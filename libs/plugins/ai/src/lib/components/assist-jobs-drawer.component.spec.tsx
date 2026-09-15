@@ -194,6 +194,42 @@ describe('the list', () => {
     expect(mockTrackEvent).not.toHaveBeenCalled()
   })
 
+  it('links a generated form to its page, and shows what the job says to decide next (AGL-2913)', async () => {
+    const note = 'Forms cannot collect photo upload yet, so this form leaves it out.'
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.startsWith('/api/ai/jobs?orgId=org-1')) {
+        return jsonResponse({
+          jobs: [
+            job({
+              id: 'job-form',
+              kind: 'form',
+              status: 'done',
+              running: false,
+              steps: [{ name: 'generate', status: 'done', startedAt: null, endedAt: null, creditsSpent: 4, error: null }],
+              outputs: [
+                {
+                  resource: 'form',
+                  id: 'job-form',
+                  versionId: null,
+                  hostId: 'host-1',
+                  hostSubdomain: 'shop',
+                  label: 'Roof quote request',
+                  note,
+                },
+              ],
+            }),
+          ],
+        })
+      }
+      throw new Error(`unarmed request to ${url}`)
+    })
+    renderDrawer()
+    fireEvent.click(screen.getByLabelText('Show AI jobs'))
+    const link = (await screen.findByText('Open draft — Roof quote request')) as HTMLAnchorElement
+    expect(link.getAttribute('href')).toBe('/acme/hosts/shop/forms/job-form')
+    expect(screen.getByText(note)).toBeTruthy()
+  })
+
   it('shows the route’s refusal rather than an empty list', async () => {
     mockFetch.mockImplementation(async () =>
       jsonResponse({ error: "This workspace's plan does not include that feature" }, 403),
@@ -331,6 +367,15 @@ describe('aiJobOutputHref', () => {
     expect(aiJobOutputHref(output({ resource: 'theme', id: 'proposal' }) as never, 'acme')).toBe(
       '/acme/hosts/shop/setup/theme',
     )
+  })
+
+  it('opens a generated form on its own page, which mints its first version (AGL-2913)', () => {
+    expect(aiJobOutputHref(output({ resource: 'form', id: 'form-1' }) as never, 'acme')).toBe(
+      '/acme/hosts/shop/forms/form-1',
+    )
+    expect(
+      aiJobOutputHref(output({ resource: 'form', id: 'form-1', versionId: 'v-3' }) as never, 'acme'),
+    ).toBe('/acme/hosts/shop/forms/form-1')
   })
 })
 

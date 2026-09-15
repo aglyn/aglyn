@@ -1042,3 +1042,30 @@ export function isMarketingConsentFieldName(name: unknown): boolean {
       .replace(/[^a-z]/g, ''),
   )
 }
+
+/**
+ * The marketing consent field: the props the Forms editor's **Marketing
+ * consent** preset places on a Form Field, and the ones a form generated from
+ * a brief carries.
+ *
+ * A Checkboxes field with ONE option, unticked and not required. The option
+ * says what the person agrees to, because a Checkboxes field posts the text
+ * of the option that was ticked and {@link isConsentCheckboxTicked} reads that
+ * text as the tick. So the option holds no comma and no line break: the
+ * Options setting starts a new box at each, and a second box is an answer
+ * that is not the opt-in. A site owner may reword the label and the option;
+ * the form names the field as its `consentFieldName` for a tick to count.
+ */
+export const MARKETING_CONSENT_FORM_FIELD: Readonly<{
+  fieldName: string
+  label: string
+  fieldType: FormFieldType
+  options: string
+  required: boolean
+}> = {
+  fieldName: 'marketingConsent',
+  label: 'Marketing emails',
+  fieldType: 'checkbox',
+  options: 'Email me news and offers',
+  required: false,
+}

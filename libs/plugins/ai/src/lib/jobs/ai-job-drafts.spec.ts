@@ -55,6 +55,8 @@ import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import {
+  AI_DRAFT_BANDS,
+  AI_DRAFT_ENTITLEMENT_REFUSAL,
   AI_DRAFT_FIELDS,
   AI_DRAFT_VERSION_FIELDS,
   AI_DRAFT_VERSION_NAME,
@@ -187,6 +189,48 @@ function templateInput(patch: Partial<AiDraftInput> = {}): AiDraftInput {
   }
 }
 
+/** A generated form's design, canvas-shaped as the Forms page's Create stores one. */
+const FORM_NODES = {
+  [CANVAS_ROOT_ELEMENT_ID]: { $id: CANVAS_ROOT_ELEMENT_ID, componentId: 'div', nodes: ['quote'] },
+  quote: {
+    $id: 'quote',
+    componentId: 'form',
+    pluginId: 'forms',
+    parentId: CANVAS_ROOT_ELEMENT_ID,
+    props: { formId: 'job-form', formName: 'Quote request' },
+    nodes: ['email'],
+  },
+  email: {
+    $id: 'email',
+    componentId: 'formField',
+    pluginId: 'forms',
+    parentId: 'quote',
+    props: { fieldName: 'email', label: 'Email', fieldType: 'email' },
+    nodes: [],
+  },
+} as unknown as NodesMap
+
+function formInput(patch: Partial<AiDraftInput> = {}): AiDraftInput {
+  return {
+    kind: 'form',
+    hostId: 'host-1',
+    id: 'job-form',
+    uid: 'uid-1',
+    org: STARTER_ORG,
+    name: 'Quote request',
+    nodes: FORM_NODES,
+    form: {
+      rootId: CANVAS_ROOT_ELEMENT_ID,
+      formNodeId: 'quote',
+      fields: [{ fieldName: 'email', label: 'Email', fieldType: 'email' }],
+      consentFieldName: 'marketingConsent',
+      routing: { lead: true },
+    },
+    now: NOW,
+    ...patch,
+  }
+}
+
 /** A site with live things bound to other things: every pointer a tenant render follows. */
 function seedLiveSite() {
   mockOwners.set('host-1', 'org-1')
@@ -226,7 +270,10 @@ describe('writeAiDraft — applied to nothing', () => {
     const before = new Map([...mockDocs].map(([path, data]) => [path, JSON.stringify(data)]))
     const layout = await writeAiDraft(firestore, layoutInput())
     const template = await writeAiDraft(firestore, templateInput())
-    if (layout.ok === false || template.ok === false) throw new Error('a draft was refused')
+    const form = await writeAiDraft(firestore, formInput())
+    if (layout.ok === false || template.ok === false || form.ok === false) {
+      throw new Error('a draft was refused')
+    }
 
     for (const [path, data] of before) {
       expect([path, JSON.stringify(mockDocs.get(path))]).toEqual([path, data])
@@ -236,14 +283,20 @@ describe('writeAiDraft — applied to nothing', () => {
         'hosts/host-1/layouts/job-layout',
         `hosts/host-1/layouts/job-layout/versions/${layout.versionId}`,
         'hosts/host-1/templates/job-template',
+        'hosts/host-1/forms/job-form',
       ].sort(),
     )
     const drafts = new Set(commits)
     for (const [path, data] of mockDocs) {
       if (drafts.has(path)) continue
       const text = JSON.stringify(data)
-      expect([path, text.includes('job-layout') || text.includes('job-template')]).toEqual([path, false])
+      expect([
+        path,
+        text.includes('job-layout') || text.includes('job-template') || text.includes('job-form'),
+      ]).toEqual([path, false])
     }
+    // A form is promoted by setting its version pointer; the draft has none.
+    expect(mockDocs.get('hosts/host-1/forms/job-form')).not.toHaveProperty('versionId')
     // The new layout nests inside nothing, so no chain of layouts reaches it either.
     expect(mockDocs.get('hosts/host-1/layouts/job-layout')).not.toHaveProperty('layoutId')
   })
@@ -263,6 +316,7 @@ describe('writeAiDraft — the create route’s document', () => {
     }
     expect([...AI_DRAFT_FIELDS.layout]).toEqual(fieldsOf('layout'))
     expect([...AI_DRAFT_FIELDS.template]).toEqual(fieldsOf('template'))
+    expect([...AI_DRAFT_FIELDS.form]).toEqual(fieldsOf('form'))
 
     const versions = readFileSync(join(REPO_ROOT, 'apps/console/app/api/hosts/versions/route.ts'), 'utf8')
       .replace(/\/\/.*$/gm, '')
@@ -274,6 +328,25 @@ describe('writeAiDraft — the create route’s document', () => {
     for (const field of AI_DRAFT_VERSION_FIELDS) {
       expect([field, keys.includes(field)]).toEqual([field, true])
     }
+  })
+
+  it('counts each kind in the collection, on the counter and behind the feature the route declares', () => {
+    const route = readFileSync(join(REPO_ROOT, 'apps/console/app/api/hosts/resources/route.ts'), 'utf8')
+      .replace(/\/\/.*$/gm, '')
+    for (const kind of ['layout', 'template', 'form'] as const) {
+      const start = route.indexOf(`\n  ${kind}: {`)
+      expect([kind, start > -1]).toEqual([kind, true])
+      const entry = route.slice(start, route.indexOf('fields: [', start))
+      const declared = (key: string) => new RegExp(`${key}: '([A-Za-z]+)'`).exec(entry)?.[1]
+      expect([kind, declared('collection'), declared('quotaKey'), declared('entitlement')]).toEqual([
+        kind,
+        AI_DRAFT_BANDS[kind].collection,
+        AI_DRAFT_BANDS[kind].quotaKey,
+        AI_DRAFT_BANDS[kind].entitlement,
+      ])
+    }
+    // A plan without the feature is refused in the route's own words.
+    expect(route).toContain(AI_DRAFT_ENTITLEMENT_REFUSAL)
   })
 
   it('writes a layout and its first version as the create and versions routes do, and nothing more', async () => {
@@ -394,6 +467,83 @@ describe('writeAiDraft — counted like a create', () => {
       error: 'Unknown site',
     })
     expect(commits).toEqual([])
+  })
+})
+
+describe('writeAiDraft — a form', () => {
+  it('writes the document the Forms page’s Create sends, with its declaration and no version', async () => {
+    mockOwners.set('host-1', 'org-1')
+    mockDocs.set('hosts/host-1', { subdomain: 'acme' })
+    const result = await writeAiDraft(firestore, formInput())
+    expect(result).toEqual({
+      ok: true,
+      replayed: false,
+      id: 'job-form',
+      versionId: null,
+      name: 'Quote request',
+      hostSubdomain: 'acme',
+    })
+    const form = mockDocs.get('hosts/host-1/forms/job-form') ?? {}
+    expect(form).toEqual({
+      displayName: 'Quote request',
+      slug: 'quote-request',
+      fields: [{ fieldName: 'email', label: 'Email', fieldType: 'email' }],
+      consentFieldName: 'marketingConsent',
+      routing: { lead: true },
+      rootId: CANVAS_ROOT_ELEMENT_ID,
+      nodes: expect.any(Buffer),
+      createdAt: NOW,
+      updatedAt: NOW,
+      createdBy: 'uid-1',
+    })
+    expect(decodeStoredNodes(form['nodes'])).toEqual(FORM_NODES)
+    expect(commits).toEqual(['hosts/host-1/forms/job-form'])
+    expect(await readAiDraft(firestore, { kind: 'form', hostId: 'host-1', id: 'job-form' })).toEqual({
+      id: 'job-form',
+      versionId: null,
+      name: 'Quote request',
+      hostSubdomain: 'acme',
+    })
+  })
+
+  it('names the form apart from a sibling, and captions its form node and slug with that name', async () => {
+    mockOwners.set('host-1', 'org-1')
+    mockDocs.set('hosts/host-1', {})
+    mockDocs.set('hosts/host-1/forms/frm-a', { displayName: 'Quote request' })
+    const result = await writeAiDraft(firestore, formInput({ form: { ...formInput().form!, routing: null, consentFieldName: null } }))
+    expect(result).toMatchObject({ ok: true, name: 'Quote request 2' })
+    const form = mockDocs.get('hosts/host-1/forms/job-form') ?? {}
+    expect(form['slug']).toBe('quote-request-2')
+    expect(form).not.toHaveProperty('routing')
+    expect(form).not.toHaveProperty('consentFieldName')
+    expect(decodeStoredNodes<Record<string, any>>(form['nodes'])?.['quote'].props.formName).toBe('Quote request 2')
+  })
+
+  it('meets the forms band as the route does: the plan’s feature first, then every form document', async () => {
+    mockOwners.set('host-1', 'org-1')
+    mockDocs.set('hosts/host-1', {})
+    expect(await writeAiDraft(firestore, formInput({ org: FREE_ORG }))).toEqual({
+      ok: false,
+      status: 403,
+      error: AI_DRAFT_ENTITLEMENT_REFUSAL,
+    })
+    // A retired form keeps its slot: the route counts every form document.
+    mockDocs.set('hosts/host-1/forms/frm-retired', { displayName: 'Old', archivedAt: 5 })
+    const capped = { ...STARTER_ORG, entitlements: { formsPerHost: 1 } } as unknown as Partial<AglynOrgBilling>
+    expect(await writeAiDraft(firestore, formInput({ org: capped }))).toEqual({
+      ok: false,
+      status: 403,
+      error: 'Your plan includes 1 forms — upgrade in Billing for more',
+    })
+    expect(await aiDraftAllowanceRefusal(firestore, { kind: 'form', hostId: 'host-1', org: capped })).toBe(
+      'Your plan includes 1 forms — upgrade in Billing for more',
+    )
+    expect(commits).toEqual([])
+    expect((await writeAiDraft(firestore, formInput({ org: STARTER_ORG }))).ok).toBe(true)
+  })
+
+  it('refuses to write a form that carries no declaration', async () => {
+    await expect(writeAiDraft(firestore, formInput({ form: undefined }))).rejects.toThrow('declaration')
   })
 })
 

@@ -38,13 +38,13 @@ rules deny every client write). Fields:
 
 | field | meaning |
 | --- | --- |
-| `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout` and `template` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
+| `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout`, `template` and `form` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
 | `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` and `needs_review` as the two parked states (below). |
 | `brief`, `inputs` | The customer's brief verbatim and the kind-specific scalars a runner reads. |
 | `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`. |
-| `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. A page's document carries its estimated first-visit `load`. |
+| `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. A page's document carries its estimated first-visit `load`. An output may carry a customer-safe `note`: what the person decides next about it. |
 | `plan` | The plan a planned kind builds from: `reuse`, `create`, `screens`, the inventory `labels` it references, and `status` `proposed` → `confirmed` with who confirmed it and when. |
-| `review` | While the job is `needs_review`: the `reason` (`plan` or `doctrine`), the customer-safe `message`, and the rules the last answer broke. |
+| `review` | While the job is `needs_review`: the `reason` (`plan`, `doctrine` or `limit`), the customer-safe `message`, and the rules the last answer broke. |
 | `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step, and the real spend at the plan's credit rate. |
 | `lease` | `{ owner, until }` while a step runs — see below. |
 | `expiresAt` | 180 days from creation, the assist exchange's clock: the brief is verbatim customer text (`docs/DATA_RETENTION.md`). |
@@ -222,6 +222,55 @@ confirmed `job.plan` and builds exactly one draft.
   the write, the step stops the job `needs_review` with `review.reason`
   `limit` and the route's own sentence as its error; trying again runs the
   step once more.
+
+## The form kind
+
+`form` (AGL-2913) builds one form from a brief: its design and the declaration
+the submit route reads, agreeing with each other. It is a planned kind, like
+`layout` and `template`.
+
+- **Runner.** `src/lib/jobs/ai-job-form-step.ts` calls
+  `runValidatedGeneration('form', …)` on `ctx.modelFor?.('job.form')`, with no
+  extended thinking and the doctrine's answer ceiling for a form, through
+  `AI_JOB_FORM_TOOL`: the doctrine's form tree tool plus `routing` (`inbox`,
+  `list` or `lead`, with a list name only when the brief names one) and
+  `cannotCollect`. The tree is composed on the palette's `form` surface, whose
+  Form Field props are the Forms editor's field settings, generated from the
+  forms plugin's attributes; `ai-job-form-parity.spec.ts` holds the step's
+  vocabulary to them in both directions.
+- **The declaration is derived, never answered.** The step stamps the design as
+  the Forms page's Create does (the form node bound to the draft's id and
+  captioned with its name, a canvas root above it, no dataset binding) and
+  reads `fields` off it with `formFieldDeclsFromNodes`. When the fields can
+  yield an email address, it replaces any consent-like field the model drew
+  with `MARKETING_CONSENT_FORM_FIELD` (`@aglyn/aglyn/app-utils/forms`, the props of
+  the Forms editor's Marketing consent preset) and names it as the form's
+  `consentFieldName`. A `lead` proposal stores `routing.lead`. The stored
+  routing has no place for an email list, so a `list` proposal leaves the form
+  on the Inbox.
+- **The check.** `extend` runs `checkFormContract` on the stamped draft, with
+  two checks of its own: a form with no named field, and a `list` proposal on a
+  form with no email field. Each is a rule 3 finding: asked once more, then a
+  doctrine review.
+- **What it sends.** The brief, the form's name, the confirmed plan as
+  references and the site inventory. It reads no email list, contact, CRM
+  record or form submission; the step spec seeds each and asserts none is read
+  or sent.
+- **The draft.** `writeAiDraft` with kind `form`: the resources route's
+  allow-list, its entitlement (`reusableComponents`) before `formsPerHost`, the
+  canvas-shaped design in msgpack, a `slug` from the unique name, and no
+  version — the form's page mints the first when a member opens it. Nothing is
+  promoted and no page places it.
+- **The output** is `{ resource: 'form', id, hostId, hostSubdomain, label,
+  load, note }`, which the drawer links to the form's page. `note` says what
+  the person decides next: the lead routing that is on, how to enroll the people
+  who tick consent in an email list, and what the brief asked for that a form
+  cannot collect, such as a photo upload.
+- **The goldens.** `src/lib/jobs/fixtures/ai-job-form-goldens.json` holds
+  recorded answers (a roofing quote request with a photo upload, a newsletter
+  signup, an anonymous survey) that the step spec runs through the doctrine,
+  the contract, the draft writer and the consent reader. No spec calls a live
+  provider.
 
 ## The doors
 

@@ -120,6 +120,11 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // audit pass is heavier: eight pages' findings and text, about 9,000
   // characters, with up to about 8,000 back.
   'job.seo': { inputTokens: 1_100, outputTokens: 250, cacheReadTokens: 1_200, cacheWriteTokens: 0 },
+  // The form step: the doctrine, the form instructions, the form surface's
+  // catalog (about 150 tokens) and the tool's schema are the cached prefix, the
+  // site inventory and the brief ride uncached, and a form's answer is 200 to
+  // 400 tokens of JSON with no extended thinking.
+  'job.form': { inputTokens: 700, outputTokens: 450, cacheReadTokens: 3_700, cacheWriteTokens: 0 },
 }
 
 /** The fewest measured exchanges a median is taken over. */

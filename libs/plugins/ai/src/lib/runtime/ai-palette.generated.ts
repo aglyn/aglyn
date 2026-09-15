@@ -1151,7 +1151,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       placeholder: 200,
       options: 2000,
     },
-    presets: ['Form Field'],
+    presets: ['Form Field', 'Marketing consent'],
   },
   functionWidget: {
     pluginId: 'mui',

@@ -25,6 +25,9 @@ import './jobs/ai-job-plan-step'
 // checks before a job of it is created or resumed (AGL-2909).
 import './jobs/ai-job-layout-step'
 import './jobs/ai-job-template-step'
+// Registers the form generation step and what a form job checks before it is
+// created or resumed (AGL-2913).
+import './jobs/ai-job-form-step'
 import { ensureFirstPartyAiProviders } from './providers/registry'
 import { aiAssistHandler } from './server/ai-assist'
 import { POST as cancelAiJob } from './server/ai-jobs-cancel'

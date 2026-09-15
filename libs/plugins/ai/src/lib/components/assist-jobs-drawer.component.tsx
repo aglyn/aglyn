@@ -126,6 +126,11 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
   if (output.resource === 'theme') {
     return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
   }
+  if (output.resource === 'form') {
+    // A new form has no version for the besigner to open: its own page mints
+    // the first one, and holds the routing and consent it declares.
+    return buildRoute(Route.FORM_DETAILS, { orgSlug, host, formId: output.id })
+  }
   return null
 }
 
@@ -452,6 +457,11 @@ export function AssistJobsDrawer({
                       {output.load ? (
                         <Typography variant="caption" color="text.secondary" component="div">
                           About {formatBytes(output.load.totalBytes)} on a first visit
+                        </Typography>
+                      ) : null}
+                      {output.note ? (
+                        <Typography variant="caption" color="text.secondary" component="div">
+                          {output.note}
                         </Typography>
                       ) : null}
                     </Box>

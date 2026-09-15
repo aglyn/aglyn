@@ -110,11 +110,11 @@ throws, which also stops the action — records nothing at all, so an automation
 never fires because of a broken filter has an empty run history rather than an
 explanation. Prefer a condition when you want the skip on the record.
 
-**Example — grow an email list from a signup form:** add a **Checkboxes** field named
-`marketingConsent`, labeled `Marketing emails`, with a single option
-`Email me news and offers` to your form, and pick it as the **Marketing consent field** on
-the form's own page. Keep the option free of commas: the Options setting starts a new box
-at every comma. Then create an action on **formSubmission** with the condition
+**Example — grow an email list from a signup form:** add the **Marketing consent** field
+to your form — a **Checkboxes** field named `marketingConsent`, labeled `Marketing emails`,
+with a single option `Email me news and offers` — and pick it as the
+**Marketing consent field** on the form's own page. If you reword the option, keep it free
+of commas: the Options setting starts a new box at every comma. Then create an action on **formSubmission** with the condition
 *"A field is not empty" → `marketingConsent`* and one step: **Enroll in a list**, picking
 your audience. Visitors who tick the box join the list; everyone else just submits the form.
 

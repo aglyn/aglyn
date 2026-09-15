@@ -261,6 +261,7 @@ export type AiStepKind =
   | 'copy.section'
   | 'copy.blog'
   | 'generate.section'
+  | 'job.form'
   | 'job.layout'
   | 'job.template'
   | 'job.seo'
@@ -275,6 +276,9 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   'copy.section': 'balanced',
   'copy.blog': 'balanced',
   'generate.section': 'balanced',
+  // A form is one small tree held to the building rules and to the contract
+  // its submissions are read by; a re-ask costs more than the tier saves.
+  'job.form': 'balanced',
   // A layout or a page template is one structured tree held to every
   // building rule; the fast tier re-asks more than it saves.
   'job.layout': 'balanced',
