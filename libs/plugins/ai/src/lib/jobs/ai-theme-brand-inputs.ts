@@ -252,13 +252,9 @@ async function readLogoColors(
   if (typeof media['sizeBytes'] === 'number' && media['sizeBytes'] > AI_THEME_LOGO_MAX_BYTES) {
     return null
   }
-  const [{ mediaCdnServeBlock }, { mediaStoragePathInScope }, { firebaseAdmin }, { loadSharp }] =
-    await Promise.all([
-      import('@aglyn/tenant-data-admin/server/serve-media-cdn'),
-      import('@aglyn/tenant-data-admin/server/media-storage-path'),
-      import('@aglyn/tenant-data-admin/server/firebase-admin'),
-      import('@aglyn/tenant-data-admin/server/media-variants'),
-    ])
+  const { mediaCdnServeBlock, mediaStoragePathInScope, firebaseAdmin, loadSharp } = await import(
+    './ai-theme-brand-server'
+  )
   const blocked = await mediaCdnServeBlock(scope, {
     contentSha256: typeof media['contentSha256'] === 'string' ? media['contentSha256'] : undefined,
     contentHash: typeof media['contentHash'] === 'string' ? media['contentHash'] : undefined,
@@ -414,9 +410,7 @@ export async function fetchPublicText(
   url: string,
   options: { maxBytes: number; accept: RegExp; signal?: AbortSignal; timeoutMs?: number },
 ): Promise<{ text: string; url: string } | null> {
-  const { createPinnedDispatcher, resolvePublicIp } = await import(
-    '@aglyn/tenant-data-admin/server/serve-plugin-fetch'
-  )
+  const { createPinnedDispatcher, resolvePublicIp } = await import('./ai-theme-brand-server')
   let current = url
   for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
     let parsed: URL
