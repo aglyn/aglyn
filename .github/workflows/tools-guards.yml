@@ -839,6 +839,14 @@ jobs:
       - run: npm run test:ai-in-core
       - run: npm run check:ai-in-core
 
+      # The AI eval harness (AGL-2937): every golden brief under
+      # tools/ai-eval/cases scored offline — the tree validator, the doctrine's
+      # rules, the budget, the plan's expected shape and the recorded rubric —
+      # with each kind held to its floor and every control made to fail. No
+      # provider is called. A token lever that drops a kind under its floor is
+      # red here.
+      - run: npm run test:ai-eval
+
       # British-spelling ratchet (AGL-2763), the third of the same shape. The
       # standing rule is American spelling on every customer-facing surface;
       # nothing mechanical enforced it, and the drift it was written about came

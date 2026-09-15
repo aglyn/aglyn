@@ -1,0 +1,32 @@
+{
+  "id": "blog-first-roof-inspection",
+  "kind": "blog",
+  "brief": "Title: What to expect from your first roof inspection. Excerpt: A short guide for homeowners booking their first inspection. Instruction: write the post body for homeowners who have never had a roof inspected.",
+  "framing": null,
+  "inventory": null,
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: the body alone in markdown-lite, the title left to the page.",
+      "plan": null,
+      "answer": "A roof inspection takes about an hour, and you do not need to be on the roof for any of it. Here is what happens from the moment the inspector arrives.\n\n## Before the visit\n\n- Clear the driveway so the ladder can go up close to the house.\n- Note any stains on ceilings or walls, and which rooms they are in.\n- If you have had work done before, find the paperwork. **The date of the last replacement** tells the inspector a lot.\n\n## On the roof\n\nThe inspector walks the roof and looks at the shingles, the flashing around chimneys and vents, and the gutters. They photograph anything worn, lifted or missing so you can see it for yourself.\n\n## Afterward\n\nYou get a short written report: what is fine, what to watch, and what needs repair now. Nothing in the report commits you to any work. If a repair is needed, you can ask for a quote on the spot or take the report to anyone you like.",
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A title line at the top of the body, which the page already renders from the post title.",
+      "answer": "# What to expect from your first roof inspection\n\nA roof inspection takes about an hour.",
+      "fails": ["readable"]
+    },
+    {
+      "why": "Filler copy in place of the post.",
+      "answer": "Lorem ipsum dolor sit amet. Your text here about roof inspections.",
+      "fails": ["rules"]
+    }
+  ]
+}

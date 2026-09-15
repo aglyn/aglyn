@@ -1,0 +1,52 @@
+{
+  "id": "theme-warmer-accents",
+  "kind": "theme",
+  "brief": "Make the site feel warmer. Keep the fonts as they are.",
+  "framing": null,
+  "inventory": null,
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: a targeted color change with dark values, nothing the brief did not ask about.",
+      "plan": null,
+      "answer": {
+        "summary": "Warmer accents: a terracotta primary and an amber secondary.",
+        "colors": [
+          { "token": "primary", "light": "#b4532a", "dark": "#f0a47a" },
+          { "token": "secondary", "light": "#b7791f", "dark": "#f6c177" }
+        ],
+        "darkScheme": null,
+        "fontFamily": null,
+        "borderRadius": null,
+        "spacing": null,
+        "navHeightMobile": null,
+        "navHeightDesktop": null,
+        "componentOverrides": [],
+        "resetComponentOverrides": false
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A color named in words, which no theme control takes.",
+      "answer": {
+        "summary": "Warmer.",
+        "colors": [{ "token": "primary", "light": "warm orange", "dark": null }],
+        "darkScheme": null,
+        "fontFamily": null,
+        "borderRadius": null,
+        "spacing": null,
+        "navHeightMobile": null,
+        "navHeightDesktop": null,
+        "componentOverrides": [],
+        "resetComponentOverrides": false
+      },
+      "fails": ["readable"]
+    }
+  ]
+}

@@ -138,6 +138,41 @@ What generation costs in tokens is measured beside what it costs in credits
   hit rate is `aiCacheHitRate`: reads over everything the prompt was billed
   as, cache writes included.
 
+## The eval harness
+
+A token lever ships only when the eval holds (AGL-2937): each output kind has
+golden briefs, and every answer to them is scored the way the doctrine holds a
+live answer.
+
+- **Where the cases live.** `tools/ai-eval/cases/<kind>/<id>.json`, one file
+  per golden brief, filed under its kind: `page`, `template`, `component`,
+  `layout`, `form`, `email`, `section` (a section rewrite), `seo`, `theme`,
+  `element`, `blog`, `text` and `chat`. A generator adds its briefs there.
+- **What a case holds.** The brief and its framing; the site `inventory` it is
+  built for, in the shape `readSiteInventory` returns, and the media `assets`
+  its images are measured against; for a planned kind, the plan shape a good
+  answer has (`expected.plan`: how many screens, what it must reuse, its
+  layout, what it may create); `candidates`, each an answer with its plan, its
+  rubric grade, and whether it was `authored` by hand or `recorded` from a
+  live run; and `controls`, answers that must fail, each naming the checks it
+  fails.
+- **The checks** (`src/lib/runtime/ai-eval.ts`). *Readable*: the tree
+  validator admits it, or the copy, the fields or the theme call are there.
+  *Rules*: no doctrine rule is broken, nor the kind's own (a link the chat
+  answer was not given, a title line on a blog body). *Budget*: rule 17 for a
+  document, the length ceiling for copy. *Plan*: the plan rules and the
+  expected shape. *Rubric*: a grade from 1 to 5 for structure, copy fit and
+  reuse, passing at a mean of 3.5 with nothing under 3. An answer's score is
+  those checks and the rubric averaged, from 0 to 1.
+- **The floors.** `AI_EVAL_FLOORS` holds each kind's pass rate and mean
+  score. `npm run test:ai-eval` fails when a kind falls under its floor, when a
+  kind has no case, or when a control passes a check it names; the tools
+  guards workflow runs it.
+- **Offline by default.** CI and every local run read the fixtures and call
+  no provider. The candidates on main are authored references, so the offline
+  scores prove the scorers and pin the doctrine's verdicts on answers known to
+  be good or bad; they measure no model until a live run records one.
+
 ## Planning, and a job that waits for a person
 
 A job whose kind builds site structure (`AI_PLANNED_JOB_KINDS`: page, site,

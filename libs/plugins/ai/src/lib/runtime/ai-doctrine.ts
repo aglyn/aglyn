@@ -702,6 +702,24 @@ function withDraftsOnly<T>(check: AiGenerationCheck<T>): AiGenerationCheck<T> {
   }
 }
 
+/**
+ * What a tree built for this site is checked against: the brand an email is
+ * held to, the ids the inventory lists, and whatever the door adds — asset
+ * sizes, embeds, framing.
+ */
+export function aiDoctrineTreeContext(
+  inventory: AiSiteInventory | null,
+  extra: AiDoctrineTreeContext = {},
+): AiDoctrineTreeContext {
+  return {
+    brand: inventory?.theme
+      ? { colors: inventory.theme.colors, fonts: inventory.theme.fonts }
+      : null,
+    ...aiNodeTreeContextFromInventory(inventory),
+    ...extra,
+  }
+}
+
 function checkFor(kind: string, input: object): AiGenerationCheck<unknown> {
   if (kind === 'plan') {
     const plan = input as AiPlanGenerationInput
@@ -709,15 +727,8 @@ function checkFor(kind: string, input: object): AiGenerationCheck<unknown> {
   }
   if (isAiOutputKind(kind)) {
     const tree = input as AiTreeGenerationInput
-    const context: AiDoctrineTreeContext = {
-      brand: tree.inventory?.theme
-        ? { colors: tree.inventory.theme.colors, fonts: tree.inventory.theme.fonts }
-        : null,
-      ...aiNodeTreeContextFromInventory(tree.inventory),
-      ...tree.context,
-    }
     return withExtension(
-      aiDoctrineTreeCheck(kind, context, tree.otherPages),
+      aiDoctrineTreeCheck(kind, aiDoctrineTreeContext(tree.inventory, tree.context), tree.otherPages),
       tree.extend,
     ) as AiGenerationCheck<unknown>
   }

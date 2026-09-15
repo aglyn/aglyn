@@ -1,0 +1,180 @@
+{
+  "id": "component-team-member-card",
+  "kind": "component",
+  "brief": "A reusable card for one person on our crew: their photo, their name and their role.",
+  "framing": null,
+  "inventory": {
+    "hostId": "host-harbor",
+    "components": [
+      { "id": "cmp-service-card", "name": "Service card", "props": { "title": "text", "body": "text", "image": "image" } },
+      { "id": "cmp-testimonial", "name": "Testimonial", "props": { "quote": "text", "name": "text" } }
+    ],
+    "layouts": [{ "id": "lay-site", "name": "Harbor Roofing site", "parentId": null }],
+    "templates": [],
+    "forms": [],
+    "datasets": [],
+    "collections": [],
+    "screens": [{ "id": "scr-home", "name": "Home", "slug": "/", "layoutId": "lay-site", "template": false }],
+    "theme": { "summary": ["Light scheme only"], "colors": { "primary.main": "#1d4e89" }, "fonts": ["Inter"] },
+    "truncated": []
+  },
+  "expected": {
+    "plan": { "screens": [0, 0], "createKinds": ["component"], "maxCreate": 1 }
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: one card, its per-person values marked in brackets for each instance to fill, the photo left empty for an upload.",
+      "plan": {
+        "reuse": [],
+        "create": [
+          {
+            "kind": "component",
+            "name": "Team member card",
+            "why": "The site has no card for a person: the service card carries a service's copy, not a name and a role.",
+            "duplicateOf": null,
+            "fields": ["name:text", "role:text", "photo:image"]
+          }
+        ],
+        "screens": []
+      },
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["card"] },
+            "card": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["photo", "content"] },
+            "photo": { "componentId": "image", "props": { "src": "", "alt": "[Photo of the crew member]" } },
+            "content": { "componentId": "muiCardContent", "nodes": ["name", "role"] },
+            "name": { "componentId": "muiTypography", "props": { "variant": "h6", "component": "h3", "children": "[Name]" } },
+            "role": { "componentId": "muiTypography", "props": { "variant": "body2", "children": "[Role on the crew]" } }
+          }
+        }
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": 5, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "Two top-level headings on one card; a component carries at most one h1 (rule 11).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": {
+              "componentId": "div",
+              "nodes": [
+                "card"
+              ]
+            },
+            "card": {
+              "componentId": "muiCard",
+              "props": {
+                "variant": "outlined"
+              },
+              "nodes": [
+                "content"
+              ]
+            },
+            "content": {
+              "componentId": "muiCardContent",
+              "nodes": [
+                "name",
+                "role"
+              ]
+            },
+            "name": {
+              "componentId": "muiTypography",
+              "props": {
+                "variant": "h1",
+                "component": "h1",
+                "children": "[Name]"
+              }
+            },
+            "role": {
+              "componentId": "muiTypography",
+              "props": {
+                "variant": "h1",
+                "component": "h1",
+                "children": "[Role on the crew]"
+              }
+            }
+          }
+        }
+      },
+      "fails": [
+        "rules"
+      ]
+    },
+    {
+      "why": "A plan that creates a second testimonial component when the site already has one (rule 7).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": {
+              "componentId": "div",
+              "nodes": [
+                "card"
+              ]
+            },
+            "card": {
+              "componentId": "muiCard",
+              "props": {
+                "variant": "outlined"
+              },
+              "nodes": [
+                "content"
+              ]
+            },
+            "content": {
+              "componentId": "muiCardContent",
+              "nodes": [
+                "name",
+                "role"
+              ]
+            },
+            "name": {
+              "componentId": "muiTypography",
+              "props": {
+                "variant": "h6",
+                "component": "h3",
+                "children": "[Name]"
+              }
+            },
+            "role": {
+              "componentId": "muiTypography",
+              "props": {
+                "variant": "body2",
+                "children": "[Role on the crew]"
+              }
+            }
+          }
+        }
+      },
+      "plan": {
+        "reuse": [],
+        "create": [
+          {
+            "kind": "component",
+            "name": "Testimonial",
+            "why": "A card for what customers say.",
+            "duplicateOf": null,
+            "fields": [
+              "quote:text",
+              "name:text"
+            ]
+          }
+        ],
+        "screens": []
+      },
+      "fails": [
+        "plan"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "element-warmer-hero-heading",
+  "kind": "element",
+  "brief": "Current element text: Professional roof repair services. Instruction: make the hero heading sound warmer and more local.",
+  "framing": null,
+  "inventory": null,
+  "maxChars": 120,
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: the element's text alone, about the length of what it replaces.",
+      "plan": null,
+      "answer": "Roof repairs from neighbors who answer the phone",
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A preamble and quotes around the text, which the element would render as they are.",
+      "answer": "Here is a warmer version: \"Roof repairs from neighbors who answer the phone\"",
+      "fails": ["readable"]
+    },
+    {
+      "why": "A heading far longer than the one it replaces.",
+      "answer": "Roof repairs from friendly neighbors right here in Harbor County who always answer the phone, show up on time and leave your yard cleaner than they found it",
+      "fails": ["budget"]
+    }
+  ]
+}
