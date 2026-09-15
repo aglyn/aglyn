@@ -22,6 +22,7 @@ import { Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { notFound, useParams } from 'next/navigation'
 import { useMemo } from 'react'
+import { useDeclareDocumentSubject } from '../../../../components/document-subject'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { resolveDocsHelpTopic } from '../../../../constants/docs-links'
@@ -47,6 +48,11 @@ const AdminStaffPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     () => (id ? resolveConsoleStaffPage(id, STAFF_PLUGIN_IDS) : undefined),
     [id],
   )
+  // The server layout titles the tab with the id, because the staff registry
+  // only fills on the client; the page's label takes its place once resolved.
+  // The label rather than `header.title`, which may carry the brand the title
+  // template already appends.
+  useDeclareDocumentSubject(id, page?.label)
   if (!page) notFound()
   const { Component, header, label } = page
   const basePath = buildRoute(Route.ADMIN_STAFF_PAGE, { staffPage: page.id })
