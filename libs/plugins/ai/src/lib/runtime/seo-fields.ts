@@ -19,7 +19,7 @@ import type { SeoListingFieldKey } from '@aglyn/aglyn/app-utils/seo-listing-fiel
 import type { AiSeoFieldValues } from '../model/ai-seo'
 import type { AiStepKind } from '../providers/catalog'
 import type { AiProvider } from '../providers/contract'
-import { aiModelForStep, type AiPluginSettings } from '../providers/routing'
+import { AI_ROUTING_TABLE, aiModelForStep, type AiPluginSettings } from '../providers/routing'
 import {
   AI_SEO_FIELDS_TOOL_NAME,
   aiSeoFieldsTool,
@@ -284,11 +284,12 @@ export async function runValidatedGenerationStandIn<T>(
  * ------------------------------------------------------------------------ */
 
 /**
- * The output budget. The largest answer the tool accepts — every field at
- * its limit — is under 300 tokens of JSON (`seo-fields.spec.ts` measures
- * it); the rest is headroom, and the fast tier thinks in none of it.
+ * The output budget, from the routing table. The largest answer the tool
+ * accepts — every field at its limit — is under 300 tokens of JSON
+ * (`ai-job-seo-step.spec.ts` measures it); the rest is headroom, and the fast
+ * tier thinks in none of it.
  */
-export const AI_SEO_FIELDS_MAX_TOKENS = 1_024
+export const AI_SEO_FIELDS_MAX_TOKENS = AI_ROUTING_TABLE['job.seo'].maxTokens
 
 /** How many other pages' titles a prompt lists for the model to avoid. */
 const OTHER_TITLES_LISTED = 40

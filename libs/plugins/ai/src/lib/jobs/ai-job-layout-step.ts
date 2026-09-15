@@ -20,7 +20,7 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
-import { aiModelForStep } from '../providers/routing'
+import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
   aiDoctrineTreeTool,
   runValidatedGeneration,
@@ -82,7 +82,7 @@ import { registerAiJobStep } from './ai-jobs'
  */
 
 /** The longest answer a layout may run to; the tree is held to the layout budget either way. */
-export const AI_JOB_LAYOUT_MAX_TOKENS = 8_000
+export const AI_JOB_LAYOUT_MAX_TOKENS = AI_ROUTING_TABLE['job.layout'].maxTokens
 
 /** A layout's name when the plan names none. */
 export const AI_JOB_LAYOUT_DEFAULT_NAME = 'Site layout'
@@ -263,7 +263,8 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
       messages: [{ role: 'user', content: aiJobLayoutPrompt(job, plan, name) }],
       tool: aiDoctrineTreeTool('layout'),
       maxTokens: AI_JOB_LAYOUT_MAX_TOKENS,
-      thinking: 'off',
+      ...(AI_ROUTING_TABLE['job.layout'].thinking ? { thinking: AI_ROUTING_TABLE['job.layout'].thinking } : {}),
+      ...(AI_ROUTING_TABLE['job.layout'].effort ? { effort: AI_ROUTING_TABLE['job.layout'].effort } : {}),
       extend: aiLayoutReuseCheck(inventory, plan),
       ...(signal ? { signal } : {}),
     })

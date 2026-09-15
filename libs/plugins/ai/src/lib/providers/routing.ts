@@ -177,6 +177,31 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis: 'a section of four to twelve nodes written as JSON',
     eval: { kinds: ['section'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
   },
+  'job.layout': {
+    // The plan was reasoned out and confirmed before the step, so it writes without thinking.
+    thinking: 'off',
+    effort: null,
+    maxTokens: 8000,
+    maxTokensBasis:
+      "tighter than the doctrine's default for a layout, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
+    eval: { kinds: ['layout'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+  },
+  'job.template': {
+    thinking: 'off',
+    effort: null,
+    maxTokens: 8000,
+    maxTokensBasis:
+      "tighter than the doctrine's default for a template, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
+    eval: { kinds: ['template'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+  },
+  'job.seo': {
+    thinking: null,
+    effort: null,
+    maxTokens: 1024,
+    maxTokensBasis:
+      "the largest listing the tool accepts, at three characters a token with a quarter again, as ai-job-seo-step.spec.ts measures it; an audit's site proposal and fix batches keep ceilings of their own, measured the same way",
+    eval: { kinds: ['seo'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
+  },
   'job.text': {
     thinking: 'adaptive',
     effort: null,
