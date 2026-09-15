@@ -313,6 +313,13 @@ export const FEATURE_ROW_EXCLUSIONS: Partial<Record<FeatureKey, string>> = {
     'Capacity-managed and requested, not included — bounded by the provider ' +
     'domain allowance, with the shared pool carrying the mail meanwhile. The ' +
     'promised half of sending identity is the customer-owned domain row.',
+  // False on all eight tiers while its packaging is undecided (AGL-2976): an
+  // organization receives it through the `entitlements` override. A row would
+  // read "no plan includes this" on every card, which is true and gives a
+  // buyer nothing to compare.
+  outreach:
+    'On no plan yet — granted per organization while its packaging is ' +
+    'decided.',
 }
 
 /**
