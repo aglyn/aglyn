@@ -1,0 +1,20 @@
+Delivered-To: avery@example.org
+MIME-Version: 1.0
+From: Casey Morgan <casey@example.com>
+Date: Mon, 14 Sep 2026 08:00:12 -0700
+Message-ID: <CAVacationResponder-m4n5o6@mail.gmail.com>
+Subject: Out of Office
+To: avery@example.org
+Content-Type: multipart/alternative; boundary="000000000000e5f6a70626f4c801"
+
+--000000000000e5f6a70626f4c801
+Content-Type: text/plain; charset="UTF-8"
+
+Away until the 21st. For billing questions, write to billing@example.com.
+
+--000000000000e5f6a70626f4c801
+Content-Type: text/html; charset="UTF-8"
+
+<div dir="ltr">Away until the 21st. For billing questions, write to billing@example.com.</div>
+
+--000000000000e5f6a70626f4c801--

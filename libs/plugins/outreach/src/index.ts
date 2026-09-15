@@ -22,3 +22,8 @@ export * from './lib/components/outreach-console-sections'
 // The document model both halves share (AGL-2974): collection names and the
 // mailbox, sequence, enrollment and credential shapes.
 export * from './lib/model/outreach.types'
+// The sequence engine (AGL-2979): validation, gates, scheduling, composition,
+// reply and bounce classification, mailbox health. The do-not-contact key
+// hashes with `node:crypto` and is imported by its own path instead:
+// `@aglyn/plugins-outreach/engine/do-not-contact`.
+export * from './lib/engine'
