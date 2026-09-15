@@ -19,6 +19,7 @@
 // The POST climbs `aiGateLadder`, whose lockdown rung is the verdict.
 
 import { randomUUID } from 'crypto'
+import { aiJobAdmissionRefusal } from '../jobs/ai-job-admission'
 import {
   AI_JOB_INLINE_BUDGET_MS,
   aiJobSummary,
@@ -85,6 +86,32 @@ export async function POST(
   if ((existing.hostId ?? null) !== hostId) {
     await release()
     return Response.json({ error: 'That job belongs to another site' }, { status: 400 })
+  }
+  // A confirmed plan runs the step that writes, and an allowance free when the
+  // job was created may be used by now (AGL-2909): the kind is asked again
+  // before anything runs, and a refusal leaves the job waiting for review.
+  if (existing.status === 'needs_review') {
+    let refusal: Awaited<ReturnType<typeof aiJobAdmissionRefusal>>
+    try {
+      refusal = await aiJobAdmissionRefusal(existing.kind, {
+        firestore: gate.firestore,
+        orgId: gate.orgId,
+        hostId: existing.hostId ?? null,
+        inputs: existing.inputs ?? {},
+        org: gate.org,
+      })
+    } catch (error) {
+      await release()
+      console.error('ai job admission failed', { orgId: gate.orgId, jobId, error })
+      return Response.json({ error: 'The AI job could not be resumed' }, { status: 500 })
+    }
+    if (refusal) {
+      await release()
+      return Response.json(
+        { error: refusal.error, job: aiJobSummary(existing, new Date()) },
+        { status: refusal.status },
+      )
+    }
   }
   const now = new Date()
   const { job, changed } = await resumeAiJob(

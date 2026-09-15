@@ -207,6 +207,13 @@ export type AiJobReviewReason =
   | 'plan'
   /** An answer broke a building rule, and so did the answer to the re-ask. */
   | 'doctrine'
+  /**
+   * The site is at an allowance its plan sets for what the step writes, such
+   * as its shared layouts or its templates (AGL-2909). Freeing one, or a plan
+   * that holds more, is the member's decision; trying again runs the step
+   * again.
+   */
+  | 'limit'
 
 /** A building rule an answer broke, as the job keeps it: the number, the code, the sentence. */
 export interface AiJobRuleFinding {

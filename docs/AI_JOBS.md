@@ -38,7 +38,7 @@ rules deny every client write). Fields:
 
 | field | meaning |
 | --- | --- |
-| `kind` | `AiJobKind` — what the job produces. `text` and `theme` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
+| `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout` and `template` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
 | `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` and `needs_review` as the two parked states (below). |
 | `brief`, `inputs` | The customer's brief verbatim and the kind-specific scalars a runner reads. |
 | `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`. |
@@ -154,6 +154,60 @@ and the rule-17 scorer, which measures nodes, stored bytes (`nodeMapBytes`),
 image bytes, embeds, font families and an email's rendered HTML against
 `AI_OUTPUT_BUDGETS` in `runtime/ai-palette.ts`. A page's estimated load starts
 from `ESTIMATED_PAGE_TRANSFER_BYTES`, the measured weight of a published page.
+
+## The layout and template kinds
+
+`layout` and `template` (AGL-2909) are the first kinds whose generation step
+builds a document. Both are planned kinds: a job runs the plan step first and
+waits for a member to confirm it, and the generation runner then reads the
+confirmed `job.plan` and builds exactly one draft.
+
+- **Runners.** `src/lib/jobs/ai-job-layout-step.ts` and
+  `ai-job-template-step.ts`, registered by the plugin's server surface. Each
+  calls `runValidatedGeneration('layout' | 'template', …)` on
+  `ctx.modelFor?.('job.layout' | 'job.template')`, with the doctrine's tree
+  tool, no extended thinking and an 8,000-token answer ceiling, so the step
+  and its one re-ask fit the beat's budget for one step. The door's checks
+  ride `extend`: a layout places every component the confirmed plan reuses
+  and never draws navigation the site keeps as a component (rules 7 and 1); a
+  template binds only the tokens its page fills, binds its h1 to the
+  subject's title, and places no block that fills itself only on another
+  subject's page (rule 8).
+- **What a template is for.** `inputs.subject` is `entry` (with
+  `inputs.collectionId`, a content collection), `product` or `author`
+  (`src/lib/model/ai-template-subjects.ts`). The tokens are the besigner
+  insert picker's catalogs for an entry or an author page, and the commerce
+  product page resolver's names for a product, which a spec reads from the
+  resolver's source. A `url` or `media` prop may hold one of the subject's
+  address tokens whole: `AiNodeTreeContext.bindingTokens` admits exactly the
+  tokens a caller names, and the palette validator is otherwise unchanged.
+- **Examples.** The template step sends the platform's starter pages as a
+  cached block after its instructions (`src/lib/runtime/ai-template-examples.ts`),
+  each brought up to rules 3, 5 and 11 the same way, shown only when the
+  doctrine accepts it with no repair, one page per shape, within 6,000
+  characters.
+- **Drafts.** `src/lib/jobs/ai-job-drafts.ts` writes the document the host
+  resources route would write: that route's allow-list (a spec reads the
+  route), its stamps, msgpack nodes, the band met inside the transaction with
+  the route's arithmetic, and a name unique among live siblings. The job's id
+  is the document id, so a step run again reports its draft rather than
+  writing a second. A layout gets its first version. A template is `kind:
+  'page'` with `source.type: 'authored'`, a suggested `slug` and no
+  placeholders, so Use template asks for nothing and every token stays bound.
+  Nothing else is written: no screen, collection, store setting, layout or
+  host document names the draft until a member assigns it. A plan that starts
+  from a copy (`duplicateOf`) gets that copy through the platform's
+  `duplicateResource` and generates nothing.
+- **Admission.** A kind registers one check with `registerAiJobAdmission`
+  (`src/lib/jobs/ai-job-admission.ts`). The create door asks it after the gate
+  ladder and before the job exists, and the resume door asks it again before
+  a waiting job runs; a refusal hands the reservation back. A layout or
+  template job needs a site of the job's own org and room under that site's
+  allowance, and a template job needs inputs that read.
+- **A limit review.** When the allowance is used up between the admission and
+  the write, the step stops the job `needs_review` with `review.reason`
+  `limit` and the route's own sentence as its error; trying again runs the
+  step once more.
 
 ## The doors
 
@@ -311,12 +365,15 @@ model, which honors the creator's model pick within the plan and the
 allotments. The runner writes its drafts and returns `{ outputs, usage,
 estCostUsd, model, stopReason }` — with `refused` for a model decline,
 `failure` (a customer-safe sentence) for an answer it could not use, or
-`review` when the doctrine gave up. It must not write the job document, take a
-reservation, or publish anything. Registering a runner for a planned kind is
-what turns on its plan step; a generation runner reads the confirmed plan from
-`job.plan`. Kinds with more than one step extend `aiJobStepNames`. A runner
-that loads heavy modules registers a lazy wrapper, as `theme` does, so the
-machine stays light to load.
+`review` when the doctrine gave up or the site had no room for the draft. It
+must not write the job document, take a reservation, or publish anything.
+Registering a runner for a planned kind is what turns on its plan step; a
+generation runner reads the confirmed plan from `job.plan`. A kind that cannot
+finish for some requests — no site, inputs it cannot read, no room for its
+draft — also registers `registerAiJobAdmission(kind, check)`, which both doors
+ask before anything is spent. Kinds with more than one step extend
+`aiJobStepNames`. A runner that loads heavy modules registers a lazy wrapper,
+as `theme` does, so the machine stays light to load.
 
 ## Assist edits in the Besigner
 

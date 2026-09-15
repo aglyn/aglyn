@@ -592,12 +592,13 @@ export async function recordStep(
       // A plan the step produced is kept whatever the job's status is by
       // now, for the reason its credits are.
       ...(input.plan ? { plan: input.plan } : {}),
-      // A doctrine review's sentence is the job's customer-safe error, as a
-      // meter park's is; a plan waiting to be confirmed is not an error.
+      // A doctrine or limit review's sentence is the job's customer-safe
+      // error, as a meter park's is; a plan waiting to be confirmed is not an
+      // error.
       ...(parksForReview && input.review
         ? {
             review: input.review,
-            error: input.review.reason === 'doctrine' ? input.review.message : null,
+            error: input.review.reason === 'plan' ? null : input.review.message,
           }
         : {}),
     }
@@ -1170,13 +1171,13 @@ export async function runAiJobStep(
 
   // A step that stopped for a person parks the job in the same write that
   // records it (AGL-2935): a plan review completes the step, so confirming
-  // runs the next one; a doctrine review hands it back, so trying again runs
-  // the same one.
+  // runs the next one; a doctrine or limit review hands it back, so trying
+  // again runs the same one.
   const review = outcome.review
   const recorded = await recordStep(
     firestore, orgId, jobId, options.owner, stepIndex,
     {
-      status: review?.reason === 'doctrine' ? 'pending' : 'done',
+      status: review && review.reason !== 'plan' ? 'pending' : 'done',
       creditsSpent: credits,
       outputs: outcome.outputs,
       ...(outcome.plan ? { plan: outcome.plan } : {}),

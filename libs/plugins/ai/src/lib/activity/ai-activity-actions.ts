@@ -87,9 +87,10 @@ export const AI_ACTIVITY_FILTER_LABEL = 'AI'
  * its own precautions: the account's credits, its daily request cap, a
  * pause after declined briefs, or the platform's day of free spend. Those
  * are the meter's `AssistRefusedBy` less its `null`, so a ceiling the meter
- * can name is one the feed can label. The last two are the job's own
- * (AGL-2935): its plan is ready for review, or an answer broke a building
- * rule on its re-ask.
+ * can name is one the feed can label. The last three are the job's own: its
+ * plan is ready for review, or an answer broke a building rule on its re-ask
+ * (AGL-2935), or the site is at an allowance its plan sets for what the job
+ * writes (AGL-2909).
  */
 export type AiJobNeedsInputReason =
   | 'band'
@@ -103,6 +104,7 @@ export type AiJobNeedsInputReason =
   | 'platform'
   | 'plan'
   | 'doctrine'
+  | 'limit'
 
 export const AI_JOB_NEEDS_INPUT_REASON_LABELS: Record<
   AiJobNeedsInputReason,
@@ -110,6 +112,7 @@ export const AI_JOB_NEEDS_INPUT_REASON_LABELS: Record<
 > = {
   plan: 'its plan is ready for review',
   doctrine: 'its answer broke a building rule twice',
+  limit: 'the site reached an allowance of its plan',
   band: 'the included AI band is used up',
   cap: 'the overage ceiling was reached',
   messages: 'the monthly message cap was reached',

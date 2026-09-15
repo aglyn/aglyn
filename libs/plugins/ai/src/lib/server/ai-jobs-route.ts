@@ -29,6 +29,7 @@ import {
 // stub the barrel closed-world, and the ladder, the machine and the runtime
 // are the things under test here, not things to be stubbed away.
 import { aiGateLadder } from '../runtime/ai-gate'
+import { aiJobAdmissionRefusal } from '../jobs/ai-job-admission'
 import { AI_JOB_BRIEF_MAX_CHARS } from '../jobs/ai-job-text-step'
 import {
   AI_JOB_INLINE_BUDGET_MS,
@@ -179,6 +180,31 @@ export async function POST(request: Request): Promise<Response> {
       () => undefined,
     )
     return Response.json({ error: parsed }, { status: 400 })
+  }
+  // What only this kind can say about the request (AGL-2909): a site it
+  // needs, inputs it reads, an allowance its draft counts against. Asked
+  // before the job exists, so a refusal spends nothing.
+  let refusal: Awaited<ReturnType<typeof aiJobAdmissionRefusal>>
+  try {
+    refusal = await aiJobAdmissionRefusal(parsed.kind, {
+      firestore: gate.firestore,
+      orgId: gate.orgId,
+      hostId: parsed.hostId,
+      inputs: parsed.inputs,
+      org: gate.org,
+    })
+  } catch (error) {
+    await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
+      () => undefined,
+    )
+    console.error('ai job admission failed', { orgId: gate.orgId, kind: parsed.kind, error })
+    return Response.json({ error: 'The AI job could not be created' }, { status: 500 })
+  }
+  if (refusal) {
+    await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
+      () => undefined,
+    )
+    return Response.json({ error: refusal.error }, { status: refusal.status })
   }
 
   const now = new Date()

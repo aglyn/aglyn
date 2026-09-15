@@ -1155,3 +1155,71 @@ describe('validateAiNodeTree site references (AGL-2935)', () => {
     }
   })
 })
+
+describe('validateAiNodeTree binding tokens (AGL-2909)', () => {
+  const bound = (image: Record<string, unknown>) =>
+    tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'section',
+          props: { element: 'section' },
+          children: [
+            { componentId: 'image', props: image },
+            { componentId: 'muiTypography', props: { children: '{{entry.title}}' } },
+          ],
+        },
+      ],
+    })
+  const propsOf = (result: AiNodeTreeResult, componentId: string) =>
+    result.ok
+      ? Object.values(result.nodes).find((node) => node.componentId === componentId)?.props
+      : undefined
+  const TOKENS = ['{{entry.coverImage}}', '{{entry.url}}']
+
+  it('drops a token from a link or media prop when the caller named none', () => {
+    const result = validateAiNodeTree(
+      bound({ src: '{{entry.coverImage}}', href: '{{entry.url}}', alt: 'The cover' }),
+      'screen',
+    )
+    expect(result.ok).toBe(true)
+    expect(propsOf(result, 'image')).not.toHaveProperty('src')
+    expect(propsOf(result, 'image')).not.toHaveProperty('href')
+    // Copy keeps its tokens either way: a text prop is no address.
+    expect(propsOf(result, 'muiTypography')).toMatchObject({ children: '{{entry.title}}' })
+  })
+
+  it('keeps a token the caller named, whole, in a link or media prop', () => {
+    const result = validateAiNodeTree(
+      bound({ src: ' {{entry.coverImage}} ', href: '{{entry.url}}', alt: 'Cover for {{entry.title}}' }),
+      'screen',
+      { bindingTokens: TOKENS },
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(propsOf(result, 'image')).toMatchObject({
+      src: '{{entry.coverImage}}',
+      href: '{{entry.url}}',
+      alt: 'Cover for {{entry.title}}',
+    })
+    expect(result.repairs.filter((repair) => /\.(src|href) /.test(repair))).toEqual([])
+  })
+
+  it('admits no named token inside a longer value, none that is not named, and none in a screen prop', () => {
+    const result = validateAiNodeTree(
+      bound({
+        src: 'javascript:{{entry.coverImage}}',
+        href: '{{entry.authorUrl}}',
+        screenId: '{{entry.url}}',
+        alt: 'The cover',
+      }),
+      'screen',
+      { bindingTokens: TOKENS },
+    )
+    expect(result.ok).toBe(true)
+    const image = propsOf(result, 'image')
+    expect(image).not.toHaveProperty('src')
+    expect(image).not.toHaveProperty('href')
+    expect(image).not.toHaveProperty('screenId')
+  })
+})

@@ -290,6 +290,7 @@ import {
   registerAiJobPlanStep,
   registerAiJobStep,
 } from '../jobs/ai-jobs'
+import { registerAiJobAdmission } from '../jobs/ai-job-admission'
 
 const ORG = 'org-1'
 /** A Pro workspace with the AI add-on: `aiGenerative` is on. */
@@ -553,6 +554,37 @@ describe('POST /api/ai/jobs — the green path', () => {
     expect(job).toMatchObject({ status: 'failed', error: AI_JOB_NOT_AVAILABLE_COPY })
     expect(mockRunAiRequest).not.toHaveBeenCalled()
     expect(mockDocs.get(`orgs/${ORG}/assistUsage/${assistUsageMonth()}`)?.['messages']).toBe(0)
+  })
+
+  it('asks the kind’s admission before the job exists, and a refusal spends nothing (AGL-2909)', async () => {
+    const limit = 'Your plan includes 1 shared layouts — upgrade in Billing for more'
+    const admission = jest.fn().mockResolvedValue({ status: 403, error: limit })
+    const messages = () => mockDocs.get(`orgs/${ORG}/assistUsage/${assistUsageMonth()}`)?.['messages']
+    registerAiJobAdmission('component', admission)
+    try {
+      const refused = await createJob(post({ ...VALID, kind: 'component', inputs: { tone: 'plain' } }))
+      expect(refused.status).toBe(403)
+      expect(await refused.json()).toEqual({ error: limit })
+      expect(admission).toHaveBeenCalledWith(
+        expect.objectContaining({ orgId: ORG, hostId: 'host-1', inputs: { tone: 'plain' } }),
+      )
+      expect(jobDocs()).toHaveLength(0)
+      expect(messages()).toBe(0)
+
+      jest.spyOn(console, 'error').mockImplementation(() => undefined)
+      admission.mockRejectedValueOnce(new Error('the host index could not be read'))
+      const failed = await createJob(post({ ...VALID, kind: 'component' }))
+      expect(failed.status).toBe(500)
+      expect(jobDocs()).toHaveLength(0)
+      expect(messages()).toBe(0)
+
+      admission.mockResolvedValueOnce(null)
+      const admitted = await createJob(post({ ...VALID, kind: 'component' }))
+      expect(admitted.status).toBe(200)
+      expect(jobDocs()).toHaveLength(1)
+    } finally {
+      registerAiJobAdmission('component', null)
+    }
   })
 })
 
@@ -899,5 +931,31 @@ describe('POST /api/ai/jobs/[jobId]/resume (AGL-2935)', () => {
     expect(mockDocs.get(`orgs/${ORG}/aiJobs/${job.id}`)?.['status']).toBe('needs_review')
     expect(messages()).toBe(1)
     expect(siteRunner).not.toHaveBeenCalled()
+  })
+
+  it('asks the kind’s admission again before a waiting job runs, and a refusal leaves it waiting (AGL-2909)', async () => {
+    const job = await proposed()
+    const limit = 'Your plan includes 1 shared layouts — upgrade in Billing for more'
+    const admission = jest.fn().mockResolvedValue({ status: 403, error: limit })
+    registerAiJobAdmission('site', admission)
+    try {
+      const refused = await resume(job.id)
+      expect(refused.status).toBe(403)
+      expect(await refused.json()).toMatchObject({
+        error: limit,
+        job: { status: 'needs_review', review: { reason: 'plan' } },
+      })
+      expect(admission).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, hostId: 'host-1' }))
+      expect(mockDocs.get(`orgs/${ORG}/aiJobs/${job.id}`)?.['status']).toBe('needs_review')
+      expect(messages()).toBe(1)
+      expect(siteRunner).not.toHaveBeenCalled()
+      expect(auditRows()).toEqual([])
+
+      admission.mockResolvedValue(null)
+      expect((await resume(job.id)).status).toBe(200)
+      expect(siteRunner).toHaveBeenCalledTimes(1)
+    } finally {
+      registerAiJobAdmission('site', null)
+    }
   })
 })

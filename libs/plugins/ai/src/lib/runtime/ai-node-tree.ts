@@ -136,6 +136,13 @@ export interface AiNodeTreeContext {
   formIds?: Iterable<string>
   /** Datasets a Form element may write to by `datasetId`. */
   datasetIds?: Iterable<string>
+  /**
+   * Binding tokens a `url` or `media` prop may hold whole — an Image whose
+   * `src` is `{{entry.coverImage}}` on a page template, filled per record
+   * when the page renders (AGL-2909). Absent: a token in either role is
+   * dropped like any other value that is not an address.
+   */
+  bindingTokens?: Iterable<string>
 }
 
 /**
@@ -429,7 +436,8 @@ function textLimitFor(
 
 /**
  * One string prop against its role. Returns the value to store, or
- * `undefined` with the reason pushed to `repairs`.
+ * `undefined` with the reason pushed to `repairs`. A binding token the
+ * caller admitted passes a `url` or `media` role whole.
  */
 function sanitizeString(
   nodeId: string,
@@ -441,6 +449,7 @@ function sanitizeString(
   screenIds: Set<string> | null,
   assetIds: Set<string> | null,
   repairs: string[],
+  bindingTokens: ReadonlySet<string> | null = null,
 ): string | undefined {
   let value = raw.trim()
   if (HOSTILE_TEXT.test(value)) {
@@ -460,6 +469,7 @@ function sanitizeString(
       break
     }
     case 'url': {
+      if (bindingTokens?.has(value)) break
       if (!isHttpsUrl(value) && !isRootRelativePath(value)) {
         repairs.push(
           `${nodeId}.${name} is neither an https: URL nor a path on this site; dropped`,
@@ -478,6 +488,7 @@ function sanitizeString(
       break
     }
     case 'media': {
+      if (bindingTokens?.has(value)) break
       if (isHttpsUrl(value)) break
       const ref = parseMediaRef(value)
       if (!ref || (assetIds && !assetIds.has(ref.mediaId))) {
@@ -523,6 +534,7 @@ function sanitizeProps(
   screenIds: Set<string> | null,
   assetIds: Set<string> | null,
   repairs: string[],
+  bindingTokens: ReadonlySet<string> | null = null,
 ): { props: Record<string, unknown> } | { missing: string } {
   const source = isRecord(raw) ? raw : {}
   const props: Record<string, unknown> = {}
@@ -595,6 +607,7 @@ function sanitizeProps(
           screenIds,
           assetIds,
           repairs,
+          bindingTokens,
         )
         if (cleaned === undefined) continue
         props[name] = cleaned
@@ -916,6 +929,10 @@ function validate(
   // but on the tenant's own page it is exactly what an image should name.
   // Lift those values out before sanitizing and hand them back to the prop
   // pass, which holds them to the asset set the caller supplied.
+  // A binding token the caller admitted (AGL-2909) is lifted the same way:
+  // `{{entry.coverImage}}` is no address the sanitizer knows, and the prop
+  // pass holds it to the tokens the caller named.
+  const bindingTokens = context?.bindingTokens ? new Set(context.bindingTokens) : null
   const mediaByNodeId = new Map<string, Record<string, string>>()
   const forSanitizer: Record<string, unknown> = {}
   for (const [id, node] of Object.entries(nodes)) {
@@ -927,10 +944,11 @@ function validate(
     const props: Record<string, unknown> = { ...node.props }
     const lifted: Record<string, string> = {}
     for (const [key, value] of Object.entries(props)) {
+      if (typeof value !== 'string') continue
+      const role = roles[key]
       if (
-        roles[key] === 'media' &&
-        typeof value === 'string' &&
-        parseMediaRef(value.trim())
+        (role === 'media' && parseMediaRef(value.trim())) ||
+        ((role === 'media' || role === 'url') && bindingTokens?.has(value.trim()))
       ) {
         lifted[key] = value
         delete props[key]
@@ -1112,6 +1130,7 @@ function validate(
       screenIds,
       assetIds,
       repairs,
+      bindingTokens,
     )
     if ('missing' in propsResult) {
       return {

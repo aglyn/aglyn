@@ -222,6 +222,8 @@ export type AiStepKind =
   | 'copy.section'
   | 'copy.blog'
   | 'generate.section'
+  | 'job.layout'
+  | 'job.template'
   | 'job.text'
   | 'job.theme'
   | 'job.plan'
@@ -233,6 +235,10 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   'copy.section': 'balanced',
   'copy.blog': 'balanced',
   'generate.section': 'balanced',
+  // A layout or a page template is one structured tree held to every
+  // building rule; the fast tier re-asks more than it saves.
+  'job.layout': 'balanced',
+  'job.template': 'balanced',
   'job.text': 'balanced',
   // A theme is one structured answer over a small, fixed control set; the
   // judgment is in the color choices, which the fast tier makes worse.

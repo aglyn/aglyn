@@ -6,8 +6,8 @@ description: The building rules every AI build follows (reuse, components, layou
 
 # How Aglyn AI builds
 
-When Aglyn AI builds for your site (a page, a component, a layout, a form or an
-email), it builds the way a careful designer on your team would: from what the
+When Aglyn AI builds for your site (a page, a component, a layout, a page template, a
+form or an email), it builds the way a careful designer on your team would: from what the
 site already has, with your theme and brand, as a draft you review. The rules
 below are not a suggestion in a prompt. Every plan and every generated document
 is checked against them before you see it.
@@ -102,3 +102,5 @@ Build jobs need the **Generate with AI** permission. See
 
 - [AI Assist](../marketing-and-automation/ai-assist/overview.md)
 - [AI Generate Section](../marketing-and-automation/ai-assist/generate-section.md)
+- [Generate a layout](../building-sites/screens-and-layouts/layouts.md#generate-a-layout-with-aglyn-ai)
+- [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai)

@@ -52,7 +52,7 @@ const tracked = (): string[] =>
 
 /** Files named outright because they author documents without presets. */
 const NAMED_SOURCES = [
-  'apps/console/constants/starter-templates.ts',
+  'libs/aglyn/src/lib/app-utils/starter-templates.ts',
   'libs/tenant/runtime/src/lib/collection-fallback-nodes.ts',
 ]
 
@@ -140,7 +140,7 @@ describe('besigner document sources speak one spelling (AGL-2210)', () => {
     // A guard that matched nothing would pass forever. Assert the sweep saw
     // the files the fix actually touched, and enough of them to be real.
     const paths = sources.map((entry) => entry.path)
-    expect(paths).toContain('apps/console/constants/starter-templates.ts')
+    expect(paths).toContain('libs/aglyn/src/lib/app-utils/starter-templates.ts')
     expect(paths).toContain(
       'libs/tenant/runtime/src/lib/collection-fallback-nodes.ts',
     )

@@ -1164,6 +1164,58 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
     })
   })
 
+  it('hands back a step stopped at a site allowance with its sentence, and trying again runs it once more (AGL-2909)', async () => {
+    const limit = 'Your plan includes 1 shared layouts — upgrade in Billing for more'
+    planRunner.mockResolvedValue(proposedOutcome())
+    const job = await newSiteJob()
+    await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
+    await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, LATER)
+
+    siteRunner
+      .mockResolvedValueOnce({
+        outputs: [],
+        ...spend,
+        review: { reason: 'limit', message: limit, findings: [] },
+      })
+      .mockResolvedValueOnce({
+        outputs: [{ resource: 'layout', id: 'lay-new', versionId: 'v-1', hostId: 'host-1', label: 'Main layout' }],
+        ...spend,
+      })
+    expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'beat', now: LATER })).outcome).toBe(
+      'needs_review',
+    )
+    const parked = await getAiJob(firestore, ORG, job.$id)
+    expect(parked).toMatchObject({
+      status: 'needs_review',
+      error: limit,
+      creditsSpent: 12,
+      review: { reason: 'limit', message: limit, findings: [] },
+      plan: { status: 'confirmed', confirmedBy: 'uid-1' },
+    })
+    expect(parked?.steps.map((step) => step.status)).toEqual(['done', 'pending'])
+    expect(mockAiActivity.logAiJobNeedsInput).toHaveBeenCalledWith(ORG, { uid: null }, {
+      jobId: job.$id,
+      kind: 'site',
+      reason: 'limit',
+    })
+
+    const resumed = await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-2' }, LATER)
+    expect(resumed.job).toMatchObject({
+      status: 'queued',
+      error: null,
+      review: null,
+      // Trying again is not confirming again: the plan keeps who confirmed it.
+      plan: { status: 'confirmed', confirmedBy: 'uid-1' },
+    })
+    expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'beat', now: LATER })).outcome).toBe('done')
+    expect(siteRunner).toHaveBeenCalledTimes(2)
+    expect(await getAiJob(firestore, ORG, job.$id)).toMatchObject({
+      status: 'done',
+      creditsSpent: 18,
+      outputs: [expect.objectContaining({ resource: 'layout', id: 'lay-new' })],
+    })
+  })
+
   it('changes nothing for a job that is not waiting for a person', async () => {
     const job = await newTextJob()
     expect((await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, NOW)).changed).toBe(false)

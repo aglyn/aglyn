@@ -182,7 +182,8 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
   framing?: AiCopyFraming
 }
 
-interface Visit {
+/** One node of a walk: its id, its depth, and its ancestors' ids from the root down. */
+export interface Visit {
   id: string
   node: AiDoctrineNode
   depth: number
@@ -193,8 +194,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** Every reachable node in document order, each once. */
-function walkTree(tree: AiDoctrineTree): Visit[] {
+/**
+ * Every reachable node in document order, each once. Exported for a door's
+ * own checks (`extend`), which read a tree the way these detectors do.
+ */
+export function walkTree(tree: AiDoctrineTree): Visit[] {
   const visits: Visit[] = []
   const seen = new Set<string>()
   const stack: Array<{ id: string; depth: number; ancestors: string[] }> = [
