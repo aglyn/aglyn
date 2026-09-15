@@ -80,7 +80,7 @@ const DEFAULT_CHANNELS: AiAllotmentAlertChannels = {
 
 /** The console's absolute origin for an email link, or `''` when unset. */
 function consoleOrigin(): string {
-  return (process.env['NEXT_PUBLIC_CONSOLE_URL'] ?? '').trim().replace(/\/+$/, '')
+  return (process.env.NEXT_PUBLIC_CONSOLE_URL ?? '').trim().replace(/\/+$/, '')
 }
 
 /** Take the marker for `threshold` this month; `false` when it was taken. */
