@@ -25,7 +25,11 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
-import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+import {
+  ASSIST_PROVIDER_COST_FIELD,
+  assistCreditsFromUsd,
+  assistProviderCostUsd,
+} from '@aglyn/aglyn/app-utils/assist-credits'
 import {
   hasAiAddon,
   resolveEffectivePlan,
@@ -155,14 +159,21 @@ async function rankAssistSpendForMonth(
     if (doc.id !== month && doc.get('month') !== month) continue
     const orgId = doc.ref.parent.parent?.id
     if (!orgId) continue
-    const cost = Number(doc.get('estCostUsd') ?? 0)
-    const estCostUsd = Number.isFinite(cost) && cost > 0 ? cost : 0
+    // Two figures off one document (AGL-3015): the credits a workspace drew
+    // come from what it was BILLED, and the dollars staff rank workspaces by
+    // come from what it COST US. Ranking on the billed figure would sort the
+    // fleet by our own markup wherever workspaces differ in model mix.
+    const billed = Number(doc.get('estCostUsd') ?? 0)
+    const billedUsd = Number.isFinite(billed) && billed > 0 ? billed : 0
     unranked.push({
       orgId,
       plan: 'free',
       aiAddon: false,
-      credits: assistCreditsFromUsd(estCostUsd),
-      estCostUsd,
+      credits: assistCreditsFromUsd(billedUsd),
+      providerCostUsd: assistProviderCostUsd(
+        billedUsd,
+        doc.get(ASSIST_PROVIDER_COST_FIELD),
+      ),
       refusals: assistRefusalCounts(doc.get('refusals')),
     })
   }

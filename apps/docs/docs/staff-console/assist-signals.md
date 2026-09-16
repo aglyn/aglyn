@@ -39,7 +39,9 @@ Work the board in this order:
 ## Fleet
 
 Totals across the scanned sample: messages, tokens, estimated cost, the thumbs
-tally, and how turns stopped.
+tally, and how turns stopped. Every dollar on this page is what the models cost
+us, not what the workspaces drew in credits — the two differ wherever a
+marked-up model served, and this page exists to answer the first question.
 
 **Answered free** is the share of turns served with no model call at all —
 either quoted straight from the docs index or replayed from the answer cache —

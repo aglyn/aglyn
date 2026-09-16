@@ -73,14 +73,19 @@ two, and a question answered from the docs counts none. A month recorded
 before kinds were kept shows its totals and no rows.
 
 **Top users this month.** The ten people who drew the most, by credits — named
-from the roster, with their share of the organization's spend, provider
-dollars, requests and refusals beside them. Each name opens the account's
+from the roster, with their share of the organization's spend, the dollars
+behind their credits, requests and refusals beside them. Those dollars are what
+the credits were charged at, so a person's three figures are one arithmetic;
+what the month cost the platform is the Margin section below. Each name opens the account's
 staff page. An organization with nobody attributed reads as exactly that, not
 as a failed read.
 
 **Margin.** This month's provider spend against what AI brings in: the
 add-on's price when it is on, the share of the plan price the band was sized
-against, and overage priced at the plan's rate. The section turns **red when
+against, and overage priced at the plan's rate. Spend here is what the models
+actually cost, which on the balanced tier is below what the same tokens drew in
+credits — the credit rate carries a markup, and reading it as a cost would make
+a fully-drawn band look like exactly break-even. The section turns **red when
 spend exceeds the add-on plus the plan's assist share** — overage is left out
 of that comparison because it bills at a margin, so an organization deep in
 overage is not the one losing money. It also names the multiple of the staff
@@ -101,7 +106,8 @@ the organization used nothing.
 
 **Organizations list.** An **AI spend (month)** column shows this month's
 live provider spend per organization and sorts on it, unmeasured
-organizations last. It is the quickest way to find the one organization
+organizations last. Months closed before provider spend was recorded
+separately show what they drew, which is at or above what they cost. It is the quickest way to find the one organization
 spending while the month is still open.
 
 **Margin utilization.** Each organization's revenue side names the AI add-on's

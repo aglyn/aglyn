@@ -28,6 +28,10 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { orgMarginRow, type OrgMarginRow } from '@aglyn/aglyn/app-utils/margin-utilization'
+import {
+  ASSIST_PROVIDER_COST_FIELD,
+  assistProviderCostUsd,
+} from '@aglyn/aglyn/app-utils/assist-credits'
 
 /**
  * REALISED BAND UTILIZATION, PER ORGANIZATION.
@@ -231,10 +235,16 @@ async function handler(request: Request): Promise<Response> {
       .filter((ref): ref is FirebaseFirestore.DocumentReference => Boolean(ref))
     const assistSnaps = assistRefs.length ? await db.getAll(...assistRefs) : []
     reads += assistSnaps.length
+    // Our bill for the month, not what the organizations drew (AGL-3015):
+    // this page rates margins, and a cost side carrying our own markup would
+    // rate a token-heavy organization worse than it is.
     const assistByPath = new Map<string, number>()
     assistSnaps.forEach((snap) => {
-      const cost = Number(snap.get('estCostUsd') ?? 0)
-      if (Number.isFinite(cost) && cost > 0) assistByPath.set(snap.ref.path, cost)
+      const cost = assistProviderCostUsd(
+        snap.get('estCostUsd'),
+        snap.get(ASSIST_PROVIDER_COST_FIELD),
+      )
+      if (cost > 0) assistByPath.set(snap.ref.path, cost)
     })
 
     const rows = pageDocs.map((doc, index) => {

@@ -121,14 +121,24 @@ What generation costs in tokens is measured beside what it costs in credits
   reports the `effort` it asked for, which `runValidatedGeneration` returns
   on its spend. A step that failed before the provider records none.
 - **On the org month.** `assistUsage/{month}.kinds.{kind}` holds `requests`,
-  `estCostUsd` and `tokens.{input,cached,cacheWrite,output}` for every metered
-  model request, keyed by its `AiUsageKind` — a job step by its job's kind.
-  A docs answer is not a request. `estCostUsd` there is the measured provider
-  spend, a declined Free turn included, where the month's top-level
-  `estCostUsd` is the credited spend; the month's `inputTokens` …
-  `cacheWriteTokens` stay its totals.
+  `estCostUsd`, `providerCostUsd` and `tokens.{input,cached,cacheWrite,output}`
+  for every metered model request, keyed by its `AiUsageKind` — a job step by
+  its job's kind. A docs answer is not a request. Both dollar figures count a
+  declined Free turn, where the month's top-level `estCostUsd` counts only the
+  credited ones; the month's `inputTokens` … `cacheWriteTokens` stay its totals.
+- **Two dollar figures, and which is which (AGL-3015).** `estCostUsd` is every
+  exchange at the model catalog's **billed** rates — the figure credits are
+  drawn from, and the one a band, a cap, an overage line and an invoice are
+  measured in. `providerCostUsd` is the same exchanges at what the **provider**
+  charges, which on a marked-up model is lower. Read the first to answer "what
+  did this workspace draw", the second to answer "what did it cost us" — never
+  either for both. `assistProviderCostUsd` in
+  `libs/aglyn/src/lib/app-utils/assist-credits.ts` is the one reader of the
+  second, and answers with the first for a period closed before the split.
 - **On the person's month.** `aiUsageByUser/{uid}/months/{month}.tokens`, the
-  same four counts beside `estCostUsd`, written on the org rollup's batch.
+  same four counts beside `estCostUsd` — the billed figure, so a person's
+  dollars, their credits and their share of the workspace are one arithmetic.
+  Written on the org rollup's batch.
 - **On the signal.** `assistSignals/{id}.kind`, so the fleet board splits
   tokens by kind. A signal written before it is read by its route.
 - **Where staff read them.** The staff AI card (`composeStaffOrgAiTokens` in

@@ -16,7 +16,11 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { assistMonthOverage } from '@aglyn/aglyn/app-utils/assist-credits'
+import {
+  ASSIST_PROVIDER_COST_FIELD,
+  assistMonthOverage,
+  assistProviderCostUsd,
+} from '@aglyn/aglyn/app-utils/assist-credits'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
@@ -1100,13 +1104,17 @@ async function handler(request: Request): Promise<Response> {
        * pay a provider, and the discount guardrail's entire job is to compare
        * revenue against what an org costs us.
        *
-       * Already dollars: `estCostUsd` is computed at the provider's list
-       * rates where the tokens were counted. Re-deriving it from tokens here
-       * would be a second cost model to drift from the first.
+       * Already dollars, and the PROVIDER figure of the two the rollup keeps
+       * (AGL-3015): `estCostUsd` beside it is the same tokens at the billed
+       * rates a customer's credits come out of, and a cost of goods carrying
+       * our own markup would understate the margin the guardrail defends.
+       * Re-deriving either from tokens here would be a second cost model to
+       * drift from the first.
        *=========================================*/
-      const assistCostRaw = Number(assistUsageSnap.get('estCostUsd') ?? 0)
-      const assistCostUsd =
-        Number.isFinite(assistCostRaw) && assistCostRaw > 0 ? assistCostRaw : 0
+      const assistCostUsd = assistProviderCostUsd(
+        assistUsageSnap.get('estCostUsd'),
+        assistUsageSnap.get(ASSIST_PROVIDER_COST_FIELD),
+      )
       /*==========================================
        * AGLYN ASSIST OVERAGE, PRICED ONTO THE INVOICE (AGL-2653).
        *
@@ -1118,6 +1126,11 @@ async function handler(request: Request): Promise<Response> {
        * to, and prices the rest — so the console meter and this line cannot
        * disagree about what was over.
        *
+       * Off the BILLED figure, not the provider one above it (AGL-3015). A
+       * credit is a fixed quantity of billed spend, so this is the only
+       * reading under which the credits invoiced here are the credits the
+       * customer's own meter counted down.
+       *
        * The org's hard-cap switch is NOT read here, on purpose. The switch
        * lives at the gate: on, `reserveAssistMessage` refuses at the band and
        * at most the one exchange that crossed the line can land past it; off,
@@ -1127,7 +1140,11 @@ async function handler(request: Request): Promise<Response> {
        * erase a month's overage, which is AGL-2399 on a different meter. A
        * plan with no band or no rate prices zero structurally.
        *=========================================*/
-      const assistOverage = assistMonthOverage(orgData, assistCostUsd)
+      const assistBilledRaw = Number(assistUsageSnap.get('estCostUsd') ?? 0)
+      const assistOverage = assistMonthOverage(
+        orgData,
+        Number.isFinite(assistBilledRaw) && assistBilledRaw > 0 ? assistBilledRaw : 0,
+      )
       /*==========================================
        * THE POS FEE THAT STRIPE CANNOT COLLECT (AGL-2111).
        *

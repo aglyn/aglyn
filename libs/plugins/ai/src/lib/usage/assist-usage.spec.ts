@@ -42,7 +42,10 @@ import {
   ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
   assistOrgMonthlyCostLimitUsd,
 } from '@aglyn/aglyn/app-utils/usage-budget'
-import { aiRatesForModel } from '../providers/catalog'
+import {
+  aiBilledRatesForModel,
+  aiProviderRatesForModel,
+} from '../providers/catalog'
 import type { AssistRefusedBy } from '@aglyn/aglyn/app-utils/assist-credits'
 import type { AiRefusedBy } from '../model/ai-allotments'
 
@@ -263,6 +266,7 @@ const {
   assistUsageMonth,
   checkAssistQuota,
   estimateAssistCostUsd,
+  estimateAssistProviderCostUsd,
   recordAssistExchange,
   recordAssistFeedback,
   releaseAssistMessage,
@@ -365,17 +369,22 @@ describe('estimateAssistCostUsd', () => {
     expect(estimateAssistCostUsd(million, 'claude-haiku-4-5')).toBe(6)
   })
 
-  it('an unknown model id errs HIGH rather than low', () => {
+  it('an unknown model id errs HIGH rather than low, on BOTH rates', () => {
     // A pinned snapshot id, a model released after this table was written,
     // a typo in the env var: none of them may quietly make an org look
-    // cheap. The fallback is the dearest tier on purpose.
-    const rate = aiRatesForModel('claude-something-not-in-the-table')
-    expect(rate.inputPerToken).toBeGreaterThan(
-      aiRatesForModel('claude-opus-5').inputPerToken,
-    )
-    expect(rate.outputPerToken).toBeGreaterThan(
-      aiRatesForModel('claude-opus-5').outputPerToken,
-    )
+    // cheap. The fallback is the dearest tier on purpose — and since
+    // AGL-3015 there are two rates to fall back on, each of which errs in
+    // its own direction if it is left behind: a low billed rate under-draws
+    // the customer's credits, a low provider rate over-states the margin.
+    for (const rates of [aiBilledRatesForModel, aiProviderRatesForModel]) {
+      const rate = rates('claude-something-not-in-the-table')
+      expect(rate.inputPerToken).toBeGreaterThan(
+        rates('claude-opus-5').inputPerToken,
+      )
+      expect(rate.outputPerToken).toBeGreaterThan(
+        rates('claude-opus-5').outputPerToken,
+      )
+    }
   })
 })
 
@@ -873,12 +882,13 @@ describe('recordAssistExchange', () => {
     // to prevent. Cost telemetry nobody has tied to tokens can drift from
     // the truth with nothing going red, and tuning price against measured
     // margin is this meter's entire reason to exist.
-    const rate = aiRatesForModel('claude-sonnet-5')
-    const expected =
+    const priced = (rate: ReturnType<typeof aiBilledRatesForModel>) =>
       1200 * rate.inputPerToken +
       300 * rate.outputPerToken +
       800 * rate.cacheReadPerToken +
       100 * rate.cacheWritePerToken
+    const rate = aiBilledRatesForModel('claude-sonnet-5')
+    const expected = priced(rate)
     expect(Number(month?.estCostUsd)).toBeCloseTo(expected, 9)
     // Every term is load-bearing: a formula that dropped the cache columns
     // would still be proportional to the tokens and still positive.
@@ -887,6 +897,16 @@ describe('recordAssistExchange', () => {
       9,
     )
     expect(Number(signal?.estCostUsd)).toBeCloseTo(expected, 9)
+
+    // AGL-3015: the SAME tokens, priced a second time at what the provider
+    // charges, on the same three documents. Sonnet 5 is billed above its
+    // provider rate, so this is a strictly smaller number — and asserting
+    // it as its own arithmetic is what stops the second field being filled
+    // in from the first.
+    const providerExpected = priced(aiProviderRatesForModel('claude-sonnet-5'))
+    expect(providerExpected).toBeLessThan(expected)
+    expect(Number(month?.providerCostUsd)).toBeCloseTo(providerExpected, 9)
+    expect(Number(signal?.providerCostUsd)).toBeCloseTo(providerExpected, 9)
 
     // And the asker's own month (AGL-2928), on the same batch: the same
     // money, keyed by the uid the signal deliberately does not carry.
@@ -2299,6 +2319,7 @@ describe('tokens by kind on the month, on the signal and on the person’s month
   const orgMonthPath = `orgs/${ORG}/assistUsage/2026-08`
   const usage = { inputTokens: 1_200, outputTokens: 300, cacheReadTokens: 3_000, cacheWriteTokens: 400 }
   const cost = estimateAssistCostUsd(usage, 'claude-sonnet-5')
+  const providerCost = estimateAssistProviderCostUsd(usage, 'claude-sonnet-5')
   const step = {
     route: 'ai/jobs',
     hostId: 'host-1',
@@ -2337,9 +2358,13 @@ describe('tokens by kind on the month, on the signal and on the person’s month
       page: {
         requests: 2,
         estCostUsd: cost * 2,
+        // Both figures per kind (AGL-3015), so the staff card can ask what a
+        // kind COST without reading what it drew.
+        providerCostUsd: providerCost * 2,
         tokens: { input: 2_400, cached: 6_000, cacheWrite: 800, output: 600 },
       },
     })
+    expect(providerCost).toBeLessThan(cost)
     // The month's own totals keep counting every request, as they always did.
     expect(month).toMatchObject({
       inputTokens: 2_400,

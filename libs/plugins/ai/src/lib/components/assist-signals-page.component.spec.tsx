@@ -104,18 +104,18 @@ const report = (over: Record<string, unknown> = {}) => ({
     outputTokens: 200,
     cacheReadTokens: 4_500,
     cacheWriteTokens: 8_192,
-    estCostUsd: 4.24,
+    providerCostUsd: 4.24,
     // Two of the five turns were answered with no model call (AGL-2486).
     deflected: 2,
     deflectionRate: 0.4,
     cacheReadRate: 0.9,
     byTier: {
-      entitled: { messages: 2, estCostUsd: 4.04 },
-      free: { messages: 3, estCostUsd: 0.2 },
+      entitled: { messages: 2, providerCostUsd: 4.04 },
+      free: { messages: 3, providerCostUsd: 0.2 },
     },
     byModel: {
-      'claude-sonnet-5': { messages: 2, estCostUsd: 4.04 },
-      'claude-haiku-4-5': { messages: 3, estCostUsd: 0.2 },
+      'claude-sonnet-5': { messages: 2, providerCostUsd: 4.04 },
+      'claude-haiku-4-5': { messages: 3, providerCostUsd: 0.2 },
     },
     stopReasons: { end_turn: 5 },
     feedback: { up: 1, down: 1, none: 3 },
@@ -247,14 +247,14 @@ describe('the Assist cost breakdown reaches the screen (AGL-2340)', () => {
     serve(
       report({
         totals: {
-          estCostUsd: 12.5,
+          providerCostUsd: 12.5,
           byTier: {
-            entitled: { messages: 2, estCostUsd: 1.5 },
-            free: { messages: 3, estCostUsd: 11.0 },
+            entitled: { messages: 2, providerCostUsd: 1.5 },
+            free: { messages: 3, providerCostUsd: 11.0 },
           },
           byModel: {
-            'claude-sonnet-5': { messages: 2, estCostUsd: 1.5 },
-            'claude-haiku-4-5': { messages: 3, estCostUsd: 11.0 },
+            'claude-sonnet-5': { messages: 2, providerCostUsd: 1.5 },
+            'claude-haiku-4-5': { messages: 3, providerCostUsd: 11.0 },
           },
         },
       }),
@@ -301,12 +301,12 @@ describe('zero spend is a finding, not an empty grid (AGL-2501)', () => {
     serve(
       report({
         totals: {
-          estCostUsd: 0,
+          providerCostUsd: 0,
           messages: 8,
           deflected: 8,
           deflectionRate: 1,
-          byTier: { entitled: { messages: 8, estCostUsd: 0 } },
-          byModel: { 'docs-retrieval': { messages: 8, estCostUsd: 0 } },
+          byTier: { entitled: { messages: 8, providerCostUsd: 0 } },
+          byModel: { 'docs-retrieval': { messages: 8, providerCostUsd: 0 } },
         },
       }),
     )
@@ -325,12 +325,12 @@ describe('zero spend is a finding, not an empty grid (AGL-2501)', () => {
     serve(
       report({
         totals: {
-          estCostUsd: 0,
+          providerCostUsd: 0,
           messages: 8,
           deflected: 5,
           deflectionRate: 0.625,
-          byTier: { entitled: { messages: 8, estCostUsd: 0 } },
-          byModel: { 'claude-sonnet-5': { messages: 8, estCostUsd: 0 } },
+          byTier: { entitled: { messages: 8, providerCostUsd: 0 } },
+          byModel: { 'claude-sonnet-5': { messages: 8, providerCostUsd: 0 } },
         },
       }),
     )
@@ -338,7 +338,7 @@ describe('zero spend is a finding, not an empty grid (AGL-2501)', () => {
 
     // THE ASSERTION that separates the two zeros. Three turns reached a
     // provider and priced at nothing, which is spend landing nowhere — the
-    // opposite conclusion from the test above, off the same `estCostUsd`.
+    // opposite conclusion from the test above, off the same `providerCostUsd`.
     expect(
       await screen.findByText(/3 of 8 turns reached a model/),
     ).toBeTruthy()
@@ -377,7 +377,7 @@ describe('the workspace is named and the ranking states its cut (AGL-2501)', () 
             outputTokens: 0,
             cacheReadTokens: 0,
             cacheWriteTokens: 0,
-            estCostUsd: 0,
+            providerCostUsd: 0,
             down: 0,
           },
           {
@@ -388,7 +388,7 @@ describe('the workspace is named and the ranking states its cut (AGL-2501)', () 
             outputTokens: 0,
             cacheReadTokens: 0,
             cacheWriteTokens: 0,
-            estCostUsd: 0,
+            providerCostUsd: 0,
             down: 0,
           },
         ],
@@ -413,7 +413,7 @@ describe('the workspace is named and the ranking states its cut (AGL-2501)', () 
       up: 0,
       down: 0,
       orgs: 1,
-      estCostUsd: 0,
+      providerCostUsd: 0,
       downRate: null,
     })
     serve(
@@ -488,7 +488,7 @@ describe('tokens by kind (AGL-2937)', () => {
           byKind: {
             assist: {
               messages: 30,
-              estCostUsd: 0.3,
+              providerCostUsd: 0.3,
               inputTokens: 1_000,
               outputTokens: 500,
               cacheReadTokens: 9_000,
@@ -498,7 +498,7 @@ describe('tokens by kind (AGL-2937)', () => {
             },
             page: {
               messages: 4,
-              estCostUsd: 2.2,
+              providerCostUsd: 2.2,
               inputTokens: 2_000,
               outputTokens: 9_000,
               cacheReadTokens: 0,

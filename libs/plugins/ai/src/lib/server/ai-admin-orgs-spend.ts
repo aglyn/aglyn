@@ -22,6 +22,10 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import {
+  ASSIST_PROVIDER_COST_FIELD,
+  assistProviderCostUsd,
+} from '@aglyn/aglyn/app-utils/assist-credits'
 import { assistUsageMonth } from '../usage/assist-usage'
 import {
   parseStaffOrgIds,
@@ -115,12 +119,24 @@ async function handler(request: Request): Promise<Response> {
   }
 }
 
-/** A month document's spend, or `null` when there is no document to read. */
+/**
+ * A month document's PROVIDER spend, or `null` when there is no document to
+ * read.
+ *
+ * The column this feeds is named for our money and is sorted on to find the
+ * workspace spending it, so it is the provider figure and not what the
+ * workspace drew (AGL-3015). A month closed before the two were split
+ * answers with what it drew, which over-states the bill rather than hiding
+ * it — the direction that still surfaces the workspace worth looking at.
+ */
 function spendOf(
   snapshot: FirebaseFirestore.DocumentSnapshot | undefined,
 ): number | null {
   if (!snapshot?.exists) return null
-  const cost = Number(snapshot.get('estCostUsd') ?? 0)
+  const cost = assistProviderCostUsd(
+    snapshot.get('estCostUsd'),
+    snapshot.get(ASSIST_PROVIDER_COST_FIELD),
+  )
   return Number.isFinite(cost) ? cost : null
 }
 

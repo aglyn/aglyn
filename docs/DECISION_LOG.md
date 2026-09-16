@@ -92,6 +92,49 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-15 — An AI credit carries a markup: the catalog's billed rate and the provider's rate are two figures, and cost is measured at the provider's
+
+- **Decided by:** the account owner on 2026-09-15 (AGL-3015). Asked whether to correct the balanced tier's catalog rate down to the vendor's published list, they kept the higher figure and named it deliberate: the platform is upcharging on AI, and the answer to cost is to spend fewer tokens rather than to charge less for them.
+- **Scope:** packaging, policy
+- **Evidence:** `AiCatalogRates`, `aiRatesAtList`, `aiProviderRatesForModel`, `aiBilledRatesForModel`, `estimateAiProviderCostUsd` and `estimateAiBilledUsd` in `libs/plugins/ai/src/lib/providers/catalog.ts`; `ASSIST_PROVIDER_COST_FIELD` and `assistProviderCostUsd` in `libs/aglyn/src/lib/app-utils/assist-credits.ts`; the second increment in `writeSignalAndRollup` (`libs/plugins/ai/src/lib/usage/assist-usage.ts`); the readers switched in `usage/staff-org-ai.ts`, `usage/assist-signal-mining.ts`, `server/ai-admin-orgs-spend.ts`, `apps/console/app/api/_lib/org-cogs.ts`, `apps/console/app/api/admin/margin-utilization/route.ts` and the COGS line of `apps/console/app/api/billing/report-usage/route.ts`; `libs/plugins/ai/src/lib/providers/billed-rate-is-not-provider-cost.spec.ts`; AGL-3015, AGL-3011, AGL-2937.
+
+**No locked price moves.** No price, band, credit rate or overage figure
+changes, and no customer is charged differently. What changes is which figure
+the platform's own cost and margin surfaces read.
+
+**What was wrong.** One rate table answered two questions. The balanced tier —
+which serves most requests — is billed above what the vendor charges, and that
+markup was being read as though it were spend. Everything reasoning about real
+money was therefore computed from a price nobody pays: the staff cost meters,
+the discount guardrail's cost of goods, the fleet margin page, and the overage
+exposure figures AGL-3011 is sized against.
+
+**What a credit is now, stated once.** A credit is **$0.001 of BILLED spend**,
+not of provider spend. Every band, ceiling, cap, overage rate and invoice line
+keeps that reading and is unchanged. What a credit COSTS us is at or below a
+tenth of a cent, and on the balanced tier it is two thirds of one. The rule
+retired by this entry is the framing in the 2026-09-14 add-on entry and the
+Free-taste entry above it, where a credit was described as a tenth of a cent of
+provider spend; those entries stand as written and their cost figures are read
+as upper bounds.
+
+**Consequences worth stating plainly:**
+
+* `ASSIST_CREDIT_MIN_MARGIN_PCT` is unchanged at 50%, and every retail rate on
+  the ladder still clears it — by **more** than before, never less. The cost
+  side of `assistCreditRateMarginPct` is the billed rate, which is at or above
+  what we pay, so the figure it reports is a **lower bound** on the realized
+  line margin. A rate that clears the floor there clears it on every model mix.
+* The staff margin card was comparing a billed-rate spend figure against a
+  billed-rate revenue figure, so a workspace that drew exactly its band read as
+  **exactly break-even** whatever its tokens cost. On the balanced tier that
+  same month now reads about **33% margin** on the plan's assist share.
+* AGL-3011's exposure arithmetic was conservative rather than wrong: it put $50
+  of retail overage at $16.67–$25 of provider cost, and the true figure is
+  lower. Its guards stand; they are simply not as tight as they looked.
+* Periods closed before this shipped carry only the billed figure and answer
+  with it, which **over-states** what we paid rather than hiding it.
+
 ## 2026-09-15 — Manual AI model picks by plan, the org-wide model restriction, and who may set AI allotments are confirmed as built
 
 - **Decided by:** the account owner on 2026-09-15. Asked in the engineering session to confirm or change the defaults AGL-2942 had chosen, they confirmed all three as built.

@@ -145,7 +145,7 @@ function CostSplitTable({
 }: {
   caption: string
   label: string
-  rows: { key: string; messages: number; estCostUsd: number }[]
+  rows: { key: string; messages: number; providerCostUsd: number }[]
   totalUsd: number
 }) {
   return (
@@ -176,9 +176,9 @@ function CostSplitTable({
                 <TableCell align="right">
                   {row.messages.toLocaleString()}
                 </TableCell>
-                <TableCell align="right">{money(row.estCostUsd)}</TableCell>
+                <TableCell align="right">{money(row.providerCostUsd)}</TableCell>
                 <TableCell align="right">
-                  {percent(totalUsd > 0 ? row.estCostUsd / totalUsd : null)}
+                  {percent(totalUsd > 0 ? row.providerCostUsd / totalUsd : null)}
                 </TableCell>
               </TableRow>
             ))
@@ -304,7 +304,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
           // AGL-1891 is the same drift, in the Assist panel itself.
           <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
             <Chip label={`${totals.messages.toLocaleString()} turns`} />
-            <Chip label={`${money(totals.estCostUsd)} estimated`} />
+            <Chip label={`${money(totals.providerCostUsd)} estimated`} />
             {/*
              * The headline number for whether Assist is affordable to
              * leave on (AGL-2486): the share of turns answered from the
@@ -460,7 +460,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
                     {row.credits.toLocaleString()}
                   </TableCell>
                   <TableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                    {money(row.estCostUsd)}
+                    {money(row.providerCostUsd)}
                   </TableCell>
                   {/* The total, with the reasons on hover-free display:
                       a reader comparing spend to refusals needs both
@@ -506,7 +506,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
           <Typography variant="body2" color="text.secondary">
             {loading ? 'Reading signals…' : 'No assist turns recorded yet.'}
           </Typography>
-        ) : totals.estCostUsd === 0 ? (
+        ) : totals.providerCostUsd === 0 ? (
           /*
            * ZERO SPEND IS A FINDING, NOT AN EMPTY TABLE.
            *
@@ -537,13 +537,13 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
               caption="By tier"
               label="Tier"
               rows={costSplitRows(totals.byTier)}
-              totalUsd={totals.estCostUsd}
+              totalUsd={totals.providerCostUsd}
             />
             <CostSplitTable
               caption="By model"
               label="Model"
               rows={costSplitRows(totals.byModel)}
-              totalUsd={totals.estCostUsd}
+              totalUsd={totals.providerCostUsd}
             />
           </Stack>
         )}
@@ -595,7 +595,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
                   <TableCell>{row.kind}</TableCell>
                   <TableCell align="right">{row.messages.toLocaleString()}</TableCell>
                   <TableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                    {money(row.messages ? row.estCostUsd / row.messages : 0)}
+                    {money(row.messages ? row.providerCostUsd / row.messages : 0)}
                   </TableCell>
                   <TableCell align="right">{row.inputTokens.toLocaleString()}</TableCell>
                   <TableCell align="right">{row.cacheReadTokens.toLocaleString()}</TableCell>
@@ -656,7 +656,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
                   </TableCell>
                   <TableCell align="right">{row.orgs}</TableCell>
                   <TableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                    {money(row.estCostUsd)}
+                    {money(row.providerCostUsd)}
                   </TableCell>
                 </TableRow>
               ))
@@ -874,7 +874,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
                   </TableCell>
                   <TableCell align="right">{row.down}</TableCell>
                   <TableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                    {money(row.estCostUsd)}
+                    {money(row.providerCostUsd)}
                   </TableCell>
                 </TableRow>
               ))
