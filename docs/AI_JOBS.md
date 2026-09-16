@@ -283,7 +283,9 @@ live answer.
   first, and refused as the page step refuses it (AGL-3053) — or the copy, the fields
   or the theme call are there.
   *Rules*: no doctrine rule is broken, nor the kind's own (a link the chat
-  answer was not given, a title line on a blog body). *Budget*: rule 17 for a
+  answer was not given, a title line on a blog body); a component answer that
+  declares its `props` is held to the component step's own checks too
+  (`aiComponentCheck`, AGL-3054). *Budget*: rule 17 for a
   document, the length ceiling for copy. *Plan*: the plan rules and the
   expected shape. *Rubric*: a grade from 1 to 5 for structure, copy fit and
   reuse, passing at a mean of 3.5 with nothing under 3. An answer's score is
@@ -744,12 +746,27 @@ draft.
   doctrine's tree, and `props[]` beside it.
 - **The kinds are the Properties dialog's.** The tool offers
   `REUSABLE_PROP_KINDS` less the kinds `AI_COMPONENT_PROP_KINDS_NOT_OFFERED`
-  names, each with its reason, which leaves Text, Long text, Image, Link,
+  names, each with its reason, which leaves Text, Long text, Image, Link, Icon,
   Number, Yes / no and Choice. A spec holds the two tables in both directions,
   and a kind added to the dialog does not compile until it is offered or
   excused. `readAiComponentProps` stores each property as the dialog's cleaner
   does: trimmed, a default in its kind's own type, only the fields the kind
   uses.
+- **An icon is the site owner's pick (AGL-3054).** The Icon element draws the
+  path its picker stores beside the icon's id, and a model can name an id but
+  never the drawing: on a published page, which never loads the icon catalog, an
+  icon a model names draws the empty Icon. So the component palette, and no
+  other, offers the Icon (`COMPONENT_EXTRA_IDS` in
+  `tools/scripts/generate-ai-palette.mts`), and a component binds it to an Icon
+  property whose default is empty, for the owner to pick where a page places the
+  component; a default that names an icon is refused (`prop-default`). The
+  palette validator drops, with a repair, any icon a model writes itself: a value
+  on an icon picker (an Icon's `iconId`, a Button's `startIconId`) that is not a
+  component's own token, and a word a page fills an instance's Icon property with.
+  The plan names an icon field's kind as `name:icon`. A live About page's card had
+  none of this: its plan listed `icon:string`, its step declared the icon as Text
+  and drew it as an h3-sized span, and three pages filled it with "family",
+  "estate" and "realestate".
 - **Bindings.** The tree binds a property with `{{prop.<name>}}`. The palette
   validator keeps a whole token in a field that is not copy, and in `hideIf`
   or `hideUnless`, only while `AiNodeTreeContext.definesComponent` is set.
@@ -760,17 +777,24 @@ draft.
   field kind the generated palette records for each prop as `propFields`), as
   its whole value; a field that is typed into takes copy (Text, Long text,
   Number) whole or inside a sentence, an Image only as a picture's source and
-  a Link only as an address. A Choice's answers must be values the dropdown
-  lists (`unofferedChoiceValues`, in core so the designer and the check read
-  one rule).
-- **The step's check,** through `extend`: every token names a declared
-  property and every declared property is bound; each sits on a field its
-  kind fits; an optional part is hidden by a Yes / no labeled `Hide …` whose
-  default is false, bound to `hideIf` on that part and never on the whole
-  component; a default fits the field it fills and reads in the site's voice
-  (rule 14); an Image default is empty or a library picture (rule 9); the
-  confirmed plan's reused components are placed and the properties it lists
-  are declared (rule 7). A property handed on to a placed component fits the
+  a Link only as an address. An Icon binds only to an icon picker, whole. A
+  Choice's answers must be values the dropdown lists (`unofferedChoiceValues`,
+  in core so the designer and the check read one rule).
+- **The step's check,** through `extend`, is `aiComponentCheck` in
+  `src/lib/jobs/ai-job-component-checks.ts`, which is pure, so the step, the eval
+  harness and their specs read one definition: every token names a declared
+  property and every declared property is bound, and a property bound nowhere
+  is re-asked with where its kind binds (`prop-unbound`: "an Icon to an Icon
+  element's iconId"); each sits on a field its kind fits; a copy property named
+  or labeled as an icon and shown as words is refused as `icon-as-text`, with a
+  re-ask to make it an Icon property bound whole to an Icon's `iconId` with the
+  default `""` (AGL-3054); an optional part is hidden by a Yes / no labeled
+  `Hide …` whose default is false, bound to `hideIf` on that part and never on
+  the whole component; a default fits the field it fills and reads in the site's
+  voice (rule 14); an Image default is empty or a library picture (rule 9); the
+  confirmed plan's reused components are placed, the properties it lists are
+  declared, and a field it lists as `name:icon` is an Icon property
+  (`plan-prop-kind`, rule 7). A property handed on to a placed component fits the
   kind that component declares.
 - **Drafts.** `writeAiDraft` writes the component as the host resources
   route's `reusableComponent` entry does: that entry's allow-list
@@ -810,7 +834,11 @@ answering an `AssistEditProposal` that AGL-2906's own card applies.
   defaults, and `bindings[]` of `{ nodeId, field, prop }`. The check is a
   closed world over the selection's own subtree, with the binding rules read
   from `runtime/ai-component-bindings.ts` — the from-brief step's own module,
-  so the two entry points cannot disagree.
+  so the two entry points cannot disagree. It offers every kind the from-brief
+  step does but Icon (`AI_COMPONENT_SELECTION_PROP_KINDS`): the apply reads each
+  default off the live field, and an icon's default is drawn from a path that
+  field does not carry. A property bound nowhere is re-asked with where its kind
+  binds.
 - **Refused before spend.** A selection that is the document, that carries the
   `main` landmark or a second h1 (rule 11), or that the outline stops short of
   describing whole.

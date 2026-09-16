@@ -134,12 +134,27 @@ describe('aiComponentPropBindsToField (AGL-2908)', () => {
     expect(bind('boolean', image, 'hideUnless', 'whole')).toBe(false)
   })
 
-  it('binds nothing to a prop the element does not declare, a field no offered kind takes, or an unknown element', () => {
+  it('binds an icon only to an icon picker, as its whole value, and nothing else there (AGL-3054)', () => {
+    const icon = AI_PALETTE['icon']
     const button = AI_PALETTE['muiButton']
-    expect(button.propFields['startIconId']).toBe(FieldComponentType.ICON_PICKER)
+    const typography = AI_PALETTE['muiTypography']
+    expect([icon.propFields['iconId'], button.propFields['startIconId']]).toEqual([
+      FieldComponentType.ICON_PICKER,
+      FieldComponentType.ICON_PICKER,
+    ])
     for (const type of AI_COMPONENT_PROP_KINDS) {
-      expect([type, bind(type, button, 'startIconId', 'whole')]).toEqual([type, false])
+      expect([type, bind(type, icon, 'iconId', 'whole'), bind(type, button, 'startIconId', 'whole')]).toEqual([
+        type,
+        type === 'icon',
+        type === 'icon',
+      ])
     }
+    expect(bind('icon', icon, 'iconId', 'inside')).toBe(false)
+    expect(bind('icon', typography, 'children', 'whole')).toBe(false)
+  })
+
+  it('binds nothing to a prop the element does not declare, or an unknown element', () => {
+    const button = AI_PALETTE['muiButton']
     expect(bind('text', button, 'onClick', 'whole')).toBe(false)
     expect(bind('text', undefined, 'children', 'whole')).toBe(false)
   })

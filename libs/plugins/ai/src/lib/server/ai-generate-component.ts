@@ -35,6 +35,7 @@ import {
 import type { AiSystemBlock, AiTool } from '../providers/contract'
 import { AI_ROUTING_TABLE } from '../providers/routing'
 import {
+  aiComponentKindBindsTo,
   aiComponentPropBindsToField,
   aiComponentUnofferedAnswers,
   type AiComponentPropBinding,
@@ -50,7 +51,7 @@ import { aiGateLadder } from '../runtime/ai-gate'
 import { AI_PALETTE } from '../runtime/ai-palette.generated'
 import {
   AI_COMPONENT_MAX_PROPS,
-  AI_COMPONENT_PROP_KINDS,
+  AI_COMPONENT_SELECTION_PROP_KINDS,
   aiComponentPropKindWords,
 } from '../tools/ai-component-tool'
 import { recordAssistExchange, releaseAssistMessage } from '../usage/assist-usage'
@@ -254,8 +255,8 @@ export function aiComponentSelectionTool(): AiTool {
               },
               type: {
                 type: 'string',
-                enum: [...AI_COMPONENT_PROP_KINDS],
-                description: `The kind, as type (the name a page reads): ${aiComponentPropKindWords()}.`,
+                enum: [...AI_COMPONENT_SELECTION_PROP_KINDS],
+                description: `The kind, as type (the name a page reads): ${aiComponentPropKindWords(AI_COMPONENT_SELECTION_PROP_KINDS)}.`,
               },
               label: {
                 type: 'string',
@@ -382,7 +383,7 @@ export function checkAiComponentSelection(
       return finding('prop-duplicate', `Two properties are called "${name}".`, path)
     }
     const type = cleanText(raw['type'], NAME_MAX)
-    if (!(AI_COMPONENT_PROP_KINDS as readonly string[]).includes(type)) {
+    if (!(AI_COMPONENT_SELECTION_PROP_KINDS as readonly string[]).includes(type)) {
       return finding('prop-kind', `"${type}" is not a kind a property takes.`, path)
     }
     const options = Array.isArray(raw['options'])
@@ -474,7 +475,7 @@ export function checkAiComponentSelection(
     if (bound.has(prop.name)) continue
     finding(
       'prop-unbound',
-      `"${prop.name}" is declared and never bound. Every property fills a setting of the section.`,
+      `"${prop.name}" is declared and never bound. Every property fills a setting of the section: bind a ${prop.type} property to ${aiComponentKindBindsTo(prop.type ?? 'text')}.`,
       'bindings',
     )
   }

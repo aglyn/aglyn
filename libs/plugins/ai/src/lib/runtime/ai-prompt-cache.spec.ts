@@ -504,10 +504,10 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     // prompt moves one of them DOWN and says so in its commit, and a prompt
     // that grows without anyone meaning it to moves one UP and is red here.
     expect(measured()).toEqual({
-      plan: { prefixTokens: 2_922, minimum: 1_024, caches: true, toolsStable: true },
+      plan: { prefixTokens: 2_927, minimum: 1_024, caches: true, toolsStable: true },
       layout: { prefixTokens: 4_396, minimum: 1_024, caches: true, toolsStable: true },
       template: { prefixTokens: 4_970, minimum: 1_024, caches: true, toolsStable: true },
-      component: { prefixTokens: 4_925, minimum: 1_024, caches: true, toolsStable: true },
+      component: { prefixTokens: 4_992, minimum: 1_024, caches: true, toolsStable: true },
       email: { prefixTokens: 2_883, minimum: 1_024, caches: true, toolsStable: true },
       form: { prefixTokens: 2_512, minimum: 1_024, caches: true, toolsStable: true },
       'page-section': { prefixTokens: 4_562, minimum: 1_024, caches: true, toolsStable: true },

@@ -1,0 +1,110 @@
+{
+  "id": "component-practice-area-card",
+  "kind": "component",
+  "brief": "A card for one of the areas our law firm practices: an icon for the area, its name and a sentence about what we handle there.",
+  "framing": null,
+  "inventory": {
+    "hostId": "host-harborline",
+    "components": [],
+    "layouts": [{ "id": "lay-site", "name": "Harborline Law site", "parentId": null }],
+    "templates": [],
+    "forms": [],
+    "datasets": [],
+    "collections": [],
+    "screens": [
+      { "id": "scr-home", "name": "Home", "slug": "home", "layoutId": "lay-site", "template": false },
+      { "id": "scr-about", "name": "About", "slug": "about", "layoutId": "lay-site", "template": false }
+    ],
+    "theme": { "summary": ["Light scheme only"], "colors": { "primary.main": "#1b2a4a" }, "fonts": ["Lora"] },
+    "truncated": []
+  },
+  "expected": {
+    "plan": { "screens": [0, 0], "createKinds": ["component"], "maxCreate": 1 }
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand (AGL-3054): the area's icon an Icon bound to an icon property the site owner picks, left empty, and the name an h3 under the section's own h2.",
+      "plan": {
+        "reuse": [],
+        "create": [
+          {
+            "kind": "component",
+            "name": "Practice area card",
+            "why": "The site has no card for a practice area, and each area repeats the same icon, name and summary.",
+            "duplicateOf": null,
+            "fields": ["icon:icon", "title:text", "summary:richText"]
+          }
+        ],
+        "screens": []
+      },
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["card"] },
+            "card": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["content"] },
+            "content": { "componentId": "muiCardContent", "nodes": ["icon", "title", "summary"] },
+            "icon": { "componentId": "icon", "props": { "iconId": "{{prop.icon}}" }, "sx": { "color": "primary.main" } },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h5", "component": "h3", "children": "{{prop.title}}" } },
+            "summary": { "componentId": "muiTypography", "props": { "variant": "body2", "children": "{{prop.summary}}" } }
+          }
+        },
+        "props": [
+          { "name": "icon", "type": "icon", "label": "Icon", "description": "The icon for this area, picked from the library.", "defaultValue": "", "options": [] },
+          { "name": "title", "type": "text", "label": "Practice area", "description": "", "defaultValue": "[Practice area]", "options": [] },
+          { "name": "summary", "type": "richText", "label": "Summary", "description": "One sentence on what the firm handles in this area.", "defaultValue": "[What the firm handles in this area]", "options": [] }
+        ]
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": 5, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "The icon declared as a Text property and shown as words in an h3-sized span, so each page's word for its area reads where the icon belongs (AGL-3054).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["card"] },
+            "card": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["content"] },
+            "content": { "componentId": "muiCardContent", "nodes": ["icon", "title", "summary"] },
+            "icon": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "span", "children": "{{prop.icon}}" } },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h5", "component": "h3", "children": "{{prop.title}}" } },
+            "summary": { "componentId": "muiTypography", "props": { "variant": "body2", "children": "{{prop.summary}}" } }
+          }
+        },
+        "props": [
+          { "name": "icon", "type": "text", "label": "Icon", "description": "A single character or short symbol, such as an emoji or initial.", "defaultValue": "⚖", "options": [] },
+          { "name": "title", "type": "text", "label": "Practice area", "description": "", "defaultValue": "[Practice area]", "options": [] },
+          { "name": "summary", "type": "richText", "label": "Summary", "description": "", "defaultValue": "[What the firm handles in this area]", "options": [] }
+        ]
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "An icon property whose default names an icon, which only the site owner's pick can draw (AGL-3054).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["card"] },
+            "card": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["content"] },
+            "content": { "componentId": "muiCardContent", "nodes": ["icon", "title"] },
+            "icon": { "componentId": "icon", "props": { "iconId": "{{prop.icon}}" } },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h5", "component": "h3", "children": "{{prop.title}}" } }
+          }
+        },
+        "props": [
+          { "name": "icon", "type": "icon", "label": "Icon", "description": "", "defaultValue": "mdiScaleBalance", "options": [] },
+          { "name": "title", "type": "text", "label": "Practice area", "description": "", "defaultValue": "[Practice area]", "options": [] }
+        ]
+      },
+      "fails": ["rules"]
+    }
+  ]
+}

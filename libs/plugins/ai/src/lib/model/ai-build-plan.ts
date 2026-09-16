@@ -118,8 +118,9 @@ export interface AiBuildPlanCreate {
   /** The inventory id this starts from as a duplicate, or null. */
   duplicateOf: string | null
   /**
-   * A component or layout: its props as `name:type`. A form or a dataset:
-   * its field names. A theme change: the palette paths it adds or changes.
+   * A component or layout: its props as `name:type`, an icon as `name:icon`
+   * (AGL-3054). A form or a dataset: its field names. A theme change: the
+   * palette paths it adds or changes.
    */
   fields: string[]
 }
@@ -245,7 +246,7 @@ export const AI_BUILD_PLAN_TOOL: AiTool = {
               'The inventory id this starts from as a duplicate, or null.',
             ),
             fields: strings(
-              `A component or layout: its props as name:type. A form or dataset: its field names. A theme change: the palette paths it adds or changes. Each ${atMost()}.`,
+              `A component or layout: its props as name:type, an icon as name:icon. A form or dataset: its field names. A theme change: the palette paths it adds or changes. Each ${atMost()}.`,
             ),
           },
         },

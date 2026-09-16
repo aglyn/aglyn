@@ -134,6 +134,16 @@ const PAGE_EXTRA_IDS = [
 ]
 
 /**
+ * Elements offered to a reusable component beyond a page's (AGL-3054). An
+ * Icon draws the pick its `iconId` names from a path stored beside the id,
+ * which only the icon picker writes: a model can name an id and never the
+ * drawing, so an icon a model writes itself shows as the empty Icon. A
+ * component binds its Icon to an icon property the site owner picks for
+ * each placement, which is the one Icon a model can build.
+ */
+const COMPONENT_EXTRA_IDS = ['icon']
+
+/**
  * Never offered to a model, whatever list they are on: a raw-HTML escape
  * hatch, a code-invoking widget, the canvas root, a reference into another
  * document, and third-party plugin elements.
@@ -550,7 +560,10 @@ async function main(): Promise<void> {
       root: 'div',
       allow: [...pageAllow, registered('layoutSlot')].sort(),
     },
-    component: { root: 'div', allow: pageAllow },
+    component: {
+      root: 'div',
+      allow: [...pageAllow, ...COMPONENT_EXTRA_IDS.map(registered)].sort(),
+    },
   }
 
   const sxTokens = {

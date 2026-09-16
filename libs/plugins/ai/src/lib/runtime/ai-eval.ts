@@ -33,6 +33,7 @@ import type { AiSiteInventory } from '../model/ai-site-inventory'
 import type { AiAutomationCapabilities } from '../model/ai-workflow-job'
 import type { AiStepKind } from '../providers/catalog'
 import type { AiEffort, AiUsage } from '../providers/contract'
+import { aiComponentCheck } from '../jobs/ai-job-component-checks'
 import { parseAiThemeToolInput } from '../tools/ai-theme-tool'
 import {
   AI_AUTOMATION_OVERSIZE_CODES,
@@ -326,15 +327,20 @@ const codes = (violations: readonly AiDoctrineViolation[]) =>
 
 function checkTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknown): Checked {
   const inline = evalCase.capabilities?.reusableComponents === false
+  let input = isRecord(answer) ? answer : { tree: answer }
+  // A component answer that declares its properties binds them in its tree,
+  // and is held to the component step's own checks as that step holds it
+  // (AGL-3054).
+  const declaresProps = evalCase.kind === 'component' && Array.isArray(input['props'])
   const check = aiDoctrineTreeCheck(
     outputKind,
     aiDoctrineTreeContext(evalCase.inventory, {
       ...(evalCase.assets ? { assets: evalCase.assets } : {}),
       framing: evalCase.framing,
       ...(inline ? { reusableComponents: false } : {}),
+      ...(declaresProps ? { definesComponent: true } : {}),
     }),
   )
-  let input = isRecord(answer) ? answer : { tree: answer }
   // A page's repeated item written once is drawn into its copies first, as the
   // page step draws it, and refused as the page step refuses it (AGL-3053).
   if (evalCase.kind === 'page') {
@@ -345,13 +351,19 @@ function checkTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unkno
     if (drawn.items) input = { tree: drawn.tree }
   }
   const result = check(input)
-  const budget = result.violations.filter((violation) => violation.rule === 17)
-  const rules = result.violations.filter((violation) => violation.rule !== 17)
+  const violations = [
+    ...result.violations,
+    ...(declaresProps && result.value
+      ? aiComponentCheck({ inventory: evalCase.inventory, plan: null, onProps: () => undefined })(result.value, input)
+      : []),
+  ]
+  const budget = violations.filter((violation) => violation.rule === 17)
+  const rules = violations.filter((violation) => violation.rule !== 17)
   return {
     readable: result.value !== null,
     rules: result.value !== null && rules.length === 0,
     budget: result.value !== null && budget.length === 0,
-    findings: codes(result.violations),
+    findings: codes(violations),
   }
 }
 

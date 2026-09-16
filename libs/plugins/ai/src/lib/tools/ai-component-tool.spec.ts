@@ -74,6 +74,7 @@ describe('the component tool’s kinds are the Properties dialog’s (AGL-2908)'
       'richText',
       'image',
       'href',
+      'icon',
       'number',
       'boolean',
       'choice',
@@ -166,16 +167,34 @@ describe('readAiComponentProps (AGL-2908)', () => {
       entry({ name: 'hero.title' }),
       entry({}),
       entry({ label: 'Again' }),
-      entry({ name: 'icon', type: 'icon' }),
+      entry({ name: 'accent', type: 'color-picker' }),
     ])
     expect(reading.violations.map((violation) => [violation.code, violation.paths])).toEqual([
       ['prop-name', ['props[0].name']],
       ['prop-duplicate', ['props[2].name']],
       ['prop-kind', ['props[3].type']],
     ])
-    expect(reading.violations[2].message).toContain('Text, Long text, Image, Link, Number, Yes / no, Choice')
+    expect(reading.violations[2].message).toContain('Text, Long text, Image, Link, Icon, Number, Yes / no, Choice')
     expect(reading.props.map((prop) => prop.name)).toEqual(['headline'])
-    expect(reading.refused).toEqual(['icon'])
+    expect(reading.refused).toEqual(['accent'])
+  })
+
+  it('stores an icon with no default, for the site owner to pick, and refuses one a model names (AGL-3054)', () => {
+    expect(read([entry({ name: 'icon', type: 'icon', label: 'Icon', defaultValue: '' })])).toEqual({
+      props: [{ name: 'icon', type: 'icon', label: 'Icon' }],
+      refused: [],
+      violations: [],
+    })
+    const named = read([entry({ name: 'icon', type: 'icon', label: 'Icon', defaultValue: 'mdiScaleBalance' })])
+    expect(named.violations).toEqual([
+      {
+        rule: 1,
+        code: 'prop-default',
+        message: 'The default of "icon" is an icon, which the site owner picks; leave it "".',
+        paths: ['props[0].defaultValue'],
+      },
+    ])
+    expect(named.refused).toEqual(['icon'])
   })
 
   it('refuses a Choice with no answers, answers that share a value, and a default that is none of them', () => {
