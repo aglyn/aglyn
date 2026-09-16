@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   ASSIST_EDIT_ACTION_ID,
   ASSIST_EDIT_DOCUMENT_KINDS,
@@ -619,6 +620,10 @@ export function sanitiseId(value: string): string {
  * spread would carry it into a third party's API without anything failing.
  * Both fields named here are already on screen for any member who can open
  * the panel, so nothing is disclosed that the asker could not read anyway.
+ *
+ * The plan is the one the workspace resolves to, as the console's badges name
+ * it (AGL-3034): a canceled subscription's stored plan grants nothing, and a
+ * staff comp grants a plan the stored field may not name.
  */
 export function safeOrgFacts(org: Record<string, unknown>): {
   name: string
@@ -626,7 +631,7 @@ export function safeOrgFacts(org: Record<string, unknown>): {
 } {
   return {
     name: String(org?.['name'] ?? '').slice(0, 120),
-    plan: String(org?.['plan'] ?? '').slice(0, 40),
+    plan: resolveEffectivePlan(org as never).slice(0, 40),
   }
 }
 
