@@ -59,7 +59,7 @@ import {
   AI_INVENTORY_LOOKUP_TOOL_NAME,
   aiInventoryLookupTool,
 } from '../tools/ai-inventory-lookup-tool'
-import { AI_DOCTRINE_RULES } from './ai-doctrine-validators'
+import { AI_DOCTRINE_RULES, AI_REPEAT_MIN_COUNT, AI_SIMILAR_PAGES_MIN } from './ai-doctrine-validators'
 import { AI_SURFACE_NAMES } from './ai-palette'
 import { AI_PALETTE_CATALOG } from './ai-palette.generated'
 import {
@@ -132,9 +132,18 @@ describe('the doctrine block', () => {
     )
   })
 
+  it('states the counts its validators enforce, so a rule cannot ask for what it then refuses (AGL-3022)', () => {
+    // The first live run planned a template for two similar pages and cited
+    // rule 4 for it, because rule 4's text named no count while
+    // `detectUntemplatedSimilarPages` wants three. A threshold a generator is
+    // not told is a threshold it cannot hold to.
+    expect(AI_BUILDING_DOCTRINE).toContain(`When ${AI_SIMILAR_PAGES_MIN} or more pages share one structure`)
+    expect(AI_BUILDING_DOCTRINE).toContain(`appearing ${AI_REPEAT_MIN_COUNT} or more times`)
+  })
+
   it('pins the doctrine’s bytes, so changing what every generator is told is a deliberate cache break', () => {
     expect(createHash('sha256').update(AI_DOCTRINE_SYSTEM_BLOCK.text).digest('hex')).toBe(
-      'cfd26bc7239183ff2a43029e0a69c381bbcf77a744b3a14d149bb397856b1158',
+      '5a06e0b9e191beaa9178253e8562fe552d225aabca8e957024e2fe09f4015e2f',
     )
   })
 
