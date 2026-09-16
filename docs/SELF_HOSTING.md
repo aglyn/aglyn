@@ -210,6 +210,10 @@ node tools/scripts/deploy-database-rules.mjs
 Storage rules are deny-all **by design** — media flows through tokened URLs
 and the Admin SDK, not direct client reads.
 
+If you edit a rules file, keep it under 256 KiB, comments included: the deploy
+refuses a larger source with only `400 INVALID_ARGUMENT` and compiling never
+checks, so run `npm run check:rules-size` before deploying.
+
 ### 3b. Firestore indexes — do not skip this
 
 Rules decide who may read; **indexes decide whether the read works at all** —
