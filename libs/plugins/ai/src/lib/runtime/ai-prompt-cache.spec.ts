@@ -45,6 +45,7 @@ import {
 } from './ai-doctrine'
 import { detectPublishIntent } from './ai-doctrine-validators'
 import { AI_JOB_COMPONENT_INSTRUCTIONS } from '../jobs/ai-job-component-step'
+import { AI_JOB_EMAIL_INSTRUCTIONS, AI_JOB_EMAIL_TOOL } from '../jobs/ai-job-email-step'
 import { AI_JOB_FORM_INSTRUCTIONS } from '../jobs/ai-job-form-step'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
 import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
@@ -157,6 +158,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     step: 'job.template',
     caches: true,
     why: "the doctrine, the template rules, the platform's starter pages and the screen palette",
+  },
+  'jobs/ai-job-email-step.ts': {
+    step: 'job.email',
+    caches: true,
+    why: 'the doctrine, the email rules and the email palette; a campaign job generates through this same step',
   },
   'jobs/ai-job-form-step.ts': {
     step: 'job.form',
@@ -271,6 +277,13 @@ const REQUESTS: Record<string, Composed> = {
         surface: 'component',
       }),
     tools: () => [aiComponentTool()],
+  },
+  email: {
+    door: 'jobs/ai-job-email-step.ts',
+    step: 'job.email',
+    blocks: (site) =>
+      aiDoctrineSystemBlocks(site, { instructions: AI_JOB_EMAIL_INSTRUCTIONS, surface: 'email' }),
+    tools: () => [AI_JOB_EMAIL_TOOL],
   },
   form: {
     door: 'jobs/ai-job-form-step.ts',
@@ -447,10 +460,11 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     // prompt moves one of them DOWN and says so in its commit, and a prompt
     // that grows without anyone meaning it to moves one UP and is red here.
     expect(measured()).toEqual({
-      plan: { prefixTokens: 2_543, minimum: 1_024, caches: true, toolsStable: true },
+      plan: { prefixTokens: 2_545, minimum: 1_024, caches: true, toolsStable: true },
       layout: { prefixTokens: 4_078, minimum: 1_024, caches: true, toolsStable: true },
       template: { prefixTokens: 4_651, minimum: 1_024, caches: true, toolsStable: true },
       component: { prefixTokens: 4_606, minimum: 1_024, caches: true, toolsStable: true },
+      email: { prefixTokens: 2_565, minimum: 1_024, caches: true, toolsStable: true },
       form: { prefixTokens: 2_194, minimum: 1_024, caches: true, toolsStable: true },
       theme: { prefixTokens: 3_186, minimum: 1_024, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 759, minimum: 4_096, caches: false, toolsStable: true },
