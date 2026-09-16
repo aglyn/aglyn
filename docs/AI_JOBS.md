@@ -301,7 +301,11 @@ live answer.
   marks the jest it starts, so the shared setup's `.env` scrub (AGL-690) keeps
   the provider key the run was handed even where the repo-root `.env` holds
   the same key (AGL-3038); a run started any other way from such a checkout
-  loses the key and stops before its first request, saying why.
+  loses the key and stops before its first request, saying why. Where a case
+  describes its workspace, the grader is told it the way the plan was — the
+  capability lines — and that on a workspace without reusable components or saved
+  forms, an item drawn where it repeats and a form drawn on the page are the correct
+  build rather than a missed reuse (`aiEvalGraderCapabilities`, AGL-3040).
 
 ## The routing table
 
