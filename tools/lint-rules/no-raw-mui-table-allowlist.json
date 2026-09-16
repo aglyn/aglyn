@@ -2,71 +2,7 @@
   "note": "Files excused from aglyn/no-raw-mui-table, each with its reason. The rule reports a row whose file no longer draws a raw MUI Table, so this list cannot outlive what it excuses. It may shrink and must never grow: a new raw table is refused, not recorded.",
   "files": [
     {
-      "path": "apps/console/app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/hosts/[host]/components/[componentId]/page.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/[layoutId]/page.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/hosts/[host]/templates/[templateId]/page.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/app/(app)/manage/notifications/page.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view/page.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/components/analytics/screens-analytics-table.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/components/besigner-versions.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/components/content/collection-entries-page.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/components/host-activity-table.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/components/host-members-card.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/components/org-licences-panel.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/components/org-members-card.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/components/org-sso-card.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
       "path": "apps/console/components/screens-hierarchy-table.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/components/theme-editor/theme-overrides-card.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "apps/console/components/theme-editor/theme-preview.component.tsx",
       "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
     },
     {

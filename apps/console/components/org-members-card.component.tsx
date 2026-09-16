@@ -34,6 +34,7 @@ import {
   CardDisplay,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Box,
@@ -47,7 +48,6 @@ import {
   FormControlLabel,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -458,7 +458,7 @@ export function OrgMembersCard() {
             </Typography>
           </Stack>
         ) : null}
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>{'Member'}</TableCell>
@@ -741,7 +741,7 @@ export function OrgMembersCard() {
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </ScrollTable>
         <TablePagination
           component="div"
           count={members.length}

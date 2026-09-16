@@ -19,12 +19,12 @@
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import type { GridColDef } from '@mui/x-data-grid'
 import {
   Alert,
   Button,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -229,7 +229,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
             {'No activity yet — changes made in the console appear here.'}
           </Typography>
         ) : (
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Action'}</TableCell>
@@ -267,7 +267,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
                 )
               })}
             </TableBody>
-          </Table>
+          </ScrollTable>
         )}
         <ListPagination
           page={page}

@@ -27,13 +27,13 @@ import {
   Alert,
   Chip,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
 } from '@mui/material'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   collection,
   documentId,
@@ -284,7 +284,7 @@ export function OrgLicencesPanel({
           contentGutterX
           contentGutterY
         >
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Listing'}</TableCell>
@@ -315,7 +315,7 @@ export function OrgLicencesPanel({
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </ScrollTable>
           <ListPagination
             page={heldPage}
             pageSize={heldPageSize}
@@ -356,7 +356,7 @@ export function OrgLicencesPanel({
           contentGutterX
           contentGutterY
         >
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Listing'}</TableCell>
@@ -395,7 +395,7 @@ export function OrgLicencesPanel({
                 )
               })}
             </TableBody>
-          </Table>
+          </ScrollTable>
           <ListPagination
             page={minePage}
             pageSize={minePageSize}

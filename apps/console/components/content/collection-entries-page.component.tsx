@@ -57,7 +57,6 @@ import {
   Divider,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -95,6 +94,7 @@ import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { gridFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
@@ -2035,7 +2035,7 @@ export function CollectionEntriesPage() {
                             'Setup → SEO.'}
                         </Typography>
                       ) : (
-                        <Table size="small">
+                        <ScrollTable size="small">
                           <TableHead
                             sx={{
                               '& .MuiTableCell-head': {
@@ -2147,7 +2147,7 @@ export function CollectionEntriesPage() {
                               </TableRow>
                             ))}
                           </TableBody>
-                        </Table>
+                        </ScrollTable>
                       )}
                     </Stack>
                   </CardDisplay>

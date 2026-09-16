@@ -27,6 +27,7 @@ import {
 import { mdiBellOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
@@ -35,7 +36,6 @@ import {
   FormControlLabel,
   Stack,
   Switch,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -485,7 +485,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
                 {"You're all caught up."}
               </Typography>
             ) : (
-              <Table size="small">
+              <ScrollTable size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>{'Notification'}</TableCell>
@@ -541,7 +541,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </ScrollTable>
             )}
             <ListPagination
               page={page}

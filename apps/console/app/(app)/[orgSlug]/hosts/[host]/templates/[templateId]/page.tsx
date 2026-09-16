@@ -33,7 +33,6 @@ import {
   Button,
   Chip,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -48,6 +47,7 @@ import {
   useFirestore,
 } from '@aglyn/tenant-feature-instance'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
@@ -465,7 +465,7 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
                 'here each page is the separate template it really is, and ' +
                 'can be edited, used or deleted on its own.'}
             </Typography>
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Page'}</TableCell>
@@ -539,7 +539,7 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
           </CardDisplay>
                     ),
                   },

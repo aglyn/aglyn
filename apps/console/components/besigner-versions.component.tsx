@@ -29,6 +29,7 @@ import {
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { docsHelp } from '../constants/docs-links'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -42,7 +43,6 @@ import {
   DialogTitle,
   IconButton,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -801,7 +801,7 @@ export const BesignerVersionsComponent = observer(
             </Button>
           </DialogTitle>
           <DialogContent>
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Version'}</TableCell>
@@ -956,7 +956,7 @@ export const BesignerVersionsComponent = observer(
                   )
                 })}
               </TableBody>
-            </Table>
+            </ScrollTable>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpen(false)}>{'Close'}</Button>

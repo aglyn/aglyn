@@ -23,13 +23,13 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
   Chip,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -528,7 +528,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
             </Typography>
           </>
         ) : null}
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>{'Member'}</TableCell>
@@ -669,7 +669,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </ScrollTable>
         <ListPagination
           page={page}
           pageSize={pageSize}
