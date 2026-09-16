@@ -46,15 +46,21 @@ export type AdminBarArmMode = 'manual' | 'auto'
  *
  * 1. a still-valid token from an earlier connect sits in storage —
  *    returning editors get the bar back without re-consenting;
- * 2. the page was visited with `?aglyn-edit` — the shareable opt-in, which
- *    also outranks a remembered disconnect;
+ * 2. the page was visited with `?aglyn-edit` — the shareable opt-in (the
+ *    console's Visit links add it), which also outranks a remembered
+ *    disconnect;
  * 3. the Cmd/Ctrl+Shift+E chord — the habit path, likewise outranking a
  *    disconnect, and a real user gesture for the popup it may need;
- * 4. AUTO (AGL-1829): the console's same-site editor-presence hint cookie
- *    is here and this editor hasn't disconnected — the bar then runs the
- *    silent iframe probe and appears only if the console proves access. On
- *    cross-site hosts (`*.aglyn.app`, customer domains) the hint is
- *    invisible by construction and this signal simply never fires.
+ * 4. AUTO (AGL-1829): the editor-presence hint cookie is here and this
+ *    editor hasn't disconnected — the bar then proves access silently (the
+ *    AGL-1842 exchange, then the iframe probe) and appears only if that
+ *    succeeds. The hint reaches `*.aglyn.app` through the console's
+ *    login-time bounce and the `aglyn.com` hosts directly; a customer's
+ *    custom domain is out of reach of both, so there this signal never
+ *    fires and 1–3 are the ways in.
+ *
+ * 2 and 3 arm MANUAL, which still tries the silent exchange first when the
+ * hint is present (AGL-3047) and otherwise offers the connect pill.
  *
  * Anonymous visitors hit none of these, so the bar chunk is never fetched,
  * no request is ever made, and no auth question is ever asked.

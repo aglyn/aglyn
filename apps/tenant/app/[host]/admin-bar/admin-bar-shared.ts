@@ -43,14 +43,15 @@ export const EDIT_MESSAGE_TYPE = 'aglyn-edit-access'
 export const EDIT_RESULT_MESSAGE_TYPE = 'aglyn-edit-access-result'
 
 /**
- * The console's editor-presence hint cookie (AGL-1829): set on the
+ * The editor-presence hint cookie (AGL-1829): set by the console on the
  * REGISTRABLE domain (`.aglyn.com`/`.aglyn.io`) while a console session
- * exists, cleared on sign-out. Only first-party tenant hosts that are
- * same-site with the console can ever see it — `*.aglyn.app` tenants and
- * customer custom domains are cross-site, where the browser (correctly)
- * keeps the two worlds apart; those keep the chord/param/stored-token
- * paths. Never a credential: the silent probe re-proves everything
- * server-side before any token exists.
+ * exists, cleared on sign-out — and planted on `.aglyn.app` too, beside its
+ * HttpOnly signed sibling, by the login-time bounce (AGL-1842), where it
+ * lapses rather than clears because sign-out cannot reach that domain. A
+ * customer's custom domain is cross-site with both, so the browser
+ * (correctly) never shows it there; that host keeps the chord/param/
+ * stored-token paths. Never a credential: the exchange and the silent probe
+ * re-prove everything server-side before any token exists.
  */
 export const EDITOR_HINT_COOKIE = 'aglyn_editor'
 

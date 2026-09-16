@@ -22,6 +22,7 @@ import {
   clearStoredEditToken,
   EDIT_MESSAGE_TYPE,
   EDIT_RESULT_MESSAGE_TYPE,
+  hasEditorHint,
   readStoredEditToken,
   setEditOptOut,
   writeStoredEditToken,
@@ -53,8 +54,16 @@ import {
  *   definitive "no rights here" and renders NOTHING, as does a probe that
  *   answers "no" (or nothing, within the timeout) — an auto-armed bar has
  *   no business showing UI to someone it can't verify.
- * - Manual arm without a token: the "Edit this site" pill; clicking it (a
- *   user gesture, so no popup blocker) opens the same page as a popup.
+ * - Manual arm without a token (the chord, `?aglyn-edit`, the console's
+ *   Visit links): where the presence hint is on this site, the SAME
+ *   exchange goes first (AGL-3047), so on `*.aglyn.app` the editor who asked
+ *   for the bar gets the bar rather than a button standing in front of it.
+ *   With no hint (a customer's custom domain, which no hint can reach), or
+ *   when the exchange does not connect, the "Edit this site" pill: clicking
+ *   it (a user gesture, so no popup blocker) opens the same page as a
+ *   popup. A manual arm never probes and never goes silent — the editor
+ *   asked, so a failure leaves them the button, which can still connect
+ *   whatever console session they have.
  *
  * The ready bar is platform chrome FIXED TO THE TOP of the site: compact,
  * dark, visibly not part of the site's own design. While mounted it pushes
@@ -369,7 +378,12 @@ export default function AdminBar({
   consoleOrigin,
   autoConnect = false,
 }: AdminBarProps) {
-  const [phase, setPhase] = useState<Phase>(autoConnect ? 'exchanging' : 'idle')
+  // The exchange goes first whenever the hint is here, however the bar was
+  // armed (AGL-3047). A manual arm without it — a custom domain — starts on
+  // the connect pill, as it always has.
+  const [phase, setPhase] = useState<Phase>(() =>
+    autoConnect || hasEditorHint() ? 'exchanging' : 'idle',
+  )
   const [context, setContext] = useState<EditContext | null>(null)
   const [identity, setIdentity] = useState<string | undefined>(undefined)
   // The phone-width ⋯ menu (AGL-1829 mobile pass). Unmounted while closed,
@@ -437,22 +451,27 @@ export default function AdminBar({
     if (stored) void resolveContext(stored)
   }, [hostId, resolveContext])
 
-  // The same-site hint exchange (AGL-1842) — the auto path's first move.
-  // One POST to this site's OWN server; the HttpOnly hint cookie rides it
-  // automatically, so there is nothing for scripts to read or leak. Where
-  // it lands decides everything:
+  // The same-site hint exchange (AGL-1842) — the first move wherever the
+  // hint is, auto-armed or not (AGL-3047). One POST to this site's OWN
+  // server; the HttpOnly hint cookie rides it automatically, so there is
+  // nothing for scripts to read or leak. Where it lands decides everything:
   //   200 → the same stored-token flow as the popup/probe deliveries;
   //   403 → a definitive no (known caller, no rights on this host, or a
   //         disabled/removed account) — silence, no probe;
   //   anything else (401 no cookie, 404 rollout skew, 5xx, network) → the
   //         AGL-1829 iframe probe, which is the still-working path on the
   //         same-site `aglyn.com`/`aglyn.io` marketing hosts.
+  // That table is the AUTO arm's. A manual arm lands every failure on the
+  // connect pill instead: the editor asked for the bar, and the popup can
+  // still connect a console session the hint does not name.
   useEffect(() => {
     if (phase !== 'exchanging') return undefined
     // A stored token is already being resolved by the effect above — the
     // exchange would only race it for the same outcome.
     if (readStoredEditToken(hostId)) return undefined
     let cancelled = false
+    const fallBack = (status: number | null) =>
+      setPhase(autoConnect ? (status === 403 ? 'silent' : 'probing') : 'idle')
     void (async () => {
       try {
         const response = await fetch('/api/edit-access/exchange', {
@@ -479,18 +498,18 @@ export default function AdminBar({
             void resolveContext(stored)
             return
           }
-          setPhase('probing')
+          fallBack(response.status)
           return
         }
-        setPhase(response.status === 403 ? 'silent' : 'probing')
+        fallBack(response.status)
       } catch {
-        if (!cancelled) setPhase('probing')
+        if (!cancelled) fallBack(null)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [phase, hostId, resolveContext])
+  }, [phase, hostId, resolveContext, autoConnect])
 
   // The console's /edit-access page (popup or silent iframe) delivers the
   // token here. Origin-checked against the ONE console origin this page was
@@ -705,8 +724,11 @@ export default function AdminBar({
 
   if (phase !== 'ready') {
     // Auto-armed, nothing proven yet (resolving the probed token): stay
-    // invisible — the pill is the MANUAL path's affordance only.
-    if (autoConnect) return null
+    // invisible — the pill is the MANUAL path's affordance only. And nothing
+    // while a manual arm's exchange is in flight (AGL-3047): a pill that
+    // flashed up and vanished in front of the bar would be a button offering
+    // to do what is already happening.
+    if (autoConnect || phase === 'exchanging') return null
     return (
       <button
         type="button"
