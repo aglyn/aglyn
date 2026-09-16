@@ -31,6 +31,7 @@ import {
   orgSiteCount,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
+  resolveEffectivePlan,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
@@ -1036,8 +1037,12 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   }
 
   const resolved = org ? resolveOrgEntitlements(org) : null
-  const planDefaults = org?.plan
-    ? PLAN_ENTITLEMENTS[org.plan as keyof typeof PLAN_ENTITLEMENTS]
+  // The defaults of the plan the org GETS (AGL-3034), which is what the
+  // Effective column resolved from — a staff comp's plan, or Free for a
+  // stored plan whose subscription died. The stored plan's defaults made
+  // every row of a comped org differ with no override to explain why.
+  const planDefaults = org
+    ? PLAN_ENTITLEMENTS[resolveEffectivePlan(org as never)]
     : null
   /*
    * Whether the org's AI add-on is on (AGL-2899), read off the EFFECTIVE plan

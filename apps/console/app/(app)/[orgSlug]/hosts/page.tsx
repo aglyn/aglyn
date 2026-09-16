@@ -21,6 +21,7 @@ import {
   ENTERPRISE_PLAN_LABEL,
   isEnterpriseOrg,
   PLAN_LABELS,
+  resolveEffectivePlan,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_HOST_GROUP } from '@aglyn/shared-data-enums'
@@ -162,7 +163,9 @@ function HostsContent() {
     limit: resolveOrgEntitlements(org as never)?.hostLimit,
     planLabel: isEnterpriseOrg(org as never)
       ? ENTERPRISE_PLAN_LABEL
-      : PLAN_LABELS[((org as any)?.plan ?? 'free') as keyof typeof PLAN_LABELS],
+      : // The plan the limit beside it resolved from — a staff comp or a
+        // dead subscription included (AGL-3034) — never the stored field.
+        PLAN_LABELS[resolveEffectivePlan(org as never)],
     // Both reads, not just the org's (AGL-1066). `used` comes from the SITE
     // list, so gating this on the ORG being ready published a count taken
     // from a list that had not loaded — `0 of Unlimited sites · Enterprise

@@ -24,6 +24,7 @@ import {
 } from '@aglyn/aglyn/app-utils/analytics-events'
 import { readInternalTrafficOverride } from '@aglyn/aglyn/app-utils/internal-traffic'
 import {
+  describeOrgPlan,
   ENTERPRISE_PLAN_LABEL,
   isEnterpriseOrg,
   isLiveSubscriptionStatus,
@@ -328,7 +329,13 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
 
   // Workspace-scoped (AGL-236): meters cover the selected org's sites.
   const { hosts } = useOrgHosts(firestore, user?.uid, orgId)
-  const plan = (org?.plan ?? 'free') as OrgPlan
+  // The plan the workspace GETS, not the one stored (AGL-3034). A staff comp
+  // grants a plan no subscription pays for, and a dead subscription's stored
+  // plan grants nothing — so naming the stored one called a lapsed workspace
+  // Pro above Free limits, and a comped one Free above Pro's. Every card
+  // below names this plan; the entitlements beside it already resolved it.
+  const planState = describeOrgPlan(org)
+  const plan = planState.effectivePlan
   // The plugin cards among the plan and add-on cards (AGL-2940); no item
   // at all when nothing survives the slot's gates.
   const { widgets: overviewWidgets } = useSlotWidgets(['orgBillingOverview'])
@@ -1322,13 +1329,15 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     </Typography>
                     <Chip
                       label={
-                        enterprise && customMonthlyUsd === 0
+                        (enterprise && customMonthlyUsd === 0) ||
+                        planState.compInForce
                           ? 'comped'
                           : (org?.subscription?.status ?? 'no subscription')
                       }
                       size="small"
                       color={
                         (enterprise && customMonthlyUsd === 0) ||
+                        planState.compInForce ||
                         org?.subscription?.status === 'active'
                           ? 'success'
                           : org?.subscription?.status === 'past_due'
@@ -1347,6 +1356,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         ? `$${customMonthlyUsd.toLocaleString()}/mo · custom` +
                           `${org?.subscription?.interval === 'year' ? ' (billed yearly)' : ''}`
                         : 'Comped — internal use, no charge'}
+                    </Typography>
+                  ) : planState.compInForce ? (
+                    // A staff comp bills nothing (AGL-3034), so a list price
+                    // here would read as what the workspace is charged.
+                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                      {'Comped — no charge'}
                     </Typography>
                   ) : PLAN_PRICING[plan]?.basePriceMonthlyUsd ? (
                     <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -1379,7 +1394,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     ))}
                   </Stack>
                   <Typography variant="body2" color="text.secondary">
-                    {org?.plan
+                    {org?.plan || planState.compInForce
                       ? 'Usage and limits for your plan are shown beside.'
                       : 'No plan assigned yet — this organization resolves ' +
                         'to the Free limits.'}

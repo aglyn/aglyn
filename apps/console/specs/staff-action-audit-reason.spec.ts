@@ -68,18 +68,31 @@ function mockFirestore() {
         return { id: `auto-${mockDocs.length}` }
       },
       limit: () => mockFirestoreQuery(),
-      where: () => mockFirestoreQuery(),
+      where: (field: string) => mockFirestoreQuery(field),
     }),
   }
 }
 
-function mockFirestoreQuery(): any {
+/**
+ * The orgs a query answers with, per `where` field (AGL-3034). Absent: every
+ * org on a live Business subscription, so a plan cohort resolves to all three.
+ */
+let mockOrgsByField: Record<string, Array<{ id: string; data: Record<string, unknown> }>> | null =
+  null
+
+function mockFirestoreQuery(field?: string): any {
+  const rows =
+    (field && mockOrgsByField?.[field]) ??
+    ['org-a', 'org-b', 'org-c'].map((id) => ({
+      id,
+      data: { plan: 'business', billingStatus: 'active' },
+    }))
   return {
-    limit: () => mockFirestoreQuery(),
-    where: () => mockFirestoreQuery(),
+    limit: () => mockFirestoreQuery(field),
+    where: (next: string) => mockFirestoreQuery(next),
     get: async () => ({
-      size: 3,
-      docs: [{ id: 'org-a' }, { id: 'org-b' }, { id: 'org-c' }],
+      size: rows.length,
+      docs: rows.map((row) => ({ id: row.id, data: () => row.data })),
     }),
   }
 }
@@ -158,11 +171,49 @@ describe('a broadcast records why, and what was actually sent (AGL-2162)', () =>
     mockDocs = []
     mockNotified.length = 0
     mockAuditThrows = false
+    mockOrgsByField = null
     mockVerifyIdToken.mockReset().mockResolvedValue({
       uid: 'uid-staff',
       email_verified: true,
       staff: true,
     })
+  })
+
+  it('reaches the orgs ON a plan — a comp included, a canceled stored plan not (AGL-3034)', async () => {
+    mockOrgsByField = {
+      plan: [
+        { id: 'paying', data: { plan: 'pro', billingStatus: 'active' } },
+        // Stores Pro, resolves as Free: not in a Pro cohort.
+        { id: 'canceled', data: { plan: 'pro', billingStatus: 'canceled' } },
+      ],
+      'entitlements.planComp.plan': [
+        {
+          id: 'comped',
+          data: {
+            plan: 'free',
+            billingStatus: 'canceled',
+            entitlements: { planComp: { plan: 'pro' } },
+          },
+        },
+        // A comp a live subscription outranks: that org is on Business.
+        {
+          id: 'dormant',
+          data: {
+            plan: 'business',
+            billingStatus: 'active',
+            entitlements: { planComp: { plan: 'pro' } },
+          },
+        },
+      ],
+    }
+    const response = await post({
+      title: 'Pro tier notice',
+      plan: 'pro',
+      reason: 'A notice for every workspace on Pro',
+    })
+    expect(response.status).toBe(200)
+    expect([...mockNotified].sort()).toEqual(['comped', 'paying'])
+    expect(auditRows()[0].after).toMatchObject({ orgs: 2, truncated: false })
   })
 
   it('refuses a reasonless broadcast BEFORE notifying anyone', async () => {

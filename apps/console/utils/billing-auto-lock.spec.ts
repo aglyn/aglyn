@@ -106,6 +106,41 @@ describe('shouldAutoLockOrgForBilling', () => {
     ).toBe(false)
   })
 
+  it('never locks a workspace a staff comp holds, and a live subscription still locks (AGL-3034)', () => {
+    const comp = { planComp: { plan: 'pro', reason: 'support', grantedBy: 'staff-1' } }
+    // The two delinquent shapes a comp can sit on: Stripe gave up, or unpaid.
+    expect(
+      shouldAutoLockOrgForBilling(
+        { entitlements: comp },
+        { status: 'canceled', canceledReason: 'payment_failed', currentPeriodEnd: periodEnd(45) },
+        NOW,
+      ),
+    ).toBe(false)
+    expect(
+      shouldAutoLockOrgForBilling(
+        { entitlements: comp },
+        { status: 'unpaid', currentPeriodEnd: periodEnd(45) },
+        NOW,
+      ),
+    ).toBe(false)
+    // The controls: without the comp both lock, and `past_due` is live, so a
+    // comp there is dormant and the subscription's delinquency still counts.
+    expect(
+      shouldAutoLockOrgForBilling(
+        {},
+        { status: 'unpaid', currentPeriodEnd: periodEnd(45) },
+        NOW,
+      ),
+    ).toBe(true)
+    expect(
+      shouldAutoLockOrgForBilling(
+        { entitlements: comp },
+        { status: 'past_due', currentPeriodEnd: periodEnd(45) },
+        NOW,
+      ),
+    ).toBe(true)
+  })
+
   it('fails closed without a period end to anchor the 30 days on', () => {
     expect(
       shouldAutoLockOrgForBilling(

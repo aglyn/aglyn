@@ -21,6 +21,10 @@ import {
   pluginRequestFromWeb,
   resolveBrandingProfile,
 } from '@aglyn/aglyn/server'
+import {
+  readOrgPlanComp,
+  resolveEffectivePlan,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import { selectCronChunk } from '../../../../utils/cron-chunk'
@@ -162,7 +166,14 @@ async function handler(request: Request): Promise<Response> {
       }
       // Dark-launch rule: only orgs with an explicit plan get billing
       // email; everyone else isn't metered in any user-visible way yet.
-      const plan = orgDoc.get('plan')
+      // A staff comp is an explicit plan too (AGL-3034), and the plan the
+      // email names is the one the org GETS — a comp's, or Free for a stored
+      // plan whose subscription died — never the stored field alone.
+      const orgData = (orgDoc.data() ?? {}) as Partial<AglynOrgBilling>
+      const plan =
+        orgData.plan || readOrgPlanComp(orgData)
+          ? resolveEffectivePlan(orgData)
+          : null
       if (!plan) {
         results[orgId] = { skipped: 'no plan' }
         continue

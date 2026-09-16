@@ -23,6 +23,7 @@ import {
   notifyOrgAdmins,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 const MAX_ORGS_PER_BROADCAST = 200
 
@@ -81,11 +82,45 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Staff only' }, { status: 403 })
     }
     const firestore = firebaseAdmin.app().firestore()
-    let query = firestore
-      .collection('orgs')
-      .limit(MAX_ORGS_PER_BROADCAST) as FirebaseFirestore.Query
-    if (plan) query = query.where('plan', '==', plan)
-    const orgs = await query.get()
+    const orgsRef = firestore.collection('orgs')
+    // A PLAN COHORT IS THE ORGS ON THAT PLAN, not the orgs storing it
+    // (AGL-3034). The stored field alone reached canceled workspaces that
+    // resolve as Free and missed every workspace a staff comp puts on the
+    // plan, so both are asked for — the comp by its nested field, which
+    // Firestore indexes like any other — and the answer is filtered on the
+    // plan each org actually resolves to. The cap still bounds each query.
+    const orgs = plan
+      ? await Promise.all([
+          orgsRef.where('plan', '==', plan).limit(MAX_ORGS_PER_BROADCAST).get(),
+          orgsRef
+            .where('entitlements.planComp.plan', '==', plan)
+            .limit(MAX_ORGS_PER_BROADCAST)
+            .get(),
+        ]).then((snapshots) => {
+          const byId = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>()
+          for (const snapshot of snapshots) {
+            for (const doc of snapshot.docs) byId.set(doc.id, doc)
+          }
+          const docs = [...byId.values()].filter(
+            (doc) => resolveEffectivePlan((doc.data() ?? {}) as never) === plan,
+          )
+          return {
+            docs,
+            size: docs.length,
+            // Either query at its cap means the cohort may be larger.
+            capped: snapshots.some(
+              (snapshot) => snapshot.size >= MAX_ORGS_PER_BROADCAST,
+            ),
+          }
+        })
+      : await orgsRef
+          .limit(MAX_ORGS_PER_BROADCAST)
+          .get()
+          .then((snapshot) => ({
+            docs: snapshot.docs,
+            size: snapshot.size,
+            capped: snapshot.size >= MAX_ORGS_PER_BROADCAST,
+          }))
 
     for (const org of orgs.docs) {
       await notifyOrgAdmins(org.id, {
@@ -125,7 +160,7 @@ async function handler(request: Request): Promise<Response> {
         // `MAX_ORGS_PER_BROADCAST` caps the query, so a send that hit the cap
         // reached FEWER orgs than "everyone" — recorded, because a partial
         // broadcast reads identically to a complete one from the count alone.
-        truncated: orgs.size >= MAX_ORGS_PER_BROADCAST,
+        truncated: orgs.capped,
       },
       at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })

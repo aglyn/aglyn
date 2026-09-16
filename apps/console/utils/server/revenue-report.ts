@@ -20,6 +20,7 @@ import {
   isBillingSubscription,
   orgListPriceMonthlyUsd,
   orgMonthlyRevenueUsd,
+  resolvePlanComp,
   storefrontProcessingCostCents,
 } from '@aglyn/aglyn/server'
 
@@ -161,6 +162,12 @@ export function classifyOrgRevenueState(
     doc?.subscription?.status ||
     ''
   if (!isBillingSubscription(doc)) {
+    // AN EXPLICIT STAFF COMP IN FORCE IS A COMP (AGL-3034), whatever the
+    // stored plan says and whether the subscription is dead or absent: it is
+    // the one record that says, with a reason, that we chose to give the plan
+    // away. It is checked first because a comp is precisely how a canceled
+    // workspace comes to hold a plan — the case the next rule reads as churn.
+    if (resolvePlanComp(doc)) return 'comped'
     // A COMP IS THE ABSENCE OF A SUBSCRIPTION, not the presence of a dead one.
     // A staff plan override writes `plan` and never writes `subscription`, so
     // a paid plan with no status behind it is a comp / override / dark launch.

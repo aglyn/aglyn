@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  describeOrgPlan,
   isEnterpriseOrg,
   PLAN_LABELS,
   resolveEffectivePlan,
@@ -367,7 +368,8 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
             ? PLAN_LABELS.enterprise
             : resolveEffectivePlan(row as never),
         renderCell: ({ row }: any) => {
-          const effectivePlan = resolveEffectivePlan(row as never)
+          const planState = describeOrgPlan(row as never)
+          const effectivePlan = planState.effectivePlan
           const storedPlanLabel = row.plan ?? 'no plan'
           return (
             <Stack
@@ -399,6 +401,18 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                   label={`stored: ${storedPlanLabel}`}
                   size="small"
                   variant="outlined"
+                />
+              ) : null}
+              {/* A staff comp (AGL-3034) — the reason the effective plan can
+                  exceed what any subscription pays for. Dormant while a
+                  live subscription decides the plan. */}
+              {planState.comp ? (
+                <Chip
+                  label={`comp: ${planState.comp.plan}${
+                    planState.compInForce ? '' : ' (dormant)'
+                  }`}
+                  size="small"
+                  color="secondary"
                 />
               ) : null}
               {row.suspendedAt ? (
