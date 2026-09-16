@@ -73,10 +73,12 @@ export interface MintedEditAccessToken {
 }
 
 /**
- * Mints a token asserting "this uid may edit this host, until exp". Only the
- * console's `/api/edit-access/token` route calls this, AFTER verifying the
- * caller's Firebase ID token and membership — the mint itself checks nothing,
- * which is why it must never be reachable from unverified input.
+ * Mints a token asserting "this uid may edit this host, until exp". Two
+ * routes call this, each only AFTER proving who the caller is and passing the
+ * shared `editAccessMintRefusal` gate: the console's `/api/edit-access/token`
+ * (a verified Firebase ID token) and the tenant's `/api/edit-access/exchange`
+ * (a verified signed hint, AGL-1842). The mint itself checks nothing, which is
+ * why it must never be reachable from unverified input.
  */
 export function mintEditAccessToken(
   hostId: string,

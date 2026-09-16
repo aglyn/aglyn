@@ -114,9 +114,9 @@
     },
     "release_edit_bar": {
       "defaultValue": {
-        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+        "value": "{\"enabled\":true,\"rolloutPercent\":0,\"note\":\"Released to every workspace 2026-09-16 (AGL-3041)\"}"
       },
-      "description": "Edit-access admin bar on published sites (admin edit bar, AGL-1302 follow-on). OFF until the cross-origin connect flow is verified on a live tenant domain; flipping off also invalidates outstanding edit tokens.",
+      "description": "Site admin bar on published sites (AGL-1302 follow-on). Released 2026-09-16 (AGL-3041), on for every site. Turning it off hides the bar and revokes every outstanding edit token at the verify site.",
       "valueType": "JSON"
     },
     "release_assist": {

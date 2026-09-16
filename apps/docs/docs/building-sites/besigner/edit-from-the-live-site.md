@@ -10,12 +10,6 @@ Browsing your published site and spot something to fix? The **admin bar** connec
 your console edit access to the live site, so any page you're looking at is one click
 from its screen in the besigner.
 
-:::caution Rolling out
-The admin bar is a **release-flagged feature, currently being rolled out** — it may
-not be available on your site yet. Nothing needs configuring; it switches on
-per-workspace as the rollout proceeds.
-:::
-
 ## Call it up
 
 On any page of your published site, either:

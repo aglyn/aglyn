@@ -30,8 +30,9 @@ import { isServerReleaseFlagOnForOrg } from './release-flags'
  *
  * The gate, in order:
  *
- * 1. `release_edit_bar` for the host's org — dark until released, and the
- *    kill switch for the whole surface;
+ * 1. `release_edit_bar` for the host's org — on for every site since its
+ *    release (AGL-3041), and the kill switch for the whole surface, for
+ *    everyone or for one org by staff override;
  * 2. org roster membership — proven against the host the CALLER was already
  *    resolved to, never a caller-supplied orgId;
  * 3. the co-editing edit gate, verbatim from the presence broker: host

@@ -228,17 +228,19 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'rather than to a dead button.',
     defaultEnabled: false,
   },
+  // Released to every site 2026-09-16 (AGL-3041). Still the whole surface's
+  // kill switch, globally or for one org by override: off, the tenant slot
+  // renders nothing, both token mints refuse, and `/api/edit-context` turns
+  // away every token already issued.
   {
     key: 'release_edit_bar',
     label: 'Site admin bar',
     description:
-      'Edit-access admin bar on published sites: a signed-in editor can ' +
-      'jump from a live page straight into the besigner for the screen ' +
-      'serving it (admin edit bar, AGL-1302 follow-on). OFF by default ' +
-      'until the cross-origin connect flow is verified on a live tenant ' +
-      'domain; flipping it off also invalidates every outstanding edit ' +
-      'token at the verify site.',
-    defaultEnabled: false,
+      'Admin bar on published sites: a signed-in editor jumps from a live ' +
+      'page into the besigner for the screen serving it. Released ' +
+      '2026-09-16 (AGL-3041) for every site; turning it off hides the bar ' +
+      'and revokes every outstanding edit token at the verify site.',
+    defaultEnabled: true,
   },
   {
     key: 'release_assist',

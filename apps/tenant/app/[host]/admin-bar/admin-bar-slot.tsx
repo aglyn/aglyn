@@ -26,9 +26,11 @@ const CONSOLE_ORIGIN =
  * Server-side mount point for the tenant admin bar (admin edit bar,
  * AGL-1302 follow-on), rendered from the `[host]` layout.
  *
- * Gated on `release_edit_bar` HERE, on the server: with the flag off (the
- * default — it ships dark) nothing reaches the client at all, not even the
- * stub. Costs the render nothing it wasn't already paying — `getHostCached`
+ * Gated on `release_edit_bar` HERE, on the server. The flag is on for every
+ * site since its release (AGL-3041), which leaves it the kill switch: for an
+ * org it is off for — platform-wide, or by a staff override — nothing reaches
+ * the client at all, not even the stub. Costs the render nothing it wasn't
+ * already paying — `getHostCached`
  * is the same request-deduped read the layout theming does, and the flag
  * values are a 60s-TTL module cache. Both are baked into the ISR page, so a
  * flag flip propagates within a revalidation, same as any content change.
