@@ -59,6 +59,18 @@ const rulesFor = (className: string) =>
     .split('\n')
     .filter((line) => line.includes(className))
 
+/** The rules naming an element's generated class. */
+const rulesOf = (element: HTMLElement) => {
+  const generated = element.className
+    .split(' ')
+    .find((name) => name.startsWith('css-'))
+  // Guard the guard: with no generated class every `toContain` below would be
+  // asserting over the whole document's CSS, or over nothing at all.
+  expect(generated).toBeTruthy()
+  return rulesFor(generated as string)
+}
+
+/** The run's own box, and `root`: the balanced flow of cards inside it. */
 function mount(props?: Omit<CardColumnsProps, 'items'>) {
   const { container } = render(
     <CardColumns
@@ -69,15 +81,16 @@ function mount(props?: Omit<CardColumnsProps, 'items'>) {
       ]}
     />,
   )
-  const root = container.firstElementChild as HTMLElement
-  const generated = root.className
-    .split(' ')
-    .find((name) => name.startsWith('css-'))
-  // Guard the guard: with no generated class every `toContain` below would be
-  // asserting over the whole document's CSS, or over nothing at all.
-  expect(generated).toBeTruthy()
-  return { root, rules: rulesFor(generated as string) }
+  const box = container.firstElementChild as HTMLElement
+  const root = box.firstElementChild as HTMLElement
+  return { box, boxRules: rulesOf(box), root, rules: rulesOf(root) }
 }
+
+/** The rule every card wrapper takes: `>*`, and none of the hiding rules. */
+const cardRule = (rules: string[]) =>
+  rules.find(
+    (rule) => rule.includes('>*') && !rule.includes(':empty') && !rule.includes(':has'),
+  )
 
 describe('CardColumns', () => {
   it('emits a two-column flow that the browser BALANCES', () => {
@@ -119,11 +132,10 @@ describe('CardColumns', () => {
   it('spaces the cards from the theme, not from a hard-coded pixel count', () => {
     const wide = mount({ spacing: 3 })
     expect(wide.rules.join('\n')).toContain('column-gap: 24px')
-    expect(wide.rules.find((rule) => rule.includes('>*'))).toContain(
-      'margin-bottom: 24px',
-    )
+    expect(cardRule(wide.rules)).toContain('padding-bottom: 24px')
     const tight = mount({ spacing: 1 })
     expect(tight.rules.join('\n')).toContain('column-gap: 8px')
+    expect(cardRule(tight.rules)).toContain('padding-bottom: 8px')
   })
 
   it('honours a column count other than two', () => {
@@ -134,11 +146,10 @@ describe('CardColumns', () => {
   })
 
   it('hides a wrapper whose card rendered NOTHING', () => {
-    // `PluginWidgetSlot` renders an empty fragment when no plugin is entitled
-    // for the slot. Its wrapper would then be an empty block carrying only
-    // `margin-bottom`, which multicol counts as content and balances the
-    // columns around — a hole reintroduced by the component that exists to
-    // close holes.
+    // `PluginWidgetSlot` renders nothing when no plugin is entitled for the
+    // slot. Its wrapper would then be an empty block carrying only its gutter,
+    // which multicol counts as content and balances the columns around — a
+    // hole reintroduced by the component that exists to close holes.
     const { rules } = mount()
     const empty = rules.find((rule) => rule.includes(':empty'))
     expect(empty).toBeTruthy()
@@ -167,7 +178,7 @@ describe('CardColumns', () => {
         ]}
       />,
     )
-    const flow = container.firstElementChild as HTMLElement
+    const flow = (container.firstElementChild as HTMLElement).firstElementChild as HTMLElement
     const [zoneWrapper, skeletonWrapper, cardWrapper] = Array.from(flow.children)
     const holdsAnEmptyFrame = `:has(> ${EMPTY_FRAME_SELECTOR})`
     expect(zoneWrapper.matches(holdsAnEmptyFrame)).toBe(true)
@@ -182,6 +193,45 @@ describe('CardColumns', () => {
     const { root } = mount()
     expect(root.children).toHaveLength(2)
     expect(root.textContent).toBe('card acard b')
+  })
+})
+
+/**
+ * AGL-3059: the run ends at its last card, so whatever follows it keeps only
+ * its own spacing.
+ *
+ * Measured in headless Chrome against these declarations, with the cards
+ * stood in by fixed-height boxes: 48px between the run and the card band after
+ * it on Billing → Usage before, 24px after, at 400, 700, 1000 and 1300px; 32px
+ * against 16px before, and 16px after, where the run sits in a `Stack`.
+ */
+describe('CardColumns ends at its last card (AGL-3059)', () => {
+  it('spaces a card with padding, which a column break never truncates', () => {
+    // A margin at the foot of a column is truncated at the break, so only the
+    // last column would end in a gutter, and the given-back gutter below would
+    // pull what follows up against a first column taller than the last.
+    const { rules } = mount()
+    expect(cardRule(rules)).toContain('padding-bottom: 24px')
+    expect(cardRule(rules)).not.toContain('margin')
+  })
+
+  it('gives the one trailing gutter back from the flow', () => {
+    const { rules } = mount()
+    const flow = rules.find((rule) => !rule.includes('>*') && rule.includes('margin-bottom'))
+    expect(flow).toContain('margin-bottom: -24px')
+    expect(
+      mount({ spacing: 2 }).rules.find((rule) => !rule.includes('>*') && rule.includes('margin-bottom')),
+    ).toContain('margin-bottom: -16px')
+  })
+
+  it('contains that margin in a box of its own, which carries no margin for a parent to reset', () => {
+    // A block formatting context ends at its last child's margin edge, so the
+    // negative margin shortens the box. On the box itself it would be zeroed
+    // by a `Stack` parent, which resets its children's margins.
+    const { box, boxRules, root } = mount()
+    expect(box.firstElementChild).toBe(root)
+    expect(boxRules.join('\n')).toContain('display: flow-root')
+    expect(boxRules.join('\n')).not.toContain('margin')
   })
 })
 
