@@ -89,6 +89,8 @@ const TOUCHED_TOLERANCE_MS = 5_000
 
 const HOST_CAP = 2000
 const SCREENS_PER_HOST_CAP = 400
+/** How many hosts are swept at once. Bounded, not unlimited — see `sweepHost`. */
+const HOST_CONCURRENCY = 8
 /** Version reads are one per candidate, so the candidates are capped too. */
 const VERSION_READ_CAP = 1500
 
@@ -160,12 +162,11 @@ async function handler(request: Request): Promise<Response> {
     let versionsTruncated = false
     let versionReads = 0
 
-    for (const host of hostSnap.docs) {
-      // The routing map is what makes a screen reachable, so a screen it does
-      // not name is not live whatever its `publishedAt` says — and only a
-      // live page is a decision anybody has to make.
+    const sweepHost = async (host: (typeof hostSnap.docs)[number]) => {
+      // A screen the map does not name is not live whatever its
+      // `publishedAt` says, and only a live page is a decision anybody has
+      // to make.
       const routingMap = (host.get('screens') ?? {}) as Record<string, string>
-      if (!Object.keys(routingMap).length) continue
 
       const screenSnap = await host.ref
         .collection('screens')
@@ -234,6 +235,27 @@ async function handler(request: Request): Promise<Response> {
           blankCanvas: isBlank,
         })
       }
+    }
+
+    /**
+     * Hosts in parallel, a few at a time.
+     *
+     * One `screens` page per host and one version read per candidate is a
+     * fan-out that a sequential loop turns into a 504 at any real platform
+     * size — the failure this route's own `maxDuration` note warns about,
+     * and a report that times out is indistinguishable from "we cannot say".
+     * Batched rather than unbounded: a `Promise.all` over every host at once
+     * would open thousands of concurrent Firestore streams and fail a
+     * different way.
+     *
+     * A host whose routing map names nothing has no live page, so it is
+     * dropped before the reads rather than read and discarded.
+     */
+    const live = hostSnap.docs.filter(
+      (host) => Object.keys((host.get('screens') ?? {}) as object).length > 0,
+    )
+    for (let index = 0; index < live.length; index += HOST_CONCURRENCY) {
+      await Promise.all(live.slice(index, index + HOST_CONCURRENCY).map(sweepHost))
     }
 
     // Blank first, then untouched, then most recent — the order somebody
