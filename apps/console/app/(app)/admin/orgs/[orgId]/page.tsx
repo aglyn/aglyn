@@ -39,6 +39,7 @@ import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import {
   AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import OrgActivityCard from '../../../../../components/org-activity-card.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -51,7 +52,6 @@ import {
   Link as MuiLink,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -1463,7 +1463,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                       contentGutterY
                     >
                       {resolved ? (
-                        <Table size="small">
+                        <ScrollTable size="small">
                           <TableHead>
                             <TableRow>
                               <TableCell>{'Key'}</TableCell>
@@ -1534,7 +1534,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 )
                               })}
                           </TableBody>
-                        </Table>
+                        </ScrollTable>
                       ) : null}
                     </CardDisplay>
                   ),
@@ -1658,7 +1658,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                               </Typography>
                             )
                           ) : (
-                            <Table size="small">
+                            <ScrollTable size="small">
                               <TableHead>
                                 <TableRow>
                                   <TableCell>{'Invoice'}</TableCell>
@@ -1699,7 +1699,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   </TableRow>
                                 ))}
                               </TableBody>
-                            </Table>
+                            </ScrollTable>
                           )}
                         </Stack>
                       )}

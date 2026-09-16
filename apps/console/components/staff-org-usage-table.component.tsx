@@ -16,8 +16,8 @@
  */
 'use client'
 
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -228,7 +228,7 @@ const StaffOrgUsageTable = ({
     )
   }
   return (
-    <Table size="small">
+    <ScrollTable size="small">
       <TableHead>
         <TableRow>
           {LEADING_COLUMNS.map((column, index) => (
@@ -333,7 +333,7 @@ const StaffOrgUsageTable = ({
           </Fragment>
         ))}
       </TableBody>
-    </Table>
+    </ScrollTable>
   )
 }
 StaffOrgUsageTable.displayName = 'StaffOrgUsageTable'

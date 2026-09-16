@@ -76,6 +76,7 @@
 
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -89,7 +90,6 @@ import {
   LinearProgress,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -542,7 +542,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                   transition: 'opacity 120ms',
                 }}
               >
-                <Table size="small">
+                <ScrollTable size="small">
                   <TableHead>
                     <TableRow>
                       <TableCell>{'Item'}</TableCell>
@@ -603,7 +603,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                </ScrollTable>
               </Box>
               {payload && verdict.blocking ? (
                 <Typography variant="body2" color="error" sx={{ mt: 2 }}>
@@ -782,7 +782,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                   'platform account, so Stripe computed that tax against ' +
                   'Aglyn’s registrations and it settled into Aglyn’s balance.'}
               </Typography>
-              <Table size="small">
+              <ScrollTable size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>{'Bucket'}</TableCell>
@@ -862,7 +862,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                     ))
                   )}
                 </TableBody>
-              </Table>
+              </ScrollTable>
               {payload?.storefront?.truncated ? (
                 <Typography variant="body2" color="error" sx={{ mt: 2 }}>
                   {'Storefront rows exceeded the row cap — these figures are ' +
@@ -897,7 +897,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                   'established there, so the obligation is unconditional. A ' +
                   'region showing sales and no tax is the one to watch.'}
               </Typography>
-              <Table size="small">
+              <ScrollTable size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>{'Buyer state'}</TableCell>
@@ -978,7 +978,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                     ))
                   )}
                 </TableBody>
-              </Table>
+              </ScrollTable>
               <Typography
                 variant="caption"
                 color="text.secondary"
@@ -1100,7 +1100,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                   'by buyer state” above — a different taxpayer’s money, and ' +
                   'never summed with this.'}
               </Typography>
-              <Table size="small">
+              <ScrollTable size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>{'Jurisdiction'}</TableCell>
@@ -1285,7 +1285,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                     ))
                   )}
                 </TableBody>
-              </Table>
+              </ScrollTable>
               <Typography
                 variant="caption"
                 color="text.secondary"

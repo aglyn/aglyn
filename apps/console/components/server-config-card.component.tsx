@@ -42,6 +42,7 @@
  */
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
@@ -50,7 +51,6 @@ import {
   Button,
   Chip,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -159,7 +159,7 @@ export function ServerConfigCard() {
         </Stack>
 
         {report ? (
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Setting'}</TableCell>
@@ -207,7 +207,7 @@ export function ServerConfigCard() {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </ScrollTable>
         ) : null}
       </Stack>
     </CardDisplay>

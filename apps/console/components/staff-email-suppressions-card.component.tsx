@@ -17,6 +17,7 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -25,7 +26,6 @@ import {
   Button,
   Chip,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -220,7 +220,7 @@ export default function StaffEmailSuppressionsCard() {
             {'Nothing is suppressed platform-wide.'}
           </Typography>
         ) : (
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Address'}</TableCell>
@@ -314,7 +314,7 @@ export default function StaffEmailSuppressionsCard() {
                 )
               })}
             </TableBody>
-          </Table>
+          </ScrollTable>
         )}
         {/*
           The console's shared footer, so this list is the same control as

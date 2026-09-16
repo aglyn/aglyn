@@ -58,6 +58,7 @@
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -70,7 +71,6 @@ import {
   LinearProgress,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -131,47 +131,45 @@ function SourceTable({
   }
   return (
     <>
-      <Box sx={{ overflowX: 'auto' }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{unit}</TableCell>
-              <TableCell align="right">Earned</TableCell>
-              <TableCell align="right">Returned</TableCell>
-              <TableCell align="right">{countLabel}</TableCell>
+      <ScrollTable size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>{unit}</TableCell>
+            <TableCell align="right">Earned</TableCell>
+            <TableCell align="right">Returned</TableCell>
+            <TableCell align="right">{countLabel}</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.key}>
+              <TableCell>
+                {row.name}
+                {row.detail ? (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: 'block' }}
+                  >
+                    {row.detail}
+                  </Typography>
+                ) : null}
+              </TableCell>
+              <TableCell align="right">{money(row.gainCents)}</TableCell>
+              <TableCell align="right">
+                {Number(row.lossCents ?? 0) > 0 ? (
+                  <Typography variant="body2" color="error.main">
+                    −{money(row.lossCents)}
+                  </Typography>
+                ) : (
+                  money(0)
+                )}
+              </TableCell>
+              <TableCell align="right">{row.count}</TableCell>
             </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.key}>
-                <TableCell>
-                  {row.name}
-                  {row.detail ? (
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ display: 'block' }}
-                    >
-                      {row.detail}
-                    </Typography>
-                  ) : null}
-                </TableCell>
-                <TableCell align="right">{money(row.gainCents)}</TableCell>
-                <TableCell align="right">
-                  {Number(row.lossCents ?? 0) > 0 ? (
-                    <Typography variant="body2" color="error.main">
-                      −{money(row.lossCents)}
-                    </Typography>
-                  ) : (
-                    money(0)
-                  )}
-                </TableCell>
-                <TableCell align="right">{row.count}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Box>
+          ))}
+        </TableBody>
+      </ScrollTable>
       {Number(table?.omittedRows ?? 0) > 0 ? (
         <Alert severity="info" sx={{ mt: 2 }}>
           <AlertTitle>
@@ -463,7 +461,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterX
               contentGutterY
             >
-              <Table size="small">
+              <ScrollTable size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>Org state</TableCell>
@@ -533,7 +531,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                     </TableCell>
                   </TableRow>
                 </TableBody>
-              </Table>
+              </ScrollTable>
               <Box sx={{ mt: 2 }}>
                 <Typography variant="body2" color="text.secondary">
                   A plan tier is not a price. A comped org, an org on a 100%-off
@@ -625,7 +623,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                 </Alert>
               ) : null}
               <Divider sx={{ my: 2 }} />
-              <Table size="small">
+              <ScrollTable size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>Cause</TableCell>
@@ -661,7 +659,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+              </ScrollTable>
               {payload?.unbilledMeteredApplies === false ? (
                 <Box sx={{ mt: 2 }}>
                   <Typography variant="body2" color="text.secondary">
@@ -694,7 +692,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                   emptyMessage={`Nothing settled in this period, so there is no total to divide. The chart appears as soon as ${PLATFORM_BRAND_NAME} earns something — it is waiting for data, not failing to load.`}
                 />
               </Box>
-              <Table size="small">
+              <ScrollTable size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>Source</TableCell>
@@ -724,7 +722,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                     </TableCell>
                   </TableRow>
                 </TableBody>
-              </Table>
+              </ScrollTable>
             </CardDisplay>
 
             {/* ---- Gross vs net, unambiguously ---- */}
@@ -738,7 +736,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterX
               contentGutterY
             >
-              <Table size="small">
+              <ScrollTable size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>Line</TableCell>
@@ -830,7 +828,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                     </TableCell>
                   </TableRow>
                 </TableBody>
-              </Table>
+              </ScrollTable>
               <Box sx={{ mt: 2 }}>
                 <Stack
                   direction="row"
@@ -907,72 +905,70 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                   showing if a query had failed.
                 </Typography>
               ) : (
-                <Box sx={{ overflowX: 'auto' }}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Org</TableCell>
-                        <TableCell>State</TableCell>
-                        <TableCell>Plan</TableCell>
-                        <TableCell align="right">Contracted / mo</TableCell>
-                        <TableCell align="right">Settled in period</TableCell>
-                        <TableCell align="right">Unbilled meter</TableCell>
-                        <TableCell align="right">Invoices</TableCell>
+                <ScrollTable size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Org</TableCell>
+                      <TableCell>State</TableCell>
+                      <TableCell>Plan</TableCell>
+                      <TableCell align="right">Contracted / mo</TableCell>
+                      <TableCell align="right">Settled in period</TableCell>
+                      <TableCell align="right">Unbilled meter</TableCell>
+                      <TableCell align="right">Invoices</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {attributionRows.map((row) => (
+                      <TableRow key={row.orgId}>
+                        <TableCell>{row.name}</TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            label={
+                              ORG_STATE_LABELS[String(row.state)] ??
+                              String(row.state)
+                            }
+                            color={
+                              row.state === 'collecting'
+                                ? 'success'
+                                : row.state === 'pastDue'
+                                  ? 'error'
+                                  : row.state === 'trialing'
+                                    ? 'info'
+                                    : 'default'
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>{row.plan}</TableCell>
+                        <TableCell align="right">
+                          {usdMoney(row.mrrUsd)}
+                        </TableCell>
+                        <TableCell align="right">
+                          {money(row.settledCents)}
+                          {Number(row.refundedCents ?? 0) > 0 ? (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ display: 'block' }}
+                            >
+                              after {money(row.refundedCents)} returned
+                            </Typography>
+                          ) : null}
+                        </TableCell>
+                        <TableCell align="right">
+                          {Number(row.unbilledMeteredCents ?? 0) > 0 ? (
+                            <Typography variant="body2" color="error.main">
+                              −{money(row.unbilledMeteredCents)}
+                            </Typography>
+                          ) : (
+                            money(0)
+                          )}
+                        </TableCell>
+                        <TableCell align="right">{row.invoices}</TableCell>
                       </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {attributionRows.map((row) => (
-                        <TableRow key={row.orgId}>
-                          <TableCell>{row.name}</TableCell>
-                          <TableCell>
-                            <Chip
-                              size="small"
-                              label={
-                                ORG_STATE_LABELS[String(row.state)] ??
-                                String(row.state)
-                              }
-                              color={
-                                row.state === 'collecting'
-                                  ? 'success'
-                                  : row.state === 'pastDue'
-                                    ? 'error'
-                                    : row.state === 'trialing'
-                                      ? 'info'
-                                      : 'default'
-                              }
-                            />
-                          </TableCell>
-                          <TableCell>{row.plan}</TableCell>
-                          <TableCell align="right">
-                            {usdMoney(row.mrrUsd)}
-                          </TableCell>
-                          <TableCell align="right">
-                            {money(row.settledCents)}
-                            {Number(row.refundedCents ?? 0) > 0 ? (
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{ display: 'block' }}
-                              >
-                                after {money(row.refundedCents)} returned
-                              </Typography>
-                            ) : null}
-                          </TableCell>
-                          <TableCell align="right">
-                            {Number(row.unbilledMeteredCents ?? 0) > 0 ? (
-                              <Typography variant="body2" color="error.main">
-                                −{money(row.unbilledMeteredCents)}
-                              </Typography>
-                            ) : (
-                              money(0)
-                            )}
-                          </TableCell>
-                          <TableCell align="right">{row.invoices}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </Box>
+                    ))}
+                  </TableBody>
+                </ScrollTable>
               )}
               {Number(payload?.attribution?.omittedOrgs ?? 0) > 0 ? (
                 <Alert severity="info" sx={{ mt: 2 }}>
