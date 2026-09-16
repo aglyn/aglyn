@@ -62,6 +62,21 @@ export interface AiCatalogEntry extends AiModelDescriptor {
    * dearest, slowest class.
    */
   tier: 'fast' | 'balanced' | 'deep'
+  /**
+   * The shortest prefix this model's provider will cache (AGL-2937). A
+   * request whose cached span falls under it is served with the markers
+   * honored and NOTHING cached: no error, no warning, and a usage report
+   * that reads as a permanent cache miss.
+   *
+   * It is a property of the model rather than of the tier or the vendor,
+   * and it does not fall as a generation advances — so the number has to be
+   * written beside the model, and a door that means to cache has to be held
+   * to it (`aiCachedPrefixCaches` in the runtime, and the door table in
+   * `runtime/ai-prompt-cache.spec.ts`). Without it, "this block carries a
+   * breakpoint" is a claim nothing checks, and a prompt can be designed
+   * around a cache it never had.
+   */
+  cacheMinTokens: number
 }
 
 /**
@@ -142,6 +157,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     capabilities: anthropicCapabilities,
     rates: aiRatesPerMTok(3, 15),
     tier: 'balanced',
+    cacheMinTokens: 1_024,
   },
   {
     id: 'claude-sonnet-4-6',
@@ -150,6 +166,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     capabilities: anthropicCapabilities,
     rates: aiRatesPerMTok(3, 15),
     tier: 'balanced',
+    cacheMinTokens: 1_024,
   },
   {
     // Rejects an explicit `thinking` setting; the runtime omits it.
@@ -159,6 +176,10 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     capabilities: { ...anthropicCapabilities, thinking: false },
     rates: aiRatesPerMTok(1, 5),
     tier: 'fast',
+    // Four times the balanced tier's minimum: the cheapest model per token
+    // is the hardest one to cache for, which is why a short prompt moved
+    // here can cost more per request than it saved per token.
+    cacheMinTokens: 4_096,
   },
   {
     id: 'claude-opus-5',
@@ -167,6 +188,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     capabilities: anthropicCapabilities,
     rates: aiRatesPerMTok(5, 25),
     tier: 'deep',
+    cacheMinTokens: 512,
   },
   {
     id: 'claude-opus-4-8',
@@ -175,6 +197,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     capabilities: anthropicCapabilities,
     rates: aiRatesPerMTok(5, 25),
     tier: 'deep',
+    cacheMinTokens: 1_024,
   },
   /**
    * The OpenAI-compatible adapter serves whatever the endpoint behind
@@ -190,6 +213,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     capabilities: { streaming: true, tools: true, thinking: false, promptCache: true },
     rates: aiRatesPerMTok(1.25, 10),
     tier: 'balanced',
+    cacheMinTokens: 1_024,
   },
   {
     id: 'gpt-5-mini',
@@ -198,11 +222,25 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     capabilities: { streaming: true, tools: true, thinking: false, promptCache: true },
     rates: aiRatesPerMTok(0.25, 2),
     tier: 'fast',
+    cacheMinTokens: 1_024,
   },
 ]
 
 /** The dearest known tier, used when a model id is not in the catalog. */
 export const AI_FALLBACK_RATES: AiTokenRates = aiRatesPerMTok(10, 50)
+
+/**
+ * The minimum an unknown model id is assumed to have: the largest one the
+ * catalog knows. It errs the way the rate fallback errs — toward the answer
+ * that costs more — so an unrecognized id reads as "this prompt does not
+ * cache" rather than promising a saving nobody measured.
+ */
+export const AI_FALLBACK_CACHE_MIN_TOKENS = 4_096
+
+/** The shortest prefix a model's provider will cache; the dearest assumption for an unknown id. */
+export function aiModelCacheMinTokens(modelId: string): number {
+  return aiCatalogEntry(modelId)?.cacheMinTokens ?? AI_FALLBACK_CACHE_MIN_TOKENS
+}
 
 const ZERO_RATES = aiRatesPerMTok(0, 0)
 
