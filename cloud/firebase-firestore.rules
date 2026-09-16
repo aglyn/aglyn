@@ -1,4 +1,7 @@
 rules_version = '2';
+// SIZE: this source must stay under 256 KiB (262,144 bytes), COMMENTS INCLUDED.
+// The Rules API refuses a larger one at deploy with a bare 400, and nothing
+// that compiles it checks the limit; `npm run check:rules-size` does (AGL-3027).
 service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() { return request.auth != null; }
