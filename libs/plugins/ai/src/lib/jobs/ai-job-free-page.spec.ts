@@ -42,7 +42,11 @@
  *    same page on a site with no layout yet, whose job builds the one layout
  *    the Free plan includes first (AGL-3031), at the layout generation
  *    measured live. The developer notes quote both figures. A doctrine or
- *    plan change that pushes a Free page past the wall is red here;
+ *    plan change that pushes a Free page past the wall is red here. So is a
+ *    section ceiling the wall cannot hold: the ceiling it is measured at is
+ *    close to the largest that holds, far short of what a roomy two-person
+ *    introduction needs, which is why such a section is asked for smaller
+ *    rather than given more (AGL-3042);
  *  - a recording of the Free-shaped eval brief, when a live run has left one
  *    (`AI_EVAL_LIVE=1 AI_EVAL_CASES=page-free-law-firm-about npm run
  *    eval:ai-live`), built its page and fits the wall at the credits it
@@ -112,10 +116,10 @@ import type { AiEvalCandidate, AiEvalRecording } from '../runtime/ai-eval'
 import type { generateSeoFields } from '../runtime/seo-fields'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import { AI_PAGE_SECTION_INLINE_LINE, aiPageCheckContext } from './ai-job-page-sections'
-import { createAiJobPageStep } from './ai-job-page-step'
+import { AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED, createAiJobPageStep } from './ai-job-page-step'
 import { AI_JOB_PLAN_REVIEW_COPY, AI_JOB_PLAN_SCOPES, createAiJobPlanStep } from './ai-job-plan-step'
 import { AI_FREE_PAGE_STOPPED_RECORDING } from './fixtures/ai-free-page-recording'
-import { AI_FREE_PAGE_FIXTURE } from './fixtures/ai-page-briefs'
+import { AI_FREE_PAGE_FIXTURE, AI_TWO_PERSON_PAGE_FIXTURE } from './fixtures/ai-page-briefs'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
 const NOW = new Date('2026-09-16T13:00:00.000Z')
@@ -470,6 +474,39 @@ describe('one Free page fits the Free taste, end to end', () => {
     expect(result.planRequest.model).toBe(PLAN_MODEL)
     expect(PLAN_MODEL).toBe(MEASURED.model)
     expect(result.passRequests.map((request) => request.model)).toEqual(FIXTURE.answers.map(() => PAGE_MODEL))
+  })
+
+  it('scales every estimate by the ratio the page step counts a section’s element budget in (AGL-3042)', () => {
+    // One measurement, read the same way in both places: a section asked to
+    // keep under more elements than its ceiling holds is cut off live.
+    expect(AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED).toBe(REAL_TOKENS_PER_ESTIMATED)
+  })
+
+  it('holds the wall at no section ceiling large enough for a roomier two-person introduction, so the ceiling stays and the section is asked for smaller (AGL-3042)', async () => {
+    const result = await replay()
+    const at = (ceiling: number) =>
+      arithmetic({ ...result, passRequests: result.passRequests.map((request) => ({ ...request, maxTokens: ceiling })) })
+    // The room the arithmetic keeps: more of the wall left than its largest pass, which a re-asked section spends again.
+    const holds = (figures: FreePageArithmetic) =>
+      FREE_AI_TASTE_CREDITS_PER_MONTH - figures.totalWithLayout > Math.max(...figures.passes)
+    const [first] = result.passRequests
+    expect(holds(at(first.maxTokens))).toBe(true)
+    let most = first.maxTokens
+    while (holds(at(most + 1))) most += 1
+    const past = at(most + 1)
+
+    const { roomier } = AI_TWO_PERSON_PAGE_FIXTURE
+    const roomierTokens = Math.ceil(
+      Math.ceil(JSON.stringify({ tree: JSON.stringify(roomier) }).length / 4) * AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED,
+    )
+    expect(most).toBeLessThan(roomierTokens)
+
+    const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
+    const figure = (value: number) => value.toLocaleString('en-US')
+    expect(notes).toContain(
+      `past ${figure(most)} tokens the first section pass costs ${Math.max(...past.passes)} credits, and the Free page that builds its layout first leaves ${FREE_AI_TASTE_CREDITS_PER_MONTH - past.totalWithLayout} of the ${FREE_AI_TASTE_CREDITS_PER_MONTH}`,
+    )
+    expect(notes).toContain(`needs ${figure(roomierTokens)} real tokens, so no ceiling the wall holds fits it`)
   })
 
   it('fits the plan, every section at its answer ceiling and the listing inside the wall, at the figure the developer notes quote', async () => {

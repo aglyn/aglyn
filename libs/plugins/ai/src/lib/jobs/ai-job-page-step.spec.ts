@@ -130,7 +130,7 @@ import {
   AI_JOB_PAGE_SECTION_MAX_TOKENS,
   AI_JOB_PAGE_SECTION_TOKENS,
   AI_JOB_PAGE_STEP_MINIMUM_MS,
-  AI_JOB_PAGE_TOKENS_PER_ELEMENT,
+  aiJobPageSectionMaxElements,
   aiJobPageSectionMaxTokens,
   aiPageJobAdmission,
   aiPageJobRunMinimumMs,
@@ -458,7 +458,7 @@ describe('the time budget: a pass fits the least time it registers, and that fit
       expect(clock + AI_JOB_STEP_OVERHEAD_MS).toBeLessThanOrEqual(AI_JOB_PAGE_STEP_MINIMUM_MS)
       // The request asks the section to stay under what that ceiling holds.
       const prompt = mockRunAiRequest.mock.calls[0][0].messages[0].content as string
-      expect(prompt).toContain(`Keep this section to at most ${Math.floor(ceiling / AI_JOB_PAGE_TOKENS_PER_ELEMENT)} elements.`)
+      expect(prompt).toContain(`Keep this section to at most ${aiJobPageSectionMaxElements(ceiling)} elements.`)
     },
   )
 })
@@ -645,12 +645,12 @@ describe('when a pass stops', () => {
     expect(text).toBe(
       [
         'Your page-section was not used: it ran past the size one answer may have, and was cut off before it was whole.',
-        aiPageSectionSmaller({ maxElements: Math.floor(ceiling / AI_JOB_PAGE_TOKENS_PER_ELEMENT), reusableComponents: true }),
+        aiPageSectionSmaller({ maxElements: aiJobPageSectionMaxElements(ceiling), reusableComponents: true }),
         '',
         'Answer again with submit_section: the whole page-section, smaller than the one that was cut off.',
       ].join('\n'),
     )
-    expect(text).toContain('at most 23;')
+    expect(text).toContain('at most 15;')
     expect(text).not.toContain('could not be used as a section')
     expect(storedPage()[CANVAS_ROOT_ELEMENT_ID].nodes).toEqual([SECTION_IDS[0]])
   })

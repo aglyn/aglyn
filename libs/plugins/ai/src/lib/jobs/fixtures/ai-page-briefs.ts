@@ -1005,3 +1005,122 @@ export const AI_PAGE_CREATION_FIXTURE: AiPageCreationFixture = (() => {
     formGolden: 'roofingQuote',
   }
 })()
+
+/**
+ * A page whose second section introduces two people (AGL-3042): a photo, a
+ * name, a role and a short bio for each, as a law firm's About page asks for
+ * its attorneys, on a paid workspace whose site keeps no card for a person.
+ * Two items are fewer than a component is required for, so the section draws
+ * both where they stand.
+ *
+ * The golden answer is the drawing a section's request asks for at the
+ * balanced tier's ceiling: a Card a person holding the four, in fifteen
+ * elements. `roomier` is the same two people drawn the way a model reaches for
+ * with more elements to spend — a grid cell, a card body and styles a person,
+ * and an introduction — in twenty, inside the twenty-three a budget counted in
+ * estimated tokens allows. The page's evals measure both against the ceiling.
+ */
+export interface AiTwoPersonPageFixture extends AiPageBriefFixture {
+  /** The introduction drawn in twenty elements: a valid section, and past the ceiling in real tokens. */
+  roomier: AiGoldenSection
+}
+
+const ATTORNEYS = [
+  {
+    photo: 'A portrait of [attorney name], the founding partner, in the firm’s office',
+    name: '[attorney name]',
+    role: 'Founding partner, family law',
+    bio: 'Has represented parents and spouses in [county] for [years] years, and settles most cases before they reach a courtroom.',
+  },
+  {
+    photo: 'A portrait of [attorney name] at a conference table',
+    name: '[attorney name]',
+    role: 'Partner, estate planning and real estate',
+    bio: 'Writes wills and trusts for young families, and handles closings for homes and small commercial property.',
+  },
+]
+
+export const AI_TWO_PERSON_PAGE_FIXTURE: AiTwoPersonPageFixture = (() => {
+  const introduction = section('b', 'meet our attorneys', [], ATTORNEYS.length, (add) => {
+    const cards = ATTORNEYS.map((person) =>
+      add({
+        componentId: 'muiCard',
+        props: { variant: 'outlined' },
+        nodes: [
+          add({ componentId: 'image', props: { alt: person.photo } }),
+          add(typography('h3', person.name, 'h3')),
+          add(typography('subtitle1', person.role)),
+          add(typography('body2', person.bio)),
+        ],
+      }),
+    )
+    return framed(
+      add,
+      [add(typography('h2', 'Meet our attorneys', 'h2')), add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: cards })],
+      'lg',
+      8,
+    )
+  })
+  const roomier = section('b', 'meet our attorneys', [], ATTORNEYS.length, (add) => {
+    const cells = ATTORNEYS.map((person) =>
+      add({
+        componentId: 'muiGrid',
+        props: { size: '6' },
+        nodes: [
+          add({
+            componentId: 'muiCard',
+            props: { variant: 'outlined' },
+            sx: { height: '100%' },
+            nodes: [
+              add({ componentId: 'image', props: { alt: person.photo, objectFit: 'cover', loading: 'lazy' }, sx: { width: '100%' } }),
+              add({
+                componentId: 'muiCardContent',
+                nodes: [
+                  add(typography('h3', person.name, 'h3')),
+                  add({ componentId: 'muiTypography', props: { variant: 'subtitle1', children: person.role }, sx: { color: 'text.secondary' } }),
+                  add(typography('body2', person.bio)),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+    )
+    return framed(
+      add,
+      [
+        add(typography('h2', 'Meet our attorneys', 'h2')),
+        add(typography('body1', 'Two attorneys, and one of them handles your matter from the first meeting to the final order.')),
+        add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: cells }),
+      ],
+      'lg',
+      8,
+    )
+  })
+  const fixture = brief({
+    id: 'agency-law-firm-two-attorneys',
+    icp: 'agency',
+    pageType: 'about',
+    brief: 'An about page for Harborline Law: who we are, and our two attorneys with a photo, their role and a short bio for each.',
+    inventory: site('host-harborline-law', {
+      screens: [{ id: 'scr-contact', name: 'Contact', slug: 'contact', layoutId: 'lay-site', template: false }],
+    }),
+    title: 'About Harborline Law',
+    slug: '/about',
+    layout: 'lay-site',
+    nav: true,
+    seo: {
+      title: 'About Harborline Law',
+      description: 'A coastal law firm for families and homeowners: family law, estate planning and real estate closings.',
+    },
+    sections: [
+      hero('a', {
+        title: 'About Harborline Law',
+        lead: 'A small coastal firm for families and homeowners, in family law, estate planning and real estate closings.',
+        cta: { label: 'Request a consultation', screenId: 'scr-contact' },
+      }),
+      introduction,
+    ],
+  })
+  return { ...fixture, roomier: roomier.answer }
+})()

@@ -1230,10 +1230,11 @@ Assist panel.
   and an answer ceiling from `aiJobPageSectionMaxTokens`. The request names
   the page, its type, the brief, the confirmed plan as references, the section
   to build with the inventory ids it places, the names of the sections built
-  above it, never their content, and the most elements the section may carry.
-  A section cut off at its ceiling is re-asked for a smaller one — fewer
-  elements, shorter copy, a repeated item placed as an instance — and one cut
-  off twice stops as too large to build in one pass
+  above it, never their content, and the most elements the section may carry
+  (`aiJobPageSectionMaxElements`, [in real tokens](#the-time-budget)). A section
+  cut off at its ceiling is re-asked for a smaller one — fewer elements, shorter
+  copy, a repeated item placed as an instance — and one cut off twice stops as
+  too large to build in one pass
   ([An answer cut off at its ceiling](#an-answer-cut-off-at-its-ceiling)). The
   check runs the palette validator
   on the section, then `validateAiDoctrineTree(page, 'page')` on the page
@@ -1356,13 +1357,37 @@ needs, and the machine does not start it with less.
   runs, and at most `AI_JOB_PAGE_SECTION_MAX_TOKENS` (2,000): 1,750 tokens on
   the fast tier, 1,050 on the balanced tier and 700 on the deep tier — the
   ceilings every golden section and the Free page's arithmetic are measured
-  at. The request asks the section
-  to stay under the element count that ceiling holds at
-  `AI_JOB_PAGE_TOKENS_PER_ELEMENT` (45 tokens an element, measured on the
-  golden sections). `ai-job-page-step.spec.ts` runs a pass on a fake clock on
+  at. `ai-job-page-step.spec.ts` runs a pass on a fake clock on
   every tier through both lookup rounds, an answer that breaks a rule and its
   re-ask, and holds it inside the minimum, and the minimum inside what a beat
   can give a step and past an inline door's 25 s.
+- **The element budget, in real tokens (AGL-3042).** The request asks a section
+  to keep under the elements its ceiling holds, and the ceiling is counted in
+  the provider's tokens. An element is `AI_JOB_PAGE_TOKENS_PER_ELEMENT` (45
+  tokens) estimated at four characters a token, measured on the golden
+  sections; real tokens run above that estimate by
+  `AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED`, the 1.5427 the first live document run
+  measured (the Free page's ratio below, on prompt text). So an element is
+  `AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT` (70 real tokens an element, 45 × 1.5427
+  rounded up), and `aiJobPageSectionMaxElements` asks for 25 elements on the
+  fast tier, 15 on the balanced tier and 10 on the deep tier. Fifteen elements
+  of the goldens' largest come to 1,042 real tokens of the 1,050; the 23 an
+  estimate-counted budget allowed came to 1,597, and a live About page's
+  section introducing two attorneys was cut off at the ceiling on its answer
+  and its re-ask. The budget counts every element at the goldens' largest, so
+  it errs dear for a section of many small ones: the Free page's four inline
+  practice-area cards take 21 elements at 1,009 real tokens, and are asked to
+  keep under 15 all the same. The request's line is the same length either
+  way, so no figure the Free page's arithmetic quotes moves.
+- **The ceiling does not move to make a section fit.** The balanced tier's
+  1,050 fits the Free page's wall with little to spare: past 1,073 tokens the
+  first section pass costs 45 credits, and the Free page that builds its layout
+  first leaves 45 of the 300 — no more than that pass, which is the room the
+  arithmetic keeps for a re-asked section. A two-person introduction drawn
+  roomier, in the 20 elements an estimate-counted budget allowed, needs 1,110
+  real tokens, so no ceiling the wall holds fits it; drawn in 15, it needs 810.
+  A plan rule that splits a section cannot see how long its items' copy runs,
+  so the budget is what changes.
 - A creation a page job builds runs inside a page pass (AGL-3031), handed to the
   step of its own kind, which keeps the ceiling it keeps as a job of that kind —
   far past a section's time. So that pass needs the time the creation's step
@@ -1426,7 +1451,8 @@ hand in the shape a section answer takes, never recorded from a provider.
 doctrine and draft writer. Every plan is one a page job builds; every page
 keeps the doctrine, carries no main landmark of its own (the layout's slot is
 the document's one main) and no raw binding token; and every section fits the
-balanced tier's answer ceiling, under the element measure.
+balanced tier's answer ceiling in real tokens, at the ratio measured live, under
+the element budget its request asks for.
 
 - **Credits per page: an estimate.** 46 credits per page: the median
   (the higher middle value) of the ten golden pages, each priced from the
@@ -1436,6 +1462,19 @@ balanced tier's answer ceiling, under the element measure.
   and the listing exchange at the SEO step's nominal usage. It is not a
   measurement, and customer docs quote no figure: a job shows what it used in
   AI jobs. A recorded run through AGL-2937's harness replaces it.
+- **A two-person introduction fits a pass (AGL-3042).** `AI_TWO_PERSON_PAGE_FIXTURE`
+  is a law firm's About page on a paid workspace whose site keeps no card for a
+  person: a hero, then its two attorneys, each with a photo, a name, a role and a
+  short bio, drawn where they stand because two items are fewer than a component
+  is required for. `ai-job-page-evals.spec.ts` replays it through the real page
+  step: the introduction, a Card a person in 15 elements, is 525 estimated tokens
+  and 810 real, inside the 15 elements and the 1,050 tokens its pass asks for on
+  the balanced tier. The same two people drawn roomier — a grid cell, a card body
+  and styles a person, and an introduction — make a section the page's rules
+  keep, in 20 elements, inside the 23 an estimate-counted budget allows, at 1,110
+  real tokens, past the ceiling. On every tier the spec holds a section of the
+  goldens' largest elements inside its ceiling at its element budget, and past it
+  at one element more.
 - **A plan with creations, built end to end.** `AI_PAGE_CREATION_FIXTURE` is a
   roofing page on a Starter site with no layout, card or form: its plan creates all
   three. `ai-job-page-evals.spec.ts` replays it through the real page step, handing

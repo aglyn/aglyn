@@ -37,9 +37,15 @@
  *    (the layout's slot is the document's one main) and no raw binding token,
  *    and stays an unpublished draft;
  *  - every section fits the answer ceiling a pass asks for on the balanced
- *    tier, under the element measure the step asks by;
+ *    tier — in the provider's tokens, at the ratio measured live (AGL-3042) —
+ *    under the element budget the step asks by;
  *  - the credits a page takes, ESTIMATED from the requests the step sent and
  *    the golden answers' sizes, match the figure the developer notes quote.
+ *
+ * A page that introduces two people fits its passes too (AGL-3042): the
+ * section a live About page was cut off on, drawn inside the element budget,
+ * and drawn roomier inside the budget the estimate alone would allow, which
+ * runs past the ceiling.
  *
  * And one brief whose plan CREATES what its site lacks (AGL-3031): a layout,
  * a reusable component and a saved form, each built first through the REAL
@@ -108,16 +114,29 @@ import { aiGenerationMaxTokensWithin } from './ai-job-budget'
 import { createAiJobComponentStep } from './ai-job-component-step'
 import { createAiJobFormStep } from './ai-job-form-step'
 import { createAiJobLayoutStep } from './ai-job-layout-step'
-import { aiPageCheckContext } from './ai-job-page-sections'
 import {
+  aiEmptyPage,
+  aiPageCheckContext,
+  aiPageSectionCheck,
+  aiPageSectionNodeId,
+  aiPageWithSection,
+  type AiPageSection,
+} from './ai-job-page-sections'
+import {
+  AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT,
+  AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED,
   AI_JOB_PAGE_SECTION_MAX_TOKENS,
   AI_JOB_PAGE_STEP_MINIMUM_MS,
   AI_JOB_PAGE_TOKENS_PER_ELEMENT,
+  aiJobPageSectionMaxElements,
+  aiJobPageSectionMaxTokens,
   createAiJobPageStep,
 } from './ai-job-page-step'
 import {
+  AI_FREE_PAGE_FIXTURE,
   AI_PAGE_BRIEF_FIXTURES,
   AI_PAGE_CREATION_FIXTURE,
+  AI_TWO_PERSON_PAGE_FIXTURE,
   type AiGoldenSection,
   type AiPageBriefFixture,
 } from './fixtures/ai-page-briefs'
@@ -342,6 +361,15 @@ const tokensOf = (chars: number) => Math.ceil(chars / 4)
 /** A section answer as its tool call carries it. */
 const answerChars = (answer: AiGoldenSection) => JSON.stringify({ tree: JSON.stringify(answer) }).length
 
+/**
+ * An estimate as the provider's tokens, which a pass's ceiling is counted in:
+ * scaled by the ratio measured live (AGL-3042).
+ */
+const realTokensOf = (estimated: number) => Math.ceil(estimated * AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED)
+
+/** The elements a section answer carries: every node but the document wrapper. */
+const elementsOf = (answer: AiGoldenSection) => Object.keys(answer.nodes).length - 1
+
 /** One section pass's estimated usage: the cached prefix, what rides after it, and the answer. */
 function passUsage(request: SentRequest, answer: AiGoldenSection, first: boolean): AiUsage {
   const lastBreakpoint = request.system.map((block) => Boolean(block.cacheBreakpoint)).lastIndexOf(true)
@@ -400,26 +428,28 @@ describe('the ten golden page briefs', () => {
       const result = await replay(fixture, index)
 
       // One exchange a section, at the balanced tier's ceiling: no golden
-      // answer needed its re-ask, and every one fits what its pass asks for.
+      // answer needed its re-ask, and every one fits what its pass asks for,
+      // in the provider's tokens the ceiling is counted in.
       expect(result.requests).toHaveLength(fixture.answers.length)
       const ceiling = aiGenerationMaxTokensWithin({
         budgetMs: AI_JOB_PAGE_STEP_MINIMUM_MS,
         model: PAGE_MODEL,
         cap: AI_JOB_PAGE_SECTION_MAX_TOKENS,
       })
-      const maxElements = Math.floor(ceiling / AI_JOB_PAGE_TOKENS_PER_ELEMENT)
+      const maxElements = aiJobPageSectionMaxElements(ceiling)
       result.requests.forEach((request, pass) => {
         const answer = fixture.answers[pass]
-        const elements = Object.keys(answer.nodes).length - 1
+        const elements = elementsOf(answer)
         const tokens = tokensOf(answerChars(answer))
         const label = `${fixture.id} section ${pass + 1}`
         expect([label, request.model, request.maxTokens]).toEqual([label, PAGE_MODEL, ceiling])
         expect([
           label,
-          tokens <= ceiling,
+          realTokensOf(tokens) <= ceiling,
           elements <= maxElements,
           tokens / elements <= AI_JOB_PAGE_TOKENS_PER_ELEMENT,
         ]).toEqual([label, true, true, true])
+        expect(String(request.messages[0].content)).toContain(`Keep this section to at most ${maxElements} elements.`)
       })
 
       // The draft: reported with its weight and its listing, never published.
@@ -467,6 +497,109 @@ describe('the ten golden page briefs', () => {
       'utf8',
     )
     expect(customer).not.toMatch(/\d[\d,]*\s+credits/i)
+  })
+})
+
+/**
+ * A two-person introduction fits a pass on the balanced tier (AGL-3042).
+ *
+ * A live About page asked for its two attorneys — a photo, a name, a role and
+ * a short bio each — and the section was cut off at the balanced tier's
+ * ceiling on its answer and on its re-ask. The ceiling holds a Free page's
+ * wall and stays; what a section is asked to keep under is what makes it fit,
+ * counted in the provider's tokens the ceiling is counted in rather than in
+ * the estimate.
+ */
+describe('a two-person introduction fits a pass on the balanced tier (AGL-3042)', () => {
+  const FIXTURE = AI_TWO_PERSON_PAGE_FIXTURE
+  const ceiling = aiJobPageSectionMaxTokens(PAGE_MODEL)
+  const realTokensOfAnswer = (answer: AiGoldenSection) => realTokensOf(tokensOf(answerChars(answer)))
+
+  it('builds the page in one exchange a section, the introduction inside the elements its request asks for and the tokens its ceiling holds', async () => {
+    const result = await replay(FIXTURE, AI_PAGE_BRIEF_FIXTURES.length)
+    expect(result.requests).toHaveLength(FIXTURE.answers.length)
+    expect(result.outcome.review).toBeUndefined()
+    expect(result.outcome.failure).toBeUndefined()
+    const report = validateAiDoctrineTree(
+      { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: result.page as never },
+      'page',
+      aiPageCheckContext(FIXTURE.inventory),
+    )
+    expect(report.violations).toEqual([])
+
+    const maxElements = aiJobPageSectionMaxElements(ceiling)
+    expect([ceiling, maxElements]).toEqual([1_050, 15])
+    expect(String(result.requests[1].messages[0].content)).toContain(`Keep this section to at most ${maxElements} elements.`)
+    const [, introduction] = FIXTURE.answers
+    // Fifteen elements, 525 estimated tokens: 810 of the provider's.
+    expect([elementsOf(introduction), realTokensOfAnswer(introduction)]).toEqual([15, 810])
+    expect(elementsOf(introduction)).toBeLessThanOrEqual(maxElements)
+    expect(realTokensOfAnswer(introduction)).toBeLessThanOrEqual(ceiling)
+  })
+
+  it('runs past the ceiling drawn roomier, inside the elements a budget counted in estimated tokens allows', () => {
+    const screen = FIXTURE.plan.screens[0]
+    const sectionIds = screen.sections.map((_, index) => aiPageSectionNodeId('job-two-person', index))
+    const context = aiPageCheckContext(FIXTURE.inventory)
+    const hero = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, uses: screen.sections[0].uses, inventory: FIXTURE.inventory })({
+      tree: JSON.stringify(FIXTURE.answers[0]),
+    })
+    const page = aiPageWithSection(aiEmptyPage(), hero.value as AiPageSection, sectionIds)
+    // A section the page's rules keep, and not one its ceiling holds.
+    const roomier = aiPageSectionCheck({ page, sectionIds, index: 1, context, uses: [], inventory: FIXTURE.inventory })({
+      tree: JSON.stringify(FIXTURE.roomier),
+    })
+    expect([roomier.value !== null, roomier.violations]).toEqual([true, []])
+    const estimatedBudget = Math.floor(ceiling / AI_JOB_PAGE_TOKENS_PER_ELEMENT)
+    expect([estimatedBudget, elementsOf(FIXTURE.roomier), realTokensOfAnswer(FIXTURE.roomier)]).toEqual([23, 20, 1_110])
+    expect(elementsOf(FIXTURE.roomier)).toBeLessThanOrEqual(estimatedBudget)
+    expect(elementsOf(FIXTURE.roomier)).toBeGreaterThan(aiJobPageSectionMaxElements(ceiling))
+    expect(realTokensOfAnswer(FIXTURE.roomier)).toBeGreaterThan(ceiling)
+  })
+
+  it.each(['fast', 'balanced', 'deep'] as const)(
+    'on the %s tier, a section of the goldens’ largest elements fits its ceiling at its element budget, and not at one more',
+    (tier) => {
+      const model = AI_MODEL_CATALOG.find((entry) => entry.tier === tier)?.id as string
+      const tierCeiling = aiJobPageSectionMaxTokens(model)
+      const budget = aiJobPageSectionMaxElements(tierCeiling)
+      expect(realTokensOf(budget * AI_JOB_PAGE_TOKENS_PER_ELEMENT)).toBeLessThanOrEqual(tierCeiling)
+      expect(realTokensOf((budget + 1) * AI_JOB_PAGE_TOKENS_PER_ELEMENT)).toBeGreaterThan(tierCeiling)
+      // Counted in the estimate, the budget holds half as much again as the ceiling.
+      expect(realTokensOf(Math.floor(tierCeiling / AI_JOB_PAGE_TOKENS_PER_ELEMENT) * AI_JOB_PAGE_TOKENS_PER_ELEMENT)).toBeGreaterThan(
+        tierCeiling,
+      )
+    },
+  )
+
+  it('is stated in the developer notes with the figures the code computes', () => {
+    const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
+    const figure = (value: number) => value.toLocaleString('en-US')
+    const budgetOn = (tier: 'fast' | 'balanced' | 'deep') =>
+      aiJobPageSectionMaxElements(aiJobPageSectionMaxTokens(AI_MODEL_CATALOG.find((entry) => entry.tier === tier)?.id as string))
+    const [, introduction] = FIXTURE.answers
+    expect(notes).toContain(
+      `\`AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT\` (${AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT} real tokens an element, ` +
+        `${AI_JOB_PAGE_TOKENS_PER_ELEMENT} × ${AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED.toFixed(4)} rounded up)`,
+    )
+    expect(notes).toContain(
+      `asks for ${budgetOn('fast')} elements on the fast tier, ${budgetOn('balanced')} on the balanced tier and ${budgetOn('deep')} on the deep tier`,
+    )
+    expect(notes).toContain(
+      `is ${figure(tokensOf(answerChars(introduction)))} estimated tokens and ${figure(realTokensOfAnswer(introduction))} real, ` +
+        `inside the ${aiJobPageSectionMaxElements(ceiling)} elements and the ${figure(ceiling)} tokens its pass asks for`,
+    )
+    expect(notes).toContain(
+      `in ${elementsOf(FIXTURE.roomier)} elements, inside the ${Math.floor(ceiling / AI_JOB_PAGE_TOKENS_PER_ELEMENT)} an estimate-counted budget allows, ` +
+        `at ${figure(realTokensOfAnswer(FIXTURE.roomier))} real tokens`,
+    )
+    // The budget errs dear for a section of many small elements, and the notes say by how much.
+    const cards = AI_FREE_PAGE_FIXTURE.answers[1]
+    expect([elementsOf(cards) > aiJobPageSectionMaxElements(ceiling), realTokensOfAnswer(cards) <= ceiling]).toEqual([true, true])
+    expect(notes).toContain(
+      `practice-area cards take ${elementsOf(cards)} elements at ${figure(realTokensOfAnswer(cards))} real tokens, ` +
+        `and are asked to keep under ${aiJobPageSectionMaxElements(ceiling)} all the same`,
+    )
   })
 })
 

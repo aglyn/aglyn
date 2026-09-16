@@ -157,14 +157,44 @@ export {
 }
 
 /**
- * Tokens one element takes in a section's answer: the tree as JSON text
- * inside the tool call, at four characters a token. Measured on the ten
+ * Tokens one element takes in a section's answer, ESTIMATED: the tree as JSON
+ * text inside the tool call, at four characters a token. Measured on the ten
  * golden pages at a median of 38 and a most of 43 over their 39 sections, and
- * `ai-job-page-evals.spec.ts` holds every golden section under it. Turns an
- * answer ceiling into the element count a request asks a section to keep
- * under.
+ * `ai-job-page-evals.spec.ts` holds every golden section under it.
  */
 export const AI_JOB_PAGE_TOKENS_PER_ELEMENT = 45
+
+/**
+ * Real tokens to every token estimated at four characters (AGL-3042). A
+ * section's ceiling is counted by the provider in its own tokens, which run
+ * above that estimate. MEASURED on the first live document run on a Free
+ * workspace (AGL-3024, test-org, 2026-09-16), as the cache read of a request
+ * over the estimate of the same cached prefix: 4,059 over 2,825 for the page
+ * plan and 6,649 over 4,310 for the layout, the higher of the two, 1.5427 —
+ * the ratio `ai-job-free-page.spec.ts` prices a Free page at. It is measured on
+ * prompt text; an answer's own is read off a recorded pass, whose output
+ * tokens the step's record keeps (`lastRuns`), beside the section it stored.
+ */
+export const AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED = Math.max(4_059 / 2_825, 6_649 / 4_310)
+
+/**
+ * Real tokens one element takes in a section's answer: the estimate at its
+ * golden most, in real tokens, rounded up — 45 × 1.5427 → 70 (AGL-3042).
+ */
+export const AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT = Math.ceil(
+  AI_JOB_PAGE_TOKENS_PER_ELEMENT * AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED,
+)
+
+/**
+ * The most elements a section's request asks it to keep under at an answer
+ * ceiling: 15 at the balanced tier's 1,050 (AGL-3042). Counted in real
+ * tokens, because the ceiling is: counted in the estimate, the budget is 23
+ * elements, which a section of the goldens' largest elements fills at 1,597
+ * real tokens — half as much again as the ceiling that cuts it off.
+ */
+export function aiJobPageSectionMaxElements(maxTokens: number): number {
+  return Math.max(1, Math.floor(maxTokens / AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT))
+}
 
 /** A page's name when the plan names none. */
 export const AI_JOB_PAGE_DEFAULT_NAME = 'New page'
@@ -461,7 +491,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       if (allowance) return aiUnspentOutcome(model, { review: aiLimitReview(allowance) })
     }
     const maxTokens = aiJobPageSectionMaxTokens(model)
-    const maxElements = Math.max(1, Math.floor(maxTokens / AI_JOB_PAGE_TOKENS_PER_ELEMENT))
+    const maxElements = aiJobPageSectionMaxElements(maxTokens)
     const result = await runValidatedGeneration<AiPageSection>('page-section', {
       step: 'job.page',
       model,
