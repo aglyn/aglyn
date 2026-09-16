@@ -1825,12 +1825,64 @@ describe('the green path', () => {
     // Everything except the final turn, which is the question itself.
     const history = request.messages.slice(0, -1) as Array<{ content: string }>
     const chars = history.reduce((total, turn) => total + turn.content.length, 0)
-    expect(chars).toBeLessThanOrEqual(8000)
+    // The ceiling was 8,000 while every turn was sent verbatim. Since
+    // AGL-2937 the verbatim window shares 4,000 and the turns behind it are
+    // digested under 1,200 of their own, so the worst case a scripted caller
+    // can reach is about a third lower.
+    expect(chars).toBeLessThanOrEqual(5400)
     // Asserted as a bound AND as a floor: a build that simply dropped the
     // history would satisfy the line above and quietly break the feature,
     // and a conversation the model cannot see is the failure users report
     // as the assistant forgetting what they just said.
-    expect(chars).toBeGreaterThan(7000)
+    expect(chars).toBeGreaterThan(4500)
+    // …and the turns past the verbatim window are DIGESTED rather than
+    // dropped, which is the half of this that is not a saving.
+    expect(history[0].content.startsWith('Earlier in this conversation')).toBe(true)
+  })
+
+  it('folds the turns behind the verbatim window into one labelled digest (AGL-2937)', async () => {
+    // A long answer earlier in the thread used to eat the whole budget and
+    // take the turns behind it with it. Now it contributes an opening line
+    // and the rest of the conversation survives.
+    seedOrgs()
+    armUpstream()
+    const long = 'answers at length. '.repeat(400)
+    await (
+      await POST(
+        post({
+          ...QUESTION_BODY(FREE_ORG),
+          history: [
+            { role: 'user', text: 'how do I connect a domain' },
+            { role: 'assistant', text: `Open settings. ${long}` },
+            { role: 'user', text: 'and a subdomain' },
+            { role: 'assistant', text: 'the same place' },
+            { role: 'user', text: 'what about email' },
+            { role: 'assistant', text: 'under the same tab' },
+            { role: 'user', text: 'and DNS' },
+            { role: 'assistant', text: 'we show the records' },
+          ],
+        }),
+      )
+    ).text()
+    const request = JSON.parse(String(mockFetch.mock.calls[0][1].body))
+    const messages = request.messages as Array<{ role: string; content: string }>
+    // The digest opens the conversation, user-side, and names both halves of
+    // each older exchange without carrying either of them whole.
+    expect(messages[0].role).toBe('user')
+    expect(messages[0].content).toContain('Earlier in this conversation')
+    expect(messages[0].content).toContain('- I asked: how do I connect a domain')
+    expect(messages[0].content).toContain('- You answered: Open settings.')
+    expect(messages[0].content.length).toBeLessThan(1_300)
+    // The six newest turns are still word for word.
+    expect(messages.slice(1, -1).map((turn) => turn.content)).toEqual([
+      'and a subdomain',
+      'the same place',
+      'what about email',
+      'under the same tab',
+      'and DNS',
+      'we show the records',
+    ])
+    expect(messages[messages.length - 1].content).toBe(QUESTION)
   })
 
   it('spends that budget on the NEWEST turns, not the oldest', async () => {

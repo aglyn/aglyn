@@ -236,8 +236,18 @@ import {
  * So it caches, with little headroom — and on a shorter screen description
  * it may not. `usage.cacheReadTokens` on the exchange doc is the only thing
  * that settles it in production; a prefix under the minimum caches silently
- * not at all. Note the minimum moves with the model, so routing
- * `assist.chat` to another catalog model changes the arithmetic.
+ * not at all. The minimum moves with the model, so routing `assist.chat` to
+ * another catalog model changes the arithmetic: since AGL-2937 it is written
+ * beside each model as `cacheMinTokens`, and `runtime/ai-prompt-cache.spec.ts`
+ * measures every door's span against it rather than leaving the question to
+ * a comment.
+ *
+ * The history is where this route's uncached money goes — `messages` never
+ * caches, and a client posts its own thread. Since AGL-2937 only the last
+ * `HISTORY_VERBATIM_TURNS` ride word for word; the turns behind them are
+ * folded into one labelled digest with no second model call, which bounds a
+ * scripted caller's history at about 5,200 characters rather than 8,000 and
+ * keeps the gist of the turns that used to be dropped.
  */
 
 /**
@@ -254,8 +264,8 @@ export function assistModel(): string {
 const MAX_QUESTION_CHARS = 4000
 const MAX_HISTORY_TURNS = 24
 /**
- * Prior conversation sent upstream, in characters — a budget shared across
- * ALL turns, not an allowance granted to each of them.
+ * The VERBATIM turns' share of what is sent upstream, in characters — a
+ * budget shared across all of them, not an allowance granted to each.
  *
  * The distinction is the whole cost of this constant. It used to be applied
  * inside the per-turn loop (`text.slice(0, MAX_HISTORY_CHARS)`), so 24 turns
@@ -274,9 +284,43 @@ const MAX_HISTORY_TURNS = 24
  *
  * Spent newest-first, because the turns nearest the question are the ones
  * that make it intelligible; the oldest included turn is truncated at its
- * end and everything past the budget is dropped.
+ * end. It was 8,000 and covered every turn; since AGL-2937 it covers the
+ * last `HISTORY_VERBATIM_TURNS` and the older ones are digested under a
+ * budget of their own, so the whole history is bounded at about 5,200
+ * characters rather than 8,000 — a third off the dearest turn this route
+ * serves, and the figure the COGS alert above should be read against.
  */
-const MAX_HISTORY_CHARS = 8000
+const MAX_HISTORY_CHARS = 4000
+
+/**
+ * Turns kept VERBATIM: the ones nearest the question, which are the ones
+ * that make it intelligible. Six covers three exchanges — the span a
+ * follow-up like "and the other one?" actually reaches back over.
+ */
+const HISTORY_VERBATIM_TURNS = 6
+
+/**
+ * What an older turn contributes to the digest, and what the digest may cost
+ * altogether (AGL-2937).
+ *
+ * Older turns used to be spent from the same budget as recent ones and then
+ * DROPPED when it ran out, so a long answer earlier in the thread could eat
+ * the whole allowance and leave nothing for the rest — and the turns past it
+ * vanished with no trace the model could see. Folding them into a labelled
+ * digest instead is both cheaper and truer: a thread whose turns run long
+ * now sends about 5,200 characters rather than 8,000, and a thread with many
+ * short turns keeps the gist of ALL of them rather than the newest few.
+ *
+ * No model call: the digest is the opening of each older turn, which is
+ * where a turn says what it is about. Summarizing it properly would mean a
+ * second request, and a request to save tokens that costs a request is not a
+ * saving.
+ */
+const DIGEST_TURN_CHARS = 160
+const MAX_DIGEST_CHARS = 1200
+
+/** How the digest introduces itself, so the model never reads it as the user's words. */
+const DIGEST_OPENING = 'Earlier in this conversation, in brief:'
 /** The chat turn's routing: its ceiling, no thinking and the low effort rung — see the header. */
 const CHAT_ROUTE = AI_ROUTING_TABLE['assist.chat']
 const MAX_OUTPUT_TOKENS = CHAT_ROUTE.maxTokens
@@ -392,6 +436,42 @@ interface AssistRequestBody {
   canvas: unknown
 }
 
+/** A posted turn the route will read: a known role with words in it. */
+function isAssistTurn(turn: unknown): turn is AssistHistoryTurn {
+  const role = (turn as Record<string, unknown>)?.role
+  if (role !== 'user' && role !== 'assistant') return false
+  return Boolean(String((turn as Record<string, unknown>)?.text ?? '').trim())
+}
+
+/**
+ * The turns past the verbatim window, as one labelled digest (AGL-2937).
+ *
+ * Each older turn contributes its opening, which is where a turn says what
+ * it is about, under a per-turn cap and a budget for the whole digest that
+ * is spent newest-first like the verbatim one. An empty string when there
+ * are no older turns, and the caller sends no digest turn at all.
+ *
+ * Written as the USER recounting the thread, because that is what it is: the
+ * client's own record of the conversation, compressed. Reading it as the
+ * assistant's words would invite the model to treat a summary of its earlier
+ * answers as something it had actually said in those words.
+ */
+export function assistHistoryDigest(older: readonly AssistHistoryTurn[]): string {
+  const lines: string[] = []
+  let remaining = MAX_DIGEST_CHARS
+  for (const turn of [...older].reverse()) {
+    if (remaining <= 0) break
+    const opening = turn.text.replace(/\s+/g, ' ').trim().slice(0, DIGEST_TURN_CHARS)
+    if (!opening) continue
+    const line = `- ${turn.role === 'user' ? 'I asked' : 'You answered'}: ${opening}`
+    if (line.length > remaining) break
+    remaining -= line.length
+    lines.push(line)
+  }
+  if (!lines.length) return ''
+  return [DIGEST_OPENING, ...lines.reverse()].join('\n')
+}
+
 /** Validate + clamp the request body; null when structurally unusable. */
 export function parseAssistBody(payload: unknown): AssistRequestBody | null {
   const body = (payload ?? {}) as Record<string, unknown>
@@ -401,22 +481,21 @@ export function parseAssistBody(payload: unknown): AssistRequestBody | null {
     .slice(0, MAX_QUESTION_CHARS)
   if (!orgId || !question) return null
   const rawHistory = Array.isArray(body.history) ? body.history : []
+  const window = rawHistory.slice(-MAX_HISTORY_TURNS).filter(isAssistTurn)
+  const verbatim = window.slice(-HISTORY_VERBATIM_TURNS)
+  const older = window.slice(0, -HISTORY_VERBATIM_TURNS)
   const history: AssistHistoryTurn[] = []
   // Newest-first, spending ONE budget — see `MAX_HISTORY_CHARS`. Walking
   // backwards is what makes the budget shared rather than per-turn, and it
   // is also the right thing to keep: a truncated old turn costs the model
   // less than a missing recent one.
   let remainingChars = MAX_HISTORY_CHARS
-  for (const turn of rawHistory.slice(-MAX_HISTORY_TURNS).reverse()) {
+  for (const turn of [...verbatim].reverse()) {
     if (remainingChars <= 0) break
-    const role = (turn as Record<string, unknown>)?.role
-    if (role !== 'user' && role !== 'assistant') continue
-    const text = String((turn as Record<string, unknown>)?.text ?? '')
-      .trim()
-      .slice(0, remainingChars)
+    const text = turn.text.slice(0, remainingChars)
     if (!text) continue
     remainingChars -= text.length
-    history.push({ role, text })
+    history.push({ role: turn.role, text })
   }
   // Back into conversational order — the budget was spent in reverse.
   history.reverse()
@@ -426,6 +505,10 @@ export function parseAssistBody(payload: unknown): AssistRequestBody | null {
   // thread would start failing at exactly the twelfth message, which is the
   // sort of bug that only shows up for the users who like the feature most.
   while (history.length && history[0].role === 'assistant') history.shift()
+  // The digest goes in front, as a user turn, so the conversation still
+  // opens user-side and the model never reads it as something it said.
+  const digest = assistHistoryDigest(older)
+  if (digest) history.unshift({ role: 'user', text: digest })
   const rawContext = body.context as Record<string, unknown> | null | undefined
   const context = rawContext
     ? {
