@@ -1,8 +1,8 @@
 {
   "team": "AGL",
-  "highest": 3023,
+  "highest": 3025,
   "verifiedAt": "2026-09-16",
-  "verifiedBy": "Read from Linear on 2026-09-16, ordered by createdAt. AGL-3019 (the GA4 /g/collect 503s) was created by a peer lane; AGL-3020 (responsive evals), AGL-3021 (Create New Screen publishes on creation), AGL-3022 (the first live eval fails six of eight cases) and AGL-3023 (the AI overage invoice comes out at $0) were created by the AI arc in that order and the workspace assigned exactly those numbers, so 3023 is the highest that exists. Raised because a local guard run reds on any id above the checked-in floor while CI, which holds LINEAR_API_KEY, asks Linear directly and passes -- the number comes from what the workspace returned, never from what a failing check reported.",
+  "verifiedBy": "Read from Linear on 2026-09-16, the team's issues newest-first by createdAt with archived included: AGL-3024 (09:28:07Z, no AI-generated document has been measured live) and AGL-3025 (10:11:00Z, every generative job fails in a real build) were returned above AGL-3023, and nothing above them. The number is what the workspace returned, never what a failing check reported.",
   "note": "The highest issue identifier that EXISTS, and a FLOOR rather than the answer. Any citation above it was never assigned, because Linear numbers issues sequentially per team. check-linear-ids.mjs asks Linear for the real highest on every run and can only ever RAISE this number with the answer, so with LINEAR_API_KEY set there is nothing to maintain here; this value is what the check falls back to when the query cannot be made. Raise it only after reading the workspace — never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
   "historicalCitations": {
     "note": "Commits already on `main` whose messages cite a fabricated id. History is NOT rewritten (see docs/DECISION_LOG.md, 2026-08-28), so the commit sweep would otherwise be permanently red and the guard would never be wirable into CI. Listed by sha rather than exempted by date: a FIFTEENTH such commit still fails. This list may shrink and must never grow.",
