@@ -34,7 +34,8 @@
  *  2. an operator's explicit ceiling still binds it, as it binds everyone;
  *  3. it is never metered as billable: no claim, no invoice call;
  *  4. a live subscription ignores it: the paying plan's band and rate apply;
- *  5. what staff are shown about it crosses JSON as booleans and nulls.
+ *  5. what staff are shown about it crosses JSON as booleans and nulls, and
+ *     the refusal alert names no ceiling the reservation does not enforce.
  *
  * Every case has a control that differs in the one field under test.
  */
@@ -55,6 +56,7 @@ jest.mock('firebase-admin/firestore', () => ({
 }))
 
 import { resolveOrgEntitlements } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { assistBackstopCeilingUsd } from '../usage/assist-ceiling'
 import { reserveAssistMessage } from '../usage/assist-usage'
 import {
   composeStaffOrgAiOverage,
@@ -370,4 +372,11 @@ describe('what staff read about an uncapped comp (AGL-3049)', () => {
     expect(capped).toMatchObject({ totalCredits: 116_000, uncapped: false })
   })
 
+  it('the refusal alert’s ceiling is the reservation’s: none without an operator figure, and that figure with one', () => {
+    expect(assistBackstopCeilingUsd(UNCAPPED as never)).toBeNull()
+    process.env['ASSIST_ORG_MONTHLY_COGS_LIMIT_USD'] = '200'
+    expect(assistBackstopCeilingUsd(UNCAPPED as never)).toBe(200)
+    // The capped grant is walled at its own band, which is not a backstop.
+    expect(assistBackstopCeilingUsd(CAPPED as never)).toBeNull()
+  })
 })
