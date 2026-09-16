@@ -431,7 +431,9 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   form with no field to send are still refused. The tenant renders such a Form as
   authored (only a form bound by `formId` is replaced by its entity's design), and
   `/api/forms/submit` collects a submission with no `formId` under its `formName`,
-  within the plan's `formSubmissionsPerMonth`.
+  within the plan's `formSubmissionsPerMonth`. A section's answer writes that
+  repeated item once and lists its copies' values, and the page step draws the copies
+  ([A repeated item written once](#a-repeated-item-written-once)).
 - **A typed list is counted within its section (AGL-3061).** Rule 8's tree check
   (`detectTypedData`) refuses `AI_TYPED_LIST_MIN_ITEMS` (8) or more same-shaped items
   typed out by hand, counted within the Section they sit in: the unit the plan rule
@@ -543,8 +545,9 @@ the part that arrived already broke, with the shape findings left out — and:
 - **The re-ask asks for it smaller.** It says the answer ran past the size one
   answer may have and was cut off, then what makes one of its kind smaller:
   the door's `cutOff.smaller` sentence, or "Build a smaller <kind>." A page
-  section's is its element budget, shorter copy and, where the workspace keeps
-  reusable components, a repeated item placed as an instance
+  section's is its element budget, shorter copy and a repeated item drawn no more
+  than once: placed as an instance where the workspace keeps reusable components,
+  and written once, with the shape spelled out, where it keeps none
   (`aiPageSectionSmaller`). It asks for the whole answer again, smaller. The
   re-ask is a user turn, so no system block and no cached prefix changes.
 - **A person reads that it was too large.** `aiDoctrineNeedsInputMessage` reads a
@@ -1241,10 +1244,12 @@ Assist panel.
   above it, never their content, and the most elements the section may carry
   (`aiJobPageSectionMaxElements`, [in real tokens](#the-time-budget)). A section
   cut off at its ceiling is re-asked for a smaller one — fewer elements, shorter
-  copy, a repeated item placed as an instance — and one cut off twice stops as
+  copy, a repeated item placed as an instance, or written once where the
+  workspace keeps no reusable components — and one cut off twice stops as
   too large to build in one pass
   ([An answer cut off at its ceiling](#an-answer-cut-off-at-its-ceiling)). The
-  check runs the palette validator
+  check draws a repeated item written once into its copies
+  ([below](#a-repeated-item-written-once)), then runs the palette validator
   on the section, then `validateAiDoctrineTree(page, 'page')` on the page
   built so far with the section added, then the plan line: every component the
   section's `uses` names placed as an instance and every form bound by id
@@ -1252,6 +1257,13 @@ Assist panel.
   wrote, so a re-ask quotes that section alone. A section's root id comes from
   the job and its plan index, so a pass that runs again finds it and writes
   nothing twice.
+- **A repeated item written once (AGL-3053).** On a workspace that keeps no reusable
+  components a repeated item is drawn where it repeats, and written out card by card
+  every copy repeats its whole subtree inside the escaped JSON of the tool call: a
+  live Free About page's four practice areas were cut off at the 1,050-token ceiling
+  on their answer and on their re-ask. So there the answer writes the item once.
+  [A repeated item written once](#a-repeated-item-written-once) has the shape, the
+  refusals and what it saves.
 - **The last pass.** The whole page against the doctrine (a `doctrine` review,
   spending nothing, when a rule no longer holds); the search title and
   description from `generateSeoFields` on `job.seo`, written from the page's
@@ -1287,6 +1299,75 @@ Assist panel.
   told what a page job may create, re-asks a plan that creates anything else,
   and asks the same admission of the plan before it is kept, so such a plan is
   refused before a member is shown a Confirm (AGL-3030).
+
+### A repeated item written once
+
+A workspace that keeps no reusable components draws a repeated item where it repeats
+(AGL-3030). Written out card by card, every copy repeats its Card, its body, its
+heading and its text, each node's JSON escaped inside the `submit_section` call, and a
+live Free About page's four practice areas were cut off at the balanced tier's
+1,050-token ceiling on their answer and on their re-ask. The ceiling holds the Free
+wall and does not move, so the answer writes the item once (AGL-3053):
+
+```json
+"card":  { "componentId": "muiCard", "nodes": ["body"],
+           "repeat": [["Estate planning", "Wills and trusts…"], ["Real estate", "Closings…"]] },
+"title": { "componentId": "muiTypography", "props": { "variant": "h3", "children": "{{1}}" } },
+"text":  { "componentId": "muiTypography", "props": { "variant": "body2", "children": "{{2}}" } }
+```
+
+- **The shape.** `repeat` on the item's outermost node holds one list of values a
+  copy, and `{{n}}` stands for a copy's n-th value anywhere in the item's props or
+  styles. Positional values are the smallest list a copy can be: a value costs its
+  quotes and a comma, where a named value repeats its name on every copy and a list
+  of columns keeps a copy's values apart. Numbered placeholders are the one token no
+  binding can be: a site variable's `{{name}}` starts with a letter, and
+  `{{prop.name}}`, `{{entry.field}}` and `{{fn:…}}` carry a dot or a colon
+  (`binding-tokens.ts`), so copy that binds a variable keeps its token and nothing a
+  placeholder leaves behind can bind.
+- **Asked only where it applies.** Every request on such a workspace carries
+  `AI_PAGE_SECTION_INLINE_LINE` ("write a repeated item once"), and a section whose
+  plan line shows items also carries `AI_PAGE_SECTION_REPEAT_LINE`, which spells the
+  shape with an example. The page instructions every workspace caches say only that a
+  repeated item is written once, so a workspace that places components is never shown
+  how, and a section with nothing to repeat pays nothing for it. A section cut off at
+  its ceiling there is re-asked with the shape spelled out (`aiPageSectionSmaller`),
+  since its first request may not have carried it.
+- **Drawn before any check.** `expandAiRepeatedItems`
+  (`src/lib/runtime/ai-repeated-items.ts`) clones the item once a copy, in order, in
+  its place under its parent: the first copy keeps the ids the model wrote, and copy
+  `n` takes `<id>~<n>` on every node of the subtree. A whole-string placeholder keeps
+  its value's type. `aiPageSectionCheck` then runs the palette validator, the page
+  check and the plan line on the drawn section exactly as on one written out, and the
+  page stores the drawn section: no draft, besigner or tenant render ever sees
+  `repeat` or a placeholder. A finding on the copies names the node the model wrote,
+  once.
+- **Refused, with a re-ask that names the model's nodes.** On a workspace that keeps
+  reusable components, `repeat-not-inline` (rule 1: place the component as instances).
+  Everywhere else, as an answer that could not be used: `repeat-on-section` (on the
+  document wrapper or the Section), `repeat-nested`, `repeat-shape` (not one list of
+  values a copy), `repeat-count` (under 2 copies, or over `AI_REPEAT_MAX_COPIES`, 7,
+  the most rule 8 leaves a typed list), `repeat-placeholder-without-value` (a copy
+  gives no value for a placeholder, `{{0}}`, or a placeholder in no repeated item),
+  `repeat-value-without-placeholder` (a value past the last placeholder, a gap in the
+  numbering, or values with no numbered placeholder at all, such as `{{title}}`), and
+  `repeat-id-collision` (a copy's id the answer already gives another node).
+- **What it saves.** `ai-job-page-evals.spec.ts` measures the goldens as it measures
+  every section, in real tokens. The Free About golden's practice areas written once
+  take 9 elements at 590 real tokens, where written out they take 21 at 1,009.
+  `AI_FREE_PRACTICE_AREAS_FIXTURE` gives a Free law firm's practice areas the copy a
+  firm writes, 25 to 29 words a summary: its four practice areas written once take 9
+  elements at 736 real tokens, and 21 at 1,154 written out; its six take 9 elements at
+  897 real tokens, and 29 at 1,605 written out. Both fit the 1,050-token pass written
+  once, and neither fits written out. The spec replays that page through the real page
+  step on a Free org, and holds each drawn section equal to the one written out, node
+  for node apart from ids, through the same checks and to the same stored page.
+- **The Free wall does not move.** The inline line is 9 characters shorter than the one
+  it replaced, and so are the cached page instructions, so the Free page's first pass —
+  its hero, with nothing to repeat — is cheaper than before, and the arithmetic's
+  figures stay where they were ([Evals](#evals)). The 201-character repeat line rides
+  only the user turn of the pass that builds the practice areas, which stays inside the
+  credits it came to before.
 
 ### The time budget
 
@@ -1384,11 +1465,14 @@ needs, and the machine does not start it with less.
   section introducing two attorneys was cut off at the ceiling on its answer
   and its re-ask. The budget counts every element at the goldens' largest, so
   it errs dear for a section of many small ones: the Free page's four inline
-  practice-area cards take 21 elements at 1,009 real tokens, and are asked to
-  keep under 15 all the same. The request's line is the same length either
-  way, so no figure the Free page's arithmetic quotes moves.
+  practice-area cards written out take 21 elements at 1,009 real tokens, and are
+  asked to keep under 15 all the same. Written once, as a workspace without reusable
+  components answers them
+  ([A repeated item written once](#a-repeated-item-written-once)), they take 9. The
+  request's line is the same length either way, so no figure the Free page's
+  arithmetic quotes moves.
 - **The ceiling does not move to make a section fit.** The balanced tier's
-  1,050 fits the Free page's wall with little to spare: past 1,073 tokens the
+  1,050 fits the Free page's wall with little to spare: past 1,074 tokens the
   first section pass costs 45 credits, and the Free page that builds its layout
   first leaves 45 of the 300 — no more than that pass, which is the room the
   arithmetic keeps for a re-asked section. A two-person introduction drawn
@@ -1492,8 +1576,8 @@ the element budget its request asks for.
   that renders inside the new layout and places the new card and form by id, every
   building rule on the page, and nothing published.
 - **A Free page fits the taste.** `ai-job-free-page.spec.ts` replays
-  `AI_FREE_PAGE_FIXTURE` — an about page with four practice areas and a
-  consultation form, on a Free site that already has its one layout — through the
+  `AI_FREE_PAGE_FIXTURE` — an about page with four practice areas, written once, and
+  a consultation form, on a Free site that already has its one layout — through the
   real plan and page steps on a Free org, and holds the arithmetic: the page plan at
   the tokens measured live on a Free workspace (1,366 input, 4,059 cache read,
   4,059 cache write and 3,954 output on claude-sonnet-5, 80 credits), grown with the

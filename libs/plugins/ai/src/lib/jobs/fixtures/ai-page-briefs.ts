@@ -51,6 +51,11 @@ export interface AiGoldenNode {
   props?: Record<string, unknown>
   sx?: Record<string, unknown>
   nodes?: string[]
+  /**
+   * A repeated item written once (AGL-3053): each copy's values, in the order
+   * of the `{{1}}`, `{{2}}` placeholders its subtree carries.
+   */
+  repeat?: string[][]
 }
 
 /** A section as the model answers it: the document wrapper holding one Section. */
@@ -172,6 +177,23 @@ function inlineCards(prefix: string, input: { name: string; heading: string; ite
       }),
     )
     return framed(add, [add(typography('h2', input.heading, 'h2')), add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: cards })], 'lg', 8)
+  })
+}
+
+/**
+ * The same cards written once (AGL-3053): one Card whose title is `{{1}}` and
+ * whose summary is `{{2}}`, with every card's pair listed on it, which the
+ * section check draws into exactly the cards `inlineCards` writes out.
+ */
+function inlineCardsOnce(prefix: string, input: { name: string; heading: string; items: Array<{ title: string; summary: string }> }): Built {
+  return section(prefix, input.name, [], input.items.length, (add) => {
+    const card = add({
+      componentId: 'muiCard',
+      props: { variant: 'outlined' },
+      nodes: [add({ componentId: 'muiCardContent', nodes: [add(typography('h3', '{{1}}', 'h3')), add(typography('body2', '{{2}}'))] })],
+      repeat: input.items.map((item) => [item.title, item.summary]),
+    })
+    return framed(add, [add(typography('h2', input.heading, 'h2')), add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: [card] })], 'lg', 8)
   })
 }
 
@@ -814,15 +836,41 @@ export const AI_PAGE_BRIEF_FIXTURES: readonly AiPageBriefFixture[] = [
 ]
 
 /**
+ * A page brief for a workspace that keeps no reusable components, answered the
+ * way such a workspace answers (AGL-3053): every repeated item written once
+ * with its copies' values listed. `writtenOut` is the same page with every
+ * repeated item written out card by card — the control, which the section
+ * check draws the golden answers into, node for node apart from ids.
+ */
+export interface AiFreePageFixture extends AiPageBriefFixture {
+  /** The golden answers, in the plan's order, with every repeated item written out in full. */
+  writtenOut: AiGoldenSection[]
+}
+
+type PracticeAreas = { name: string; heading: string; items: Array<{ title: string; summary: string }> }
+
+/** A Free page brief whose card sections are written once, with the page written out in full beside it. */
+function freeBrief(input: Omit<Parameters<typeof brief>[0], 'sections'> & { sections: Array<Built | { once: Built; full: Built }> }): AiFreePageFixture {
+  const once = input.sections.map((entry) => ('once' in entry ? entry.once : entry))
+  const full = input.sections.map((entry) => ('full' in entry ? entry.full : entry))
+  return { ...brief({ ...input, sections: once }), writtenOut: full.map((entry) => entry.answer) }
+}
+
+/** A section of cards, written once and written out. */
+function repeatedCards(prefix: string, input: PracticeAreas): { once: Built; full: Built } {
+  return { once: inlineCardsOnce(prefix, input), full: inlineCards(prefix, input) }
+}
+
+/**
  * A page brief for a Free workspace (AGL-3030): a site that keeps no reusable
  * components and no saved forms, with the one layout its plan includes. Its
  * practice areas repeat and its consultation request is a form, so the page
  * is built the one way such a workspace can build it — the cards drawn where
- * they repeat, and the form carried by the page with its fields inside it.
- * The plan the page job keeps for it is held to the Free workspace's
- * capabilities, never the whole doctrine.
+ * they repeat, written once in the answer (AGL-3053), and the form carried by
+ * the page with its fields inside it. The plan the page job keeps for it is
+ * held to the Free workspace's capabilities, never the whole doctrine.
  */
-export const AI_FREE_PAGE_FIXTURE: AiPageBriefFixture = brief({
+export const AI_FREE_PAGE_FIXTURE: AiFreePageFixture = freeBrief({
   id: 'free-law-firm-about',
   icp: 'small-business',
   pageType: 'about',
@@ -841,7 +889,7 @@ export const AI_FREE_PAGE_FIXTURE: AiPageBriefFixture = brief({
       title: 'About Brightwater Law',
       lead: 'We are a small firm that helps families and small businesses in [city] plan ahead and settle disputes before they reach a courtroom.',
     }),
-    inlineCards('b', {
+    repeatedCards('b', {
       name: 'practice areas',
       heading: 'What we help with',
       items: [
@@ -869,6 +917,59 @@ export const AI_FREE_PAGE_FIXTURE: AiPageBriefFixture = brief({
         { fieldName: 'email', label: 'Email', fieldType: 'email', required: true },
         { fieldName: 'phone', label: 'Phone', fieldType: 'text' },
         { fieldName: 'matter', label: 'What can we help with?', fieldType: 'textarea', required: true },
+      ],
+    }),
+  ],
+})
+
+/**
+ * A Free law firm's practice areas with copy of the length a firm writes
+ * (AGL-3053): four areas for families and six for businesses and property
+ * owners, 25 to 29 words a summary. A live Free About page's four practice
+ * areas, drawn card by card, were cut off at their pass's ceiling on their
+ * answer and on their re-ask. Written once, four and six such cards each fit a
+ * balanced-tier pass; written out card by card, neither does
+ * (`ai-job-page-evals.spec.ts`).
+ */
+export const AI_FREE_PRACTICE_AREAS_FIXTURE: AiFreePageFixture = freeBrief({
+  id: 'free-law-firm-practice-areas',
+  icp: 'small-business',
+  pageType: 'about',
+  brief: 'An about page for Cedar Point Law: who we are, the four ways we help families, and the six ways we help businesses and property owners, a few sentences on each.',
+  inventory: site('host-cedar-point-law', {}),
+  title: 'About Cedar Point Law',
+  slug: '/about',
+  layout: 'lay-site',
+  nav: true,
+  seo: {
+    title: 'About Cedar Point Law',
+    description: 'A general practice for families, businesses and property owners in [county], from estate planning and probate to leases and closings.',
+  },
+  sections: [
+    hero('a', {
+      title: 'About Cedar Point Law',
+      lead: 'A general practice in [town] for families, small businesses and property owners, with the same attorney answering your calls from the first meeting to the last filing.',
+    }),
+    repeatedCards('b', {
+      name: 'four ways we help families',
+      heading: 'For families',
+      items: [
+        { title: 'Estate planning', summary: 'Wills, revocable trusts, powers of attorney and health care directives, drafted after a conversation about your family, your property and who should decide for you if you cannot.' },
+        { title: 'Divorce and custody', summary: 'Uncontested and contested divorces, parenting plans and support, with a written estimate before anything is filed and a schedule for the children that both households can follow.' },
+        { title: 'Probate', summary: 'Opening probate, listing assets, paying debts and distributing property for personal representatives, with a written timeline so heirs know what happens next and about how long it takes.' },
+        { title: 'Guardianship and elder law', summary: 'Guardianship and conservatorship petitions, long-term care planning and help for adult children managing a parent’s money, with meetings at home or at a care facility when travel is hard.' },
+      ],
+    }),
+    repeatedCards('c', {
+      name: 'six ways we help businesses and property owners',
+      heading: 'For businesses and property owners',
+      items: [
+        { title: 'Business formation', summary: 'Choosing between an LLC and a corporation, operating agreements, partner buyout terms and the first contracts a new business signs with its landlord, lenders and first employees.' },
+        { title: 'Contracts', summary: 'Vendor, customer and service agreements drafted or reviewed in plain language, with the payment terms, termination rights and limits on liability explained before you sign anything.' },
+        { title: 'Commercial leases', summary: 'First leases and renewals for shops, offices and restaurants, including build-out allowances, personal guarantees, rent increases and what happens when the business outgrows the space.' },
+        { title: 'Real estate closings', summary: 'Purchase agreements, title review, boundary questions and closings for homes, rental property and small commercial buildings, with one attorney following the file from contract to keys.' },
+        { title: 'Landlord and tenant', summary: 'Leases, security deposits, repair disputes and eviction notices, for owners with a few rental units and for tenants who need to know where they stand before they answer.' },
+        { title: 'Employment matters', summary: 'Offer letters, handbooks, contractor questions and separation agreements for businesses with fewer than fifty employees, written to fit the state rules that apply to them.' },
       ],
     }),
   ],

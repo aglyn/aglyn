@@ -34,15 +34,18 @@ import type { AiCompletion, AiProvider, AiProviderRequest } from '../providers/c
 import {
   AI_DOCTRINE_SYSTEM_BLOCK,
   aiDoctrineSystemBlocks,
+  aiReaskMessage,
   aiStoppedAtCeiling,
   runValidatedGeneration,
 } from '../runtime/ai-doctrine'
 import { validateAiDoctrineTree } from '../runtime/ai-doctrine-validators'
 import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import { validateAiSystemBlocks } from '../runtime/ai-runtime'
-import { AI_PAGE_BRIEF_FIXTURES, type AiPageBriefFixture } from './fixtures/ai-page-briefs'
+import { AI_FREE_PAGE_FIXTURE, AI_PAGE_BRIEF_FIXTURES, type AiPageBriefFixture } from './fixtures/ai-page-briefs'
 import {
   AI_JOB_PAGE_INSTRUCTIONS,
+  AI_PAGE_SECTION_INLINE_LINE,
+  AI_PAGE_SECTION_REPEAT_LINE,
   AI_PAGE_SECTION_TOOL,
   aiEmptyPage,
   aiPageCheckContext,
@@ -359,10 +362,139 @@ describe('a section cut off at its ceiling (AGL-3042)', () => {
     expect(result.message).toBe('This section was too large to build in one pass. Try again, or describe it smaller.')
   })
 
-  it('tells a workspace that keeps no reusable components to shrink the section without placing instances', () => {
-    expect(aiPageSectionSmaller({ maxElements: 15, reusableComponents: false })).toBe(
-      'Make it smaller: use fewer elements, at most 15, and write shorter copy.',
+  it('tells a workspace that keeps no reusable components to shrink the section by writing a repeated item once, not by placing instances (AGL-3053)', () => {
+    const inline = aiPageSectionSmaller({ maxElements: 15, reusableComponents: false })
+    expect(inline).toBe(
+      'Make it smaller: use fewer elements, at most 15; write shorter copy; and write a repeated item once instead of drawing it again: ' +
+        'put {{1}}, {{2}}… where its copies differ, and give its outermost node "repeat", one list of values a copy, in that order, as [["Title 1", "Text 1"], ["Title 2", "Text 2"]].',
     )
+    expect(inline).not.toContain('instance')
     expect(SMALLER).toContain('instance of a component the site has')
+    expect(SMALLER).not.toContain('"repeat"')
+  })
+})
+
+/**
+ * A repeated item written once (AGL-3053), through the REAL section check: a
+ * workspace that keeps no reusable components writes an item once with its
+ * copies' values, the check draws the copies before either validator reads
+ * them, and every finding names a node the model wrote.
+ */
+describe('a repeated item written once (AGL-3053)', () => {
+  const fixture = AI_FREE_PAGE_FIXTURE
+  const screen = fixture.plan.screens[0]
+  const sectionIds = screen.sections.map((_, index) => aiPageSectionNodeId('job-once', index))
+  const FREE = aiPageCheckContext(fixture.inventory, { reusableComponents: false })
+  const heroPage = () =>
+    aiPageWithSection(
+      aiEmptyPage(),
+      aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context: FREE, uses: [], inventory: fixture.inventory })({
+        tree: JSON.stringify(fixture.answers[0]),
+      }).value as AiPageSection,
+      sectionIds,
+    )
+  const checkCards = (tree: unknown, context = FREE) =>
+    aiPageSectionCheck({ page: heroPage(), sectionIds, index: 1, context, uses: [], inventory: fixture.inventory })({
+      tree: JSON.stringify(tree),
+    })
+  /** The practice areas as the golden writes them once, with one node changed. */
+  const cardsWith = (id: string, change: (node: Record<string, unknown>) => Record<string, unknown>) => {
+    const answer = structuredClone(fixture.answers[1])
+    answer.nodes[id] = change(answer.nodes[id] as unknown as Record<string, unknown>) as never
+    return answer
+  }
+  type Stored = Record<string, { componentId: string; props?: Record<string, unknown>; nodes?: string[] }>
+
+  it('shows how to write one once only to a section whose plan line shows items, on a workspace that keeps no reusable components', () => {
+    const job = { brief: fixture.brief, inputs: { pageType: fixture.pageType } }
+    const plan = confirmed(fixture)
+    const prompt = (index: number, reusableComponents?: boolean) =>
+      aiPageSectionPrompt({ job, plan, screen, index, maxElements: 15, reusableComponents })
+    expect(AI_PAGE_SECTION_INLINE_LINE).toBe(
+      'This site keeps no saved forms or reusable components: write a repeated item once, and draw a form as a Form holding its Form Fields.',
+    )
+    expect(screen.sections.map((section) => section.items)).toEqual([0, 4, 0, 0])
+    expect(screen.sections.map((_, index) => [prompt(index, false).includes(AI_PAGE_SECTION_INLINE_LINE), prompt(index, false).includes(AI_PAGE_SECTION_REPEAT_LINE)])).toEqual([
+      [true, false],
+      [true, true],
+      [true, false],
+      [true, false],
+    ])
+    // A workspace that places components is never shown either.
+    expect(screen.sections.map((_, index) => /repeat|\{\{1\}\}/.test(prompt(index)))).toEqual([false, false, false, false])
+    // The page instructions every workspace shares say only that a repeated item is written once.
+    expect(AI_JOB_PAGE_INSTRUCTIONS[0].text).toContain('a repeated item is written once, and a form is a Form (form) with no formId')
+    expect(AI_JOB_PAGE_INSTRUCTIONS[0].text).not.toMatch(/written out each time|\{\{1\}\}|"repeat"/)
+  })
+
+  it('keeps the cards written once as the cards written out: the same elements, the same copy, a card each', () => {
+    const once = checkCards(fixture.answers[1])
+    const full = checkCards(fixture.writtenOut[1])
+    expect([once.violations, full.violations]).toEqual([[], []])
+    const cards = (nodes: Stored) =>
+      Object.values(nodes)
+        .filter((node) => node.componentId === 'muiCard')
+        .map((card) => (nodes[card.nodes?.[0] as string].nodes ?? []).map((id) => nodes[id].props?.['children']))
+    const onceNodes = once.value?.nodes as unknown as Stored
+    const fullNodes = full.value?.nodes as unknown as Stored
+    expect(cards(onceNodes)).toEqual(cards(fullNodes))
+    expect(cards(onceNodes)).toEqual(
+      (fixture.answers[1].nodes['b4'].repeat ?? []).map(([title, summary]) => [title, summary]),
+    )
+    expect(Object.keys(onceNodes)).toHaveLength(Object.keys(fullNodes).length)
+    expect(JSON.stringify(onceNodes)).not.toMatch(/\{\{|"repeat"/)
+  })
+
+  it('refuses an item written once where the workspace keeps reusable components, telling the model to place instances (rule 1)', () => {
+    const result = checkCards(fixture.answers[1], aiPageCheckContext(fixture.inventory))
+    expect(result.value).toBeNull()
+    expect(result.violations).toEqual([
+      expect.objectContaining({ rule: 1, code: 'repeat-not-inline', nodeIds: ['b4'], detail: expect.stringContaining('reusableInstance') }),
+    ])
+    expect(Object.keys(result.offending ?? {})).toEqual(['b4'])
+  })
+
+  it('refuses a copy that leaves a placeholder without its value, quoting the item as the model wrote it', () => {
+    const result = checkCards(
+      cardsWith('b4', (node) => ({ ...node, repeat: [['Estate planning', 'Wills.'], ['Real estate'], ['Business formation', 'Contracts.']] })),
+    )
+    expect(result.value).toBeNull()
+    expect(result.violations).toEqual([
+      {
+        rule: null,
+        code: 'repeat-placeholder-without-value',
+        message: 'The answer could not be used as a section.',
+        detail: 'The second copy of "b4" gives 1 value, and the item uses {{1}} and {{2}}: give every copy one value for each placeholder, in order.',
+        nodeIds: ['b4', 'b2'],
+      },
+    ])
+    expect(Object.keys(result.offending ?? {})).toEqual(['b4', 'b2'])
+    expect(aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)).toContain(
+      '- The answer could not be used as a section. The second copy of "b4" gives 1 value, and the item uses {{1}} and {{2}}: give every copy one value for each placeholder, in order. (nodes b4, b2)',
+    )
+  })
+
+  it('names the node the model wrote for a rule every copy breaks, once', () => {
+    // An h4 under the section's h2 skips a level, on every card the item draws.
+    const result = checkCards(cardsWith('b1', (node) => ({ ...node, props: { variant: 'h4', children: '{{1}}', component: 'h4' } })))
+    expect(result.value).not.toBeNull()
+    expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
+      { rule: 11, code: 'skipped-heading', nodeIds: ['b1'] },
+    ])
+    expect(Object.keys(result.offending ?? {})).toEqual(['b1'])
+  })
+
+  it('names the node the model wrote when the palette validator refuses the item, never a copy', () => {
+    // A Typography cannot hold an element; every copy lists one, and the first copy is the one the model wrote.
+    const answer = structuredClone(fixture.answers[1])
+    answer.nodes['b2'] = { ...answer.nodes['b2'], nodes: ['b2x'] }
+    answer.nodes['b2x'] = { componentId: 'muiTypography', props: { variant: 'caption', children: '{{1}}' } }
+    const result = checkCards(answer)
+    expect(result.violations).toEqual([
+      expect.objectContaining({
+        code: 'tree-lineage',
+        detail: 'Typography (b2) cannot hold other elements, but lists b2x',
+      }),
+    ])
   })
 })

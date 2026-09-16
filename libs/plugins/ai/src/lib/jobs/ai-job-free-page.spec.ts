@@ -335,6 +335,14 @@ describe('a Free workspace builds its first page', () => {
       ['formField', 'matter'],
     ])
     expect(Object.values(page).filter((node) => node.componentId === 'reusableInstance')).toEqual([])
+
+    // The practice areas were answered written once (AGL-3053), and the draft holds
+    // every card drawn with its own copy, with no trace of how it was written.
+    const written = FIXTURE.answers[1].nodes['b4'].repeat ?? []
+    expect(written).toHaveLength(4)
+    const cards = Object.values(page).filter((node) => node.componentId === 'muiCard')
+    expect(cards.map((card) => (page[(card.nodes ?? [])[0]].nodes ?? []).map((id) => page[id].props?.['children']))).toEqual(written)
+    expect(JSON.stringify(page)).not.toMatch(/\{\{|"repeat"/)
   })
 })
 
