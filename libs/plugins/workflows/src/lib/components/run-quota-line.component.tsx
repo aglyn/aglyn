@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { resolveOrgEntitlements } from '@aglyn/aglyn'
+import { isUnlimitedQuota, resolveOrgEntitlements } from '@aglyn/aglyn'
 import { Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import {
@@ -73,10 +73,14 @@ export function RunQuotaLine(props: RunQuotaLineProps) {
   )?.[COUNTER_LIMIT[counter]]
   if (typeof limit !== 'number') return null
   const used = Number(counterDoc?.[monthKey] ?? 0)
+  // An unlimited band (an uncapped staff comp, AGL-3049) has no figure to
+  // include: `Infinity.toLocaleString()` would print "∞ included".
   return (
     <Typography variant="caption" color="text.secondary">
       {`${used.toLocaleString()} ${COUNTER_LABEL[counter]} this month · ` +
-        `${limit.toLocaleString()} included`}
+        (isUnlimitedQuota(limit)
+          ? 'no monthly limit'
+          : `${limit.toLocaleString()} included`)}
     </Typography>
   )
 }
