@@ -21,6 +21,7 @@ import {
   parseReleaseFlagPlans,
   parseReleaseFlagValue,
   RELEASE_FLAGS,
+  releaseFlagParameterDescription,
   type ReleaseFlagValue,
 } from '@aglyn/aglyn/server'
 import {
@@ -137,7 +138,13 @@ async function handler(request: Request): Promise<Response> {
 
     template.parameters[key] = {
       defaultValue: { value: JSON.stringify(nextValue) },
-      description: definition?.description,
+      // Never a description Remote Config refuses (AGL-3048): one past its
+      // limit fails the whole publish, and several registry descriptions run
+      // longer. Which text is sent instead, and why, lives with the helper.
+      description: releaseFlagParameterDescription(
+        definition?.description ?? '',
+        parameter?.description,
+      ),
       valueType: 'JSON',
     }
     const published = await remoteConfig.publishTemplate(template)
