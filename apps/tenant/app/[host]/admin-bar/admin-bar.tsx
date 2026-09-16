@@ -409,8 +409,13 @@ export default function AdminBar({
   const restingPhase = autoConnect ? 'silent' : 'idle'
 
   const resolveContext = useCallback(
-    async (stored: StoredEditToken) => {
-      setPhase('resolving')
+    async (stored: StoredEditToken, refresh = false) => {
+      // A refresh follows the page under a bar that is already up, and the
+      // bar stays mounted with the last page's context until the answer
+      // lands. Dropping back to 'resolving' would unmount it, and the page
+      // offset with it, so every soft navigation would jump the page by the
+      // bar's height and back (AGL-3064).
+      if (!refresh) setPhase('resolving')
       pathRef.current = window.location.pathname
       try {
         const response = await fetch('/api/edit-context', {
@@ -572,7 +577,7 @@ export default function AdminBar({
         tokenRef.current &&
         window.location.pathname !== pathRef.current
       ) {
-        void resolveContext(tokenRef.current)
+        void resolveContext(tokenRef.current, true)
       }
     }, 2000)
     return () => window.clearInterval(interval)
