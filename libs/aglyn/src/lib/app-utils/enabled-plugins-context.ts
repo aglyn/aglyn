@@ -17,7 +17,10 @@
 
 import { createContext, useContext } from 'react'
 import { ComponentCategory } from '../foundation/constants/components'
-import { ACCOUNTS_PLUGIN_ID } from '../plugin-manager/enabled-plugins'
+import {
+  ACCOUNTS_PLUGIN_ID,
+  isFirstPartyPlugin,
+} from '../plugin-manager/enabled-plugins'
 
 /**
  * The EDITOR's view of per-site plugin enablement (AGL-1014).
@@ -98,6 +101,33 @@ export function isFromEnabledPlugin(
   if (!enabledPluginIds) return true
   const pluginId = item?.pluginId
   return !pluginId || enabledPluginIds.includes(pluginId)
+}
+
+/**
+ * Whether a REGISTERED component must be drawn as though it were not
+ * registered at all, because its first-party plugin does not run on the site
+ * being rendered (AGL-3033).
+ *
+ * The component registry is process-global and only grows. On a server that
+ * serves many sites, a bundle one site's page loaded stays registered for
+ * every later render, so asking the registry alone draws a switched-off
+ * plugin's elements in full on a site that switched it off — while that
+ * site's browser, which never loads the bundle, draws the unregistered
+ * fallback. The HTML shows what the site switched off, and hydration fails on
+ * the difference. Asking the rendered site's plugin set as well makes the
+ * server and the browser give one answer.
+ *
+ * Only a FIRST-PARTY id is asked about. A marketplace bundle's components name
+ * the id in its manifest, which is not the listing id the site's set carries,
+ * and a component naming no plugin belongs to none. Both, and everything when
+ * no set was supplied, render as registered.
+ */
+export function isSwitchedOffForRenderedSite(
+  pluginId: string | undefined,
+  enabledPluginIds: readonly string[] | undefined,
+): boolean {
+  if (!enabledPluginIds || !pluginId) return false
+  return isFirstPartyPlugin(pluginId) && !enabledPluginIds.includes(pluginId)
 }
 
 export default EnabledPluginsContext

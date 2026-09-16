@@ -39,6 +39,7 @@ import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context-va
 import { SiteContext } from '@aglyn/aglyn/app-utils/site-context'
 import { NODE_ROOT_ID } from '@aglyn/aglyn/canvas-manager/canvas-manager'
 import { AglynEvent } from '@aglyn/aglyn/emit-manager/emit-manager'
+import { EnabledPluginsContext } from '@aglyn/aglyn/app-utils/enabled-plugins-context'
 import { DEFAULT_ENABLED_PLUGINS } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 // The plugin-manager barrel is reachable from `@aglyn/aglyn/server`, and a
 // client-only React hook on that path 500s every server route. See
@@ -180,6 +181,16 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   const [, setLatePluginTick] = useState(0)
   const blockingKey = props.blockingPlugins?.join(',')
   const enabledKey = enabledPlugins.join(',')
+  /**
+   * The site's plugin set, as the renderer reads it (AGL-3033): a registered
+   * component whose first-party plugin is not in it is drawn as unregistered.
+   * The registry this server renders from outlives the site that loaded a
+   * bundle, so without it the server would draw a switched-off plugin's
+   * elements that this site's browser — which never loads the bundle — does
+   * not. One array per set, so the renderer's leaves are not re-rendered by
+   * an identical list.
+   */
+  const renderedPlugins = useMemo(() => enabledKey.split(','), [enabledKey])
   useEffect(() => {
     if (blockingKey == null || blockingKey === enabledKey) return
     let active = true
@@ -445,7 +456,11 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // mirrors the first-fill pattern above.
   if (props.memberScreen && memberDenied && props.unauthorizedNodes) {
     canvas.setNodes(props.unauthorizedNodes)
-    return <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+    return (
+      <EnabledPluginsContext.Provider value={renderedPlugins}>
+        <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+      </EnabledPluginsContext.Provider>
+    )
   }
 
   // Members-only screens (AGL-109): prompt for sign-in until the session
@@ -585,7 +600,9 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           }
         />
       ))}
-      <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+      <EnabledPluginsContext.Provider value={renderedPlugins}>
+        <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+      </EnabledPluginsContext.Provider>
       {props.showBranding ? (
         // White-label badge (White-Label Phase 2): the "Made with …" credit
         // reads the org's resolved brand — product name, support URL, logo,

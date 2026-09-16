@@ -39,6 +39,10 @@ import {
   NODE_ANIMATION_TRIGGER_PROP,
   resolveElementAnimation,
 } from '@aglyn/aglyn/app-utils/element-animation'
+import {
+  EnabledPluginsContext,
+  isSwitchedOffForRenderedSite,
+} from '@aglyn/aglyn/app-utils/enabled-plugins-context'
 import { NodeIdentityContext } from '@aglyn/aglyn/app-utils/node-identity'
 import { FEATURE_FLAG } from '@aglyn/aglyn/foundation/constants/shared'
 // Deep import, NOT the barrel: `@aglyn/shared-ui-jsx`'s index re-exports the
@@ -117,7 +121,19 @@ export const Leaf = observer(
       [NODE_ANIMATION_STAGGER_PROP]: _animationStagger,
       [NODE_ANIMATION_STAGGER_STEP_PROP]: _animationStaggerStep,
     })
-    const Factory = components.getFactory(node?.componentId)
+    // A component whose first-party plugin does not run on the rendered site
+    // is drawn exactly as an unregistered one is (AGL-3033): the registry is
+    // process-global and outlives the site that loaded the bundle, and the
+    // site's own browser never loads it. Its schema goes with it, so the
+    // void-element and positional flags cannot tell the server a different
+    // story from the client either.
+    const enabledPlugins = useContext(EnabledPluginsContext)
+    const registeredSchema = components.getSchema(node?.componentId)
+    const offForSite = isSwitchedOffForRenderedSite(
+      registeredSchema?.pluginId,
+      enabledPlugins,
+    )
+    const Factory = offForSite ? undefined : components.getFactory(node?.componentId)
     const Component = isValidElementType(Factory) ? Factory : DefaultComponent
 
     // Self-closing components (AGL-579): a component whose schema flags it
@@ -126,7 +142,7 @@ export const Leaf = observer(
     // `[undefined, false]` the JSX below always produces. Rendering the whole
     // page 500s off one image node (blog covers, AGL-579), so honor the flag
     // here: no JSX children, and strip a stray `children` prop too.
-    const schema = components.getSchema(node?.componentId)
+    const schema = offForSite ? undefined : registeredSchema
     const selfClosing = Boolean(
       (schema?.flags?.selfClosing ?? 0) & FEATURE_FLAG.ENABLED,
     )
