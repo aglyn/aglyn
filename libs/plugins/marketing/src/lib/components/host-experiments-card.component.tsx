@@ -27,6 +27,7 @@ import {
 import { compareVariants, summarizeVariantStats, validateExperiment, type ExperimentTarget, type ExperimentVariant, type HostExperiment } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -41,7 +42,6 @@ import {
   MenuItem,
   Stack,
   Switch,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -407,7 +407,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
           </Button>
           {experiments.length === 0 && !hasMoreExperiments ? null : (
             <>
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Experiment'}</TableCell>
@@ -471,7 +471,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
             <ListPagination
               page={experimentPage}
               pageSize={experimentPageSize}
@@ -756,7 +756,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
           ) : null}
         </DialogTitle>
         <DialogContent>
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Variant'}</TableCell>
@@ -840,7 +840,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
                 )
               })}
             </TableBody>
-          </Table>
+          </ScrollTable>
         </DialogContent>
         <DialogActions>
           <Button color="inherit" onClick={() => setResults(null)}>

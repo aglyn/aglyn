@@ -23,6 +23,7 @@ import {
 } from '@aglyn/shared-ui-email-campaigns/components/report-figures'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   buildRoute,
   CAMPAIGN_MEMBERSHIP_FIELD,
@@ -34,7 +35,6 @@ import {
 import {
   Alert,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -520,7 +520,7 @@ function MemberTable(props: {
         </Alert>
       ) : null}
       {rows.length ? (
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>{'Name'}</TableCell>
@@ -582,7 +582,7 @@ function MemberTable(props: {
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </ScrollTable>
       ) : null}
       {rows.length ? (
         <ListPagination

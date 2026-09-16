@@ -38,6 +38,7 @@ import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { PageHeaderRecord, pluginDocsHelp } from '@aglyn/aglyn'
 import {
@@ -47,7 +48,6 @@ import {
   Chip,
   Divider,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -754,7 +754,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
               Emails tab's — the same documents — read as two different kinds
               of thing.
              */}
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Subject'}</TableCell>
@@ -858,7 +858,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
             <ListPagination
               page={page}
               pageSize={pageSize}

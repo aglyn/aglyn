@@ -30,6 +30,7 @@ import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-j
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -44,7 +45,6 @@ import {
   DialogContent,
   DialogTitle,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -225,7 +225,7 @@ export function ContactsCard({ hostId }: { hostId: string }) {
           </Typography>
         ) : (
           <>
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Email'}</TableCell>
@@ -350,7 +350,7 @@ export function ContactsCard({ hostId }: { hostId: string }) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
             <ListPagination
               page={contactPage}
               pageSize={contactPageSize}

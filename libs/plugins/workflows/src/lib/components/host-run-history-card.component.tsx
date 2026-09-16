@@ -24,11 +24,11 @@ import {
 import { CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
   Chip,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -210,7 +210,7 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
         </Typography>
       ) : (
         <Stack spacing={1.5}>
-        <Table size="small" aria-label="Run history">
+        <ScrollTable size="small" aria-label="Run history">
           <TableHead>
             <TableRow>
               <TableCell>{'Time'}</TableCell>
@@ -255,7 +255,7 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
               )
             })}
           </TableBody>
-        </Table>
+        </ScrollTable>
         <ListPagination
           page={page}
           pageSize={pageSize}

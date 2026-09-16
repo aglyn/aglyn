@@ -24,11 +24,11 @@ import {
 } from '@aglyn/shared-ui-email-campaigns/components/report-figures'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
   Button,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -742,7 +742,7 @@ export function CampaignDestinationsSection(props: CampaignReachProps) {
           {result ? (
             result.rows.length ? (
               <Stack spacing={0.5}>
-                <Table size="small">
+                <ScrollTable size="small">
                   <TableHead>
                     <TableRow>
                       <TableCell>{'Destination'}</TableCell>
@@ -765,7 +765,7 @@ export function CampaignDestinationsSection(props: CampaignReachProps) {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                </ScrollTable>
                 <ListPagination
                   page={page}
                   pageSize={pageSize}

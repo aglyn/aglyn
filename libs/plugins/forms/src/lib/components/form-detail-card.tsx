@@ -33,6 +33,7 @@ import {
 import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
 import { ICON_VARIANT_BESIGNER } from '@aglyn/shared-data-enums'
 import { AppLink, CardDisplay, GridItems, MdiIcon, useLoading } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -44,7 +45,6 @@ import {
   MenuItem,
   Stack,
   Switch,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -719,7 +719,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
                     {'No versions yet — opening the besigner creates the first one.'}
                   </Typography>
                 ) : (
-                  <Table size="small">
+                  <ScrollTable size="small">
                     <TableHead>
                       <TableRow>
                         <TableCell>{'Version'}</TableCell>
@@ -799,7 +799,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
                         </TableRow>
                       ))}
                     </TableBody>
-                  </Table>
+                  </ScrollTable>
                 )}
               </Stack>
             </CardDisplay>

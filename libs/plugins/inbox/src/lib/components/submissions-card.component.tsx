@@ -34,6 +34,7 @@ import {
 import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -52,7 +53,6 @@ import {
   Divider,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -385,7 +385,7 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
           </Typography>
         ) : (
           <>
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'From'}</TableCell>
@@ -578,7 +578,7 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
             <ListPagination
               page={submissionPage}
               pageSize={submissionPageSize}
