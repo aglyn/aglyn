@@ -227,6 +227,28 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       "a section of a page written as JSON, about forty elements at the step's measured 45 tokens an element; a pass lowers it to the worst case that fits AI_JOB_PAGE_STEP_MINIMUM_MS on the model it runs",
     eval: { kinds: ['page'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
   },
+  'job.email': {
+    // One email design from the email palette, written against the brief with
+    // no extended thinking (AGL-2912). A campaign job runs the same
+    // generation, so it carries the same ceiling.
+    thinking: 'off',
+    effort: null,
+    maxTokens: 6000,
+    maxTokensBasis:
+      "an email's node map written as JSON, with three subject lines and three preheaders beside it",
+    eval: { kinds: ['email'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+  },
+  'job.campaign': {
+    // The campaign job generates its email through the email step, so it is
+    // routed identically; the draft campaign it also writes asks nothing of
+    // the model (AGL-2912).
+    thinking: 'off',
+    effort: null,
+    maxTokens: 6000,
+    maxTokensBasis:
+      "an email's node map written as JSON, with three subject lines and three preheaders beside it",
+    eval: { kinds: ['email'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+  },
   'job.seo': {
     thinking: null,
     effort: null,

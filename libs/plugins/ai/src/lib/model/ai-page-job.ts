@@ -131,6 +131,7 @@ const CREATION_NOUNS: Record<AiBuildPlanCreateKind, { noun: string; where: strin
   template: { noun: 'template', where: 'in the Templates library' },
   'theme-change': { noun: 'theme change', where: 'in the Theme section' },
   dataset: { noun: 'dataset', where: 'on the Datasets page' },
+  email: { noun: 'email design', where: 'in Emails → Templates' },
 }
 
 /** A creation a plan names, as the refusal lists it. */

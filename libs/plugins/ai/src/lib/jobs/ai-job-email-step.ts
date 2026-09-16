@@ -23,7 +23,7 @@ import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import type { AiStepKind } from '../providers/catalog'
-import { aiModelForStep } from '../providers/routing'
+import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
   aiDoctrineTreeTool,
   runValidatedGeneration,
@@ -108,7 +108,7 @@ export const AI_EMAIL_DESIGN_RESOURCE = 'emailDesign'
 export const AI_EMAIL_PLUGIN_ID = 'email'
 
 /** The longest answer an email may run to; the tree is held to the email budget either way. */
-export const AI_JOB_EMAIL_MAX_TOKENS = 6_000
+export const AI_JOB_EMAIL_MAX_TOKENS = AI_ROUTING_TABLE['job.email'].maxTokens
 
 /** How many subject lines, and how many preheaders, an email is written with. */
 export const AI_EMAIL_VARIANTS = 3
