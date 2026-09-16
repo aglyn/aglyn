@@ -297,7 +297,11 @@ live answer.
   plan step rather than the kind's floor); a kind whose door is a request route
   (the copy assistant's modes, the chat door) has no recorder yet, and a door
   that gains one registers it with `registerAiEvalRecorder`.
-  `AI_EVAL_CASES=<id>[,<id>]` records only the briefs it names.
+  `AI_EVAL_CASES=<id>[,<id>]` records only the briefs it names. The launcher
+  marks the jest it starts, so the shared setup's `.env` scrub (AGL-690) keeps
+  the provider key the run was handed even where the repo-root `.env` holds
+  the same key (AGL-3038); a run started any other way from such a checkout
+  loses the key and stops before its first request, saying why.
 
 ## The routing table
 

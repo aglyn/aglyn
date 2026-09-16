@@ -26,6 +26,13 @@
 // The second form records only the briefs it names. It spends real money on
 // the provider, so without AI_EVAL_LIVE=1 it refuses before anything runs. The recording itself is the plugin spec
 // `ai-eval.live.spec.ts`, which reuses the production step runners.
+//
+// The run keeps the environment it is started with, the provider key included
+// (AGL-3038). The shared jest setup removes every value the repo-root .env
+// also defines, which on a machine whose .env holds the key removes the key
+// this run was handed, so the jest started here carries the mark that setup
+// leaves alone. The spec is named by path: read as a pattern, its name also
+// matches the harness's unit spec.
 
 import { spawnSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
@@ -47,9 +54,14 @@ const result = spawnSync(
     'jest',
     '-c',
     'libs/plugins/ai/jest.config.ts',
+    '--runTestsByPath',
     'libs/plugins/ai/src/lib/runtime/ai-eval.live.spec.ts',
     '--runInBand',
   ],
-  { cwd: repoRoot, stdio: 'inherit', env: process.env },
+  {
+    cwd: repoRoot,
+    stdio: 'inherit',
+    env: { ...process.env, AI_EVAL_LIVE_LAUNCHER: 'tools/ai-eval/record-live.mjs' },
+  },
 )
 process.exit(result.status ?? 1)
