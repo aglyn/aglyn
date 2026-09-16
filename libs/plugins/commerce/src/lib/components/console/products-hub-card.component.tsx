@@ -23,6 +23,7 @@ import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -36,7 +37,6 @@ import {
   DialogTitle,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -803,8 +803,8 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
                 'blocks on any screen in the besigner.'}
           </Typography>
         ) : (
-          <Box sx={{ overflowX: 'auto' }}>
-            <Table size="small">
+          <Box>
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Product'}</TableCell>
@@ -911,7 +911,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
           </Box>
         )}
         {products.length === 0 ? null : (

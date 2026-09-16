@@ -33,7 +33,6 @@ import {
   IconButton,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -59,6 +58,7 @@ import {
   type SeoListingFieldKey,
 } from '@aglyn/aglyn/app-utils/seo-listing-fields'
 import type { ConsoleSeoFieldValues } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   EntitlementUpsell,
   useCommerceEntitlement,
@@ -760,8 +760,8 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             {'Add option'}
           </Button>
         ) : null}
-        <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small">
+        <Box>
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Variant'}</TableCell>
@@ -857,7 +857,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </ScrollTable>
         </Box>
         <Typography variant="caption" color="text.secondary">
           {stockApplies

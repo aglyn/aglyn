@@ -2,26 +2,6 @@
   "note": "Files excused from aglyn/no-raw-mui-table, each with its reason. The rule reports a row whose file no longer draws a raw MUI Table, so this list cannot outlive what it excuses. It may shrink and must never grow: a new raw table is refused, not recorded.",
   "files": [
     {
-      "path": "libs/plugins/commerce/src/lib/components/console/host-orders-card.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/commerce/src/lib/components/console/product-editor-dialog.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/commerce/src/lib/components/console/products-hub-card.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/commerce/src/lib/components/console/stock-movements-card.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/commerce/src/lib/components/console/storefront-tax-summary-card.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
       "path": "libs/plugins/crm/src/lib/components/company-contacts-card.tsx",
       "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
     },

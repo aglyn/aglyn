@@ -19,11 +19,11 @@
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -240,7 +240,7 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
               'and hand adjustments all land here.'}
           </Typography>
         ) : (
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'When'}</TableCell>
@@ -306,7 +306,7 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
                 )
               })}
             </TableBody>
-          </Table>
+          </ScrollTable>
         )}
         {movements.length === 0 ? null : (
           <ListPagination
