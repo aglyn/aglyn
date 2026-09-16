@@ -87,6 +87,10 @@ or menu component, the layout places it rather than building another. The layout
 [the building rules](../../ai/how-aglyn-ai-builds.md), so it carries no page title of its own
 and takes its colors and type from your theme.
 
+Open **Layouts** for the site and choose **Describe it**, beside **Templates** and **Create New
+Layout**. Write what the header, navigation and footer should hold, then choose **Plan the
+layout**, and open **AI jobs** in the Assist panel to read the plan and confirm it.
+
 The layout arrives as a new draft in **Layouts**, and **Open draft** on the job opens it in the
 Besigner. No screen uses it until you assign it, so nothing on the live site changes. It counts
 against your shared-layout allowance like a layout you create yourself, and when the site has

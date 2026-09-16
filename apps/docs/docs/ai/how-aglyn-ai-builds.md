@@ -17,6 +17,22 @@ Aglyn AI build jobs are released gradually. The rules on this page apply to ever
 build as it reaches your workspace.
 :::
 
+## Where to describe a build
+
+Open the site you are building for, go to the page that lists what you want built, and
+choose **Describe it** beside its create button:
+
+- a page on **Screens**, or **Describe a page** in **AI jobs** in the Assist panel; see
+  [Generate a page](../building-sites/screens-and-layouts/generate-a-page.md);
+- a page template on **Templates**; see
+  [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai);
+- a layout on **Layouts**; see
+  [Generate a layout](../building-sites/screens-and-layouts/layouts.md#generate-a-layout-with-aglyn-ai);
+- a form on **Forms**; see [Generate a form](./generate-a-form.md).
+
+**Describe it** is there when your workspace has AI build jobs, you have the **Generate
+with AI** permission, and AI is on for the site.
+
 ## The plan comes first
 
 Before it generates anything, a build job proposes a **plan**:

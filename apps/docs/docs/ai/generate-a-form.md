@@ -24,6 +24,16 @@ Aglyn AI build jobs are released gradually. This page applies to form jobs as th
 workspace.
 :::
 
+## Describe the form
+
+Open **Forms** for the site and choose **Describe it**, beside **Create Form**. Write what the
+form is for in one box: who fills it in, what you need to know from them and what should happen
+with each submission. Then choose **Plan the form**.
+
+The job proposes its [plan](./how-aglyn-ai-builds.md#the-plan-comes-first) before it builds
+anything. Open **AI jobs** in the Assist panel to read it, then choose **Confirm plan** to build
+the form, or cancel.
+
 ## What the form gets
 
 - **Fields** of the types a form supports: text, email, multiline, dropdown, radio choice,

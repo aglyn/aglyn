@@ -33,12 +33,15 @@
  * not import console-app code, so the provider here is a stand-in of the same
  * shape: it holds one slot and renders what the surface publishes. What is
  * under test is what FORMS publishes — on the catalog, on one form, and
- * against which number.
+ * against which number — including the `hostForms` zone it hosts beside
+ * Create Form (AGL-3043), through a stand-in for the renderer the shell hands
+ * down.
  */
 
 import { render, screen, within } from '@testing-library/react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { PageHeaderActionsContext } from '@aglyn/aglyn'
+import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 
 /** The rows the mocked page query hands the card. */
 const mockRows: any[] = []
@@ -174,6 +177,20 @@ function HeaderHarness(props: { children: ReactNode }) {
   )
 }
 
+/** Every zone the shell's renderer was asked to draw, with what it was handed. */
+const mockZoneCalls: Array<Record<string, unknown>> = []
+
+/**
+ * The shell's zone renderer as `ConsoleWidgetSlotContext` hands it down: one
+ * button per zone asked for. The gates it applies are the console slot's and
+ * are asserted against the real one in `apps/console/specs`; what is under
+ * test here is which zone the Forms header asks for, and with what.
+ */
+function ShellSlot(props: { slot: string } & Record<string, unknown>) {
+  mockZoneCalls.push(props)
+  return <button type="button">{`widget in ${props.slot}`}</button>
+}
+
 /** The page header, by its landmark role. */
 const pageHeader = () => screen.getByRole('banner')
 
@@ -189,23 +206,33 @@ function renderForms(options: {
   org?: Record<string, unknown>
   segments?: string[]
   used?: number
+  /** Mount inside the console shell, which hands its zone renderer down. */
+  inShell?: boolean
 }) {
   mockCountCalls.length = 0
+  mockZoneCalls.length = 0
   mockCardProps = {}
   mockLiveCount = options.used ?? 0
+  const page = (
+    <HeaderHarness>
+      <FormsConsolePage
+        hostId="host-1"
+        entitled
+        org={options.org as never}
+        basePath="/acme/hosts/demo/forms"
+        segments={options.segments ?? []}
+        hostRole={{ canPublish: true, loaded: true }}
+      />
+    </HeaderHarness>
+  )
   return render(
-    (
-      <HeaderHarness>
-        <FormsConsolePage
-          hostId="host-1"
-          entitled
-          org={options.org as never}
-          basePath="/acme/hosts/demo/forms"
-          segments={options.segments ?? []}
-          hostRole={{ canPublish: true, loaded: true }}
-        />
-      </HeaderHarness>
-    ) as any,
+    (options.inShell ? (
+      <ConsoleWidgetSlotContext.Provider value={ShellSlot as never}>
+        {page}
+      </ConsoleWidgetSlotContext.Provider>
+    ) : (
+      page
+    )) as any,
   )
 }
 
@@ -254,6 +281,35 @@ describe('the forms catalog publishes its controls to the page header', () => {
     expect(mockCountCalls.filter((call) => call === 'usePagedCollection')).toEqual(
       ['usePagedCollection'],
     )
+  })
+})
+
+describe('other ways to start a form sit beside Create Form (AGL-3043)', () => {
+  it('draws the hostForms zone through the shell’s renderer, with the site and its org', () => {
+    renderForms({ org: { $id: 'org-1', plan: 'pro' }, used: 3, inShell: true })
+    const header = within(pageHeader())
+    expect(header.getByRole('button', { name: 'widget in hostForms' })).toBeTruthy()
+    // One zone, and exactly the props the zone documents.
+    expect(new Set(mockZoneCalls.map((call) => call.slot))).toEqual(new Set(['hostForms']))
+    expect(mockZoneCalls[mockZoneCalls.length - 1]).toEqual({
+      slot: 'hostForms',
+      hostId: 'host-1',
+      orgId: 'org-1',
+    })
+    // Among the create actions: after the list's own toggle, before Create Form.
+    expect(pageHeader().textContent).toMatch(/Show retired.*widget in hostForms.*Create Form/s)
+  })
+
+  it('draws no zone outside the console shell, where there is no workspace to gate on', () => {
+    renderForms({ org: { $id: 'org-1', plan: 'pro' }, used: 3 })
+    expect(mockZoneCalls).toEqual([])
+    expect(within(pageHeader()).getByRole('button', { name: 'Create Form' })).toBeTruthy()
+  })
+
+  it('lets go of the zone on a form’s own route', () => {
+    renderForms({ org: { $id: 'org-1', plan: 'pro' }, segments: ['form-abc'], inShell: true })
+    expect(mockZoneCalls).toEqual([])
+    expect(pageHeader().querySelectorAll('button')).toHaveLength(0)
   })
 })
 

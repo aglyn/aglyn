@@ -63,7 +63,8 @@ switching it off stops and what it leaves running.
 
 With AI off for a site:
 
-- the assistant, **Describe it**, the SEO and theme cards, the editor's **Rewrite with AI**,
+- the assistant, **Describe it** on the Screens, Templates, Layouts and Forms pages, the SEO
+  and theme cards, the editor's **Rewrite with AI**,
   **Generate a section with AI** and **Make a reusable component with AI** controls, and
   the AI columns on the site's collaborators card are gone from that site;
 - every AI request made for the site is refused with **AI is switched off for this site.**,

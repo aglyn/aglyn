@@ -91,6 +91,12 @@ that page, such as **Entry Meta** and **Entry Body**, are placed where they belo
 proposes a plan first and builds once you confirm it, following
 [the building rules](../../ai/how-aglyn-ai-builds.md).
 
+Open **Templates** for the site and choose **Describe it**, beside **Create Template**. Write
+what each page should show, and under **One page for each** pick what the site draws a page for:
+**Collection entry**, then the collection whose entries it shows, **Product** or **Author**. Then
+choose **Plan the template**, and open **AI jobs** in the Assist panel to read the plan and
+confirm it.
+
 The template lands in your library as **Saved here**, like one you saved yourself. It is bound
 to no collection, changes nothing on your site, and counts against your template allowance.
 To put it to work, **Use** it to create the page, then pick that page right away as the

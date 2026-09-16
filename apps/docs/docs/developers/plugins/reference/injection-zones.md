@@ -37,6 +37,10 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `assistPanel` | The console shell's assistant dock, above every route boundary in both the app and editor shells | none — resolve your own scope from the URL |
 | `besignerInspector` | A section at the bottom of the besigner's Attributes panel, under the selected element's fields, on every editor the designer opens | `hostId` (`null` on an editor that names no site), `node` (the selected element) |
 | `besignerToolbar` | The besigner's secondary toolbar, after undo and redo, on every editor the designer opens | `hostId` (`null` on an editor that names no site) |
+| `hostScreens` | A site's Screens page, beside Templates and Create New Screen: another way to start a screen | `hostId`, `orgId` (`undefined` while the page resolves it) |
+| `hostTemplates` | A site's Templates page, beside Create Template: another way to start a template | `hostId`, `orgId` |
+| `hostLayouts` | A site's Layouts page, beside Templates and Create New Layout: another way to start a layout | `hostId`, `orgId` |
+| `hostForms` | A site's Forms page, beside Create Form: another way to start a form. The Forms page is the forms plugin's, which hosts the zone — see [Zones a plugin hosts](#zones-a-plugin-hosts) | `hostId`, `orgId` |
 
 Rules of thumb: widgets receive shell-resolved context as props and must
 not reach for console-app hooks; data access goes through
@@ -44,6 +48,22 @@ not reach for console-app hooks; data access goes through
 `usePluginConfig`, …). A widget renders for a workspace only when its
 plugin is enabled and released — the shell never mounts widgets from
 unloaded plugins.
+
+## Zones a plugin hosts
+
+A zone can sit on a plugin's own surface rather than on a console page, such as `hostForms`
+on the forms plugin's Forms page. A plugin cannot import the console's `PluginWidgetSlot`,
+so the shell hands its renderer down: read it with `useConsoleWidgetSlot()` from
+`@aglyn/aglyn` and draw the zone through it.
+
+```tsx
+const Slot = useConsoleWidgetSlot()
+return Slot ? <Slot slot="hostForms" hostId={hostId} orgId={orgId} /> : null
+```
+
+The renderer is the same gated slot a console page mounts, so a widget there passes the
+same enablement, entitlement and permission gates. Outside the console shell it is `null`,
+and the zone draws nothing.
 
 ## Staff zones
 

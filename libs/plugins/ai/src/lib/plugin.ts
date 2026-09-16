@@ -61,6 +61,11 @@ import AiSeoAuditCard from './components/ai-seo-audit-card.component'
 import AiSiteBatchCard from './components/ai-site-batch-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
 import AiDescribePageButton from './components/ai-describe-page.component'
+import {
+  AiDescribeFormButton,
+  AiDescribeLayoutButton,
+  AiDescribeTemplateButton,
+} from './components/ai-describe-button.component'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
 
@@ -322,6 +327,34 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiDescribePageButton,
+      },
+      // The same entry for a page template, a layout and a form (AGL-3043),
+      // beside the create action of the page that lists each: the same
+      // dialog, the same gates, and the same question to the jobs route
+      // before it shows anything.
+      {
+        slot: 'hostTemplates',
+        widgetId: 'ai-describe-template',
+        title: 'Describe a page template',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeTemplateButton,
+      },
+      {
+        slot: 'hostLayouts',
+        widgetId: 'ai-describe-layout',
+        title: 'Describe a layout',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeLayoutButton,
+      },
+      {
+        slot: 'hostForms',
+        widgetId: 'ai-describe-form',
+        title: 'Describe a form',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeFormButton,
       },
       // The agency batch (AGL-2911): one brief across many of the org's
       // sites, from the page that lists them. The card asks the jobs route

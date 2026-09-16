@@ -21,8 +21,9 @@
  * and as a `PluginWidgetSlot` mounted on a page. This spec ties the two
  * together, both ways:
  *
- * 1. every catalog key is mounted somewhere under `apps/console` (a key with
- *    no mount is a zone a plugin can register for and never appear in);
+ * 1. every catalog key is mounted somewhere under `apps/console`, or on a
+ *    plugin surface that hosts it through the shell's renderer (a key with no
+ *    mount is a zone a plugin can register for and never appear in);
  * 2. every new key, when a plugin registers a widget for it, renders that
  *    widget with the props the zone documents — through the REAL slot, so
  *    the enablement, entitlement and permission gates are the ones a page
@@ -105,11 +106,18 @@ import {
 /**
  * Where each new zone is mounted, and how. A `slot` entry is a
  * `<PluginWidgetSlot slot="…">`; a `columns` entry is the column helper
- * reading the zone for table columns.
+ * reading the zone for table columns; a `hosted` entry is a plugin's own
+ * surface drawing the zone through the renderer the shell hands down
+ * (`useConsoleWidgetSlot`, which is `PluginWidgetSlot` with its gates), because
+ * a plugin cannot import the console's slot.
  */
 const MOUNTS: Record<
   string,
-  { file: string; how: 'slot' | 'columns' | 'both'; props: Record<string, unknown> }
+  {
+    file: string
+    how: 'slot' | 'columns' | 'both' | 'hosted'
+    props: Record<string, unknown>
+  }
 > = {
   orgBillingUsage: {
     file: 'apps/console/app/(app)/[orgSlug]/billing/(sections)/usage/page.tsx',
@@ -208,6 +216,23 @@ const MOUNTS: Record<
     how: 'slot',
     props: { hostId: 'host-1', orgId: 'org-1' },
   },
+  // AGL-3043: beside the create actions on a site's Templates and Layouts
+  // pages, and on the Forms page, which is the forms plugin's own surface.
+  hostTemplates: {
+    file: 'apps/console/app/(app)/[orgSlug]/hosts/[host]/templates/page.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', orgId: 'org-1' },
+  },
+  hostLayouts: {
+    file: 'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', orgId: 'org-1' },
+  },
+  hostForms: {
+    file: 'libs/plugins/forms/src/lib/components/host-forms-card.component.tsx',
+    how: 'hosted',
+    props: { hostId: 'host-1', orgId: 'org-1' },
+  },
   // AGL-2911: beside the sites on the organization's Sites page, for an
   // action taken across many of them at once.
   orgSites: {
@@ -225,7 +250,9 @@ const NEW_ZONES = Object.keys(MOUNTS)
 
 /**
  * Every zone mounted anywhere in the console: a literal `slot="…"`, a
- * `slot={CONSOLE_WIDGET_SLOTS.…}`, or the column helper reading a zone.
+ * `slot={CONSOLE_WIDGET_SLOTS.…}`, or the column helper reading a zone — on a
+ * console page, or on a plugin's own surface drawing the renderer the shell
+ * hands it (AGL-3043).
  */
 function mountedZones(): Set<string> {
   const out = execFileSync(
@@ -239,6 +266,7 @@ function mountedZones(): Set<string> {
       String.raw`(slot="[A-Za-z]+"|slot=\{CONSOLE_WIDGET_SLOTS\.[A-Za-z]+\}|usePluginListColumns\('[A-Za-z]+'\))`,
       '--',
       'apps/console',
+      'libs/plugins',
       ':!apps/console/specs',
       ':!*.spec.*',
     ],
@@ -265,7 +293,7 @@ describe('AGL-2940 · the new zones are in the catalog and mounted', () => {
     }
   })
 
-  it('mounts every catalog zone somewhere under apps/console', () => {
+  it('mounts every catalog zone somewhere a console page draws', () => {
     const mounted = mountedZones()
     // ANTI-VACUITY: the grep found the zones that predate this issue.
     expect(mounted.has('hostDashboard')).toBe(true)
@@ -284,6 +312,13 @@ describe('AGL-2940 · the new zones are in the catalog and mounted', () => {
       if (mount.how === 'columns') expect(`${zone}: ${columnMount}`).toBe(`${zone}: true`)
       if (mount.how === 'both') {
         expect(`${zone}: ${slotMount && columnMount}`).toBe(`${zone}: true`)
+      }
+      if (mount.how === 'hosted') {
+        // Drawn through the shell's gated renderer, never a list of its own.
+        const hosted = slotMount && source.includes('useConsoleWidgetSlot()')
+        expect(`${zone}: ${mount.file.startsWith('libs/plugins/') && hosted}`).toBe(
+          `${zone}: true`,
+        )
       }
     }
   })

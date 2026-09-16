@@ -673,6 +673,31 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   hostScreens: 'hostScreens',
   /**
+   * A site's Templates page, beside its Create Template action (AGL-3043):
+   * another way to start a template. Props:
+   * {@link ConsoleHostTemplatesZoneProps}. The `hostScreens` contract: a
+   * widget here runs its own flow and writes nothing through the page, and
+   * the template list shows what it makes once it exists.
+   */
+  hostTemplates: 'hostTemplates',
+  /**
+   * A site's Layouts page, beside its Templates and Create New Layout actions
+   * (AGL-3043): another way to start a layout. Props:
+   * {@link ConsoleHostLayoutsZoneProps}, on the `hostScreens` contract.
+   */
+  hostLayouts: 'hostLayouts',
+  /**
+   * The Forms page of a site, beside its Create Form action (AGL-3043):
+   * another way to start a form. Props: {@link ConsoleHostFormsZoneProps}, on
+   * the `hostScreens` contract.
+   *
+   * The Forms page is the forms plugin's own surface, so the plugin HOSTS
+   * this zone: it draws the renderer `useConsoleWidgetSlot` hands down, as
+   * the product editor draws `seoFields`, and every gate a console page's
+   * slot applies applies here too.
+   */
+  hostForms: 'hostForms',
+  /**
    * The organization's sites page, beside the sites themselves (AGL-2911):
    * an action a member takes across MANY of the org's sites at once, rather
    * than a card totaling them. Props: {@link ConsoleOrgSitesZoneProps}.
@@ -697,6 +722,16 @@ export interface ConsoleHostScreensZoneProps {
   /** The org the page names; `undefined` while it resolves. */
   orgId: string | undefined
 }
+
+/**
+ * What the `hostTemplates`, `hostLayouts` and `hostForms` zones hand each
+ * widget (AGL-3043): the site and its org, as `hostScreens` hands them.
+ */
+export type ConsoleHostTemplatesZoneProps = ConsoleHostScreensZoneProps
+/** See {@link ConsoleHostTemplatesZoneProps}. */
+export type ConsoleHostLayoutsZoneProps = ConsoleHostScreensZoneProps
+/** See {@link ConsoleHostTemplatesZoneProps}. */
+export type ConsoleHostFormsZoneProps = ConsoleHostScreensZoneProps
 
 /** What the `orgSites` zone hands each widget (AGL-2911). */
 export interface ConsoleOrgSitesZoneProps {
