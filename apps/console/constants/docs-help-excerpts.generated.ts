@@ -87,7 +87,7 @@ export const DOCS_HELP_EXCERPTS = {
   domainProviders: 'Make hostnames actually resolve on a self-hosted install — choose a domain driver, run the wildcard path end to end, or implement the webhook contract against your own proxy.',
   downgradingAndCanceling: 'What happens when you downgrade, cancel, or delete — when each takes effect, what the cancel dialog offers you, and how to export first.',
   dragDropHierarchy: 'Everything drag-and-drop in the Besigner — where you can drag, how drop zones and placement markers work, containers vs. leaf elements, placement rules, and multi-drag.',
-  editFromTheLiveSite: 'The admin bar on your published site — who sees it, how it appears on aglyn.app and on your own domain, what it links to, and how to hide it.',
+  editFromTheLiveSite: 'The admin bar on your published site — who sees it, how it appears on your Aglyn subdomain and on your own domain, what it links to, and how to hide it.',
   editYourTheme: 'Set colors, fonts, and light/dark schemes with a live preview.',
   elementCatalog: 'Every built-in element you can drop on the canvas, grouped by the categories in the ELEMENTS drawer.',
   emailCampaigns: 'Campaigns to audiences built from your contacts. Campaign email starts at Pro and needs a sending domain of the site\'s own; receipts and account email send on every plan.',

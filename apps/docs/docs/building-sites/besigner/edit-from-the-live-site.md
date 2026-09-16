@@ -1,7 +1,7 @@
 ---
 sidebar_position: 13
 title: Edit from the live site
-description: The admin bar on your published site — who sees it, how it appears on aglyn.app and on your own domain, what it links to, and how to hide it.
+description: The admin bar on your published site — who sees it, how it appears on your Aglyn subdomain and on your own domain, what it links to, and how to hide it.
 ---
 
 # Edit from the live site
