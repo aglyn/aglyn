@@ -18,9 +18,10 @@
 import {
   AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K,
   hasAiAddon,
-  PLAN_PRICING,
   resolveEffectivePlan,
   resolveOrgEntitlements,
+  resolvePlanComp,
+  resolvePlanPricing,
 } from './plan-entitlements'
 import type { AglynOrgBilling } from '../foundation/definitions/org-billing.types'
 
@@ -260,13 +261,24 @@ export function assistCreditOverage(
  * Free and Enterprise stay null with or without the add-on: Free sells no
  * add-on and its taste band is a wall by decision (AGL-2925), and
  * Enterprise's usage is in the contract.
+ *
+ * A STAFF COMP is null on every plan and with every add-on (AGL-3034). The
+ * rate is read through `resolvePlanPricing`, which sells nothing on a comp,
+ * and the Starter add-on exception is refused for one explicitly — on a
+ * workspace with no subscription a staff-set add-on quantity still counts, so
+ * without the check a Starter comp would be sold overage past a band that no
+ * invoice will ever carry. `null` here is what makes a comp's band a wall at
+ * the gate and prices its overage to zero at the charge: the AI overage path
+ * (AGL-3011) claims only what `assistMonthOverage` prices, so a comp never
+ * becomes a Stripe invoice.
  */
 export function resolveAssistOverageRateUsdPer1k(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): number | null {
   const plan = resolveEffectivePlan(org)
-  const listed = PLAN_PRICING[plan].extraAssistCreditsUsdPer1k
+  const listed = resolvePlanPricing(org).extraAssistCreditsUsdPer1k
   if (listed !== null) return listed
+  if (resolvePlanComp(org)) return null
   if (plan === 'starter' && hasAiAddon(org)) {
     return AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K
   }

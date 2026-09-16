@@ -24,6 +24,10 @@ import type {
   OrgPlan,
   OrgSeatAddons,
 } from '../foundation'
+import {
+  isOrgOverrideReasonCode,
+  type OrgOverrideReasonCode,
+} from './org-override-reason'
 import type { ResolvedBrandingProfile } from './platform-brand'
 import {
   PLATFORM_BRAND_NAME,
@@ -216,11 +220,21 @@ type LegacyEntitlementKeys = 'datasetsPerHost' | 'maxDatasetsPerHost'
  */
 type RetiredEntitlementKeys = 'totalSiteSizeMb'
 
+/**
+ * Keys stored under `entitlements` that are not quotas at all (AGL-3034): the
+ * staff plan comp rides the same staff-owned map, and is read through
+ * `readOrgPlanComp` rather than resolved into a limit.
+ */
+type NonQuotaEntitlementKeys = 'planComp'
+
 /** Fully-resolved entitlements: every LIVE quota present, features complete. */
 export type ResolvedOrgEntitlements = Required<
   Omit<
     OrgEntitlements,
-    'features' | LegacyEntitlementKeys | RetiredEntitlementKeys
+    | 'features'
+    | LegacyEntitlementKeys
+    | RetiredEntitlementKeys
+    | NonQuotaEntitlementKeys
   >
 > & {
   features: Required<OrgFeatureFlags>
@@ -1726,6 +1740,61 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
 }
 
 /**
+ * The price list a plan's row becomes when a staff COMP is what grants it
+ * (AGL-3034): the list prices kept, and nothing for sale.
+ *
+ * Every other figure on a row prices something sold on top of a subscription —
+ * an add-on item, or usage past a band billed onto that subscription's next
+ * invoice. A comp has no subscription to add an item to or to invoice, so
+ * every one of them is `null` and the pass-through is off. That is `free`'s
+ * reasoning (`meteredInfraPassThrough`: "there is no subscription to hang a
+ * metered item on"), and it turns each band into a wall rather than a line
+ * past which usage is sold to nobody.
+ *
+ * It is also what keeps a comp away from Stripe without a check anyone could
+ * forget: the AI overage charge claims only what `assistMonthOverage` prices,
+ * the usage sweep bills only what these rates price, and a `null` rate prices
+ * zero. A comp that needs more of something gets a quota override beside it.
+ *
+ * Derived from the row rather than written out, so a rate added to
+ * `PlanPricing` later is withheld from a comp on the day it ships.
+ */
+function compPricing(pricing: PlanPricing): PlanPricing {
+  const withheld: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(pricing)) {
+    if (key === 'basePriceMonthlyUsd' || key === 'basePriceAnnualMonthlyUsd') {
+      withheld[key] = value
+    } else if (typeof value === 'boolean') {
+      withheld[key] = false
+    } else {
+      withheld[key] = null
+    }
+  }
+  return withheld as unknown as PlanPricing
+}
+
+const PLAN_COMP_PRICING = Object.fromEntries(
+  Object.entries(PLAN_PRICING).map(([plan, pricing]) => [plan, compPricing(pricing)]),
+) as Record<OrgPlan, PlanPricing>
+
+/**
+ * The prices the org's usage and add-ons are sold at (AGL-3034): its
+ * effective plan's row, or that row with nothing for sale when a staff comp
+ * is what grants the plan — see `compPricing`.
+ *
+ * EVERY reader that decides whether something past a band is sold, or what a
+ * purchasable seat costs, reads this rather than indexing `PLAN_PRICING` by
+ * the effective plan. Indexing it directly is how a comp would be quoted a
+ * rate nobody can be invoiced at.
+ */
+export function resolvePlanPricing(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): PlanPricing {
+  const plan = resolveEffectivePlan(org)
+  return resolvePlanComp(org) ? PLAN_COMP_PRICING[plan] : PLAN_PRICING[plan]
+}
+
+/**
  * Subscription states that stop paying for the plan (AGL-247). `past_due`
  * keeps working as a dunning grace period; these do not.
  *
@@ -1782,14 +1851,266 @@ function subscriptionStatusOf(
 }
 
 /**
+ * What the org's subscription contributes to deciding its plan (AGL-3034).
+ *
+ * - `live` — a status is mirrored and it is not one this module reads as
+ *   dead. The subscription decides the plan. `past_due` is live (dunning
+ *   grace), and so is a status this build does not recognize, for the reason
+ *   `DEAD_SUBSCRIPTION_STATUSES` gives: an unrecognized status must not take
+ *   away what a paying workspace bought, and handing the plan to a comp would
+ *   do exactly that.
+ * - `dead` — the status is in `DEAD_SUBSCRIPTION_STATUSES`. A stored paid
+ *   plan grants nothing (AGL-247).
+ * - `none` — no status at all: the workspace has never been subscribed, or
+ *   predates the mirror.
+ *
+ * `dead` and `none` are the only states a staff comp applies in.
+ */
+export type OrgSubscriptionState = 'live' | 'dead' | 'none'
+
+export function orgSubscriptionState(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): OrgSubscriptionState {
+  const status = subscriptionStatusOf(org)
+  if (!status) return 'none'
+  return DEAD_SUBSCRIPTION_STATUSES.has(status) ? 'dead' : 'live'
+}
+
+/** A staff plan comp, as every reader receives it (AGL-3034). */
+export interface ResolvedOrgPlanComp {
+  /** The plan granted — always a paid plan this build knows. */
+  plan: OrgPlan
+  /** `null` when the stored code is not one of the override set's. */
+  reason: OrgOverrideReasonCode | null
+  note: string | null
+  grantedBy: string | null
+  /** ISO instant, or `null` when the stored stamp does not read back. */
+  grantedAt: string | null
+}
+
+/**
+ * An instant off a stored value in whichever form it reached this reader: a
+ * Firestore `Timestamp` from either SDK, the `{ seconds }`/`{ _seconds }`
+ * shape a timestamp takes after crossing JSON, a `Date`, or an ISO string.
+ */
+function instantOf(value: unknown): string | null {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString()
+  }
+  if (typeof value === 'string') {
+    const millis = Date.parse(value)
+    return Number.isFinite(millis) ? new Date(millis).toISOString() : null
+  }
+  if (!value || typeof value !== 'object') return null
+  const toDate = (value as { toDate?: unknown }).toDate
+  if (typeof toDate === 'function') {
+    const date = toDate.call(value)
+    return date instanceof Date && !Number.isNaN(date.getTime())
+      ? date.toISOString()
+      : null
+  }
+  const record = value as { seconds?: unknown; _seconds?: unknown }
+  const seconds = Number(record.seconds ?? record._seconds)
+  if (!Number.isFinite(seconds)) return null
+  // Out of `Date`'s range is Invalid Date, whose `toISOString` throws.
+  const date = new Date(seconds * 1000)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+function trimmedOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+/**
+ * The org's STORED comp (`entitlements.planComp`), whether or not it is in
+ * force, or `null` when there is none (AGL-3034).
+ *
+ * Strict about the one field that grants anything: `plan` must be a paid plan
+ * this build knows. A comp of `free` grants nothing and an unknown plan could
+ * grant anything, so both read as no comp at all — the org then resolves
+ * exactly as it would without one, which is the direction a malformed grant
+ * must fail in. The descriptive fields are narrowed and never block the plan:
+ * a comp whose note or stamp did not read back is still the comp staff wrote.
+ */
+export function readOrgPlanComp(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): ResolvedOrgPlanComp | null {
+  const entitlements = org?.entitlements as { planComp?: unknown } | null | undefined
+  const raw =
+    entitlements && typeof entitlements === 'object' ? entitlements.planComp : undefined
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const record = raw as Record<string, unknown>
+  const plan = record['plan']
+  if (
+    typeof plan !== 'string' ||
+    plan === 'free' ||
+    !Object.prototype.hasOwnProperty.call(PLAN_ENTITLEMENTS, plan)
+  ) {
+    return null
+  }
+  const reason = record['reason']
+  return {
+    plan: plan as OrgPlan,
+    reason: isOrgOverrideReasonCode(reason) ? reason : null,
+    note: trimmedOrNull(record['note']),
+    grantedBy: trimmedOrNull(record['grantedBy']),
+    grantedAt: instantOf(record['grantedAt']),
+  }
+}
+
+/**
+ * The comp IN FORCE: the stored comp while no subscription decides the plan,
+ * and `null` otherwise (AGL-3034).
+ *
+ * A live subscription always wins. The comp is not removed by one starting —
+ * nothing but the staff override writes it — so it waits, dormant, and
+ * applies again if that subscription ends. Staff views say so.
+ */
+export function resolvePlanComp(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): ResolvedOrgPlanComp | null {
+  if (orgSubscriptionState(org) === 'live') return null
+  return readOrgPlanComp(org)
+}
+
+/**
+ * What decided the org's effective plan (AGL-3034):
+ *
+ * - `subscription` — a live subscription; the stored plan is its mirror.
+ * - `comp`         — a staff comp, on a dead or absent subscription.
+ * - `lapsed`       — a dead subscription and no comp: Free.
+ * - `stored-plan`  — no subscription and no comp, and a paid plan stored
+ *                    directly, the way staff granted plans before comps.
+ * - `no-plan`      — no subscription, no comp, no paid plan: Free.
+ */
+export type OrgPlanDecidedBy =
+  | 'subscription'
+  | 'comp'
+  | 'lapsed'
+  | 'stored-plan'
+  | 'no-plan'
+
+/** Everything a staff surface needs to say how an org's plan resolves. */
+export interface OrgPlanDescription {
+  effectivePlan: OrgPlan
+  /** `org.plan` when it names a plan this build knows, else `null`. */
+  storedPlan: OrgPlan | null
+  subscriptionStatus: string | null
+  subscription: OrgSubscriptionState
+  /** The STORED comp — in force or dormant; see `compInForce`. */
+  comp: ResolvedOrgPlanComp | null
+  compInForce: boolean
+  decidedBy: OrgPlanDecidedBy
+}
+
+/**
+ * The org's plan, described rather than only resolved (AGL-3034) — the ONE
+ * reading the staff override route answers with and the staff override
+ * dialog renders, so the response and the dialog cannot tell staff two
+ * different stories about the same document.
+ */
+export function describeOrgPlan(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): OrgPlanDescription {
+  const subscription = orgSubscriptionState(org)
+  const status = subscriptionStatusOf(org)
+  const stored = org?.plan
+  const storedPlan =
+    typeof stored === 'string' &&
+    Object.prototype.hasOwnProperty.call(PLAN_ENTITLEMENTS, stored)
+      ? (stored as OrgPlan)
+      : null
+  const comp = readOrgPlanComp(org)
+  const compInForce = comp !== null && subscription !== 'live'
+  const decidedBy: OrgPlanDecidedBy =
+    subscription === 'live'
+      ? 'subscription'
+      : compInForce
+        ? 'comp'
+        : subscription === 'dead'
+          ? 'lapsed'
+          : storedPlan && storedPlan !== 'free'
+            ? 'stored-plan'
+            : 'no-plan'
+  return {
+    effectivePlan: resolveEffectivePlan(org),
+    storedPlan,
+    subscriptionStatus: typeof status === 'string' && status ? status : null,
+    subscription,
+    comp,
+    compInForce,
+    decidedBy,
+  }
+}
+
+/**
+ * One sentence for staff saying what decides the plan and what a plan set in
+ * the override dialog would do (AGL-3034). Shared by the route's response and
+ * the dialog, for the reason `describeOrgPlan` is.
+ */
+export function orgPlanDescriptionSentence(
+  description: OrgPlanDescription,
+): string {
+  const label = (plan: OrgPlan | null) => (plan ? PLAN_LABELS[plan] : 'no plan')
+  const status = description.subscriptionStatus ?? 'none'
+  const dormant =
+    description.comp && !description.compInForce
+      ? ` A ${label(description.comp.plan)} comp is stored and dormant: it ` +
+        'takes effect if the subscription ends.'
+      : ''
+  switch (description.decidedBy) {
+    case 'subscription':
+      return (
+        `The live subscription (${status}) decides the plan: ` +
+        `${label(description.effectivePlan)}. Stripe's next subscription ` +
+        `event rewrites a plan set here.${dormant}`
+      )
+    case 'comp':
+      return (
+        `${label(description.effectivePlan)} is in force as a staff comp, ` +
+        (description.subscription === 'dead'
+          ? `because the subscription is ${status}. `
+          : 'because no subscription pays for this workspace. ') +
+        'It bills nothing, and lasts until it is removed or a live ' +
+        'subscription starts.'
+      )
+    case 'lapsed':
+      return (
+        `The subscription is ${status}, so this workspace resolves as ` +
+        `${label('free')}` +
+        (description.storedPlan && description.storedPlan !== 'free'
+          ? ` — the stored ${label(description.storedPlan)} grants nothing`
+          : '') +
+        '. A plan set here is written as a staff comp.'
+      )
+    case 'stored-plan':
+      return (
+        `No subscription: the plan stored directly, ` +
+        `${label(description.storedPlan)}, decides it. A plan set here is ` +
+        'written as a staff comp.'
+      )
+    default:
+      return (
+        `No subscription and no paid plan, so this workspace resolves as ` +
+        `${label('free')}. A plan set here is written as a staff comp.`
+      )
+  }
+}
+
+/**
  * Whether the org is actually being charged for its plan right now.
  *
  * This is deliberately stricter than `resolveEffectivePlan`: entitlement
  * asks "what does this org get", revenue asks "who is paying us". A staff
- * plan override (`/admin/orgs`) writes `plan` and never writes
- * `subscription`, so a comped or dark-launched org resolves to a paid plan
- * while billing nothing — counting it inflates MRR (AGL-925). No
- * subscription mirror means no Stripe subscription means no revenue.
+ * plan override (`/admin/orgs`) never writes `subscription` — before AGL-3034
+ * it wrote `plan`, and now it writes a comp — so a comped or dark-launched
+ * org resolves to a paid plan while billing nothing, and counting it inflates
+ * MRR (AGL-925). No subscription mirror means no Stripe subscription means no
+ * revenue.
+ *
+ * A comp never reaches this answer: it reads the stored `plan` and the
+ * status, never `entitlements.planComp`, and a comp is only ever in force
+ * where the status is dead or absent — both of which answer false here.
  *
  * `past_due` counts: Stripe is still retrying and the plan is still owed.
  */
@@ -1922,10 +2243,17 @@ export function applyDiscountUsd(
  * migrating such an org to `plan: 'enterprise'` is the clean end state and
  * changes nothing about how it reads here. List-priced orgs with none of the
  * three are not enterprise.
+ *
+ * A staff comp in force names the plan instead of the stored one (AGL-3034),
+ * exactly as it does for entitlements: a workspace comped to Enterprise reads
+ * as Enterprise, and one comped to a lower tier does not read as Enterprise
+ * because of a plan stored before the comp. The explicit marker still counts.
  */
 export function isEnterpriseOrg(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): boolean {
+  const comp = resolvePlanComp(org)
+  if (comp) return comp.plan === 'enterprise' || org?.enterprise === true
   if (org?.plan === 'enterprise') return true
   if (org?.enterprise === true) return true
   return (
@@ -2690,10 +3018,19 @@ export function checkDiscountMargin(
  * as `free`, and a paid plan whose subscription is canceled/unpaid/
  * incomplete downgrades to `free` until the webhook restores it — plan
  * fields alone are not entitlement.
+ *
+ * A STAFF COMP comes first (AGL-3034), and only where no subscription decides
+ * the plan: `resolvePlanComp` answers `null` while one is live, so a paying
+ * workspace's plan is always its subscription's. The comp is its own marker,
+ * never the stored `plan` — a canceled customer whose `plan` still names what
+ * they paid for resolves as Free exactly as before, because nothing about
+ * their document is a comp.
  */
 export function resolveEffectivePlan(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): OrgPlan {
+  const comp = resolvePlanComp(org)
+  if (comp) return comp.plan
   const plan = org?.plan
   if (!plan || !(plan in PLAN_ENTITLEMENTS)) return 'free'
   const status = subscriptionStatusOf(org)
@@ -3184,7 +3521,7 @@ export function checkHostCollaboratorQuota(
   assignedSeats: number
 } {
   const entitlements = resolveOrgEntitlements(org)
-  const pricing = PLAN_PRICING[resolvePlan(org)]
+  const pricing = resolvePlanPricing(org)
   const included = entitlements.membersPerHost
   const maxSeats = entitlements.maxMembersPerHost
   const addonPriceUsd = pricing.extraCollaboratorMonthlyUsd
@@ -4073,7 +4410,7 @@ export function checkSeatQuota(
   currentUsage: number,
 ): SeatQuotaResult {
   const entitlements = resolveOrgEntitlements(org)
-  const pricing = PLAN_PRICING[resolvePlan(org)]
+  const pricing = resolvePlanPricing(org)
   const included =
     kind === 'managers'
       ? entitlements.managersPerOrg
@@ -4157,7 +4494,7 @@ export function checkDatasetQuota(
   currentUsage: number,
 ): DatasetQuotaResult {
   const entitlements = resolveOrgEntitlements(org)
-  const pricing = PLAN_PRICING[resolvePlan(org)]
+  const pricing = resolvePlanPricing(org)
   const included = entitlements.datasetsPerOrg
   const maxDatasets = entitlements.maxDatasetsPerOrg
   const addonPriceUsd = pricing.extraDatasetMonthlyUsd
@@ -4205,7 +4542,7 @@ export function checkDataStorageQuota(
   usedMb: number,
 ): DataStorageQuotaResult {
   const entitlements = resolveOrgEntitlements(org)
-  const pricing = PLAN_PRICING[resolvePlan(org)]
+  const pricing = resolvePlanPricing(org)
   const includedMb = entitlements.dataStorageMbPerOrg
   const overageRateUsd = pricing.extraDataGbMonthlyUsd
   const used = Math.max(0, usedMb)
@@ -4254,7 +4591,7 @@ export function checkApiRequestQuota(
   usedRequests: number,
 ): ApiRequestQuotaResult {
   const entitlements = resolveOrgEntitlements(org)
-  const pricing = PLAN_PRICING[resolvePlan(org)]
+  const pricing = resolvePlanPricing(org)
   const included = entitlements.apiRequestsPerMonth
   const overageRateUsd = pricing.extraApiRequestsUsdPer1k
   const used = Math.max(0, usedRequests)
@@ -4324,7 +4661,7 @@ export function checkCrmRecordsQuota(
   usedRecords: number,
 ): CrmRecordsQuotaResult {
   const entitlements = resolveOrgEntitlements(org)
-  const pricing = PLAN_PRICING[resolvePlan(org)]
+  const pricing = resolvePlanPricing(org)
   const included = entitlements.contactsPerHost
   const overageRateUsd = pricing.extraContactsUsdPer1k
   const used = Math.max(0, usedRecords)
@@ -4496,7 +4833,7 @@ export function priceEmailSendOverage(
   org: Partial<AglynOrgBilling> | null | undefined,
   overageSends: number,
 ): EmailSendOveragePrice {
-  const overageRateUsd = PLAN_PRICING[resolvePlan(org)].extraEmailSendsUsdPer1k
+  const overageRateUsd = resolvePlanPricing(org).extraEmailSendsUsdPer1k
   const sends = Number(overageSends)
   const over = Number.isFinite(sends) && sends > 0 ? sends : 0
   return {
@@ -4518,11 +4855,14 @@ export function priceEmailSendOverage(
  * Deliberately a plan-level question, not an org-level one — an org with no
  * plan resolves as free, so an unknown org meters nothing. Billing usage to
  * someone with no subscription is the one error direction with no recovery.
+ * A staff comp is that someone too (AGL-3034): it grants a paid plan with no
+ * subscription behind it, so `resolvePlanPricing` answers `false` for it and
+ * its bands are walls.
  */
 export function planMetersInfraOverage(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): boolean {
-  return PLAN_PRICING[resolvePlan(org)].meteredInfraPassThrough
+  return resolvePlanPricing(org).meteredInfraPassThrough
 }
 
 export interface FormSubmissionQuotaResult {

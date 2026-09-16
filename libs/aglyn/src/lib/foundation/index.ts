@@ -79,6 +79,7 @@ export type {
   OrgEntitlements,
   OrgFeatureFlags,
   OrgPlan,
+  OrgPlanComp,
   OrgSeatAddons,
   OrgSubscription,
   OrgUid,
