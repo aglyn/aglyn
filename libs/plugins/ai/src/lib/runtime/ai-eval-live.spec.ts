@@ -42,8 +42,10 @@ import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
 import { AI_THEME_TOOL_NAME } from '../tools/ai-theme-tool'
 import { readAiEvalCase, scoreAiEvalCandidate, type AiEvalCase } from './ai-eval'
 import {
+  AI_EVAL_PLAN_GRADER_NOTE,
   AI_EVAL_RUBRIC_TOOL,
   AiEvalLiveRefusedError,
+  aiEvalGraderPrompt,
   readAiEvalGrade,
   recordAiEvalLive,
 } from './ai-eval-live'
@@ -156,6 +158,22 @@ describe('the live run', () => {
     expect(mockRunAiRequest.mock.calls.filter((call) => call[0].tools?.[0]?.name === AI_EVAL_RUBRIC_TOOL.name)).toHaveLength(2)
     expect(candidate.rubric).toMatchObject({ structure: 1, copy: 1, grader: 'grader-model' })
     expect(scoreAiEvalCandidate(text, candidate).pass).toBe(false)
+  })
+})
+
+describe('aiEvalGraderPrompt', () => {
+  const answer = { source: 'recorded', step: null, model: null, effort: null, usage: null } as const
+
+  it('tells a plan’s grader what a plan can hold, so it grades the plan and not the page (AGL-3022)', () => {
+    const prompt = aiEvalGraderPrompt(page, { ...answer, scope: 'plan', plan: { reuse: [] }, answer: null })
+    expect(prompt).toContain(AI_EVAL_PLAN_GRADER_NOTE)
+    expect(prompt).toContain('(its build plan)')
+  })
+
+  it('says nothing of plans to the grader of a whole answer', () => {
+    const prompt = aiEvalGraderPrompt(text, { ...answer, scope: 'full', plan: null, answer: 'Fresh bread.' })
+    expect(prompt).not.toContain(AI_EVAL_PLAN_GRADER_NOTE)
+    expect(prompt).toContain('Fresh bread.')
   })
 })
 

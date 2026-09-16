@@ -278,11 +278,33 @@ export const AI_EVAL_GRADER_INSTRUCTIONS: readonly AiSystemBlock[] = [
   },
 ]
 
+/**
+ * What a build plan is, for the grader that grades one (AGL-3022).
+ *
+ * A plan is the proposal a member confirms, not the document the generation
+ * step writes afterwards, and `AI_BUILD_PLAN_TOOL` gives it nowhere to put a
+ * node tree, a heading order, a landmark or a line of body copy. Graded
+ * against a finished page it loses marks for every one of those, on structure
+ * and on copy alike, and the grade then measures the schema rather than the
+ * answer. So the grader is told the shape it is reading, and that the only
+ * words a plan writes are the ones `aiPlanCopy` collects.
+ */
+export const AI_EVAL_PLAN_GRADER_NOTE =
+  'A build plan is not the finished output: it is the proposal a member confirms before anything is generated. ' +
+  'It holds only what it reuses by inventory id, what it creates and why, and its screens — each with a title, ' +
+  'slug, layout, template, nav flag, search title and description, and sections named with what they place and ' +
+  'how many items they hold. A plan has no node tree, no heading order, no landmarks, no theme tokens, no field ' +
+  'labels or validation, and no body copy; all of those belong to the generation step that runs once the plan is ' +
+  'confirmed. Grade structure on whether the plan proposes the right screens, sections, fields and creations for ' +
+  'the brief, and copy on the only words a plan writes: screen titles, search titles and descriptions, and the ' +
+  'names and rationales of what it creates. Do not mark a plan down for anything a plan cannot hold.'
+
 /** The grader's user turn: the brief, its site, and the answer — copy as written, anything else as JSON. */
 export function aiEvalGraderPrompt(evalCase: AiEvalCase, answer: AiEvalRecordedAnswer): string {
   const output = answer.scope === 'plan' ? answer.plan : answer.answer
   return [
     `Output kind: ${evalCase.kind}${answer.scope === 'plan' ? ' (its build plan)' : ''}`,
+    ...(answer.scope === 'plan' ? [AI_EVAL_PLAN_GRADER_NOTE] : []),
     `Brief: ${evalCase.brief}`,
     aiSiteInventoryBlock(evalCase.inventory),
     `Output:\n${typeof output === 'string' ? output : JSON.stringify(output)}`,
