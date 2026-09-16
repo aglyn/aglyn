@@ -102,6 +102,38 @@ const AUTH_PATH_SEGMENTS = new Set([
   'verify-email',
   'account-recovery',
 ])
+/**
+ * RFC 8615's reserved discovery namespace, under which this app serves
+ * NOTHING (AGL-3016).
+ *
+ * The RFC's requirement is a 404 when the server does not have the resource,
+ * and the console answered 200 to every path in it. The org-level plugin
+ * catch-all at `/[orgSlug]/[...pluginSlug]` (AGL-2974) claims every unclaimed
+ * org sub-path, so `.well-known` bound to `orgSlug`, the document name bound
+ * to `pluginSlug`, and the page rendered its "not installed" notice — console
+ * shell, 200 status.
+ *
+ * A 200 here is a protocol-level claim, not a cosmetic one. Sign-in lives on
+ * `auth.<workspace domain>`, so the OIDC discovery document — HTML, 200 — on
+ * the auth host asserts that we run an authorization server. It was read as
+ * one: an agent-readiness audit of the marketing site scored it against
+ * authentication checks no surface of ours claims to answer.
+ *
+ * The route cannot decide this itself. It already means to refuse a path
+ * (`segments.length > 1` calls `notFound()`), but it is a client component, so
+ * MEASURED, `/.well-known/a/b` answered 200 all the same: the status is
+ * settled before the render, or not at all.
+ *
+ * Refusing the whole namespace is safe because nothing under it that matters
+ * reaches this app. MEASURED, not assumed: an ACME challenge token under
+ * `acme-challenge` is answered by Vercel's edge with a 404 carrying no
+ * `x-matched-path`, so certificate issuance for a custom console domain never
+ * arrives here to be broken. The cost of the blanket rule is that a well-known
+ * document we ever do serve — a security contact, an app-site association —
+ * must be excepted in the same breath as it is added, or it will 404.
+ */
+const WELL_KNOWN_PREFIX = '/.well-known'
+
 const CACHE_TTL_MS = 60_000
 type SlugVerdict = { known: boolean; movedTo: string | null; at: number }
 const slugCache = new Map<string, SlugVerdict>()
@@ -268,6 +300,23 @@ export async function middleware(request: NextRequest) {
   // The conversion is lossless — body, status and headers all carry.
   const refused = enforceSanctionsGeo(request.headers, 'page')
   if (refused) return new NextResponse(refused.body, refused)
+
+  // The reserved discovery namespace, SECOND — after the geo refusal, which
+  // decides whether to serve at all, and before everything that decides what.
+  //
+  // Ahead of the nonce and both host gates on purpose: a path that names
+  // nothing must not spend a Firestore-backed verdict lookup to be told so,
+  // the same reasoning the sanctions check states for itself. `pathname` is
+  // already normalized by the time middleware sees it, so a prefix test is the
+  // whole rule — and it is anchored at the root, leaving `/acme/.well-known/x`
+  // to the org routes, where a segment spelled like this one is just a segment.
+  const { pathname } = request.nextUrl
+  if (
+    pathname === WELL_KNOWN_PREFIX ||
+    pathname.startsWith(`${WELL_KNOWN_PREFIX}/`)
+  ) {
+    return new NextResponse(null, { status: 404 })
+  }
 
   // CSP script-src: ENFORCING for everyone (AGL-518, AGL-523).
   //

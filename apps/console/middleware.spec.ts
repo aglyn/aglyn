@@ -775,3 +775,75 @@ describe('sanctions geo-block', () => {
     ).toBe(451)
   })
 })
+
+describe('the reserved /.well-known namespace (AGL-3016)', () => {
+  /*
+   * The catch-all these pin is `/[orgSlug]/[...pluginSlug]` (AGL-2974), which
+   * claimed the whole namespace and answered 200 with the console shell. Each
+   * path below is one a machine probes to decide that a protocol endpoint
+   * EXISTS, so a 200 is not a cosmetic wrong answer — it is a false claim, and
+   * `openid-configuration` on the auth host is the one that was believed.
+   */
+  it.each([
+    '/.well-known/openid-configuration',
+    '/.well-known/oauth-authorization-server',
+    '/.well-known/oauth-protected-resource',
+    '/.well-known/security.txt',
+    '/.well-known/apple-app-site-association',
+    '/.well-known/anything-we-do-not-serve',
+  ])('answers 404 for %s', async (path) => {
+    const response = await middleware(request('app.aglyn.com', path))
+    expect(response.status).toBe(404)
+  })
+
+  it('answers 404 on the auth host, which is the one an OIDC client probes', async () => {
+    const response = await middleware(
+      request('auth.aglyn.com', '/.well-known/openid-configuration'),
+    )
+    expect(response.status).toBe(404)
+  })
+
+  it('refuses the bare namespace root too', async () => {
+    expect(
+      (await middleware(request('app.aglyn.com', '/.well-known'))).status,
+    ).toBe(404)
+  })
+
+  it('spends no verdict lookup on a path that names nothing', async () => {
+    // A workspace subdomain would otherwise cost a slug lookup. Ordering, not
+    // politeness: the gate has to sit above every Firestore-backed verdict.
+    await middleware(
+      request('zgover.aglyn.com', '/.well-known/openid-configuration'),
+    )
+    expect(fetchCalls).toHaveLength(0)
+  })
+
+  it('still lets the geo refusal answer first', async () => {
+    const response = await middleware(
+      new NextRequest(
+        'https://app.aglyn.com/.well-known/openid-configuration',
+        {
+          headers: {
+            host: 'app.aglyn.com',
+            'x-vercel-ip-country': 'IR',
+          },
+        },
+      ),
+    )
+    expect(response.status).toBe(451)
+  })
+
+  it('is anchored at the root, so a segment spelled the same way is served', async () => {
+    // `/acme/.well-known/x` is an org path whose surface happens to be spelled
+    // like the namespace. Nothing discovers a protocol endpoint there.
+    const response = await middleware(
+      request('app.aglyn.com', '/acme/.well-known/x'),
+    )
+    expect(response.status).toBe(200)
+  })
+
+  it('leaves an ordinary console page alone', async () => {
+    const response = await middleware(request('app.aglyn.com', '/signin'))
+    expect(response.status).toBe(200)
+  })
+})
