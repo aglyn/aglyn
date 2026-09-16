@@ -314,6 +314,24 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
 
   const handleOptionsChange = useCallback(
     (index: number, patch: Partial<CommerceModel.ProductOption> | null) => {
+      // A RENAME moves each variant's selection to the new name (AGL-3066).
+      // Rebuilding the matrix matches variants by name and value, so under a
+      // new name it finds none and replaces every variant, its id, price, SKU
+      // and stock with them. Only a change of values rebuilds.
+      if (
+        patch &&
+        current.options?.[index] &&
+        Object.keys(patch).length === 1 &&
+        typeof patch.name === 'string'
+      ) {
+        update(
+          CommerceModel.renameProductOptions(
+            current,
+            current.options.map((option, at) => (at === index ? patch.name : option.name)),
+          ),
+        )
+        return
+      }
       const options = [...(current.options ?? [])]
       if (patch === null) options.splice(index, 1)
       else options[index] = { name: '', values: [], ...options[index], ...patch }

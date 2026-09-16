@@ -361,6 +361,85 @@ export function expandVariantMatrix(
   return combos
 }
 
+/**
+ * The option axes renamed, with every variant's selection carried to the new
+ * name in place (AGL-3066).
+ *
+ * A variant keeps its selections keyed by option NAME, so a rename has to move
+ * each key rather than rebuild the matrix: a rebuild matches variants by name
+ * and value, finds none under the new name, and replaces every variant with a
+ * new id holding the first variant's price and stock and no SKU, barcode,
+ * compare-at price or weight. Moving the key keeps the id every order line
+ * and stock movement refers to, and every field a person set.
+ *
+ * `names` holds one entry per option, in order; an entry that is not a string
+ * keeps that option's name. Each selection keeps its position among a
+ * variant's selections, because a variant is labeled by them in order.
+ *
+ * Two options may share a name for a moment while a person types. A variant
+ * cannot hold two selections under one name, so while the new names are not
+ * all different nothing is moved, and `validateProduct` refuses the product.
+ * The selection left under the old name is found again by its value once the
+ * names differ, so typing through a duplicate loses nothing.
+ */
+export function renameProductOptions(
+  product: Pick<HostProduct, 'options' | 'variants'>,
+  names: ReadonlyArray<string | null | undefined>,
+): Pick<HostProduct, 'options' | 'variants'> {
+  const current = product.options ?? []
+  const options = current.map((option, index) => {
+    const name = names[index]
+    return typeof name === 'string' ? { ...option, name } : option
+  })
+  const next = options.map((option) => option.name)
+  if (new Set(next).size !== next.length) return { options, variants: product.variants }
+  const variants = (product.variants ?? []).map((variant) => {
+    const selections = variant.options
+    if (!selections) return variant
+    const axisOf = optionAxesOf(current, selections)
+    const moved: Record<string, string> = {}
+    let changed = false
+    for (const [key, value] of Object.entries(selections)) {
+      const axis = axisOf.get(key)
+      const name = axis === undefined ? key : next[axis]
+      if (name !== key) changed = true
+      moved[name] = value
+    }
+    return changed ? { ...variant, options: moved } : variant
+  })
+  return { options, variants }
+}
+
+/**
+ * Which option each of a variant's selections belongs to: the option of the
+ * same name first, and then, for a selection under a name no option has any
+ * longer, the one remaining option whose values hold its value. A selection
+ * that fits neither belongs to no option and is left as it is.
+ */
+function optionAxesOf(
+  options: readonly ProductOption[],
+  selections: Readonly<Record<string, string>>,
+): Map<string, number> {
+  const axisOf = new Map<string, number>()
+  const taken = new Set<number>()
+  options.forEach((option, index) => {
+    if (Object.prototype.hasOwnProperty.call(selections, option.name) && !axisOf.has(option.name)) {
+      axisOf.set(option.name, index)
+      taken.add(index)
+    }
+  })
+  for (const [key, value] of Object.entries(selections)) {
+    if (axisOf.has(key)) continue
+    const axis = options.findIndex(
+      (option, index) => !taken.has(index) && (option.values ?? []).includes(value),
+    )
+    if (axis === -1) continue
+    axisOf.set(key, axis)
+    taken.add(axis)
+  }
+  return axisOf
+}
+
 /** Variant whose option selections match exactly; undefined if none. */
 export function findVariant(
   product: Pick<HostProduct, 'variants'>,
@@ -809,6 +888,11 @@ export function validateProduct(product: HostProduct): string | null {
     if (new Set(option.values).size !== option.values.length) {
       return `Option "${option.name}" has duplicate values`
     }
+  }
+  // A variant keys its selections by option name, so two options with one
+  // name cannot both be selected (AGL-3066).
+  if (new Set(options.map((option) => option.name.trim())).size !== options.length) {
+    return 'Each option needs its own name'
   }
   const variants = product.variants ?? []
   if (variants.length === 0) return 'Products need at least one variant'
