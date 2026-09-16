@@ -46,6 +46,7 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { aiOverageReservationRefusal } from '../billing/ai-overage-gate'
 import { aiAllotmentRefusalText } from '../model/ai-allotments'
+import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
 import { resolveAiModelChoice } from '../providers/model-choice'
 import { aiOutputTargetType } from '../activity/ai-activity-actions'
 import {
@@ -942,7 +943,9 @@ export async function cancelAiJob(
  * back unchanged. The pending step's attempts start over — a person asking
  * again is not a provider failing again — and a confirmed plan with no step
  * left behind it completes the job rather than queueing nothing. The steps
- * it queues are held at the nominal figure again, which the park released.
+ * it queues are held at the nominal figure again, which the park released —
+ * and a confirmed plan is held at what the whole job is estimated to cost
+ * (AGL-3031), creations included, where that is more.
  */
 export async function resumeAiJob(
   firestore: Firestore,
@@ -958,24 +961,29 @@ export async function resumeAiJob(
     )
     const outstanding = steps.filter((step) => step.status === 'pending').length
     const pending = outstanding > 0
-    const confirmed =
-      current.review?.reason === 'plan' && current.plan
-        ? {
-            plan: {
-              ...current.plan,
-              status: 'confirmed',
-              confirmedAt: now,
-              confirmedBy: actor.uid,
-            },
-          }
-        : {}
+    const confirming = current.review?.reason === 'plan' && current.plan ? current.plan : null
+    const confirmed = confirming
+      ? {
+          plan: {
+            ...confirming,
+            status: 'confirmed',
+            confirmedAt: now,
+            confirmedBy: actor.uid,
+          },
+        }
+      : {}
     return {
       status: pending ? 'queued' : 'done',
       steps,
       review: null,
       error: null,
       ...confirmed,
-      creditsReserved: outstanding * AI_JOB_STEP_RESERVE_CREDITS,
+      creditsReserved: pending
+        ? Math.max(
+            outstanding * AI_JOB_STEP_RESERVE_CREDITS,
+            confirming ? aiJobPlanCreditEstimate(current.kind, confirming) : 0,
+          )
+        : 0,
       updatedAt: now,
     }
   })

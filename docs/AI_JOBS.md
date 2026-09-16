@@ -49,7 +49,7 @@ rules deny every client write). Fields:
 | `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. A page's document carries its estimated first-visit `load`. An output may carry a customer-safe `note`: what the person decides next about it. |
 | `plan` | The plan a planned kind builds from: `reuse`, `create`, `screens`, the inventory `labels` it references, and `status` `proposed` → `confirmed` with who confirmed it and when. |
 | `review` | While the job is `needs_review`: the `reason` (`plan`, `doctrine` or `limit`), the customer-safe `message`, and the rules the last answer broke. |
-| `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step while the job can run — zero while it waits for a person — and the real spend at the plan's credit rate. |
+| `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step while the job can run — zero while it waits for a person, and a confirmed page or site plan's whole-job estimate where that is more — and the real spend at the plan's credit rate. |
 | `lease` | `{ owner, until }` while a step runs — see below. |
 | `expiresAt` | 180 days from creation, the assist exchange's clock: the brief is verbatim customer text (`docs/DATA_RETENTION.md`). |
 | `error` | Customer-safe only. Provider detail goes to the server log beside the ids. |
@@ -127,8 +127,10 @@ against either. The figure is what the console shows a running job as costing
 before its bill is known: `AI_JOB_STEP_RESERVE_CREDITS` a step at creation, one
 step's worth released as each settles. A job parked `needs_review` shows nothing
 held — the step that parks it releases the figure in the write that records it —
-and `resumeAiJob` holds it again for the steps a resume queues. A meter park
-(`needs_input`) keeps it, because its step runs as soon as the meter admits it.
+and `resumeAiJob` holds it again for the steps a resume queues, or at the
+confirmed plan's whole-job estimate (`aiJobPlanCreditEstimate`, AGL-3031) where
+that is more. A meter park (`needs_input`) keeps it, because its step runs as soon
+as the meter admits it.
 
 ## Tokens, per step and per kind
 
@@ -358,8 +360,9 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   only the collections a finite allowance counts. A theme change counts against
   nothing, and an email design is the email plugin's to refuse.
 - **The job.** A kind that builds only some plans narrows that
-  (`AI_JOB_PLAN_SCOPES` in the plan step): a page job and a site scaffold each build
-  only the creations their lists name, and refuse a plan of the wrong shape.
+  (`AI_JOB_PLAN_SCOPES` in the plan step): a page job builds the layout, forms and
+  components its plan creates (`AI_PAGE_CREATE_KINDS`, AGL-3031) and a site scaffold
+  its layout, form and palette change, and each refuses a plan of the wrong shape.
 - **The request.** The lines ride the plan's USER turn (`aiJobPlanPrompt`), never a
   system block: they are per workspace and per site, and the doctrine's cached prefix
   stays one entry for the platform. The doctrine states the rule once — rule 7,
@@ -757,6 +760,12 @@ nothing itself.
 - **The pass bound.** A scaffold's unit is a whole page, so the default bound an
   audit keeps would cut a real site short: the kind registers its own through
   `registerAiJobStepPasses`, sized to the largest plan the rules admit.
+- **Shared with the page job.** A page job builds its plan's creations through the
+  same pieces (AGL-3031): `aiCreationUnit` makes a creation a unit, `aiRunJobUnit`
+  runs one delegated pass and reports whether the unit is built, and
+  `aiSiteBuiltRefs` with `aiSiteUnitJob` resolve `new:<name>` to what was built. A
+  creation unit is told the plan's reuse less what the plan's screens place
+  themselves, so a layout is never refused for leaving out a card a page places.
 - **The estimate is the guard rail.** `aiPlanCreditEstimate` counts the plan's
   passes — one a section, one more a page, one a creation — at the machine's
   nominal credits per step, and the plan proposal shows it beside the button
@@ -1054,9 +1063,10 @@ which fails a listing's job and becomes an audit unit's note.
 
 `page` (AGL-2907) builds one screen from a brief, as an unpublished draft. It
 is a planned kind: the plan step runs first, and once a member confirms the
-plan the generation runner builds its one screen. A member starts one from
-"Describe it" on a site's Screens page (the `hostScreens` widget zone) or from
-AI jobs in the Assist panel.
+plan the generation runner builds the layout, forms and components the plan
+creates, then its one screen (AGL-3031). A member starts one from "Describe it"
+on a site's Screens page (the `hostScreens` widget zone) or from AI jobs in the
+Assist panel.
 
 - **Runner.** `src/lib/jobs/ai-job-page-step.ts`, registered by the plugin's
   server surface with `registerAiJobStep('page', runner, { minimumMs:
@@ -1064,6 +1074,24 @@ AI jobs in the Assist panel.
   builds the next section of the plan's screen and answers `continue`, and
   the last pass builds nothing new. Every pass is one reservation and one
   generation, a section's answer and its one re-ask.
+- **Creations first (AGL-3031).** A doctrine-correct page plan names what the page
+  needs and the site lacks — a layout, a card that repeats, a saved form — and a job
+  that sent the member away to make them by hand and describe the page again had not
+  finished. So the generation step builds them first, one a pass, through the site
+  scaffold's unit machinery (`aiPageJobUnits`: the layout, then forms, then
+  components). Each is handed to the step registered for its kind under a job derived
+  from this one, `<jobId>-c<index>` by its place in the plan, so a pass run again finds
+  its own draft; each lands as the draft that step writes, unpublished and placed
+  nowhere; and where the job stands is read from its outputs. Once every creation is
+  built, the page's passes run on the plan with each `new:<name>` resolved to the
+  record that was built, which the site's inventory now lists, so the page places the
+  new component and binds the new form by id and renders inside the new layout. A
+  creation that stops for a person stops the job; one that reports nothing, or whose
+  kind no step builds here, fails it. `AI_JOB_PAGE_MAX_PASSES` bounds a job at every
+  creation and section the plan limits admit, and the last pass. The proposal lists
+  every creation and the whole job's estimate (`aiJobPlanCreditEstimate`: one pass a
+  section, one for the page's last pass, one a creation), and confirming holds the job
+  at that estimate.
 - **Sections.** `src/lib/jobs/ai-job-page-sections.ts` holds what a pass asks
   for and how its answer is checked. `runValidatedGeneration('page-section',
   …)` sends the section tool (`submit_section`), the page instructions with
@@ -1105,11 +1133,13 @@ AI jobs in the Assist panel.
   when one is given, a site of the job's own org, and room under
   `screensPerHost`. The resume door hands the check the plan being confirmed
   (`AiJobAdmissionContext.plan`), and a page job refuses, before any
-  generation spend, a plan that is not one screen with sections or that
-  creates anything (`aiPagePlanRefusal` in `src/lib/model/ai-page-job.ts`). A
-  new component is a component job's work (AGL-2908) and a new form a form
-  job's (AGL-2913), so the refusal names what to create first and where. The
-  plan step is told the page job creates nothing, re-asks a plan that does,
+  generation spend, a plan that is not one screen with sections, that creates
+  what a page job does not build — a template, a theme change, a dataset or an
+  email design, named with where to create it (`aiPagePlanRefusal` in
+  `src/lib/model/ai-page-job.ts`) — that creates a kind no registered step
+  builds, or that creates what the workspace may no longer make on the site
+  (`aiPageCreationRefusal`, read with `readAiPlanCapabilities`). The plan step is
+  told what a page job may create, re-asks a plan that creates anything else,
   and asks the same admission of the plan before it is kept, so such a plan is
   refused before a member is shown a Confirm (AGL-3030).
 
@@ -1162,6 +1192,11 @@ needs, and the machine does not start it with less.
   every tier, answer and re-ask at the full ceiling, and holds it inside the
   minimum, and the minimum inside the beat's budget and past an inline door's
   25 s.
+- A creation a page job builds runs inside a page pass, so it starts only with
+  the page's minimum left (AGL-3031). Its step keeps the ceiling it keeps as a
+  job of its own kind; the same spec holds each creation golden's answer and its
+  re-ask, at the size the golden measures, inside that minimum on the balanced
+  tier.
 
 ### Evals
 
@@ -1183,6 +1218,14 @@ balanced tier's answer ceiling, under the element measure.
   and the listing exchange at the SEO step's nominal usage. It is not a
   measurement, and customer docs quote no figure: a job shows what it used in
   AI jobs. A recorded run through AGL-2937's harness replaces it.
+- **A plan with creations, built end to end.** `AI_PAGE_CREATION_FIXTURE` is a
+  roofing page on a Starter site with no layout, card or form: its plan creates all
+  three. `ai-job-page-evals.spec.ts` replays it through the real page step, handing
+  each creation to the real layout, form and component steps on the goldens their
+  own specs hold, with the site's inventory read as it grows, and holds the order
+  (layout, form, component, then the page), each draft under its derived id, a page
+  that renders inside the new layout and places the new card and form by id, every
+  building rule on the page, and nothing published.
 - **A Free page fits the taste.** `ai-job-free-page.spec.ts` replays
   `AI_FREE_PAGE_FIXTURE` — an about page with four practice areas and a
   consultation form, on a Free site that already has its one layout — through the
@@ -1194,7 +1237,12 @@ balanced tier's answer ceiling, under the element measure.
   nominal usage. Characters are read four to a token and scaled by what the live
   run measured against the ledger's estimate, the higher of the plan's and the
   layout's ratios. The four-section Free page comes to at most 190 credits of the
-  300, and a Free page fits 9 sections at every pass's ceiling. The spec fails when
+  300, and a Free page fits 9 sections at every pass's ceiling. On a Free site with
+  no layout yet, the page job builds the one layout the Free plan includes first
+  (AGL-3031), at the layout generation measured live (1,709 input, 6,649 cache read,
+  6,649 cache write and 2,057 output), grown with the layout request's cached prefix:
+  the same page that creates its layout first comes to at most 254 credits, and a
+  Free page fits 6 sections with its layout. The spec fails when
   a doctrine or plan change pushes the figure past the wall or out of step with this
   sentence. When a live run has recorded the Free brief
   (`AI_EVAL_LIVE=1 AI_EVAL_CASES=page-free-law-firm-about npm run eval:ai-live`), the

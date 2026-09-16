@@ -40,6 +40,11 @@
  *    tier, under the element measure the step asks by;
  *  - the credits a page takes, ESTIMATED from the requests the step sent and
  *    the golden answers' sizes, match the figure the developer notes quote.
+ *
+ * And one brief whose plan CREATES what its site lacks (AGL-3031): a layout,
+ * a reusable component and a saved form, each built first through the REAL
+ * layout, form and component steps on their own goldens, then the page, which
+ * places what was built.
  */
 
 const mockRunAiRequest = jest.fn()
@@ -100,6 +105,9 @@ import { AI_STEP_NOMINAL_USAGE } from '../providers/model-choice'
 import { validateAiBuildPlan, validateAiDoctrineTree } from '../runtime/ai-doctrine-validators'
 import type { generateSeoFields } from '../runtime/seo-fields'
 import { aiGenerationMaxTokensWithin } from './ai-job-budget'
+import { createAiJobComponentStep } from './ai-job-component-step'
+import { createAiJobFormStep } from './ai-job-form-step'
+import { createAiJobLayoutStep } from './ai-job-layout-step'
 import { aiPageCheckContext } from './ai-job-page-sections'
 import {
   AI_JOB_PAGE_SECTION_MAX_TOKENS,
@@ -109,9 +117,13 @@ import {
 } from './ai-job-page-step'
 import {
   AI_PAGE_BRIEF_FIXTURES,
+  AI_PAGE_CREATION_FIXTURE,
   type AiGoldenSection,
   type AiPageBriefFixture,
 } from './fixtures/ai-page-briefs'
+import type { AiJobOutput } from '../model/ai-jobs.types'
+import type { AiSiteInventory } from '../model/ai-site-inventory'
+import { aiEvalMemoryInventory } from '../runtime/ai-eval-memory-firestore'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
 const NOW = new Date('2026-09-15T22:00:00.000Z')
@@ -513,5 +525,148 @@ describe('the recorded accessibility audit of the golden pages', () => {
     // Lighthouse's accessibility category is axe underneath, but no Lighthouse
     // run happens here and the notes must not imply one.
     expect(notes).not.toMatch(/lighthouse/i)
+  })
+})
+
+describe('a golden page whose plan creates what its site lacks (AGL-3031)', () => {
+  const FIXTURE = AI_PAGE_CREATION_FIXTURE
+  const HOST_ID = FIXTURE.inventory.hostId
+  const golden = <T,>(path: string): T => JSON.parse(readFileSync(join(__dirname, path), 'utf8')) as T
+  const COMPONENT = golden<{ answer: { tree: unknown; props: unknown[] } }>(`goldens/${FIXTURE.componentGolden}.json`)
+  const FORM = golden<Record<string, { answer: { tree: unknown; routing: unknown; cannotCollect: unknown } }>>(
+    'fixtures/ai-job-form-goldens.json',
+  )[FIXTURE.formGolden]
+
+  /** The site's inventory as the reader would list it now: the fixture's, and every draft the job built. */
+  const inventoryNow = (): AiSiteInventory => aiEvalMemoryInventory(FIXTURE.inventory, mockDocs)
+
+  const answer = (name: string, input: unknown) => ({
+    kind: 'completion',
+    text: '',
+    toolUse: [{ name, input }],
+    usage: ZERO_USAGE,
+    estCostUsd: 0,
+    stopReason: 'tool_use',
+  })
+
+  it('builds the layout, the form and the component first, then a page that places them, all unpublished', async () => {
+    mockDocs.clear()
+    mockOwners.clear()
+    commits = []
+    mockOwners.set(HOST_ID, 'org-1')
+    mockDocs.set(`hosts/${HOST_ID}`, {
+      subdomain: 'harbor-new',
+      displayName: 'Harbor Roofing',
+      screens: Object.fromEntries(FIXTURE.inventory.screens.map((row) => [row.id, row.slug])),
+    })
+    mockDocs.set('orgs/org-1', STARTER_ORG)
+    mockReadInventory.mockReset().mockImplementation(async () => inventoryNow())
+    const sections = [...FIXTURE.answers]
+    mockRunAiRequest.mockReset().mockImplementation(async (request: SentRequest) => {
+      const tool = (request.tools[0] as { name: string }).name
+      if (tool === 'submit_layout') return answer(tool, { tree: JSON.stringify(FIXTURE.layout) })
+      if (tool === 'submit_form') return answer(tool, { ...FORM.answer, tree: JSON.stringify(FORM.answer.tree) })
+      if (tool === 'submit_component') return answer(tool, { tree: JSON.stringify(COMPONENT.answer.tree), props: COMPONENT.answer.props })
+      if (tool === 'submit_section') return answer(tool, { tree: JSON.stringify(sections.shift()) })
+      throw new Error(`no golden answers ${tool}`)
+    })
+    const readers = { readInventory: mockReadInventory as never }
+    const runners: Record<string, ReturnType<typeof createAiJobPageStep>> = {
+      layout: createAiJobLayoutStep(readers),
+      form: createAiJobFormStep(readers),
+      component: createAiJobComponentStep(readers),
+    }
+    const seoFields = jest.fn(async () => ({
+      status: 'ok' as const,
+      value: FIXTURE.seo,
+      attempts: 1,
+      usage: SEO_USAGE,
+      estCostUsd: estimateAiBilledUsd(SEO_USAGE, SEO_MODEL),
+      model: SEO_MODEL,
+      stopReason: 'tool_use',
+    }))
+    const step = createAiJobPageStep({
+      ...readers,
+      seoFields: seoFields as unknown as typeof generateSeoFields,
+      runnerFor: (kind) => runners[kind] ?? null,
+    })
+    // The plan a page job keeps and confirms: its creations are ones it builds.
+    expect(aiPagePlanRefusal(FIXTURE.plan)).toBeNull()
+    expect(validateAiBuildPlan(FIXTURE.plan, FIXTURE.inventory)).toEqual([])
+    const plan: AiJobPlan = {
+      ...FIXTURE.plan,
+      status: 'confirmed',
+      labels: { 'scr-about': 'About' },
+      proposedAt: NOW as unknown as AiJobPlan['proposedAt'],
+      confirmedAt: NOW as unknown as AiJobPlan['confirmedAt'],
+      confirmedBy: 'uid-1',
+    }
+    let outputs: AiJobOutput[] = []
+    const passes: Array<{ continue?: boolean; outputs: AiJobOutput[] }> = []
+    for (let pass = 0; pass < 12; pass += 1) {
+      const outcome = await step({
+        job: {
+          $id: FIXTURE.jobId,
+          orgId: 'org-1',
+          hostId: HOST_ID,
+          kind: 'page',
+          status: 'running',
+          brief: FIXTURE.brief,
+          inputs: { pageType: FIXTURE.pageType },
+          steps: [],
+          outputs,
+          creditsReserved: 0,
+          creditsSpent: 0,
+          createdBy: 'uid-1',
+          createdAt: NOW,
+          updatedAt: NOW,
+          expiresAt: NOW,
+          plan,
+          review: null,
+        } as unknown as AiJob,
+        stepIndex: 1,
+        now: NOW,
+        firestore,
+      })
+      expect([pass, outcome.review, outcome.failure]).toEqual([pass, undefined, undefined])
+      passes.push(outcome)
+      outputs = [...outputs, ...outcome.outputs]
+      if (!outcome.continue) break
+    }
+
+    // One pass a creation, one a section, and the last: every creation built before the page.
+    expect(passes).toHaveLength(3 + FIXTURE.answers.length + 1)
+    expect(outputs.map((output) => [output.resource, output.id])).toEqual([
+      ['layout', `${FIXTURE.jobId}-c1`],
+      ['form', `${FIXTURE.jobId}-c2`],
+      ['reusableComponent', `${FIXTURE.jobId}-c0`],
+      ['screen', FIXTURE.jobId],
+    ])
+    // Each creation is the draft its own step writes, under the job's slot.
+    expect(mockDocs.get(`hosts/${HOST_ID}/layouts/${FIXTURE.jobId}-c1`)).toMatchObject({ displayName: 'Harbor Roofing site' })
+    expect(mockDocs.get(`hosts/${HOST_ID}/forms/${FIXTURE.jobId}-c2`)).toMatchObject({ displayName: 'Roof quote request' })
+    expect(mockDocs.get(`hosts/${HOST_ID}/components/${FIXTURE.jobId}-c0`)).toMatchObject({ displayName: 'Testimonial card' })
+
+    // The page renders inside the new layout, places the new card and binds the new form.
+    const screen = mockDocs.get(`hosts/${HOST_ID}/screens/${FIXTURE.jobId}`) ?? {}
+    const version = mockDocs.get(`hosts/${HOST_ID}/screens/${FIXTURE.jobId}/versions/${screen['versionId']}`)
+    expect(version).toMatchObject({ layoutId: `${FIXTURE.jobId}-c1` })
+    const nodes = (decodeStoredNodes(version?.['nodes']) ?? {}) as Record<string, StoredNode>
+    const cards = Object.values(nodes).filter((node) => node.componentId === 'reusableInstance')
+    expect(cards.map((node) => node.props?.['refId'])).toEqual([0, 1, 2].map(() => `${FIXTURE.jobId}-c0`))
+    expect(Object.values(nodes).filter((node) => node.componentId === 'form').map((node) => node.props?.['formId'])).toEqual([
+      `${FIXTURE.jobId}-c2`,
+    ])
+    const report = validateAiDoctrineTree(
+      { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: nodes as never },
+      'page',
+      aiPageCheckContext(inventoryNow()),
+    )
+    expect(report.violations).toEqual([])
+    // Nothing published: no host document written, no publish stamp on any draft.
+    expect(commits.filter((path) => path === `hosts/${HOST_ID}`)).toEqual([])
+    for (const [path, data] of mockDocs) {
+      if (path.startsWith(`hosts/${HOST_ID}/`)) expect([path, data['publishedAt']]).toEqual([path, undefined])
+    }
   })
 })

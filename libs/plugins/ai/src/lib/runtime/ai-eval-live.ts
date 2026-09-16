@@ -18,8 +18,12 @@
 import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import { createAiJobPageStep } from '../jobs/ai-job-page-step'
+import { createAiJobComponentStep } from '../jobs/ai-job-component-step'
+import { createAiJobFormStep } from '../jobs/ai-job-form-step'
+import { createAiJobLayoutStep } from '../jobs/ai-job-layout-step'
+import { aiPageJobUnits, createAiJobPageStep } from '../jobs/ai-job-page-step'
 import { createAiJobPlanStep } from '../jobs/ai-job-plan-step'
+import { aiSitePendingUnits } from '../jobs/ai-job-site-step'
 import type { AiJobStepOutcome } from '../jobs/ai-job-text-step'
 import { runAiJobTextStep } from '../jobs/ai-job-text-step'
 import { aiJobThemeCheck, aiJobThemeGeneration, aiJobThemeMode } from '../jobs/ai-job-theme-step'
@@ -36,7 +40,7 @@ import {
   type AiEvalRecordedStep,
   type AiEvalRubric,
 } from './ai-eval'
-import { aiEvalMemoryFirestore } from './ai-eval-memory-firestore'
+import { aiEvalMemoryFirestore, aiEvalMemoryInventory } from './ai-eval-memory-firestore'
 
 /**
  * THE EVAL HARNESS, LIVE (AGL-2937): recording new answers from the model.
@@ -61,9 +65,10 @@ import { aiEvalMemoryFirestore } from './ai-eval-memory-firestore'
  *
  * A page brief is recorded END TO END (AGL-3030): the plan step's runner,
  * the plan confirmed as a member confirms it, and every pass of the page
- * step's runner against a site kept in memory, each exchange's spend kept
- * as the machine meters it. That is what proves what one page costs, on the
- * workspace the case describes.
+ * step's runner against a site kept in memory — the layout, forms and
+ * components its plan creates built first by their own steps (AGL-3031) —
+ * each exchange's spend kept as the machine meters it. That is what proves
+ * what one page costs, on the workspace the case describes.
  */
 
 /** The environment variable a live run must be named by. */
@@ -317,19 +322,40 @@ const recordPage: AiEvalRecorder = async (evalCase, options) => {
       confirmedBy: 'eval',
     },
   }
+  // The site as the steps read it: the case's rows, and what the job has
+  // built there so far. A case's site holds no documents to copy, so a plan
+  // that starts from a copy is built from its brief, as a step builds one
+  // whose source is gone.
+  const readers = {
+    readInventory: async () => {
+      if (!evalCase.inventory) throw new Error(`${evalCase.id} has no inventory to build from`)
+      return aiEvalMemoryInventory(evalCase.inventory, site.docs)
+    },
+    duplicate: async () => ({ ok: false as const, status: 404, error: 'A recording copies nothing' }),
+  }
+  const creations = {
+    layout: createAiJobLayoutStep(readers),
+    form: createAiJobFormStep(readers),
+    component: createAiJobComponentStep(readers),
+  } as const
   const generate = createAiJobPageStep({
-    readInventory: inventoryOf(evalCase),
-    // A case's site holds no documents to copy, so a plan that starts from a
-    // copy is built from its brief, as a page step builds one whose source
-    // is gone.
-    duplicate: async () => ({ ok: false, status: 404, error: 'A recording copies nothing' }),
+    ...readers,
+    runnerFor: (kind) => (kind in creations ? creations[kind as keyof typeof creations] : null),
   })
+  const units = aiPageJobUnits(confirmed.plan as AiJobPlan)
   let outputs: AiJobOutput[] = []
   let stopped: string | undefined
   for (let pass = 0; pass < AI_EVAL_PAGE_MAX_PASSES; pass += 1) {
+    const [unit] = aiSitePendingUnits(units, outputs)
     const outcome = await generate({ ...context, stepIndex: 1, job: { ...confirmed, outputs } })
-    // The pass that reports the draft asks for the listing, on the SEO step's model.
-    steps.push(recordedStep(outcome.outputs.some((output) => output.resource === 'screen') ? 'job.seo' : 'job.page', outcome))
+    // A creation's pass is its own step's; the pass that reports the draft
+    // asks for the listing, on the SEO step's model.
+    const kind: AiStepKind = unit
+      ? (`job.${unit.jobKind}` as AiStepKind)
+      : outcome.outputs.some((output) => output.resource === 'screen')
+        ? 'job.seo'
+        : 'job.page'
+    steps.push(recordedStep(kind, outcome))
     outputs = [...outputs, ...outcome.outputs]
     if (outcome.refused || outcome.failure || outcome.review) {
       stopped = outcome.refused ? 'refused' : (outcome.failure ?? outcome.review?.message)

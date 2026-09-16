@@ -184,6 +184,8 @@ export interface AiPlanUncreatable {
   name: string
   /** The plan path of the creation: `create[2]`. */
   path: string
+  /** Why not, as a clause: "this site has room for 1 more". */
+  reason: string
   /** One customer-safe sentence: what was refused, why, and what to do instead. */
   message: string
 }
@@ -210,6 +212,7 @@ export function aiPlanUncreatable(
       kind: entry.kind,
       name: entry.name,
       path: `create[${index}]`,
+      reason,
       message: `The plan creates ${aiCreationNoun(entry.kind)} named "${entry.name}", and ${reason}. ${insteadOf(entry.kind, capabilities)}`,
     })
   })

@@ -86,6 +86,21 @@ const toolCall = (name: string, input: unknown) => ({
   stopReason: 'tool_use',
 })
 
+/** The one layout a Free site's page job creates: its name, a link home, the slot and a footer. */
+const FREE_LAYOUT = {
+  rootId: 'root',
+  nodes: {
+    root: { componentId: 'div', nodes: ['header', 'slot', 'footer'] },
+    header: { componentId: 'muiAppBar', props: { position: 'static', color: 'default' }, nodes: ['bar'] },
+    bar: { componentId: 'muiToolbar', nodes: ['brand', 'home'] },
+    brand: { componentId: 'muiTypography', props: { variant: 'h6', component: 'p', children: 'Brightwater Law' } },
+    home: { componentId: 'muiScreenLink', props: { screenId: 'scr-home', children: 'Home' } },
+    slot: { componentId: 'layoutSlot' },
+    footer: { componentId: 'section', props: { element: 'footer' }, nodes: ['tagline'] },
+    tagline: { componentId: 'muiTypography', props: { variant: 'body2', children: 'Brightwater Law, [city].' } },
+  },
+}
+
 /** The fake provider answers each door as the fixture's reference answer would. */
 function armReferenceAnswers(
   grade: Record<string, unknown> = { structure: 4, copy: 4, reuse: 5, notes: 'Holds up.' },
@@ -95,6 +110,7 @@ function armReferenceAnswers(
   mockRunAiRequest.mockImplementation(async (request: { tools?: Array<{ name: string }> }) => {
     const tool = request.tools?.[0]?.name
     if (tool === AI_BUILD_PLAN_TOOL.name) return toolCall(tool, planned.candidates[0].plan)
+    if (tool === 'submit_layout') return toolCall(tool, { tree: JSON.stringify(FREE_LAYOUT) })
     if (tool === AI_PAGE_SECTION_TOOL.name) return toolCall(tool, { tree: JSON.stringify(sections.shift()) })
     if (tool === AI_SEO_FIELDS_TOOL_NAME) return toolCall(tool, AI_FREE_PAGE_FIXTURE.seo)
     if (tool === AI_THEME_TOOL_NAME) return toolCall(tool, theme.candidates[0].answer)
@@ -156,7 +172,7 @@ describe('the live run', () => {
     expect(score.pass).toBe(true)
   })
 
-  it('records a page brief end to end — the plan, every section pass and the listing — each exchange metered as the machine meters a step (AGL-3030)', async () => {
+  it('records a page brief end to end — the plan, its creations, every section pass and the listing — each exchange metered as the machine meters a step (AGL-3030, AGL-3031)', async () => {
     armReferenceAnswers(undefined, freePage)
     const [{ candidate }] = (await recordAiEvalLive([freePage], LIVE)).recorded
     const sent = mockRunAiRequest.mock.calls.map((call) => call[0])
@@ -167,8 +183,10 @@ describe('the live run', () => {
     for (const request of passes) expect(String(request.messages[0].content)).toContain(AI_PAGE_SECTION_INLINE_LINE)
 
     expect(candidate).toMatchObject({ source: 'recorded', scope: 'full', step: 'job.page', model: 'eval-model' })
+    // The one layout the Free plan includes is built first, by the layout step.
     expect(candidate.steps?.map((step) => step.step)).toEqual([
       'job.plan',
+      'job.layout',
       ...AI_FREE_PAGE_FIXTURE.answers.map(() => 'job.page'),
       'job.seo',
     ])

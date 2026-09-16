@@ -156,7 +156,7 @@ export function AiPageBriefDialog({ open, onClose, orgId, hostId, user }: AiPage
             </Stack>
             <Typography variant="body2" color="text.secondary">
               {'A plan comes first, and nothing is built until you confirm it. The page uses your '}
-              {'theme, your layout and the components and forms the site already has.'}
+              {'theme and what the site already has, and the plan lists anything the job builds first.'}
             </Typography>
             {notice ? <Alert severity="warning">{notice}</Alert> : null}
           </Stack>

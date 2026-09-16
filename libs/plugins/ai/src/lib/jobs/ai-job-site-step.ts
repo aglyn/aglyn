@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
   isAiPlanNewRef,
@@ -42,6 +41,7 @@ import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiConfirmedPlan, aiUnspentOutcome } from './ai-job-generation'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
+  type AiJobStepContext,
   type AiJobStepOutcome,
   type AiJobStepRunner,
 } from './ai-job-text-step'
@@ -92,10 +92,19 @@ import {
  * Nothing here publishes, routes or sends: each delegated step writes the
  * unpublished draft it already wrote for a job of its own kind, and the
  * palette and navigation travel as proposals a member applies.
+ *
+ * ── The page job builds its creations the same way (AGL-3031) ────────────
+ *
+ * A page job whose plan creates a layout, forms or components builds them
+ * before its page through this same machinery: the units a creation implies
+ * (`aiCreationUnit`), where the job stands read from its outputs
+ * (`aiSitePendingUnits`), one delegated pass a unit (`aiRunJobUnit`), and the
+ * `new:<name>` references resolved to what was built (`aiSiteBuiltRefs`,
+ * `aiSiteUnitJob`). There is one loop, and it is the machine's.
  */
 
-/** What a scaffold's units are, in the order it builds them. */
-export type AiSiteUnitKind = 'theme' | 'layout' | 'form' | 'page' | 'email'
+/** What a scaffold's units are, in the order it builds them; a component is a page job's. */
+export type AiSiteUnitKind = 'theme' | 'layout' | 'form' | 'component' | 'page' | 'email'
 
 export interface AiSiteUnit {
   kind: AiSiteUnitKind
@@ -121,8 +130,27 @@ const UNIT_KINDS: Record<
   theme: { jobKind: 'theme', resource: 'theme' },
   layout: { jobKind: 'layout', resource: 'layout' },
   form: { jobKind: 'form', resource: 'form' },
+  component: { jobKind: 'component', resource: 'reusableComponent' },
   page: { jobKind: 'page', resource: 'screen' },
   email: { jobKind: 'email', resource: 'emailScreen' },
+}
+
+/** The unit kind a creation is built as, where a unit builds it. */
+const CREATION_UNIT_KINDS: Partial<Record<AiBuildPlanCreateKind, AiSiteUnitKind>> = {
+  'theme-change': 'theme',
+  layout: 'layout',
+  form: 'form',
+  component: 'component',
+}
+
+/**
+ * The unit one creation is built as, under the slot its derived job and draft
+ * are addressed by; `null` for a creation no unit builds.
+ */
+export function aiCreationUnit(creation: AiBuildPlanCreate, slot: string): AiSiteUnit | null {
+  const kind = CREATION_UNIT_KINDS[creation.kind]
+  if (!kind) return null
+  return { kind, ...UNIT_KINDS[kind], slot, creation, label: creation.name }
 }
 
 /** The creation kinds a unit is built from, by unit kind. */
@@ -224,7 +252,7 @@ export interface AiSiteBuiltRef {
   id: string
   label: string
   /** Only what becomes a record a page can name; a palette change is not one. */
-  kind: 'layout' | 'form'
+  kind: 'layout' | 'form' | 'component'
 }
 
 /**
@@ -251,9 +279,15 @@ export function aiSiteBuiltRefs(
     const rows = byResource.get(unit.resource)
     const row = rows?.shift()
     if (!row || !unit.creation) continue
-    // A theme change is a proposal with no record to reference; only a layout
-    // and a form become ids a page can name.
-    if (unit.creation.kind !== 'layout' && unit.creation.kind !== 'form') continue
+    // A theme change is a proposal with no record to reference; a layout, a
+    // form and a component become ids a page can name.
+    if (
+      unit.creation.kind !== 'layout' &&
+      unit.creation.kind !== 'form' &&
+      unit.creation.kind !== 'component'
+    ) {
+      continue
+    }
     built.set(unit.creation.name.toLowerCase(), {
       id: row.id,
       label: row.label || unit.creation.name,
@@ -304,6 +338,11 @@ export function aiSiteBriefLines(
  * produced is not its business. Its `$id` is this job's with the unit's slot,
  * which is what every step already addresses its draft by, so a unit re-run
  * after its write finds its own draft rather than writing a second.
+ *
+ * A creation unit reuses what the plan reuses less what the plan's screens
+ * place themselves (AGL-3031): a component a page's section places is the
+ * page's to place, and a layout or a card told to place it would be refused
+ * for leaving it out.
  */
 export function aiSiteUnitJob(
   job: AiJob,
@@ -326,6 +365,10 @@ export function aiSiteUnitJob(
     screens: [],
   }
   if (unit.creation) {
+    const placedByScreens = new Set(
+      plan.screens.flatMap((screen) => screen.sections.flatMap((section) => section.uses)),
+    )
+    unitPlan.reuse = plan.reuse.filter((entry) => !placedByScreens.has(entry.id))
     unitPlan.create = [
       {
         ...unit.creation,
@@ -409,6 +452,55 @@ export const aiSiteJobAdmission: AiJobAdmission = async (context) => {
   return null
 }
 
+/** What one delegated pass came to: the unit's spend as the job records it, and whether the unit is built. */
+export interface AiJobUnitPass {
+  outcome: AiJobStepOutcome
+  /** The unit reported what it built and asked for no pass of its own. */
+  built: boolean
+}
+
+/**
+ * One delegated pass (AGL-2911, AGL-3031): the unit handed to the runner of
+ * the kind that owns it, under the job derived for it, and its outcome as the
+ * delegating job records it. A delegate proposes a plan for its own job,
+ * which does not exist, so no plan is carried back. A unit that stopped for a
+ * person, refused or failed is the delegating job's stop; a unit that asked
+ * for another pass keeps its turn; and a unit that finished without reporting
+ * what it built fails with `emptyCopy`, since another pass would ask the same
+ * thing again. The tokens it spent are on the bill either way.
+ */
+export async function aiRunJobUnit(
+  context: AiJobStepContext,
+  input: {
+    unit: AiSiteUnit
+    units: readonly AiSiteUnit[]
+    runner: AiJobStepRunner
+    emptyCopy: string
+  },
+): Promise<AiJobUnitPass> {
+  const { job } = context
+  const outputs = job.outputs ?? []
+  const outcome = await input.runner({
+    ...context,
+    job: aiSiteUnitJob(job, input.unit, aiSiteBuiltRefs(input.units, outputs)),
+  })
+  const spent: AiJobStepOutcome = {
+    outputs: outcome.outputs,
+    usage: outcome.usage,
+    estCostUsd: outcome.estCostUsd,
+    model: outcome.model,
+    stopReason: outcome.stopReason,
+    ...(outcome.effort ? { effort: outcome.effort } : {}),
+    ...(outcome.refused ? { refused: true } : {}),
+    ...(outcome.failure ? { failure: outcome.failure } : {}),
+    ...(outcome.review ? { review: outcome.review } : {}),
+  }
+  if (spent.review || spent.refused || spent.failure) return { outcome: spent, built: false }
+  if (outcome.continue) return { outcome: { ...spent, continue: true }, built: false }
+  if (!outcome.outputs.length) return { outcome: { ...spent, failure: input.emptyCopy }, built: false }
+  return { outcome: spent, built: true }
+}
+
 export interface AiJobSiteStepDeps {
   /** The runner registry; specs hand in a fake for a kind they drive. */
   runnerFor?: typeof aiJobStepRunnerFor
@@ -447,33 +539,16 @@ export function createAiJobSiteStep(
     const runner = runnerFor(unit.jobKind)
     if (!runner) return aiUnspentOutcome(model)
 
-    const outcome = await runner({
-      ...context,
-      job: aiSiteUnitJob(job, unit, aiSiteBuiltRefs(units, outputs)),
+    const pass = await aiRunJobUnit(context, {
+      unit,
+      units,
+      runner,
+      emptyCopy: AI_SITE_UNIT_EMPTY_COPY,
     })
-    // A delegate proposes a plan for its own job, which does not exist: the
-    // plan a scaffold builds from is the one a member confirmed.
-    const spent: AiJobStepOutcome = {
-      outputs: outcome.outputs,
-      usage: outcome.usage,
-      estCostUsd: outcome.estCostUsd,
-      model: outcome.model,
-      stopReason: outcome.stopReason,
-      ...(outcome.effort ? { effort: outcome.effort } : {}),
-      ...(outcome.refused ? { refused: true } : {}),
-      ...(outcome.failure ? { failure: outcome.failure } : {}),
-      ...(outcome.review ? { review: outcome.review } : {}),
-    }
-    // A unit that stopped for a person is what the job waits on, and one that
-    // refused or failed is the job's refusal: neither continues.
-    if (spent.review || spent.refused || spent.failure) return spent
-    // The unit asked for another pass of its own.
-    if (outcome.continue) return { ...spent, continue: true }
-    // It finished without reporting what it built, so another pass would ask
-    // the same thing again. The tokens it spent are on the bill either way.
-    if (!outcome.outputs.length)
-      return { ...spent, failure: AI_SITE_UNIT_EMPTY_COPY }
-    return { ...spent, ...(pending.length > 1 ? { continue: true } : {}) }
+    // A built unit continues the scaffold while units remain after it.
+    return pass.built && pending.length > 1
+      ? { ...pass.outcome, continue: true }
+      : pass.outcome
   }
 }
 

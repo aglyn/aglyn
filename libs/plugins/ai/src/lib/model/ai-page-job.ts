@@ -22,18 +22,20 @@ import {
   type AiBuildPlan,
   type AiBuildPlanCreateKind,
 } from './ai-build-plan'
+import type { AiPlanUncreatable } from './ai-plan-capabilities'
 
 /**
  * What a page job is (AGL-2907): the page types a brief may name, the inputs
  * the job doors admit, and the plans a page generator can build.
  *
- * A page job builds ONE screen from what the site already has. It places the
- * site's components by id, binds its forms by id, and renders inside a layout
- * the site keeps. It creates nothing else: a component is a component job's
- * work (AGL-2908) and a form a form job's (AGL-2913), and a job that starts
- * another job is the site scaffold's (AGL-2911). So a plan that needs a
- * creation is refused when a member confirms it, before anything is spent,
- * with a sentence naming what to make first.
+ * A page job builds ONE screen. It places the site's components by id, binds
+ * its forms by id, and renders inside a layout — and since AGL-3031 it first
+ * builds the layout, forms and components its own plan creates, in the same
+ * job, through the steps that own them, so a doctrine-correct plan is one it
+ * finishes rather than one it sends the member away from. Anything else a
+ * plan creates — a template, a theme change, a dataset, an email — is another
+ * job's work, and such a plan is refused before anything is spent, with a
+ * sentence naming what to make first.
  *
  * This module imports nothing at runtime, so the doors, the step, the console
  * dialog and the specs read one vocabulary.
@@ -131,8 +133,8 @@ export interface AiPagePrerequisite {
 }
 
 /**
- * What the plan asks to be created, in the order the plan lists it, each
- * named once. A page job builds none of it, so every entry is something a
+ * What the plan asks to be created that a page job does not build, in the
+ * order the plan lists it, each named once: every entry is something a
  * member makes first.
  */
 export function aiPagePlanPrerequisites(plan: AiBuildPlan): AiPagePrerequisite[] {
@@ -144,7 +146,9 @@ export function aiPagePlanPrerequisites(plan: AiBuildPlan): AiPagePrerequisite[]
     seen.add(key)
     prerequisites.push({ kind, name })
   }
-  for (const entry of plan.create) add(entry.kind, entry.name)
+  for (const entry of plan.create) {
+    if (!AI_PAGE_CREATE_KINDS.includes(entry.kind)) add(entry.kind, entry.name)
+  }
   // A reference the create list does not carry is refused by the plan rules
   // before a plan is kept; one that slipped through still names a creation.
   for (const screen of plan.screens) {
@@ -158,12 +162,14 @@ export function aiPagePlanPrerequisites(plan: AiBuildPlan): AiPagePrerequisite[]
 }
 
 /**
- * The creations a page job builds itself from its own plan (AGL-3030): none.
- * The plan step is told so before it answers, and the plan rules refuse a
- * creation outside this list with the one re-ask every rule gets, so a plan
- * that needs one never reaches a member's Confirm.
+ * The creations a page job builds itself from its own plan (AGL-3031): the
+ * layout the page renders inside, and the forms and components it places.
+ * Each is built before the page, as a draft, by the step that builds that
+ * kind on its own. The plan step is told this list before it answers, and
+ * the plan rules refuse a creation outside it with the one re-ask every rule
+ * gets, so a plan that needs another never reaches a member's Confirm.
  */
-export const AI_PAGE_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = []
+export const AI_PAGE_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = ['layout', 'form', 'component']
 
 /**
  * Why a page job cannot build a plan of this SHAPE — no page, several pages,
@@ -200,4 +206,21 @@ export function aiPagePlanRefusal(plan: AiBuildPlan): string | null {
   const listed =
     parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
   return `This page needs what the site does not have yet. Create ${listed}, then describe the page again.`
+}
+
+/**
+ * Why a page job cannot build the creations its plan names ON THIS SITE NOW,
+ * in a sentence a member reads when confirming it: what the workspace's plan
+ * does not include, or what the site has no room left for. The plan step was
+ * told what could be created, so this is the site changing between the plan
+ * and its confirmation.
+ */
+export function aiPageCreationRefusal(refused: readonly AiPlanUncreatable[]): string | null {
+  if (!refused.length) return null
+  const parts = refused.map(
+    ({ kind, name, reason }) => `the ${AI_BUILD_PLAN_CREATION_NOUNS[kind].noun} “${name}”, because ${reason}`,
+  )
+  const listed =
+    parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join('; ')}; and ${parts[parts.length - 1]}`
+  return `This page cannot be built as planned: it creates ${listed}. Describe the page again.`
 }

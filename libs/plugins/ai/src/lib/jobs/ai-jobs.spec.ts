@@ -245,6 +245,7 @@ import {
   sweepAiJobs,
   type AiJobStepRun,
 } from './ai-jobs'
+import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
 import { AI_UPSTREAM_FAILURE_COPY, AiUpstreamError } from '../runtime/ai-runtime'
 import { assistFreeTasteRefusalText } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
@@ -1338,6 +1339,35 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
       creditsSpent: 12,
       creditsReserved: 0,
     })
+  })
+
+  it('holds a confirmed plan at what the whole job is estimated to cost, where that is more than its steps (AGL-3031)', async () => {
+    const screen = {
+      title: 'Home',
+      slug: 'home',
+      layout: 'new:Frame',
+      template: null,
+      duplicateOf: null,
+      nav: true,
+      seoTitle: 'Home',
+      seoDescription: 'The home page',
+      sections: [
+        { name: 'hero', uses: [], items: 0 },
+        { name: 'services', uses: [], items: 0 },
+      ],
+    }
+    const plan = {
+      ...proposedOutcome().plan,
+      create: [{ kind: 'layout' as const, name: 'Frame', why: 'every page', duplicateOf: null, fields: [] }],
+      screens: [screen, { ...screen, slug: 'about' }],
+    }
+    planRunner.mockResolvedValue({ ...proposedOutcome(), plan })
+    const job = await newSiteJob()
+    await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
+    const resumed = await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-2' }, LATER)
+    // Two screens of two sections and their last passes, and the layout.
+    expect(aiJobPlanCreditEstimate('site', plan)).toBe((2 * (2 + 1) + 1) * AI_JOB_STEP_RESERVE_CREDITS)
+    expect(resumed.job.creditsReserved).toBe(aiJobPlanCreditEstimate('site', plan))
   })
 
   it('hands back a step whose answer broke a rule twice, with its spend, and trying again runs it once more', async () => {

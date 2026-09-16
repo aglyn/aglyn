@@ -21,9 +21,15 @@ import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fiel
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
-import type { AiBuildPlanScreen } from '../model/ai-build-plan'
-import { aiPagePlanRefusal, parseAiPageJobInputs } from '../model/ai-page-job'
-import type { AiJobOutput } from '../model/ai-jobs.types'
+import { AI_BUILD_PLAN_LIMITS, type AiBuildPlanScreen } from '../model/ai-build-plan'
+import {
+  AI_PAGE_CREATE_KINDS,
+  aiPageCreationRefusal,
+  aiPagePlanRefusal,
+  parseAiPageJobInputs,
+} from '../model/ai-page-job'
+import { aiPlanCapabilitiesForJob, aiPlanUncreatable } from '../model/ai-plan-capabilities'
+import type { AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import { aiModelForStep } from '../providers/routing'
 import { aiDoctrineNeedsInputMessage, runValidatedGeneration } from '../runtime/ai-doctrine'
 import { validateAiDoctrineTree } from '../runtime/ai-doctrine-validators'
@@ -38,6 +44,7 @@ import {
   aiSiteSubdomain,
   readAiDraft,
   readAiDraftNodes,
+  readAiPlanCapabilities,
   updateAiDraftNodes,
   writeAiDraft,
   writeAiDraftScreenSeo,
@@ -61,8 +68,16 @@ import {
   aiPageWithSection,
   type AiPageSection,
 } from './ai-job-page-sections'
+import {
+  aiCreationUnit,
+  aiRunJobUnit,
+  aiSiteBuiltRefs,
+  aiSitePendingUnits,
+  aiSiteUnitJob,
+  type AiSiteUnit,
+} from './ai-job-site-step'
 import type { AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
-import { registerAiJobStep } from './ai-jobs'
+import { aiJobStepRunnerFor, registerAiJobStep, registerAiJobStepPasses } from './ai-jobs'
 
 /**
  * The page step (AGL-2907): the generation step of a `page` job, run once a
@@ -89,6 +104,19 @@ import { registerAiJobStep } from './ai-jobs'
  *
  * How a section is asked for and held to the rules as part of the page is
  * `ai-job-page-sections.ts`.
+ *
+ * ── What the plan creates comes first (AGL-3031) ─────────────────────────
+ *
+ * A plan that creates a layout, forms or components is built in the same job,
+ * before its page, one creation a pass, through the site scaffold's unit
+ * machinery: each creation is handed to the step that builds that kind, under
+ * a job derived from this one, and lands as the draft that step writes. Where
+ * the job stands is read from its outputs, so nothing is kept anywhere else.
+ * Once every creation is built, the page's passes run on the plan with each
+ * `new:<name>` resolved to the record that was built, which the site's
+ * inventory now lists — so the page places the new component and binds the new
+ * form by id, and renders inside the new layout, exactly as it would one the
+ * site always had.
  *
  * ── Never published ──────────────────────────────────────────────────────
  *
@@ -128,6 +156,38 @@ export const AI_JOB_PAGE_DEFAULT_NAME = 'New page'
 export const AI_JOB_PAGE_NO_PLAN_COPY = 'This page job has no confirmed plan to build.'
 export const AI_JOB_PAGE_DELETED_COPY = 'The draft page was deleted while it was being built.'
 
+/** A creation the plan names that this deployment has no step to build. */
+export const AI_JOB_PAGE_CREATION_UNAVAILABLE_COPY =
+  'This page needs something that cannot be built here yet. Describe the page again.'
+
+/** A creation that finished without reporting what it built; the page cannot place it. */
+export const AI_JOB_PAGE_CREATION_EMPTY_COPY =
+  'Part of this page could not be built. Describe the page again.'
+
+/**
+ * The most passes a page job may take (AGL-3031): every creation the plan
+ * limits admit, every section they admit, and the last pass that reports the
+ * draft. A creation's step builds it in one pass, and a page one section a
+ * pass, so a runner that never finishes is still bounded while a real page is
+ * not.
+ */
+export const AI_JOB_PAGE_MAX_PASSES = AI_BUILD_PLAN_LIMITS.create + AI_BUILD_PLAN_LIMITS.sections + 1
+
+/**
+ * The units a plan's creations are built as, in the order a scaffold builds
+ * them: the layout, then the forms, then the components. Each is addressed by
+ * its place in the plan, so a unit run again finds its own draft.
+ */
+export function aiPageJobUnits(plan: Pick<AiJobPlan, 'create'>): AiSiteUnit[] {
+  return AI_PAGE_CREATE_KINDS.flatMap((kind) =>
+    plan.create.flatMap((creation, index) => {
+      if (creation.kind !== kind) return []
+      const unit = aiCreationUnit(creation, `c${index}`)
+      return unit ? [unit] : []
+    }),
+  )
+}
+
 /** The one-segment address a draft asks for, from the plan's slug. */
 export function aiPageDraftSlug(screen: Pick<AiBuildPlanScreen, 'slug'>): string {
   const segments = screen.slug.split('/').map((part) => part.trim()).filter(Boolean)
@@ -152,21 +212,41 @@ function siteNameOf(host: FirebaseFirestore.DocumentSnapshot): string {
 /**
  * A page job is admitted with inputs that read, for a site of the job's own
  * org with a screen to spare; and confirmed only for a plan it can build —
- * one screen, from what the site already has.
+ * one screen, whose creations are ones a page job builds, this deployment has
+ * a step for, and this workspace may still make on this site (AGL-3031).
  */
 export const aiPageJobAdmission: AiJobAdmission = async (context) => {
   const inputs = parseAiPageJobInputs(context.inputs)
   if (typeof inputs === 'string') return { status: 400, error: inputs }
-  if (context.plan) {
-    const refusal = aiPagePlanRefusal(context.plan)
+  const plan = context.plan
+  if (plan) {
+    const refusal = aiPagePlanRefusal(plan)
     if (refusal) return { status: 400, error: refusal }
+    if (aiPageJobUnits(plan).some((unit) => !aiJobStepRunnerFor(unit.jobKind))) {
+      return { status: 400, error: AI_JOB_PAGE_CREATION_UNAVAILABLE_COPY }
+    }
   }
+  const org = context.org as Partial<AglynOrgBilling> | null
   return aiDraftAdmissionRefusal(context.firestore, {
     orgId: context.orgId,
     hostId: context.hostId,
     kind: 'screen',
     noun: 'page',
-    org: context.org,
+    org,
+    // What the workspace may still make here, read once the site is known to
+    // be the org's: the site may have changed since the plan was told.
+    ...(plan?.create.length
+      ? {
+          ownCheck: async (hostId: string) => {
+            const capabilities = aiPlanCapabilitiesForJob(
+              await readAiPlanCapabilities(context.firestore, { hostId, org }),
+              { noun: 'a page job', creates: AI_PAGE_CREATE_KINDS },
+            )
+            const refusal = aiPageCreationRefusal(aiPlanUncreatable(plan, capabilities))
+            return refusal ? { status: 403 as const, error: refusal } : null
+          },
+        }
+      : {}),
   })
 }
 
@@ -177,23 +257,60 @@ export interface AiJobPageStepDeps {
   duplicate?: typeof duplicateResource
   /** The listing generator (AGL-2910). */
   seoFields?: typeof generateSeoFields
+  /** The runners a plan's creations are built by (AGL-3031); the registry's otherwise. */
+  runnerFor?: typeof aiJobStepRunnerFor
 }
 
 export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunner {
   const readInventory = deps.readInventory ?? readSiteInventory
   const duplicate = deps.duplicate ?? duplicateResource
   const seoFields = deps.seoFields ?? generateSeoFields
-  return async ({ job, now, signal, firestore, modelFor }): Promise<AiJobStepOutcome> => {
+  const runnerFor = deps.runnerFor ?? aiJobStepRunnerFor
+  return async (stepContext): Promise<AiJobStepOutcome> => {
+    const { job, now, signal, firestore, modelFor } = stepContext
     const hostId = job.hostId
     if (!hostId) throw new Error('a page job names no site, and its admission refuses one')
     // The switch's answer for this job, else the routing table's (AGL-2942).
     const model = modelFor?.('job.page') ?? aiModelForStep('job.page')
-    const plan = aiConfirmedPlan(job)
-    if (!plan) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_NO_PLAN_COPY }
+    const confirmed = aiConfirmedPlan(job)
+    if (!confirmed) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_NO_PLAN_COPY }
     // The resume door refuses such a plan at confirmation; one confirmed
     // before a site changed still stops here, before any spend.
-    const refusal = aiPagePlanRefusal(plan)
+    const refusal = aiPagePlanRefusal(confirmed)
     if (refusal) return { ...aiUnspentOutcome(model), failure: refusal }
+
+    // ── The creations first (AGL-3031): one a pass, by the steps that own them ──
+    const units = aiPageJobUnits(confirmed)
+    const outputs = job.outputs ?? []
+    const [unit] = aiSitePendingUnits(units, outputs)
+    if (unit) {
+      const runner = runnerFor(unit.jobKind)
+      if (!runner) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_CREATION_UNAVAILABLE_COPY }
+      const pass = await aiRunJobUnit(stepContext, {
+        unit,
+        units,
+        runner,
+        emptyCopy: AI_JOB_PAGE_CREATION_EMPTY_COPY,
+      })
+      // A built creation is followed by the next, or by the page's first section.
+      return pass.built ? { ...pass.outcome, continue: true } : pass.outcome
+    }
+    // The page's plan with every creation resolved to the record it built, as
+    // a scaffold's page is planned against what the scaffold built.
+    const plan: AiJobPlan = units.length
+      ? (aiSiteUnitJob(
+          job,
+          {
+            kind: 'page',
+            jobKind: 'page',
+            resource: 'screen',
+            slot: 'page',
+            screen: confirmed.screens[0],
+            label: confirmed.screens[0].title,
+          },
+          aiSiteBuiltRefs(units, outputs),
+        ).plan as AiJobPlan)
+      : confirmed
     const screen = plan.screens[0] as AiBuildPlanScreen
     const name = screen.title || AI_JOB_PAGE_DEFAULT_NAME
     const slug = aiPageDraftSlug(screen)
@@ -385,10 +502,12 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
 export const runAiJobPageStep = createAiJobPageStep()
 
 /**
- * Registers the page step with the least time one pass of it needs, and the
- * check a page job passes when it is created or its plan is confirmed.
+ * Registers the page step with the least time one pass of it needs, the
+ * passes a page with its creations may take, and the check a page job passes
+ * when it is created or its plan is confirmed.
  */
 export function registerAiPageJob(): void {
   registerAiJobStep('page', runAiJobPageStep, { minimumMs: AI_JOB_PAGE_STEP_MINIMUM_MS })
+  registerAiJobStepPasses('page', AI_JOB_PAGE_MAX_PASSES)
   registerAiJobAdmission('page', aiPageJobAdmission)
 }

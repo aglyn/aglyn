@@ -30,15 +30,17 @@ of page it is. Then choose **Plan the page**.
 ## Review the plan
 
 The job proposes a [plan](../../ai/how-aglyn-ai-builds.md#the-plan-comes-first) before it
-builds anything: the layout the page renders in, the components and forms it places, the
-page's address and search title, and its sections from top to bottom. Open **AI jobs** in the
-Assist panel to read it, then choose **Confirm plan** to build it, or cancel.
+builds anything: the layout the page renders in, the components and forms it places, anything
+it needs to create first, the page's address and search title, and its sections from top to
+bottom. Open **AI jobs** in the Assist panel to read it, with what the whole job is estimated to
+use, then choose **Confirm plan** to build it, or cancel.
 
-A page job builds one page from what your site already has. A plan only proposes what your
-workspace can create, and a plan the job could not build is not offered for confirmation: when
-it would need something the site does not have yet, such as a new component or form, the job
-stops before you confirm anything and tells you what to create first and where. Create it,
-then describe the page again.
+When the page needs something your site does not have yet, such as a layout, a reusable
+component for cards that repeat, or a form, the plan lists it, and confirming builds it first,
+in the same job, before the page that uses it. A plan only proposes what your workspace can
+create: what your plan includes and what your site has room for. Something a page job does not
+build, such as a page template or a dataset, is not offered for confirmation: the job stops
+before you confirm anything and tells you what to create first and where.
 
 On a plan without reusable components or saved forms, such as Free, the page is built from
 what that plan can make: a block that repeats, such as a row of service cards, is built into
@@ -47,8 +49,10 @@ into your inbox like any form.
 
 ## How the page is built
 
-The job builds the page one section at a time, top to bottom, in the background, so you can
-leave the Screens page while it works. Each section is checked against
+The job first builds anything the plan creates, one at a time: a layout, a form or a reusable
+component, each as a draft, the same way a layout, form or component job builds one. Then it
+builds the page one section at a time, top to bottom, in the background, so you can leave the
+Screens page while it works. Each section is checked against
 [the building rules](../../ai/how-aglyn-ai-builds.md) as part of the whole page: one top-level
 heading and headings in order, your theme's colors, spacing and type, and your components
 placed as instances instead of copied.
@@ -71,6 +75,10 @@ opens it in the Besigner.
   a search title and a search description written from the page's own text.
 - **Navigation is yours to add.** When the brief calls for a navigation entry, the job
   suggests its label and address. Add it to your menu once the page is live.
+- **What it created is a draft too.** A layout, form or component the job built first is in
+  **Layouts**, **Forms** or **Components**, and **AI jobs** links to each. The page renders in
+  the new layout and places the new component and form; nothing else on your site uses them
+  until you do.
 - **It counts like a screen you create.** The draft counts against your plan's screen
   allowance. When the site has no screen to spare, the job says so before it spends anything.
 

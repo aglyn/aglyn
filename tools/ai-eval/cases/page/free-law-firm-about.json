@@ -7,7 +7,7 @@
     "reusableComponents": false,
     "create": {
       "component": { "allowed": false, "left": 0, "reason": "this workspace's plan does not include reusable components" },
-      "layout": { "allowed": false, "left": 0, "reason": "this site already holds the 1 shared layout its plan includes" },
+      "layout": { "allowed": true, "left": 1, "reason": null },
       "template": { "allowed": true, "left": 10, "reason": null },
       "form": { "allowed": false, "left": 0, "reason": "this workspace's plan does not include saved forms" },
       "dataset": { "allowed": false, "left": 0, "reason": "this workspace's plan does not include datasets" }
@@ -16,17 +16,17 @@
   "inventory": {
     "hostId": "host-brightwater-law",
     "components": [],
-    "layouts": [{ "id": "lay-site", "name": "Site layout", "parentId": null }],
+    "layouts": [],
     "templates": [],
     "forms": [],
     "datasets": [],
     "collections": [],
-    "screens": [{ "id": "scr-home", "name": "Home", "slug": "/", "layoutId": "lay-site", "template": false }],
+    "screens": [{ "id": "scr-home", "name": "Home", "slug": "/", "layoutId": null, "template": false }],
     "theme": { "summary": ["Light scheme with the theme’s default type"], "colors": { "primary.main": "#1f5fa8", "secondary.main": "#c2410c" }, "fonts": ["Inter"] },
     "truncated": []
   },
   "expected": {
-    "plan": { "screens": [1, 1], "reuse": ["lay-site"], "layout": "lay-site", "maxCreate": 0, "createKinds": [] }
+    "plan": { "screens": [1, 1], "maxCreate": 1, "createKinds": ["layout"] }
   },
   "candidates": [
     {
@@ -34,17 +34,17 @@
       "step": null,
       "model": null,
       "effort": null,
-      "note": "A reference answer written by hand for a Free workspace, which keeps no reusable components or saved forms: the four practice areas drawn where they repeat, and the consultation request carried by the page as a Form holding its fields.",
+      "note": "A reference answer written by hand for a Free workspace, which keeps no reusable components or saved forms, on a site with no layout yet: the one layout the Free plan includes is created, the four practice areas drawn where they repeat, and the consultation request carried by the page as a Form holding its fields.",
       "plan": {
-        "reuse": [
-          { "kind": "layout", "id": "lay-site", "purpose": "the page renders inside it" }
+        "reuse": [],
+        "create": [
+          { "kind": "layout", "name": "Site layout", "why": "The site has no layout yet, so its pages would otherwise carry their own header and footer.", "duplicateOf": null, "fields": [] }
         ],
-        "create": [],
         "screens": [
           {
             "title": "About Brightwater Law",
             "slug": "/about",
-            "layout": "lay-site",
+            "layout": "new:Site layout",
             "template": null,
             "duplicateOf": null,
             "nav": true,
@@ -156,9 +156,7 @@
     {
       "why": "A plan that creates a component and a saved form the workspace's plan does not include (rule 7).",
       "plan": {
-        "reuse": [
-          { "kind": "layout", "id": "lay-site", "purpose": "the page renders inside it" }
-        ],
+        "reuse": [],
         "create": [
           { "kind": "component", "name": "Practice area card", "why": "Four practice areas share one card.", "duplicateOf": null, "fields": ["title:text", "summary:text"] },
           { "kind": "form", "name": "Consultation request", "why": "The site has no form to request a consultation.", "duplicateOf": null, "fields": ["name", "email", "phone", "matter"] }
@@ -167,7 +165,7 @@
           {
             "title": "About Brightwater Law",
             "slug": "/about",
-            "layout": "lay-site",
+            "layout": "new:Site layout",
             "template": null,
             "duplicateOf": null,
             "nav": true,

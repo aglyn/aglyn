@@ -31,6 +31,8 @@
  * nothing. It never runs in production: nothing a deployment loads imports it.
  */
 
+import type { AiSiteInventory } from '../model/ai-site-inventory'
+
 type Data = Record<string, unknown>
 
 function valueAt(data: unknown, path: string): unknown {
@@ -132,4 +134,58 @@ export function aiEvalMemoryFirestore(seed: Record<string, Data> = {}): AiEvalMe
     },
   }
   return { firestore: firestore as unknown as FirebaseFirestore.Firestore, docs }
+}
+
+/**
+ * A site's inventory as the reader would list it from the documents in
+ * memory (AGL-3031): the case's own rows, and every layout, form and
+ * component a job has written there since. A page job builds its creations
+ * before its page, and the page is held to placing them, so the inventory it
+ * reads has to change as the job builds — as the real reader's does.
+ */
+export function aiEvalMemoryInventory(base: AiSiteInventory, docs: ReadonlyMap<string, Data>): AiSiteInventory {
+  const rows = (collection: string) =>
+    [...docs.entries()]
+      .filter(([path]) => path.startsWith(`hosts/${base.hostId}/${collection}/`) && path.split('/').length === 4)
+      .map(([path, data]) => ({ id: path.split('/')[3], data }))
+      .filter(({ data }) => data['deletedAt'] == null)
+  const listed = (ids: readonly { id: string }[]) => new Set(ids.map((row) => row.id))
+  const layouts = listed(base.layouts)
+  const components = listed(base.components)
+  const forms = listed(base.forms)
+  return {
+    ...base,
+    layouts: [
+      ...base.layouts,
+      ...rows('layouts')
+        .filter(({ id }) => !layouts.has(id))
+        .map(({ id, data }) => ({ id, name: String(data['displayName'] ?? id), parentId: null })),
+    ],
+    components: [
+      ...base.components,
+      ...rows('components')
+        .filter(({ id, data }) => !components.has(id) && Boolean(data['rootId'] || data['versionId']))
+        .map(({ id, data }) => ({
+          id,
+          name: String(data['displayName'] ?? id),
+          props: Object.fromEntries(
+            ((data['props'] as Array<{ name?: string; type?: string }> | undefined) ?? [])
+              .filter((prop) => typeof prop.name === 'string' && prop.name)
+              .map((prop) => [prop.name as string, prop.type || 'text']),
+          ),
+        })),
+    ],
+    forms: [
+      ...base.forms,
+      ...rows('forms')
+        .filter(({ id }) => !forms.has(id))
+        .map(({ id, data }) => ({
+          id,
+          name: String(data['displayName'] ?? id),
+          fields: ((data['fields'] as Array<{ fieldName?: string }> | undefined) ?? [])
+            .map((field) => field.fieldName ?? '')
+            .filter(Boolean),
+        })),
+    ],
+  }
 }

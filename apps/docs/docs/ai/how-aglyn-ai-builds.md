@@ -29,7 +29,8 @@ Before it generates anything, a build job proposes a **plan**:
 
 A plan only proposes what your workspace can create: what your plan includes, and what
 your site still has room for. A plan the job could not build is stopped before you are
-asked to confirm it, with the reason.
+asked to confirm it, with the reason. What a page's plan creates, such as its layout, a
+card that repeats or its form, is built first when you confirm, in the same job.
 
 The job then waits for you. Open **AI jobs** in the Assist panel, read the plan,
 and choose **Confirm plan** to build it, or **Cancel** to stop. Nothing is

@@ -38,9 +38,11 @@
  *    doctrine, which a paid workspace keeps, refuses the same plan and page;
  *  - THE ARITHMETIC: the plan at the tokens measured live on a Free workspace,
  *    grown with the prompt as it grows now, plus every section pass at its
- *    answer ceiling, plus the listing, fits the Free taste — and the
- *    developer notes quote the figure. A doctrine or plan change that pushes
- *    a Free page past the wall is red here;
+ *    answer ceiling, plus the listing, fits the Free taste — and so does the
+ *    same page on a site with no layout yet, whose job builds the one layout
+ *    the Free plan includes first (AGL-3031), at the layout generation
+ *    measured live. The developer notes quote both figures. A doctrine or
+ *    plan change that pushes a Free page past the wall is red here;
  *  - a recording of the Free-shaped eval brief, when a live run has left one
  *    (`AI_EVAL_LIVE=1 AI_EVAL_CASES=page-free-law-firm-about npm run
  *    eval:ai-live`), fits the wall at the credits it actually metered.
@@ -93,6 +95,9 @@ import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
+import { aiDoctrineSystemBlocks, aiDoctrineTreeTool } from '../runtime/ai-doctrine'
+import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
+import { AI_JOB_LAYOUT_INSTRUCTIONS } from './ai-job-layout-step'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { aiPlanCapabilitiesForJob, aiPlanCapabilityLines } from '../model/ai-plan-capabilities'
 import { AI_MODEL_CATALOG, AI_STEP_TIERS, estimateAiBilledUsd } from '../providers/catalog'
@@ -121,6 +126,7 @@ const modelOf = (kind: keyof typeof AI_STEP_TIERS): string =>
 const PAGE_MODEL = modelOf('job.page')
 const PLAN_MODEL = modelOf('job.plan')
 const SEO_MODEL = modelOf('job.seo')
+const LAYOUT_MODEL = modelOf('job.layout')
 
 /** The Free workspace's capabilities on the fixture's site: its one layout already there. */
 const FREE = aiPlanCapabilitiesFrom(FREE_ORG, {
@@ -378,6 +384,10 @@ interface FreePageArithmetic {
   total: number
   /** The most sections a Free page fits at every pass's answer ceiling. */
   sectionsWithin: number
+  /** The one layout a Free plan includes, built first on a site with none (AGL-3031). */
+  layout: number
+  totalWithLayout: number
+  sectionsWithinWithLayout: number
 }
 
 function arithmetic(result: FreeReplay): FreePageArithmetic {
@@ -417,7 +427,37 @@ function arithmetic(result: FreeReplay): FreePageArithmetic {
   const total = planCredits + passes.reduce((sum, credits) => sum + credits, 0) + listing
   const later = Math.max(...passes.slice(1))
   const sectionsWithin = 1 + Math.floor((FREE_AI_TASTE_CREDITS_PER_MONTH - planCredits - passes[0] - listing) / later)
-  return { plan: planCredits, passes, listing, total, sectionsWithin }
+  // The layout the page job builds first on a site with none, at the layout
+  // generation measured live, its cached prefix grown as the layout step's
+  // request has grown since: the doctrine, its instructions, the layout
+  // palette and the tools, as the ledger measures that request.
+  const layoutPrefixChars =
+    textOf(
+      aiDoctrineSystemBlocks(FIXTURE.inventory, { instructions: AI_JOB_LAYOUT_INSTRUCTIONS, surface: 'layout' }).filter(
+        (block) => !block.volatile,
+      ),
+    ) + JSON.stringify([aiDoctrineTreeTool('layout'), aiInventoryLookupTool()]).length
+  const layoutPrefix = Math.max(
+    Math.ceil(MEASURED.layout.usage.cacheReadTokens * (layoutPrefixChars / 4 / MEASURED.layout.ledgerPrefixTokens)),
+    realTokens(layoutPrefixChars),
+  )
+  const layout = creditsOf(
+    { ...MEASURED.layout.usage, cacheReadTokens: layoutPrefix, cacheWriteTokens: layoutPrefix },
+    LAYOUT_MODEL,
+  )
+  const totalWithLayout = total + layout
+  const sectionsWithinWithLayout =
+    1 + Math.floor((FREE_AI_TASTE_CREDITS_PER_MONTH - planCredits - layout - passes[0] - listing) / later)
+  return {
+    plan: planCredits,
+    passes,
+    listing,
+    total,
+    sectionsWithin,
+    layout,
+    totalWithLayout,
+    sectionsWithinWithLayout,
+  }
 }
 
 describe('one Free page fits the Free taste, end to end', () => {
@@ -444,6 +484,20 @@ describe('one Free page fits the Free taste, end to end', () => {
       figures.sectionsWithin,
       true,
     ])
+  })
+
+  it('fits the same page on a site with no layout yet, whose job builds the one layout the Free plan includes first (AGL-3031)', async () => {
+    const figures = arithmetic(await replay())
+    expect(LAYOUT_MODEL).toBe(MEASURED.model)
+    expect(figures.totalWithLayout).toBeLessThanOrEqual(FREE_AI_TASTE_CREDITS_PER_MONTH)
+    expect(FREE_AI_TASTE_CREDITS_PER_MONTH - figures.totalWithLayout).toBeGreaterThan(Math.max(...figures.passes))
+    expect(figures.sectionsWithinWithLayout).toBeGreaterThanOrEqual(FIXTURE.answers.length)
+    const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
+    expect([
+      figures.totalWithLayout,
+      notes.includes(`creates its layout first comes to at most ${figures.totalWithLayout} credits`),
+      notes.includes(`fits ${figures.sectionsWithinWithLayout} sections with its layout`),
+    ]).toEqual([figures.totalWithLayout, true, true])
   })
 
   it('fits the wall at the credits a live recording of the Free brief metered, when one has been recorded', () => {

@@ -22,6 +22,7 @@ import {
   type AiBuildPlan,
   type AiBuildPlanCreateKind,
 } from './ai-build-plan'
+import { AI_PAGE_CREATE_KINDS } from './ai-page-job'
 
 /**
  * What a site scaffold is (AGL-2911): the inputs a `site` job is admitted
@@ -258,22 +259,25 @@ export function aiSitePlanRefusal(plan: AiBuildPlan): string | null {
   return `This site needs what the workspace does not have yet. Create ${listed}, then describe the site again.`
 }
 
+/** What the estimate counts a plan in: whether a welcome email follows, and the creations the job builds. */
+export interface AiPlanPassOptions {
+  welcomeEmail?: boolean
+  /** The creation kinds the job builds itself; a scaffold's when absent. */
+  creates?: readonly AiBuildPlanCreateKind[]
+}
+
 /**
  * The passes a plan implies: one per section of every screen, one more per
  * screen for its search listing and its draft, and one for each thing the
- * plan creates. What the estimate is counted in.
+ * plan creates that the job builds. What the estimate is counted in.
  */
-export function aiPlanPasses(
-  plan: AiBuildPlan,
-  options: { welcomeEmail?: boolean } = {},
-): number {
+export function aiPlanPasses(plan: AiBuildPlan, options: AiPlanPassOptions = {}): number {
   const screens = plan.screens.reduce(
     (total, screen) => total + screen.sections.length + 1,
     0,
   )
-  const creations = plan.create.filter((entry) =>
-    AI_SITE_CREATE_KINDS.includes(entry.kind),
-  ).length
+  const creates = options.creates ?? AI_SITE_CREATE_KINDS
+  const creations = plan.create.filter((entry) => creates.includes(entry.kind)).length
   return screens + creations + (options.welcomeEmail ? 1 : 0)
 }
 
@@ -283,11 +287,18 @@ export function aiPlanPasses(
  * What each pass actually costs is its model's tokens, recorded on the job
  * as it runs.
  */
-export function aiPlanCreditEstimate(
-  plan: AiBuildPlan,
-  options: { welcomeEmail?: boolean } = {},
-): number {
+export function aiPlanCreditEstimate(plan: AiBuildPlan, options: AiPlanPassOptions = {}): number {
   return aiPlanPasses(plan, options) * AI_SITE_PASS_CREDITS
+}
+
+/**
+ * About what a job of this kind costs to build from its plan (AGL-3031): a
+ * page job counts the layout, forms and components it builds before its
+ * page, and every other kind counts what a scaffold would. The figure the
+ * proposal shows beside Confirm, and the hold a confirmation takes.
+ */
+export function aiJobPlanCreditEstimate(kind: string, plan: AiBuildPlan): number {
+  return aiPlanCreditEstimate(plan, kind === 'page' ? { creates: AI_PAGE_CREATE_KINDS } : {})
 }
 
 /**

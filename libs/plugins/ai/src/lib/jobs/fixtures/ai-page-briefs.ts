@@ -873,3 +873,135 @@ export const AI_FREE_PAGE_FIXTURE: AiPageBriefFixture = brief({
     }),
   ],
 })
+
+/**
+ * A page brief whose plan creates what its site lacks (AGL-3031): a layout, a
+ * reusable component and a saved form, on a Starter site that has none of
+ * them. The page job builds all three first — each through the step that
+ * builds its kind, answering with the golden that step's own spec holds —
+ * and then the page, which places the component and binds the form by the
+ * ids the job built them under, and renders inside the layout.
+ *
+ * Those ids are the job's own with each creation's place in the plan, so the
+ * section answers name them: the component is `<jobId>-c0`, the layout
+ * `<jobId>-c1` and the form `<jobId>-c2`.
+ */
+export interface AiPageCreationFixture extends AiPageBriefFixture {
+  /** The job the page is built under, which every creation's id derives from. */
+  jobId: string
+  /** The layout step's golden answer: a header of screen links, the slot and a footer. */
+  layout: AiGoldenSection
+  /** The component step's golden, by its file under `jobs/goldens`. */
+  componentGolden: string
+  /** The form step's golden, by its key in `fixtures/ai-job-form-goldens.json`. */
+  formGolden: string
+}
+
+const CREATION_JOB = 'job-golden-creations'
+
+export const AI_PAGE_CREATION_FIXTURE: AiPageCreationFixture = (() => {
+  const component = `${CREATION_JOB}-c0`
+  const form = `${CREATION_JOB}-c2`
+  const opener = hero('a', {
+    title: 'Roof repair in Harbor County',
+    lead: 'A local crew that finds the leak, fixes it the same week and sends you photos of the work.',
+    cta: { label: 'Meet the crew', screenId: 'scr-about' },
+  })
+  const quotes = section('b', 'customer words', ['new:Testimonial card'], 3, (add) => {
+    const instances = [
+      { quote: 'They found the leak two other companies missed.', name: '[customer name]', role: 'Homeowner, Harbor Point' },
+      { quote: 'On time, tidy, and the photos made the invoice easy to trust.', name: '[customer name]', role: 'Homeowner, Old Mill Road' },
+      { quote: 'The same crew came back to check the repair after the first storm.', name: '[customer name]', role: 'Homeowner, Bayside' },
+    ].map((propValues) => add({ componentId: 'reusableInstance', props: { refId: component, propValues } }))
+    return framed(
+      add,
+      [add(typography('h2', 'What homeowners say', 'h2')), add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: instances })],
+      'lg',
+      8,
+    )
+  })
+  const request = section('c', 'quote request form', ['new:Roof quote request'], 0, (add) =>
+    framed(
+      add,
+      [
+        add(typography('h2', 'Request a quote', 'h2')),
+        add(typography('body1', 'Tell us about the roof. We call back within one business day.')),
+        add({ componentId: 'form', props: { formId: form } }),
+      ],
+      'sm',
+      8,
+    ),
+  )
+  const seo = {
+    title: 'Roof Repair in Harbor County',
+    description: 'Same-week roof repair from a local crew, with photos of every fix and a callback within one business day.',
+  }
+  return {
+    id: 'agency-roofing-creations',
+    icp: 'agency',
+    pageType: 'service',
+    brief: 'A roof repair page for Harbor Roofing: what we fix, three things customers have said, and a form to request a quote. The site is new and has no layout, cards or forms yet.',
+    inventory: site('host-harbor-new', {
+      layouts: [],
+      screens: [{ id: 'scr-about', name: 'About', slug: 'about', layoutId: null, template: false }],
+    }),
+    plan: {
+      reuse: [{ kind: 'screen', id: 'scr-about', purpose: 'linked from the hero' }],
+      create: [
+        {
+          kind: 'component',
+          name: 'Testimonial card',
+          why: 'Three quotes share one card, and the site has no card yet.',
+          duplicateOf: null,
+          fields: ['quote:richText', 'name:text', 'role:text', 'photo:image'],
+        },
+        {
+          kind: 'layout',
+          name: 'Harbor Roofing site',
+          why: 'The site has no layout, so every page would otherwise carry its own header and footer.',
+          duplicateOf: null,
+          fields: [],
+        },
+        {
+          kind: 'form',
+          name: 'Roof quote request',
+          why: 'The site has no form to request a quote.',
+          duplicateOf: null,
+          fields: [],
+        },
+      ],
+      screens: [
+        {
+          title: 'Roof repair',
+          slug: '/roof-repair',
+          layout: 'new:Harbor Roofing site',
+          template: null,
+          duplicateOf: null,
+          nav: true,
+          seoTitle: seo.title,
+          seoDescription: seo.description,
+          sections: [opener.section, quotes.section, request.section],
+        },
+      ],
+    },
+    answers: [opener.answer, quotes.answer, request.answer],
+    seo,
+    jobId: CREATION_JOB,
+    layout: {
+      rootId: 'root',
+      nodes: {
+        root: { componentId: 'div', nodes: ['header', 'slot', 'footer'] },
+        header: { componentId: 'muiAppBar', props: { position: 'static', color: 'default' }, nodes: ['bar'] },
+        bar: { componentId: 'muiToolbar', nodes: ['brand', 'home', 'about'] },
+        brand: { componentId: 'muiTypography', props: { variant: 'h6', component: 'p', children: 'Harbor Roofing' } },
+        home: { componentId: 'muiScreenLink', props: { screenId: 'scr-home', children: 'Home' } },
+        about: { componentId: 'muiScreenLink', props: { screenId: 'scr-about', children: 'About' } },
+        slot: { componentId: 'layoutSlot' },
+        footer: { componentId: 'section', props: { element: 'footer' }, nodes: ['tagline'] },
+        tagline: { componentId: 'muiTypography', props: { variant: 'body2', children: 'Family-run roofers in Harbor County since 1998.' } },
+      },
+    },
+    componentGolden: 'component-testimonial-card',
+    formGolden: 'roofingQuote',
+  }
+})()
