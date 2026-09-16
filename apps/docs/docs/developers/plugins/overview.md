@@ -174,6 +174,12 @@ installing.
   whether the site serves `/signin`, `/signup` and `/recover` — and a sign-in page on a
   marketing site is worse than a missing one. See
   [Member accounts](../../guides/member-accounts.md) for what the switch does.
+- **AI** has a site switch and no workspace switch. It is on for every workspace, because
+  the AI add-on, credits, allotments and overage billing belong to the workspace rather
+  than to any site. A site can switch AI off for itself on its **Admin → Plugins** page:
+  that hides AI on the site, refuses every AI request made for it and stops its queued
+  jobs without spending credits, while the workspace's AI keeps running. See
+  [Switch AI off for one site](../../marketing-and-automation/ai-assist/overview.md#switch-ai-off-for-one-site).
 
 ## When one plugin depends on another
 

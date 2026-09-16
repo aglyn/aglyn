@@ -134,6 +134,30 @@ export function useEnabledPluginIds(): string[] {
 }
 
 /**
+ * The workspace's effective plugin ids WITHOUT the per-site narrowing
+ * (AGL-3028) — for what wraps every console page rather than what a page
+ * draws.
+ *
+ * Providers are nested around the whole route tree, so the list of them is
+ * part of the tree's SHAPE: a provider present on one page and absent on the
+ * next unmounts and remounts everything beneath it, the app bar and every
+ * open listener included. Narrowed per site, that would happen on every
+ * crossing between a site that switched a plugin off and one that did not —
+ * and on every load of such a site, as its host document lands after the
+ * first render. So providers are listed against the workspace, and each is
+ * handed the site's narrowed set to decide what it opens there.
+ */
+export function useWorkspacePluginIds(): string[] {
+  const { enabledKey } = useEffectiveEnabledPlugins()
+  // The same no-workspace-no-plugins rule as `useEnabledPluginIds` (AGL-2486).
+  const namedOrg = useUrlNamedOrg()
+  return useMemo(
+    () => (namedOrg ? enabledKey.split(',').filter(Boolean) : []),
+    [enabledKey, namedOrg],
+  )
+}
+
+/**
  * Dynamic console-plugin activation (AGL-417), replacing the static
  * register-console-plugins composition root: once the org workspace
  * resolves, load + register its enabled plugins' ConsoleExtensions, THEN
@@ -154,6 +178,7 @@ export default function ConsolePluginsGate({
   const [readyForOrg, setReadyForOrg] = useState<string | null>(null)
   const { flagsReady, enabledKey } = useEffectiveEnabledPlugins()
   const enabledPluginIds = useEnabledPluginIds()
+  const workspacePluginIds = useWorkspacePluginIds()
   // The reader's plugin permissions on the site in view (AGL-2927,
   // AGL-2984), resolved ONCE here for every provider rather than by each — a
   // plugin package cannot reach the console's permission context, and a
@@ -262,7 +287,12 @@ export default function ConsolePluginsGate({
   // every load. A provider's entitlement gate therefore has to be told the
   // difference between "not on your plan" and "no answer yet", because an
   // undefined `org` checks as the free tier either way.
-  return listConsoleProviders(enabledPluginIds).reduce<ReactNode>(
+  //
+  // Listed against the WORKSPACE, and handed the SITE's set (AGL-3028): see
+  // `useWorkspacePluginIds` for why a per-site list would remount the tree.
+  // A provider whose plugin a site switched off stays mounted there and opens
+  // nothing — `enabledPluginIds` is how it knows.
+  return listConsoleProviders(workspacePluginIds).reduce<ReactNode>(
     (inner, Provider, index) => (
       <Provider
         key={index}
@@ -271,6 +301,7 @@ export default function ConsolePluginsGate({
         orgId={orgId}
         hostId={hostId}
         permissionsOnHost={permissionsOnHost}
+        enabledPluginIds={enabledPluginIds}
       >
         {inner}
       </Provider>

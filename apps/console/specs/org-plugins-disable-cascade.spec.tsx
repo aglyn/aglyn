@@ -174,8 +174,8 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
     await waitFor(() => expect(savedSet()).not.toBeNull())
     expect(continueButton()).toBeUndefined()
     // `forms` and `ai` ride every save the way `mui` does: all three are
-    // always-on, so `resolveEnabledPlugins` unions them in before the toggle
-    // subtracts.
+    // locked on for the workspace, so `resolveEnabledPlugins` unions them in
+    // before the toggle subtracts. A site switches AI off for itself.
     expect(savedSet()).toEqual(['mui', 'forms', 'ai', 'commerce'])
   })
 

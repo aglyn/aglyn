@@ -681,7 +681,7 @@ export const DOCS_HELP_ANCHORS = {
   addSearch: ['#steps', '#tips', '#related'],
   aglynAssist: ['#what-it-can-do', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#edits-in-the-besigner', '#where-an-answer-came-from', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
   aiAllotments: ['#allotments', '#hard-or-soft', '#the-pool-comes-first', '#limiting-models', '#who-can-set-them', '#usage-strip', '#choosing-a-model', '#related'],
-  aiAssist: ['#copy-assist', '#ai-generate-section', '#who-can-use-it', '#limits', '#related'],
+  aiAssist: ['#copy-assist', '#ai-generate-section', '#who-can-use-it', '#limits', '#switch-ai-off-for-one-site', '#related'],
   aiMonitoring: ['#the-ai-card', '#where-else', '#one-account', '#the-spend-leaderboard', '#alerts', '#related'],
   analytics: ['#pageview-tracking', '#visitors-approximate', '#traffic-card', '#traffic-delta', '#insights', '#campaign-tracking-utm', '#per-screen-traffic', '#dwell-time', '#google-analytics', '#related'],
   animations: ['#add-an-animation', '#presets', '#plays', '#duration-and-delay', '#easing', '#stagger-children', '#replay-each-time', '#animations-do-not-play-on-the-canvas', '#accessibility', '#speed-and-layout', '#if-a-visitor-has-javascript-turned-off'],

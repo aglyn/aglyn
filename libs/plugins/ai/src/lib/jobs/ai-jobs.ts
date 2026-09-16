@@ -47,6 +47,7 @@ import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { aiOverageReservationRefusal } from '../billing/ai-overage-gate'
 import { aiAllotmentRefusalText } from '../model/ai-allotments'
 import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
+import { AI_OFF_FOR_SITE_COPY, isAiOffForSite } from '../model/ai-site-switch'
 import { resolveAiModelChoice } from '../providers/model-choice'
 import { aiOutputTargetType } from '../activity/ai-activity-actions'
 import {
@@ -1222,6 +1223,21 @@ export async function runAiJobStep(
     options.org ??
     (((await firestore.collection('orgs').doc(orgId).get()).data() ??
       {}) as Partial<AglynOrgBilling>)
+
+  // A site that switched AI off runs none of its jobs (AGL-3028), queued
+  // before the switch or not. Asked before the reservation, so the job fails
+  // in words a member can act on and nothing is reserved, run or metered.
+  if (await isAiOffForSite(firestore, org, job.hostId)) {
+    await releaseHeld()
+    return {
+      outcome: 'failed',
+      job: await failAiJob(firestore, orgId, jobId, AI_OFF_FOR_SITE_COPY, {
+        stepIndex,
+        error: `ai is switched off for site ${job.hostId}`,
+      }, now),
+    }
+  }
+
   const entitled =
     checkEntitlement(org, 'aiAssist') || checkEntitlement(org, 'aiGenerative')
 

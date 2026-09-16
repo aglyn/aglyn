@@ -25,7 +25,7 @@ import {
   getOrgForUser,
   memberHasPermissionOnHost,
 } from '@aglyn/tenant-data-admin/server/organizations'
-import { aiJobAdmissionRefusal } from '../jobs/ai-job-admission'
+import { aiJobAdmissionRefusal, aiJobSiteRefusal } from '../jobs/ai-job-admission'
 import { AI_JOB_BRIEF_MAX_CHARS } from '../jobs/ai-job-text-step'
 import { aiJobSummary, createAiJob } from '../jobs/ai-jobs'
 import {
@@ -263,13 +263,22 @@ export async function POST(request: Request): Promise<Response> {
     // site being this org's, and a step that can build its pages.
     let refusal: Awaited<ReturnType<typeof aiJobAdmissionRefusal>>
     try {
-      refusal = await aiJobAdmissionRefusal('site', {
-        firestore: gate.firestore,
-        orgId: gate.orgId,
-        hostId: site.hostId,
-        inputs,
-        org: gate.org,
-      })
+      // A site that switched AI off is refused on its own (AGL-3028): the
+      // dispatcher cannot see a site named inside `sites[]`, and the rest of
+      // the batch still starts.
+      refusal =
+        (await aiJobSiteRefusal({
+          firestore: gate.firestore,
+          org: gate.org,
+          hostId: site.hostId,
+        })) ??
+        (await aiJobAdmissionRefusal('site', {
+          firestore: gate.firestore,
+          orgId: gate.orgId,
+          hostId: site.hostId,
+          inputs,
+          org: gate.org,
+        }))
     } catch (error) {
       console.error('ai site batch admission failed', {
         orgId: gate.orgId,

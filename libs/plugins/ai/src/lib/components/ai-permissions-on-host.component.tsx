@@ -17,6 +17,7 @@
 'use client'
 
 import { useMemo, type ComponentProps } from 'react'
+import { AI_PLUGIN_ID } from '../constants'
 import { aiPermissionsOf } from '../model/ai-permissions'
 import { AiAssistProvider } from './ai-assist-provider.component'
 import { AssistPanelComponent } from './assist-panel.component'
@@ -61,13 +62,36 @@ export function useAiPermissionsOnHost(
 
 type ProviderProps = Omit<ComponentProps<typeof AiAssistProvider>, 'aiPermissions'> & {
   permissionsOnHost?: ShellPermissionsOnHost
+  /**
+   * The plugins that run on the site in view, as the shell resolved them
+   * (AGL-3028). Absent where the shell hands none, which reads as no site
+   * narrowing at all.
+   */
+  enabledPluginIds?: readonly string[]
 }
 
-/** The besigner copy assistant's provider, holding on the shell's permission answer. */
+/**
+ * Every AI door closed, as a settled answer: what the provider holds on a site
+ * that switched AI off. One object, so the callbacks keyed on it are stable.
+ */
+const OFF_FOR_SITE: AiPermissionsAnswer = { loaded: true, use: false, generate: false }
+
+/**
+ * The besigner copy assistant's provider, holding on the shell's permission
+ * answer.
+ *
+ * On a site with AI switched off (AGL-3028) it stays MOUNTED — it wraps every
+ * console page, and a provider that came and went per site would remount the
+ * whole tree beneath it — and opens nothing: a settled refusal publishes no
+ * callback, so no control can reach its dialogs.
+ */
 export function AiAssistProviderOnHost(props: ProviderProps) {
-  const { permissionsOnHost, ...rest } = props
+  const { permissionsOnHost, enabledPluginIds, ...rest } = props
   const aiPermissions = useAiPermissionsOnHost(permissionsOnHost)
-  return <AiAssistProvider {...rest} aiPermissions={aiPermissions} />
+  const offForSite = Boolean(enabledPluginIds) && !enabledPluginIds?.includes(AI_PLUGIN_ID)
+  return (
+    <AiAssistProvider {...rest} aiPermissions={offForSite ? OFF_FOR_SITE : aiPermissions} />
+  )
 }
 AiAssistProviderOnHost.displayName = 'AiAssistProviderOnHost'
 

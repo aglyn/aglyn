@@ -20,6 +20,8 @@ import {
   canManageOrg,
   FIRST_PARTY_PLUGINS,
   isDefaultOffPerSite,
+  isLockedOnForSite,
+  isLockedOnForWorkspace,
   resolveDisableCascade,
   resolveEnabledPlugins,
   resolveHostEnabledPlugins,
@@ -213,10 +215,10 @@ export function useOrgPluginSwitchboard(
 
   return {
     isOn: (pluginId: string) => enabledSet.has(pluginId),
-    isLocked: (pluginId: string) =>
-      Boolean(
-        FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === pluginId)?.alwaysOn,
-      ),
+    // Locked for the base library AND for a plugin on for every workspace:
+    // `resolveEnabledPlugins` unions both back in, so a switch here would
+    // write a set that reads back unchanged.
+    isLocked: isLockedOnForWorkspace,
     requestToggle,
     ready,
     canWrite,
@@ -447,10 +449,9 @@ export function useSitePluginSwitchboard(
       enabledPlugins: state.optedIn,
     },
     isOn: (pluginId: string) => enabledSet.has(pluginId),
-    isLocked: (pluginId: string) =>
-      Boolean(
-        FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === pluginId)?.alwaysOn,
-      ),
+    // The base library alone: every other plugin the workspace runs — AI and
+    // Forms included — has a switch for one site.
+    isLocked: isLockedOnForSite,
     requestToggle,
     // The host doc's own staleness is what the seed guard covers; nothing
     // here claims a plan, so there is no unresolved-entitlement window to

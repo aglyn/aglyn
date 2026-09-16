@@ -511,6 +511,47 @@ describe('the gate ladder — every guard forced red once', () => {
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
+  it('404 when the page’s site switched AI off — nothing reserved, nothing spent (AGL-3028)', async () => {
+    // The site rides in `context`, where the plugin API dispatcher's per-site
+    // gate does not look, so the door asks the site itself.
+    seedOrgs()
+    mockDocs.set('hosts/host-1', { disabledPlugins: ['ai'] })
+    armUpstream()
+    const response = await POST(post(QUESTION_BODY(PRO_ORG)))
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({
+      error: 'AI is switched off for this site.',
+      reason: 'site-off',
+    })
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(mockDocs.has(`orgs/${PRO_ORG}/assistUsage/${MONTH}`)).toBe(false)
+  })
+
+  it('answers on a site whose document never switched AI off — on by default', async () => {
+    seedOrgs()
+    mockDocs.set('hosts/host-1', { disabledPlugins: ['commerce'], enabledPlugins: ['accounts'] })
+    armUpstream()
+    const response = await POST(post(QUESTION_BODY(PRO_ORG)))
+    expect(response.status).toBe(200)
+    await response.text()
+    expect(mockFetch).toHaveBeenCalled()
+  })
+
+  it('answers a workspace question asked off any site, whatever a site switched off', async () => {
+    seedOrgs()
+    mockDocs.set('hosts/host-1', { disabledPlugins: ['ai'] })
+    armUpstream()
+    const response = await POST(
+      post({
+        ...QUESTION_BODY(PRO_ORG),
+        context: { route: '/acme/settings', hostId: '', orgSlug: 'acme' },
+      }),
+    )
+    expect(response.status).toBe(200)
+    await response.text()
+    expect(mockFetch).toHaveBeenCalled()
+  })
+
   it('staff pass a released-off flag (preview)', async () => {
     seedOrgs()
     mockFlagOn = false

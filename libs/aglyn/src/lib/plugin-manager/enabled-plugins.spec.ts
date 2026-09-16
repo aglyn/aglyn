@@ -23,10 +23,14 @@ import {
   FIRST_PARTY_PLUGINS,
   filterPluginsByReleaseFlags,
   isFirstPartyPlugin,
+  isHostPluginEnabled,
+  isLockedOnForSite,
+  isLockedOnForWorkspace,
   isPluginEnabled,
   pluginForReleaseFlag,
   resolveEnabledPlugins,
   resolveHostEnabledPlugins,
+  resolvePluginSiteState,
   subtractDisabledPlugins,
 } from './enabled-plugins'
 
@@ -163,10 +167,115 @@ describe('resolveHostEnabledPlugins (AGL-1014)', () => {
   })
 })
 
+/**
+ * On for every workspace, switchable for one site (AGL-3028).
+ *
+ * The workspace half must never stop — AI's add-on, credits and overage
+ * billing carry no site — so the id is unioned into every org's set as the
+ * base library is. The site half is an ordinary deny-list entry, which is what
+ * makes "on by default" free: every host document written before the switch
+ * existed has no such entry, so nothing needs migrating and nothing turns off.
+ */
+describe('a plugin on for every workspace is switchable per site (AGL-3028)', () => {
+  const WORKSPACE_LOCKED = FIRST_PARTY_PLUGINS.filter(
+    (plugin) => plugin.alwaysOnForWorkspace,
+  ).map((plugin) => plugin.id)
+
+  it('is exactly the plugins whose workspace half carries no site', () => {
+    expect(WORKSPACE_LOCKED).toEqual(['ai'])
+  })
+
+  it('never also claims `alwaysOn`, which would make the site switch inert', () => {
+    for (const plugin of FIRST_PARTY_PLUGINS.filter((p) => p.alwaysOnForWorkspace)) {
+      expect(plugin.alwaysOn).toBeFalsy()
+    }
+  })
+
+  it.each(WORKSPACE_LOCKED)(
+    '%s survives a workspace list saved without it, including an empty one',
+    (id) => {
+      expect(resolveEnabledPlugins({ enabledPlugins: [] })).toContain(id)
+      expect(resolveEnabledPlugins({ enabledPlugins: ['mui', 'commerce'] })).toContain(id)
+      expect(isPluginEnabled({ enabledPlugins: ['commerce'] }, id)).toBe(true)
+    },
+  )
+
+  it.each(WORKSPACE_LOCKED)(
+    '%s is ON for a site whose document predates the switch',
+    (id) => {
+      // Every shape a stored host document can have today: none, no fields,
+      // empty lists, and lists that name OTHER plugins.
+      const org = { enabledPlugins: ['mui', 'commerce', 'bookings'] }
+      for (const host of [
+        undefined,
+        null,
+        {},
+        { disabledPlugins: [] },
+        { enabledPlugins: [] },
+        { disabledPlugins: ['commerce'], enabledPlugins: ['accounts'] },
+      ]) {
+        expect(isHostPluginEnabled(org, host, id)).toBe(true)
+        expect(resolvePluginSiteState(org, host, id)).toBe('runs-here')
+      }
+    },
+  )
+
+  it.each(WORKSPACE_LOCKED)('%s is OFF for a site that switched it off', (id) => {
+    const org = { enabledPlugins: ['mui', 'commerce'] }
+    const host = { disabledPlugins: [id] }
+    expect(isHostPluginEnabled(org, host, id)).toBe(false)
+    expect(resolveHostEnabledPlugins(org, host)).not.toContain(id)
+    expect(resolvePluginSiteState(org, host, id)).toBe('off-for-site')
+    // The workspace still runs it — only this site does not.
+    expect(isPluginEnabled(org, id)).toBe(true)
+  })
+
+  it.each(WORKSPACE_LOCKED)(
+    '%s switched off on one site stays on for its sibling sites',
+    (id) => {
+      const org = {}
+      expect(isHostPluginEnabled(org, { disabledPlugins: [id] }, id)).toBe(false)
+      expect(isHostPluginEnabled(org, { disabledPlugins: [] }, id)).toBe(true)
+    },
+  )
+
+  it('the base library still survives a per-site disable', () => {
+    expect(
+      resolveHostEnabledPlugins({}, { disabledPlugins: ['mui', ...WORKSPACE_LOCKED] }),
+    ).toContain('mui')
+    expect(resolvePluginSiteState({}, { disabledPlugins: ['mui'] }, 'mui')).toBe(
+      'always-on',
+    )
+  })
+
+  it('locks the WORKSPACE switch for both kinds and the SITE switch for the base library alone', () => {
+    expect(isLockedOnForWorkspace('mui')).toBe(true)
+    expect(isLockedOnForSite('mui')).toBe(true)
+    for (const id of WORKSPACE_LOCKED) {
+      expect(isLockedOnForWorkspace(id)).toBe(true)
+      expect(isLockedOnForSite(id)).toBe(false)
+    }
+    expect(isLockedOnForWorkspace('commerce')).toBe(false)
+    expect(isLockedOnForSite('commerce')).toBe(false)
+  })
+
+  it.each(WORKSPACE_LOCKED)(
+    '%s says what switching it off for a site stops and what it keeps',
+    (id) => {
+      const entry = FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === id)
+      expect(entry?.siteOff?.stops).toMatch(/\S/)
+      expect(entry?.siteOff?.keeps).toMatch(/\S/)
+    },
+  )
+})
+
 describe('filterPluginsByReleaseFlags (AGL-422)', () => {
   it('every non-always-on first-party plugin carries a REAL release flag', () => {
     for (const plugin of FIRST_PARTY_PLUGINS) {
-      if (plugin.alwaysOn) continue
+      // A plugin on for every workspace carries no flag either: its doors
+      // gate themselves, and a flag on the bundle would switch off the
+      // workspace half with the site half.
+      if (plugin.alwaysOn || plugin.alwaysOnForWorkspace) continue
       expect(plugin.releaseFlag).toBeDefined()
       expect(isReleaseFlagKey(String(plugin.releaseFlag))).toBe(true)
       expect(pluginForReleaseFlag(String(plugin.releaseFlag))?.id).toBe(
