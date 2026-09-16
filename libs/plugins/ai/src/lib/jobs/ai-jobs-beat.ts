@@ -51,6 +51,10 @@ import { AI_JOB_SWEEP_BUDGET_MS, sweepAiJobs, type SweepAiJobsResult } from './a
  * document — and does nothing while either is locked. A job it leaves
  * queued stays queued: its lease is not taken, so nothing expires and
  * nothing is lost, and the first beat after the lock lifts picks it up.
+ *
+ * The same switch paused for ONE workspace (AGL-3037) holds that workspace's
+ * jobs and no other's: `runAiJobStep` asks the verdict with the job's org
+ * before it claims a step, and leaves a paused workspace's job queued.
  */
 
 /** The beat's row in `SCHEDULED_JOBS`, and the mark it leaves for `/api/health/crons`. */
@@ -91,6 +95,7 @@ export async function runAiJobsBeat(): Promise<AiJobsBeatResult> {
   if (result.due) {
     console.info(
       `ai jobs: ${result.ran} step(s) run, ${result.skipped} skipped, ` +
+        `${result.paused} held by a workspace's AI pause, ` +
         `${result.remaining} left for the next beat` +
         (result.budgetExhausted ? ' (budget exhausted)' : ''),
     )

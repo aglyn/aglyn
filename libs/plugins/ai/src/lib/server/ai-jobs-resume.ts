@@ -171,6 +171,8 @@ export async function POST(
     org: gate.org,
     signal: AbortSignal.timeout(AI_JOB_INLINE_BUDGET_MS),
     actor: { uid: gate.uid, email: gate.decoded.email ?? null },
+    // The workspace's AI pause lets staff through, as the ladder above did.
+    staff: gate.staff,
   })
   if (run.outcome === 'not-claimable') {
     // The beat claimed the step between the resume and this run; it runs

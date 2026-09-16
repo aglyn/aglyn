@@ -1109,6 +1109,7 @@ describe('sweepAiJobs — the beat', () => {
       due: 3,
       ran: 2,
       skipped: 0,
+      paused: 0,
       remaining: 1,
       budgetExhausted: true,
     })
@@ -1662,7 +1663,7 @@ describe('a step that says how long it needs (AGL-2907)', () => {
     })
     // 15 s are left when the timed step's turn comes, and it needs 20 s.
     expect(ran).toEqual([untimed.$id])
-    expect(result).toEqual({ due: 2, ran: 1, skipped: 0, remaining: 1, budgetExhausted: false })
+    expect(result).toEqual({ due: 2, ran: 1, skipped: 0, paused: 0, remaining: 1, budgetExhausted: false })
     expect(await getAiJob(firestore, ORG, timed.$id)).toMatchObject({ status: 'queued', updatedAt: NOW })
   })
 
@@ -1694,7 +1695,7 @@ describe('a step that says how long it needs (AGL-2907)', () => {
     // Its first pass, the other job's turn, then its passes until it is done.
     // A step that says nothing about its time is never run again here.
     expect(ran).toEqual([timed.$id, untimed.$id, timed.$id, timed.$id])
-    expect(result).toEqual({ due: 2, ran: 4, skipped: 0, remaining: 0, budgetExhausted: false })
+    expect(result).toEqual({ due: 2, ran: 4, skipped: 0, paused: 0, remaining: 0, budgetExhausted: false })
   })
 
   it('stops running it again when less time is left than it needs, and after the sweep’s candidate count', async () => {

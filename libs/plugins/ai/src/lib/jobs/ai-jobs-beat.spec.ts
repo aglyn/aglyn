@@ -52,7 +52,7 @@ jest.mock('./ai-jobs', () => ({
 
 import { AI_JOBS_BEAT_CRON_ID, AI_JOBS_BEAT_PATH, runAiJobsBeat } from './ai-jobs-beat'
 
-const SWEPT = { due: 2, ran: 1, skipped: 1, remaining: 0, budgetExhausted: false }
+const SWEPT = { due: 2, ran: 1, skipped: 1, paused: 1, remaining: 0, budgetExhausted: false }
 
 beforeEach(() => {
   mockLocked = null
@@ -83,6 +83,8 @@ describe('the AI jobs beat', () => {
     // owner, or the second would read the first's lease as its own.
     expect(second.owner).not.toBe(first.owner)
     expect(console.info).toHaveBeenCalledWith(expect.stringContaining('1 step(s) run'))
+    // A workspace's AI pause holds its jobs, and the beat says how many (AGL-3037).
+    expect(console.info).toHaveBeenCalledWith(expect.stringContaining("1 held by a workspace's AI pause"))
   })
 
   it('says nothing on a beat with nothing due', async () => {

@@ -19,6 +19,7 @@ import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { registerAiDeclarations } from './declarations'
 import { AI_JOBS_BEAT_PATH } from './jobs/ai-jobs-beat'
 import { registerAiJobPlan } from './jobs/ai-job-plan-step'
+import { registerAiJobsPause } from './jobs/ai-jobs-pause'
 import { registerAiComponentJob } from './jobs/ai-job-component-step'
 import { registerAiLayoutJob } from './jobs/ai-job-layout-step'
 import { registerAiTemplateJob } from './jobs/ai-job-template-step'
@@ -79,6 +80,9 @@ const registerFirstPartyProviders = ensureFirstPartyAiProviders
  * published site can reach a provider.
  */
 function registerAiJobKinds(): void {
+  // The workspace AI pause the machine asks before it claims any step, so a
+  // paused workspace's queued jobs spend nothing (AGL-3037).
+  registerAiJobsPause()
   // The plan step every planned kind runs first (AGL-2935).
   registerAiJobPlan()
   // Components, layouts and templates (AGL-2908, AGL-2909).

@@ -344,6 +344,45 @@ export function registerAiJobPlanStep(
     runner && registration.minimumMs && registration.minimumMs > 0 ? registration.minimumMs : 0
 }
 
+/**
+ * Whether AI generation is paused for a workspace, as the jobs doors read it
+ * (AGL-3037). `staff` is a verified staff caller on an inline door; the beat
+ * has none.
+ */
+export type AiJobPauseReader = (input: { orgId: string; staff: boolean }) => Promise<boolean>
+
+let pauseReader: AiJobPauseReader | null = null
+
+/**
+ * The reader `runAiJobStep` asks before it claims a step. Registered by its
+ * own module (`ai-jobs-pause.ts`), which the plugin's console surface calls,
+ * so this machine — and every spec that drives it — never loads the Admin SDK
+ * the lockdown reads run on. `null` unregisters it; a machine with no reader
+ * runs every job, as a process with no lockdown carrier would.
+ */
+export function registerAiJobPauseReader(reader: AiJobPauseReader | null): void {
+  pauseReader = reader
+}
+
+/** Whether a pause reader is registered: what a surface that runs jobs must have. */
+export function aiJobPauseReaderRegistered(): boolean {
+  return pauseReader !== null
+}
+
+/**
+ * The registered reader's answer. A read that throws is not a pause: the
+ * lockdown carriers fail open on an unreachable Firestore, and so does this.
+ */
+async function aiJobPausedFor(orgId: string, jobId: string, staff: boolean): Promise<boolean> {
+  if (!pauseReader) return false
+  try {
+    return await pauseReader({ orgId, staff })
+  } catch (error) {
+    console.error('ai job pause read failed', { orgId, jobId, error })
+    return false
+  }
+}
+
 /** The runner for one step of one job: the plan step by its name, else the kind's own. */
 export function aiJobRunnerForStep(kind: AiJobKind, stepName: string): AiJobStepRunner | null {
   return stepName === AI_JOB_PLAN_STEP ? planStepRunner : aiJobStepRunnerFor(kind)
@@ -587,6 +626,17 @@ function nextStepIndex(job: AiJob): number {
 }
 
 /**
+ * The step a claim by `owner` would take, or -1 when there is none to take:
+ * the job is terminal or parked, has no step left, or ANOTHER owner's lease
+ * has not yet expired.
+ */
+function claimableStepIndex(job: AiJob, owner: string, nowMs: number): number {
+  if (job.status !== 'queued' && job.status !== 'running') return -1
+  if (leaseIsLive(job, owner, nowMs)) return -1
+  return nextStepIndex(job)
+}
+
+/**
  * Take the lease on the job's next step, in one transaction.
  *
  * Refuses — `null` — when the job is terminal or parked, when it has no
@@ -608,9 +658,7 @@ export async function claimNextStep(
   return firestore.runTransaction(async (tx: Transaction) => {
     const job = jobFrom(await tx.get(ref))
     if (!job) return null
-    if (job.status !== 'queued' && job.status !== 'running') return null
-    if (leaseIsLive(job, owner, now.getTime())) return null
-    const stepIndex = nextStepIndex(job)
+    const stepIndex = claimableStepIndex(job, owner, now.getTime())
     if (stepIndex === -1) return null
     const steps = job.steps.map((step, index) =>
       index === stepIndex
@@ -668,6 +716,33 @@ export async function heartbeatStep(
       { merge: true },
     )
     return true
+  })
+}
+
+/**
+ * Leave a job whose workspace's AI is paused where it is (AGL-3037), moved to
+ * the back of the beat's queue. Nothing is claimed: its steps, their attempts
+ * and its lease stay exactly as they were, so resuming AI runs the job from
+ * where it stopped. Only `updatedAt` moves — the beat's queue is ordered by it,
+ * and a paused workspace's jobs left at the front would fill every beat's
+ * candidates and starve every other workspace's.
+ *
+ * `null`, writing nothing, for a job a claim would not take either: terminal,
+ * parked, no step left, or another owner's live lease.
+ */
+export async function holdPausedAiJob(
+  firestore: Firestore,
+  orgId: string,
+  jobId: string,
+  owner: string,
+  now = new Date(),
+): Promise<AiJob | null> {
+  const ref = jobsCollection(firestore, orgId).doc(jobId)
+  return firestore.runTransaction(async (tx: Transaction) => {
+    const job = jobFrom(await tx.get(ref))
+    if (!job || claimableStepIndex(job, owner, now.getTime()) === -1) return null
+    tx.set(ref, { updatedAt: now }, { merge: true })
+    return { ...job, updatedAt: now as unknown as AiJob['updatedAt'] }
   })
 }
 
@@ -1158,6 +1233,13 @@ export interface RunAiJobStepOptions {
    * whose brief it is, never to nobody (AGL-2929).
    */
   actor?: AiActivityActor
+  /**
+   * A verified staff claim on the request when a route runs the step inline.
+   * The workspace's AI pause lets staff through here as the gate ladder does,
+   * so staff can verify a pause with one generation (AGL-3037). The beat has
+   * no caller and never passes it.
+   */
+  staff?: boolean
 }
 
 export type AiJobStepRun =
@@ -1172,6 +1254,12 @@ export type AiJobStepRun =
   | { outcome: 'failed'; job: AiJob }
   /** A retryable provider failure; the step is pending again. */
   | { outcome: 'requeued'; job: AiJob }
+  /**
+   * AI is paused for the job's workspace (AGL-3037): nothing was claimed,
+   * reserved or run, and the job waits where it stopped, at the back of the
+   * beat's queue, until staff resume AI.
+   */
+  | { outcome: 'paused'; job: AiJob }
 
 /**
  * A budget that ended before the provider answered. `fetch` rejects with
@@ -1199,13 +1287,15 @@ export function aiJobStepSpentNothing(
 }
 
 /**
- * Claim, reserve, run, meter, record — one step of one job.
+ * Pause, claim, reserve, run, meter, record — one step of one job.
  *
- * The order is the invariant. The reservation is taken AFTER the claim so
- * a refused claim costs nothing, and BEFORE the runner so the org's ceiling
- * binds before a token is spent. The cost is recorded before the step is,
- * so a process cut off between the two leaves the bill right and the step
- * recoverable, never the other way round.
+ * The order is the invariant. The workspace's AI pause is asked BEFORE the
+ * claim, so a paused workspace's job is neither claimed nor reserved for.
+ * The reservation is taken AFTER the claim so a refused claim costs nothing,
+ * and BEFORE the runner so the org's ceiling binds before a token is spent.
+ * The cost is recorded before the step is, so a process cut off between the
+ * two leaves the bill right and the step recoverable, never the other way
+ * round.
  */
 export async function runAiJobStep(
   firestore: Firestore,
@@ -1214,10 +1304,6 @@ export async function runAiJobStep(
   options: RunAiJobStepOptions,
 ): Promise<AiJobStepRun> {
   const now = options.now ?? new Date()
-  const claimed = await claimNextStep(firestore, orgId, jobId, options.owner, now)
-  if (!claimed) return { outcome: 'not-claimable' }
-  const { job, stepIndex } = claimed
-  const step = job.steps[stepIndex]
 
   // A reservation the caller took before the job existed is a message
   // counted against the org; a step that fails before the provider is
@@ -1230,6 +1316,25 @@ export async function runAiJobStep(
         console.error('ai job release failed', { orgId, jobId, releaseError }),
     )
   }
+
+  // A WORKSPACE WHOSE AI STAFF HAVE PAUSED runs none of its jobs (AGL-3037),
+  // queued before the pause or not: the pause is a spend stop, and a job the
+  // beat kept running would spend through it. The pause is lifted by staff
+  // or by its own expiry and leaves the plan, the add-on and every
+  // entitlement as they were, so a paused job is held, not failed: nothing is
+  // claimed, reserved or run, and resuming AI runs it from where it stopped.
+  // Read through the same verdict the jobs doors climb, before the claim.
+  if (await aiJobPausedFor(orgId, jobId, options.staff === true)) {
+    const held = await holdPausedAiJob(firestore, orgId, jobId, options.owner, now)
+    if (!held) return { outcome: 'not-claimable' }
+    await releaseHeld()
+    return { outcome: 'paused', job: held }
+  }
+
+  const claimed = await claimNextStep(firestore, orgId, jobId, options.owner, now)
+  if (!claimed) return { outcome: 'not-claimable' }
+  const { job, stepIndex } = claimed
+  const step = job.steps[stepIndex]
 
   const runner = aiJobRunnerForStep(job.kind, step.name)
   if (!runner) {
@@ -1571,6 +1676,11 @@ export interface SweepAiJobsResult {
   ran: number
   /** Claims another owner held, or jobs with nothing left. */
   skipped: number
+  /**
+   * Jobs whose workspace's AI staff have paused (AGL-3037): held where they
+   * stopped and moved to the back of the queue, to run once AI is resumed.
+   */
+  paused: number
   /** Candidates left untouched because the wall clock ran out. */
   remaining: number
   budgetExhausted: boolean
@@ -1649,6 +1759,7 @@ export async function sweepAiJobs(
     due: due.length,
     ran: 0,
     skipped: 0,
+    paused: 0,
     remaining: 0,
     budgetExhausted: false,
   }
@@ -1679,6 +1790,10 @@ export async function sweepAiJobs(
       })
       if (run.outcome === 'not-claimable') {
         if (first) result.skipped += 1
+        return
+      }
+      if (run.outcome === 'paused') {
+        if (first) result.paused += 1
         return
       }
       result.ran += 1

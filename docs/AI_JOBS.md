@@ -89,16 +89,19 @@ lockdown, rate, band and caps — and adds the two rungs a copy needs:
 `runAiJobStep` is the one place a step is claimed, metered, run and recorded,
 in that order:
 
-1. claim the lease (a refused claim costs nothing);
-2. `reserveAssistMessage` — the same read-and-increment transaction the chat
+1. ask the workspace's AI pause: a job of a workspace whose AI staff have
+   paused is held where it stopped, and nothing below happens (AGL-3037,
+   [The beat](#the-beat));
+2. claim the lease (a refused claim costs nothing);
+3. `reserveAssistMessage` — the same read-and-increment transaction the chat
    route takes, so a job cannot slip past the org's monthly ceiling by being
    asynchronous. The console route's gate ladder takes this reservation
    before the job exists and hands it to the first step; every later step
    reserves for itself;
-3. run the step's registered runner;
-4. `recordAssistCost` at the serving model's rates, so the usage rollup and
+4. run the step's registered runner;
+5. `recordAssistCost` at the serving model's rates, so the usage rollup and
    the invoice see a job's tokens exactly as they see a chat turn's;
-5. record the step: its credits, its outputs, one `adminAudit` row
+6. record the step: its credits, its outputs, one `adminAudit` row
    (`ai.job.output`) per output.
 
 A refused reservation is not a failure. The org is out of credits, over its
@@ -809,7 +812,9 @@ Registered under `/api/ai/jobs` by the plugin's console API surface:
   step (AGL-3026, AGL-3035): a plan, every generation step and every pass of a
   page or a scaffold registers more than 25 s, so only a `text` job — whose one
   request at its ceiling fits the door — runs here, and every other job
-  answers `queued` and runs on the beat. A `theme` job must name its site.
+  answers `queued` and runs on the beat. A job whose workspace's AI staff paused
+  once the ladder had admitted the request is held the same way (AGL-3037). A
+  `theme` job must name its site.
 - `POST /api/ai/jobs/batch` `{ orgId, brief, businessType, pages, welcomeEmail?,
   sites: [{ hostId, businessName?, city?, brand? }], model? }` is the agency
   batch (AGL-2911): it climbs the same ladder on the ORG axis, holds the plan
@@ -1023,6 +1028,32 @@ asks before it claims a step — a lock that stopped the doors and not the beat
 would keep spending on every job already queued. The switch composes the
 platform lock, and a beat it holds answers 200 `{ held: true }`: an operator's
 decision, not a fault for the scheduler to log every minute.
+
+**A workspace whose AI staff have paused runs none of its jobs (AGL-3037).** The
+staff org page's Pause AI writes the same switch for one workspace
+(`feature--ai-generate--org--{orgId}`), and every jobs door refuses that
+workspace's requests through the gate ladder's rung. A job queued before the
+pause has no request to refuse, so `runAiJobStep` asks the ladder's own verdict —
+`featureLockdownRefusal({ feature: 'ai-generate', staff, orgId })`, through the
+reader `src/lib/jobs/ai-jobs-pause.ts` registers from the console surface — before
+it claims a step, for queued and running jobs alike, whatever door or beat is
+running it.
+
+- **Held, not failed.** The pause is a spend stop that staff lift with Resume AI,
+  or that ends at its own expiry, and it leaves the plan, the add-on and every
+  entitlement as they were, so what it stops should run again once it lifts —
+  the same reading the beat already gives the switch platform-wide, where a job
+  it leaves queued stays queued. A site that switched AI off is the workspace's
+  own lasting choice instead, and its job fails (AGL-3028).
+- **Nothing spent, nothing moved but the queue.** A held job calls no runner,
+  takes no reservation and hands back one a door already held; no lease is taken
+  and no attempt counted, so resuming runs it from the step it stopped at. Only
+  its `updatedAt` moves: the beat's queue is ordered by it, and a paused
+  workspace's jobs left at the front would fill every beat's candidates and
+  starve every other workspace's. The sweep counts them as `paused`.
+- **Staff still verify.** A verified staff caller on an inline door passes, as the
+  ladder lets staff through; the beat has no caller. A reader that cannot answer
+  is not a pause, as the lockdown reads fail open.
 
 ## The `seo` kind
 

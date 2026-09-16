@@ -166,6 +166,16 @@ const CHOKEPOINTS: Chokepoint[] = [
       'already queued',
   },
   {
+    feature: 'ai-generate',
+    file: 'libs/plugins/ai/src/lib/jobs/ai-jobs-pause.ts',
+    wiring: [`featureLockdownRefusal({`, `feature: 'ai-generate',`, 'orgId: input.orgId,'],
+    why:
+      'the workspace-scoped AI pause (AGL-2927) held at the claim of every AI ' +
+      'job step (AGL-3037): a job queued before staff paused the workspace has ' +
+      'no request for a door to refuse, so the jobs machine asks the same ' +
+      'verdict with the job’s org before it claims, reserves or runs anything',
+  },
+  {
     feature: '(writer)',
     covers: [],
     file: 'apps/console/app/api/admin/lockdown/route.ts',
