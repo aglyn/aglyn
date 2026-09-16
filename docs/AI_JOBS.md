@@ -206,6 +206,17 @@ one cache entry. A door's own instructions may follow the same discipline: the
 listing rules state the rule for a field only when that field is asked for,
 and no length in prose, because the strict schema carries every length.
 
+**A rule the schema already states is not stated twice.** A strict tool's
+schema rides in the same request as the blocks, ahead of them, so a sentence
+written in both is billed twice on a door whose prompt no model will cache.
+The listing rules therefore carry only what the schema does not say — how to
+write a field rather than what it is — and the image description, whose schema
+entry already says what it describes and when to answer `null`, carries no
+prose rule at all. The pair is held together by the ledger spec: whatever
+`checkAiSeoFields` can refuse an answer for, the REQUEST has to state
+somewhere, in a block or in the schema. That test reads the two halves as one
+string, so a sentence may move between them freely and may not leave both.
+
 ## The eval harness
 
 A token lever ships only when the eval holds (AGL-2937): each output kind has

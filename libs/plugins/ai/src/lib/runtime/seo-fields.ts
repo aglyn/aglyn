@@ -70,20 +70,28 @@ export const AI_SEO_FIELDS_MAX_TOKENS = AI_ROUTING_TABLE['job.seo'].maxTokens
 const OTHER_TITLES_LISTED = 40
 
 /**
- * The rule for one listing field, stated only when that field is asked for
- * (AGL-2937). The tool is built from the same field list, so a listing that
- * writes three fields no longer carries a paragraph about the fourth — and
- * neither the rule nor the tool states a length, because the schema's own
- * descriptions carry them and `checkAiSeoFields` enforces them.
+ * What one listing field's rule ADDS to the tool's own description of that
+ * field (AGL-2937), stated only when the field is asked for.
+ *
+ * The schema the answer arrives through is built from the editor's field
+ * catalog, and it already names each field, says what the value is for and
+ * states its length. It rides in the same request, ahead of these blocks, so
+ * a rule that restated it would be the same sentence billed twice on a door
+ * whose prompt no model will cache. Each rule here is therefore only what
+ * the schema does not say: how to write the field rather than what it is.
+ * The image description has no rule at all, because its description already
+ * carries both halves of one — what it describes, and when to answer null.
+ *
+ * `runtime/ai-prompt-cache.spec.ts` holds the pair together: whatever
+ * `checkAiSeoFields` can refuse an answer for, the request has to state
+ * somewhere, in a block or in the schema.
  */
-const AI_SEO_FIELD_RULES: Readonly<Record<SeoListingFieldKey, string>> = {
+const AI_SEO_FIELD_RULES: Readonly<Partial<Record<SeoListingFieldKey, string>>> = {
   title:
-    'The title says what this page is, specifically and in plain words. It is published exactly as written, so add the site name only where it fits and helps.',
+    'The title says what the page is, specifically and in plain words; add the site name only where it helps.',
   description:
-    'The description is one or two sentences telling a searcher what they will find. No quotation marks, no emoji, no capitals for emphasis.',
-  breadcrumb: 'The breadcrumb label is the page\u2019s short name, one to three words.',
-  imageAlt:
-    'The image description says what the picture shows, never what the page is about. Answer null when nothing you were given says what the picture shows.',
+    'The description is one or two sentences: no quotation marks, no emoji, no capitals for emphasis.',
+  breadcrumb: 'The breadcrumb label is one to three words.',
 }
 
 /** What a listing request carries, and therefore which rules it is sent. */
@@ -111,10 +119,15 @@ export function aiSeoFieldsInstructions(
   const fields = orderedSeoListingFields(shape.fields)
   const rules = [
     'Write only from the text you are given. Never invent a fact, a price, a name, a place, an offer or a claim the text does not state.',
-    ...fields.map((key) => AI_SEO_FIELD_RULES[key]),
+    ...fields.map((key) => AI_SEO_FIELD_RULES[key]).filter((rule): rule is string => Boolean(rule)),
+    // Every field a person reads is held to this, keywords or none, so it is
+    // stated on every shape rather than inside the keyword rule it used to
+    // ride in: `checkAiSeoFields` refuses a repeat in a listing that named
+    // no keywords too.
+    'Never repeat the same word three times in one field.',
     ...(shape.keywords
       ? [
-          'A target keyword goes in only where the page is about it and it reads naturally: at most once in the title and once in the description. Never list keywords, never repeat a word to rank, and leave out a keyword the page is not about.',
+          'A target keyword goes in only where the page is about it and it reads naturally: at most once in the title and once in the description. Never list keywords, and leave out a keyword the page is not about.',
         ]
       : []),
     ...(shape.otherTitles
@@ -125,7 +138,7 @@ export function aiSeoFieldsInstructions(
   return [
     {
       text:
-        'You write the search listing for one page or one product of a website: what a search result shows, and the short name a breadcrumb trail uses.\n\n' +
+        'You write the search listing for one page or one product of a website: what a search result shows.\n\n' +
         `Answer by calling ${AI_SEO_FIELDS_TOOL_NAME} exactly once. A reply in prose cannot be used.\n\n` +
         `Rules:\n${rules.map((rule) => `- ${rule}`).join('\n')}`,
       cacheBreakpoint: true,

@@ -467,8 +467,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       email: { prefixTokens: 2_565, minimum: 1_024, caches: true, toolsStable: true },
       form: { prefixTokens: 2_194, minimum: 1_024, caches: true, toolsStable: true },
       theme: { prefixTokens: 3_186, minimum: 1_024, caches: true, toolsStable: true },
-      'seo-fields': { prefixTokens: 759, minimum: 4_096, caches: false, toolsStable: true },
-      'seo-fields-full': { prefixTokens: 943, minimum: 4_096, caches: false, toolsStable: true },
+      'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
+      'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },
       'seo-site': { prefixTokens: 951, minimum: 4_096, caches: false, toolsStable: true },
       // The fixes tool's schema enumerates the eight pages of THIS batch, so
       // its prefix is per-batch as well as too short. The enumeration is kept
@@ -504,6 +504,71 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     for (const rule of new Set(cited)) {
       expect([rule, fields.includes(`\n${rule}. `)]).toEqual([rule, true])
     }
+  })
+
+  it('states, somewhere in a listing request, every rule its own check refuses for', () => {
+    // The listing's rules were cut back to what the tool's schema does not
+    // already say (AGL-2937), which is sound only while the PAIR still covers
+    // the checks. `checkAiSeoFields` refuses an answer for a wrong type, a
+    // missing field, a length, a repeated word, a stuffed keyword and a
+    // borrowed title; a requirement the request never states is a refusal the
+    // model could not have avoided, which is the failure a cheaper prompt
+    // causes. So the assertion is on the whole request — the blocks and the
+    // schema together — rather than on either half of it.
+    const composed = REQUESTS['seo-fields-full']
+    const request = [
+      ...composed.blocks(SITE_A).map((block) => block.text),
+      JSON.stringify(composed.tools(SITE_A)),
+    ].join('\n')
+    const fields = ['title', 'description', 'breadcrumb', 'imageAlt'] as const
+    const context = {
+      fields,
+      hasImage: true,
+      keywords: ['roof repair'],
+      otherTitles: ['Taken already'],
+    }
+    const listing = (over: Record<string, unknown>) => ({
+      title: 'Roof repair in Leeds',
+      description: 'What a roof repair costs, and how long one takes.',
+      breadcrumb: 'Repairs',
+      imageAlt: 'A slate roof under repair.',
+      ...over,
+    })
+    // Each refusal, the answer that earns it, and the sentence the request
+    // has to carry for it — in a block or in the schema, whichever says it.
+    const refusals = [
+      { code: 'type', answer: listing({ title: 12 }), states: '{"type":"string"}' },
+      { code: 'missing', answer: listing({ title: '  ' }), states: 'Every field is required' },
+      { code: 'too-long', answer: listing({ title: 'Roof '.repeat(20) }), states: 'At most 60 characters' },
+      {
+        code: 'repetition',
+        answer: listing({ description: 'Slate slate slate work.' }),
+        states: 'Never repeat the same word three times in one field.',
+      },
+      {
+        code: 'keyword-stuffing',
+        answer: listing({ title: 'Roof repair and roof repair' }),
+        states: 'at most once in the title and once in the description',
+      },
+      {
+        code: 'duplicate-title',
+        answer: listing({ title: 'Taken already' }),
+        states: 'Do not reuse a title another page of the site already uses.',
+      },
+    ]
+    for (const refusal of refusals) {
+      const codes = checkAiSeoFields(refusal.answer, context).violations.map(
+        (violation) => violation.code,
+      )
+      // The answer really does earn the refusal it is here for: without this
+      // the table could drift into asserting sentences nothing can refuse on.
+      expect([refusal.code, codes]).toEqual([refusal.code, expect.arrayContaining([refusal.code])])
+      expect([refusal.code, request.includes(refusal.states)]).toEqual([refusal.code, true])
+    }
+    // Every code the check can produce is in the table above.
+    expect(new Set(refusals.map((refusal) => refusal.code))).toEqual(
+      new Set(['type', 'missing', 'too-long', 'repetition', 'keyword-stuffing', 'duplicate-title']),
+    )
   })
 
   it('lets no step price a cache read it will never get', () => {
