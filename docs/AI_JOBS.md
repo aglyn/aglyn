@@ -138,6 +138,62 @@ What generation costs in tokens is measured beside what it costs in credits
   hit rate is `aiCacheHitRate`: reads over everything the prompt was billed
   as, cache writes included.
 
+## What a prompt caches, and what it cannot
+
+A cache breakpoint is a request for caching, not a guarantee (AGL-2937). A
+provider will not cache a prefix shorter than its model's minimum: it honors
+the markers, caches nothing, and reports a usage row indistinguishable from a
+permanent miss. The minimum is a property of the MODEL, not of the tier or the
+vendor, and it does not move as a conversation grows.
+
+- **Where the number lives.** `cacheMinTokens` on each `AI_MODEL_CATALOG`
+  row, read through `aiModelCacheMinTokens`. An id the catalog does not know
+  is assumed to be the dearest one it does, the way the rate fallback is: an
+  unrecognized model reads as "this does not cache" rather than promising a
+  saving nobody measured.
+- **How a door asks.** `aiCachedPrefixChars(system, tools)` in
+  `src/lib/runtime/ai-runtime.ts` counts the cached span — the tools, which a
+  provider renders ahead of the system blocks, plus every block through the
+  last breakpoint — and `aiCachedPrefixCaches(model, …)` answers whether it
+  clears the model's minimum, reading four characters to a token so the
+  estimate errs toward "it does not".
+- **The ledger.** `src/lib/runtime/ai-prompt-cache.spec.ts` scans the source
+  for every file that calls `runAiRequest` or `runValidatedGeneration`, so a
+  new door cannot be added without a row saying what its prompt caches. It
+  holds every request's cached span to a measured size, asserts that span is a
+  function of the request's SHAPE and never of the tenant, refuses a static
+  block stranded after the last breakpoint, and refuses a step that quotes
+  cache reads in `AI_STEP_NOMINAL_USAGE` for a prefix its model will not cache.
+
+Two consequences worth knowing before writing a prompt. A door on the fast
+tier has the HIGHEST minimum on the platform, so a step moved there to save
+per-token money can cost more per request; and on a door that cannot cache,
+every static byte is billed at full input rate on every attempt AND on every
+re-ask, so its prompt is worth shortening rather than enriching.
+
+## Rules a kind can actually break
+
+The seventeen building rules are written for a kind that composes a document.
+A kind that writes short values a door checks itself — a search listing, an
+audit's fixes — can break exactly one of them, so a rule declares the scopes
+it binds and `aiDoctrineSystemBlocks` renders only the scope's rules
+(AGL-2937).
+
+- `documents` is every rule, and is what a kind gets unless it names another.
+- `fields` is rule 13 and the acceptable-use rules. Rule 13 is there because
+  the loop ENFORCES it on every custom kind through `detectPublishIntent`, and
+  an answer may not be refused for a rule it was never told; the ledger spec
+  derives that from the checks rather than from a comment.
+- The acceptable-use rules are in every scope, whole. They are the abuse
+  guard, not a building rule.
+- `AI_DOCTRINE_KIND_SCOPE` names the kinds in the field scope; a new kind that
+  writes values rather than composing a document belongs there.
+
+Each scope's block is built once at load, so two workspaces on one door share
+one cache entry. A door's own instructions may follow the same discipline: the
+listing rules state the rule for a field only when that field is asked for,
+and no length in prose, because the strict schema carries every length.
+
 ## The eval harness
 
 A token lever ships only when the eval holds (AGL-2937): each output kind has
@@ -652,3 +708,31 @@ published, and goes one step further — the server writes no document at all.
   found the proposal on an exchange the same member had about the same
   document — the signal's `editOps` count — and a second report for one
   exchange writes nothing.
+
+## The copy assistant's own doors
+
+`POST /api/ai/assist` is not a job — it serves the besigner's copy assistant
+in three modes — but it shares the runtime, the meters and the rules above.
+
+- **The prompts** are `src/lib/server/ai-assist-prompts.ts`, a pure module a
+  spec can read without a Firestore, an ID token or a provider.
+  `assistModeSystemBlocks(mode)` puts the acceptable-use rules ahead of the
+  mode's own prompt, as one block with a breakpoint. None of the three modes
+  reaches its model's minimum today; the ledger spec records that, so the
+  marker is a statement about the block rather than a claimed saving.
+- **A section answers through a strict tool** (`submit_section`,
+  AGL-2937), not as parsed prose. It takes a FLAT list of nodes, each naming
+  its id, component, parent and children, because a strict schema forbids
+  additional properties and so cannot describe a map keyed by node id;
+  `readAssistSection` rebuilds the `{ rootId, nodes }` map the besigner
+  consumer reads and runs it through the same marketplace sanitizer an install
+  passes. Values arrive as name/value pairs and are typed from the component's
+  own props schema, with `children` always left as text. The bare-JSON parse
+  stays behind the tool for a provider whose adapter has none.
+- **`POST /api/assist/chat` keeps its last turns whole.** The last
+  `HISTORY_VERBATIM_TURNS` share a 4,000-character budget spent newest-first;
+  the turns behind them become one labelled digest under 1,200 characters of
+  its own, built from each turn's opening with no second model call
+  (`assistHistoryDigest`). The digest leads the conversation as a user turn,
+  so the thread still opens user-side. `messages` never caches, so this is the
+  route's uncached spend: about 5,200 characters at worst rather than 8,000.
