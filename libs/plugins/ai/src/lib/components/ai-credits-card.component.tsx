@@ -20,6 +20,7 @@ import {
   AI_ADDON_CREDITS_PER_MONTH,
   aiAddonName,
   hasAiAddon,
+  isUnlimitedQuota,
   resolveEffectivePlan,
   resolveOrgEntitlements,
   resolvePlanPricing,
@@ -109,10 +110,13 @@ export default function AiCreditsCard(props: AiCreditsCardProps) {
       contentGutterX
       contentGutterY
     >
+      {/* An uncapped staff comp (AGL-3049) resolves this band `UNLIMITED`:
+          the meter reads "Unlimited" and draws no bar, never "/ Infinity". */}
       <UsageMeter
         label="AI credits (this month)"
         used={credits ? credits.used : null}
         limit={entitlements.assistCreditsPerMonth}
+        unlimited={isUnlimitedQuota(entitlements.assistCreditsPerMonth)}
         upgradeHref={billingHref ? `${billingHref}#plans` : '#plans'}
       />
       {aiAddonCredits > 0 ? (

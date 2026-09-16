@@ -129,6 +129,42 @@ describe('the AI credit pool line on the staff usage table', () => {
     ).toEqual({ aiAddon: false, addonCredits: 0, creditsPerMonth: null })
   })
 
+  it('names an uncapped staff comp as the reason there is no band, never ∞ (AGL-3049)', () => {
+    const org = {
+      plan: 'enterprise',
+      enterprise: true,
+      entitlements: {
+        planComp: {
+          plan: 'enterprise',
+          uncapped: true,
+          reason: 'other',
+          note: 'Internal workspace',
+          grantedBy: 'staff-1',
+        },
+      },
+    } as never
+    expect(staffAssistPool(org)).toEqual({
+      aiAddon: false,
+      addonCredits: 0,
+      creditsPerMonth: null,
+      uncapped: true,
+    })
+    expect(assistPoolSentence(staffAssistPool(org))).toBe(
+      'Aglyn AI add-on off — no AI credit band (uncapped staff comp).',
+    )
+    // The control: the same grant capped names Enterprise's band.
+    const capped = {
+      plan: 'enterprise',
+      enterprise: true,
+      entitlements: {
+        planComp: { plan: 'enterprise', uncapped: false, reason: 'other', grantedBy: 'staff-1' },
+      },
+    } as never
+    expect(assistPoolSentence(staffAssistPool(capped))).toBe(
+      'Aglyn AI add-on off — 116,000 AI credits/mo.',
+    )
+  })
+
   it('draws the line from the org document, and nothing without one', () => {
     const org = {
       plan: 'pro',

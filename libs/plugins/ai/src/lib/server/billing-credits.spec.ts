@@ -152,6 +152,33 @@ describe('the assist credit odometer', () => {
     })
   })
 
+  it('an uncapped staff comp: the credits drawn, no band, and a flag that says why (AGL-3049)', async () => {
+    const comp = { plan: 'enterprise', uncapped: true, reason: 'other', note: 'Internal', grantedBy: 'staff-1' }
+    mockDocs.set('orgs/org-1', { plan: 'enterprise', enterprise: true, entitlements: { planComp: comp } })
+    mockDocs.set(`orgs/org-1/assistUsage/${MONTH}`, { estCostUsd: 250 })
+    const response = await GET(get())
+    const wire = await response.text()
+    // The band's absence as JSON writes it on purpose — never `Infinity`,
+    // which would arrive as the same `null` with nothing saying so.
+    expect(JSON.parse(wire)).toEqual({
+      credits: { used: 250_000, limit: null, remaining: null },
+      unlimited: true,
+    })
+    expect(wire).not.toContain('Infinity')
+
+    // The control: the same grant, capped, meters against Enterprise's band
+    // and carries no flag.
+    mockDocs.set('orgs/org-1', {
+      plan: 'enterprise',
+      enterprise: true,
+      entitlements: { planComp: { ...comp, uncapped: false } },
+    })
+    const capped = await (await GET(get())).json()
+    expect(capped).toEqual({
+      credits: { used: 250_000, limit: 116_000, remaining: 0 },
+    })
+  })
+
   it('honours a CONTRACTED band over the plan fallback', async () => {
     mockDocs.set('orgs/org-1', {
       plan: 'enterprise',

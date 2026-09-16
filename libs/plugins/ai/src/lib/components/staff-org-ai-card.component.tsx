@@ -100,8 +100,17 @@ export function poolPartsSentence(pool: StaffOrgAiPool): string {
   return parts.join(' + ')
 }
 
-/** The overage's state as one line: sold, walled, or capped. */
-export function overageStateSentence(overage: StaffOrgAiOverage): string {
+/**
+ * The overage's state as one line: sold, walled, or capped — or, for an
+ * uncapped staff comp (AGL-3049), nothing to sell past at all.
+ */
+export function overageStateSentence(
+  overage: StaffOrgAiOverage,
+  uncapped = false,
+): string {
+  if (uncapped) {
+    return 'Nothing is sold past a band: an uncapped staff comp has none, and bills nothing.'
+  }
   if (overage.hardCap) return 'Stopped at the band — the org’s band switch is on.'
   if (!overage.sellsOverage) return 'Not sold past the band on this plan.'
   const rate =
@@ -402,7 +411,11 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
             <Typography variant="overline" color="text.secondary">
               {`Credit pool · ${data.month}`}
             </Typography>
-            {data.pool.totalCredits === null ? (
+            {data.pool.totalCredits === null && data.pool.uncapped ? (
+              <Typography variant="body2" color="text.secondary">
+                {'Uncapped staff comp — no AI credit band. Bounded only by the message cap and an operator’s explicit spend ceiling.'}
+              </Typography>
+            ) : data.pool.totalCredits === null ? (
               <Typography variant="body2" color="text.secondary">
                 {'No AI credit band on this plan — bounded by the message cap and the operator backstop.'}
               </Typography>
@@ -431,7 +444,7 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
               {`${credits(data.overage.overageCredits)} credits over the band · ${usd(data.overage.accruedUsd)} accrued`}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {overageStateSentence(data.overage)}
+              {overageStateSentence(data.overage, data.pool.uncapped === true)}
             </Typography>
           </Stack>
 

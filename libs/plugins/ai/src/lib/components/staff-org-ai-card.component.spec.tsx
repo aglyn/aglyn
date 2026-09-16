@@ -215,6 +215,41 @@ describe('StaffOrgAiCard (AGL-2930)', () => {
     expect(screen.queryByText(/^since /)).toBeNull()
   })
 
+  it('names an uncapped staff comp as the reason there is no band, and nothing is sold (AGL-3049)', async () => {
+    // The route's answer as JSON carries it: no band is `null`, and the flag
+    // says it is the comp's doing rather than a plan that sells none.
+    mockAnswer.payload = JSON.parse(
+      JSON.stringify(
+        body({
+          addon: { on: false, priceUsd: null, since: null, sinceSource: 'no-subscription' },
+          pool: {
+            ...body().pool,
+            planCredits: 116_000,
+            overrideCredits: null,
+            addonCredits: 0,
+            totalCredits: null,
+            remainingCredits: null,
+            uncapped: true,
+          },
+          overage: { ...body().overage, rateUsdPer1k: null, sellsOverage: false },
+        }),
+      ),
+    )
+    render(<StaffOrgAiCard orgId="org-1" />)
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'Uncapped staff comp — no AI credit band. Bounded only by the message cap and an operator’s explicit spend ceiling.',
+        ),
+      ).toBeTruthy(),
+    )
+    expect(
+      screen.getByText('Nothing is sold past a band: an uncapped staff comp has none, and bills nothing.'),
+    ).toBeTruthy()
+    expect(screen.queryByText(/No AI credit band on this plan/)).toBeNull()
+    expect(screen.queryByText(/Not sold past the band/)).toBeNull()
+  })
+
   it('says which of the org’s own controls stopped the overage', async () => {
     mockAnswer.payload = body({
       overage: { ...body().overage, overageCredits: 900, accruedUsd: 2.7, capUsd: 50, capReached: true },

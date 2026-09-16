@@ -33,7 +33,8 @@
  *     for one, and each request is still counted;
  *  2. an operator's explicit ceiling still binds it, as it binds everyone;
  *  3. it is never metered as billable: no claim, no invoice call;
- *  4. a live subscription ignores it: the paying plan's band and rate apply.
+ *  4. a live subscription ignores it: the paying plan's band and rate apply;
+ *  5. what staff are shown about it crosses JSON as booleans and nulls.
  *
  * Every case has a control that differs in the one field under test.
  */
@@ -55,6 +56,10 @@ jest.mock('firebase-admin/firestore', () => ({
 
 import { resolveOrgEntitlements } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { reserveAssistMessage } from '../usage/assist-usage'
+import {
+  composeStaffOrgAiOverage,
+  composeStaffOrgAiPool,
+} from '../usage/staff-org-ai'
 import {
   AI_OVERAGE_PRODUCT_ENV,
   closeOutAiOverage,
@@ -336,4 +341,33 @@ describe('a live subscription ignores an uncapped comp (AGL-3049)', () => {
     } as never)
     expect(reservation).toMatchObject({ allowed: false, refusedBy: 'band' })
   })
+})
+
+describe('what staff read about an uncapped comp (AGL-3049)', () => {
+  it('the staff AI card’s pool and overage cross JSON as themselves — no band is null, and the flag says why', () => {
+    const now = new Date(NOW)
+    const wire = JSON.parse(
+      JSON.stringify({
+        pool: composeStaffOrgAiPool(UNCAPPED as never, docs.get(USAGE), now),
+        overage: composeStaffOrgAiOverage(UNCAPPED as never, SPEND_USD),
+      }),
+    )
+    expect(wire.pool).toMatchObject({
+      totalCredits: null,
+      remainingCredits: null,
+      uncapped: true,
+      usedCredits: 500_000,
+    })
+    expect(wire.overage).toMatchObject({
+      overageCredits: 0,
+      accruedUsd: 0,
+      rateUsdPer1k: null,
+      sellsOverage: false,
+      bandRefuses: false,
+    })
+    // The control: the capped grant carries Enterprise's band and no flag.
+    const capped = composeStaffOrgAiPool(CAPPED as never, docs.get(USAGE), now)
+    expect(capped).toMatchObject({ totalCredits: 116_000, uncapped: false })
+  })
+
 })

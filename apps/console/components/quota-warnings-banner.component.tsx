@@ -354,6 +354,9 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         if (!response.ok || !active) return
         const payload = await response.json().catch(() => null)
         const credits = payload?.credits
+        // A standing with no band — an uncapped staff comp (AGL-3049) — is
+        // no row, and `null` must not reach `Number()`, which reads it as 0.
+        if (credits?.limit === null) return
         const used = Number(credits?.used)
         const limit = Number(credits?.limit)
         // A standing we could not read is not a standing of zero — the
