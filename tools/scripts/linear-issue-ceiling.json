@@ -1,8 +1,8 @@
 {
   "team": "AGL",
-  "highest": 3009,
-  "verifiedAt": "2026-09-15",
-  "verifiedBy": "Read from the Linear workspace on 2026-09-15 (UTC) with get_issue: AGL-3007 (created 19:55:56Z), AGL-3008 (created 20:41:19Z) and AGL-3009 (created 20:46:46Z, the theme step and Assist edit rung moving to the real runValidatedGeneration) were each returned, and the next three identifiers after it were not found, so 3009 is the highest known to exist. The number comes from what the workspace assigned, never from what a failing check reported as missing.",
+  "highest": 3015,
+  "verifiedAt": "2026-09-16",
+  "verifiedBy": "Read from the Linear workspace on 2026-09-16 (UTC) by listing the team's issues newest-first: AGL-3013 (created 2026-09-15 23:04:54Z, this drill), AGL-3014 (23:05:01Z) and AGL-3015 (23:41:00Z, splitting the billed credit rate from provider cost) were each returned, and get_issue for the next identifier after it answered 'Could not find referenced Issue', so 3015 is the highest known to exist. The number comes from what the workspace assigned, never from what a failing check reported as missing.",
   "note": "The highest issue identifier that EXISTS, and a FLOOR rather than the answer. Any citation above it was never assigned, because Linear numbers issues sequentially per team. check-linear-ids.mjs asks Linear for the real highest on every run and can only ever RAISE this number with the answer, so with LINEAR_API_KEY set there is nothing to maintain here; this value is what the check falls back to when the query cannot be made. Raise it only after reading the workspace — never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
   "historicalCitations": {
     "note": "Commits already on `main` whose messages cite a fabricated id. History is NOT rewritten (see docs/DECISION_LOG.md, 2026-08-28), so the commit sweep would otherwise be permanently red and the guard would never be wirable into CI. Listed by sha rather than exempted by date: a FIFTEENTH such commit still fails. This list may shrink and must never grow.",
