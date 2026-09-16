@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-util-timestamp",
-  "version": "1.0.0-beta.125",
+  "version": "1.0.0-beta.126",
   "type": "module",
   "exports": {
     ".": {
