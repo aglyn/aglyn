@@ -23,7 +23,9 @@
 import { formatMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
 import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
+import { AI_FREE_PAGE_RECORDED_PLAN } from '../jobs/fixtures/ai-free-page-recording'
 import type { AiBuildPlan, AiBuildPlanScreen } from '../model/ai-build-plan'
+import { AI_PAGE_CREATE_KINDS } from '../model/ai-page-job'
 import {
   aiPlanCapabilitiesForJob,
   aiUnrestrictedPlanCapabilities,
@@ -56,6 +58,7 @@ import {
   detectPlanRepeats,
   detectPlanTypedData,
   detectPlanUncreatable,
+  detectPlanUndeclaredCreations,
   detectPublishIntent,
   detectRepeatedSubtrees,
   detectTypedData,
@@ -934,6 +937,252 @@ describe('validateAiDoctrineTree — the palette first, then every rule', () => 
   })
 })
 
+describe('what a plan places, it reuses or creates (AGL-3040)', () => {
+  const PAGE_JOB = { noun: 'a page job', creates: AI_PAGE_CREATE_KINDS }
+  /** A workspace that keeps everything, narrowed to what a page job builds. */
+  const PAID_PAGE = aiPlanCapabilitiesForJob(aiUnrestrictedPlanCapabilities(), PAGE_JOB)
+  const creation = (kind: AiBuildPlan['create'][number]['kind'], name: string) => ({
+    kind,
+    name,
+    why: 'Nothing the site has will do.',
+    duplicateOf: null,
+    fields: [],
+  })
+
+  it('rule 2: refuses a section that places a layout, the site’s or one the plan creates', () => {
+    const placed = planOf({
+      create: [creation('layout', 'Main layout')],
+      screens: [
+        screen({
+          layout: 'new:Main layout',
+          sections: [
+            { name: 'hero', uses: ['new:Main layout'], items: 0 },
+            { name: 'services grid', uses: ['cmp-card', 'lay-site'], items: 3 },
+          ],
+        }),
+      ],
+    })
+    expect(detectPlanLayoutRegions(placed, INVENTORY)).toEqual([
+      {
+        rule: 2,
+        code: 'plan-layout-in-section',
+        message:
+          "A section places a layout. A layout frames a whole screen and is never placed inside one: name it as the screen's layout, and take it out of the section's uses.",
+        paths: ['screens[0].sections[0].uses[0]', 'screens[0].sections[1].uses[1]'],
+      },
+    ])
+    expect(detectPlanLayoutRegions(planOf(), INVENTORY)).toEqual([])
+  })
+
+  it('rule 2: refuses a screen’s undeclared layout once, saying what this workspace may do instead', () => {
+    const undeclared = planOf({ screens: [screen({ layout: 'new:Site frame' })] })
+    // The site holds its one layout, and this workspace may create no other.
+    expect(detectPlanLayoutRegions(undeclared, INVENTORY, FREE)).toEqual([
+      {
+        rule: 2,
+        code: 'plan-screen-without-layout',
+        message:
+          'A screen names no layout the site has, and this job may not create one. Put every screen in a layout the site has.',
+        paths: ['screens[0].layout'],
+      },
+    ])
+    expect(detectPlanLayoutRegions(undeclared, INVENTORY)[0].message).toContain('or plan one')
+    // Rule 7 leaves a screen's layout to rule 2.
+    expect(detectPlanUndeclaredCreations(undeclared, INVENTORY, FREE)).toEqual([])
+  })
+
+  it('rule 4: refuses a section that places a template, which only a whole screen applies', () => {
+    const placed = planOf({ screens: [screen({ sections: [{ name: 'hero', uses: ['tpl-service'], items: 0 }] })] })
+    expect(detectUntemplatedSimilarPages(placed, INVENTORY)).toEqual([
+      {
+        rule: 4,
+        code: 'plan-template-in-section',
+        message:
+          "A section places a template. A template is applied to a whole screen and is never placed inside one: take it out of the section's uses, and name it as the screen's template only when the whole screen is built from it.",
+        paths: ['screens[0].sections[0].uses[0]'],
+      },
+    ])
+    const created = planOf({
+      create: [creation('template', 'Service page v2')],
+      screens: [screen({ sections: [{ name: 'body', uses: ['new:Service page v2'], items: 0 }] })],
+    })
+    expect(codes(detectUntemplatedSimilarPages(created))).toEqual(['plan-template-in-section'])
+    expect(detectUntemplatedSimilarPages(planOf({ screens: [screen({ template: 'tpl-service' })] }), INVENTORY)).toEqual([])
+  })
+
+  it('rule 7: refuses a creation a section places and the plan never declares, and tells a workspace that may make it to declare it', () => {
+    const plan = planOf({
+      screens: [
+        screen({
+          sections: [
+            { name: 'contact form', uses: ['new:Contact request'], items: 0 },
+            { name: 'services grid', uses: ['new:Service tile'], items: 6 },
+          ],
+        }),
+      ],
+    })
+    expect(detectPlanUndeclaredCreations(plan, INVENTORY, PAID_PAGE)).toEqual([
+      {
+        rule: 7,
+        code: 'plan-creation-undeclared',
+        message:
+          'The "contact form" section places a creation named "Contact request", but the plan never creates it. Declare it in create as a form, with why nothing the site has will do, or place a form the site already has by its id.',
+        paths: ['screens[0].sections[0].uses[0]'],
+      },
+      {
+        rule: 7,
+        code: 'plan-creation-undeclared',
+        message:
+          'The "services grid" section places a creation named "Service tile", but the plan never creates it. Declare it in create as a component, with why nothing the site has will do, or place a component the site already has by its id.',
+        paths: ['screens[0].sections[1].uses[0]'],
+      },
+    ])
+    // With no capabilities read, the doctrine applies whole, and the way out is the same.
+    expect(detectPlanUndeclaredCreations(plan, INVENTORY)).toEqual(detectPlanUndeclaredCreations(plan, INVENTORY, PAID_PAGE))
+    // A form section that already places its form placed something else beside it.
+    const beside = planOf({
+      screens: [screen({ sections: [{ name: 'contact form', uses: ['frm-contact', 'new:Office map'], items: 0 }] })],
+    })
+    expect(detectPlanUndeclaredCreations(beside, INVENTORY, PAID_PAGE)[0].message).toContain(
+      'Declare it in create as a component',
+    )
+  })
+
+  it('rule 7: tells a workspace that cannot make the creation to build the page without it', () => {
+    const plan = planOf({
+      screens: [
+        screen({
+          sections: [
+            { name: 'quote request', uses: ['new:Quote form'], items: 0 },
+            { name: 'services grid', uses: ['new:Service tile'], items: 6 },
+          ],
+        }),
+      ],
+    })
+    expect(
+      detectPlanUndeclaredCreations(plan, INVENTORY, aiPlanCapabilitiesForJob(FREE, PAGE_JOB)).map((found) => found.message),
+    ).toEqual([
+      'The "quote request" section places a creation named "Quote form", but the plan never creates it, and this workspace\'s plan does not include saved forms. Draw the form on the page instead, as a Form element holding its Form Fields. Take it out of the section\'s uses.',
+      'The "services grid" section places a creation named "Service tile", but the plan never creates it, and this workspace\'s plan does not include reusable components. Draw the item in its own section instead. Take it out of the section\'s uses.',
+    ])
+  })
+
+  it('rule 7: never tells a plan to declare a creation the site has no room left for', () => {
+    const oneForm: AiPlanCapabilities = {
+      ...PAID_PAGE,
+      create: { ...PAID_PAGE.create, form: { allowed: true, left: 1, reason: null } },
+    }
+    const plan = planOf({
+      create: [creation('form', 'Newsletter')],
+      screens: [
+        screen({
+          sections: [
+            { name: 'newsletter signup', uses: ['new:Newsletter'], items: 0 },
+            { name: 'contact form', uses: ['new:Contact'], items: 0 },
+          ],
+        }),
+      ],
+    })
+    expect(detectPlanUndeclaredCreations(plan, INVENTORY, oneForm)).toEqual([
+      {
+        rule: 7,
+        code: 'plan-creation-undeclared',
+        message:
+          'The "contact form" section places a creation named "Contact", but the plan never creates it, and this site has room for 1 more. Place a form the site already has. Take it out of the section\'s uses.',
+        paths: ['screens[0].sections[1].uses[0]'],
+      },
+    ])
+  })
+
+  it('rule 7: refuses a template a screen applies and the plan never declares', () => {
+    const plan = planOf({ screens: [screen({ template: 'new:Service page' })] })
+    expect(detectPlanUndeclaredCreations(plan, INVENTORY, PAID_PAGE)).toEqual([
+      {
+        rule: 7,
+        code: 'plan-creation-undeclared',
+        message:
+          'The screen "Roof repair" applies a template named "Service page", but the plan never creates it, and a page job does not build one. Leave the screen\'s template empty, or apply a template the site already has.',
+        paths: ['screens[0].template'],
+      },
+    ])
+    expect(detectPlanUndeclaredCreations(plan, INVENTORY)[0].message).toBe(
+      'The screen "Roof repair" applies a template named "Service page", but the plan never creates it. Declare it in create as a template, with why nothing the site has will do, or leave the screen\'s template empty.',
+    )
+  })
+
+  it('rule 7: reports a name once however often it is placed, and nothing for a plan that declares what it places', () => {
+    const plan = planOf({
+      screens: [
+        screen({ sections: [{ name: 'cards', uses: ['new:Card'], items: 3 }] }),
+        screen({ title: 'Gutters', slug: '/gutters', sections: [{ name: 'more cards', uses: ['new:card'], items: 3 }] }),
+      ],
+    })
+    expect(detectPlanUndeclaredCreations(plan, INVENTORY, PAID_PAGE)).toMatchObject([
+      { code: 'plan-creation-undeclared', paths: ['screens[0].sections[0].uses[0]', 'screens[1].sections[0].uses[0]'] },
+    ])
+    const declared = planOf({ ...plan, create: [creation('component', 'Card')] })
+    expect(detectPlanUndeclaredCreations(declared, INVENTORY, PAID_PAGE)).toEqual([])
+  })
+
+  describe('the plan the first live recording of the Free brief kept', () => {
+    /**
+     * The brief's workspace as its eval case describes it: no reusable
+     * components, saved forms or datasets, and room for the one layout its
+     * site does not have yet — narrowed to what a page job builds.
+     */
+    const FREE_BRIEF = aiPlanCapabilitiesForJob(
+      {
+        reusableComponents: false,
+        create: {
+          ...aiUnrestrictedPlanCapabilities().create,
+          component: { allowed: false, left: 0, reason: "this workspace's plan does not include reusable components" },
+          layout: { allowed: true, left: 1, reason: null },
+          template: { allowed: true, left: 10, reason: null },
+          form: { allowed: false, left: 0, reason: "this workspace's plan does not include saved forms" },
+          dataset: { allowed: false, left: 0, reason: "this workspace's plan does not include datasets" },
+        },
+      },
+      PAGE_JOB,
+    )
+    const SITE: AiSiteInventory = {
+      ...emptyAiSiteInventory('host-brightwater-law'),
+      screens: [{ id: 'scr-home', name: 'Home', slug: '/', layoutId: null, template: false }],
+    }
+
+    it('is refused on the Free workspace it was recorded for: the layout off the hero section, the form drawn on the page', () => {
+      expect(validateAiBuildPlan(AI_FREE_PAGE_RECORDED_PLAN, SITE, null, FREE_BRIEF)).toEqual([
+        {
+          rule: 2,
+          code: 'plan-layout-in-section',
+          message:
+            "A section places a layout. A layout frames a whole screen and is never placed inside one: name it as the screen's layout, and take it out of the section's uses.",
+          paths: ['screens[0].sections[0].uses[0]'],
+        },
+        {
+          rule: 7,
+          code: 'plan-creation-undeclared',
+          message:
+            'The "consultation request form" section places a creation named "consultation-form", but the plan never creates it, and this workspace\'s plan does not include saved forms. Draw the form on the page instead, as a Form element holding its Form Fields. Take it out of the section\'s uses.',
+          paths: ['screens[0].sections[4].uses[0]'],
+        },
+      ])
+    })
+
+    it('is refused on a paid workspace as well, where the form it places is declared and its repeats are components', () => {
+      const found = validateAiBuildPlan(AI_FREE_PAGE_RECORDED_PLAN, SITE, null, PAID_PAGE)
+      expect(found.map(({ rule, code, paths }) => [rule, code, paths])).toEqual([
+        [1, 'plan-repeated-items', ['screens[0].sections[2]', 'screens[0].sections[3]']],
+        [2, 'plan-layout-in-section', ['screens[0].sections[0].uses[0]']],
+        [3, 'plan-form-not-placed', ['screens[0].sections[4]']],
+        [7, 'plan-creation-undeclared', ['screens[0].sections[4].uses[0]']],
+      ])
+      expect(found[3].message).toBe(
+        'The "consultation request form" section places a creation named "consultation-form", but the plan never creates it. Declare it in create as a form, with why nothing the site has will do, or place a form the site already has by its id.',
+      )
+    })
+  })
+})
+
 describe('validateAiBuildPlan', () => {
   it('passes a plan that reuses the site’s layout for one fresh screen', () => {
     expect(validateAiBuildPlan(planOf(), INVENTORY)).toEqual([])
@@ -944,12 +1193,17 @@ describe('validateAiBuildPlan', () => {
       planOf({
         reuse: [{ kind: 'component', id: 'cmp-missing', purpose: 'cards' }],
         screens: [
-          screen({ title: 'Lorem ipsum', layout: null, slug: 'Bad Slug', sections: [{ name: 'price grid', uses: [], items: 9 }] }),
+          screen({
+            title: 'Lorem ipsum',
+            layout: null,
+            slug: 'Bad Slug',
+            sections: [{ name: 'price grid', uses: ['tpl-service', 'new:Price tile'], items: 9 }],
+          }),
         ],
       }),
       INVENTORY,
     )
-    expect(found.map((violation) => violation.rule)).toEqual([1, 2, 7, 8, 10, 14])
+    expect(found.map((violation) => violation.rule)).toEqual([1, 2, 4, 7, 7, 8, 10, 14])
   })
 
   it('holds a plan to what its job may create, and to the inline doctrine where the workspace keeps no reusable components (AGL-3030)', () => {

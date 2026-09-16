@@ -467,3 +467,57 @@ export function aiPlanCreateFor(
   const name = ref.slice(AI_PLAN_NEW_REF_PREFIX.length).trim().toLowerCase()
   return plan.create.find((entry) => entry.name.toLowerCase() === name)
 }
+
+/**
+ * A `new:<name>` reference that names no entry of the plan's create list: a
+ * screen's own layout or template, or what one of its sections places, with
+ * that section's index.
+ */
+export type AiPlanUndeclaredRef = {
+  /** The name the reference gives the creation, as written after `new:`. */
+  name: string
+  /** Where the plan writes it: `screens[0].template`, `screens[0].sections[4].uses[0]`. */
+  path: string
+  /** The screen that writes it, by index. */
+  screenIndex: number
+} & ({ field: 'layout' | 'template'; sectionIndex: null } | { field: 'uses'; sectionIndex: number })
+
+/**
+ * Every `new:<name>` reference the plan's create list does not carry, in plan
+ * order: each screen's layout, then its template, then what its sections
+ * place. A plan that places a creation it never declares has nothing to build
+ * it from, so the plan rules refuse each (AGL-3040), and the page and
+ * scaffold doors still name one in a plan confirmed before they did.
+ */
+export function aiPlanUndeclaredRefs(plan: AiBuildPlan): AiPlanUndeclaredRef[] {
+  const found: AiPlanUndeclaredRef[] = []
+  const undeclared = (ref: string | null): ref is string =>
+    isAiPlanNewRef(ref) && !aiPlanCreateFor(plan, ref)
+  const nameOf = (ref: string) => ref.slice(AI_PLAN_NEW_REF_PREFIX.length).trim()
+  plan.screens.forEach((screen, screenIndex) => {
+    for (const field of ['layout', 'template'] as const) {
+      const ref = screen[field]
+      if (!undeclared(ref)) continue
+      found.push({
+        name: nameOf(ref),
+        path: `screens[${screenIndex}].${field}`,
+        screenIndex,
+        field,
+        sectionIndex: null,
+      })
+    }
+    screen.sections.forEach((section, sectionIndex) => {
+      section.uses.forEach((ref, useIndex) => {
+        if (!undeclared(ref)) return
+        found.push({
+          name: nameOf(ref),
+          path: `screens[${screenIndex}].sections[${sectionIndex}].uses[${useIndex}]`,
+          screenIndex,
+          field: 'uses',
+          sectionIndex,
+        })
+      })
+    })
+  })
+  return found
+}

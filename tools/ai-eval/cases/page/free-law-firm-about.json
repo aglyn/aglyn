@@ -158,6 +158,7 @@
       "plan": {
         "reuse": [],
         "create": [
+          { "kind": "layout", "name": "Site layout", "why": "The site has no layout yet, so its pages would otherwise carry their own header and footer.", "duplicateOf": null, "fields": [] },
           { "kind": "component", "name": "Practice area card", "why": "Four practice areas share one card.", "duplicateOf": null, "fields": ["title:text", "summary:text"] },
           { "kind": "form", "name": "Consultation request", "why": "The site has no form to request a consultation.", "duplicateOf": null, "fields": ["name", "email", "phone", "matter"] }
         ],
@@ -174,6 +175,45 @@
             "sections": [
               { "name": "hero", "uses": [], "items": 0 },
               { "name": "practice areas", "uses": ["new:Practice area card"], "items": 4 },
+              { "name": "how we work", "uses": [], "items": 0 },
+              { "name": "consultation request form", "uses": ["new:Consultation request"], "items": 0 }
+            ]
+          }
+        ]
+      },
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } }
+          }
+        }
+      },
+      "fails": ["plan"]
+    },
+    {
+      "why": "A plan that places a consultation form it never declares, which nothing on a workspace without saved forms can build (rule 7).",
+      "plan": {
+        "reuse": [],
+        "create": [
+          { "kind": "layout", "name": "Site layout", "why": "The site has no layout yet, so its pages would otherwise carry their own header and footer.", "duplicateOf": null, "fields": [] }
+        ],
+        "screens": [
+          {
+            "title": "About Brightwater Law",
+            "slug": "/about",
+            "layout": "new:Site layout",
+            "template": null,
+            "duplicateOf": null,
+            "nav": true,
+            "seoTitle": "About Brightwater Law",
+            "seoDescription": "A small firm for families and small businesses: estate planning, real estate, business formation and landlord-tenant matters.",
+            "sections": [
+              { "name": "hero", "uses": [], "items": 0 },
+              { "name": "practice areas", "uses": [], "items": 4 },
               { "name": "how we work", "uses": [], "items": 0 },
               { "name": "consultation request form", "uses": ["new:Consultation request"], "items": 0 }
             ]

@@ -382,6 +382,23 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   shape refusal (`plan-job-shape`) — both with the one re-ask every rule gets. A site
   with no layout, where the job may not create one, is not refused for a screen that
   names none; a long list, where no dataset may be made, is asked to be shorter.
+- **What a plan places, it reuses or creates (AGL-3040).** A `new:<name>` reference
+  that names no entry of `create` is a creation nothing builds: a plan kept with one
+  stopped its page at the first pass, sending a Free member to make what Free cannot.
+  `aiPlanUndeclaredRefs` (`src/lib/model/ai-build-plan.ts`) lists each one. A screen's
+  layout stays rule 2's `plan-screen-without-layout`, whose message follows the
+  workspace: plan a layout, put the screen in one the site has, or leave it empty. A
+  screen's template or a section's `uses` is rule 7's `plan-creation-undeclared`, one
+  violation a name. Where the job may make one more of the kind the reference meant (a
+  form when its name, or a section with no form yet, reads as one; a component
+  otherwise), the message says to declare it in `create`; where it may not
+  (`aiPlanUncreatableKind`), it says to build without it — a Form element, or the item
+  drawn in its section, on a workspace without saved forms or reusable components, and
+  what the site has elsewhere. A section that places a layout is refused by rule 2
+  (`plan-layout-in-section`) and one that places a template by rule 4
+  (`plan-template-in-section`): each frames a whole screen. No system block changes, so
+  the cached prefix is the same bytes. A plan confirmed before these rules still stops
+  at the page and scaffold doors, which name such a reference as a component to create.
 - **Inline, where the workspace keeps no reusable components.** A workspace whose plan
   lacks `reusableComponents` can place no component and save no form, so there — and
   only there — the doctrine builds inline: a form is a Form element the page carries,

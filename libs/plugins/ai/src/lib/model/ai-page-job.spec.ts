@@ -27,6 +27,10 @@
  */
 
 import { AI_PAGE_BRIEF_FIXTURES } from '../jobs/fixtures/ai-page-briefs'
+import {
+  AI_FREE_PAGE_RECORDED_PLAN,
+  AI_FREE_PAGE_STOPPED_RECORDING,
+} from '../jobs/fixtures/ai-free-page-recording'
 import type { AiBuildPlan } from './ai-build-plan'
 import {
   AI_PAGE_CREATE_KINDS,
@@ -131,6 +135,15 @@ describe('the plans a page job builds', () => {
       { kind: 'email', name: 'Welcome' },
       { kind: 'component', name: 'Quote strip' },
     ])
+  })
+
+  it('still names an undeclared creation in a plan confirmed before the plan rules refused one (AGL-3040)', () => {
+    // The plan rules now refuse this plan before it is kept (rule 7,
+    // `plan-creation-undeclared`); one confirmed earlier stops at the door
+    // with the sentence the live recording stopped with, not at a dead pass.
+    const { candidate } = AI_FREE_PAGE_STOPPED_RECORDING
+    expect(aiPagePlanPrerequisites(AI_FREE_PAGE_RECORDED_PLAN)).toEqual([{ kind: 'component', name: 'consultation-form' }])
+    expect(`stopped: ${aiPagePlanRefusal(AI_FREE_PAGE_RECORDED_PLAN)}`).toBe(candidate.note)
   })
 
   it('holds a plan’s shape apart from what it creates (AGL-3030)', () => {

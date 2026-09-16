@@ -190,6 +190,19 @@ export interface AiPlanUncreatable {
   message: string
 }
 
+/**
+ * Why the nth creation of a kind may not be made here, as a clause; `null`
+ * when it may. A kind the site may make only so many more of refuses the ones
+ * past that count, not the first of them.
+ */
+function refusedReason(capability: AiPlanCreation, nth: number): string | null {
+  const overCount = capability.allowed && capability.left !== null && nth > capability.left
+  if (capability.allowed && !overCount) return null
+  return overCount
+    ? `this site has room for ${capability.left} more`
+    : (capability.reason ?? 'it cannot be made here')
+}
+
 /** The creations a plan names that the capabilities refuse, in plan order. */
 export function aiPlanUncreatable(
   plan: Pick<AiBuildPlan, 'create'>,
@@ -198,16 +211,10 @@ export function aiPlanUncreatable(
   const refused: AiPlanUncreatable[] = []
   const counted = new Map<AiBuildPlanCreateKind, number>()
   plan.create.forEach((entry, index) => {
-    const capability = capabilities.create[entry.kind]
     const nth = (counted.get(entry.kind) ?? 0) + 1
     counted.set(entry.kind, nth)
-    // A kind the site may make only so many more of refuses the ones past
-    // that count, not the first of them.
-    const overCount = capability.allowed && capability.left !== null && nth > capability.left
-    if (capability.allowed && !overCount) return
-    const reason = overCount
-      ? `this site has room for ${capability.left} more`
-      : (capability.reason ?? 'it cannot be made here')
+    const reason = refusedReason(capabilities.create[entry.kind], nth)
+    if (reason === null) return
     refused.push({
       kind: entry.kind,
       name: entry.name,
@@ -217,4 +224,21 @@ export function aiPlanUncreatable(
     })
   })
   return refused
+}
+
+/**
+ * Why the plan could not add one more creation of a kind here, and what to
+ * do instead; `null` when it could (AGL-3040). Counted past the creations of
+ * that kind the plan already names, as `aiPlanUncreatable` counts them, so a
+ * plan told to declare a creation is never told to declare one the next
+ * answer is refused for.
+ */
+export function aiPlanUncreatableKind(
+  plan: Pick<AiBuildPlan, 'create'>,
+  kind: AiBuildPlanCreateKind,
+  capabilities: AiPlanCapabilities,
+): { reason: string; instead: string } | null {
+  const planned = plan.create.filter((entry) => entry.kind === kind).length
+  const reason = refusedReason(capabilities.create[kind], planned + 1)
+  return reason === null ? null : { reason, instead: insteadOf(kind, capabilities) }
 }

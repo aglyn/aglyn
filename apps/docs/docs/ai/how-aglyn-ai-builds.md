@@ -65,7 +65,8 @@ generated until you confirm.
    campaigns start from an email template.
 7. **Reuse before creating.** Creating something new is the exception, and the plan
    says why. A plan never creates something your plan does not include or your site
-   has no room for.
+   has no room for, and everything it puts on a page is something your site already
+   has or something the plan itself creates.
 8. **Data is bound, not typed.** A list you already keep as a dataset, collection
    or product catalog is bound to it rather than typed into the page, so it stays
    current. A long list your site does not have yet becomes a proposed dataset.

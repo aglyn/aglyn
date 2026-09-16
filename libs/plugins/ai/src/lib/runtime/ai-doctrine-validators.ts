@@ -33,11 +33,19 @@ import {
 import { renderEmailHtml } from '@aglyn/shared-util-email/email-render'
 import {
   aiPlanCreateFor,
+  aiPlanUndeclaredRefs,
   isAiPlanNewRef,
   type AiBuildPlan,
   type AiBuildPlanCreateKind,
+  type AiBuildPlanSection,
+  type AiPlanUndeclaredRef,
 } from '../model/ai-build-plan'
-import { aiPlanUncreatable, type AiPlanCapabilities } from '../model/ai-plan-capabilities'
+import {
+  aiCreationNoun,
+  aiPlanUncreatable,
+  aiPlanUncreatableKind,
+  type AiPlanCapabilities,
+} from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import {
   AI_INSTANCE_REF_PROP,
@@ -1668,11 +1676,26 @@ export function detectPlanRepeats(
   return violations
 }
 
+/** Where the plan's sections place a record of one kind, as `screens[0].sections[1].uses[0]`. */
+function placementsOf(
+  plan: AiBuildPlan,
+  kinds: Map<string, RecordKind>,
+  kind: RecordKind,
+): string[] {
+  return sectionPaths(plan).flatMap(({ section, path }) =>
+    section.uses.flatMap((ref, index) =>
+      refKind(ref, plan, kinds) === kind ? [`${path}.uses[${index}]`] : [],
+    ),
+  )
+}
+
 /**
- * Rule 2 (plan): every screen declares a layout, and no section is a copy of
- * a layout region. A site with no layout, where this job may not create one
+ * Rule 2 (plan): every screen declares a layout, no section is a copy of a
+ * layout region, and no section places a layout, which frames a whole screen
+ * (AGL-3040). A site with no layout, where this job may not create one
  * (AGL-3030), has nothing to declare: its screens name none, and a screen
- * that names none is not refused there.
+ * that names none is not refused there. A screen whose layout is a `new:`
+ * reference the plan never creates is refused here, and only here.
  */
 export function detectPlanLayoutRegions(
   plan: AiBuildPlan,
@@ -1681,10 +1704,8 @@ export function detectPlanLayoutRegions(
 ): AiDoctrineViolation[] {
   const kinds = inventoryKinds(inventory)
   const violations: AiDoctrineViolation[] = []
-  const noLayoutToName =
-    Boolean(capabilities) &&
-    !capabilities?.create.layout.allowed &&
-    !(inventory?.layouts.length ?? 0)
+  const mayCreateLayout = !capabilities || capabilities.create.layout.allowed
+  const noLayoutToName = !mayCreateLayout && !(inventory?.layouts.length ?? 0)
   const unlaid = plan.screens
     .map((screen, index) => ({ screen, index }))
     .filter(
@@ -1698,7 +1719,9 @@ export function detectPlanLayoutRegions(
       code: 'plan-screen-without-layout',
       message: noLayoutToName
         ? 'A screen names a layout the site does not have, and this job may not create one. Leave the layout empty.'
-        : "A screen names no layout the site has or the plan creates. Put every screen in the site's layout, or plan one.",
+        : mayCreateLayout
+          ? "A screen names no layout the site has or the plan creates. Put every screen in the site's layout, or plan one."
+          : 'A screen names no layout the site has, and this job may not create one. Put every screen in a layout the site has.',
       paths: unlaid.map(({ index }) => `screens[${index}].layout`),
     })
   }
@@ -1712,6 +1735,16 @@ export function detectPlanLayoutRegions(
       message:
         'A screen plans its own header, navigation or footer. Those live in the layout; take the section off the screen.',
       paths: regions.map((entry) => entry.path),
+    })
+  }
+  const placed = placementsOf(plan, kinds, 'layout')
+  if (placed.length) {
+    violations.push({
+      rule: 2,
+      code: 'plan-layout-in-section',
+      message:
+        "A section places a layout. A layout frames a whole screen and is never placed inside one: name it as the screen's layout, and take it out of the section's uses.",
+      paths: placed,
     })
   }
   return violations
@@ -1750,8 +1783,15 @@ export function detectPlanInlineForms(
 /** Pages sharing one shape this many times are a template applied. */
 export const AI_SIMILAR_PAGES_MIN = 3
 
-/** Rule 4 (plan): three or more screens with the same sections share one template. */
-export function detectUntemplatedSimilarPages(plan: AiBuildPlan): AiDoctrineViolation[] {
+/**
+ * Rule 4 (plan): three or more screens with the same sections share one
+ * template, and a template is what a screen applies, never what one of its
+ * sections places (AGL-3040).
+ */
+export function detectUntemplatedSimilarPages(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null = null,
+): AiDoctrineViolation[] {
   const groups = new Map<string, number[]>()
   plan.screens.forEach((screen, index) => {
     if (screen.sections.length < 2) return
@@ -1770,6 +1810,16 @@ export function detectUntemplatedSimilarPages(plan: AiBuildPlan): AiDoctrineViol
       code: 'plan-similar-pages',
       message: `${indexes.length} screens share one shape. Plan one template and apply it ${indexes.length} times with each page's copy, or bind it to a collection.`,
       paths: indexes.map((index) => `screens[${index}].template`),
+    })
+  }
+  const placed = placementsOf(plan, inventoryKinds(inventory), 'template')
+  if (placed.length) {
+    violations.push({
+      rule: 4,
+      code: 'plan-template-in-section',
+      message:
+        "A section places a template. A template is applied to a whole screen and is never placed inside one: take it out of the section's uses, and name it as the screen's template only when the whole screen is built from it.",
+      paths: placed,
     })
   }
   return violations
@@ -1874,6 +1924,74 @@ export function detectPlanUncreatable(
     message: entry.message,
     paths: [entry.path],
   }))
+}
+
+/**
+ * What a section most likely meant by a creation it places and the plan never
+ * declares, so the refusal can name the way out: a form where the reference
+ * or its section reads as one and the section places no form yet, otherwise
+ * a component. Only the message reads it; the reference is refused whatever
+ * it was meant to be.
+ */
+function undeclaredPlacementKind(
+  name: string,
+  section: AiBuildPlanSection,
+  plan: AiBuildPlan,
+  kinds: Map<string, RecordKind>,
+): 'form' | 'component' {
+  if (FORM_SECTION_NAME.test(name)) return 'form'
+  const placesForm = section.uses.some((ref) => refKind(ref, plan, kinds) === 'form')
+  return FORM_SECTION_NAME.test(section.name) && !placesForm ? 'form' : 'component'
+}
+
+/**
+ * Rule 7 (plan): what a plan places, it reuses or it creates (AGL-3040). The
+ * doctrine has a plan refer to what it creates as new:<name>, so a reference
+ * that names no entry of the create list is a creation nothing builds. A page
+ * kept with one stops at its first pass, sending the member to make that
+ * creation by hand, which a workspace that cannot make it never can. Each is
+ * refused with the one re-ask, once a name however often it is placed, and
+ * says what to do on THIS workspace: declare the creation where the job may
+ * make one more of that kind, and otherwise build the page without it, drawn
+ * on the page or placed from what the site has. A screen's layout is rule
+ * 2's (`plan-screen-without-layout`), and is not reported twice.
+ */
+export function detectPlanUndeclaredCreations(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
+): AiDoctrineViolation[] {
+  const kinds = inventoryKinds(inventory)
+  const byName = new Map<string, AiPlanUndeclaredRef[]>()
+  for (const ref of aiPlanUndeclaredRefs(plan)) {
+    if (ref.field === 'layout') continue
+    const key = ref.name.toLowerCase()
+    byName.set(key, [...(byName.get(key) ?? []), ref])
+  }
+  return [...byName.values()].map((refs): AiDoctrineViolation => {
+    const [first] = refs
+    const screen = plan.screens[first.screenIndex]
+    const section = first.field === 'uses' ? screen.sections[first.sectionIndex] : null
+    const kind: AiBuildPlanCreateKind = section
+      ? undeclaredPlacementKind(first.name, section, plan, kinds)
+      : 'template'
+    const refused = capabilities ? aiPlanUncreatableKind(plan, kind, capabilities) : null
+    const where = section
+      ? `${section.name ? `The "${section.name}" section` : 'A section'} places a creation named "${first.name}", but the plan never creates it`
+      : `${screen.title ? `The screen "${screen.title}"` : 'A screen'} applies a template named "${first.name}", but the plan never creates it`
+    let message: string
+    if (!refused) {
+      const otherwise = section
+        ? `place ${aiCreationNoun(kind)} the site already has by its id`
+        : "leave the screen's template empty"
+      message = `${where}. Declare it in create as ${aiCreationNoun(kind)}, with why nothing the site has will do, or ${otherwise}.`
+    } else if (section) {
+      message = `${where}, and ${refused.reason}. ${refused.instead} Take it out of the section's uses.`
+    } else {
+      message = `${where}, and ${refused.reason}. Leave the screen's template empty, or apply a template the site already has.`
+    }
+    return { rule: 7, code: 'plan-creation-undeclared', message, paths: refs.map((ref) => ref.path) }
+  })
 }
 
 /**
@@ -2077,10 +2195,11 @@ export function validateAiBuildPlan(
     ...detectPlanRepeats(plan, inventory, capabilities),
     ...detectPlanLayoutRegions(plan, inventory, capabilities),
     ...detectPlanInlineForms(plan, inventory, capabilities),
-    ...detectUntemplatedSimilarPages(plan),
+    ...detectUntemplatedSimilarPages(plan, inventory),
     ...detectPlanLiteralColors(plan),
     ...detectCreateBeforeReuse(plan, inventory),
     ...detectPlanUncreatable(plan, capabilities),
+    ...detectPlanUndeclaredCreations(plan, inventory, capabilities),
     ...detectPlanTypedData(plan, inventory, capabilities),
     ...detectMissingNavAndSeo(plan, inventory),
     ...detectOffVoiceCopy(aiPlanCopy(plan), framing),
