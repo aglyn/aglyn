@@ -279,7 +279,9 @@ live answer.
   live run; and `controls`, answers that must fail, each naming the checks it
   fails.
 - **The checks** (`src/lib/runtime/ai-eval.ts`). *Readable*: the tree
-  validator admits it, or the copy, the fields or the theme call are there.
+  validator admits it — a page's repeated item written once drawn into its copies
+  first, and refused as the page step refuses it (AGL-3053) — or the copy, the fields
+  or the theme call are there.
   *Rules*: no doctrine rule is broken, nor the kind's own (a link the chat
   answer was not given, a title line on a blog body). *Budget*: rule 17 for a
   document, the length ceiling for copy. *Plan*: the plan rules and the
@@ -1368,6 +1370,11 @@ wall and does not move, so the answer writes the item once (AGL-3053):
   figures stay where they were ([Evals](#evals)). The 201-character repeat line rides
   only the user turn of the pass that builds the practice areas, which stays inside the
   credits it came to before.
+- **The eval harness reads the same shape.** A `page` answer is drawn the same way
+  before it is scored (`checkTree` in `src/lib/runtime/ai-eval.ts`), and refused the
+  same way: the Free About case holds the page written once as a golden beside the page
+  written out, and controls for a copy with a missing value and for named
+  placeholders; a paid case holds an item written once as a control that fails.
 
 ### The time budget
 

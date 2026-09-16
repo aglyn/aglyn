@@ -82,6 +82,32 @@
   ],
   "controls": [
     {
+      "why": "The customer quotes written once with \"repeat\", on a site that keeps reusable components, where a repeated item is placed as instances of its component (rule 1, AGL-3053).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro", "words"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "intro-body"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Meet the crew" } },
+            "intro-body": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Six roofers who know Harbor County roofs." } },
+            "words": { "componentId": "section", "props": { "element": "section" }, "nodes": ["words-title", "words-row"] },
+            "words-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What customers say" } },
+            "words-row": { "componentId": "muiStack", "props": { "direction": "row", "flexWrap": "wrap" }, "sx": { "gap": 3 }, "nodes": ["quote"] },
+            "quote": {
+              "componentId": "reusableInstance",
+              "props": { "refId": "cmp-testimonial", "propValues": { "quote": "{{1}}", "name": "{{2}}" } },
+              "repeat": [
+                ["They found the leak two other companies missed.", "Dana, Harbor Point"],
+                ["On time, tidy, and the photos made the invoice easy to trust.", "Luis, Old Mill Road"]
+              ]
+            }
+          }
+        }
+      },
+      "fails": ["readable"]
+    },
+    {
       "why": "The page carries its own app bar, a copy of the site header the layout already has (rule 2).",
       "answer": {
         "tree": {

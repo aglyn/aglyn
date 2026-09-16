@@ -27,7 +27,7 @@ import type { AiSiteInventory } from '../model/ai-site-inventory'
 import type { AiStepKind } from '../providers/catalog'
 import type { AiEffort, AiUsage } from '../providers/contract'
 import { parseAiThemeToolInput } from '../tools/ai-theme-tool'
-import { aiDoctrinePlanCheck, aiDoctrineTreeCheck, aiDoctrineTreeContext } from './ai-doctrine'
+import { aiAnswerTree, aiDoctrinePlanCheck, aiDoctrineTreeCheck, aiDoctrineTreeContext } from './ai-doctrine'
 import {
   AI_SEO_DESCRIPTION_MAX,
   AI_SEO_TITLE_MAX,
@@ -38,6 +38,7 @@ import {
   type AiDoctrineViolation,
 } from './ai-doctrine-validators'
 import { AI_TEXT_LIMITS, type AiOutputKind } from './ai-palette'
+import { expandAiRepeatedItems } from './ai-repeated-items'
 
 /**
  * THE EVAL HARNESS (AGL-2937): the measure that gates every token lever.
@@ -301,15 +302,26 @@ const codes = (violations: readonly AiDoctrineViolation[]) =>
 // ── The kinds ─────────────────────────────────────────────────────────────
 
 function checkTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknown): Checked {
+  const inline = evalCase.capabilities?.reusableComponents === false
   const check = aiDoctrineTreeCheck(
     outputKind,
     aiDoctrineTreeContext(evalCase.inventory, {
       ...(evalCase.assets ? { assets: evalCase.assets } : {}),
       framing: evalCase.framing,
-      ...(evalCase.capabilities?.reusableComponents === false ? { reusableComponents: false } : {}),
+      ...(inline ? { reusableComponents: false } : {}),
     }),
   )
-  const result = check(isRecord(answer) ? answer : { tree: answer })
+  let input = isRecord(answer) ? answer : { tree: answer }
+  // A page's repeated item written once is drawn into its copies first, as the
+  // page step draws it, and refused as the page step refuses it (AGL-3053).
+  if (evalCase.kind === 'page') {
+    const drawn = expandAiRepeatedItems(aiAnswerTree(input), { inline, noun: 'page' })
+    if (drawn.ok === false) {
+      return { readable: false, rules: false, budget: false, findings: codes(drawn.violations) }
+    }
+    if (drawn.items) input = { tree: drawn.tree }
+  }
+  const result = check(input)
   const budget = result.violations.filter((violation) => violation.rule === 17)
   const rules = result.violations.filter((violation) => violation.rule !== 17)
   return {
