@@ -112,9 +112,21 @@ describe('scheduled-crons.yml wiring', () => {
   )
 
   /**
+   * The AI jobs beat (AGL-3026): one route on a job of its own, every minute,
+   * because one sweep may run for most of five minutes. Pinned in named
+   * consts for the reason the other two families are.
+   */
+  const aiBeatSchedule = /^const CONSOLE_AI_JOBS_BEAT_SCHEDULE = '([^']+)'$/m.exec(
+    functions,
+  )?.[1]
+  const aiBeatRoute = /^const CONSOLE_AI_JOBS_BEAT_ROUTE = '([^']+)'$/m.exec(
+    functions,
+  )?.[1]
+
+  /**
    * Every console route ANY runner POSTs on a schedule.
    *
-   * The workflow's `case` arms plus both Cloud Scheduler families. Routes
+   * The workflow's `case` arms plus every Cloud Scheduler family. Routes
    * move between runners — AGL-1617 took two off GitHub Actions and the
    * dailies followed — so anything that has to be true of a scheduled console
    * route has to be asserted over this union rather than over whichever
@@ -126,6 +138,7 @@ describe('scheduled-crons.yml wiring', () => {
       ...caseArms.values(),
       ...fastRoutes,
       ...[...dailyCrons.values()].map((daily) => daily.route),
+      ...(aiBeatRoute ? [aiBeatRoute] : []),
     ]),
   ]
 
@@ -325,12 +338,21 @@ describe('scheduled-crons.yml wiring', () => {
       functions,
     )?.[1]
 
+    /** The inventory row the AI jobs beat is judged by, found by its route. */
+    const aiBeatJobs = SCHEDULED_JOBS.filter(
+      (job) =>
+        job.runner === 'cloud-scheduler' &&
+        Boolean(aiBeatRoute) &&
+        job.target.includes(aiBeatRoute as string),
+    )
+
     /** Inventory rows driven by `consoleFastCrons`, keyed by the route. */
     const fastJobs = SCHEDULED_JOBS.filter(
       (job) =>
         job.runner === 'cloud-scheduler' &&
         job.id !== 'plugin-jobs-beat' &&
-        !dailyCrons.has(job.id),
+        !dailyCrons.has(job.id) &&
+        !aiBeatJobs.includes(job),
     )
 
     /** Inventory rows driven by a `consoleDailyCron` export. */
@@ -480,6 +502,62 @@ describe('scheduled-crons.yml wiring', () => {
       expect(scheduled).not.toContain(beat?.cron)
       expect(functions).toContain('export const pluginJobsBeat = onSchedule(')
       expect(functions).toContain("schedule: 'every 1 minutes'")
+    })
+
+    it('runs the AI jobs beat every minute on a job of its own, and watches it (AGL-3026)', () => {
+      // Parsed at all, and not decorative: the export reads both consts.
+      expect(aiBeatRoute).toBe('/api/admin/ai-jobs-beat')
+      expect(functions).toContain('export const consoleAiJobsBeat = onSchedule(')
+      expect(functions).toContain('schedule: CONSOLE_AI_JOBS_BEAT_SCHEDULE')
+      expect(functions).toMatch(/sweepConsoleCron\(\s*CONSOLE_AI_JOBS_BEAT_ROUTE,/)
+      // Every minute: a step a budget handed back, and every page pass after
+      // the first, waits for the next beat.
+      expect(aiBeatSchedule).toBe('* * * * *')
+      // Exactly one inventory row, judged against the schedule the function
+      // declares, and held to the grace the other every-minute job keeps.
+      expect(aiBeatJobs.map((job) => job.id)).toEqual(['ai-jobs-beat'])
+      expect(aiBeatJobs[0].cron).toBe(aiBeatSchedule)
+      expect(aiBeatJobs[0].graceMinutes).toBeLessThanOrEqual(
+        SCHEDULED_JOBS.find((job) => job.id === 'plugin-jobs-beat')?.graceMinutes as number,
+      )
+      // One place only: not a fast route as well, and not on the workflow's
+      // schedule, where a second runner would sweep beside it.
+      expect(fastRoutes).not.toContain(aiBeatRoute)
+      expect(
+        [...caseArms.entries()]
+          .filter(([cron]) => scheduled.includes(cron))
+          .map(([, route]) => route),
+      ).not.toContain(aiBeatRoute)
+    })
+
+    it('waits for a beat longer than the console route may run (AGL-3026)', () => {
+      // A wait that ended before the route did would log a sweep that is
+      // still running as a failure, every minute it ran long.
+      const route = readFileSync(
+        join(repoRoot, 'apps', 'console', 'app', 'api', 'admin', 'ai-jobs-beat', 'route.ts'),
+        'utf8',
+      )
+      const maxDurationMs = Number(/^export const maxDuration = (\d+)$/m.exec(route)?.[1]) * 1_000
+      const waitMs = Number(
+        /^const CONSOLE_AI_JOBS_BEAT_TIMEOUT_MS = ([\d_]+)$/m.exec(functions)?.[1].replace(/_/g, ''),
+      )
+      const edge = readFileSync(
+        join(repoRoot, 'cloud', 'functions', 'src', 'edge-challenge.ts'),
+        'utf8',
+      )
+      const retryDelayMs = Number(
+        /export const EDGE_CHALLENGE_RETRY_DELAY_MS = ([\d_]+)/.exec(edge)?.[1].replace(/_/g, ''),
+      )
+      const declaration = functions.slice(
+        functions.indexOf('export const consoleAiJobsBeat = onSchedule('),
+      )
+      const functionTimeoutMs = Number(/timeoutSeconds: (\d+)/.exec(declaration)?.[1]) * 1_000
+      expect(maxDurationMs).toBeGreaterThan(0)
+      expect(waitMs).toBeGreaterThan(maxDurationMs)
+      // A challenged first attempt answers at the edge in moments; then the
+      // retry's delay, then the full wait.
+      expect(retryDelayMs).toBeGreaterThan(0)
+      expect(functionTimeoutMs).toBeGreaterThan(waitMs + retryDelayMs)
     })
   })
 

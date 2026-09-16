@@ -166,7 +166,6 @@
       "register": {
         "console": "registerAiConsole",
         "staff": "registerAiConsole",
-        "tenantApi": "registerAiApi",
         "consoleApi": "registerAiConsoleApi",
         "declarations": "registerAiDeclarations",
         "serverDeclarations": "registerAiServerDeclarations",

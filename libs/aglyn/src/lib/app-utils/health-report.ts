@@ -2239,11 +2239,11 @@ export interface ScheduledJob {
  *
  * Seven GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) —
  * the weekly jobs, the month-boundary usage-email sweep and the hourly CRM
- * task reminders, for which an hour of drift is nothing — and twelve rows
+ * task reminders, for which an hour of drift is nothing — and the rows
  * driven by Cloud Scheduler out of
- * `cloud/functions/src/index.ts`: `pluginJobsBeat` (every minute), the four
- * the `consoleFastCrons` job carries every fifteen (AGL-1617), and one
- * `consoleDailyCron` export per daily job.
+ * `cloud/functions/src/index.ts`: `pluginJobsBeat` and `consoleAiJobsBeat`
+ * (every minute), the routes the `consoleFastCrons` job carries every
+ * fifteen (AGL-1617), and one `consoleDailyCron` export per daily job.
  *
  * `scheduled-crons-wiring.spec.ts` holds BOTH runners against their source —
  * the workflow for the `github-actions` rows, the functions file for the
@@ -2495,6 +2495,19 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     graceMinutes: 45,
     drives:
       'Fires the cache-drop announce for publishes whose tab closed before it landed (AGL-2575). Publishing is a client Firestore write, so the announce is a fetch from the browser and a closed tab strands it; this is the only thing that finishes one. If it stops, a stranded publish is invisible on the live site for the full hour-long document TTL, and the pending entry that records it is never read by anything.',
+  },
+  {
+    id: 'ai-jobs-beat',
+    label: 'AI jobs beat',
+    // Its own Cloud Scheduler job, every minute (AGL-3026): the console route
+    // runs steps for most of five minutes at a time, and a page waits a beat
+    // between sections. The grace is the other every-minute job's, below.
+    cron: '* * * * *',
+    runner: 'cloud-scheduler',
+    target: 'consoleAiJobsBeat → console /api/admin/ai-jobs-beat',
+    graceMinutes: 30,
+    drives:
+      'Runs the AI generation steps the doors leave queued: every plan, every page pass, the passes of a site scaffold, and any step an inline door’s budget handed back (AGL-3026). It runs on the console because only the console holds the AI provider key. If it stops, a generation job that plans never gets its plan and a page is never built — the job sits queued, spending nothing, and never finishes.',
   },
   {
     id: 'plugin-jobs-beat',

@@ -426,7 +426,10 @@ export function createEmailDesignDraftWriter(
 
 export const emailDesignDraftWriter = createEmailDesignDraftWriter()
 
-/** Registers the writer; both server surfaces call it, and the second replaces the first. */
+/**
+ * Registers the writer; the console surface calls it, since only the console
+ * runs AI jobs (AGL-3026). Idempotent: a second call replaces the first.
+ */
 export function registerEmailDesignDraftWriter(): void {
   registerPluginResourceDraftWriter(EMAIL_DESIGN_DRAFT_RESOURCE, emailDesignDraftWriter, {
     pluginId: EMAIL_PLUGIN_ID,

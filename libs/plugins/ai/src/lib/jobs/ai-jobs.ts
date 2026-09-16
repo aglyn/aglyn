@@ -81,8 +81,9 @@ import {
  * One document per job under the org, written only by this module through
  * the Admin SDK; the rules let a member READ their org's jobs and nobody
  * write them. The console route creates a job and runs its first step
- * inline when it can; the platform job beat claims and runs whatever is
- * queued, across every org, inside a wall-clock budget. Both go through
+ * inline when it can; the AI jobs beat, a console route of its own, claims
+ * and runs whatever is queued, across every org, inside a wall-clock budget
+ * (`ai-jobs-beat.ts`). Both go through
  * `runAiJobStep`, so there is exactly one place a step is claimed, metered,
  * run and recorded.
  *
@@ -113,11 +114,15 @@ import {
 export const AI_JOBS_COLLECTION = 'aiJobs'
 
 /**
- * How long a claim holds the step. Longer than any single provider call the
- * text step makes and shorter than two beats, so a step abandoned by a
- * frozen process is recovered on the beat after next rather than never.
+ * How long a claim holds the step: longer than the longest any holder can
+ * still be running it, which is the beat route's 300 s function ceiling
+ * (AGL-3026). A lease that ran out under a live holder would let the next
+ * beat claim the same step and call the provider for it a second time, and
+ * the beat fires every minute while a sweep may run for most of five, so
+ * this is what keeps overlapping beats apart. A step abandoned by a process
+ * that died is recovered once it runs out, by the first beat after that.
  */
-export const AI_JOB_LEASE_MS = 90_000
+export const AI_JOB_LEASE_MS = 330_000
 
 /** A step handed back by a retryable provider failure this many times fails. */
 export const AI_JOB_STEP_MAX_ATTEMPTS = 3
@@ -145,8 +150,19 @@ export const AI_JOB_STEP_RESERVE_CREDITS = 50
  */
 export const AI_JOB_INLINE_BUDGET_MS = 25_000
 
-/** Wall clock one beat may spend running steps before it yields. */
-export const AI_JOB_SWEEP_BUDGET_MS = 45_000
+/**
+ * Wall clock one beat may spend running steps before it yields (AGL-3026).
+ *
+ * Sized from the slowest step, not from the beat's interval: the plan step's
+ * minimum, which is its answer and its re-ask at the routing table's ceiling
+ * at the rates `ai-job-budget.ts` assumes, has to fit, or no plan could ever
+ * start. What is left of the beat route's 300 s function ceiling above this
+ * is the route's own work around the sweep: loading the plugin surfaces on a
+ * cold start, the lockdown read and the beat's mark, and the last step's
+ * record after its provider call. The beat fires every minute whatever this
+ * is, and overlapping beats are kept apart by the lease.
+ */
+export const AI_JOB_SWEEP_BUDGET_MS = 280_000
 
 /** Jobs one beat reads as candidates; the budget usually stops it first. */
 export const AI_JOB_SWEEP_MAX_JOBS = 25

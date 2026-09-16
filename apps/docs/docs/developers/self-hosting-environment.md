@@ -719,7 +719,7 @@ Three separate mechanisms, and missing any of them is quiet rather than loud.
 | --- | --- | --- | --- |
 | `CRON_SECRET` | Feature | Runtime | Shared secret every scheduled route checks, accepted as `Authorization: Bearer <secret>` or `x-cron-secret: <secret>`. Unset, every one of those routes refuses. `openssl rand -hex 32`. |
 | `AGLYN_JOB_RUNNER_URL` | Feature *(cloud functions)* | Runtime | The tenant origin the every-minute beat POSTs: `https://sites.example.com/api/plugins/run-jobs`. **No default, deliberately.** |
-| `AGLYN_CONSOLE_URL` | Feature *(cloud functions)* | Runtime | The origin that **serves** your console — never one that redirects to it, because a redirect drops the POST body and the `x-cron-secret` header. **No default, deliberately.** |
+| `AGLYN_CONSOLE_URL` | Feature *(cloud functions)* | Runtime | The origin that **serves** your console — never one that redirects to it, because a redirect drops the POST body and the `x-cron-secret` header. It drives the fifteen-minute console sweeps and the every-minute AI jobs beat. **No default, deliberately.** |
 | `CRM_DIGEST_TIME_ZONE` | Optional | Runtime | The zone `/api/crm/daily-digest` reads "today" in when it counts overdue and due-today tasks. Default `America/Chicago`, which is why the schedule below fires at 13:00 UTC; an IANA name (`Europe/London`). A value the runtime does not know falls back to the default with a warning. Schedule the route for 08:00 in whatever zone you set. |
 
 What `CRON_SECRET` being unset silently switches off:

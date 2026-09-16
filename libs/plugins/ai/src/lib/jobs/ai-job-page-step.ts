@@ -71,7 +71,7 @@ import { registerAiJobStep } from './ai-jobs'
  * ── Why a page is built in passes ────────────────────────────────────────
  *
  * A page is far larger than one answer the job beat can wait for: the beat
- * gives a step what is left of 45 s, and a whole page, answered and re-asked,
+ * gives a step what is left of its budget, and a whole page, answered and re-asked,
  * takes several times that. The confirmed plan already names the page's
  * sections, so the step builds one section per pass and asks the machine to
  * continue. Every pass is one reservation and one generation — the section's

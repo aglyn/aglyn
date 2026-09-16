@@ -54,7 +54,6 @@ import {
   type MarketingCadence,
 } from '@aglyn/shared-util-email'
 import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
-import { registerEmailDesignDraftWriter } from './server-email-drafts'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   heading,
@@ -1348,9 +1347,6 @@ export function registerEmailApi(): void {
   registerPluginApiRoute('email/resubscribe', resubscribeHandler)
   registerPluginApiRoute('email/preferences', preferencesHandler)
   registerPluginApiRoute('email/confirm', confirmHandler)
-  // The email design writer another plugin reaches through the core's
-  // resource-drafts seam (AGL-2912): the tenant's job beat runs there.
-  registerEmailDesignDraftWriter()
 }
 
 /*

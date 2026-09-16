@@ -361,7 +361,7 @@ value shape, the default and the symptom for each one.
 | Scheduled plugin jobs | [`PLUGIN_JOBS_SECRET`](./self-hosting-environment.md#secrets) — without it no scheduled publishing and no booking-hold expiry ever runs |
 | Customer issue reports | `LINEAR_API_KEY` and `LINEAR_CUSTOMER_REPORTS_TEAM_ID` — both required. See [below](#issue-reports) |
 | The every-minute job beat | `AGLYN_JOB_RUNNER_URL`, only if you deploy `cloud/functions`. See [below](#scheduled-jobs) |
-| The fifteen-minute console sweeps | `AGLYN_CONSOLE_URL`, only if you deploy `cloud/functions`. See [below](#scheduled-jobs) |
+| The console's scheduled sweeps, and AI jobs past their first step | `AGLYN_CONSOLE_URL`, only if you deploy `cloud/functions`. See [below](#scheduled-jobs) |
 
 ### Scheduled jobs {#scheduled-jobs}
 
@@ -393,6 +393,14 @@ settles. Set it to the origin that *serves* your console — not one that
 redirects to it, because a redirect drops the POST body and the
 `x-cron-secret` header. Unset, the job refuses to fire and names the variable,
 for the same reason `AGLYN_JOB_RUNNER_URL` has no default.
+
+The same variable drives `consoleAiJobsBeat`, which POSTs the console's AI
+jobs beat every minute. The AI generation steps no request can finish run
+there — every plan a job proposes, every section of a generated page, and any
+step a request ran out of time on — so without it an AI job that plans waits
+at its first step for good. It is a console route because those steps call
+your AI provider, and the tenant runtime that serves published sites never
+does.
 
 Aglyn's own deployment moved these two off GitHub Actions in AGL-1617: GitHub
 coalesces and silently drops scheduled triggers under load, which is fine for

@@ -57,7 +57,7 @@ type Loaded = Record<string, any>
 const reRequire = (id: string): Loaded => (require as unknown as (spec: string) => Loaded)(id)
 
 const SERVER_ENTRY = `
-export { registerAiApi, registerAiConsoleApi } from ${JSON.stringify(join(LIB, 'server'))}
+export { registerAiConsoleApi } from ${JSON.stringify(join(LIB, 'server'))}
 export {
   AI_PLANNED_JOB_KINDS,
   aiJobRunnerForStep,
@@ -166,14 +166,19 @@ interface Registered {
   steps: Record<string, Array<{ step: string; runner: boolean }>>
   admissions: string[]
   passes: Record<string, number>
+  /** Every platform job the plugin put on a job runner: none since AGL-3026. */
   jobs: string[]
+  /** The console API paths the plugin registered. */
+  routes: string[]
 }
 
-/** Registers the plugin as both apps do, and reads back what that registered. */
+/**
+ * Registers the plugin as the console does — the one app that loads its
+ * server surface (AGL-3026) — and reads back what that registered.
+ */
 function registered(plugin: Loaded): Registered {
   plugin.registerAiConsoleApi()
-  plugin.registerAiApi()
-  const { listPluginJobs } = reRequire('@aglyn/aglyn/server')
+  const { listPluginApiRoutes, listPluginJobs } = reRequire('@aglyn/aglyn/server')
   const steps: Registered['steps'] = {}
   const passes: Registered['passes'] = {}
   const admissions: string[] = []
@@ -189,7 +194,8 @@ function registered(plugin: Loaded): Registered {
     .filter((job) => job.pluginId === 'ai')
     .map((job) => job.name)
     .sort()
-  return { steps, admissions, passes, jobs }
+  const routes = (listPluginApiRoutes() as string[]).slice().sort()
+  return { steps, admissions, passes, jobs, routes }
 }
 
 /** The AI activity codes the activity registry holds, with their labels. */
@@ -261,8 +267,19 @@ describe('the AI plugin, loaded through a bundler that honors sideEffects', () =
     expect(kinds.filter((kind) => !bundled.steps[kind]?.every(({ runner }) => runner))).toEqual([])
   })
 
-  it('registers the jobs beat the tenant runs', () => {
-    expect(isolated(() => registered(load(serverBundle))).jobs).toEqual(['ai-jobs'])
+  it('serves the jobs beat from the console surface, and puts nothing on the tenant’s job runner', () => {
+    // AGL-3026: every step calls the provider, whose key only the console
+    // holds, so the beat is a console route and the tenant loads no server
+    // surface of this plugin at all.
+    const bundled = isolated(() => registered(load(serverBundle)))
+    const { AI_JOBS_BEAT_PATH } = require('./jobs/ai-jobs-beat')
+    expect(bundled.routes).toContain(AI_JOBS_BEAT_PATH)
+    expect(bundled.jobs).toEqual([])
+    expect(isolated(() => require('./server').registerAiApi)).toBeUndefined()
+    const config = JSON.parse(readFileSync(resolve(PLUGIN_ROOT, '..', '..', '..', 'plugins.config.json'), 'utf8')) as {
+      plugins: Array<{ id: string; register: Record<string, string> }>
+    }
+    expect(Object.keys(config.plugins.find((plugin) => plugin.id === 'ai')?.register ?? {})).not.toContain('tenantApi')
   })
 
   it('declares the activity catalog from the declarations entry alone', () => {

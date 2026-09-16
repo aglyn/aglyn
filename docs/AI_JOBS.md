@@ -3,8 +3,9 @@
 The job model behind every generative door (AGL-2904): one customer brief
 carried through one or more model steps by a Firestore state machine, so that
 work longer than a request survives the request. The console route runs what
-it can inline; the platform job beat resumes whatever is left. The document is
-the whole state — no process holds anything the next beat cannot read back.
+it can inline; the AI jobs beat, a console route of its own driven every
+minute, resumes whatever is left. The document is the whole state — no process
+holds anything the next beat cannot read back.
 
 Code, all in the AI plugin (`libs/plugins/ai`, AGL-2939):
 `src/lib/model/ai-jobs.types.ts` (the model),
@@ -16,8 +17,9 @@ Code, all in the AI plugin (`libs/plugins/ai`, AGL-2939):
 `ai-job-component-step.ts` (the generation steps, below),
 `src/lib/server/ai-jobs-route.ts`, `ai-jobs-events-route.ts`,
 `ai-jobs-cancel.ts` and `ai-jobs-resume.ts` (the doors, registered on the
-console dispatcher by `src/lib/server.ts`), `src/lib/jobs/ai-jobs-beat.ts` (the
-beat). The building doctrine every generator runs through is
+console dispatcher by `src/lib/server.ts`), `src/lib/jobs/ai-jobs-beat.ts` and
+`src/lib/server/ai-jobs-beat-route.ts` (the beat, below). The building doctrine
+every generator runs through is
 `src/lib/runtime/ai-doctrine.ts`, with its validators in
 `src/lib/runtime/ai-doctrine-validators.ts` (below).
 
@@ -54,14 +56,21 @@ rules deny every client write). Fields:
 
 ## The lease
 
-A step runs under a lease: an owner id and an `until` instant 90 s out. The
-console route and two overlapping beats can all look at one job inside the
-same minute, and only one of them may spend the reservation for its step. A
-claim is a transaction (`claimNextStep`) that refuses while another owner's
-lease is live; an expired lease is simply claimable, which is how a step
-abandoned by a frozen process is recovered — the stale lease is released by
-being taken, not by a sweep of its own. `heartbeatStep` extends a lease a long
-step still holds, and refuses once someone else has recovered it.
+A step runs under a lease: an owner id and an `until` instant
+`AI_JOB_LEASE_MS` (330 s) out. The console route and several overlapping
+beats can all look at one job inside the same minute, and only one of them may
+spend the reservation for its step. A claim is a transaction (`claimNextStep`)
+that refuses while another owner's lease is live; an expired lease is simply
+claimable, which is how a step abandoned by a process that died is recovered —
+the stale lease is released by being taken, not by a sweep of its own.
+`heartbeatStep` extends a lease a long step still holds, and refuses once
+someone else has recovered it.
+
+The lease outlasts the longest any holder can still be running a step: the
+beat route's 300 s function ceiling (AGL-3026). The beat fires every minute
+and one sweep may run for most of five, so a lease shorter than that would
+run out under a live beat, and the next beat would claim the same step and
+call the provider for it a second time.
 
 ## Tools a step may call
 
@@ -602,7 +611,7 @@ draft.
 - **Fit.** The step's spec measures the cached prefix and the golden answer
   (`src/lib/jobs/goldens/`), holds `AI_STEP_NOMINAL_USAGE['job.component']`
   within a quarter of both, and holds an answer and its one re-ask inside the
-  beat's 45 s at the serving rate it states.
+  beat's budget at the serving rate it states.
 
 ### From a selection, not a brief
 
@@ -864,17 +873,45 @@ is one thing to build and a plan over it would be a plan of one.
 
 ## The beat
 
-`ai:ai-jobs` registers on the platform job beat every minute
-(`libs/plugins/ai/src/lib/jobs/ai-jobs-beat.ts`, registered by the plugin's
-tenant API surface, which the run-jobs route loads like every plugin's). `sweepAiJobs` reads
-queued and running jobs across every org oldest-first by `updatedAt`, plus a
-few parked jobs that have rested, and runs steps until 45 s of wall clock is
-spent — checked between jobs, with the time left handed to the step in flight
-as its abort signal. The ordering is the cursor: a job the sweep touches has
-its `updatedAt` moved to the back; one it did not reach keeps its place. Two
-collection-group queries rather than one, so a workspace with many parked jobs
-cannot fill the candidate list and starve the queue. A `needs_review` job is
-in neither query.
+The beat is a console route, `POST /api/admin/ai-jobs-beat` (AGL-3026). The
+plugin's console API surface registers its handler
+(`src/lib/server/ai-jobs-beat-route.ts`, which runs `runAiJobsBeat` in
+`src/lib/jobs/ai-jobs-beat.ts`), and the console app serves that exact path
+from a named route, `apps/console/app/api/admin/ai-jobs-beat/route.ts`, whose
+only job is the function time a sweep needs: `maxDuration = 300`, where the
+plugin dispatcher's ceiling is a door's 60. Cloud Scheduler calls it every
+minute through `consoleAiJobsBeat` in `cloud/functions/src/index.ts`, on the
+console's `CRON_SECRET` as `x-cron-secret`: the route answers 501 while the
+secret is unset and 401 to a request that does not carry it. It stamps
+`ai-jobs-beat` for `/api/health/crons` on every call that does, a call the
+switch holds included.
+
+It runs on the console because every step calls the AI provider, and the
+provider's key is held by the console alone: the tenant app serves every
+published site and holds no provider key, so a step it ran could only fail.
+The tenant loads no server surface of this plugin at all — `plugins.config.json`
+gives the plugin no `tenantApi` register function — so nothing that serves a
+site registers a job kind, a provider or a beat. `/api/admin/` is the path
+because the console's edge lets a request past its bot challenge there when it
+carries the cron secret's header; a route anywhere else would need a firewall
+rule before a scheduler could reach it. It is the one path the plugin registers
+outside its own prefixes.
+
+Each beat sweeps under a lease owner of its own (`beat:<uuid>`), fixed for the
+whole sweep. `sweepAiJobs` reads queued and running jobs across every org
+oldest-first by `updatedAt`, plus a few parked jobs that have rested, and runs
+steps until `AI_JOB_SWEEP_BUDGET_MS` (280 s) of wall clock is spent — checked
+between jobs, with the time left handed to the step in flight as its abort
+signal. The budget is sized from the slowest step, a plan answered and
+re-asked at its routing ceiling, and the 20 s left of the route's 300 s is the
+route's own work around the sweep: loading the plugin surfaces on a cold
+start, the lockdown read and the beat's mark, and the last step's record after
+its provider call. A beat still running when the next minute fires overlaps
+it, and the lease keeps the two apart. The ordering is the cursor: a job the
+sweep touches has its `updatedAt` moved to the back; one it did not reach
+keeps its place. Two collection-group queries rather than one, so a workspace
+with many parked jobs cannot fill the candidate list and starve the queue. A
+`needs_review` job is in neither query.
 
 A step that says how long it needs (`minimumMs`) is left queued and untouched
 when less than that is left, rather than started and cut off, and keeps its
@@ -884,11 +921,12 @@ while the time it needs is left, for at most `AI_JOB_SWEEP_MAX_JOBS` further
 runs — which is how the page kind builds a page one section to a pass, under
 [The page kind](#the-page-kind).
 
-The beat is platform-scoped for the coverage guard: it resolves no host and
-writes only unpublished drafts under the org. The lock that applies is the
-`ai-generate` feature switch, which the handler asks before it claims a step
-— a lock that stopped the doors and not the beat would keep spending on every
-job already queued.
+The beat resolves no host and writes only unpublished drafts under the org.
+The lock that applies is the `ai-generate` feature switch, which the handler
+asks before it claims a step — a lock that stopped the doors and not the beat
+would keep spending on every job already queued. The switch composes the
+platform lock, and a beat it holds answers 200 `{ held: true }`: an operator's
+decision, not a fault for the scheduler to log every minute.
 
 ## The `seo` kind
 
@@ -1006,7 +1044,7 @@ AI jobs in the Assist panel.
 
 ### The time budget
 
-The beat gives a step what is left of `AI_JOB_SWEEP_BUDGET_MS` (45 s) as its
+The beat gives a step what is left of `AI_JOB_SWEEP_BUDGET_MS` (280 s) as its
 abort signal, and a provider call that signal cuts off is still generated and
 billed upstream while the meter records nothing. So a step says how long it
 needs, and the machine does not start it with less.
@@ -1036,7 +1074,7 @@ needs, and the machine does not start it with less.
   `AI_JOB_PAGE_TOKENS_PER_ELEMENT` (45 tokens an element, measured on the
   golden sections). `ai-job-page-step.spec.ts` runs a pass on a fake clock on
   every tier, answer and re-ask at the full ceiling, and holds it inside the
-  minimum, and the minimum inside the beat's 45 s and past an inline door's
+  minimum, and the minimum inside the beat's budget and past an inline door's
   25 s.
 
 ### Evals
@@ -1148,9 +1186,10 @@ as `theme` does, so the machine stays light to load.
 **Register by a call, never by an import.** A kind's registrations — its
 runner, its admission, its pass bound — go in one exported function in the
 kind's own module (`registerAiPageJob`), and `registerAiJobKinds` in
-`server.ts` calls it for both surfaces. Never register at a module's top level
+`server.ts` calls it for the console surface, the only one that loads the
+plugin's server entry. Never register at a module's top level
 and import the module for that: the plugin's `package.json` declares only
-`server.ts` effect-ful, so Turbopack deletes such an import in both apps while
+`server.ts` effect-ful, so Turbopack deletes such an import in a built app while
 jest still runs it. That is how every generative kind answered "not available
 yet" in a built console with every project green (AGL-3025).
 `registrations-survive-a-bundler.spec.ts` bundles the plugin with webpack
@@ -1164,8 +1203,8 @@ Two settings shape when a runner gets to run:
   of the step needs — its generation's worst case at the rates
   `ai-job-budget.ts` assumes, plus its own reads and writes. Neither the beat
   nor an inline door starts it with less. Size it from the budget helpers
-  rather than by hand, and hold it inside the beat's 45 s in a spec, or the
-  step can never run at all.
+  rather than by hand, and hold it inside the beat's `AI_JOB_SWEEP_BUDGET_MS`
+  in a spec, or the step can never run at all.
 - A runner returning `continue: true` asks for another pass on the same step
   (`AI_JOB_STEP_MAX_PASSES`), which is how a kind too large for one answer —
   a page, a section to a pass — stays inside its budget. Each pass records its

@@ -16,26 +16,31 @@
  */
 
 import { randomUUID } from 'crypto'
-import { registerPluginJob } from '@aglyn/aglyn/server'
 import { featureLockdownRefusal, firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { AI_JOB_SWEEP_BUDGET_MS, sweepAiJobs } from './ai-jobs'
+import { AI_JOB_SWEEP_BUDGET_MS, sweepAiJobs, type SweepAiJobsResult } from './ai-jobs'
 
 /**
- * Resume AI generation jobs on the platform job beat (AGL-2904).
+ * Resume AI generation jobs on the AI jobs beat (AGL-2904, AGL-3026).
  *
  * A job's first step runs inline in the console route when it can; every
- * step after it, and any step the route's budget cut short, runs here. The
- * beat fires every minute against a 120 s function timeout, so the sweep
- * bounds itself at `AI_JOB_SWEEP_BUDGET_MS` of wall clock and hands the
- * rest to the next beat — the ordering of the queue is the cursor, so
- * nothing is stored between beats and nothing can be skipped.
+ * step after it, every step too long for an inline door, and any step a
+ * budget cut short, runs here. The sweep bounds itself at
+ * `AI_JOB_SWEEP_BUDGET_MS` of wall clock and hands the rest to the next beat
+ * — the ordering of the queue is the cursor, so nothing is stored between
+ * beats and nothing can be skipped.
  *
- * ## Why the beat and not a schedule of its own
+ * ## Why the console runs it
  *
- * The reason `sending-domain-recheck-job.ts` gives: the runner route already
- * fires from the project's one Cloud Scheduler job, and a second scheduled
- * route is a second thing to orphan. The runner's due-ness check makes an
- * interval into a schedule, and the sweep is bounded by its own clock.
+ * A step calls the AI provider, and the provider's key is held by the
+ * console alone: the tenant app serves every published site, and a
+ * credential it holds is one request-handling bug away from a visitor. So
+ * the beat is a console route (`server/ai-jobs-beat-route.ts`, registered
+ * by the console surface), driven every minute by its own Cloud Scheduler
+ * job in `cloud/functions` on the console's cron secret — the reason the
+ * sending-domain sweep is a console route and not a job on the tenant's
+ * platform beat. A beat must resolve to the minute: a step handed back by
+ * a budget, or a page pass waiting on the next, should resume on the next
+ * minute, not the next quarter hour.
  *
  * ## The kill switch
  *
@@ -48,23 +53,35 @@ import { AI_JOB_SWEEP_BUDGET_MS, sweepAiJobs } from './ai-jobs'
  * nothing is lost, and the first beat after the lock lifts picks it up.
  */
 
+/** The beat's row in `SCHEDULED_JOBS`, and the mark it leaves for `/api/health/crons`. */
+export const AI_JOBS_BEAT_CRON_ID = 'ai-jobs-beat'
+
 /**
- * The namespace this job registers under. Not a plugin: the registry never
- * interprets `pluginId`, and an id with no manifest passes the runner's
- * release-flag filter untouched, the way `core` does. Its own name rather
- * than `core`, so the run-jobs response reads which surface the beat spent
- * its time on.
+ * The console path the beat is registered at: the one path this plugin
+ * registers outside its own prefixes. `/api/admin/` is where the console's
+ * scheduled sweeps live, and the console's edge lets a request past its bot
+ * challenge there when it carries the cron secret's header — a route
+ * anywhere else would need a firewall rule of its own before a scheduler
+ * could reach it. The console app serves this exact path from a named route
+ * with the sweep's function time, so the plugin dispatcher never serves it.
  */
-export const AI_JOBS_PLUGIN_ID = 'ai'
+export const AI_JOBS_BEAT_PATH = 'admin/ai-jobs-beat'
 
-export const AI_JOBS_BEAT_JOB = 'ai-jobs'
+/** What one beat did: nothing while `ai-generate` is locked, else the sweep's account. */
+export type AiJobsBeatResult =
+  | { held: true }
+  | ({ held: false } & SweepAiJobsResult)
 
-/** The one place the sweep is scheduled; exported for the spec, not for callers. */
-export async function runAiJobsBeat(): Promise<void> {
+/**
+ * One beat: the switch, then one sweep under its own lease owner. The owner
+ * is fresh per beat and fixed for the whole sweep, so two beats overlapping
+ * inside a lease never read each other's lease as their own.
+ */
+export async function runAiJobsBeat(): Promise<AiJobsBeatResult> {
   const locked = await featureLockdownRefusal({ feature: 'ai-generate' })
   if (locked) {
     console.warn('ai jobs beat held: ai-generate is locked')
-    return
+    return { held: true }
   }
   const result = await sweepAiJobs({
     firestore: firebaseAdmin.app().firestore(),
@@ -78,41 +95,5 @@ export async function runAiJobsBeat(): Promise<void> {
         (result.budgetExhausted ? ' (budget exhausted)' : ''),
     )
   }
-}
-
-/**
- * Schedules the sweep on the platform job beat. The tenant surface calls it,
- * because the tenant's runner is the only one that reads the beat.
- */
-export function registerAiJobsBeat(): void {
-  registerPluginJob({
-    pluginId: AI_JOBS_PLUGIN_ID,
-    name: 'ai-jobs',
-    // The beat is the resolution: a step cut short by the route's budget
-    // should resume on the next minute, not the next quarter hour.
-    intervalMinutes: 1,
-    description:
-      'Run the queued steps of AI generation jobs across every workspace, ' +
-      'inside a wall-clock budget, and resume any the console route left.',
-    /*
-     * PLATFORM scope, and the reason is what this job spends rather than
-     * where it writes. It reads jobs by collection group across every org and
-     * writes only to `orgs/{orgId}/aiJobs` — drafts and new versions, never a
-     * publish — so a site lock has nothing here to withhold: nothing a job
-     * produces is visible to a visitor until a member publishes it through a
-     * door that IS gated. What a lock on this beat is for is the provider
-     * bill, and that is the `ai-generate` feature switch the handler asks
-     * before it claims a step.
-     */
-    lockdown: {
-      scope: 'platform',
-      reason:
-        'provider spend: writes only unpublished drafts under the org and ' +
-        'resolves no host; the ai-generate feature switch is the lock that ' +
-        'applies, and the handler asks it before claiming a step.',
-    },
-    handler: async () => {
-      await runAiJobsBeat()
-    },
-  })
+  return { held: false, ...result }
 }

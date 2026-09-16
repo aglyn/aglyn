@@ -704,7 +704,7 @@ describe('the component step’s fit, measured', () => {
         .join('') + JSON.stringify(request.tools),
     )
     const answer = answerTokens(JSON.stringify(toolInput(TESTIMONIAL.answer.tree, TESTIMONIAL.answer.props)))
-    expect(sweepBudgetMs).toBe(45_000)
+    expect(sweepBudgetMs).toBe(280_000)
     // The answer and the re-ask's answer, each after its wait, inside one step's share of the beat.
     expect(2 * (SECONDS_BEFORE_FIRST_TOKEN + answer / OUTPUT_TOKENS_PER_SECOND) * 1_000).toBeLessThan(sweepBudgetMs)
     // The ceiling is far above a real answer, so it cuts only a runaway, which the doctrine re-asks as too long.
