@@ -62,6 +62,7 @@ import {
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { Container, HelpTip, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
 import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -75,7 +76,6 @@ import {
   LinearProgress,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -560,7 +560,7 @@ function ImportMappingTable<F extends string>(props: {
   return (
     <Stack spacing={1}>
       <Typography variant="subtitle2">{'Columns'}</Typography>
-      <Table size="small">
+      <ScrollTable size="small">
         <TableHead>
           <TableRow>
             <TableCell>{'Column'}</TableCell>
@@ -601,7 +601,7 @@ function ImportMappingTable<F extends string>(props: {
             </TableRow>
           ))}
         </TableBody>
-      </Table>
+      </ScrollTable>
     </Stack>
   )
 }
@@ -641,8 +641,8 @@ function ImportPreviewTable<F extends string>(props: {
       {unusable > 0 ? (
         <Alert severity="info">{vocabulary.unusableNotice(unusable, total)}</Alert>
       ) : null}
-      <Box sx={{ overflowX: 'auto' }}>
-        <Table size="small">
+      <Box>
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               {targets.map((target) => (
@@ -663,7 +663,7 @@ function ImportPreviewTable<F extends string>(props: {
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </ScrollTable>
       </Box>
     </Stack>
   )
@@ -708,7 +708,7 @@ function ImportResultPanel<F extends string, S extends ImportSkippedRow<string>>
         sx={{ borderRadius: 1 }}
       />
       {skippedByReason.length ? (
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>{'Skipped'}</TableCell>
@@ -723,7 +723,7 @@ function ImportResultPanel<F extends string, S extends ImportSkippedRow<string>>
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </ScrollTable>
       ) : null}
       {droppedFields.length ? (
         <Alert severity="info">

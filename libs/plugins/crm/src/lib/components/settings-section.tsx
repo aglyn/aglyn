@@ -37,6 +37,7 @@ import {
 import { mdiArrowDown, mdiArrowUp, mdiDeleteOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -53,7 +54,6 @@ import {
   MenuItem,
   Stack,
   Switch,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -513,7 +513,7 @@ export function AssignmentRulesCard(props: AssignmentCardProps) {
             {'No rules yet. Add one to route new contacts by where they came from.'}
           </Typography>
         ) : (
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell sx={{ width: 120 }}>{'Order'}</TableCell>
@@ -575,7 +575,7 @@ export function AssignmentRulesCard(props: AssignmentCardProps) {
                 )
               })}
             </TableBody>
-          </Table>
+          </ScrollTable>
         )}
         {atCap ? (
           <Typography variant="caption" color="text.secondary">

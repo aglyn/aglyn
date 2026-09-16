@@ -26,6 +26,7 @@ import {
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { AppLink, CardDisplay, SrOnly } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   ceilingedWindow,
@@ -39,7 +40,6 @@ import {
   Drawer,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -471,7 +471,7 @@ export function RecipesCard(props: RecipesCardProps) {
             {status.error}
           </Typography>
         ) : null}
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>{'Recipe'}</TableCell>
@@ -505,7 +505,7 @@ export function RecipesCard(props: RecipesCardProps) {
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </ScrollTable>
         {!entitled ? (
           <Typography variant="caption" color="text.secondary">
             {`The actions builder requires the ${planLabelGrantingFeature('actions') ?? 'Pro'} ` +

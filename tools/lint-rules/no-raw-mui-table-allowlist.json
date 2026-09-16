@@ -2,58 +2,6 @@
   "note": "Files excused from aglyn/no-raw-mui-table, each with its reason. The rule reports a row whose file no longer draws a raw MUI Table, so this list cannot outlive what it excuses. It may shrink and must never grow: a new raw table is refused, not recorded.",
   "files": [
     {
-      "path": "libs/plugins/crm/src/lib/components/company-contacts-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/contact-merge-dialog.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/csv-import-drawer.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/deal-products-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/email-templates-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/fields-section.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/recipes-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/reports/activity-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/reports/forecast-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/reports/pipeline-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/reports/source-conversion-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/reports/tasks-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/components/settings-section.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
       "path": "libs/plugins/data/src/lib/components/host-datasets-card.component.tsx",
       "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
     },

@@ -19,10 +19,10 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Section } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -270,7 +270,7 @@ export function ActivityCard(props: ActivityCardProps) {
         ) : null}
         <Section title={'Who did what'}>
           {rows.length ? (
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   {COLUMNS.map((column, index) => (
@@ -296,7 +296,7 @@ export function ActivityCard(props: ActivityCardProps) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
           ) : (
             <Typography variant="body2" color="text.secondary">
               {settled ? 'Nothing logged or completed in this period.' : 'Reading…'}

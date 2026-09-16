@@ -31,6 +31,7 @@ import {
 } from '@aglyn/aglyn'
 import { mdiDeleteOutline, mdiPlus } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
 import {
@@ -42,7 +43,6 @@ import {
   DialogTitle,
   IconButton,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -239,7 +239,7 @@ export function DealProductsCard(props: DealProductsCardProps) {
               : 'No line items yet. Add what the deal is for, priced by hand; the amount becomes their sum.'}
           </Typography>
         ) : (
-          <Table size="small" aria-label="Line items">
+          <ScrollTable size="small" aria-label="Line items">
             <TableHead>
               <TableRow>
                 <TableCell>{'Item'}</TableCell>
@@ -303,7 +303,7 @@ export function DealProductsCard(props: DealProductsCardProps) {
                 <TableCell padding="none" />
               </TableRow>
             </TableBody>
-          </Table>
+          </ScrollTable>
         )}
       </CardDisplay>
       <AddLineDialog

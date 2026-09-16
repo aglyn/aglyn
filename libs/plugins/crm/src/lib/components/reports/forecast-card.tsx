@@ -19,10 +19,10 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { money } from '@aglyn/shared-ui-email-campaigns/components/report-figures'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Box,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -190,8 +190,8 @@ export function ForecastCard(props: ForecastCardProps) {
             {'No open deals yet.'}
           </Typography>
         ) : (
-          <Box sx={{ overflowX: 'auto' }}>
-            <Table size="small" aria-label="Forecast by close month">
+          <Box>
+            <ScrollTable size="small" aria-label="Forecast by close month">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Expected close'}</TableCell>
@@ -235,7 +235,7 @@ export function ForecastCard(props: ForecastCardProps) {
                   ) : null}
                 </TableRow>
               </TableBody>
-            </Table>
+            </ScrollTable>
           </Box>
         )}
         {read && currency.mixed ? (
