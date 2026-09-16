@@ -30,6 +30,7 @@ import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
 } from '@aglyn/aglyn/app-utils/reusable-component-keys'
+import { parseBreakpointSpan } from '@aglyn/shared-data-enums/breakpoint-span'
 import { renderEmailHtml } from '@aglyn/shared-util-email/email-render'
 import {
   aiPlanCreateFor,
@@ -1003,6 +1004,145 @@ export function detectAdHocWidths(
     : []
 }
 
+const GRID = 'muiGrid'
+/** A Grid's props that only a container reads; on an item they do nothing. */
+const GRID_CONTAINER_PROPS = ['direction', 'wrap', 'spacing', 'rowSpacing', 'columnSpacing', 'columns']
+/** `sx` keys that space a container's columns outside the widths its items are sized by. */
+const GRID_GAP_SX_KEYS = ['gap', 'columnGap']
+/** The columns a container divides a row into when it names none. */
+const GRID_DEFAULT_COLUMNS = 12
+
+/** A Grid's columns: its own `columns` when it names a count, else the renderer's twelve. */
+function gridColumns(node: AiDoctrineNode): number {
+  const columns = Number(node.props?.['columns'])
+  return Number.isInteger(columns) && columns > 0 ? columns : GRID_DEFAULT_COLUMNS
+}
+
+/**
+ * Whether a Grid item's size is one the renderer reads, full width on a phone,
+ * and whether it steps down to a column at a larger width. The size is the
+ * stored string the besigner's breakpoint row writes and the Grid renderer
+ * parses (`parseBreakpointSpan`): a bare span at every width, or pairs such as
+ * `xs:12 md:4`.
+ */
+function gridItemSpan(size: unknown, columns: number): { phoneFull: boolean; steps: boolean } {
+  if (typeof size !== 'string' && typeof size !== 'number') return { phoneFull: false, steps: false }
+  const span = parseBreakpointSpan(size)
+  if (span.raw !== undefined) return { phoneFull: false, steps: false }
+  if (span.base !== undefined) return { phoneFull: span.base === columns, steps: false }
+  const values = span.values ?? {}
+  return {
+    phoneFull: values.xs === columns,
+    steps: Object.entries(values).some(([breakpoint, value]) => breakpoint !== 'xs' && value !== columns),
+  }
+}
+
+/** The size a container's column is asked for: full width on a phone, a row of up to four from md. */
+function gridItemSizeFor(items: number, columns: number): string {
+  const across = Math.min(Math.max(items, 2), 4)
+  const md = Math.max(1, Math.floor(columns / (items > 4 ? 3 : across)))
+  const sm = Math.floor(columns / 2)
+  return items >= 4 && sm !== md ? `xs:${columns} sm:${sm} md:${md}` : `xs:${columns} md:${md}`
+}
+
+/**
+ * Rule 12, for a Grid (AGL-3055). The palette's Grid is one element in both
+ * roles: a CONTAINER lays its direct Grid children out in columns, and an ITEM
+ * takes a size. The sizes are fractions of the container's columns, so an
+ * item under a Grid that is not a container is sized against nothing, and a
+ * row of them stacks one under another at every width; a size that holds at
+ * every width keeps a phone's columns as narrow as a desktop's; and an `sx`
+ * gap on a container spaces the columns outside the widths the items were
+ * sized by, so the last column wraps onto a row of its own. A live About
+ * page's practice areas were the first: a Grid with no container holding three
+ * items sized "4", one column at every width.
+ *
+ * - `grid-not-container`: a Grid that is not a container but holds sized Grid
+ *   items, sets a prop only a container reads, or holds two or more elements
+ *   without being an item of a container.
+ * - `grid-item-size`: a container's child that is not a Grid item sized full
+ *   width on a phone, or a container of several whose items never step down
+ *   to columns at a larger width.
+ * - `grid-gap`: a container spaced by an `sx` gap rather than its spacing.
+ *
+ * Each re-ask names the Grid or its items by the model's own ids and says what
+ * to write, in the size format the renderer reads.
+ */
+export function detectUnresponsiveGrids(
+  tree: AiDoctrineTree,
+  outputKind: AiOutputKind,
+): AiDoctrineViolation[] {
+  if (outputKind === 'email' || outputKind === 'form') return []
+  const notContainers: string[] = []
+  const unsized: string[] = []
+  const suggested: string[] = []
+  const gapped: Array<{ id: string; spacing: unknown }> = []
+  for (const visit of walkTree(tree)) {
+    const { id, node } = visit
+    if (node.componentId !== GRID) continue
+    const children = (node.nodes ?? []).filter((child) => tree.nodes[child])
+    const parent = tree.nodes[visit.ancestors[visit.ancestors.length - 1] ?? '']
+    const isItem = parent?.componentId === GRID && parent.props?.['container'] === true
+    if (node.props?.['container'] !== true) {
+      const holdsSizedItems = children.some(
+        (child) => tree.nodes[child].componentId === GRID && tree.nodes[child].props?.['size'] !== undefined,
+      )
+      const setsContainerProps = GRID_CONTAINER_PROPS.some((name) => node.props?.[name] !== undefined)
+      if (holdsSizedItems || setsContainerProps || (!isItem && children.length >= 2)) notContainers.push(id)
+      continue
+    }
+    const columns = gridColumns(node)
+    let steps = false
+    const offending: string[] = []
+    for (const child of children) {
+      const item = tree.nodes[child]
+      const span = item.componentId === GRID ? gridItemSpan(item.props?.['size'], columns) : null
+      if (!span?.phoneFull) offending.push(child)
+      if (span?.steps) steps = true
+    }
+    if (offending.length) {
+      unsized.push(...offending)
+    } else if (children.length >= 2 && !steps) {
+      unsized.push(...children)
+    }
+    if (offending.length || (children.length >= 2 && !steps)) {
+      suggested.push(gridItemSizeFor(children.length, columns))
+    }
+    const sx = node.sx ?? {}
+    const gap = GRID_GAP_SX_KEYS.find((key) => sx[key] !== undefined)
+    if (gap) gapped.push({ id, spacing: sx[gap] })
+  }
+  const violations: AiDoctrineViolation[] = []
+  if (notContainers.length) {
+    violations.push({
+      rule: 12,
+      code: 'grid-not-container',
+      message:
+        'A Grid lays out columns only as a container: this one is not, so what it holds stacks at every width. Set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4".',
+      nodeIds: unique(notContainers),
+    })
+  }
+  if (unsized.length) {
+    violations.push({
+      rule: 12,
+      code: 'grid-item-size',
+      message: `Every child of a Grid container is a Grid item whose size is full width on a phone and steps up to columns at a larger width, written as one string. Size these like "${suggested[0]}", and wrap any other element in such an item.`,
+      nodeIds: unique(unsized),
+    })
+  }
+  if (gapped.length) {
+    const [first] = gapped
+    const spacing = typeof first.spacing === 'number' ? first.spacing : 2
+    violations.push({
+      rule: 12,
+      code: 'grid-gap',
+      message: `A Grid container's items are sized by its "spacing", so an sx gap pushes its last column onto a row of its own. Remove the sx gap and set "spacing": ${spacing}.`,
+      nodeIds: gapped.map((entry) => entry.id),
+    })
+  }
+  return violations
+}
+
 /** Answer fields that say "publish", wherever the answer put them. */
 const PUBLISH_KEYS = /^(?:publish|published|publishNow|publishAt|goLive|isLive|live|makeLive)$/i
 
@@ -1522,6 +1662,7 @@ export function validateAiDoctrineTree(
     ...detectImageSources(tree, context),
     ...detectDocumentStructure(tree, outputKind),
     ...detectAdHocWidths(tree, outputKind),
+    ...detectUnresponsiveGrids(tree, outputKind),
     ...detectOffVoiceCopy(aiTreeCopy(tree, context), context.framing),
     ...detectHeavyDocument(tree, outputKind, context),
   ]

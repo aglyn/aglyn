@@ -62,6 +62,7 @@ import {
   detectPublishIntent,
   detectRepeatedSubtrees,
   detectTypedData,
+  detectUnresponsiveGrids,
   detectUntemplatedSimilarPages,
   estimateAiOutputLoad,
   scoreAiOutput,
@@ -719,6 +720,100 @@ describe('rule 12 — responsive by the theme’s breakpoints', () => {
       detectAdHocWidths(tree(page({ ...section(), sx: { width: '100%', maxWidth: 1, minWidth: { xs: '100%', md: '50%' } } })), 'page'),
     ).toEqual([])
     expect(detectAdHocWidths(tree(page({ ...section(), sx: { width: '600px' } })), 'email')).toEqual([])
+  })
+})
+
+describe('rule 12 — a Grid of columns is a container of items sized for every width (AGL-3055)', () => {
+  const grid = (props: Record<string, unknown>, children: Nested[], sx?: Record<string, unknown>): Nested => ({
+    componentId: 'muiGrid',
+    props,
+    ...(sx ? { sx } : {}),
+    children,
+  })
+  const item = (size: unknown, child: Nested = card('Estate planning', 'Wills and trusts.')): Nested => ({
+    componentId: 'muiGrid',
+    props: size === undefined ? {} : { size },
+    children: [child],
+  })
+  const areas = ['Estate planning', 'Real estate', 'Business formation']
+  const cells = (size: unknown) => areas.map((title) => item(size, card(title, 'What it covers.')))
+  const found = (root: Nested, kind: Parameters<typeof detectUnresponsiveGrids>[1] = 'page') =>
+    detectUnresponsiveGrids(tree(page(section(root))), kind).map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))
+
+  it('refuses the live About page’s shape: items sized 4 under a Grid that is not a container, naming the Grid and saying what to set', () => {
+    const live = detectUnresponsiveGrids(tree(page(section(grid({ ariaLabel: 'Practice areas' }, cells('4'))))), 'page')
+    expect(live).toEqual([
+      {
+        rule: 12,
+        code: 'grid-not-container',
+        message:
+          'A Grid lays out columns only as a container: this one is not, so what it holds stacks at every width. Set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4".',
+        nodeIds: ['n2'],
+      },
+    ])
+  })
+
+  it('refuses the goldens’ old shape, a row direction on a Grid that is not a container, and a bare Grid holding several elements', () => {
+    const cardsOf = areas.map((title) => card(title, 'What it covers.'))
+    expect(found(grid({ direction: 'row' }, cardsOf, { gap: 3 }))).toEqual([{ rule: 12, code: 'grid-not-container', nodeIds: ['n2'] }])
+    expect(found(grid({}, cardsOf))).toEqual([{ rule: 12, code: 'grid-not-container', nodeIds: ['n2'] }])
+    // One element is no row, and an item of a container holds what it likes.
+    expect(found(grid({}, [card('One', 'Only.')]))).toEqual([])
+    expect(found(grid({ container: true, spacing: '3' }, [grid({ size: 'xs:12 md:6' }, [text('h3', 'A', 'h3'), text('body1', 'B')])]))).toEqual([])
+  })
+
+  it('refuses a container’s child that is not an item full width on a phone, with the size for that many columns', () => {
+    const fixed = detectUnresponsiveGrids(tree(page(section(grid({ container: true, spacing: '3' }, cells('4'))))), 'page')
+    expect(fixed.map(({ code, nodeIds }) => [code, nodeIds])).toEqual([['grid-item-size', ['n3', 'n8', 'n13']]])
+    expect(fixed[0].message).toBe(
+      'Every child of a Grid container is a Grid item whose size is full width on a phone and steps up to columns at a larger width, written as one string. Size these like "xs:12 md:4", and wrap any other element in such an item.',
+    )
+    // A card placed straight in the container, an item with no size, one whose phone size is not full width, and one the renderer cannot read.
+    const mixed = grid({ container: true }, [card('Loose', 'No item.'), item(undefined), item('sm:6 md:3'), item('4 columns')])
+    expect(found(mixed)).toEqual([{ rule: 12, code: 'grid-item-size', nodeIds: ['n3', 'n7', 'n12', 'n17'] }])
+    expect(detectUnresponsiveGrids(tree(page(section(mixed))), 'page')[0].message).toContain('like "xs:12 sm:6 md:3"')
+    // Full width at every width is one column at every width.
+    expect(found(grid({ container: true }, cells('xs:12')))).toEqual([{ rule: 12, code: 'grid-item-size', nodeIds: ['n3', 'n8', 'n13'] }])
+    // A container of its own column count is sized against it.
+    expect(found(grid({ container: true, columns: '6' }, cells('xs:6 md:2')))).toEqual([])
+  })
+
+  it('refuses a container spaced by an sx gap its items’ widths do not count, with the spacing to set instead', () => {
+    const gapped = detectUnresponsiveGrids(tree(page(section(grid({ container: true }, cells('xs:12 md:4'), { gap: 3 })))), 'page')
+    expect(gapped).toEqual([
+      {
+        rule: 12,
+        code: 'grid-gap',
+        message:
+          'A Grid container\'s items are sized by its "spacing", so an sx gap pushes its last column onto a row of its own. Remove the sx gap and set "spacing": 3.',
+        nodeIds: ['n2'],
+      },
+    ])
+    expect(found(grid({ container: true }, cells('xs:12 md:4'), { columnGap: 2 }))).toEqual([{ rule: 12, code: 'grid-gap', nodeIds: ['n2'] }])
+    // A row gap spaces rows, which the item widths never count.
+    expect(found(grid({ container: true, spacing: '3' }, cells('xs:12 md:4'), { rowGap: 4 }))).toEqual([])
+  })
+
+  it('passes a responsive row on every document a Grid is built in, and holds a layout and a component the same way', () => {
+    const responsive = grid({ container: true, spacing: '3' }, [
+      item('xs:12'),
+      ...areas.map((title) => item('xs:12 sm:6 md:4', card(title, 'What it covers.'))),
+    ])
+    for (const kind of ['page', 'template', 'layout', 'component'] as const) {
+      expect([kind, found(responsive, kind)]).toEqual([kind, []])
+    }
+    const live = grid({ ariaLabel: 'Practice areas' }, cells('4'))
+    for (const kind of ['layout', 'component'] as const) {
+      expect([kind, found(live, kind).map((violation) => violation.code)]).toEqual([kind, ['grid-not-container']])
+    }
+    expect(found(live, 'email')).toEqual([])
+  })
+
+  it('runs on every tree the doctrine checks, after the palette validator has read the sizes', () => {
+    // A switch written as text and a size written as a number arrive as the palette reads them.
+    const answer = tree(page(section(text('h1', 'About', 'h1')), section(text('h2', 'What we help with', 'h2'), grid({ container: 'true', spacing: 3 }, cells(4)))))
+    const report = validateAiDoctrineTree(answer, 'page', { reusableComponents: false })
+    expect(report.violations.map((violation) => violation.code)).toEqual(['grid-item-size'])
   })
 })
 

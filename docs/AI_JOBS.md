@@ -1303,6 +1303,10 @@ Assist panel.
   wrote, so a re-ask quotes that section alone. A section's root id comes from
   the job and its plan index, so a pass that runs again finds it and writes
   nothing twice.
+- **A Grid of columns (AGL-3055).** A section's cards, a footer's columns and a
+  component's rows are laid out as a Grid container of sized Grid items, each full width
+  on a phone and stepping up; [A Grid of columns](#a-grid-of-columns) has the rule and
+  its refusals.
 - **A repeated item written once (AGL-3053).** On a workspace that keeps no reusable
   components a repeated item is drawn where it repeats, and written out card by card
   every copy repeats its whole subtree inside the escaped JSON of the tool call: a
@@ -1356,8 +1360,9 @@ live Free About page's four practice areas were cut off at the balanced tier's
 wall and does not move, so the answer writes the item once (AGL-3053):
 
 ```json
-"card":  { "componentId": "muiCard", "nodes": ["body"],
+"cell":  { "componentId": "muiGrid", "props": { "size": "xs:12 sm:6 md:3" }, "nodes": ["card"],
            "repeat": [["Estate planning", "Wills and trusts…"], ["Real estate", "Closings…"]] },
+"card":  { "componentId": "muiCard", "nodes": ["body"] },
 "title": { "componentId": "muiTypography", "props": { "variant": "h3", "children": "{{1}}" } },
 "text":  { "componentId": "muiTypography", "props": { "variant": "body2", "children": "{{2}}" } }
 ```
@@ -1399,12 +1404,13 @@ wall and does not move, so the answer writes the item once (AGL-3053):
   numbering, or values with no numbered placeholder at all, such as `{{title}}`), and
   `repeat-id-collision` (a copy's id the answer already gives another node).
 - **What it saves.** `ai-job-page-evals.spec.ts` measures the goldens as it measures
-  every section, in real tokens. The Free About golden's practice areas written once
-  take 9 elements at 590 real tokens, where written out they take 21 at 1,009.
-  `AI_FREE_PRACTICE_AREAS_FIXTURE` gives a Free law firm's practice areas the copy a
-  firm writes, 25 to 29 words a summary: its four practice areas written once take 9
-  elements at 736 real tokens, and 21 at 1,154 written out; its six take 9 elements at
-  897 real tokens, and 29 at 1,605 written out. Both fit the 1,050-token pass written
+  every section, in real tokens, each card in the Grid item of a responsive row
+  ([A Grid of columns](#a-grid-of-columns)). The Free About golden's practice areas
+  written once take 10 elements at 625 real tokens, where written out they take 25 at
+  1,159. `AI_FREE_PRACTICE_AREAS_FIXTURE` gives a Free law firm's practice areas the copy
+  a firm writes, 25 to 29 words a summary: its four practice areas written once take 10
+  elements at 770 real tokens, and 25 at 1,304 written out; its six take 10 elements at
+  932 real tokens, and 35 at 1,830 written out. Both fit the 1,050-token pass written
   once, and neither fits written out. The spec replays that page through the real page
   step on a Free org, and holds each drawn section equal to the one written out, node
   for node apart from ids, through the same checks and to the same stored page.
@@ -1419,6 +1425,55 @@ wall and does not move, so the answer writes the item once (AGL-3053):
   same way: the Free About case holds the page written once as a golden beside the page
   written out, and controls for a copy with a missing value and for named
   placeholders; a paid case holds an item written once as a control that fails.
+
+### A Grid of columns
+
+The palette's Grid (`muiGrid`) is one element in both of MUI's roles: a container
+(`"container": true`) lays its direct Grid children out in columns, and an item takes a
+`size`, a fraction of its container's columns stored as one string the Grid renderer
+parses (`parseBreakpointSpan` in `@aglyn/shared-data-enums/breakpoint-span`): a bare span
+such as `"6"`, or pairs such as `"xs:12 md:4"`. A live About page's practice areas were a
+Grid with no container holding three items sized `"4"` (AGL-3055): sized against no
+container, they stacked one under another at every width, and a size that holds at every
+width would have kept a phone's columns a third of its width. The goldens drew their cards
+the same way, in a Grid with a row direction and no container.
+
+- **Told once, in the page instructions.** The palette catalog shows five of a Grid's
+  props, and `container` and `spacing` are not among them, so the line that tells a
+  section how to lay itself out names both and the size format: `a Grid ("container":
+  true, "spacing": 3) of Grid items sized like "xs:12 md:4"`, 72 characters more of the
+  page prefix.
+- **Held by `detectUnresponsiveGrids`** (`runtime/ai-doctrine-validators.ts`, rule 12) on
+  every page, template, layout and component tree, with each re-ask naming the Grid or
+  its items by the model's own ids:
+  - `grid-not-container`: a Grid that is not a container but holds sized Grid items, sets
+    a prop only a container reads (`direction`, `wrap`, `spacing`, `rowSpacing`,
+    `columnSpacing`, `columns`), or holds two or more elements without being an item of a
+    container. The re-ask: set `"container": true`, and put each column in a Grid item
+    sized like `"xs:12 md:4"`.
+  - `grid-item-size`: a container's child that is not a Grid item whose size is full
+    width on a phone (`xs` at the container's columns, or a bare full span), or a
+    container of two or more whose items never step down to columns at a larger width.
+    The re-ask gives the size for that many columns: `"xs:12 md:6"` for two,
+    `"xs:12 md:4"` for three, `"xs:12 sm:6 md:3"` for four and `"xs:12 sm:6 md:4"` for more,
+    written as one string, and says to wrap any other element in such an item.
+  - `grid-gap`: a container spaced by an `sx` `gap` or `columnGap`. MUI sizes a container's
+    items by its `spacing`, so a gap on top of it pushes the last column onto a row of its
+    own. The re-ask: remove the sx gap and set `"spacing"` to its value.
+- **The goldens are real rows.** `ai-page-briefs.ts` draws every row of cards as a Grid
+  container (`"spacing": 3`) of items sized for the row (`span`): the ten briefs'
+  component cards, the Free pages' inline cards written out and written once (the
+  `repeat` now rides the Grid item), the creation page's quotes and the two-person page's
+  roomier cells. The two-person introduction itself keeps its 15 elements with a Stack
+  whose direction turns from a column into a row at md. The Free About eval case holds its
+  page written out and written once the same way, with a failing control for each
+  refusal: the goldens' old shape and the live page's shape (`grid-not-container`), items
+  sized `"4"` at every width (`grid-item-size`) and a container spaced by an sx gap
+  (`grid-gap`).
+- **What it costs.** The page prefix grows by 72 characters (the page-section ledger's
+  4,562 estimated tokens to 4,580), so the largest ceiling the Free wall holds moves
+  from 1,074 to 1,067, and no credit figure the Free arithmetic quotes moves. A Grid item
+  is an element, so a row of cards takes one more element a card: written once, one.
 
 ### The time budget
 
@@ -1516,19 +1571,19 @@ needs, and the machine does not start it with less.
   section introducing two attorneys was cut off at the ceiling on its answer
   and its re-ask. The budget counts every element at the goldens' largest, so
   it errs dear for a section of many small ones: the Free page's four inline
-  practice-area cards written out take 21 elements at 1,009 real tokens, and are
-  asked to keep under 15 all the same. Written once, as a workspace without reusable
-  components answers them
-  ([A repeated item written once](#a-repeated-item-written-once)), they take 9. The
+  practice-area cards written out, each in its Grid item, take 25 elements at 1,159 real
+  tokens: 46 real tokens an element, against the 70 the budget counts. Written once, as
+  a workspace without reusable components answers them
+  ([A repeated item written once](#a-repeated-item-written-once)), they take 10. The
   request's line is the same length either way, so no figure the Free page's
   arithmetic quotes moves.
 - **The ceiling does not move to make a section fit.** The balanced tier's
-  1,050 fits the Free page's wall with little to spare: past 1,074 tokens the
+  1,050 fits the Free page's wall with little to spare: past 1,067 tokens the
   first section pass costs 45 credits, and the Free page that builds its layout
   first leaves 45 of the 300 — no more than that pass, which is the room the
   arithmetic keeps for a re-asked section. A two-person introduction drawn
-  roomier, in the 20 elements an estimate-counted budget allowed, needs 1,110
-  real tokens, so no ceiling the wall holds fits it; drawn in 15, it needs 810.
+  roomier, in the 20 elements an estimate-counted budget allowed, needs 1,114
+  real tokens, so no ceiling the wall holds fits it; drawn in 15, it needs 834.
   A plan rule that splits a section cannot see how long its items' copy runs,
   so the budget is what changes.
 - A creation a page job builds runs inside a page pass (AGL-3031), handed to the
@@ -1597,7 +1652,7 @@ the document's one main) and no raw binding token; and every section fits the
 balanced tier's answer ceiling in real tokens, at the ratio measured live, under
 the element budget its request asks for.
 
-- **Credits per page: an estimate.** 46 credits per page: the median
+- **Credits per page: an estimate.** 48 credits per page: the median
   (the higher middle value) of the ten golden pages, each priced from the
   requests the step sent and the golden answers at four characters a token,
   at the catalog rates of the models the routing table picks, with the cached
@@ -1610,12 +1665,13 @@ the element budget its request asks for.
   person: a hero, then its two attorneys, each with a photo, a name, a role and a
   short bio, drawn where they stand because two items are fewer than a component
   is required for. `ai-job-page-evals.spec.ts` replays it through the real page
-  step: the introduction, a Card a person in 15 elements, is 525 estimated tokens
-  and 810 real, inside the 15 elements and the 1,050 tokens its pass asks for on
-  the balanced tier. The same two people drawn roomier — a grid cell, a card body
-  and styles a person, and an introduction — make a section the page's rules
-  keep, in 20 elements, inside the 23 an estimate-counted budget allows, at 1,110
-  real tokens, past the ceiling. On every tier the spec holds a section of the
+  step: the introduction, a Card a person in 15 elements, side by side from md in a
+  Stack whose direction turns from a column into a row (a Grid of two takes two more
+  elements than the pass allows), is 540 estimated tokens and 834 real, inside the 15
+  elements and the 1,050 tokens its pass asks for on the balanced tier. The same two
+  people drawn roomier — a Grid item, a card body and styles a person, and an
+  introduction — make a section the page's rules keep, in 20 elements, inside the 23
+  an estimate-counted budget allows, at 1,114 real tokens, past the ceiling. On every tier the spec holds a section of the
   goldens' largest elements inside its ceiling at its element budget, and past it
   at one element more.
 - **A plan with creations, built end to end.** `AI_PAGE_CREATION_FIXTURE` is a

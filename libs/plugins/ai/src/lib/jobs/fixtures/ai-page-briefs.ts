@@ -121,14 +121,35 @@ function hero(prefix: string, input: { name?: string; title: string; lead: strin
   })
 }
 
+/**
+ * The size each item of a golden row takes (AGL-3055): full width on a phone,
+ * two across from sm where four or more share the row, and two, three or four
+ * across from md, as the stored string the Grid renderer reads.
+ */
+function span(items: number): string {
+  if (items <= 2) return 'xs:12 md:6'
+  if (items === 3) return 'xs:12 md:4'
+  return items === 4 ? 'xs:12 sm:6 md:3' : 'xs:12 sm:6 md:4'
+}
+
+/** A Grid item of a row of `items`, holding one element. */
+function cell(add: Add, items: number, child: string, repeat?: string[][]): string {
+  return add({ componentId: 'muiGrid', props: { size: span(items) }, nodes: [child], ...(repeat ? { repeat } : {}) })
+}
+
+/** A row of Grid items: a Grid container spaced by its own spacing (AGL-3055). */
+function row(add: Add, cells: string[]): string {
+  return add({ componentId: 'muiGrid', props: { container: true, spacing: 3 }, nodes: cells })
+}
+
 function cards(prefix: string, input: { name: string; heading: string; intro?: string; componentId: string; items: Array<Record<string, string>> }): Built {
   return section(prefix, input.name, [input.componentId], input.items.length, (add) => {
-    const instances = input.items.map((propValues) =>
-      add({ componentId: 'reusableInstance', props: { refId: input.componentId, propValues } }),
+    const cells = input.items.map((propValues) =>
+      cell(add, input.items.length, add({ componentId: 'reusableInstance', props: { refId: input.componentId, propValues } })),
     )
     const children = [add(typography('h2', input.heading, 'h2'))]
     if (input.intro) children.push(add(typography('body1', input.intro)))
-    children.push(add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: instances }))
+    children.push(row(add, cells))
     return framed(add, children, 'lg', 8)
   })
 }
@@ -169,31 +190,40 @@ function form(prefix: string, input: { name: string; heading: string; intro: str
  */
 function inlineCards(prefix: string, input: { name: string; heading: string; items: Array<{ title: string; summary: string }> }): Built {
   return section(prefix, input.name, [], input.items.length, (add) => {
-    const cards = input.items.map((item) =>
-      add({
-        componentId: 'muiCard',
-        props: { variant: 'outlined' },
-        nodes: [add({ componentId: 'muiCardContent', nodes: [add(typography('h3', item.title, 'h3')), add(typography('body2', item.summary))] })],
-      }),
+    const cells = input.items.map((item) =>
+      cell(
+        add,
+        input.items.length,
+        add({
+          componentId: 'muiCard',
+          props: { variant: 'outlined' },
+          nodes: [add({ componentId: 'muiCardContent', nodes: [add(typography('h3', item.title, 'h3')), add(typography('body2', item.summary))] })],
+        }),
+      ),
     )
-    return framed(add, [add(typography('h2', input.heading, 'h2')), add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: cards })], 'lg', 8)
+    return framed(add, [add(typography('h2', input.heading, 'h2')), row(add, cells)], 'lg', 8)
   })
 }
 
 /**
- * The same cards written once (AGL-3053): one Card whose title is `{{1}}` and
- * whose summary is `{{2}}`, with every card's pair listed on it, which the
- * section check draws into exactly the cards `inlineCards` writes out.
+ * The same cards written once (AGL-3053): one Grid item holding a Card whose
+ * title is `{{1}}` and whose summary is `{{2}}`, with every card's pair listed
+ * on the item, which the section check draws into exactly the cells
+ * `inlineCards` writes out.
  */
 function inlineCardsOnce(prefix: string, input: { name: string; heading: string; items: Array<{ title: string; summary: string }> }): Built {
   return section(prefix, input.name, [], input.items.length, (add) => {
-    const card = add({
-      componentId: 'muiCard',
-      props: { variant: 'outlined' },
-      nodes: [add({ componentId: 'muiCardContent', nodes: [add(typography('h3', '{{1}}', 'h3')), add(typography('body2', '{{2}}'))] })],
-      repeat: input.items.map((item) => [item.title, item.summary]),
-    })
-    return framed(add, [add(typography('h2', input.heading, 'h2')), add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: [card] })], 'lg', 8)
+    const item = cell(
+      add,
+      input.items.length,
+      add({
+        componentId: 'muiCard',
+        props: { variant: 'outlined' },
+        nodes: [add({ componentId: 'muiCardContent', nodes: [add(typography('h3', '{{1}}', 'h3')), add(typography('body2', '{{2}}'))] })],
+      }),
+      input.items.map((entry) => [entry.title, entry.summary]),
+    )
+    return framed(add, [add(typography('h2', input.heading, 'h2')), row(add, [item])], 'lg', 8)
   })
 }
 
@@ -1009,17 +1039,12 @@ export const AI_PAGE_CREATION_FIXTURE: AiPageCreationFixture = (() => {
     cta: { label: 'Meet the crew', screenId: 'scr-about' },
   })
   const quotes = section('b', 'customer words', ['new:Testimonial card'], 3, (add) => {
-    const instances = [
+    const cells = [
       { quote: 'They found the leak two other companies missed.', name: '[customer name]', role: 'Homeowner, Harbor Point' },
       { quote: 'On time, tidy, and the photos made the invoice easy to trust.', name: '[customer name]', role: 'Homeowner, Old Mill Road' },
       { quote: 'The same crew came back to check the repair after the first storm.', name: '[customer name]', role: 'Homeowner, Bayside' },
-    ].map((propValues) => add({ componentId: 'reusableInstance', props: { refId: component, propValues } }))
-    return framed(
-      add,
-      [add(typography('h2', 'What homeowners say', 'h2')), add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: instances })],
-      'lg',
-      8,
-    )
+    ].map((propValues) => cell(add, 3, add({ componentId: 'reusableInstance', props: { refId: component, propValues } })))
+    return framed(add, [add(typography('h2', 'What homeowners say', 'h2')), row(add, cells)], 'lg', 8)
   })
   const request = section('c', 'quote request form', ['new:Roof quote request'], 0, (add) =>
     framed(
@@ -1147,6 +1172,7 @@ export const AI_TWO_PERSON_PAGE_FIXTURE: AiTwoPersonPageFixture = (() => {
       add({
         componentId: 'muiCard',
         props: { variant: 'outlined' },
+        sx: { flex: 1 },
         nodes: [
           add({ componentId: 'image', props: { alt: person.photo } }),
           add(typography('h3', person.name, 'h3')),
@@ -1155,9 +1181,15 @@ export const AI_TWO_PERSON_PAGE_FIXTURE: AiTwoPersonPageFixture = (() => {
         ],
       }),
     )
+    // A Grid of two would take two more elements than the fifteen the pass
+    // asks for (AGL-3055); a Stack that turns from a column into a row at md
+    // is the same responsive pair in none.
     return framed(
       add,
-      [add(typography('h2', 'Meet our attorneys', 'h2')), add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: cards })],
+      [
+        add(typography('h2', 'Meet our attorneys', 'h2')),
+        add({ componentId: 'muiStack', sx: { flexDirection: { xs: 'column', md: 'row' }, gap: 3 }, nodes: cards }),
+      ],
       'lg',
       8,
     )
@@ -1166,7 +1198,7 @@ export const AI_TWO_PERSON_PAGE_FIXTURE: AiTwoPersonPageFixture = (() => {
     const cells = ATTORNEYS.map((person) =>
       add({
         componentId: 'muiGrid',
-        props: { size: '6' },
+        props: { size: span(ATTORNEYS.length) },
         nodes: [
           add({
             componentId: 'muiCard',
@@ -1192,7 +1224,7 @@ export const AI_TWO_PERSON_PAGE_FIXTURE: AiTwoPersonPageFixture = (() => {
       [
         add(typography('h2', 'Meet our attorneys', 'h2')),
         add(typography('body1', 'Two attorneys, and one of them handles your matter from the first meeting to the final order.')),
-        add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: cells }),
+        row(add, cells),
       ],
       'lg',
       8,

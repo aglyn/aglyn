@@ -179,6 +179,24 @@ describe('a section that breaks the page’s rules', () => {
     ])
   })
 
+  it('is refused for a row of cards that is one column at every width, naming the model’s Grid and saying what to set (AGL-3055)', () => {
+    // The live About page's shape: a Grid with no container, holding items sized 4.
+    const answer = structuredClone(fixture.answers[1])
+    const [rowId] = Object.entries(answer.nodes).find(([, node]) => node.props?.['container'] === true) ?? []
+    const row = answer.nodes[rowId as string]
+    row.props = { ariaLabel: 'What the inspection covers' }
+    for (const cell of row.nodes ?? []) answer.nodes[cell].props = { size: '4' }
+    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, uses: screen.sections[1].uses, inventory: fixture.inventory })({
+      tree: JSON.stringify(answer),
+    })
+    expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
+      { rule: 12, code: 'grid-not-container', nodeIds: [rowId] },
+    ])
+    expect(aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)).toContain(
+      `Set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4". (nodes ${rowId})`,
+    )
+  })
+
   it('is unreadable unless it is exactly one Section inside the document wrapper', () => {
     const two = {
       rootId: 'root',
@@ -231,6 +249,9 @@ describe('what a pass asks for', () => {
     ])
     expect(() => validateAiSystemBlocks(blocks)).not.toThrow()
     expect(AI_PAGE_SECTION_TOOL).toMatchObject({ name: 'submit_section', strict: true })
+    // The catalog shows no Grid's container or spacing, so the instructions name both and the size format (AGL-3055).
+    expect(AI_PALETTE_CATALOG.screen).not.toMatch(/muiGrid \(Grid\)[^\n]*container=/)
+    expect(AI_JOB_PAGE_INSTRUCTIONS[0].text).toContain('a Grid ("container": true, "spacing": 3) of Grid items sized like "xs:12 md:4"')
   })
 })
 
@@ -439,7 +460,7 @@ describe('a repeated item written once (AGL-3053)', () => {
     const fullNodes = full.value?.nodes as unknown as Stored
     expect(cards(onceNodes)).toEqual(cards(fullNodes))
     expect(cards(onceNodes)).toEqual(
-      (fixture.answers[1].nodes['b4'].repeat ?? []).map(([title, summary]) => [title, summary]),
+      (fixture.answers[1].nodes['b5'].repeat ?? []).map(([title, summary]) => [title, summary]),
     )
     expect(Object.keys(onceNodes)).toHaveLength(Object.keys(fullNodes).length)
     expect(JSON.stringify(onceNodes)).not.toMatch(/\{\{|"repeat"/)
@@ -449,14 +470,14 @@ describe('a repeated item written once (AGL-3053)', () => {
     const result = checkCards(fixture.answers[1], aiPageCheckContext(fixture.inventory))
     expect(result.value).toBeNull()
     expect(result.violations).toEqual([
-      expect.objectContaining({ rule: 1, code: 'repeat-not-inline', nodeIds: ['b4'], detail: expect.stringContaining('reusableInstance') }),
+      expect.objectContaining({ rule: 1, code: 'repeat-not-inline', nodeIds: ['b5'], detail: expect.stringContaining('reusableInstance') }),
     ])
-    expect(Object.keys(result.offending ?? {})).toEqual(['b4'])
+    expect(Object.keys(result.offending ?? {})).toEqual(['b5'])
   })
 
   it('refuses a copy that leaves a placeholder without its value, quoting the item as the model wrote it', () => {
     const result = checkCards(
-      cardsWith('b4', (node) => ({ ...node, repeat: [['Estate planning', 'Wills.'], ['Real estate'], ['Business formation', 'Contracts.']] })),
+      cardsWith('b5', (node) => ({ ...node, repeat: [['Estate planning', 'Wills.'], ['Real estate'], ['Business formation', 'Contracts.']] })),
     )
     expect(result.value).toBeNull()
     expect(result.violations).toEqual([
@@ -464,13 +485,13 @@ describe('a repeated item written once (AGL-3053)', () => {
         rule: null,
         code: 'repeat-placeholder-without-value',
         message: 'The answer could not be used as a section.',
-        detail: 'The second copy of "b4" gives 1 value, and the item uses {{1}} and {{2}}: give every copy one value for each placeholder, in order.',
-        nodeIds: ['b4', 'b2'],
+        detail: 'The second copy of "b5" gives 1 value, and the item uses {{1}} and {{2}}: give every copy one value for each placeholder, in order.',
+        nodeIds: ['b5', 'b2'],
       },
     ])
-    expect(Object.keys(result.offending ?? {})).toEqual(['b4', 'b2'])
+    expect(Object.keys(result.offending ?? {})).toEqual(['b5', 'b2'])
     expect(aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)).toContain(
-      '- The answer could not be used as a section. The second copy of "b4" gives 1 value, and the item uses {{1}} and {{2}}: give every copy one value for each placeholder, in order. (nodes b4, b2)',
+      '- The answer could not be used as a section. The second copy of "b5" gives 1 value, and the item uses {{1}} and {{2}}: give every copy one value for each placeholder, in order. (nodes b5, b2)',
     )
   })
 

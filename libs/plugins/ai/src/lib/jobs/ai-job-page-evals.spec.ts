@@ -545,8 +545,8 @@ describe('a two-person introduction fits a pass on the balanced tier (AGL-3042)'
     expect([ceiling, maxElements]).toEqual([1_050, 15])
     expect(String(result.requests[1].messages[0].content)).toContain(`Keep this section to at most ${maxElements} elements.`)
     const [, introduction] = FIXTURE.answers
-    // Fifteen elements, 525 estimated tokens: 810 of the provider's.
-    expect([elementsOf(introduction), realTokensOfAnswer(introduction)]).toEqual([15, 810])
+    // Fifteen elements, 540 estimated tokens: 834 of the provider's.
+    expect([elementsOf(introduction), realTokensOfAnswer(introduction)]).toEqual([15, 834])
     expect(elementsOf(introduction)).toBeLessThanOrEqual(maxElements)
     expect(realTokensOfAnswer(introduction)).toBeLessThanOrEqual(ceiling)
   })
@@ -565,7 +565,7 @@ describe('a two-person introduction fits a pass on the balanced tier (AGL-3042)'
     })
     expect([roomier.value !== null, roomier.violations]).toEqual([true, []])
     const estimatedBudget = Math.floor(ceiling / AI_JOB_PAGE_TOKENS_PER_ELEMENT)
-    expect([estimatedBudget, elementsOf(FIXTURE.roomier), realTokensOfAnswer(FIXTURE.roomier)]).toEqual([23, 20, 1_110])
+    expect([estimatedBudget, elementsOf(FIXTURE.roomier), realTokensOfAnswer(FIXTURE.roomier)]).toEqual([23, 20, 1_114])
     expect(elementsOf(FIXTURE.roomier)).toBeLessThanOrEqual(estimatedBudget)
     expect(elementsOf(FIXTURE.roomier)).toBeGreaterThan(aiJobPageSectionMaxElements(ceiling))
     expect(realTokensOfAnswer(FIXTURE.roomier)).toBeGreaterThan(ceiling)
@@ -609,10 +609,11 @@ describe('a two-person introduction fits a pass on the balanced tier (AGL-3042)'
     )
     // The budget errs dear for a section of many small elements, and the notes say by how much.
     const cards = AI_FREE_PAGE_FIXTURE.writtenOut[1]
-    expect([elementsOf(cards) > aiJobPageSectionMaxElements(ceiling), realTokensOfAnswer(cards) <= ceiling]).toEqual([true, true])
+    const perElement = Math.round(realTokensOfAnswer(cards) / elementsOf(cards))
+    expect(perElement).toBeLessThan(AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT)
     expect(notes).toContain(
-      `practice-area cards written out take ${elementsOf(cards)} elements at ${figure(realTokensOfAnswer(cards))} real tokens, ` +
-        `and are asked to keep under ${aiJobPageSectionMaxElements(ceiling)} all the same`,
+      `practice-area cards written out, each in its Grid item, take ${elementsOf(cards)} elements at ${figure(realTokensOfAnswer(cards))} real tokens: ` +
+        `${perElement} real tokens an element, against the ${AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT} the budget counts`,
     )
   })
 })
@@ -676,10 +677,10 @@ describe('a repeated item written once fits a Free section pass (AGL-3053)', () 
     expect(Object.values(result.page).filter((node) => node.componentId === 'muiCard')).toHaveLength(10)
     expect(JSON.stringify(result.page)).not.toMatch(/\{\{|"repeat"/)
 
-    // Four cards in 9 elements and six in 9, inside the tokens the pass asks for.
+    // Four cards in 10 elements and six in 10, inside the tokens the pass asks for.
     const [, families, businesses] = FIXTURE.answers
     expect([elementsOf(families), realTokensOfAnswer(families), elementsOf(businesses), realTokensOfAnswer(businesses)]).toEqual([
-      9, 736, 9, 897,
+      10, 770, 10, 932,
     ])
     for (const answer of [families, businesses]) expect(realTokensOfAnswer(answer)).toBeLessThanOrEqual(ceiling)
   })
@@ -687,7 +688,7 @@ describe('a repeated item written once fits a Free section pass (AGL-3053)', () 
   it('runs past the ceiling with the same cards written out card by card, four and six alike', () => {
     const [, families, businesses] = FIXTURE.writtenOut
     expect([elementsOf(families), realTokensOfAnswer(families), elementsOf(businesses), realTokensOfAnswer(businesses)]).toEqual([
-      21, 1_154, 29, 1_605,
+      25, 1_304, 35, 1_830,
     ])
     for (const answer of [families, businesses]) expect(realTokensOfAnswer(answer)).toBeGreaterThan(ceiling)
   })

@@ -7,44 +7,44 @@
   "pages": [
     {
       "id": "agency-roofing-landing",
-      "answers": "0ea4e9781f8afe1a",
-      "markupChars": 6057,
+      "answers": "302de155f3e9ebe9",
+      "markupChars": 6875,
       "violations": []
     },
     {
       "id": "agency-dental-implants-service",
-      "answers": "6e8b7f3e3a920da7",
-      "markupChars": 6249,
+      "answers": "d4275ec68f71a962",
+      "markupChars": 7287,
       "violations": []
     },
     {
       "id": "agency-law-firm-about",
-      "answers": "bebde9fa65d58674",
-      "markupChars": 4603,
+      "answers": "03a4936317ec151b",
+      "markupChars": 5087,
       "violations": []
     },
     {
       "id": "agency-hvac-pricing",
-      "answers": "7bc4f2ba961a152d",
-      "markupChars": 5521,
+      "answers": "cbee4b13dc5e51e1",
+      "markupChars": 6489,
       "violations": []
     },
     {
       "id": "multibrand-restaurant-group-event",
-      "answers": "7fd1fe47bcd46d83",
-      "markupChars": 5059,
+      "answers": "1e10335cef7d86d3",
+      "markupChars": 5763,
       "violations": []
     },
     {
       "id": "multibrand-home-goods-product",
-      "answers": "92e7a12999a87142",
-      "markupChars": 5102,
+      "answers": "7c2b4d73bfb31805",
+      "markupChars": 5920,
       "violations": []
     },
     {
       "id": "multibrand-fitness-studios-pricing",
-      "answers": "43279f532494df89",
-      "markupChars": 6210,
+      "answers": "a885b7aab7baabdf",
+      "markupChars": 7178,
       "violations": []
     },
     {
@@ -61,8 +61,8 @@
     },
     {
       "id": "smallbiz-bike-repair-service",
-      "answers": "8ef739300cd9fb64",
-      "markupChars": 4469,
+      "answers": "3b8973936b1916f7",
+      "markupChars": 4953,
       "violations": []
     }
   ]

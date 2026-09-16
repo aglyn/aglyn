@@ -99,7 +99,8 @@ generated until you confirm.
     well to screen readers and search engines.
 12. **Responsive by your theme's breakpoints.** Widths follow your theme's
     breakpoints instead of fixed sizes, so pages hold up on phones, tablets and
-    desktops.
+    desktops. A row of cards or columns is a grid that shows one column on a phone
+    and steps up to several side by side on larger screens.
 13. **Drafts only.** Everything the AI builds is a new draft. It never publishes,
     and never changes a live page in place.
 14. **Your voice, with no filler.** Copy follows your site's tone and the brief,
