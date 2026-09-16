@@ -524,11 +524,18 @@ export function HostActionsCard(props: {
     listRead,
     EDITOR_OPTION_CEILING,
   )
+  /*
+   * The campaign CONTAINERS, `emailCampaigns`: the collection the executor
+   * resolves an "Assign to a campaign" step's `campaignId` against when it
+   * runs (AGL-3052). `campaigns` beside it holds the individual email sends,
+   * and a send's id names no container, so a step pointed at one fails every
+   * run with "unknown campaign".
+   */
   const { data: campaignRead } = useFirestoreCollection<any>(
     () =>
       editorOpened
         ? collectionCeiling(
-            collection(firestore, 'hosts', hostId, 'campaigns'),
+            collection(firestore, 'hosts', hostId, 'emailCampaigns'),
             EDITOR_OPTION_CEILING,
           )
         : null,

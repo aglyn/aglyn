@@ -194,8 +194,8 @@ describe('a bounded audit says it is bounded (AGL-2501)', () => {
   /** The thirteen collections the audit judges against. */
   const AUDITED = [
     'hosts/h1/actions',
-    'hosts/h1/campaigns',
     'hosts/h1/collections',
+    'hosts/h1/emailCampaigns',
     'hosts/h1/functions',
     'hosts/h1/overlays',
     'hosts/h1/productCategories',

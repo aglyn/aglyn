@@ -113,7 +113,9 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   const workflowDocs = useHostCollection('workflows')
   const variableDocs = useHostCollection('variables')
   const functionDocs = useHostCollection('functions')
-  const campaignDocs = useHostCollection('campaigns')
+  // The campaign containers an "Assign to a campaign" step runs against
+  // (AGL-3052); `campaigns` holds the email sends, which no step names.
+  const campaignDocs = useHostCollection('emailCampaigns')
   const overlayDocs = useHostCollection('overlays')
   const webhookDocs = useHostCollection('webhooks')
   // New reference kinds (AGL-345): screen links, commerce entities.
