@@ -79,7 +79,8 @@ page spaces it there:
 
 - `hostDashboard`, `commerceGlance` and `orgDashboard`: a tile of a dashboard
   grid.
-- `hostScreens` and `besignerToolbar`: a control in a row.
+- `hostScreens`, `hostTemplates`, `hostLayouts`, `hostForms`,
+  `hostComponents` and `besignerToolbar`: a control in a row.
 - `besignerInspector` and `seoFields`: a section among a panel's own fields.
 - `besignerFunctions`, `orgData`, `orgMarketplace`, `orgAddons` and
   `marketplaceListing`: the body of a dialog or a page.
