@@ -225,6 +225,7 @@ describe('claiming a charge', () => {
       month: MONTH,
       invoiceId: 'in_1',
       status: 'paid',
+      paidUsd: 30,
     })
     // The month grows to $54 of overage: $24 unbilled, under the threshold.
     docs.set(USAGE, {
@@ -343,9 +344,48 @@ describe('settling a charge', () => {
         month: MONTH,
         invoiceId: 'in_1',
         status: 'paid',
+        paidUsd: 30,
       })
     }
     expect(readAiOverageMonthLedger(docs.get(USAGE)).paidUsd).toBe(30)
+  })
+
+  it('credits what STRIPE collected, never what we claimed (AGL-3023)', async () => {
+    /*
+     * The fail-open this closes. `overagePaidUsd` is the figure the gate
+     * subtracts to decide whether a workspace may keep spending — so a
+     * settlement that credited the CLAIM would clear a balance nobody paid,
+     * and the unpaid bound would be satisfied by our own bookkeeping rather
+     * than by money.
+     *
+     * This is not hypothetical: AGL-3023's invoices finalized at $0 and read
+     * `paid`. Crediting the claim there would have handed every workspace an
+     * unbounded month.
+     */
+    const { firestore, claim } = await claimOne()
+    await settleAiOverageCharge(firestore, 'org-1', {
+      chargeId: claim.chargeId,
+      month: MONTH,
+      invoiceId: 'in_zero',
+      status: 'paid',
+      paidUsd: 0,
+    })
+    expect(readAiOverageMonthLedger(docs.get(USAGE)).paidUsd).toBe(0)
+    // The claim still stands against the month: the dollars were billed on
+    // an invoice that exists, and re-billing them would charge twice.
+    expect(readAiOverageMonthLedger(docs.get(USAGE)).invoicedUsd).toBe(30)
+  })
+
+  it('credits a part payment by its part, not by the whole', async () => {
+    const { firestore, claim } = await claimOne()
+    await settleAiOverageCharge(firestore, 'org-1', {
+      chargeId: claim.chargeId,
+      month: MONTH,
+      invoiceId: 'in_1',
+      status: 'paid',
+      paidUsd: 12.5,
+    })
+    expect(readAiOverageMonthLedger(docs.get(USAGE)).paidUsd).toBe(12.5)
   })
 
   it('keeps the claim on an invoice that exists but did not pay', async () => {
@@ -389,6 +429,7 @@ describe('settling a charge', () => {
       month: MONTH,
       invoiceId: 'in_1',
       status: 'paid',
+      paidUsd: 30,
     })
     const row = docs.get(`orgs/org-1/aiOverageCharges/${claim.chargeId}`)
     expect(row).toMatchObject({

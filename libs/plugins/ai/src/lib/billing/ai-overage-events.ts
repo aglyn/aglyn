@@ -112,6 +112,9 @@ export async function onAiBillingInvoicePaid(
       month: ours.month,
       invoiceId: payload.invoiceId,
       status: 'paid',
+      // The event's own figure (AGL-3023): what Stripe collected, which is
+      // the only thing that may clear what the gate refuses on.
+      paidUsd: payload.amountPaidCents / 100,
     })
     await resumeAiOverage(db, payload.orgId, { invoiceId: payload.invoiceId })
     return

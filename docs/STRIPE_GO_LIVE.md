@@ -577,6 +577,28 @@ overage needs an invoice it can pay, and before the cutover there is none.
    the questions a unit test cannot answer, and the reconcile sweep depends on
    the last one.
 
+   ⚠️ **The first run of this drill charged nothing, six times (AGL-3023).**
+   `POST /v1/invoices` documents `pending_invoice_items_behavior` as
+   defaulting to `exclude`, so an invoice created AFTER a pending invoice
+   item sweeps up nothing: the invoice is empty, finalizes at zero, and a
+   zero-total invoice is already paid the moment it finalizes. Every later
+   step then failed with "Invoice is already paid", which reads like a
+   declined card and is not. Both the drill and `chargeOrgUsageInvoice` now
+   create the invoice FIRST and attach the line to it by id — not
+   `pending_invoice_items_behavior: 'include'`, which would sweep up every
+   other pending item on that customer too.
+
+   Two traps that follow from it, worth knowing before reading any drill
+   output:
+
+   - **A re-run needs fresh ids.** Stripe idempotency keys replay for 24
+     hours and a replay returns the ORIGINAL object. The first drill used
+     fixed charge ids, so a same-day re-run would have been handed the
+     previous run's zero invoices and reported the bug as unfixed. The drill
+     now derives every id from a per-run value.
+   - **`totalCents: 0` is the tell.** If a step reports it, the line did not
+     reach the invoice; nothing after it means anything.
+
 4. **Live, read only.** Record the account's default API version, the
    endpoint's version, and the retry, receipt and past-due settings for
    one-off invoices, the way `stripe-dunning-schedule.ts` records settings.

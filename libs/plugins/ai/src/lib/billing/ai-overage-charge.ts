@@ -168,6 +168,10 @@ async function chargeClaim(
     month: claim.month,
     invoiceId: result.invoiceId,
     status: result.ok ? 'paid' : 'failed',
+    // What Stripe took, not what we claimed (AGL-3023). The two agree on
+    // every ordinary charge; where they do not, crediting the claim would
+    // clear a balance nobody paid.
+    paidUsd: result.amountPaidCents / 100,
   })
   if (!result.ok) {
     // `requires_action` reads like "not yet" and is in fact "no": nobody is
@@ -281,6 +285,10 @@ export async function reconcileAiOverageCharge(
             : found.status === 'uncollectible'
               ? 'void'
               : 'open',
+      // The found invoice's own collected figure (AGL-3023), never the
+      // claim: a reconcile that credited what we meant to charge would clear
+      // a balance on the strength of an invoice it had just looked up.
+      paidUsd: found.amountPaidCents / 100,
     })
     return { resolved: true, invoiceId: found.invoiceId, released: false }
   }

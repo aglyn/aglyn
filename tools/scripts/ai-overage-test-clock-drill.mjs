@@ -49,6 +49,17 @@
 
 const args = process.argv.slice(2)
 const RUN = args.includes('--run')
+
+/**
+ * A fresh id for every run (AGL-3023).
+ *
+ * Stripe idempotency keys replay for 24 hours and a replay returns the
+ * ORIGINAL object, not a new one. The first drill used fixed charge ids, so
+ * a same-day re-run after a fix would have been handed the previous run's
+ * zero-amount invoices and reported the bug as still present. Every object
+ * this drill creates is keyed by the run, so a re-run is a real re-run.
+ */
+const RUN_ID = Date.now().toString(36)
 const SECRET = process.env.STRIPE_SECRET_KEY ?? ''
 const API_VERSION = '2024-06-20'
 const PRODUCT = process.env.STRIPE_PRODUCT_AI_OVERAGE ?? ''
@@ -73,6 +84,7 @@ const PLAN = [
   ['customer', 'Create a customer attached to the clock, with a US address'],
   ['card', 'Attach pm_card_visa and make it the customer default'],
   ['charge-paid', 'Invoice $25 of overage; finalize and pay — expect paid'],
+  ['item', 'Read the line back: its amount, and which invoice it says it is on'],
   ['tax', 'Read automatic_tax.status and the tax line on the paid invoice'],
   ['which-card', 'Read the charge to confirm WHICH payment method was used'],
   ['search', 'Search invoices by metadata[chargeId]; time how long it indexes'],
@@ -123,30 +135,26 @@ function record(step, answer) {
   console.log(`  ${step.padEnd(15)} ${JSON.stringify(answer)}`)
 }
 
+/** This run's id for the nth charge — unique per run, search-safe. */
+function chargeId(sequence) {
+  return `2026-10-${RUN_ID}-${sequence}`
+}
+
 /** One overage invoice, created the way the plugin creates it. */
-async function invoiceOverage(customerId, chargeId, amountCents) {
+async function invoiceOverage(customerId, claimId, amountCents) {
   const metadata = {
     'metadata[orgId]': 'org-drill',
     'metadata[pluginId]': 'ai',
     'metadata[kind]': 'ai-overage',
-    'metadata[chargeId]': chargeId,
+    'metadata[chargeId]': claimId,
     'metadata[month]': '2026-10',
   }
-  const key = `aiov-org-drill-${chargeId}`
-  const item = await stripe(
-    'invoiceitems',
-    {
-      customer: customerId,
-      'price_data[product]': PRODUCT,
-      'price_data[currency]': 'usd',
-      'price_data[unit_amount]': String(amountCents),
-      'price_data[tax_behavior]': 'exclusive',
-      description: `AI credits past your included band — 2026-10 (${chargeId})`,
-      ...metadata,
-    },
-    `${key}:invoiceitem`,
-  )
-  if (!item.ok) return { ok: false, stage: 'invoiceitem', payload: item.payload }
+  const key = `aiov-org-drill-${claimId}`
+  // THE SAME ORDER AS PRODUCTION (AGL-3023), which is the point of a drill:
+  // the invoice first, then the line attached to it by id. An item created
+  // before the invoice is a PENDING item, and `POST /v1/invoices` defaults
+  // `pending_invoice_items_behavior` to `exclude` — which is how the first
+  // run of this drill raised six invoices totalling nothing.
   const invoice = await stripe(
     'invoices',
     {
@@ -154,12 +162,32 @@ async function invoiceOverage(customerId, chargeId, amountCents) {
       collection_method: 'charge_automatically',
       auto_advance: 'false',
       'automatic_tax[enabled]': 'true',
+      pending_invoice_items_behavior: 'exclude',
       ...metadata,
     },
     `${key}:invoice`,
   )
   if (!invoice.ok) return { ok: false, stage: 'invoice', payload: invoice.payload }
   const id = invoice.payload.id
+  const item = await stripe(
+    'invoiceitems',
+    {
+      customer: customerId,
+      invoice: id,
+      'price_data[product]': PRODUCT,
+      'price_data[currency]': 'usd',
+      'price_data[unit_amount]': String(amountCents),
+      'price_data[tax_behavior]': 'exclusive',
+      description: `AI credits past your included band — 2026-10 (${claimId})`,
+      ...metadata,
+    },
+    `${key}:invoiceitem`,
+  )
+  if (!item.ok) return { ok: false, stage: 'invoiceitem', payload: item.payload }
+  // Read the item back and report which invoice it says it is on. The first
+  // drill could not tell "the item was never created" from "the item was
+  // created and never swept up"; this answers that directly.
+  const itemReadBack = await stripe(`invoiceitems/${item.payload.id}`)
   const finalized = await stripe(
     `invoices/${id}/finalize`,
     { auto_advance: 'false' },
@@ -168,15 +196,35 @@ async function invoiceOverage(customerId, chargeId, amountCents) {
   if (!finalized.ok) {
     return { ok: false, stage: 'finalize', invoiceId: id, payload: finalized.payload }
   }
+  // Refuse to pay an invoice that finalized at nothing. Paying one answers
+  // "Invoice is already paid", which reads like a declined card and is not.
+  if (Number(finalized.payload?.total ?? 0) < amountCents) {
+    return {
+      ok: false,
+      stage: 'total',
+      invoiceId: id,
+      itemId: item.payload.id,
+      itemAmount: itemReadBack.payload?.amount ?? null,
+      itemInvoice: itemReadBack.payload?.invoice ?? null,
+      totalCents: finalized.payload?.total ?? null,
+      error: `finalized at ${finalized.payload?.total} for a ${amountCents}-cent line`,
+    }
+  }
   const paid = await stripe(`invoices/${id}/pay`, {}, `${key}:pay`)
   return {
-    ok: paid.ok,
+    ok: paid.ok && paid.payload?.status === 'paid',
     stage: 'pay',
     invoiceId: id,
+    itemId: item.payload.id,
+    // The evidence the first run lacked: what the line says it is worth and
+    // which invoice it says it is on.
+    itemAmount: itemReadBack.payload?.amount ?? null,
+    itemInvoice: itemReadBack.payload?.invoice ?? null,
     status: paid.payload?.status ?? finalized.payload?.status ?? null,
     automaticTax: finalized.payload?.automatic_tax?.status ?? null,
-    taxCents: finalized.payload?.tax ?? null,
+    taxCents: finalized.payload?.total_taxes?.[0]?.amount ?? finalized.payload?.tax ?? null,
     totalCents: finalized.payload?.total ?? null,
+    amountPaidCents: paid.payload?.amount_paid ?? null,
     charge: paid.payload?.charge ?? null,
     error: paid.payload?.error?.message ?? null,
     intentStatus: paid.payload?.error?.payment_intent?.status ?? null,
@@ -259,7 +307,7 @@ async function run() {
   record('card', await attachCard(customer.payload.id, 'tok_visa'))
 
   // 1. The ordinary case: a $25 threshold charge that goes through.
-  const paid = await invoiceOverage(customer.payload.id, '2026-10-001', 2_500)
+  const paid = await invoiceOverage(customer.payload.id, chargeId('001'), 2_500)
   record('charge-paid', paid)
   record('tax', {
     automaticTax: paid.automaticTax,
@@ -280,7 +328,9 @@ async function run() {
   let searchHits = 0
   for (let attempt = 0; attempt < 6 && searchHits === 0; attempt += 1) {
     const search = await stripe(
-      `invoices/search?query=${encodeURIComponent("metadata['chargeId']:'2026-10-001'")}&limit=1`,
+      `invoices/search?query=${encodeURIComponent(
+        `metadata['chargeId']:'${chargeId('001')}'`,
+      )}&limit=1`,
     )
     searchHits = (search.payload?.data ?? []).length
     if (searchHits === 0) await new Promise((resolve) => setTimeout(resolve, 5_000))
@@ -289,7 +339,7 @@ async function run() {
 
   // 3. The declining card.
   record('card-fail', await attachCard(customer.payload.id, 'tok_chargeCustomerFail'))
-  const failed = await invoiceOverage(customer.payload.id, '2026-10-002', 2_500)
+  const failed = await invoiceOverage(customer.payload.id, chargeId('002'), 2_500)
   record('charge-failed', failed)
 
   // 4. Retries. Advancing the clock is what makes Stripe's own schedule run.
@@ -325,12 +375,12 @@ async function run() {
   }
 
   // 6. Voided, and written off.
-  const toVoid = await invoiceOverage(customer.payload.id, '2026-10-003', 2_500)
+  const toVoid = await invoiceOverage(customer.payload.id, chargeId('003'), 2_500)
   if (toVoid.invoiceId) {
     const voided = await stripe(`invoices/${toVoid.invoiceId}/void`, {})
     record('void', { ok: voided.ok, status: voided.payload?.status ?? null })
   }
-  const toWriteOff = await invoiceOverage(customer.payload.id, '2026-10-004', 2_500)
+  const toWriteOff = await invoiceOverage(customer.payload.id, chargeId('004'), 2_500)
   if (toWriteOff.invoiceId) {
     const written = await stripe(
       `invoices/${toWriteOff.invoiceId}/mark_uncollectible`,
@@ -340,7 +390,7 @@ async function run() {
   }
 
   // 7. Under Stripe's minimum charge — the close-out's floor case.
-  const tiny = await invoiceOverage(customer.payload.id, '2026-10-005', 40)
+  const tiny = await invoiceOverage(customer.payload.id, chargeId('005'), 40)
   record('tiny', {
     ok: tiny.ok,
     stage: tiny.stage,
@@ -350,7 +400,7 @@ async function run() {
 
   // 8. A dispute, which resets the ladder and pauses accrual.
   record('card-dispute', await attachCard(customer.payload.id, 'tok_createDispute'))
-  const disputed = await invoiceOverage(customer.payload.id, '2026-10-006', 2_500)
+  const disputed = await invoiceOverage(customer.payload.id, chargeId('006'), 2_500)
   record('dispute', {
     ok: disputed.ok,
     invoiceId: disputed.invoiceId ?? null,

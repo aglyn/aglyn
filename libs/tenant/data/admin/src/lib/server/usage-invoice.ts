@@ -104,6 +104,18 @@ export interface OrgUsageInvoiceResult {
    */
   status: string | null
   /**
+   * What the finalized invoice actually came to, and what Stripe actually
+   * collected, in cents (AGL-3023).
+   *
+   * Both are reported because the caller must never credit a workspace from
+   * the amount it ASKED to charge. An invoice that finalized at zero, or one
+   * that reports `paid` having collected nothing, is not a payment — and a
+   * bound enforced by our own bookkeeping rather than by money is not a
+   * bound at all.
+   */
+  totalCents: number
+  amountPaidCents: number
+  /**
    * Whether Stripe asked for more from the cardholder (3-D Secure). It is
    * not a payment, and a caller extending credit must treat it as a failure
    * rather than wait: nobody is at the keyboard on an off-session charge.
@@ -189,6 +201,8 @@ export async function chargeOrgUsageInvoice(
     ok: false,
     invoiceId: null,
     status: null,
+    totalCents: 0,
+    amountPaidCents: 0,
     requiresAction: false,
     error: null,
   }
@@ -204,35 +218,22 @@ export async function chargeOrgUsageInvoice(
   const metadata = metadataParams(request.metadata)
   const key = (object: string) => `${request.idempotencyKey}:${object}`
 
-  // The line. `price_data` rather than a bare amount, because the PRODUCT is
-  // what carries the tax code the account's automatic tax computes from, and
-  // an amount with no product behind it is an untaxed line on a taxed
-  // invoice. `tax_behavior` is stated rather than left to the account
-  // default: US sales tax is added on top of the platform's prices, and an
-  // unspecified behavior is refused outright when automatic tax is on.
-  const item = await stripe(
-    fetchImpl,
-    secretKey,
-    'invoiceitems',
-    {
-      customer: request.stripeCustomerId,
-      'price_data[product]': request.productId,
-      'price_data[currency]': currency,
-      'price_data[unit_amount]': String(amountCents),
-      'price_data[tax_behavior]': 'exclusive',
-      description: request.description,
-      ...metadata,
-    },
-    key('invoiceitem'),
-  )
-  if (!item.ok) {
-    return { ...empty, error: stripeError(item, 'The usage line was refused') }
-  }
-
-  // The invoice. `charge_automatically` on the customer's default payment
-  // method, and `auto_advance` false so the finalize and the pay below are
-  // this call's own steps rather than a background transition whose outcome
-  // the caller would have to wait for.
+  // THE INVOICE FIRST, THEN THE LINE ATTACHED TO IT BY ID (AGL-3023).
+  //
+  // The order is the fix, and the reason is a default. `POST /v1/invoices`
+  // documents `pending_invoice_items_behavior` as "Defaults to `exclude` if
+  // the parameter is omitted" — so an invoice created after a pending item,
+  // without that parameter, sweeps up NOTHING. Every invoice comes out
+  // empty, finalizes at zero, and a zero-total invoice is already paid the
+  // moment it finalizes. That is what the first test-clock drill measured.
+  //
+  // Passing `pending_invoice_items_behavior: 'include'` would also fix the
+  // zero, and it is the wrong fix: "include" means every pending item on
+  // that customer, not ours. A proration, another plugin's usage line, an
+  // item some other part of the platform staged — all of it would land on an
+  // invoice this module then reports as an AI overage charge for an amount
+  // it made up. Attaching our line to our invoice BY ID binds exactly one
+  // line and cannot pick up a second.
   const created = await stripe(
     fetchImpl,
     secretKey,
@@ -242,6 +243,9 @@ export async function chargeOrgUsageInvoice(
       collection_method: 'charge_automatically',
       auto_advance: 'false',
       'automatic_tax[enabled]': 'true',
+      // Stated rather than left to the default, so this call says what it
+      // means: this invoice carries the line added below and nothing else.
+      pending_invoice_items_behavior: 'exclude',
       ...metadata,
     },
     key('invoice'),
@@ -254,6 +258,38 @@ export async function chargeOrgUsageInvoice(
     return { ...empty, error: 'Stripe returned an invoice with no id' }
   }
 
+  // The line, addressed to the draft above. `price_data` rather than a bare
+  // amount, because the PRODUCT is what carries the tax code the account's
+  // automatic tax computes from, and an amount with no product behind it is
+  // an untaxed line on a taxed invoice. `tax_behavior` is stated rather than
+  // left to the account default: US sales tax is added on top of the
+  // platform's prices, and an unspecified behavior is refused outright when
+  // automatic tax is on.
+  const item = await stripe(
+    fetchImpl,
+    secretKey,
+    'invoiceitems',
+    {
+      customer: request.stripeCustomerId,
+      invoice: invoiceId,
+      'price_data[product]': request.productId,
+      'price_data[currency]': currency,
+      'price_data[unit_amount]': String(amountCents),
+      'price_data[tax_behavior]': 'exclusive',
+      description: request.description,
+      ...metadata,
+    },
+    key('invoiceitem'),
+  )
+  if (!item.ok) {
+    return {
+      ...empty,
+      invoiceId,
+      status: 'draft',
+      error: stripeError(item, 'The usage line was refused'),
+    }
+  }
+
   const finalized = await stripe(
     fetchImpl,
     secretKey,
@@ -263,11 +299,33 @@ export async function chargeOrgUsageInvoice(
   )
   if (!finalized.ok) {
     return {
-      ok: false,
+      ...empty,
       invoiceId,
       status: String(finalized.body?.['status'] ?? 'draft'),
-      requiresAction: false,
       error: stripeError(finalized, 'The usage invoice could not be finalized'),
+    }
+  }
+
+  // WHAT THE INVOICE ACTUALLY CAME TO (AGL-3023).
+  //
+  // Checked before paying, because a zero-total invoice is not a cheap
+  // charge — it is a charge that did not happen, and Stripe marks it paid on
+  // finalization. Calling `pay` on one answers "Invoice is already paid",
+  // which reads like a failure of the card and is nothing of the sort.
+  //
+  // The comparison is `< amountCents` rather than `!== 0`: automatic tax
+  // ADDS to the total, so a correct invoice is at least what we asked for
+  // and usually more. Anything less means the line did not land.
+  const totalCents = Math.max(0, Math.floor(Number(finalized.body?.['total'] ?? 0)))
+  if (totalCents < amountCents) {
+    return {
+      ...empty,
+      invoiceId,
+      status: String(finalized.body?.['status'] ?? null) || null,
+      totalCents,
+      error:
+        `The usage invoice finalized at ${totalCents} cents for a ` +
+        `${amountCents}-cent line, so the line did not reach it`,
     }
   }
 
@@ -278,7 +336,7 @@ export async function chargeOrgUsageInvoice(
     {},
     key('pay'),
   )
-  return readPayOutcome(invoiceId, paid)
+  return readPayOutcome(invoiceId, totalCents, paid)
 }
 
 /**
@@ -289,12 +347,55 @@ export async function chargeOrgUsageInvoice(
  * the caller can record which invoice to wait on. `requires_action` is
  * singled out because it reads like "not yet" and is in fact "no": nobody is
  * present to complete a 3-D Secure challenge on an off-session charge.
+ *
+ * ## `paid` is not enough; money is (AGL-3023)
+ *
+ * Success requires BOTH a `paid` status and an `amount_paid` that covers the
+ * line. An invoice can read `paid` having collected nothing — a zero total
+ * is marked paid at finalization — and a caller that credited a workspace
+ * from our own requested figure would record a payment that never happened.
+ * On a usage bound that is the worst possible failure: the balance the gate
+ * refuses on would be cleared by bookkeeping rather than by money, and the
+ * workspace could spend without limit. So what is reported here is what
+ * Stripe says it took.
  */
-function readPayOutcome(invoiceId: string, paid: StripeAnswer): OrgUsageInvoiceResult {
+function readPayOutcome(
+  invoiceId: string,
+  totalCents: number,
+  paid: StripeAnswer,
+): OrgUsageInvoiceResult {
   const invoice = paid.ok ? paid.body : null
   const status = String((invoice ?? {})['status'] ?? '') || null
+  const amountPaidCents = Math.max(
+    0,
+    Math.floor(Number((invoice ?? {})['amount_paid'] ?? 0)),
+  )
+  if (paid.ok && status === 'paid' && amountPaidCents >= totalCents && totalCents > 0) {
+    return {
+      ok: true,
+      invoiceId,
+      status,
+      totalCents,
+      amountPaidCents,
+      requiresAction: false,
+      error: null,
+    }
+  }
   if (paid.ok && status === 'paid') {
-    return { ok: true, invoiceId, status, requiresAction: false, error: null }
+    // Stripe answered 200 and `paid`, and took less than the invoice came
+    // to. Reported as a failure with the figures, because the alternative is
+    // crediting a workspace for money nobody received.
+    return {
+      ok: false,
+      invoiceId,
+      status,
+      totalCents,
+      amountPaidCents,
+      requiresAction: false,
+      error:
+        `The usage invoice reports paid having collected ${amountPaidCents} ` +
+        `cents of ${totalCents}`,
+    }
   }
   const error = paid.body?.['error'] as
     | { message?: unknown; payment_intent?: { status?: unknown } }
@@ -304,6 +405,8 @@ function readPayOutcome(invoiceId: string, paid: StripeAnswer): OrgUsageInvoiceR
     ok: false,
     invoiceId,
     status: status ?? 'open',
+    totalCents,
+    amountPaidCents,
     requiresAction: intentStatus === 'requires_action',
     error: stripeError(paid, 'The card on file did not complete the charge'),
   }
@@ -325,15 +428,28 @@ function readPayOutcome(invoiceId: string, paid: StripeAnswer): OrgUsageInvoiceR
 export async function findOrgUsageInvoice(
   query: { metadataKey: string; metadataValue: string },
   options: { secretKey?: string; fetchImpl?: StripeFetch } = {},
-): Promise<{ invoiceId: string | null; status: string | null; error: string | null }> {
+): Promise<{
+  invoiceId: string | null
+  status: string | null
+  /** What that invoice collected, in cents — 0 when none was found. */
+  amountPaidCents: number
+  error: string | null
+}> {
   const secretKey = options.secretKey ?? process.env.STRIPE_SECRET_KEY ?? ''
   const fetchImpl = options.fetchImpl ?? fetch
-  if (!secretKey) return { invoiceId: null, status: null, error: 'Stripe is not configured' }
+  if (!secretKey) {
+    return {
+      invoiceId: null,
+      status: null,
+      amountPaidCents: 0,
+      error: 'Stripe is not configured',
+    }
+  }
   // Single quotes around the value are Stripe's own search syntax; a value
   // carrying one would break the query, so it is refused rather than escaped
   // — every id this is called with is generated by us from `[A-Za-z0-9-]`.
   if (/['\\]/.test(query.metadataValue)) {
-    return { invoiceId: null, status: null, error: 'Unsearchable claim id' }
+    return { invoiceId: null, status: null, amountPaidCents: 0, error: 'Unsearchable claim id' }
   }
   const search = `metadata['${query.metadataKey}']:'${query.metadataValue}'`
   const answer = await stripe(
@@ -344,14 +460,20 @@ export async function findOrgUsageInvoice(
     null,
   )
   if (!answer.ok) {
-    return { invoiceId: null, status: null, error: stripeError(answer, 'Invoice search failed') }
+    return {
+      invoiceId: null,
+      status: null,
+      amountPaidCents: 0,
+      error: stripeError(answer, 'Invoice search failed'),
+    }
   }
   const data = (answer.body?.['data'] ?? []) as Array<Record<string, unknown>>
   const found = data[0]
-  if (!found) return { invoiceId: null, status: null, error: null }
+  if (!found) return { invoiceId: null, status: null, amountPaidCents: 0, error: null }
   return {
     invoiceId: String(found['id'] ?? '') || null,
     status: String(found['status'] ?? '') || null,
+    amountPaidCents: Math.max(0, Math.floor(Number(found['amount_paid'] ?? 0))),
     error: null,
   }
 }

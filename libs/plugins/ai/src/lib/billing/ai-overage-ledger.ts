@@ -259,6 +259,18 @@ export interface AiOverageSettlement {
   /** `null` only when no invoice was ever created. */
   invoiceId: string | null
   status: AiOverageChargeStatus
+  /**
+   * What Stripe actually collected, in dollars (AGL-3023).
+   *
+   * The month's paid total moves by THIS and never by the claim. The two are
+   * normally equal, and the case where they are not is the one that matters:
+   * an invoice that finalized at zero or collected less than it billed would
+   * otherwise clear a balance nobody paid, and the gate's unpaid bound would
+   * be satisfied by our own bookkeeping instead of by money.
+   *
+   * Omitted on a settlement that is not a payment, where it is not read.
+   */
+  paidUsd?: number
 }
 
 /**
@@ -296,6 +308,10 @@ export async function settleAiOverageCharge(
       tx.get(chargeRef),
     ])
     const amountUsd = money(chargeSnapshot.get('amountUsd'))
+    // What the month's paid total moves by: what Stripe took. A settlement
+    // that claims to be a payment and names no collected figure moves
+    // nothing — silence is not evidence of money (AGL-3023).
+    const paidUsd = money(settlement.paidUsd)
     const open = usageSnapshot.get('overageInvoiceOpen') as
       | { chargeId?: unknown }
       | null
@@ -311,6 +327,7 @@ export async function settleAiOverageCharge(
       {
         invoiceId: settlement.invoiceId,
         status: settlement.status,
+        ...(settlement.status === 'paid' ? { paidUsd } : {}),
         ...(settlement.status === 'paid'
           ? { paidAt: FieldValue.serverTimestamp() }
           : {}),
@@ -324,8 +341,8 @@ export async function settleAiOverageCharge(
       usageRef,
       {
         month: settlement.month,
-        ...(settlement.status === 'paid' && !alreadyPaid
-          ? { overagePaidUsd: FieldValue.increment(amountUsd) }
+        ...(settlement.status === 'paid' && !alreadyPaid && paidUsd > 0
+          ? { overagePaidUsd: FieldValue.increment(paidUsd) }
           : {}),
         ...(releases
           ? {
