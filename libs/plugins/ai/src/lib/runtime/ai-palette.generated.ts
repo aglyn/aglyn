@@ -55,6 +55,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       heading: 'text',
       successMessage: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+      successMessage: 'text-field',
+    },
     textLimits: {
       heading: 200,
       successMessage: 200,
@@ -95,6 +99,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       checkoutLabel: 'text',
       emptyText: 'text',
     },
+    propFields: {
+      variant: 'select',
+      checkoutLabel: 'text-field',
+      showCoupon: 'checkbox',
+      emptyText: 'text-field',
+    },
     textLimits: {
       checkoutLabel: 200,
       emptyText: 200,
@@ -126,6 +136,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       collectionSlug: 'text',
       allLabel: 'text',
+    },
+    propFields: {
+      collectionSlug: 'text-field',
+      allLabel: 'text-field',
     },
     textLimits: {
       collectionSlug: 200,
@@ -199,6 +213,19 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       searchPlaceholder: 'text',
       spacing: 'text',
     },
+    propFields: {
+      collectionSlug: 'text-field',
+      entriesLimit: 'text-field',
+      filterCategory: 'text-field',
+      filterTag: 'text-field',
+      perPage: 'text-field',
+      page: 'text-field',
+      firstPageOnly: 'switch',
+      search: 'switch',
+      searchMode: 'select',
+      searchPlaceholder: 'text-field',
+      spacing: 'text-field',
+    },
     textLimits: {
       collectionSlug: 200,
       entriesLimit: 200,
@@ -258,6 +285,16 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       pageUrl: 'url',
       url: 'url',
     },
+    propFields: {
+      name: 'text-field',
+      bio: 'textarea',
+      image: 'text-field',
+      pageUrl: 'text-field',
+      url: 'text-field',
+      showLinks: 'switch',
+      showBio: 'switch',
+      showAvatar: 'switch',
+    },
     textLimits: {
       name: 200,
       bio: 2000,
@@ -284,6 +321,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       markdown: 'text',
+    },
+    propFields: {
+      markdown: 'text-field',
     },
     textLimits: {
       markdown: 200,
@@ -356,6 +396,21 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       tags: 'text',
       avatarImage: 'text',
       authorPageUrl: 'url',
+    },
+    propFields: {
+      date: 'text-field',
+      dateFormat: 'select',
+      author: 'text-field',
+      category: 'text-field',
+      tags: 'text-field',
+      avatarImage: 'text-field',
+      showDate: 'switch',
+      showCategory: 'switch',
+      showTags: 'switch',
+      authorPageUrl: 'text-field',
+      linkAuthor: 'switch',
+      showAuthor: 'switch',
+      showAvatar: 'switch',
     },
     textLimits: {
       date: 200,
@@ -459,6 +514,19 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       limit: 'text',
       columns: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+      limit: 'text-field',
+      layout: 'select',
+      columns: 'text-field',
+      showCover: 'switch',
+      headingVariant: 'select',
+      titleVariant: 'select',
+      showDate: 'switch',
+      dateFormat: 'select',
+      showCategory: 'switch',
+      showExcerpt: 'switch',
+    },
     textLimits: {
       heading: 200,
       limit: 200,
@@ -493,6 +561,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       collectionSlug: 'text',
       searchPlaceholder: 'text',
     },
+    propFields: {
+      collectionSlug: 'text-field',
+      searchPlaceholder: 'text-field',
+    },
     textLimits: {
       collectionSlug: 200,
       searchPlaceholder: 200,
@@ -519,6 +591,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       heading: 'text',
+    },
+    propFields: {
+      heading: 'text-field',
     },
     textLimits: {
       heading: 200,
@@ -582,6 +657,18 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       worksFor: 'text',
       url: 'url',
     },
+    propFields: {
+      name: 'text-field',
+      bio: 'textarea',
+      image: 'text-field',
+      jobTitle: 'text-field',
+      worksFor: 'text-field',
+      url: 'text-field',
+      showLinks: 'switch',
+      showBio: 'switch',
+      showRole: 'switch',
+      showAvatar: 'switch',
+    },
     textLimits: {
       name: 200,
       bio: 2000,
@@ -625,6 +712,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       css: 'text',
       embedHeight: 'text',
     },
+    propFields: {
+      html: 'text-field',
+      css: 'text-field',
+      embedMode: 'checkbox',
+      embedHeight: 'text-field',
+    },
     textLimits: {
       html: 200,
       css: 200,
@@ -652,6 +745,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       signedOutHeading: 'text',
+    },
+    propFields: {
+      signedOutHeading: 'text-field',
     },
     textLimits: {
       signedOutHeading: 200,
@@ -682,6 +778,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       emphasizeColumn: 'text',
+    },
+    propFields: {
+      headerRow: 'checkbox',
+      emphasizeColumn: 'text-field',
     },
     textLimits: {
       emphasizeColumn: 200,
@@ -717,6 +817,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      component: 'select',
+    },
     textLimits: {},
     presets: [],
   },
@@ -755,6 +858,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       children: 'text',
       href: 'url',
     },
+    propFields: {
+      children: 'text-field',
+      href: 'text-field',
+      backgroundColor: 'color-picker',
+      color: 'color-picker',
+      align: 'select',
+    },
     textLimits: {
       children: 40,
     },
@@ -778,6 +888,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      color: 'color-picker',
+    },
     textLimits: {},
     presets: ['Email divider'],
   },
@@ -801,6 +914,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       html: 'text',
+    },
+    propFields: {
+      html: 'textarea',
     },
     textLimits: {
       html: 2000,
@@ -845,6 +961,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       width: 'text',
       href: 'url',
     },
+    propFields: {
+      src: 'text-field',
+      alt: 'text-field',
+      width: 'text-field',
+      href: 'text-field',
+      align: 'select',
+    },
     textLimits: {
       alt: 200,
       width: 200,
@@ -872,6 +995,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       buttonLabel: 'text',
     },
+    propFields: {
+      buttonLabel: 'text-field',
+    },
     textLimits: {
       buttonLabel: 40,
     },
@@ -897,6 +1023,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       html: 'text',
+    },
+    propFields: {
+      html: 'textarea',
     },
     textLimits: {
       html: 2000,
@@ -931,6 +1060,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       padding: 'text',
     },
+    propFields: {
+      backgroundColor: 'color-picker',
+      padding: 'text-field',
+      align: 'select',
+    },
     textLimits: {
       padding: 200,
     },
@@ -956,6 +1090,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       height: 'text',
+    },
+    propFields: {
+      height: 'text-field',
     },
     textLimits: {
       height: 200,
@@ -994,6 +1131,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       children: 'text',
     },
+    propFields: {
+      children: 'textarea',
+      variant: 'select',
+      color: 'color-picker',
+      align: 'select',
+    },
     textLimits: {
       children: 2000,
     },
@@ -1029,6 +1172,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       heading: 'text',
       maxItems: 'text',
+    },
+    propFields: {
+      heading: 'text-field',
+      mode: 'select',
+      maxItems: 'text-field',
     },
     textLimits: {
       heading: 200,
@@ -1084,6 +1232,15 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       successMessage: 'text',
       redirectScreenId: 'screen',
       redirectUrl: 'url',
+    },
+    propFields: {
+      formName: 'text-field',
+      datasetName: 'text-field',
+      submitLabel: 'text-field',
+      successMessage: 'text-field',
+      afterSubmit: 'select',
+      redirectScreenId: 'screen-select',
+      redirectUrl: 'text-field',
     },
     textLimits: {
       formName: 200,
@@ -1145,6 +1302,14 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       placeholder: 'text',
       options: 'text',
     },
+    propFields: {
+      fieldName: 'text-field',
+      label: 'text-field',
+      placeholder: 'text-field',
+      fieldType: 'select',
+      options: 'textarea',
+      required: 'switch',
+    },
     textLimits: {
       fieldName: 200,
       label: 200,
@@ -1190,6 +1355,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       buttonLabel: 'text',
       resultLabel: 'text',
     },
+    propFields: {
+      functionName: 'text-field',
+      title: 'text-field',
+      buttonLabel: 'text-field',
+      resultLabel: 'text-field',
+    },
     textLimits: {
       functionName: 200,
       title: 200,
@@ -1229,6 +1400,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       ctaLabel: 'text',
       ctaHref: 'text',
     },
+    propFields: {
+      teaserText: 'text-field',
+      ctaLabel: 'text-field',
+      ctaHref: 'text-field',
+    },
     textLimits: {
       teaserText: 200,
       ctaLabel: 200,
@@ -1262,6 +1438,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       videoIndex: 'text',
       lockedText: 'text',
+    },
+    propFields: {
+      videoIndex: 'text-field',
+      lockedText: 'text-field',
     },
     textLimits: {
       videoIndex: 200,
@@ -1297,6 +1477,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       size: 'text',
       color: 'text',
+    },
+    propFields: {
+      iconId: 'icon-picker',
+      size: 'text-field',
+      color: 'text-field',
     },
     textLimits: {
       size: 200,
@@ -1360,6 +1545,18 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       screenId: 'screen',
       href: 'url',
     },
+    propFields: {
+      src: 'text-field',
+      alt: 'text-field',
+      decorative: 'switch',
+      title: 'text-field',
+      objectFit: 'select',
+      width: 'css-dimension',
+      height: 'css-dimension',
+      loading: 'select',
+      screenId: 'screen-select',
+      href: 'text-field',
+    },
     textLimits: {
       alt: 200,
       title: 200,
@@ -1388,6 +1585,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      variant: 'select',
+      uppercase: 'checkbox',
+    },
     textLimits: {},
     presets: ['Language Switcher'],
   },
@@ -1423,6 +1624,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       caption: 'text',
     },
+    propFields: {
+      caption: 'text-field',
+      component: 'select',
+    },
     textLimits: {
       caption: 200,
     },
@@ -1449,6 +1654,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       content: 'text',
     },
+    propFields: {
+      content: 'markdown',
+    },
     textLimits: {
       content: 2000,
     },
@@ -1469,6 +1677,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {},
     textLimits: {},
     presets: ['Plugin'],
   },
@@ -1503,6 +1712,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       emptyText: 'text',
       maxItems: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+      emptyText: 'text-field',
+      maxItems: 'text-field',
+    },
     textLimits: {
       heading: 200,
       emptyText: 200,
@@ -1536,6 +1750,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       heading: 'text',
       signinPath: 'text',
+    },
+    propFields: {
+      heading: 'text-field',
+      signinPath: 'text-field',
     },
     textLimits: {
       heading: 200,
@@ -1579,6 +1797,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       recoveryPath: 'text',
       continueFallback: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+      signupPath: 'text-field',
+      recoveryPath: 'text-field',
+      continueFallback: 'text-field',
+    },
     textLimits: {
       heading: 200,
       signupPath: 200,
@@ -1618,6 +1842,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       signinPath: 'text',
       continueFallback: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+      signinPath: 'text-field',
+      continueFallback: 'text-field',
+    },
     textLimits: {
       heading: 200,
       signinPath: 200,
@@ -1656,6 +1885,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      defaultExpanded: 'switch',
+      disableGutters: 'switch',
+      disabled: 'switch',
+    },
     textLimits: {},
     presets: ['Accordion'],
   },
@@ -1673,6 +1907,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {},
     textLimits: {},
     presets: [],
   },
@@ -1700,6 +1935,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       children: 'text',
       screenId: 'screen',
+    },
+    propFields: {
+      children: 'textarea',
+      screenId: 'screen-select',
     },
     textLimits: {
       children: 2000,
@@ -1755,6 +1994,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       ariaLabel: 'text',
     },
+    propFields: {
+      component: 'select',
+      ariaLabel: 'text-field',
+      color: 'select',
+      position: 'select',
+    },
     textLimits: {
       ariaLabel: 200,
     },
@@ -1788,6 +2033,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      component: 'select',
+    },
     textLimits: {},
     presets: ['Two-tone Statement', 'Box'],
   },
@@ -1836,6 +2084,14 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       itemsAfterCollapse: 'text',
       expandText: 'text',
       ariaLabel: 'text',
+    },
+    propFields: {
+      separator: 'text-field',
+      maxItems: 'text-field',
+      itemsBeforeCollapse: 'text-field',
+      itemsAfterCollapse: 'text-field',
+      expandText: 'text-field',
+      ariaLabel: 'text-field',
     },
     textLimits: {
       separator: 200,
@@ -1922,6 +2178,21 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       href: 'url',
       targetName: 'text',
     },
+    propFields: {
+      children: 'textarea',
+      color: 'select',
+      disabled: 'switch',
+      fullWidth: 'switch',
+      size: 'select',
+      variant: 'select',
+      screenId: 'screen-select',
+      href: 'text-field',
+      target: 'select',
+      targetName: 'text-field',
+      renderAs: 'select',
+      startIconId: 'icon-picker',
+      endIconId: 'icon-picker',
+    },
     textLimits: {
       children: 40,
       targetName: 200,
@@ -1971,6 +2242,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       ariaLabel: 'text',
       elevation: 'text',
     },
+    propFields: {
+      component: 'select',
+      ariaLabel: 'text-field',
+      variant: 'select',
+      elevation: 'text-field',
+    },
     textLimits: {
       ariaLabel: 200,
       elevation: 200,
@@ -1995,6 +2272,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      disableSpacing: 'switch',
+    },
     textLimits: {},
     presets: [],
   },
@@ -2012,6 +2292,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {},
     textLimits: {},
     presets: [],
   },
@@ -2040,6 +2321,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       title: 'text',
       subheader: 'text',
+    },
+    propFields: {
+      title: 'text-field',
+      subheader: 'text-field',
     },
     textLimits: {
       title: 200,
@@ -2090,6 +2375,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       ariaLabel: 'text',
     },
+    propFields: {
+      component: 'select',
+      ariaLabel: 'text-field',
+      fixed: 'switch',
+      disableGutters: 'switch',
+      maxWidth: 'select',
+    },
     textLimits: {
       ariaLabel: 200,
     },
@@ -2117,6 +2409,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      anchor: 'select',
+      width: 'css-dimension',
+    },
     textLimits: {},
     presets: ['Drawer'],
   },
@@ -2140,6 +2436,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       ariaLabel: 'text',
+    },
+    propFields: {
+      ariaLabel: 'text-field',
     },
     textLimits: {
       ariaLabel: 200,
@@ -2216,6 +2515,19 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       columnSpacing: 'text',
       columns: 'text',
     },
+    propFields: {
+      component: 'select',
+      ariaLabel: 'text-field',
+      container: 'switch',
+      size: 'breakpoint-span',
+      offset: 'breakpoint-span',
+      spacing: 'text-field',
+      rowSpacing: 'text-field',
+      columnSpacing: 'text-field',
+      columns: 'text-field',
+      direction: 'select',
+      wrap: 'select',
+    },
     textLimits: {
       ariaLabel: 200,
       spacing: 200,
@@ -2266,6 +2578,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       gap: 'text',
       rowHeight: 'text',
     },
+    propFields: {
+      variant: 'select',
+      cols: 'text-field',
+      gap: 'text-field',
+      rowHeight: 'text-field',
+    },
     textLimits: {
       cols: 200,
       gap: 200,
@@ -2312,6 +2630,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       subtitle: 'text',
       cols: 'text',
       rows: 'text',
+    },
+    propFields: {
+      title: 'text-field',
+      subtitle: 'text-field',
+      barPosition: 'select',
+      cols: 'text-field',
+      rows: 'text-field',
     },
     textLimits: {
       title: 200,
@@ -2369,6 +2694,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       children: 'text',
     },
+    propFields: {
+      children: 'textarea',
+      element: 'select',
+      tone: 'select',
+      weight: 'select',
+      decoration: 'select',
+    },
     textLimits: {
       children: 2000,
     },
@@ -2410,6 +2742,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       href: 'url',
       ariaLabel: 'text',
     },
+    propFields: {
+      screenId: 'screen-select',
+      href: 'text-field',
+      newTab: 'switch',
+      ariaLabel: 'text-field',
+      redundant: 'switch',
+    },
     textLimits: {
       ariaLabel: 200,
     },
@@ -2447,6 +2786,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       subheader: 'text',
+    },
+    propFields: {
+      subheader: 'text-field',
+      dense: 'switch',
+      disablePadding: 'switch',
     },
     textLimits: {
       subheader: 200,
@@ -2490,6 +2834,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      divider: 'switch',
+      alignItems: 'select',
+      dense: 'switch',
+      disableGutters: 'switch',
+      disablePadding: 'switch',
+    },
     textLimits: {},
     presets: ['List Item'],
   },
@@ -2521,6 +2872,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       primary: 'text',
       secondary: 'text',
+    },
+    propFields: {
+      primary: 'textarea',
+      secondary: 'textarea',
+      inset: 'switch',
     },
     textLimits: {
       primary: 2000,
@@ -2554,6 +2910,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       label: 'text',
     },
+    propFields: {
+      label: 'text-field',
+      panelWidth: 'select',
+    },
     textLimits: {
       label: 200,
     },
@@ -2579,6 +2939,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       label: 'text',
+    },
+    propFields: {
+      label: 'text-field',
     },
     textLimits: {
       label: 200,
@@ -2652,6 +3015,21 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       siblingCount: 'text',
       boundaryCount: 'text',
     },
+    propFields: {
+      count: 'text-field',
+      defaultPage: 'text-field',
+      variant: 'select',
+      shape: 'select',
+      color: 'select',
+      size: 'select',
+      siblingCount: 'text-field',
+      boundaryCount: 'text-field',
+      showFirstButton: 'switch',
+      showLastButton: 'switch',
+      hidePrevButton: 'switch',
+      hideNextButton: 'switch',
+      disabled: 'switch',
+    },
     textLimits: {
       count: 200,
       defaultPage: 200,
@@ -2704,6 +3082,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       ariaLabel: 'text',
       elevation: 'text',
+    },
+    propFields: {
+      component: 'select',
+      ariaLabel: 'text-field',
+      variant: 'select',
+      elevation: 'text-field',
+      square: 'switch',
     },
     textLimits: {
       ariaLabel: 200,
@@ -2775,6 +3160,18 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       screenId: 'screen',
       href: 'url',
       targetName: 'text',
+    },
+    propFields: {
+      children: 'textarea',
+      screenId: 'screen-select',
+      href: 'text-field',
+      target: 'select',
+      targetName: 'text-field',
+      renderAs: 'select',
+      color: 'select',
+      size: 'select',
+      fullWidth: 'switch',
+      variant: 'select',
     },
     textLimits: {
       children: 40,
@@ -2866,6 +3263,20 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       repeatFilter: 'text',
       repeatSort: 'text',
     },
+    propFields: {
+      component: 'select',
+      ariaLabel: 'text-field',
+      direction: 'select',
+      justifyContent: 'select',
+      alignItems: 'select',
+      spacing: 'text-field',
+      useFlexGap: 'switch',
+      flexWrap: 'select',
+      divider: 'select',
+      repeatLimit: 'text-field',
+      repeatFilter: 'text-field',
+      repeatSort: 'text-field',
+    },
     textLimits: {
       ariaLabel: 200,
       spacing: 200,
@@ -2911,6 +3322,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       label: 'text',
+    },
+    propFields: {
+      label: 'text-field',
     },
     textLimits: {
       label: 200,
@@ -3004,6 +3418,24 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       tabLink8: 'screen',
       ariaLabel: 'text',
     },
+    propFields: {
+      labels: 'textarea',
+      tabLink1: 'screen-select',
+      tabLink2: 'screen-select',
+      tabLink3: 'screen-select',
+      tabLink4: 'screen-select',
+      tabLink5: 'screen-select',
+      tabLink6: 'screen-select',
+      tabLink7: 'screen-select',
+      tabLink8: 'screen-select',
+      orientation: 'select',
+      variant: 'select',
+      ssrPanels: 'switch',
+      centered: 'switch',
+      textColor: 'select',
+      indicatorColor: 'select',
+      ariaLabel: 'text-field',
+    },
     textLimits: {
       labels: 2000,
       ariaLabel: 200,
@@ -3056,6 +3488,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       ariaLabel: 'text',
+    },
+    propFields: {
+      component: 'select',
+      ariaLabel: 'text-field',
+      disableGutters: 'switch',
+      variant: 'select',
     },
     textLimits: {
       ariaLabel: 200,
@@ -3118,6 +3556,14 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       children: 'text',
     },
+    propFields: {
+      children: 'textarea',
+      variant: 'select',
+      component: 'select',
+      align: 'select',
+      noWrap: 'switch',
+      gutterBottom: 'switch',
+    },
     textLimits: {
       children: 2000,
     },
@@ -3176,6 +3622,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       successText: 'text',
       listId: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+      buttonLabel: 'text-field',
+      successText: 'text-field',
+      listId: 'text-field',
+    },
     textLimits: {
       heading: 200,
       buttonLabel: 40,
@@ -3232,6 +3684,15 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       imageUrl: 'url',
       buyLabel: 'text',
     },
+    propFields: {
+      productId: 'text-field',
+      name: 'text-field',
+      priceUsd: 'text-field',
+      description: 'text-field',
+      imageUrl: 'text-field',
+      buyLabel: 'text-field',
+      showCoupon: 'checkbox',
+    },
     textLimits: {
       productId: 200,
       name: 200,
@@ -3272,6 +3733,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       slug: 'text',
       buyLabel: 'text',
+    },
+    propFields: {
+      slug: 'text-field',
+      buyLabel: 'text-field',
+      hideDescription: 'checkbox',
+      showCoupon: 'checkbox',
     },
     textLimits: {
       slug: 200,
@@ -3357,6 +3824,23 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       emptyText: 'text',
       pageSize: 'text',
     },
+    propFields: {
+      source: 'select',
+      collectionSlug: 'text-field',
+      categorySlug: 'text-field',
+      tag: 'text-field',
+      sort: 'select',
+      columns: 'text-field',
+      maxItems: 'text-field',
+      emptyText: 'text-field',
+      showFilters: 'checkbox',
+      showSearch: 'checkbox',
+      showCategories: 'checkbox',
+      showSort: 'checkbox',
+      showTypeFilter: 'checkbox',
+      showPriceFilter: 'checkbox',
+      pageSize: 'text-field',
+    },
     textLimits: {
       collectionSlug: 200,
       categorySlug: 200,
@@ -3390,6 +3874,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       heading: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+    },
     textLimits: {
       heading: 200,
     },
@@ -3421,6 +3908,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       heading: 'text',
       maxItems: 'text',
+    },
+    propFields: {
+      heading: 'text-field',
+      maxItems: 'text-field',
     },
     textLimits: {
       heading: 200,
@@ -3455,6 +3946,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       resourceId: 'text',
       reserveLabel: 'text',
     },
+    propFields: {
+      resourceId: 'text-field',
+      reserveLabel: 'text-field',
+    },
     textLimits: {
       resourceId: 200,
       reserveLabel: 200,
@@ -3475,6 +3970,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {},
     textLimits: {},
     presets: [],
   },
@@ -3503,6 +3999,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       placeholder: 'text',
       defaultValue: 'text',
+    },
+    propFields: {
+      placeholder: 'text-field',
+      defaultValue: 'text-field',
     },
     textLimits: {
       placeholder: 200,
@@ -3543,6 +4043,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       ariaLabel: 'text',
+    },
+    propFields: {
+      element: 'select',
+      ariaLabel: 'text-field',
     },
     textLimits: {
       ariaLabel: 200,
@@ -3595,6 +4099,14 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       youtube: 'text',
       github: 'text',
     },
+    propFields: {
+      twitter: 'text-field',
+      instagram: 'text-field',
+      facebook: 'text-field',
+      linkedin: 'text-field',
+      youtube: 'text-field',
+      github: 'text-field',
+    },
     textLimits: {
       twitter: 200,
       instagram: 200,
@@ -3630,6 +4142,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       heading: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+      depth: 'select',
+    },
     textLimits: {
       heading: 200,
     },
@@ -3655,6 +4171,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      variant: 'select',
+    },
     textLimits: {},
     presets: ['Theme mode switcher'],
   },
@@ -3748,6 +4267,27 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       captionsLabel: 'text',
       captionsLang: 'text',
     },
+    propFields: {
+      src: 'text-field',
+      poster: 'text-field',
+      title: 'text-field',
+      description: 'textarea',
+      uploadDate: 'text-field',
+      durationSeconds: 'text-field',
+      lightbox: 'switch',
+      loadPlayer: 'switch',
+      preload: 'select',
+      controls: 'checkbox',
+      autoPlay: 'checkbox',
+      loop: 'checkbox',
+      muted: 'checkbox',
+      playsInline: 'checkbox',
+      captionsSrc: 'text-field',
+      captionsLabel: 'text-field',
+      captionsLang: 'text-field',
+      width: 'css-dimension',
+      height: 'css-dimension',
+    },
     textLimits: {
       title: 200,
       description: 2000,
@@ -3782,6 +4322,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       url: 'url',
     },
+    propFields: {
+      url: 'text-field',
+      height: 'css-dimension',
+    },
     textLimits: {},
     presets: ['Video'],
   },
@@ -3810,6 +4354,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       heading: 'text',
       emptyText: 'text',
+    },
+    propFields: {
+      heading: 'text-field',
+      emptyText: 'text-field',
     },
     textLimits: {
       heading: 200,

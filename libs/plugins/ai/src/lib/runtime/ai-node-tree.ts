@@ -42,6 +42,10 @@ import { createIdUrlSafe } from '@aglyn/aglyn/foundation/constants/app'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import { NodeType, type NodesMap } from '@aglyn/aglyn/types/nodes'
 import type { AiComponentPropTypes } from '../model/ai-site-inventory'
+import {
+  AI_COMPONENT_VISIBILITY_PROPS,
+  isAiComponentPropToken,
+} from './ai-component-bindings'
 
 import { sanitizeMarketplaceDefinition } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 
@@ -143,6 +147,17 @@ export interface AiNodeTreeContext {
    * dropped like any other value that is not an address.
    */
   bindingTokens?: Iterable<string>
+  /**
+   * The tree defines a reusable component (AGL-2908). A field that is not
+   * copy — a switch, a dropdown, a screen, an address, a picture, a number —
+   * and the `hideIf` and `hideUnless` directives may then hold one of the
+   * component's own `{{prop.<name>}}` tokens as their whole value, and a
+   * placed component may be handed one in its `propValues`; each is kept as
+   * written. Which property a token names, and whether its kind binds to that
+   * field, is the component step's check (`ai-component-bindings.ts`).
+   * Absent: such a token is dropped like any value the field cannot hold.
+   */
+  definesComponent?: boolean
 }
 
 /**
@@ -303,7 +318,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function isHttpsUrl(value: string): boolean {
+/** An `https:` address that parses as one. */
+export function isHttpsUrl(value: string): boolean {
   if (!/^https:\/\//i.test(value)) return false
   try {
     return new URL(value).protocol === 'https:'
@@ -313,7 +329,7 @@ function isHttpsUrl(value: string): boolean {
 }
 
 /** A path on this site: one leading slash, never a scheme-relative `//`. */
-function isRootRelativePath(value: string): boolean {
+export function isRootRelativePath(value: string): boolean {
   return /^\/(?!\/)[^\s<>"'`\\]*$/.test(value)
 }
 
@@ -638,6 +654,8 @@ interface ReferenceSets {
   formIds: Set<string> | null
   datasetIds: Set<string> | null
   assetIds: Set<string> | null
+  /** The tree defines a reusable component, which may hand its own property tokens on. */
+  definesComponent: boolean
 }
 
 /**
@@ -743,6 +761,12 @@ function sanitizeReferenceProps(
       }
       if (declared && !(name in declared)) {
         repairs.push(`${nodeId}.propValues.${name} is not a prop of that component; dropped`)
+        continue
+      }
+      if (refs.definesComponent && isAiComponentPropToken(raw)) {
+        // A property of the component being defined, handed on whole; the
+        // component step's check holds it to the kind this prop declares.
+        values[name] = raw.trim()
         continue
       }
       const value = instancePropValue(
@@ -933,19 +957,37 @@ function validate(
   // `{{entry.coverImage}}` is no address the sanitizer knows, and the prop
   // pass holds it to the tokens the caller named.
   const bindingTokens = context?.bindingTokens ? new Set(context.bindingTokens) : null
+  // A reusable component's own property tokens (AGL-2908) are lifted too, and
+  // kept as written rather than handed back to the prop pass: `{{prop.variant}}`
+  // is no value a dropdown, a switch, an address or a visibility directive
+  // admits. Copy keeps its tokens without lifting, as the text they are.
+  const definesComponent = context?.definesComponent === true
   const mediaByNodeId = new Map<string, Record<string, string>>()
+  const boundByNodeId = new Map<string, Record<string, string>>()
   const forSanitizer: Record<string, unknown> = {}
   for (const [id, node] of Object.entries(nodes)) {
     if (!isRecord(node) || !isRecord(node.props)) {
       forSanitizer[id] = node
       continue
     }
-    const roles = AI_PALETTE[String(node.componentId)]?.propRoles ?? {}
+    const entry = AI_PALETTE[String(node.componentId)]
+    const roles = entry?.propRoles ?? {}
     const props: Record<string, unknown> = { ...node.props }
     const lifted: Record<string, string> = {}
+    const bound: Record<string, string> = {}
     for (const [key, value] of Object.entries(props)) {
       if (typeof value !== 'string') continue
       const role = roles[key]
+      if (
+        definesComponent &&
+        isAiComponentPropToken(value) &&
+        (AI_COMPONENT_VISIBILITY_PROPS.includes(key) ||
+          (entry?.propsSchema.properties[key] !== undefined && role !== 'text'))
+      ) {
+        bound[key] = value.trim()
+        delete props[key]
+        continue
+      }
       if (
         (role === 'media' && parseMediaRef(value.trim())) ||
         ((role === 'media' || role === 'url') && bindingTokens?.has(value.trim()))
@@ -955,6 +997,7 @@ function validate(
       }
     }
     if (Object.keys(lifted).length) mediaByNodeId.set(id, lifted)
+    if (Object.keys(bound).length) boundByNodeId.set(id, bound)
     forSanitizer[id] = { ...node, props }
   }
 
@@ -964,6 +1007,7 @@ function validate(
     formIds: context?.formIds ? new Set(context.formIds) : null,
     datasetIds: context?.datasetIds ? new Set(context.datasetIds) : null,
     assetIds: context?.assetIds ? new Set(context.assetIds) : null,
+    definesComponent,
   }
   // An instance is admitted only where the caller grounded it in the site's
   // components; the reference itself is checked on the node below.
@@ -1049,10 +1093,12 @@ function validate(
       }
       if (isRecord(raw.props)) {
         const lifted = mediaByNodeId.get(id) ?? {}
+        const kept = boundByNodeId.get(id) ?? {}
         for (const key of Object.keys(raw.props)) {
           if (
             key !== 'sx' &&
             lifted[key] === undefined &&
+            kept[key] === undefined &&
             node.props?.[key] === undefined &&
             raw.props[key] !== undefined
           ) {
@@ -1123,9 +1169,19 @@ function validate(
     if ('refusal' in reference) {
       return { ok: false, code: 'reference', error: reference.refusal }
     }
+    // A required prop the component binds is present: its value is the token.
+    const boundProps = boundByNodeId.get(id)
     const propsResult = sanitizeProps(
       id,
-      entry,
+      boundProps
+        ? {
+            ...entry,
+            propsSchema: {
+              ...entry.propsSchema,
+              required: entry.propsSchema.required.filter((name) => boundProps[name] === undefined),
+            },
+          }
+        : entry,
       reference.props,
       screenIds,
       assetIds,
@@ -1147,7 +1203,7 @@ function validate(
       pluginId: entry.pluginId,
       parentId,
       nodes: children,
-      props: { ...propsResult.props, ...reference.kept },
+      props: { ...propsResult.props, ...reference.kept, ...boundProps },
       ...(sx ? { sx } : {}),
       ...(hiddenByNodeId.has(id) ? { hidden: true } : {}),
     }

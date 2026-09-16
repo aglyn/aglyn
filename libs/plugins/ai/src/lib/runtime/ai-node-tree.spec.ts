@@ -1223,3 +1223,106 @@ describe('validateAiNodeTree binding tokens (AGL-2909)', () => {
     expect(image).not.toHaveProperty('screenId')
   })
 })
+
+describe('validateAiNodeTree component definitions (AGL-2908)', () => {
+  const card = () =>
+    tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'muiCard',
+          props: { variant: 'outlined' },
+          children: [
+            {
+              componentId: 'image',
+              props: { src: '{{prop.photo}}', alt: 'Portrait of {{prop.name}}', hideIf: '{{prop.hidePhoto}}' },
+            },
+            {
+              componentId: 'muiButton',
+              props: {
+                children: '{{prop.label}}',
+                variant: '{{prop.style}}',
+                fullWidth: '{{prop.wide}}',
+                screenId: '{{prop.link}}',
+                href: '{{prop.url}}',
+              },
+            },
+          ],
+        },
+      ],
+    })
+  const propsOf = (result: AiNodeTreeResult, componentId: string) =>
+    result.ok
+      ? Object.values(result.nodes).find((node) => node.componentId === componentId)?.props
+      : undefined
+
+  it('keeps a component’s own tokens whole in fields that are not copy and in the visibility directives, when the tree defines a component', () => {
+    const result = validateAiNodeTree(card(), 'component', { definesComponent: true })
+    expect(result.ok).toBe(true)
+    expect(propsOf(result, 'image')).toEqual({
+      src: '{{prop.photo}}',
+      alt: 'Portrait of {{prop.name}}',
+      hideIf: '{{prop.hidePhoto}}',
+    })
+    expect(propsOf(result, 'muiButton')).toEqual({
+      children: '{{prop.label}}',
+      variant: '{{prop.style}}',
+      fullWidth: '{{prop.wide}}',
+      screenId: '{{prop.link}}',
+      href: '{{prop.url}}',
+    })
+    if (result.ok) expect(result.repairs).toEqual([])
+  })
+
+  it('drops them like any value the field cannot hold when the tree defines no component, and keeps copy either way', () => {
+    const result = validateAiNodeTree(card(), 'component')
+    expect(result.ok).toBe(true)
+    expect(propsOf(result, 'image')).toEqual({ alt: 'Portrait of {{prop.name}}' })
+    expect(propsOf(result, 'muiButton')).toEqual({ children: '{{prop.label}}' })
+  })
+
+  it('keeps nothing but a whole property token: not one inside a value, another namespace’s, or a literal directive', () => {
+    const mixed = tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'muiButton',
+          props: {
+            children: 'Get a quote',
+            variant: 'Style {{prop.style}}',
+            fullWidth: '{{entry.wide}}',
+            href: 'javascript:{{prop.url}}',
+            hideIf: 'true',
+          },
+        },
+      ],
+    })
+    const result = validateAiNodeTree(mixed, 'component', { definesComponent: true })
+    expect(result.ok).toBe(true)
+    expect(propsOf(result, 'muiButton')).toEqual({ children: 'Get a quote' })
+  })
+
+  it('hands a whole token on to a placed component’s values only while the tree defines a component', () => {
+    const placed = tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'reusableInstance',
+          props: { refId: 'cmp-avatar', propValues: { picture: '{{prop.photo}}', size: '{{prop.size}}' } },
+        },
+      ],
+    })
+    const context = {
+      definesComponent: true,
+      componentIds: ['cmp-avatar'],
+      componentProps: { 'cmp-avatar': { picture: 'image', size: 'number' } },
+    }
+    expect(propsOf(validateAiNodeTree(placed, 'component', context), 'reusableInstance')).toEqual({
+      refId: 'cmp-avatar',
+      propValues: { picture: '{{prop.photo}}', size: '{{prop.size}}' },
+    })
+    expect(
+      propsOf(validateAiNodeTree(placed, 'component', { ...context, definesComponent: false }), 'reusableInstance'),
+    ).toEqual({ refId: 'cmp-avatar' })
+  })
+})

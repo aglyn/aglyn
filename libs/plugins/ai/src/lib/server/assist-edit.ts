@@ -152,7 +152,13 @@ const strictObject = (properties: Record<string, unknown>) => ({
  * own list, so the tool and the Screen Properties form cannot drift.
  */
 export function assistEditTool(kind: AssistEditDocumentKind): AiTool {
-  const ops = ASSIST_EDIT_OP_KINDS.filter((op) => op !== 'setSeo' || kind === 'screen')
+  // A component save (AGL-2908) is proposed by its own door, from a selection
+  // the person made, and is not on offer in a chat turn: the tool has no shape
+  // for the properties and bindings it carries, and the resolver below drops
+  // any op it is not offered.
+  const ops = ASSIST_EDIT_OP_KINDS.filter(
+    (op) => op !== 'saveAsComponent' && (op !== 'setSeo' || kind === 'screen'),
+  )
   const pair = strictObject({ name: STRING, value: STRING })
   const style = strictObject({
     key: STRING,

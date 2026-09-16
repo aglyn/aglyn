@@ -1,0 +1,10 @@
+{
+  "label": "Components",
+  "position": 1.5,
+  "collapsible": true,
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "building-sites/components/generate-a-component-with-aglyn-ai"
+  }
+}

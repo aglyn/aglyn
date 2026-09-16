@@ -22,25 +22,46 @@ import {
 } from '@aglyn/besigner-ui/contexts/inspector-extras-context'
 import { BesignerToolbarExtrasContext } from '@aglyn/besigner-ui/contexts/toolbar-extras-context'
 import { useContext, type ReactNode } from 'react'
+import useCurrentOrg from '../hooks/use-current-org'
 import { HostIdContext } from './host-id-provider'
 import PluginWidgetSlot from './plugin-widget-slot.component'
 
-/** The toolbar's plugin controls, for the site the editor names. */
+/**
+ * The toolbar's plugin controls, for the site the editor names, in the
+ * workspace it belongs to. A widget that calls a door needs the workspace the
+ * door bills and gates on, the way the assistant dock's zone hands it over.
+ */
 function BesignerToolbarZone() {
   const hostId = useContext(HostIdContext)
-  return <PluginWidgetSlot slot="besignerToolbar" hostId={hostId ?? null} />
+  const { orgId } = useCurrentOrg()
+  return <PluginWidgetSlot slot="besignerToolbar" hostId={hostId ?? null} orgId={orgId} />
 }
 
-/** The Attributes panel's plugin section, for the element selected. */
-function BesignerInspectorZone({ node }: BesignerInspected) {
+/**
+ * The Attributes panel's plugin section, for the element selected.
+ *
+ * `editable` travels with the node (AGL-2908): the panel's own rule for
+ * whether this editor may change the element in place, which a widget that
+ * would change it has no other way to ask.
+ */
+function BesignerInspectorZone({ node, editable }: BesignerInspected) {
   const hostId = useContext(HostIdContext)
-  return <PluginWidgetSlot slot="besignerInspector" hostId={hostId ?? null} node={node} />
+  const { orgId } = useCurrentOrg()
+  return (
+    <PluginWidgetSlot
+      slot="besignerInspector"
+      hostId={hostId ?? null}
+      orgId={orgId}
+      node={node}
+      editable={editable}
+    />
+  )
 }
 
 const TOOLBAR = <BesignerToolbarZone />
 
 const inspectorSection = (inspected: BesignerInspected) => (
-  <BesignerInspectorZone node={inspected.node} />
+  <BesignerInspectorZone node={inspected.node} editable={inspected.editable} />
 )
 
 /**

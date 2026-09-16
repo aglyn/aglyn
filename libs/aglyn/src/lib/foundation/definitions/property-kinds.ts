@@ -656,3 +656,28 @@ export function reusablePropHasAnswers(
   const shape = reusablePropValueShape(prop)
   return shape === OPTION_SHAPE || shape === OPTIONS_SHAPE
 }
+
+/**
+ * The values of a property with answers that a field does not offer
+ * (AGL-2871).
+ *
+ * An answer reaches the field as its VALUE, and a field handed a value
+ * outside its own list draws as though nothing were chosen. The declaration
+ * cannot see the fields its answers will drive, so the mismatch is only
+ * knowable where the two meet: the Attributes panel's binding field, and the
+ * check a generated component's bindings pass.
+ */
+export function unofferedChoiceValues(
+  prop: Pick<ReusableComponentProp, 'type' | 'options' | 'settings'> | null | undefined,
+  fieldOptions: unknown,
+): string[] {
+  if (!reusablePropHasAnswers(prop) || !Array.isArray(fieldOptions)) return []
+  const offered = new Set(
+    fieldOptions.map((option) =>
+      String((option as { value?: unknown } | null)?.value ?? ''),
+    ),
+  )
+  return (prop?.options ?? [])
+    .map((option) => option?.value)
+    .filter((value): value is string => Boolean(value) && !offered.has(value))
+}

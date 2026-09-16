@@ -26,6 +26,7 @@ import {
 function Section() {
   const extras = inspectorExtrasFor(useBesignerInspectorExtras(), {
     node: { $id: 'node-1' } as unknown as BesignerInspected['node'],
+    editable: true,
   })
   return extras ? <div data-testid="extras">{extras}</div> : <div>{'no extras'}</div>
 }

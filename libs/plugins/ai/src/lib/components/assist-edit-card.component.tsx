@@ -84,6 +84,9 @@ export function AssistEditCard(props: AssistEditCardProps) {
   )
   const live = onDocument && Boolean(session?.isLiveVersion())
   const changes = describeAssistEditDiff(proposal.diff)
+  // A component save creates one document (AGL-2908), which is the one thing
+  // on this card that outlives an undo. The copy says so before Apply.
+  const savesComponent = proposal.ops.some((op) => op.op === 'saveAsComponent')
 
   return (
     <Paper
@@ -147,7 +150,9 @@ export function AssistEditCard(props: AssistEditCardProps) {
           ? `Open this ${noun} in the Besigner to apply the change.`
           : live
             ? `This is the version your live site shows. Make a new version first — the change is applied there, and the live ${noun} stays as it is.`
-            : `${brand} Assist changes nothing until you apply. Applying adds these changes to the open canvas as unsaved edits: undo takes them back, and nothing is saved or published until you save.`}
+            : savesComponent
+              ? `${brand} Assist changes nothing until you apply. Applying saves the component to your library, and swaps this element for one that follows it — an unsaved edit on the open canvas that undo takes back. Nothing is published.`
+              : `${brand} Assist changes nothing until you apply. Applying adds these changes to the open canvas as unsaved edits: undo takes them back, and nothing is saved or published until you save.`}
       </Typography>
       {failure ? (
         <Alert severity="warning" sx={{ mt: 1 }}>
