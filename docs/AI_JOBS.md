@@ -12,6 +12,8 @@ Code, all in the AI plugin (`libs/plugins/ai`, AGL-2939):
 `src/lib/jobs/ai-job-text-step.ts` and `src/lib/jobs/ai-job-theme-step.ts`
 (the `text` and `theme` steps),
 `src/lib/jobs/ai-job-plan-step.ts` (the plan step every planned kind runs first),
+`src/lib/jobs/ai-job-layout-step.ts`, `ai-job-template-step.ts` and
+`ai-job-component-step.ts` (the generation steps, below),
 `src/lib/server/ai-jobs-route.ts`, `ai-jobs-events-route.ts`,
 `ai-jobs-cancel.ts` and `ai-jobs-resume.ts` (the doors, registered on the
 console dispatcher by `src/lib/server.ts`), `src/lib/jobs/ai-jobs-beat.ts` (the
@@ -38,7 +40,7 @@ rules deny every client write). Fields:
 
 | field | meaning |
 | --- | --- |
-| `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout`, `template` and `form` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
+| `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout`, `template`, `form` and `component` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
 | `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` and `needs_review` as the two parked states (below). |
 | `brief`, `inputs` | The customer's brief verbatim and the kind-specific scalars a runner reads. |
 | `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`. |
@@ -386,6 +388,103 @@ the submit route reads, agreeing with each other. It is a planned kind, like
   signup, an anonymous survey) that the step spec runs through the doctrine,
   the contract, the draft writer and the consent reader. No spec calls a live
   provider.
+## The component kind
+
+`component` (AGL-2908) builds one reusable component from a brief: its tree,
+and the typed properties each page that places it fills in. It is a planned
+kind, like `layout` and `template`: the plan step runs first, the job waits
+for a member to confirm the plan, and the generation step builds exactly one
+draft.
+
+- **Runner.** `src/lib/jobs/ai-job-component-step.ts`, registered by the
+  plugin's server surface, calls `runValidatedGeneration('component', …)` on
+  `ctx.modelFor?.('job.component')` with no extended thinking and an
+  8,000-token answer ceiling, as the layout step does. The model answers
+  through `submit_component` (`src/lib/tools/ai-component-tool.ts`): the
+  doctrine's tree, and `props[]` beside it.
+- **The kinds are the Properties dialog's.** The tool offers
+  `REUSABLE_PROP_KINDS` less the kinds `AI_COMPONENT_PROP_KINDS_NOT_OFFERED`
+  names, each with its reason, which leaves Text, Long text, Image, Link,
+  Number, Yes / no and Choice. A spec holds the two tables in both directions,
+  and a kind added to the dialog does not compile until it is offered or
+  excused. `readAiComponentProps` stores each property as the dialog's cleaner
+  does: trimmed, a default in its kind's own type, only the fields the kind
+  uses.
+- **Bindings.** The tree binds a property with `{{prop.<name>}}`. The palette
+  validator keeps a whole token in a field that is not copy, and in `hideIf`
+  or `hideUnless`, only while `AiNodeTreeContext.definesComponent` is set.
+  Which property may sit in which field is
+  `src/lib/runtime/ai-component-bindings.ts`: a field that is not typed into (a
+  switch, a dropdown, a screen picker, a slider) takes exactly what the
+  Attributes panel offers under its `{}` (`reusablePropBindsToField`, over the
+  field kind the generated palette records for each prop as `propFields`), as
+  its whole value; a field that is typed into takes copy (Text, Long text,
+  Number) whole or inside a sentence, an Image only as a picture's source and
+  a Link only as an address. A Choice's answers must be values the dropdown
+  lists (`unofferedChoiceValues`, in core so the designer and the check read
+  one rule).
+- **The step's check,** through `extend`: every token names a declared
+  property and every declared property is bound; each sits on a field its
+  kind fits; an optional part is hidden by a Yes / no labeled `Hide …` whose
+  default is false, bound to `hideIf` on that part and never on the whole
+  component; a default fits the field it fills and reads in the site's voice
+  (rule 14); an Image default is empty or a library picture (rule 9); the
+  confirmed plan's reused components are placed and the properties it lists
+  are declared (rule 7). A property handed on to a placed component fits the
+  kind that component declares.
+- **Drafts.** `writeAiDraft` writes the component as the host resources
+  route's `reusableComponent` entry does: that entry's allow-list
+  (`displayName`, `description`, `rootId`, `nodes`, `props`), msgpack nodes
+  and the route's stamps, admitted by the plan's `reusableComponents` feature
+  with the route's own refusal, and counted against no allowance. No version
+  is written: the component's page mints the first when a member opens it,
+  as it does for a component Use template creates. Nothing places the
+  component until a member does.
+- **Output.** `{ resource: 'reusableComponent', id, versionId: null, hostId,
+  hostSubdomain, label, load }`, which the drawer links to the component's
+  page. A plan that starts from a copy gets the copy through
+  `duplicateResource('component', …)` and generates nothing.
+- **Fit.** The step's spec measures the cached prefix and the golden answer
+  (`src/lib/jobs/goldens/`), holds `AI_STEP_NOMINAL_USAGE['job.component']`
+  within a quarter of both, and holds an answer and its one re-ask inside the
+  beat's 45 s at the serving rate it states.
+
+### From a selection, not a brief
+
+The same kind has a second entry point (AGL-2908): a section already on a page
+saved as a component, from the besigner's Attributes panel. It is not a job —
+there is nothing to plan and nothing to wait for — so it is a door of its own,
+`POST /api/ai/generate/component` (`src/lib/server/ai-generate-component.ts`),
+answering an `AssistEditProposal` that AGL-2906's own card applies.
+
+- **The seam it needs.** `BesignerInspected` carries `editable` (the
+  Attributes panel's own rule, `Besigner.dnd.canDragNode`), so a widget knows
+  whether this editor may change the element in place without importing the
+  editor. Generic core: `libs/besigner/.../contexts/inspected-selection.ts`
+  computes it and `besigner-plugin-zones.component.tsx` passes it on.
+- **What it sends.** The outline of the open document
+  (`describeAssistEditCanvas`, AGL-2906) and the name the member typed. No
+  site inventory, no other page, no entry, product, contact or submission.
+- **What it answers.** References, never a document: `props[]` with no
+  defaults, and `bindings[]` of `{ nodeId, field, prop }`. The check is a
+  closed world over the selection's own subtree, with the binding rules read
+  from `runtime/ai-component-bindings.ts` — the from-brief step's own module,
+  so the two entry points cannot disagree.
+- **Refused before spend.** A selection that is the document, that carries the
+  `main` landmark or a second h1 (rule 11), or that the outline stops short of
+  describing whole.
+- **The apply.** `applyAssistEditSavingComponent` (`components/assist-edit-canvas.ts`)
+  runs AGL-2866's recipe: the definition is read off the live subtree with
+  core's `reusableComponentDefinitionFrom`, each bound field's CURRENT value
+  becomes that property's default, the component is created through
+  `POST /api/hosts/resources` (entitlement and allow-list enforced there), and
+  the subtree is swapped for an instance with `replaceSubtreeWithInstance`
+  inside one `canvas.batch`. One undo step, on the open draft. The only
+  document created is the component; nothing is saved or published.
+- **The op.** `saveAsComponent`, in `ASSIST_EDIT_OP_KINDS` with the diff line
+  and the op-count word `component`. The chat rung's tool does not offer it.
+- **The golden.** `src/lib/jobs/goldens/component-from-selection.json`: a
+  feature section with an optional second button.
 
 ## The doors
 

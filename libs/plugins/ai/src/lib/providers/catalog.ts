@@ -261,6 +261,7 @@ export type AiStepKind =
   | 'copy.section'
   | 'copy.blog'
   | 'generate.section'
+  | 'job.component'
   | 'job.form'
   | 'job.layout'
   | 'job.template'
@@ -276,6 +277,9 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   'copy.section': 'balanced',
   'copy.blog': 'balanced',
   'generate.section': 'balanced',
+  // A reusable component is one structured tree with the typed props it
+  // declares, and choosing what becomes a prop is the judgment the step sells.
+  'job.component': 'balanced',
   // A form is one small tree held to the building rules and to the contract
   // its submissions are read by; a re-ask costs more than the tier saves.
   'job.form': 'balanced',

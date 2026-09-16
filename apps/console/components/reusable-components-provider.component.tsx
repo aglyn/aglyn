@@ -25,6 +25,7 @@ import {
   detachInstanceSubtree,
   NodeType,
   replaceSubtreeWithInstance,
+  reusableComponentDefinitionFrom,
   REUSABLE_COMPONENT_CATEGORY,
   REUSABLE_INSTANCE_COMPONENT_ID,
 } from '@aglyn/aglyn'
@@ -71,23 +72,6 @@ export interface ReusableComponentsProviderProps {
    */
   editingFormId?: string
   children?: JSX.Children
-}
-
-/** Node ids of a subtree, root included, walked through `nodes` arrays. */
-function collectSubtreeIds(
-  rootId: string,
-  nodesById: Record<string, any>,
-): string[] {
-  const ids: string[] = []
-  const queue = [rootId]
-  while (queue.length) {
-    const id = queue.shift() as string
-    if (!nodesById[id] || ids.includes(id)) continue
-    ids.push(id)
-    const children = nodesById[id]?.nodes
-    if (Array.isArray(children)) queue.push(...children)
-  }
-  return ids
 }
 
 /**
@@ -201,14 +185,13 @@ export function ReusableComponentsProvider(
     if (!node) return
     const dequeue = queueLoading()
     try {
-      const all = canvas.toJSON().nodes as Record<string, any>
-      const subtreeIds = collectSubtreeIds(node.$id, all)
-      const definitionNodes: Record<string, any> = {}
-      for (const id of subtreeIds) {
-        const { componentSchema: _cs, resolvedProps: _rp, ...plain } = all[id]
-        definitionNodes[id] =
-          id === node.$id ? { ...plain, parentId: null } : plain
-      }
+      // The definition the new document holds, through the recipe core owns
+      // (AGL-2908), so this dialog and the plugin's own Save as reusable
+      // component write the same shape.
+      const definitionNodes = reusableComponentDefinitionFrom(
+        canvas.toJSON().nodes as any,
+        node.$id,
+      )
       // Creation rides the resources API (AGL-473): reusable components
       // render on the live site, so the Starter+ entitlement is enforced
       // server-side, not just by hiding the promote button.

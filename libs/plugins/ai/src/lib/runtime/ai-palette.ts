@@ -91,6 +91,13 @@ export interface AiPaletteEntry {
   propsSchema: AiPropsSchema
   /** Roles of the string props the validator treats specially. */
   propRoles: Record<string, AiPropRole>
+  /**
+   * The attribute field kind each declared prop is edited with, as its
+   * `FieldComponentType` value (`switch`, `select`, `screen-select`, …): what
+   * the editor reads to decide which component properties a field can be
+   * bound to (AGL-2908).
+   */
+  propFields: Record<string, string>
   /** Length ceilings for `text` props, in characters. */
   textLimits: Record<string, number>
   /** Names of the presets that place this component. */

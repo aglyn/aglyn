@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import { REUSABLE_INSTANCE_COMPONENT_ID } from '@aglyn/aglyn/app-utils/reusable-component-keys'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
@@ -31,7 +30,6 @@ import {
   type AiDoctrineNode,
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
-import { AI_INSTANCE_REF_PROP } from '../runtime/ai-node-tree'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
@@ -51,8 +49,10 @@ import {
   aiJobBriefLine,
   aiLimitReview,
   aiModelNodeIds,
+  aiPlacedComponentIds,
   aiPlanCreation,
   aiPlanReferenceLines,
+  aiPlanReuseViolations,
   aiUnspentOutcome,
 } from './ai-job-generation'
 import type { AiJobStepRunner } from './ai-job-text-step'
@@ -132,40 +132,17 @@ export function aiLayoutReuseCheck(
   plan: AiJobPlan | null,
 ): (tree: AiValidatedTree) => AiDoctrineViolation[] {
   const components = inventory?.components ?? []
-  const names = new Map(components.map((component) => [component.id, component.name]))
-  const reused = [
-    ...new Set(
-      (plan?.reuse ?? []).filter((entry) => entry.kind === 'component').map((entry) => entry.id),
-    ),
-  ]
   const navigation = components.filter(
     (component) => NAVIGATION_NAME.test(component.name) && !FOOTER_NAME.test(component.name),
   )
   return (tree) => {
-    const visits = walkTree({
-      rootId: tree.rootId,
-      nodes: tree.nodes as unknown as Record<string, AiDoctrineNode>,
-    })
-    const placed = new Set<string>()
-    for (const { node } of visits) {
-      const ref = node.props?.[AI_INSTANCE_REF_PROP]
-      if (node.componentId === REUSABLE_INSTANCE_COMPONENT_ID && typeof ref === 'string') {
-        placed.add(ref)
-      }
-    }
-    const violations: AiDoctrineViolation[] = []
-    const missing = reused.filter((id) => !placed.has(id))
-    if (missing.length) {
-      const listed = missing.map((id) => `"${names.get(id) ?? id}"`).join(', ')
-      violations.push({
-        rule: 7,
-        code: 'plan-reuse-not-placed',
-        message: `The confirmed plan reuses ${listed}, and the layout does not place ${
-          missing.length === 1 ? 'it' : 'them'
-        }. Place every component the plan reuses.`,
-      })
-    }
+    const placed = aiPlacedComponentIds(tree)
+    const violations: AiDoctrineViolation[] = aiPlanReuseViolations(inventory, plan, placed, 'layout')
     if (navigation.length && !navigation.some((component) => placed.has(component.id))) {
+      const visits = walkTree({
+        rootId: tree.rootId,
+        nodes: tree.nodes as unknown as Record<string, AiDoctrineNode>,
+      })
       const slot = visits.findIndex(({ node }) => node.componentId === 'layoutSlot')
       const header = slot === -1 ? visits : visits.slice(0, slot)
       const links = header.filter(({ node }) => isLink(node)).map(({ id }) => id)

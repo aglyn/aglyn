@@ -1477,6 +1477,46 @@ export function detachInstanceSubtree<
 }
 
 /**
+ * The definition a subtree becomes when it is promoted (AGL-2908): the
+ * element at `rootId` and everything under it, as a component document's own
+ * `nodes` map.
+ *
+ * The other half of "Save as reusable component", beside
+ * {@link replaceSubtreeWithInstance}: this one says what the new document
+ * holds, that one says what the promoting document keeps. Both are here so
+ * neither can drift from what the graft expects to read back.
+ *
+ * - The promoted root's `parentId` is dropped. In its old document it hung
+ *   from a section; in its own it IS the document, and a definition whose
+ *   root still points at a parent it no longer has grafts nothing.
+ * - Editor-only fields go: `componentSchema` is the palette's own object and
+ *   `resolvedProps` is a render of the props beside them, so storing either
+ *   writes a snapshot of the editor into a document the renderer reads.
+ * - Unknown `rootId` gives an empty map, and the input is never mutated.
+ *
+ * Child lists are the only edges followed, so an element the subtree does not
+ * reach is not carried along even if it claims the root as its parent.
+ */
+export function reusableComponentDefinitionFrom<
+  N extends AglynNodeSchema = AglynNodeSchema,
+>(nodes: NormalizedNodes<N>, rootId: NodeId): NormalizedNodes<N> {
+  const root = nodes?.[rootId]
+  if (!root) return {}
+  const definition: NormalizedNodes<N> = {}
+  for (const id of [rootId, ...collectDescendantIds(nodes, rootId)]) {
+    const node = nodes[id]
+    if (!node) continue
+    const {
+      componentSchema: _schema,
+      resolvedProps: _resolved,
+      ...stored
+    } = node as N & { componentSchema?: unknown; resolvedProps?: unknown }
+    definition[id] = (id === rootId ? { ...stored, parentId: null } : stored) as N
+  }
+  return definition
+}
+
+/**
  * Replaces the subtree rooted at `rootId` with an instance of `definitionId`
  * (AGL-1193) — what "Save as reusable component" does to the tree it was
  * promoted from.

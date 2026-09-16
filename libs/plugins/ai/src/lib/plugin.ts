@@ -17,6 +17,7 @@
 
 import { PLATFORM_BRAND_NAME, registerConsoleExtension } from '@aglyn/aglyn'
 import { AiCollaboratorPermissionsCell } from './components/ai-collaborator-permissions-column.component'
+import { AiSaveAsComponent } from './components/ai-save-as-component.component'
 import {
   AiGenerateSectionControl,
   AiRewriteControl,
@@ -151,6 +152,16 @@ export function registerAiConsole(): void {
         widgetId: 'ai-rewrite-copy',
         title: 'Rewrite with AI',
         Component: AiRewriteControl,
+      },
+      // Save the selection as a reusable component (AGL-2908): the component
+      // job's second entry point, which proposes the properties a section
+      // should declare and applies them as the manual promote does.
+      {
+        slot: 'besignerInspector',
+        widgetId: 'ai-save-as-component',
+        title: 'Make a reusable component with AI',
+        permission: 'ai.generate',
+        Component: AiSaveAsComponent,
       },
       {
         slot: 'orgMember',

@@ -194,6 +194,16 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       "tighter than the doctrine's default for a template, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
     eval: { kinds: ['template'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
   },
+  'job.component': {
+    // A component's tree and the properties it declares, in one answer, from a
+    // plan reasoned out and confirmed before the step (AGL-2908).
+    thinking: 'off',
+    effort: null,
+    maxTokens: 8000,
+    maxTokensBasis:
+      "the ceiling the layout and template steps keep, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
+    eval: { kinds: ['component'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+  },
   'job.form': {
     // A form's two halves in one answer: the field declaration and the design
     // that renders it, as JSON, with no extended thinking (AGL-2913).

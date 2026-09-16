@@ -164,6 +164,7 @@ import {
   useHostSubdomain,
 } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
+import useCurrentOrg from '../../../../../../../../../../hooks/use-current-org'
 import { syncScreenRouteEntries } from '../../../../../../../../../../constants/screen-publishing'
 import { announceLiveScreenChange } from '../../../../../../../../../../constants/screen-live-announce'
 import {
@@ -214,6 +215,7 @@ function BesignerPage(props) {
     versionId: string
   }>()
   const hostId = useHostId()
+  const { orgId } = useCurrentOrg()
   const screenId = params?.screenId as string
   const versionId = params?.versionId as string
   const { enqueueSnackbar } = useSnackbar()
@@ -270,12 +272,20 @@ function BesignerPage(props) {
   const versionsActions = useRef<BesignerVersionsActions>(null)
   // One section for the Attributes panel's plugin zone (AGL-2940), drawn for
   // the selected element (AGL-2984), so the context's consumers re-render with
-  // the site rather than with this page.
+  // the site rather than with this page. `editable` (AGL-2908) is the panel's
+  // own rule for whether this editor may change the element in place, which a
+  // widget has no other way to ask.
   const inspectorExtras = useCallback(
     (inspected: BesignerInspected) => (
-      <PluginWidgetSlot slot="besignerInspector" hostId={hostId} node={inspected.node} />
+      <PluginWidgetSlot
+        slot="besignerInspector"
+        hostId={hostId}
+        orgId={orgId}
+        node={inspected.node}
+        editable={inspected.editable}
+      />
     ),
-    [hostId],
+    [hostId, orgId],
   )
   // Installed plugins appear as named drawer entries (AGL-190).
   usePluginDrawerRegistration(hostId)

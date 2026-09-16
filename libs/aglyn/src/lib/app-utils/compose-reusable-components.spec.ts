@@ -34,6 +34,7 @@ import {
   readInstanceIconValue,
   readYesNoValue,
   replaceSubtreeWithInstance,
+  reusableComponentDefinitionFrom,
   resolveComponentPropTokens,
   resolveInstanceIconPath,
   resolveInstanceLeafBinding,
@@ -337,6 +338,78 @@ describe('classes across the merge (AGL-2875)', () => {
     expect('className' in merged).toBe(false)
     // Nor a `props` bag to hold one: neither node had anything to put there.
     expect(merged.props).toBeUndefined()
+  })
+})
+
+describe('reusableComponentDefinitionFrom (AGL-2908)', () => {
+  /** A promoted card, with the editor's own fields hanging off its nodes. */
+  const page = () =>
+    ({
+      _root_: { $id: '_root_', componentId: 'div', nodes: ['card', 'footer'] },
+      card: {
+        $id: 'card',
+        parentId: '_root_',
+        componentId: 'muiCard',
+        nodes: ['quote'],
+        componentSchema: { displayName: 'Card', attributes: [] },
+      },
+      quote: {
+        $id: 'quote',
+        parentId: 'card',
+        componentId: 'muiTypography',
+        props: { children: 'It just works' },
+        resolvedProps: { children: 'It just works' },
+      },
+      footer: { $id: 'footer', parentId: '_root_', componentId: 'muiBox' },
+      // Claims the card as its parent without being in any child list: the
+      // renderer never reaches it, so neither does the definition.
+      stray: { $id: 'stray', parentId: 'card', componentId: 'muiBox' },
+    }) as any
+
+  it('carries the subtree the renderer reaches, and nothing beside it', () => {
+    const definition = reusableComponentDefinitionFrom(page(), 'card')
+    expect(Object.keys(definition).sort()).toEqual(['card', 'quote'])
+  })
+
+  it('cuts the root loose from the document it was promoted out of', () => {
+    expect(reusableComponentDefinitionFrom(page(), 'card')['card']).toMatchObject({
+      $id: 'card',
+      parentId: null,
+      componentId: 'muiCard',
+      nodes: ['quote'],
+    })
+  })
+
+  it('stores none of the editor’s own fields', () => {
+    const definition = reusableComponentDefinitionFrom(page(), 'card')
+    for (const node of Object.values(definition)) {
+      expect('componentSchema' in (node as object)).toBe(false)
+      expect('resolvedProps' in (node as object)).toBe(false)
+    }
+    // ANTI-VACUITY: they were there to drop.
+    expect('componentSchema' in page()['card']).toBe(true)
+    expect('resolvedProps' in page()['quote']).toBe(true)
+    // What the renderer does read is untouched.
+    expect(definition['quote']).toMatchObject({ props: { children: 'It just works' } })
+  })
+
+  it('leaves the document it read alone, and answers nothing for an element that has gone', () => {
+    const before = page()
+    const snapshot = JSON.stringify(before)
+    reusableComponentDefinitionFrom(before, 'card')
+    expect(JSON.stringify(before)).toBe(snapshot)
+    expect(reusableComponentDefinitionFrom(before, 'nowhere')).toEqual({})
+  })
+
+  it('pairs with the swap: what the definition takes, the document stops holding', () => {
+    const definition = reusableComponentDefinitionFrom(page(), 'card')
+    const swapped = replaceSubtreeWithInstance(page(), 'card', 'cmp1', 'Card')
+    for (const id of Object.keys(definition)) {
+      if (id === 'card') continue
+      expect([id, id in swapped]).toEqual([id, false])
+    }
+    // The promoted root stays, as the instance that now follows the component.
+    expect(swapped['card']).toMatchObject({ props: { refId: 'cmp1' } })
   })
 })
 

@@ -29,14 +29,15 @@ import type {
   AglynOrgBilling,
   OrgFeatureFlags,
 } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import type { ReusableComponentProp } from '@aglyn/aglyn/foundation/definitions/platform.types'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import type { AiJobAdmissionRefusal } from './ai-job-admission'
 
 /**
- * Where a generation job's layout, page template or form lands (AGL-2909,
- * AGL-2913): a new draft, made as the console's host resources route makes
- * one.
+ * Where a generation job's layout, page template, form or reusable
+ * component lands (AGL-2909, AGL-2913, AGL-2908): a new draft, made as the
+ * console's host resources route makes one.
  *
  * ── The document the create route makes ─────────────────────────────────
  *
@@ -51,7 +52,9 @@ import type { AiJobAdmissionRefusal } from './ai-job-admission'
  * name, a slug read from that name, and no version — the form's page mints the
  * first one when someone opens it. Where Create sends an empty `fields`, a
  * generated form sends the declaration read off its own design, so the two
- * agree from the start.
+ * agree from the start. A component carries its tree and the props it
+ * declares on its own document, as Use template writes one, and gets its
+ * first version where every component does: when a member opens it.
  *
  * ── Counted like a create ────────────────────────────────────────────────
  *
@@ -62,16 +65,19 @@ import type { AiJobAdmissionRefusal } from './ai-job-admission'
  * query, which never matches a document with no `source.type` at all. A form
  * needs the plan to include the route's `entitlement` first, refused in the
  * route's own words, and then every form document counts against
- * `formsPerHost`.
+ * `formsPerHost`. A reusable component counts against no allowance at all:
+ * the route admits one on a plan with the `reusableComponents` entitlement
+ * and refuses it otherwise, and so does the writer.
  *
  * ── Applied to nothing ───────────────────────────────────────────────────
  *
  * A layout renders only around a screen or layout that names it, or as the
  * built-in page layout the host document names; a template is inert until a
- * member uses it; a form renders only where a page places it. So the writer
- * touches the new documents and nothing else — no screen, collection, store
- * setting, other layout or host document — and what the job hands back is a
- * link to the draft, never a binding.
+ * member uses it; a form renders only where a page places it; a component
+ * renders only where an instance places it, and a new one has no instance.
+ * So the writer touches the new documents and nothing else — no screen,
+ * collection, store setting, other layout, component or host document — and
+ * what the job hands back is a link to the draft, never a binding.
  *
  * ── One draft per job ────────────────────────────────────────────────────
  *
@@ -82,7 +88,7 @@ import type { AiJobAdmissionRefusal } from './ai-job-admission'
 
 type Firestore = FirebaseFirestore.Firestore
 
-export type AiDraftKind = 'layout' | 'template' | 'form'
+export type AiDraftKind = 'layout' | 'template' | 'form' | 'component'
 
 /** The console host resources route's allow-list for each kind. */
 export const AI_DRAFT_FIELDS: Readonly<Record<AiDraftKind, readonly string[]>> = {
@@ -108,6 +114,7 @@ export const AI_DRAFT_FIELDS: Readonly<Record<AiDraftKind, readonly string[]>> =
     'rootId',
     'nodes',
   ],
+  component: ['displayName', 'description', 'rootId', 'nodes', 'props'],
 }
 
 /** The keys a layout's first version is seeded with, all on the versions route's list. */
@@ -120,8 +127,9 @@ export const AI_DRAFT_VERSION_NAME = 'Initial version'
 export const AI_DRAFT_ENTITLEMENT_REFUSAL = 'This feature is not included in your plan — see Billing'
 
 export interface AiDraftBand {
-  collection: 'layouts' | 'templates' | 'forms'
-  quotaKey: 'sharedLayoutsPerHost' | 'templatesPerHost' | 'formsPerHost'
+  collection: 'layouts' | 'templates' | 'forms' | 'components'
+  /** The allowance the route counts the kind against, where it counts one. */
+  quotaKey?: 'sharedLayoutsPerHost' | 'templatesPerHost' | 'formsPerHost'
   /** The feature the plan must include before any document of the kind counts. */
   entitlement?: keyof OrgFeatureFlags
   /** The route's plural label, in the refusal it gives. */
@@ -137,6 +145,11 @@ export const AI_DRAFT_BANDS: Readonly<Record<AiDraftKind, AiDraftBand>> = {
     quotaKey: 'formsPerHost',
     entitlement: 'reusableComponents',
     label: 'forms',
+  },
+  component: {
+    collection: 'components',
+    entitlement: 'reusableComponents',
+    label: 'reusable components',
   },
 }
 
@@ -168,7 +181,11 @@ function subdomainOf(host: FirebaseFirestore.DocumentSnapshot): string | null {
   return typeof subdomain === 'string' && subdomain ? subdomain : null
 }
 
-/** The route's refusal when the site's plan holds no more of the kind; `null` while it does. */
+/**
+ * The route's refusal when the site's plan does not include the kind, or
+ * holds no more of it; `null` while it does. The feature is asked first, as
+ * the route asks it before it counts.
+ */
 export function aiDraftBandRefusal(
   kind: AiDraftKind,
   rows: ReadonlyArray<Pick<SiblingRow, 'sourceType'>>,
@@ -178,6 +195,7 @@ export function aiDraftBandRefusal(
   if (band.entitlement && !checkEntitlement(org, band.entitlement)) {
     return AI_DRAFT_ENTITLEMENT_REFUSAL
   }
+  if (!band.quotaKey) return null
   const used =
     kind === 'template'
       ? rows.filter((row) => row.sourceType !== undefined && row.sourceType !== 'starter').length
@@ -202,7 +220,7 @@ export async function aiDraftAllowanceRefusal(
 
 export interface AiDraftRecord {
   id: string
-  /** A layout's first version; `null` for a template or a form, which the writer gives none. */
+  /** A layout's first version; `null` for every other kind, which the writer gives none. */
   versionId: string | null
   name: string
   hostSubdomain: string | null
@@ -247,6 +265,10 @@ export interface AiDraftInput {
   slug?: string | null
   /** A form's declaration and the ids its design hangs from; required for a form. */
   form?: AiFormDraftDeclaration
+  /** A component's root, which the node map holds; required for a component. */
+  rootId?: string
+  /** The properties a component declares, which its tree binds. */
+  props?: readonly ReusableComponentProp[]
   now: Date
 }
 
@@ -290,6 +312,9 @@ export async function writeAiDraft(firestore: Firestore, input: AiDraftInput): P
   const packed = encodeStoredNodes(input.nodes)
   if (!packed) throw new Error('an AI draft needs a node map')
   if (input.kind === 'form' && !input.form) throw new Error('an AI form draft needs its declaration')
+  if (input.kind === 'component' && !(input.rootId && input.nodes[input.rootId])) {
+    throw new Error('a component draft needs a root its node map holds')
+  }
   const hostRef = firestore.collection('hosts').doc(input.hostId)
   const collection = draftCollection(firestore, input.hostId, input.kind)
   const draftRef = collection.doc(input.id)
@@ -333,6 +358,16 @@ export async function writeAiDraft(firestore: Firestore, input: AiDraftInput): P
           slug: input.slug || undefined,
         }),
         source: { type: 'authored' },
+        ...stamps,
+      })
+    } else if (input.kind === 'component') {
+      tx.create(draftRef, {
+        ...allowListed('component', {
+          displayName: name,
+          rootId: input.rootId,
+          nodes,
+          props: input.props?.length ? [...input.props] : undefined,
+        }),
         ...stamps,
       })
     } else {

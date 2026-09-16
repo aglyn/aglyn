@@ -19,7 +19,16 @@ import {
   screenSeoStageKey,
   type ScreenSeoTextField,
 } from '@aglyn/aglyn/app-utils/screen-seo-fields'
+import {
+  NODE_HIDE_IF_PROP,
+  replaceSubtreeWithInstance,
+  reusableComponentDefinitionFrom,
+} from '@aglyn/aglyn/app-utils/compose-reusable-components'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
+import type {
+  ReusableComponentProp,
+  ReusableComponentPropValue,
+} from '@aglyn/aglyn/foundation/definitions/platform.types'
 import {
   stageEditorSessionFields,
   type EditorSession,
@@ -35,6 +44,8 @@ import {
   type AssistEditInsertOp,
   type AssistEditOp,
   type AssistEditProposal,
+  type AssistEditComponentProp,
+  type AssistEditSaveAsComponentOp,
 } from '../model/assist-edit'
 
 /**
@@ -76,6 +87,10 @@ export interface AssistEditCanvas {
   deleteNode(node: any): unknown
   addNodeFromNested(nested: any, parent: any, index?: number): unknown
   nodeAcceptsChildren(node: any): boolean
+  /** The whole document, which a component save reads its definition out of. */
+  toJSON(): { nodes: Record<string, unknown> }
+  /** The document after a save: the promoted subtree swapped for an instance. */
+  applyNodes(nodes: any): unknown
 }
 
 const UNDESCRIBED_PROP = /^(html|sx|style|className|dangerouslySetInnerHTML|on[A-Z].*)$/
@@ -240,6 +255,22 @@ export type AssistEditApplyResult =
     }
   | { ok: false; reason: AssistEditRefusal; message: string }
 
+/** Ids of the subtree at `rootId`, the root included, through child lists only. */
+function subtreeIds(
+  canvas: Pick<AssistEditCanvas, 'getNode'>,
+  rootId: string,
+): Set<string> {
+  const found = new Set<string>([rootId])
+  const queue = [...(canvas.getNode(rootId)?.nodes ?? [])]
+  while (queue.length) {
+    const id = queue.shift() as string
+    if (found.has(id) || !canvas.getNode(id)) continue
+    found.add(id)
+    queue.push(...(canvas.getNode(id)?.nodes ?? []))
+  }
+  return found
+}
+
 const STALE: AssistEditCheck = {
   ok: false,
   reason: 'stale',
@@ -305,6 +336,22 @@ export function checkAssistEdit(
         const parent = canvas.getNode(op.parentId)
         if (!node || node.componentId !== op.componentId) return STALE
         if (!parent || parent.componentId !== op.parentComponentId) return STALE
+        break
+      }
+      case 'saveAsComponent': {
+        const node = canvas.getNode(op.nodeId)
+        if (!node || node.componentId !== op.componentId) return STALE
+        // The document itself is not a section of itself: promoting the root
+        // would leave a document holding one instance of its own contents.
+        if (op.nodeId === CANVAS_ROOT_ELEMENT_ID) return STALE
+        const inside = subtreeIds(canvas, op.nodeId)
+        for (const binding of op.bindings) {
+          const bound = canvas.getNode(binding.nodeId)
+          if (!bound || bound.componentId !== binding.componentId) return STALE
+          // A closed world: a token outside the promoted subtree would bind a
+          // property of the new component to an element it does not contain.
+          if (!inside.has(binding.nodeId)) return STALE
+        }
         break
       }
       default: {
@@ -395,8 +442,96 @@ function applyOne(canvas: AssistEditCanvas, op: AssistEditOp): void {
       canvas.addNodeFromNested(nestSubtree(op), live(canvas, op.parentId), op.index ?? NaN)
       return
     case 'setSeo':
+    case 'saveAsComponent':
+      // Both are applied outside the canvas batch: search fields are staged
+      // into the editor's own form, and a component save mints a document
+      // first and then swaps the subtree for an instance of it.
       return
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Save the selection as a reusable component (AGL-2908)
+ * ------------------------------------------------------------------ */
+
+/** What the apply needs from the console to create the component. */
+export interface AssistEditComponentWriter {
+  /**
+   * Creates the component through `POST /api/hosts/resources`, where the
+   * plan's entitlement and the route's field allow-list are enforced, and
+   * answers its id. The plugin never writes Firestore from the browser.
+   */
+  createComponent(input: {
+    name: string
+    rootId: string
+    nodes: Record<string, unknown>
+    props: ReusableComponentProp[]
+  }): Promise<string>
+}
+
+/**
+ * The value a bound field holds on the live canvas right now, which becomes
+ * the property's default.
+ *
+ * `hideIf` is the exception: the part is on the page, so the property that
+ * hides it starts at no. Every other field answers with what the author can
+ * see, which is what makes the instance render exactly what was there.
+ */
+function currentValue(
+  node: AssistEditCanvasNodeLike,
+  field: string,
+): ReusableComponentPropValue | undefined {
+  if (field === NODE_HIDE_IF_PROP) return false
+  const value = plain(node.props)[field]
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value
+  }
+  return undefined
+}
+
+/**
+ * Whether a default the canvas gave is one the property's own control
+ * offers. A Choice whose current value is not among its answers is a
+ * selection that has changed since the proposal was made, and applying it
+ * would declare a property no page could ever set back.
+ */
+function defaultFitsProp(prop: AssistEditComponentProp, value: unknown): boolean {
+  if (!prop.options?.length) return true
+  return prop.options.some((option) => option.value === value)
+}
+
+/**
+ * The definition the new component holds: the promoted subtree, with each
+ * bound field replaced by its property's token.
+ *
+ * The defaults are read off the SAME fields a moment before they are
+ * replaced, so the instance that takes the subtree's place renders what the
+ * author was looking at. Returns null when a default no longer fits its
+ * property, which is the stale case.
+ */
+function componentDefinition(
+  canvas: AssistEditCanvas,
+  op: AssistEditSaveAsComponentOp,
+): { nodes: Record<string, unknown>; props: ReusableComponentProp[] } | null {
+  const nodes = reusableComponentDefinitionFrom(
+    canvas.toJSON().nodes as never,
+    op.nodeId,
+  ) as unknown as Record<string, Record<string, unknown>>
+  const defaults = new Map<string, ReusableComponentPropValue | undefined>()
+  for (const binding of op.bindings) {
+    const live = canvas.getNode(binding.nodeId)
+    const stored = nodes[binding.nodeId]
+    if (!live || !stored) return null
+    if (!defaults.has(binding.prop)) defaults.set(binding.prop, currentValue(live, binding.field))
+    stored['props'] = { ...plain(stored['props']), [binding.field]: `{{prop.${binding.prop}}}` }
+  }
+  const props: ReusableComponentProp[] = []
+  for (const declared of op.props) {
+    const value = defaults.get(declared.name)
+    if (!defaultFitsProp(declared, value)) return null
+    props.push({ ...declared, ...(value === undefined ? {} : { defaultValue: value }) })
+  }
+  return { nodes, props }
 }
 
 /**
@@ -412,7 +547,7 @@ export function applyAssistEdit(
   const check = checkAssistEdit(canvas, proposal, session)
   if (check.ok === false) return check
   const open = session as EditorSession
-  const canvasOps = proposal.ops.filter((op) => op.op !== 'setSeo')
+  const canvasOps = proposal.ops.filter((op) => op.op !== 'setSeo' && op.op !== 'saveAsComponent')
   if (canvasOps.length) {
     try {
       canvas.batch(() => {
@@ -437,4 +572,85 @@ export function applyAssistEdit(
     staged.push(...stageEditorSessionFields(open, values).staged)
   }
   return { ok: true, opCounts: assistEditOpCounts(proposal.ops), staged }
+}
+
+/**
+ * Lands a proposal that saves the selection as a reusable component
+ * (AGL-2908) — AGL-2866's recipe, in place, with no clipboard.
+ *
+ * The order is the manual action's order, and it matters:
+ *
+ * 1. the definition is read off the live subtree, each bound field replaced
+ *    by its token and its current value kept as that property's default;
+ * 2. the component is created through the host resources route, where the
+ *    server enforces the plan's entitlement and its own allow-list — so a
+ *    refusal happens before the open document is touched at all;
+ * 3. the subtree is swapped for an instance of what was just created, inside
+ *    ONE `batch` with the rest of the proposal's canvas ops: one undo step.
+ *
+ * The only document created is the component, exactly as Save as reusable
+ * component creates one. The page change is an unsaved edit on the version
+ * the editor has open, which the check has already refused to be a live one.
+ * Nothing is published and nothing is saved.
+ */
+export async function applyAssistEditSavingComponent(
+  canvas: AssistEditCanvas,
+  proposal: AssistEditProposal,
+  session: EditorSession | undefined,
+  writer: AssistEditComponentWriter,
+): Promise<AssistEditApplyResult> {
+  const save = proposal.ops.find(
+    (op): op is AssistEditSaveAsComponentOp => op.op === 'saveAsComponent',
+  )
+  if (!save) return applyAssistEdit(canvas, proposal, session)
+  const check = checkAssistEdit(canvas, proposal, session)
+  if (check.ok === false) return check
+
+  const definition = componentDefinition(canvas, save)
+  if (!definition) return STALE as AssistEditApplyResult
+
+  let componentId: string
+  try {
+    componentId = await writer.createComponent({
+      name: save.name,
+      rootId: save.nodeId,
+      nodes: definition.nodes,
+      props: definition.props,
+    })
+  } catch (error) {
+    console.error('assist edit could not create the component', error)
+    return {
+      ok: false,
+      reason: 'refused',
+      message:
+        error instanceof Error && error.message
+          ? error.message
+          : 'The component could not be saved, so nothing on this page was changed.',
+    }
+  }
+
+  const canvasOps = proposal.ops.filter((op) => op.op !== 'setSeo' && op.op !== 'saveAsComponent')
+  try {
+    canvas.batch(() => {
+      for (const op of canvasOps) applyOne(canvas, op)
+      canvas.applyNodes(
+        replaceSubtreeWithInstance(
+          canvas.toJSON().nodes as never,
+          save.nodeId,
+          componentId,
+          save.name,
+        ),
+      )
+    })
+  } catch (error) {
+    console.error('assist edit refused by the canvas', error)
+    return {
+      ok: false,
+      reason: 'refused',
+      message:
+        'The component was saved, but the editor refused to swap this element for it. ' +
+        'Insert it from Your components instead.',
+    }
+  }
+  return { ok: true, opCounts: assistEditOpCounts(proposal.ops), staged: [] }
 }

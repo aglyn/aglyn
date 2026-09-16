@@ -109,6 +109,12 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // brief ride uncached, and a plan answer is about 600 characters of JSON with
   // as much again to think in.
   'job.plan': { inputTokens: 500, outputTokens: 400, cacheReadTokens: 3_400, cacheWriteTokens: 0 },
+  // The component step: the doctrine, the component instructions, the
+  // component surface's catalog and the tool are the cached prefix, the site
+  // inventory, the brief and the confirmed plan ride uncached, and a card-sized
+  // answer — its tree and declared props as JSON — is about 1,700 characters.
+  // The component step's spec measures the prefix and the answer against this.
+  'job.component': { inputTokens: 700, outputTokens: 600, cacheReadTokens: 5_600, cacheWriteTokens: 0 },
   'job.layout': { inputTokens: 700, outputTokens: 1_000, cacheReadTokens: 5_400, cacheWriteTokens: 0 },
   'job.template': { inputTokens: 1_200, outputTokens: 700, cacheReadTokens: 6_200, cacheWriteTokens: 0 },
   // The SEO step's listing exchange, which a page's or a product's listing is

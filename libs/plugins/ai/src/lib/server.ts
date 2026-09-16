@@ -21,6 +21,9 @@ import { registerAiDeclarations } from './declarations'
 import './jobs/ai-jobs-beat'
 // Registers the plan step every planned job kind runs first (AGL-2935).
 import './jobs/ai-job-plan-step'
+// Registers the component generation step, and what a component job checks
+// before it is created or resumed (AGL-2908).
+import './jobs/ai-job-component-step'
 // Registers the layout and template generation steps, and what each kind
 // checks before a job of it is created or resumed (AGL-2909).
 import './jobs/ai-job-layout-step'
@@ -34,6 +37,7 @@ import { POST as cancelAiJob } from './server/ai-jobs-cancel'
 import { GET as aiJobEvents } from './server/ai-jobs-events-route'
 import { GET as listAiJobs, POST as createAiJob } from './server/ai-jobs-route'
 import { POST as resumeAiJob } from './server/ai-jobs-resume'
+import { POST as aiGenerateComponent } from './server/ai-generate-component'
 import { POST as applyAiSeoAudit } from './server/ai-seo-apply'
 import { POST as assistChat } from './server/assist-chat'
 import { POST as assistEditApplied } from './server/assist-edit-applied'
@@ -100,6 +104,10 @@ export function registerAiConsoleApi(): void {
   // A site SEO audit's "Apply all" (AGL-2910): content fixes as new
   // unpublished versions, listing values staged for their SEO cards.
   registerPluginApiRoute('ai/seo/apply', { web: applyAiSeoAudit })
+  // Save the selection as a reusable component, with AI (AGL-2908): the
+  // second entry point of the component job, from the besigner's Attributes
+  // panel. It proposes, and the person's Apply writes.
+  registerPluginApiRoute('ai/generate/component', { web: aiGenerateComponent })
   registerPluginApiRoute('ai/billing/credits', { web: billingCredits })
   registerPluginApiRoute('ai/billing/overage', { web: billingOverage })
   registerPluginApiRoute('ai/usage', { web: aiUsage })

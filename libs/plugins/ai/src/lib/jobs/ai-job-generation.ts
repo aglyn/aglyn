@@ -15,10 +15,17 @@
  * limitations under the License.
  */
 
+import { REUSABLE_INSTANCE_COMPONENT_ID } from '@aglyn/aglyn/app-utils/reusable-component-keys'
 import type { AiBuildPlanCreate, AiBuildPlanCreateKind } from '../model/ai-build-plan'
 import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
-import type { AiGenerationSpend } from '../runtime/ai-doctrine'
-import type { AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
+import type { AiSiteInventory } from '../model/ai-site-inventory'
+import type { AiGenerationSpend, AiValidatedTree } from '../runtime/ai-doctrine'
+import {
+  walkTree,
+  type AiDoctrineNode,
+  type AiDoctrineViolation,
+} from '../runtime/ai-doctrine-validators'
+import { AI_INSTANCE_REF_PROP } from '../runtime/ai-node-tree'
 import type { AssistTokenUsage } from '../usage/assist-usage'
 import { AI_JOB_BRIEF_MAX_CHARS, type AiJobStepOutcome } from './ai-job-text-step'
 
@@ -81,6 +88,49 @@ export function aiPlanReferenceLines(plan: AiJobPlan | null): string[] {
     lines.push(`- the screen "${screen.title}" at ${screen.slug}${sections ? `: ${sections}` : ''}`)
   }
   return lines.length > 1 ? lines : []
+}
+
+/** The reusable components a tree places, by the id each instance names. */
+export function aiPlacedComponentIds(tree: Pick<AiValidatedTree, 'rootId' | 'nodes'>): Set<string> {
+  const placed = new Set<string>()
+  const nodes = tree.nodes as unknown as Record<string, AiDoctrineNode>
+  for (const { node } of walkTree({ rootId: tree.rootId, nodes })) {
+    const ref = node.props?.[AI_INSTANCE_REF_PROP]
+    if (node.componentId === REUSABLE_INSTANCE_COMPONENT_ID && typeof ref === 'string') {
+      placed.add(ref)
+    }
+  }
+  return placed
+}
+
+/**
+ * Rule 7 on a generated tree: every component the confirmed plan reuses is
+ * placed. `noun` names what the tree builds, in the finding.
+ */
+export function aiPlanReuseViolations(
+  inventory: AiSiteInventory | null,
+  plan: AiJobPlan | null,
+  placed: ReadonlySet<string>,
+  noun: string,
+): AiDoctrineViolation[] {
+  const names = new Map((inventory?.components ?? []).map((component) => [component.id, component.name]))
+  const reused = [
+    ...new Set(
+      (plan?.reuse ?? []).filter((entry) => entry.kind === 'component').map((entry) => entry.id),
+    ),
+  ]
+  const missing = reused.filter((id) => !placed.has(id))
+  if (!missing.length) return []
+  const listed = missing.map((id) => `"${names.get(id) ?? id}"`).join(', ')
+  return [
+    {
+      rule: 7,
+      code: 'plan-reuse-not-placed',
+      message: `The confirmed plan reuses ${listed}, and the ${noun} does not place ${
+        missing.length === 1 ? 'it' : 'them'
+      }. Place every component the plan reuses.`,
+    },
+  ]
 }
 
 /** What a generation spent, as the step's outcome carries it for the meter. */

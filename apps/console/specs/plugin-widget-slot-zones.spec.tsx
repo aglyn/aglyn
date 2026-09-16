@@ -95,6 +95,12 @@ jest.mock('../components/console-plugins-gate.component', () => ({
 }))
 
 import PluginWidgetSlot from '../components/plugin-widget-slot.component'
+import BesignerPluginZones from '../components/besigner-plugin-zones.component'
+import {
+  inspectorExtrasFor,
+  useBesignerInspectorExtras,
+  type BesignerInspected,
+} from '@aglyn/besigner-ui/contexts/inspector-extras-context'
 
 /**
  * Where each new zone is mounted, and how. A `slot` entry is a
@@ -149,7 +155,9 @@ const MOUNTS: Record<
     file:
       'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner/page.tsx',
     how: 'slot',
-    props: { hostId: 'host-1' },
+    // AGL-2908: `editable` travels with the node — the panel's own rule for
+    // whether this editor may change the element in place.
+    props: { hostId: 'host-1', node: { $id: 'node-1' }, editable: true },
   },
   // AGL-2910: the screen detail page's SEO card, and the site SEO section.
   seoFields: {
@@ -288,6 +296,46 @@ describe('AGL-2940 · a registered widget renders through each new zone', () => 
     const { container } = render(<PluginWidgetSlot slot="staffOrg" orgId="org-1" />)
     expect(container.textContent).toBe('')
   })
+})
+
+describe('AGL-2908 · the besigner inspector zone carries the selection’s editability', () => {
+  beforeEach(() => {
+    lastWidgetProps = undefined
+  })
+
+  /**
+   * The section the console supplies to the designer, exercised the way the
+   * Attributes panel calls it: a function handed a `BesignerInspected`. The
+   * widget is the zone spec's own `demo` plugin — nothing to do with AI —
+   * because the seam has to be generic to be a core extension at all.
+   */
+  function SectionProbe({ inspected }: { inspected: BesignerInspected }) {
+    return <>{inspectorExtrasFor(useBesignerInspectorExtras(), inspected)}</>
+  }
+
+  const drawSection = (inspected: BesignerInspected) => {
+    mockSlot = 'besignerInspector'
+    return render(
+      <BesignerPluginZones>
+        <SectionProbe inspected={inspected} />
+      </BesignerPluginZones>,
+    )
+  }
+
+  it.each([true, false])(
+    'hands an unrelated plugin’s widget editable=%s, as the panel computed it',
+    async (editable) => {
+      const { unmount } = drawSection({
+        node: { $id: 'node-1' } as unknown as BesignerInspected['node'],
+        editable,
+      })
+      await waitFor(() => expect(screen.getByText('widget-for-besignerInspector')).toBeTruthy())
+      expect(lastWidgetProps).toEqual(
+        expect.objectContaining({ hostId: null, node: { $id: 'node-1' }, editable }),
+      )
+      unmount()
+    },
+  )
 })
 
 describe('AGL-3008 · a column widget belongs to its table, never to the slot', () => {

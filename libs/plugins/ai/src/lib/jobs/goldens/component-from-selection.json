@@ -1,0 +1,134 @@
+{
+  "about": "A feature section already on a page, saved as a reusable component (AGL-2908). The optional second button becomes a Yes / no that hides it. A recorded answer: no spec calls a live provider.",
+  "name": "Feature section",
+  "canvas": {
+    "selectedId": "feature",
+    "nodes": [
+      {
+        "id": "_@_",
+        "componentId": "div",
+        "parentId": null,
+        "index": 0,
+        "childCount": 2
+      },
+      {
+        "id": "other-section",
+        "componentId": "muiStack",
+        "parentId": "_@_",
+        "index": 0,
+        "childCount": 0,
+        "name": "Hero"
+      },
+      {
+        "id": "feature",
+        "componentId": "muiStack",
+        "parentId": "_@_",
+        "index": 1,
+        "childCount": 5,
+        "name": "Feature",
+        "props": { "direction": "column", "spacing": 2 }
+      },
+      {
+        "id": "heading",
+        "componentId": "muiTypography",
+        "parentId": "feature",
+        "index": 0,
+        "childCount": 0,
+        "props": { "children": "Ship faster, every week", "variant": "h2" }
+      },
+      {
+        "id": "body",
+        "componentId": "muiTypography",
+        "parentId": "feature",
+        "index": 1,
+        "childCount": 0,
+        "props": {
+          "children": "Everything your team needs to launch, in one place.",
+          "variant": "body1"
+        }
+      },
+      {
+        "id": "image",
+        "componentId": "image",
+        "parentId": "feature",
+        "index": 2,
+        "childCount": 0,
+        "props": {
+          "src": "https://cdn.example.test/media/dashboard.png",
+          "alt": "The dashboard, with this week's releases"
+        }
+      },
+      {
+        "id": "primary",
+        "componentId": "muiButton",
+        "parentId": "feature",
+        "index": 3,
+        "childCount": 0,
+        "props": { "children": "Start free", "href": "/signup", "variant": "contained" }
+      },
+      {
+        "id": "secondary",
+        "componentId": "muiButton",
+        "parentId": "feature",
+        "index": 4,
+        "childCount": 0,
+        "props": { "children": "Talk to us", "href": "/contact", "variant": "outlined" }
+      }
+    ]
+  },
+  "answer": {
+    "summary": "Each page sets the heading, the text, the picture and the first button, and can hide the second.",
+    "props": [
+      {
+        "name": "headline",
+        "type": "text",
+        "label": "Headline",
+        "description": "",
+        "options": []
+      },
+      {
+        "name": "body",
+        "type": "richText",
+        "label": "Body text",
+        "description": "",
+        "options": []
+      },
+      {
+        "name": "image",
+        "type": "image",
+        "label": "Picture",
+        "description": "",
+        "options": []
+      },
+      {
+        "name": "primaryLabel",
+        "type": "text",
+        "label": "Button label",
+        "description": "",
+        "options": []
+      },
+      {
+        "name": "primaryHref",
+        "type": "href",
+        "label": "Button link",
+        "description": "Where the button goes.",
+        "options": []
+      },
+      {
+        "name": "hideSecondary",
+        "type": "boolean",
+        "label": "Hide the second button",
+        "description": "",
+        "options": []
+      }
+    ],
+    "bindings": [
+      { "nodeId": "heading", "field": "children", "prop": "headline" },
+      { "nodeId": "body", "field": "children", "prop": "body" },
+      { "nodeId": "image", "field": "src", "prop": "image" },
+      { "nodeId": "primary", "field": "children", "prop": "primaryLabel" },
+      { "nodeId": "primary", "field": "href", "prop": "primaryHref" },
+      { "nodeId": "secondary", "field": "hideIf", "prop": "hideSecondary" }
+    ]
+  }
+}

@@ -28,6 +28,7 @@ import {
   reusablePropKind,
   reusablePropTakesSeveral,
   reusablePropValueClass,
+  unofferedChoiceValues,
 } from './property-kinds'
 
 /**
@@ -234,5 +235,18 @@ describe('which fields a property can be bound to (AGL-2893)', () => {
     expect(
       reusablePropBindsToField({ type: 'href' }, { component: FieldComponentType.SCREEN_SELECT }),
     ).toBe(true)
+  })
+
+  it('names the answers of a property that a field’s own options do not offer (AGL-2871)', () => {
+    const choice = {
+      type: 'choice' as const,
+      options: [{ value: 'contained' }, { value: 'fancy' }, { value: '' }],
+    }
+    expect(unofferedChoiceValues(choice, [{ value: 'text' }, { value: 'contained' }])).toEqual([
+      'fancy',
+    ])
+    // A field that lists nothing, and a property that holds no answers, have nothing to compare.
+    expect(unofferedChoiceValues(choice, undefined)).toEqual([])
+    expect(unofferedChoiceValues({ type: 'text' }, [{ value: 'a' }])).toEqual([])
   })
 })

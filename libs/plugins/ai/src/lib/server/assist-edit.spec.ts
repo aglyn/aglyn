@@ -462,6 +462,9 @@ describe('proposals — the validators', () => {
       moved: 0,
       renamed: 0,
       seoFields: 0,
+      // A chat turn is never offered the component save (AGL-2908).
+      componentProps: 0,
+      componentsSaved: 0,
     })
   })
 })

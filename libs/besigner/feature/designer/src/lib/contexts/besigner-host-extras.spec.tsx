@@ -59,15 +59,38 @@ describe('the host app’s besigner sections (AGL-2984)', () => {
           return <span>{`section for ${inspected.node.$id}`}</span>
         }}
       >
-        <PanelProbe node={node} />
+        <PanelProbe node={node} editable />
       </BesignerInspectorExtrasContext.Provider>,
     )
     expect(screen.getByText('section for node-1')).toBeTruthy()
     expect(drawn).toEqual(['node-1'])
   })
 
+  it('the panel hands it whether this editor may change that element (AGL-2908)', () => {
+    const seen: boolean[] = []
+    const section = (inspected: BesignerInspected) => {
+      seen.push(inspected.editable)
+      return <span>{inspected.editable ? 'may edit' : 'read only'}</span>
+    }
+    const { rerender } = render(
+      <BesignerInspectorExtrasContext.Provider value={section}>
+        <PanelProbe node={node} editable />
+      </BesignerInspectorExtrasContext.Provider>,
+    )
+    expect(screen.getByText('may edit')).toBeTruthy()
+    rerender(
+      <BesignerInspectorExtrasContext.Provider value={section}>
+        <PanelProbe node={node} editable={false} />
+      </BesignerInspectorExtrasContext.Provider>,
+    )
+    expect(screen.getByText('read only')).toBeTruthy()
+    expect(seen).toEqual([true, false])
+  })
+
   it('a node section is drawn as it is', () => {
-    expect(inspectorExtrasFor(<em>{'plain'}</em>, { node })).toEqual(<em>{'plain'}</em>)
-    expect(inspectorExtrasFor(null, { node })).toBeNull()
+    expect(inspectorExtrasFor(<em>{'plain'}</em>, { node, editable: true })).toEqual(
+      <em>{'plain'}</em>,
+    )
+    expect(inspectorExtrasFor(null, { node, editable: false })).toBeNull()
   })
 })

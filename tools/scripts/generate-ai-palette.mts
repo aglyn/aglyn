@@ -477,6 +477,7 @@ async function main(): Promise<void> {
         additionalProperties: false,
       }
       const propRoles: Dict = {}
+      const propFields: Dict = {}
       const textLimits: Dict = {}
       for (const attribute of flattenAttributes(schema.attributes)) {
         const declared = declareProp(id, attribute, AI_TEXT_LIMITS)
@@ -484,6 +485,9 @@ async function main(): Promise<void> {
         propsSchema.properties[attribute.name] = declared.schema
         if (declared.required) propsSchema.required.push(attribute.name)
         if (declared.role) propRoles[attribute.name] = declared.role
+        // The field kind the editor draws the prop with, which decides the
+        // component properties it can be bound to (AGL-2908).
+        propFields[attribute.name] = String(attribute.component)
         if (declared.textLimit !== undefined)
           textLimits[attribute.name] = declared.textLimit
       }
@@ -502,6 +506,7 @@ async function main(): Promise<void> {
           : {}),
         propsSchema,
         propRoles,
+        propFields,
         textLimits,
         presets: [],
       }
