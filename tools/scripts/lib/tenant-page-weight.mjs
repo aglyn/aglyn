@@ -51,8 +51,8 @@ import { collectBarrelGraph } from './jsx-barrel.mjs'
  * [[...slug]]/page.tsx` renders the author's nodes into, so its static graph IS
  * the JavaScript a visitor to any published screen downloads before the page
  * can hydrate. Sibling client components (the admin bar, the analytics tags)
- * are either release-gated off for anonymous visitors or already lazy, and
- * folding them in would blur the one number this gate is about.
+ * are already lazy — the admin bar's own chunk loads only once an editor arms
+ * it — and folding them in would blur the one number this gate is about.
  */
 export const TENANT_PAGE_ENTRY =
   'apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx'
