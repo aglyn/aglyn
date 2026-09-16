@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { aiModelCacheMinTokens } from '../providers/catalog'
 import {
   AiRequestShapeError,
   type AiProvider,
@@ -22,6 +23,7 @@ import {
   type AiResult,
   type AiStreamEvent,
   type AiSystemBlock,
+  type AiTool,
 } from '../providers/contract'
 import { resolveAiProvider, type AiPluginSettings } from '../providers/routing'
 
@@ -133,6 +135,53 @@ export function validateAiSystemBlocks(system: readonly AiSystemBlock[]): void {
       )
     }
   })
+}
+
+/**
+ * Characters to a token when a prompt is measured rather than tokenized
+ * (AGL-2937). Four is the high end of English prose, so reading a prefix
+ * through it errs LOW on the token count — and a prefix counts as cached
+ * only when it clears its model's minimum even at that reading. Erring the
+ * other way would let a prompt claim a cache it does not get.
+ */
+export const AI_CACHE_PREFIX_TOKEN_CHARS = 4
+
+/**
+ * The characters inside the cached span of a request: the tools, which a
+ * provider renders ahead of the system blocks and which therefore sit in
+ * every prefix, plus every system block up to and including the last
+ * breakpoint. Zero when the request marks no breakpoint at all.
+ */
+export function aiCachedPrefixChars(
+  system: readonly AiSystemBlock[],
+  tools: readonly AiTool[] = [],
+): number {
+  const lastBreakpoint = system.reduce(
+    (last, block, index) => (block.cacheBreakpoint ? index : last),
+    -1,
+  )
+  if (lastBreakpoint < 0) return 0
+  const toolChars = tools.reduce((total, tool) => total + JSON.stringify(tool).length, 0)
+  return system
+    .slice(0, lastBreakpoint + 1)
+    .reduce((total, block) => total + block.text.length, toolChars)
+}
+
+/**
+ * Whether this request's cached span is long enough for the model to cache
+ * it at all (AGL-2937). A prefix under the model's `cacheMinTokens` is
+ * served with the breakpoints honored and nothing cached — no error, and a
+ * usage report that reads as a permanent miss — so a door designed around a
+ * cache has to answer this question before it believes its own markers, and
+ * `runtime/ai-prompt-cache.spec.ts` answers it for every door at once.
+ */
+export function aiCachedPrefixCaches(
+  model: string,
+  system: readonly AiSystemBlock[],
+  tools: readonly AiTool[] = [],
+): boolean {
+  const chars = aiCachedPrefixChars(system, tools)
+  return chars / AI_CACHE_PREFIX_TOKEN_CHARS >= aiModelCacheMinTokens(model)
 }
 
 /**
