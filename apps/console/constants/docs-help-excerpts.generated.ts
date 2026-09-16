@@ -50,6 +50,7 @@ export const DOCS_HELP_EXCERPTS = {
   architectureMultiTenancy: 'How Aglyn organizes tenants — org workspaces, membership with per-site access, security rules, subdomains, and billing attribution.',
   assistSignals: 'The docs-gap and cost board behind Assist — how the ranking is ordered, why ungrounded questions are counted separately, and what the cache-read rate says about margin.',
   automations: 'The CRM events an automation can start on — a contact created or changing stage, a deal moved, won or lost, a task completed — the steps that tag, stage, assign, create a task or log an activity, and one-click recipes.',
+  automationsWithAi: 'Describe an automation and Aglyn AI drafts it switched off, from only the triggers and steps your plan includes. It can also explain an automation, and why one of its runs failed.',
   bandwidth: 'How much traffic each plan includes, what happens when a site goes past it, and why a Free site can be paused until the start of next month.',
   besigner: 'Aglyn\'s visual editor — canvas, hierarchy, inline text, multi-select, and placement rules.',
   billing: 'How Aglyn\'s tiers, entitlements, quotas, usage meters, and seat add-ons work.',

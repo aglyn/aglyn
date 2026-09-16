@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import type {
   ConsoleAutomationEditorZoneProps,
   ConsoleAutomationRunZoneProps,
@@ -31,6 +32,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Link,
   Stack,
   Typography,
 } from '@mui/material'
@@ -101,6 +103,7 @@ function Answer({ run, running, failed }: { run: AiJobRun; running: string; fail
 /** "Explain it", at the top of the editor of a saved action or workflow. */
 export function AiExplainAutomation({ hostId, orgId, target }: ConsoleAutomationEditorZoneProps) {
   const copy = AI_AUTOMATION_EXPLAIN_COPY.explain
+  const help = pluginDocsHelp('aiAutomations', { anchor: '#explain' })
   const { data: user } = useUser()
   const verdict = useAiJobsVerdict(user, orgId)
   const run = useAiJobRun(user, copy.failed)
@@ -125,7 +128,10 @@ export function AiExplainAutomation({ hostId, orgId, target }: ConsoleAutomation
       <Stack spacing={1}>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
-            {asked ? copy.saved : copy.intro}
+            {asked ? copy.saved : copy.intro}{' '}
+            <Link href={help.href} target="_blank" rel="noopener" title={help.excerpt}>
+              {'How it works'}
+            </Link>
           </Typography>
           <Button size="small" variant="outlined" disabled={busy || !orgId} onClick={explain}>
             {asked && !busy ? copy.again : copy.action}

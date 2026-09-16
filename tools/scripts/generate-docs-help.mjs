@@ -126,6 +126,7 @@ const BESIGNER_TOPICS = {
 const PLUGIN_TOPICS = {
   actionsBuilder: '/marketing-and-automation/workflows-and-actions/actions-builder',
   aglynAssist: '/getting-started/aglyn-assist',
+  aiAutomations: '/ai/automations-with-ai',
   aiSeo: '/building-sites/seo/seo-by-ai',
   aiMonitoring: '/staff-console/ai-monitoring',
   aiThemes: '/marketing-and-automation/ai-assist/theme-assist',

@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import type { ConsoleHostAutomationsZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -27,6 +28,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Link,
   Stack,
   TextField,
   Typography,
@@ -81,6 +83,7 @@ export interface AiAutomationBriefDialogProps {
 export function AiAutomationBriefDialog(props: AiAutomationBriefDialogProps) {
   const { open, onClose, orgId, hostId, user, openAction } = props
   const copy = AI_AUTOMATION_BRIEF_COPY
+  const help = pluginDocsHelp('aiAutomations')
   const [brief, setBrief] = useState('')
   const [notListed, setNotListed] = useState(false)
   const run = useAiJobRun(user, copy.failed)
@@ -130,7 +133,10 @@ export function AiAutomationBriefDialog(props: AiAutomationBriefDialogProps) {
               autoFocus
             />
             <Typography variant="body2" color="text.secondary">
-              {copy.next}
+              {copy.next}{' '}
+              <Link href={help.href} target="_blank" rel="noopener" title={help.excerpt}>
+                {'How it works'}
+              </Link>
             </Typography>
             {notice ? <Alert severity="warning">{notice}</Alert> : null}
           </Stack>
