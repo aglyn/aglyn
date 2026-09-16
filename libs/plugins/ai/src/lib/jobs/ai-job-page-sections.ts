@@ -127,6 +127,19 @@ export interface AiPageSectionPromptInput {
 export const AI_PAGE_SECTION_INLINE_LINE =
   'This site keeps no saved forms or reusable components: write a repeated item out each time, and draw a form as a Form holding its Form Fields.'
 
+/**
+ * What a pass whose answer ran past its ceiling is told makes a section
+ * smaller (AGL-3042): fewer elements, down to the budget the request gave,
+ * shorter copy, and — where the workspace keeps reusable components — a
+ * repeated item placed as an instance rather than drawn again. It rides the
+ * re-ask, never the first request, so a pass that fits sends no byte more.
+ */
+export function aiPageSectionSmaller(input: Pick<AiPageSectionPromptInput, 'maxElements' | 'reusableComponents'>): string {
+  return input.reusableComponents === false
+    ? `Make it smaller: use fewer elements, at most ${input.maxElements}, and write shorter copy.`
+    : `Make it smaller: use fewer elements, at most ${input.maxElements}; write shorter copy; and place a repeated item as an instance of a component the site has instead of drawing it again.`
+}
+
 /** One pass's user turn: the page, the brief, the plan, this section and what is built above it. */
 export function aiPageSectionPrompt(input: AiPageSectionPromptInput): string {
   const { job, plan, screen, index } = input

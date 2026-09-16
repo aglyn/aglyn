@@ -72,6 +72,7 @@ import {
   aiPageSectionCheck,
   aiPageSectionNodeId,
   aiPageSectionPrompt,
+  aiPageSectionSmaller,
   aiPageWithSection,
   type AiPageSection,
 } from './ai-job-page-sections'
@@ -460,6 +461,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       if (allowance) return aiUnspentOutcome(model, { review: aiLimitReview(allowance) })
     }
     const maxTokens = aiJobPageSectionMaxTokens(model)
+    const maxElements = Math.max(1, Math.floor(maxTokens / AI_JOB_PAGE_TOKENS_PER_ELEMENT))
     const result = await runValidatedGeneration<AiPageSection>('page-section', {
       step: 'job.page',
       model,
@@ -468,18 +470,14 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       messages: [
         {
           role: 'user',
-          content: aiPageSectionPrompt({
-            job,
-            plan,
-            screen,
-            index,
-            maxElements: Math.max(1, Math.floor(maxTokens / AI_JOB_PAGE_TOKENS_PER_ELEMENT)),
-            reusableComponents,
-          }),
+          content: aiPageSectionPrompt({ job, plan, screen, index, maxElements, reusableComponents }),
         },
       ],
       tool: AI_PAGE_SECTION_TOOL,
       maxTokens,
+      // A section cut off at its ceiling is asked for smaller, and a member
+      // whose section still does not fit reads that it was too large (AGL-3042).
+      cutOff: { noun: 'section', smaller: aiPageSectionSmaller({ maxElements, reusableComponents }) },
       thinking: 'off',
       check: aiPageSectionCheck({
         page,

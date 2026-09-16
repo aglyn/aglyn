@@ -364,7 +364,10 @@ beat query matches `needs_review`, and only a member resumes it:
 
 - **reason `plan`** — the plan step completed; confirming marks the plan
   `confirmed` and runs the generation step, which executes the plan;
-- **reason `doctrine`** — an answer broke a building rule on its re-ask; the
+- **reason `doctrine`** — an answer broke a building rule on its re-ask, or was
+  cut off at its output ceiling on both attempts, which the message says in so
+  many words: it was too large to build in one pass
+  ([An answer cut off at its ceiling](#an-answer-cut-off-at-its-ceiling)); the
   step went back to `pending` with its spend recorded, and trying again runs
   it once more with its attempts started over.
 
@@ -487,7 +490,8 @@ runValidatedGeneration<T>(kind: string, input: AiCustomGenerationInput<T>): Prom
 
 The input names the routing `step`, the door's static `instructions`, the
 site `inventory` (`readSiteInventory(orgId, hostId)`), the `messages`, the
-strict `tool`, and optionally `maxTokens`, `thinking`, `effort` and `signal`.
+strict `tool`, and optionally `maxTokens`, `cutOff`, `thinking`, `effort` and
+`signal`.
 A tree kind may add `context` (asset sizes, the brand, embeds, framing) and
 `otherPages`; the doctrine's own checks always run for `plan` and the six
 palette kinds, and a door can only `extend` them. A kind the doctrine has no
@@ -514,6 +518,42 @@ answer still breaks a rule it returns `needs_input` with a customer-safe
 message. Every attempt's tokens are summed on the result, and the job
 machine meters them. The result is `ok` with the value, `needs_input` with
 the violations, or `refused`.
+
+### An answer cut off at its ceiling
+
+A call the provider stops on its output ceiling — `max_tokens`, which the
+OpenAI-compatible adapter maps `length` onto (`aiStoppedAtCeiling` in
+`src/lib/runtime/ai-doctrine.ts`) — was cut off, whatever reached the tool
+(AGL-3042). A tool input cut mid-answer arrives partial or empty, and a check
+reads the truncation as a shape error: a page section's check said "The answer
+could not be used as a section." (`tree-invalid-input`). A re-ask that quotes
+that error never asks for less, so it was cut off the same way, and the same
+section failed on every retry. So when a cut-off call's answer fails its check,
+the attempt is refused as `answer-cut-off` instead — ahead of any numbered rule
+the part that arrived already broke, with the shape findings left out — and:
+
+- **The re-ask asks for it smaller.** It says the answer ran past the size one
+  answer may have and was cut off, then what makes one of its kind smaller:
+  the door's `cutOff.smaller` sentence, or "Build a smaller <kind>." A page
+  section's is its element budget, shorter copy and, where the workspace keeps
+  reusable components, a repeated item placed as an instance
+  (`aiPageSectionSmaller`). It asks for the whole answer again, smaller. The
+  re-ask is a user turn, so no system block and no cached prefix changes.
+- **A person reads that it was too large.** `aiDoctrineNeedsInputMessage` reads a
+  cut-off refusal as its own sentence rather than "could not be built within
+  the building rules": "This section was too large to build in one pass. Try
+  again, or describe it smaller." The noun is the door's `cutOff.noun`, a plan or
+  a palette kind's own name, or "answer". The review keeps its shape — reason
+  `doctrine`, the message, and the finding with rule `null` and code
+  `answer-cut-off`.
+- **A check that passes is kept.** A cut-off call whose answer still reads and
+  keeps every rule is an answer, and the loop returns it.
+
+`ai-job-page-sections.spec.ts` drives the loop with a fake provider through the
+real section check: a cut-off `tree` then a small section is kept on the re-ask,
+which asks for it smaller and quotes no shape error; cut off twice, the section
+ends as `answer-cut-off`, never `tree-invalid-input`. `ai-job-page-step.spec.ts`
+holds the same two through the page step, with the review a member reads.
 
 ### The inventory, and "more on request"
 
@@ -1189,8 +1229,13 @@ Assist panel.
   the screen palette catalog as the last cached block, no extended thinking,
   and an answer ceiling from `aiJobPageSectionMaxTokens`. The request names
   the page, its type, the brief, the confirmed plan as references, the section
-  to build with the inventory ids it places, and the names of the sections
-  built above it, never their content. The check runs the palette validator
+  to build with the inventory ids it places, the names of the sections built
+  above it, never their content, and the most elements the section may carry.
+  A section cut off at its ceiling is re-asked for a smaller one — fewer
+  elements, shorter copy, a repeated item placed as an instance — and one cut
+  off twice stops as too large to build in one pass
+  ([An answer cut off at its ceiling](#an-answer-cut-off-at-its-ceiling)). The
+  check runs the palette validator
   on the section, then `validateAiDoctrineTree(page, 'page')` on the page
   built so far with the section added, then the plan line: every component the
   section's `uses` names placed as an instance and every form bound by id

@@ -120,6 +120,7 @@ import {
   AI_JOB_PAGE_INSTRUCTIONS,
   AI_PAGE_SECTION_TOOL,
   aiPageSectionNodeId,
+  aiPageSectionSmaller,
 } from './ai-job-page-sections'
 import {
   AI_JOB_PAGE_CREATION_EMPTY_COPY,
@@ -609,6 +610,64 @@ describe('when a pass stops', () => {
     const outcome = await step()(context())
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     expect(outcome.review).toEqual(expect.objectContaining({ reason: 'doctrine', findings: [expect.objectContaining({ rule: 11, code: 'missing-h1' })] }))
+    expect(outcome.continue).toBeUndefined()
+    expect(commits).toEqual([])
+  })
+
+  /**
+   * A tool call cut off at its ceiling (AGL-3042): the provider stops on
+   * `max_tokens`, and the input it hands over is what had arrived — a `tree`
+   * cut mid-string, or nothing at all.
+   */
+  const cutOffAnswer = (input: Record<string, unknown>, outputTokens: number) => ({
+    kind: 'completion',
+    text: '',
+    toolUse: [{ name: 'submit_section', input }],
+    usage: { ...USAGE, outputTokens },
+    estCostUsd: 0.02,
+    stopReason: 'max_tokens',
+  })
+  const CUT_TREE = { tree: '{"rootId":"root","nodes":{"root":{"componentId":"div","nodes":["a1"]},"a1":{"componentId":"section","props":{"elem' }
+  const TOO_LARGE = 'This section was too large to build in one pass. Try again, or describe it smaller.'
+
+  it('asks a section cut off at its ceiling for a smaller one, naming what shrinks it, and keeps the re-ask that fits (AGL-3042)', async () => {
+    const ceiling = aiJobPageSectionMaxTokens('claude-sonnet-5')
+    mockRunAiRequest
+      .mockResolvedValueOnce(cutOffAnswer(CUT_TREE, ceiling))
+      .mockResolvedValueOnce(sectionAnswer(FIXTURE.answers[0]))
+    const outcome = await step()(context())
+    expect(outcome).toMatchObject({ continue: true, stopReason: 'tool_use', usage: { outputTokens: ceiling + USAGE.outputTokens } })
+
+    const [first, reask] = mockRunAiRequest.mock.calls.map(([request]) => request)
+    // The re-ask is asked for the whole ceiling: the cut answer spent one of the two.
+    expect([first.maxTokens, reask.maxTokens]).toEqual([ceiling, ceiling])
+    const text = String(reask.messages.at(-1)?.content)
+    expect(text).toBe(
+      [
+        'Your page-section was not used: it ran past the size one answer may have, and was cut off before it was whole.',
+        aiPageSectionSmaller({ maxElements: Math.floor(ceiling / AI_JOB_PAGE_TOKENS_PER_ELEMENT), reusableComponents: true }),
+        '',
+        'Answer again with submit_section: the whole page-section, smaller than the one that was cut off.',
+      ].join('\n'),
+    )
+    expect(text).toContain('at most 23;')
+    expect(text).not.toContain('could not be used as a section')
+    expect(storedPage()[CANVAS_ROOT_ELEMENT_ID].nodes).toEqual([SECTION_IDS[0]])
+  })
+
+  it('stops a section cut off on its answer and its re-ask for review as too large, not as unreadable, and writes nothing (AGL-3042)', async () => {
+    const ceiling = aiJobPageSectionMaxTokens('claude-sonnet-5')
+    mockRunAiRequest
+      .mockResolvedValueOnce(cutOffAnswer(CUT_TREE, ceiling))
+      .mockResolvedValueOnce(cutOffAnswer({}, ceiling))
+    const outcome = await step()(context())
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    expect(outcome).toMatchObject({ stopReason: 'max_tokens', usage: { outputTokens: 2 * ceiling } })
+    expect(outcome.review).toEqual({
+      reason: 'doctrine',
+      message: TOO_LARGE,
+      findings: [{ rule: null, code: 'answer-cut-off', message: TOO_LARGE }],
+    })
     expect(outcome.continue).toBeUndefined()
     expect(commits).toEqual([])
   })

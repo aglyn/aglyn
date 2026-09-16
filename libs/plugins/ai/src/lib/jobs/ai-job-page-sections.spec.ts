@@ -30,7 +30,13 @@
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import type { AiJobPlan } from '../model/ai-jobs.types'
-import { AI_DOCTRINE_SYSTEM_BLOCK, aiDoctrineSystemBlocks } from '../runtime/ai-doctrine'
+import type { AiCompletion, AiProvider, AiProviderRequest } from '../providers/contract'
+import {
+  AI_DOCTRINE_SYSTEM_BLOCK,
+  aiDoctrineSystemBlocks,
+  aiStoppedAtCeiling,
+  runValidatedGeneration,
+} from '../runtime/ai-doctrine'
 import { validateAiDoctrineTree } from '../runtime/ai-doctrine-validators'
 import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import { validateAiSystemBlocks } from '../runtime/ai-runtime'
@@ -43,6 +49,7 @@ import {
   aiPageSectionCheck,
   aiPageSectionNodeId,
   aiPageSectionPrompt,
+  aiPageSectionSmaller,
   aiPageWithSection,
   type AiPageSection,
 } from './ai-job-page-sections'
@@ -221,5 +228,141 @@ describe('what a pass asks for', () => {
     ])
     expect(() => validateAiSystemBlocks(blocks)).not.toThrow()
     expect(AI_PAGE_SECTION_TOOL).toMatchObject({ name: 'submit_section', strict: true })
+  })
+})
+
+/**
+ * A section cut off at its ceiling (AGL-3042), through the REAL doctrine loop
+ * and section check, with a fake provider standing in for the model. A tool
+ * call the provider stops on `max_tokens` hands over what had arrived: a
+ * `tree` cut mid-string, or an empty input. The section check reads either as
+ * a tree it cannot use; the loop refuses it as too large instead, and asks for
+ * a smaller one.
+ */
+describe('a section cut off at its ceiling (AGL-3042)', () => {
+  const fixture = AI_PAGE_BRIEF_FIXTURES[0]
+  const screen = fixture.plan.screens[0]
+  const sectionIds = screen.sections.map((_, index) => aiPageSectionNodeId('job-cut', index))
+  const CEILING = 1_050
+  const SMALLER = aiPageSectionSmaller({ maxElements: 15 })
+
+  const cutOff = (input: Record<string, unknown>): AiCompletion => ({
+    kind: 'completion',
+    text: '',
+    toolUse: [{ name: AI_PAGE_SECTION_TOOL.name, input }],
+    usage: { inputTokens: 1_200, outputTokens: CEILING, cacheReadTokens: 9_000, cacheWriteTokens: 0 },
+    estCostUsd: 0.02,
+    stopReason: 'max_tokens',
+  })
+  const answered = (tree: unknown): AiCompletion => ({
+    kind: 'completion',
+    text: '',
+    toolUse: [{ name: AI_PAGE_SECTION_TOOL.name, input: { tree: JSON.stringify(tree) } }],
+    usage: { inputTokens: 1_300, outputTokens: 400, cacheReadTokens: 9_000, cacheWriteTokens: 0 },
+    estCostUsd: 0.01,
+    stopReason: 'tool_use',
+  })
+  const CUT_TREE = { tree: JSON.stringify(fixture.answers[0]).slice(0, 180) }
+
+  /** A provider that answers from a queue and keeps every request it was sent. */
+  function provider(answers: AiCompletion[]): { fake: AiProvider; requests: AiProviderRequest[] } {
+    const requests: AiProviderRequest[] = []
+    const fake: AiProvider = {
+      id: 'fake',
+      label: 'Fake',
+      apiKeyEnv: 'FAKE_AI_KEY',
+      endpointHost: 'ai.test',
+      readApiKey: () => 'key',
+      models: () => [],
+      complete: async (request) => {
+        requests.push(request)
+        const next = answers.shift()
+        if (!next) throw new Error('no answer armed')
+        return next
+      },
+      stream: async () => {
+        throw new Error('the doctrine loop never streams')
+      },
+    }
+    return { fake, requests }
+  }
+
+  const generate = (fake: AiProvider) =>
+    runValidatedGeneration<AiPageSection>('page-section', {
+      model: 'test-model',
+      provider: fake,
+      instructions: AI_JOB_PAGE_INSTRUCTIONS,
+      inventory: fixture.inventory,
+      messages: [{ role: 'user', content: 'Build section 1 of 4: "hero".' }],
+      tool: AI_PAGE_SECTION_TOOL,
+      maxTokens: CEILING,
+      cutOff: { noun: 'section', smaller: SMALLER },
+      thinking: 'off',
+      check: aiPageSectionCheck({
+        page: aiEmptyPage(),
+        sectionIds,
+        index: 0,
+        context: aiPageCheckContext(fixture.inventory),
+        uses: screen.sections[0].uses,
+        inventory: fixture.inventory,
+      }),
+    })
+
+  it('reads a call as cut off by its stop reason: the contract’s max_tokens, or a provider’s length', () => {
+    expect([aiStoppedAtCeiling('max_tokens'), aiStoppedAtCeiling('length')]).toEqual([true, true])
+    expect([aiStoppedAtCeiling('tool_use'), aiStoppedAtCeiling('end_turn'), aiStoppedAtCeiling(null)]).toEqual([false, false, false])
+  })
+
+  it('without a cut-off stop, reads the same truncated tree as a tree it cannot use, as it always has', () => {
+    const check = aiPageSectionCheck({
+      page: aiEmptyPage(),
+      sectionIds,
+      index: 0,
+      context: aiPageCheckContext(fixture.inventory),
+      uses: screen.sections[0].uses,
+      inventory: fixture.inventory,
+    })
+    expect(check(CUT_TREE).violations.map((violation) => violation.code)).toEqual(['tree-invalid-input'])
+    expect(check({}).violations.map((violation) => violation.code)).toEqual(['tree-invalid-input'])
+  })
+
+  it('asks a cut-off section for a smaller one, naming what shrinks it and not the shape its cut input fails, and keeps the re-ask that fits', async () => {
+    const { fake, requests } = provider([cutOff(CUT_TREE), answered(fixture.answers[0])])
+    const result = await generate(fake)
+    expect(result).toMatchObject({ status: 'ok', attempts: 2, stopReason: 'tool_use', usage: { outputTokens: CEILING + 400 } })
+    if (result.status !== 'ok') return
+    expect(result.value.rootId).toBe(sectionIds[0])
+
+    expect(requests.map((request) => request.maxTokens)).toEqual([CEILING, CEILING])
+    expect(requests[1].system).toEqual(requests[0].system)
+    expect(requests[1].messages.slice(1)).toEqual([
+      { role: 'assistant', content: 'Submitted the page-section with submit_section.' },
+      {
+        role: 'user',
+        content: [
+          'Your page-section was not used: it ran past the size one answer may have, and was cut off before it was whole.',
+          'Make it smaller: use fewer elements, at most 15; write shorter copy; and place a repeated item as an instance of a component the site has instead of drawing it again.',
+          '',
+          'Answer again with submit_section: the whole page-section, smaller than the one that was cut off.',
+        ].join('\n'),
+      },
+    ])
+  })
+
+  it('ends a section cut off on both attempts as a cut-off refusal, not as tree-invalid-input', async () => {
+    const { fake, requests } = provider([cutOff(CUT_TREE), cutOff({})])
+    const result = await generate(fake)
+    expect(requests).toHaveLength(2)
+    expect(result).toMatchObject({ status: 'needs_input', attempts: 2, stopReason: 'max_tokens', usage: { outputTokens: 2 * CEILING } })
+    if (result.status !== 'needs_input') return
+    expect(result.violations.map((violation) => violation.code)).toEqual(['answer-cut-off'])
+    expect(result.message).toBe('This section was too large to build in one pass. Try again, or describe it smaller.')
+  })
+
+  it('tells a workspace that keeps no reusable components to shrink the section without placing instances', () => {
+    expect(aiPageSectionSmaller({ maxElements: 15, reusableComponents: false })).toBe(
+      'Make it smaller: use fewer elements, at most 15, and write shorter copy.',
+    )
+    expect(SMALLER).toContain('instance of a component the site has')
   })
 })
