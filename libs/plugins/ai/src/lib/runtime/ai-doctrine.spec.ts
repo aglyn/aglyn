@@ -26,6 +26,7 @@ import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entit
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import { AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
 import {
+  AI_SITE_INVENTORY_LISTED_PER_KIND,
   AI_SITE_INVENTORY_MAX_CHARS,
   emptyAiSiteInventory,
   type AiSiteInventory,
@@ -53,6 +54,11 @@ import {
   validateStreamedGeneration,
   type AiGenerationCheck,
 } from './ai-doctrine'
+import {
+  AI_INVENTORY_LOOKUP_MAX_ROUNDS,
+  AI_INVENTORY_LOOKUP_TOOL_NAME,
+  aiInventoryLookupTool,
+} from '../tools/ai-inventory-lookup-tool'
 import { AI_DOCTRINE_RULES } from './ai-doctrine-validators'
 import { AI_SURFACE_NAMES } from './ai-palette'
 import { AI_PALETTE_CATALOG } from './ai-palette.generated'
@@ -231,6 +237,24 @@ describe('the inventory block', () => {
     expect(cut.split(', ')).toEqual(expect.arrayContaining(['components', 'layouts']))
   })
 
+  it('lists only the first records of a kind, and points the rest at the lookup', () => {
+    // The window the reader holds is wider than the block lists (AGL-2937):
+    // the block is billed on every attempt, and the rest are found by asking.
+    const wide: AiSiteInventory = {
+      ...emptyAiSiteInventory('host-wide'),
+      components: Array.from({ length: AI_SITE_INVENTORY_LISTED_PER_KIND + 12 }, (_, index) => ({
+        id: `cmp-${index}`,
+        name: `Block ${index}`,
+        props: {},
+      })),
+    }
+    const block = aiSiteInventoryBlock(wide)
+    expect(block).toContain(`- cmp-${AI_SITE_INVENTORY_LISTED_PER_KIND - 1} ·`)
+    expect(block).not.toContain(`- cmp-${AI_SITE_INVENTORY_LISTED_PER_KIND} ·`)
+    expect(block).toContain('More exist than are listed for: components')
+    expect(block).toContain(AI_INVENTORY_LOOKUP_TOOL_NAME)
+  })
+
   it('tells the model when no inventory was read, so it reuses nothing by id', () => {
     expect(aiSiteInventoryBlock(null)).toContain('none was read')
   })
@@ -337,13 +361,78 @@ describe('runValidatedGeneration — a plan', () => {
     expect(requests).toHaveLength(1)
     expect(requests[0]).toMatchObject({
       model: 'test-model',
-      tools: [AI_BUILD_PLAN_TOOL],
+      // The lookup tool rides beside the door's own on every request that
+      // carries an inventory (AGL-2937), so the tool list is one shape.
+      tools: [AI_BUILD_PLAN_TOOL, aiInventoryLookupTool()],
       maxTokens: AI_GENERATION_MAX_TOKENS.plan,
       messages: [{ role: 'user', content: 'Brief: a roof repair page' }],
     })
     expect(requests[0].system).toEqual(
       aiDoctrineSystemBlocks(SITE_A, { instructions: [{ text: 'Plan the job.' }] }),
     )
+  })
+
+  it('answers a lookup from memory, asks again, and does not spend an answer attempt on it', async () => {
+    // The site the prompt was built for lists one component; the window holds
+    // a second the block never listed, which is the whole point of the tool.
+    const wide: AiSiteInventory = {
+      ...SITE_A,
+      components: [
+        ...SITE_A.components,
+        { id: 'cmp-price', name: 'Pricing card', props: { plan: 'text' } },
+      ],
+      truncated: ['components'],
+    }
+    const { fake, requests } = provider([
+      toolAnswer(AI_INVENTORY_LOOKUP_TOOL_NAME, { kind: 'components', query: 'pricing' }, 200),
+      toolAnswer(AI_BUILD_PLAN_TOOL.name, CLEAN_PLAN),
+    ])
+    const result = await runValidatedGeneration('plan', { ...planInput(fake), inventory: wide })
+    expect(result).toMatchObject({ status: 'ok', value: CLEAN_PLAN })
+    // Two model calls, both billed; one answer attempt, so the re-ask is
+    // still there to be spent on a broken rule.
+    expect(result.attempts).toBe(2)
+    expect(result.usage.inputTokens).toBe(1_200)
+    expect(requests).toHaveLength(2)
+    // The rows came back in the turn, in the same shape the block lists them,
+    // and the request the model saw was never rebuilt around them.
+    expect(requests[1].messages.map((message) => message.role)).toEqual([
+      'user',
+      'assistant',
+      'user',
+    ])
+    expect(requests[1].messages[2].content).toContain('cmp-price · Pricing card · plan:text')
+    expect(requests[1].system).toEqual(requests[0].system)
+  })
+
+  it('stops answering lookups after its bound, and says so before it does', async () => {
+    const { fake, requests } = provider([
+      toolAnswer(AI_INVENTORY_LOOKUP_TOOL_NAME, { kind: 'components', query: 'a' }, 200),
+      toolAnswer(AI_INVENTORY_LOOKUP_TOOL_NAME, { kind: 'forms', query: 'b' }, 200),
+      toolAnswer(AI_INVENTORY_LOOKUP_TOOL_NAME, { kind: 'screens', query: 'c' }, 200),
+      toolAnswer(AI_BUILD_PLAN_TOOL.name, CLEAN_PLAN),
+    ])
+    const result = await runValidatedGeneration('plan', planInput(fake))
+    // The bound is two, so the second answer tells the model it is the last;
+    // the third lookup is read as no answer at all and costs the re-ask.
+    expect(AI_INVENTORY_LOOKUP_MAX_ROUNDS).toBe(2)
+    expect(requests[2].messages[4].content).toContain('That was the last lookup')
+    expect(requests).toHaveLength(4)
+    expect(result).toMatchObject({ status: 'ok', attempts: 4 })
+    expect(requests[3].messages.at(-1)?.content).toContain('did not come through')
+  })
+
+  it('offers no lookup to a kind that builds from no site at all', async () => {
+    const { fake, requests } = provider([toolAnswer('submit_theme', { ok: true })])
+    await runValidatedGeneration('theme-ish', {
+      model: 'test-model',
+      provider: fake,
+      instructions: [{ text: 'Change the theme.' }],
+      messages: [{ role: 'user' as const, content: 'Brief' }],
+      tool: { name: 'submit_theme', description: 'x', strict: true, inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false } },
+      check: (answer: Record<string, unknown>) => ({ value: answer, violations: [] }),
+    })
+    expect(requests[0].tools?.map((tool) => tool.name)).toEqual(['submit_theme'])
   })
 
   it('re-asks once with the broken rule named and only the offending part quoted, and keeps the fix', async () => {

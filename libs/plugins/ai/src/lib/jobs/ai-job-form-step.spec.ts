@@ -118,6 +118,7 @@ import {
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import { AI_JOB_LAYOUT_MAX_TOKENS } from './ai-job-layout-step'
 import { registerAiJobStep } from './ai-jobs'
+import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 
 const NOW = new Date('2026-09-15T22:00:00.000Z')
 /** A workspace with no plan resolves as Free, which has no forms. */
@@ -465,7 +466,7 @@ describe('the form step', () => {
     const [request] = mockRunAiRequest.mock.calls[0]
     expect(request).toMatchObject({
       model: 'routed-model',
-      tools: [AI_JOB_FORM_TOOL],
+      tools: [AI_JOB_FORM_TOOL, aiInventoryLookupTool()],
       maxTokens: AI_JOB_FORM_MAX_TOKENS,
       thinking: 'off',
       stream: false,

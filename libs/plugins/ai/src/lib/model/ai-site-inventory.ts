@@ -26,17 +26,36 @@
  * and a generator needs to place a reference, and it is a few hundred
  * tokens where the trees would be tens of thousands.
  *
- * CAPPED twice. The reader takes each kind to `AI_SITE_INVENTORY_MAX_PER_KIND`
- * and the prompt block is held to `AI_SITE_INVENTORY_MAX_CHARS`; a kind cut
- * by either is named in `truncated`, so the model is told more exist rather
- * than concluding they do not.
+ * CAPPED three times, and the three are different numbers on purpose
+ * (AGL-2937). The reader holds each kind to `AI_SITE_INVENTORY_MAX_PER_KIND`;
+ * the prompt block LISTS only `AI_SITE_INVENTORY_LISTED_PER_KIND` of them and
+ * is held to `AI_SITE_INVENTORY_MAX_CHARS` besides; and the rest are answered
+ * on request, through the lookup tool the generation loop offers beside every
+ * door's own (`tools/ai-inventory-lookup-tool.ts`).
+ *
+ * The listing cap is what a prompt can afford: the block is volatile, so it
+ * is billed at full input rate on every request and every re-ask, and a site
+ * with two hundred components would spend most of a plan's prompt on rows it
+ * will not use. The read cap is what a LOOKUP can answer from, which is a
+ * different question — a search for "pricing card" is worth nothing if the
+ * card was never read. A kind cut by either is named in `truncated`, so the
+ * model is told more exist rather than concluding they do not.
  *
  * The shapes live here, apart from the reader (`runtime/site-inventory.ts`),
  * so the prompt block, the validators and their specs can hold an inventory
  * without loading the Admin SDK the reader needs.
  */
 
-export const AI_SITE_INVENTORY_MAX_PER_KIND = 40
+/**
+ * Rows per kind the reader holds. Above the listing cap on purpose: the rows
+ * past it are what the lookup tool searches, and a row never read cannot be
+ * found. One projection of a few fields each, so the read is small even at
+ * this cap.
+ */
+export const AI_SITE_INVENTORY_MAX_PER_KIND = 200
+
+/** Rows per kind the prompt block lists; the rest are found by lookup. */
+export const AI_SITE_INVENTORY_LISTED_PER_KIND = 40
 
 /** The rendered block's ceiling: 2,000 tokens at four characters a token. */
 export const AI_SITE_INVENTORY_MAX_CHARS = 8_000
@@ -136,6 +155,76 @@ export interface AiSiteInventory {
   theme: AiInventoryTheme | null
   /** Kinds with more records than are listed. */
   truncated: AiInventoryKind[]
+}
+
+/** One inventory record, whatever kind it is. */
+export type AiInventoryRow =
+  | AiInventoryComponent
+  | AiInventoryLayout
+  | AiInventoryTemplate
+  | AiInventoryForm
+  | AiInventoryDataset
+  | AiInventoryCollection
+  | AiInventoryScreen
+
+/**
+ * The rows of one kind. The inventory's fields are named after their kinds,
+ * so this is a lookup rather than a switch, and it is the one place that
+ * relies on the correspondence: the prompt block, the lookup tool and their
+ * specs all read a kind through it.
+ */
+export function aiInventoryRows(
+  inventory: AiSiteInventory,
+  kind: AiInventoryKind,
+): readonly AiInventoryRow[] {
+  return inventory[kind]
+}
+
+/** The heading one kind's lines are listed under, naming its columns in order. */
+export const AI_INVENTORY_KIND_HEADINGS: Readonly<Record<AiInventoryKind, string>> = {
+  components: 'Reusable components (id \u00b7 name \u00b7 props an instance fills)',
+  layouts: 'Layouts (id \u00b7 name)',
+  templates: 'Templates (id \u00b7 name \u00b7 kind)',
+  forms: 'Forms (id \u00b7 name \u00b7 fields)',
+  datasets: 'Datasets (id \u00b7 name \u00b7 fields)',
+  collections: 'Content collections (id \u00b7 name \u00b7 slug)',
+  screens: 'Screens (id \u00b7 name \u00b7 slug)',
+}
+
+/**
+ * One record as a line, in the order its heading names the columns. The one
+ * renderer: the prompt block and the lookup tool's answer read alike, so a
+ * row found by lookup is the same shape as a row that was listed.
+ */
+export function aiInventoryLine(kind: AiInventoryKind, row: AiInventoryRow): string {
+  const head = `${row.id} \u00b7 ${row.name}`
+  switch (kind) {
+    case 'components': {
+      const props = Object.entries((row as AiInventoryComponent).props)
+        .map(([name, type]) => `${name}:${type}`)
+        .join(', ')
+      return `${head} \u00b7 ${props || 'no props'}`
+    }
+    case 'layouts':
+      return head
+    case 'templates':
+      return `${head} \u00b7 ${(row as AiInventoryTemplate).kind}`
+    case 'forms':
+      return `${head} \u00b7 ${(row as AiInventoryForm).fields.join(', ')}`
+    case 'datasets':
+      return `${head} \u00b7 ${(row as AiInventoryDataset).fields.join(', ')}`
+    case 'collections':
+      return `${head} \u00b7 ${(row as AiInventoryCollection).slug}`
+    case 'screens': {
+      const screen = row as AiInventoryScreen
+      return `${head} \u00b7 ${screen.slug}${screen.template ? ' \u00b7 entry template' : ''}`
+    }
+  }
+}
+
+/** Every word of a record a lookup searches: its line, which holds them all. */
+export function aiInventoryHaystack(kind: AiInventoryKind, row: AiInventoryRow): string {
+  return aiInventoryLine(kind, row).toLowerCase()
 }
 
 /** A site the org does not own; the inventory is never read for it. */

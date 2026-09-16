@@ -356,6 +356,46 @@ message. Every attempt's tokens are summed on the result, and the job
 machine meters them. The result is `ok` with the value, `needs_input` with
 the violations, or `refused`.
 
+### The inventory, and "more on request"
+
+The site inventory is the one volatile part of that prompt, and the only part
+billed at full input rate on every attempt and every re-ask. Three caps meet
+there, and they are different numbers on purpose (AGL-2937):
+
+- `AI_SITE_INVENTORY_MAX_PER_KIND` — records of each kind the READER holds
+  (`readSiteInventory`). It is the window a lookup can answer from, and a
+  record never read cannot be found.
+- `AI_SITE_INVENTORY_LISTED_PER_KIND` — records of each kind the prompt block
+  LISTS. It is what a prompt can afford to carry every time.
+- `AI_SITE_INVENTORY_MAX_CHARS` — the block's ceiling, which cuts the longest
+  kind a line at a time so no kind crowds the others out.
+
+A kind with more records than are listed — cut by the listing cap or by the
+read itself — is named as having more, and the sentence points at
+`look_up_site_inventory` (`src/lib/tools/ai-inventory-lookup-tool.ts`). The
+loop offers that tool beside the door's own on EVERY request that carries an
+inventory, whatever the site's size: a tool list renders ahead of the system
+blocks and is part of what a cache entry is keyed on, so offering it only to
+large sites would split the platform's one cached prefix in two. Its schema
+names a kind and a search text and nothing of any site.
+
+A turn that calls it rather than answering is answered from the window already
+in memory — no Firestore read, and no second scope check, because the request
+was already entitled to the window — and the model is asked again with the
+rows in the same `id · name · …` shape the block lists them in. That round is
+a model call the caller pays for but NOT an answer attempt, so the one re-ask
+is still there to be spent on a broken rule; `AI_INVENTORY_LOOKUP_MAX_ROUNDS`
+bounds it, and the last answer says it is the last. The re-ask continues the
+turn rather than replacing it, so whatever was looked up is still in front of
+the model and is not asked for twice.
+
+What it buys is rule 7 on a site bigger than its prompt: without it, a plan for
+a site with two hundred components can only reuse the forty it was shown, and
+creates duplicates of the rest. What it costs is the tool's schema inside each
+door's cached prefix — about 195 tokens, written once per cache lifetime and
+read at a tenth of an input token after that, and a credit a page on the ten
+golden briefs.
+
 The validators hold the seventeen rules by construction: one detector per rule
 for trees and plans, each naming its rule number and a customer-safe sentence,
 and the rule-17 scorer, which measures nodes, stored bytes (`nodeMapBytes`),
@@ -973,7 +1013,7 @@ keeps the doctrine, carries no main landmark of its own (the layout's slot is
 the document's one main) and no raw binding token; and every section fits the
 balanced tier's answer ceiling, under the element measure.
 
-- **Credits per page: an estimate.** 44 credits per page: the median
+- **Credits per page: an estimate.** 45 credits per page: the median
   (the higher middle value) of the ten golden pages, each priced from the
   requests the step sent and the golden answers at four characters a token,
   at the catalog rates of the models the routing table picks, with the cached

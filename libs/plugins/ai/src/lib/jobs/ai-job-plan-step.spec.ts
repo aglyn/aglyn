@@ -56,6 +56,7 @@ jest.mock('./ai-jobs', () => ({
   registerAiJobPlanStep: jest.fn(),
 }))
 
+import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
 import type { AiJob } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
@@ -179,7 +180,7 @@ describe('the plan step', () => {
     const [request] = mockRunAiRequest.mock.calls[0]
     expect(request).toMatchObject({
       model: 'routed-model',
-      tools: [AI_BUILD_PLAN_TOOL],
+      tools: [AI_BUILD_PLAN_TOOL, aiInventoryLookupTool()],
       thinking: 'adaptive',
       stream: false,
       messages: [{ role: 'user', content: aiJobPlanPrompt(job()) }],

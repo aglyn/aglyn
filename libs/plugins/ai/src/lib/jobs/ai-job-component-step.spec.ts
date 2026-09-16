@@ -102,6 +102,7 @@ import {
 import { AI_DRAFT_ENTITLEMENT_REFUSAL } from './ai-job-drafts'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import { registerAiJobStep } from './ai-jobs'
+import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 
 const NOW = new Date('2026-09-15T20:00:00.000Z')
 const FREE_ORG = {}
@@ -327,7 +328,7 @@ describe('the component step', () => {
     const [request] = mockRunAiRequest.mock.calls[0]
     expect(request).toMatchObject({
       model: 'routed-model',
-      tools: [aiComponentTool()],
+      tools: [aiComponentTool(), aiInventoryLookupTool()],
       maxTokens: AI_JOB_COMPONENT_MAX_TOKENS,
       thinking: 'off',
       stream: false,

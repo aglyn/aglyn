@@ -111,22 +111,22 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // (about 10,000 characters) are the cached prefix, the site inventory and the
   // brief ride uncached, and a plan answer is about 600 characters of JSON with
   // as much again to think in.
-  'job.plan': { inputTokens: 500, outputTokens: 400, cacheReadTokens: 3_400, cacheWriteTokens: 0 },
+  'job.plan': { inputTokens: 500, outputTokens: 400, cacheReadTokens: 3_600, cacheWriteTokens: 0 },
   // The component step: the doctrine, the component instructions, the
   // component surface's catalog and the tool are the cached prefix, the site
   // inventory, the brief and the confirmed plan ride uncached, and a card-sized
   // answer — its tree and declared props as JSON — is about 1,700 characters.
   // The component step's spec measures the prefix and the answer against this.
-  'job.component': { inputTokens: 700, outputTokens: 600, cacheReadTokens: 5_600, cacheWriteTokens: 0 },
-  'job.layout': { inputTokens: 700, outputTokens: 1_000, cacheReadTokens: 5_400, cacheWriteTokens: 0 },
-  'job.template': { inputTokens: 1_200, outputTokens: 700, cacheReadTokens: 6_200, cacheWriteTokens: 0 },
+  'job.component': { inputTokens: 700, outputTokens: 600, cacheReadTokens: 5_800, cacheWriteTokens: 0 },
+  'job.layout': { inputTokens: 700, outputTokens: 1_000, cacheReadTokens: 5_600, cacheWriteTokens: 0 },
+  'job.template': { inputTokens: 1_200, outputTokens: 700, cacheReadTokens: 6_400, cacheWriteTokens: 0 },
   // One page section's exchange (AGL-2907), from the modules' own text: the
   // doctrine (6,281 characters), the page instructions (1,524), the screen
   // palette catalog (8,353) and the section tool (484) are the cached prefix;
   // the site inventory (711 on the median golden site), the brief, the plan
   // and the section line ride uncached; and a golden section answer is 901
   // characters at the median, asked for with no thinking.
-  'job.page': { inputTokens: 600, outputTokens: 300, cacheReadTokens: 4_200, cacheWriteTokens: 0 },
+  'job.page': { inputTokens: 600, outputTokens: 300, cacheReadTokens: 4_400, cacheWriteTokens: 0 },
   // The SEO step's listing exchange, which a page's or a product's listing is
   // exactly one of. NOTHING is cached here, whatever the breakpoints say: the
   // step runs on the fast tier, whose cacheable minimum is four times what
@@ -143,14 +143,14 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // catalog (about 150 tokens) and the tool's schema are the cached prefix, the
   // site inventory and the brief ride uncached, and a form's answer is 200 to
   // 400 tokens of JSON with no extended thinking.
-  'job.form': { inputTokens: 700, outputTokens: 450, cacheReadTokens: 3_700, cacheWriteTokens: 0 },
+  'job.form': { inputTokens: 700, outputTokens: 450, cacheReadTokens: 3_900, cacheWriteTokens: 0 },
   // The email step, and the campaign step that shares its generation: the
   // doctrine, the email instructions, the email palette catalog and the
   // tool's schema (about 10,300 characters) are the cached prefix, the site
   // inventory and the brief ride uncached, and the answer is one email's
   // node map with three subject lines and three preheaders.
-  'job.email': { inputTokens: 600, outputTokens: 1_500, cacheReadTokens: 3_400, cacheWriteTokens: 0 },
-  'job.campaign': { inputTokens: 600, outputTokens: 1_500, cacheReadTokens: 3_400, cacheWriteTokens: 0 },
+  'job.email': { inputTokens: 600, outputTokens: 1_500, cacheReadTokens: 3_600, cacheWriteTokens: 0 },
+  'job.campaign': { inputTokens: 600, outputTokens: 1_500, cacheReadTokens: 3_600, cacheWriteTokens: 0 },
 }
 
 /** The fewest measured exchanges a median is taken over. */

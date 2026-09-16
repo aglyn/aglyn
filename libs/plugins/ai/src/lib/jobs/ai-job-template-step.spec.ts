@@ -95,6 +95,7 @@ import {
   runAiJobTemplateStep,
 } from './ai-job-template-step'
 import { registerAiJobStep } from './ai-jobs'
+import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 
 const NOW = new Date('2026-09-15T20:00:00.000Z')
 const FREE_ORG = {}
@@ -366,7 +367,7 @@ describe('the template step', () => {
     const collection = { id: 'col-blog', name: 'Blog', slug: 'blog' }
     expect(request).toMatchObject({
       model: 'routed-model',
-      tools: [aiDoctrineTreeTool('template')],
+      tools: [aiDoctrineTreeTool('template'), aiInventoryLookupTool()],
       maxTokens: AI_JOB_TEMPLATE_MAX_TOKENS,
       thinking: 'off',
       messages: [

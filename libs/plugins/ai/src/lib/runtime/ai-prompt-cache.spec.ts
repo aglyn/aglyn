@@ -48,6 +48,7 @@ import { AI_JOB_COMPONENT_INSTRUCTIONS } from '../jobs/ai-job-component-step'
 import { AI_JOB_EMAIL_INSTRUCTIONS, AI_JOB_EMAIL_TOOL } from '../jobs/ai-job-email-step'
 import { AI_JOB_FORM_INSTRUCTIONS } from '../jobs/ai-job-form-step'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
+import { AI_JOB_PAGE_INSTRUCTIONS, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
 import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
 import { AI_JOB_TEMPLATE_INSTRUCTIONS } from '../jobs/ai-job-template-step'
 import { AI_JOB_TEXT_SYSTEM } from '../jobs/ai-job-text-step'
@@ -55,6 +56,7 @@ import { AI_JOB_THEME_INSTRUCTIONS } from '../jobs/ai-job-theme-step'
 import { AI_SEO_FIXES_INSTRUCTIONS, AI_SEO_SITE_INSTRUCTIONS } from '../jobs/ai-job-seo-step'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
 import { aiComponentTool } from '../tools/ai-component-tool'
+import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_SEO_FIELDS_INSTRUCTIONS, aiSeoFieldsInstructions } from './seo-fields'
 import {
   aiSeoFieldsTool,
@@ -118,8 +120,13 @@ function sourceFiles(dir: string): string[] {
   })
 }
 
-/** A file that asks a provider for an answer, however it composes the prompt. */
-const CALLS_A_MODEL = /\b(?:runAiRequest|runValidatedGeneration)\(/
+/**
+ * A file that asks a provider for an answer, however it composes the prompt.
+ * The optional type argument matters: `runValidatedGeneration<AiPageSection>(`
+ * is the same door as `runValidatedGeneration(`, and a pattern that missed it
+ * let the page step into the plugin without a ledger row (AGL-2937).
+ */
+const CALLS_A_MODEL = /\b(?:runAiRequest|runValidatedGeneration)\s*(?:<[^<>()]*>)?\(/
 
 /**
  * Every door, and what its prompt does about caching. `step` is the routing
@@ -178,6 +185,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     step: 'job.component',
     caches: false,
     why: 'one instruction block over a selected subtree, under the balanced tier’s minimum',
+  },
+  'jobs/ai-job-page-step.ts': {
+    step: 'job.page',
+    caches: true,
+    why: "the doctrine, the page rules and the screen palette; one section a pass, so the prefix is read many times over one page",
   },
   'jobs/ai-job-theme-step.ts': {
     step: 'job.theme',
@@ -246,7 +258,7 @@ const REQUESTS: Record<string, Composed> = {
     door: 'jobs/ai-job-plan-step.ts',
     step: 'job.plan',
     blocks: (site) => aiDoctrineSystemBlocks(site, { instructions: AI_JOB_PLAN_INSTRUCTIONS }),
-    tools: () => [AI_BUILD_PLAN_TOOL],
+    tools: () => [AI_BUILD_PLAN_TOOL, aiInventoryLookupTool()],
   },
   layout: {
     door: 'jobs/ai-job-layout-step.ts',
@@ -256,7 +268,7 @@ const REQUESTS: Record<string, Composed> = {
         instructions: AI_JOB_LAYOUT_INSTRUCTIONS,
         surface: 'layout',
       }),
-    tools: () => [aiDoctrineTreeTool('layout')],
+    tools: () => [aiDoctrineTreeTool('layout'), aiInventoryLookupTool()],
   },
   template: {
     door: 'jobs/ai-job-template-step.ts',
@@ -266,7 +278,7 @@ const REQUESTS: Record<string, Composed> = {
         instructions: [...AI_JOB_TEMPLATE_INSTRUCTIONS, aiTemplateExamplesSystemBlock()],
         surface: 'screen',
       }),
-    tools: () => [aiDoctrineTreeTool('template')],
+    tools: () => [aiDoctrineTreeTool('template'), aiInventoryLookupTool()],
   },
   component: {
     door: 'jobs/ai-job-component-step.ts',
@@ -276,21 +288,29 @@ const REQUESTS: Record<string, Composed> = {
         instructions: AI_JOB_COMPONENT_INSTRUCTIONS,
         surface: 'component',
       }),
-    tools: () => [aiComponentTool()],
+    tools: () => [aiComponentTool(), aiInventoryLookupTool()],
   },
   email: {
     door: 'jobs/ai-job-email-step.ts',
     step: 'job.email',
     blocks: (site) =>
       aiDoctrineSystemBlocks(site, { instructions: AI_JOB_EMAIL_INSTRUCTIONS, surface: 'email' }),
-    tools: () => [AI_JOB_EMAIL_TOOL],
+    tools: () => [AI_JOB_EMAIL_TOOL, aiInventoryLookupTool()],
   },
   form: {
     door: 'jobs/ai-job-form-step.ts',
     step: 'job.form',
     blocks: (site) =>
       aiDoctrineSystemBlocks(site, { instructions: AI_JOB_FORM_INSTRUCTIONS, surface: 'form' }),
-    tools: () => [aiDoctrineTreeTool('form')],
+    tools: () => [aiDoctrineTreeTool('form'), aiInventoryLookupTool()],
+  },
+  // One section pass of a page job. Its instructions carry the screen palette
+  // themselves, and it is a custom kind, so the loop adds no catalog of its own.
+  'page-section': {
+    door: 'jobs/ai-job-page-step.ts',
+    step: 'job.page',
+    blocks: (site) => aiDoctrineSystemBlocks(site, { instructions: AI_JOB_PAGE_INSTRUCTIONS }),
+    tools: () => [AI_PAGE_SECTION_TOOL, aiInventoryLookupTool()],
   },
   theme: {
     door: 'jobs/ai-job-theme-step.ts',
@@ -460,12 +480,13 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     // prompt moves one of them DOWN and says so in its commit, and a prompt
     // that grows without anyone meaning it to moves one UP and is red here.
     expect(measured()).toEqual({
-      plan: { prefixTokens: 2_545, minimum: 1_024, caches: true, toolsStable: true },
-      layout: { prefixTokens: 4_078, minimum: 1_024, caches: true, toolsStable: true },
-      template: { prefixTokens: 4_651, minimum: 1_024, caches: true, toolsStable: true },
-      component: { prefixTokens: 4_606, minimum: 1_024, caches: true, toolsStable: true },
-      email: { prefixTokens: 2_565, minimum: 1_024, caches: true, toolsStable: true },
-      form: { prefixTokens: 2_194, minimum: 1_024, caches: true, toolsStable: true },
+      plan: { prefixTokens: 2_740, minimum: 1_024, caches: true, toolsStable: true },
+      layout: { prefixTokens: 4_273, minimum: 1_024, caches: true, toolsStable: true },
+      template: { prefixTokens: 4_847, minimum: 1_024, caches: true, toolsStable: true },
+      component: { prefixTokens: 4_802, minimum: 1_024, caches: true, toolsStable: true },
+      email: { prefixTokens: 2_760, minimum: 1_024, caches: true, toolsStable: true },
+      form: { prefixTokens: 2_389, minimum: 1_024, caches: true, toolsStable: true },
+      'page-section': { prefixTokens: 4_356, minimum: 1_024, caches: true, toolsStable: true },
       theme: { prefixTokens: 3_186, minimum: 1_024, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
       'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },

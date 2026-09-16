@@ -90,6 +90,7 @@ import {
   runAiJobLayoutStep,
 } from './ai-job-layout-step'
 import { registerAiJobStep } from './ai-jobs'
+import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 
 const NOW = new Date('2026-09-15T20:00:00.000Z')
 const FREE_ORG = {}
@@ -319,7 +320,7 @@ describe('the layout step', () => {
     const [request] = mockRunAiRequest.mock.calls[0]
     expect(request).toMatchObject({
       model: 'routed-model',
-      tools: [aiDoctrineTreeTool('layout')],
+      tools: [aiDoctrineTreeTool('layout'), aiInventoryLookupTool()],
       maxTokens: AI_JOB_LAYOUT_MAX_TOKENS,
       thinking: 'off',
       stream: false,

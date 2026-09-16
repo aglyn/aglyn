@@ -117,6 +117,7 @@ import {
 } from './ai-job-page-step'
 import { registerAiJobStep } from './ai-jobs'
 import { AI_PAGE_BRIEF_FIXTURES } from './fixtures/ai-page-briefs'
+import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
 const NOW = new Date('2026-09-15T22:00:00.000Z')
@@ -375,7 +376,11 @@ describe('the passes', () => {
     expect(outcome).toEqual({ outputs: [], usage: USAGE, estCostUsd: 0.01, model: 'claude-sonnet-5', stopReason: 'tool_use', continue: true })
 
     const [request] = mockRunAiRequest.mock.calls[0]
-    expect(request).toMatchObject({ tools: [AI_PAGE_SECTION_TOOL], thinking: 'off', stream: false })
+    expect(request).toMatchObject({
+      tools: [AI_PAGE_SECTION_TOOL, aiInventoryLookupTool()],
+      thinking: 'off',
+      stream: false,
+    })
     expect(request.system).toEqual([
       AI_DOCTRINE_SYSTEM_BLOCK,
       AI_JOB_PAGE_INSTRUCTIONS[0],

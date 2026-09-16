@@ -19,7 +19,11 @@ import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { parseAiBuildPlan, type AiBuildPlan } from '../model/ai-build-plan'
 import {
   AI_INVENTORY_KINDS,
+  AI_INVENTORY_KIND_HEADINGS,
+  AI_SITE_INVENTORY_LISTED_PER_KIND,
   AI_SITE_INVENTORY_MAX_CHARS,
+  aiInventoryLine,
+  aiInventoryRows,
   type AiInventoryKind,
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
@@ -48,6 +52,12 @@ import {
   type AiDoctrineViolation,
   type AiOutputScore,
 } from './ai-doctrine-validators'
+import {
+  AI_INVENTORY_LOOKUP_MAX_ROUNDS,
+  AI_INVENTORY_LOOKUP_TOOL_NAME,
+  aiInventoryLookupTool,
+  answerAiInventoryLookup,
+} from '../tools/ai-inventory-lookup-tool'
 import type { AiNodeTreeContext } from './ai-node-tree'
 import {
   AI_OUTPUT_BUDGETS,
@@ -76,6 +86,10 @@ import { AI_PALETTE_CATALOG } from './ai-palette.generated'
  *  2. calls the runtime once, reads the answer off the tool, and holds it to
  *     the doctrine's validators (`ai-doctrine-validators.ts`) — the doctrine
  *     always runs for a kind it knows, and a door can only ADD checks;
+ *  2a. answers, from the window already in memory, a turn that asked to look
+ *     a record up rather than answering (AGL-2937): a site larger than its
+ *     prompt block can list is found by asking, not by listing more on every
+ *     request. Bounded, and not an answer attempt;
  *  3. on a violation, asks ONCE more with the broken rules named and the
  *     offending parts quoted — never the whole document again (AGL-2937);
  *  4. and when the second answer still breaks a rule, gives up with
@@ -263,66 +277,48 @@ export function aiDoctrineScopeFor(kind: string): AiDoctrineScope {
 
 // ── The inventory block ──────────────────────────────────────────────────
 
-const KIND_HEADINGS: Record<AiInventoryKind, string> = {
-  components: 'Reusable components (id · name · props an instance fills)',
-  layouts: 'Layouts (id · name)',
-  templates: 'Templates (id · name · kind)',
-  forms: 'Forms (id · name · fields)',
-  datasets: 'Datasets (id · name · fields)',
-  collections: 'Content collections (id · name · slug)',
-  screens: 'Screens (id · name · slug)',
-}
-
-/** One line per record, in the order the kind's heading names its columns. */
-function inventoryLines(inventory: AiSiteInventory, kind: AiInventoryKind): string[] {
-  switch (kind) {
-    case 'components':
-      return inventory.components.map((row) => {
-        const props = Object.entries(row.props)
-          .map(([name, type]) => `${name}:${type}`)
-          .join(', ')
-        return `${row.id} · ${row.name} · ${props || 'no props'}`
-      })
-    case 'layouts':
-      return inventory.layouts.map((row) => `${row.id} · ${row.name}`)
-    case 'templates':
-      return inventory.templates.map((row) => `${row.id} · ${row.name} · ${row.kind}`)
-    case 'forms':
-      return inventory.forms.map((row) => `${row.id} · ${row.name} · ${row.fields.join(', ')}`)
-    case 'datasets':
-      return inventory.datasets.map(
-        (row) => `${row.id} · ${row.name} · ${row.fields.join(', ')}`,
-      )
-    case 'collections':
-      return inventory.collections.map((row) => `${row.id} · ${row.name} · ${row.slug}`)
-    case 'screens':
-      return inventory.screens.map(
-        (row) =>
-          `${row.id} · ${row.name} · ${row.slug}${row.template ? ' · entry template' : ''}`,
-      )
-  }
-}
-
 /**
  * The inventory as the prompt's VOLATILE block: per site, so it never sits
  * inside a cached prefix. Held to `AI_SITE_INVENTORY_MAX_CHARS` by cutting
  * the longest kind a line at a time, each cut kind named, so no one kind can
  * crowd the others out.
+ *
+ * It lists `AI_SITE_INVENTORY_LISTED_PER_KIND` records of each kind, not the
+ * whole window the reader holds (AGL-2937): the block is billed at full input
+ * rate on every attempt, so a large site would spend most of a plan's prompt
+ * on rows it will not use. A kind with more — cut by the listing cap or by
+ * the read itself — is named as having more, and the sentence points at the
+ * lookup tool the loop offers beside the door's own, so the answer to "is
+ * there already a pricing card?" is a question the model can ask rather than
+ * a gap it fills by creating one.
  */
 export function aiSiteInventoryBlock(inventory: AiSiteInventory | null): string {
   if (!inventory) {
     return 'Site inventory: none was read for this request. Reuse nothing by id, and name every creation as new.'
   }
+  // Only the first rows of each kind are listed; the rest are held for the
+  // lookup tool, and a kind cut by either the listing cap or the read is
+  // named as having more.
   const lines = Object.fromEntries(
-    AI_INVENTORY_KINDS.map((kind) => [kind, inventoryLines(inventory, kind)]),
+    AI_INVENTORY_KINDS.map((kind) => [
+      kind,
+      aiInventoryRows(inventory, kind)
+        .slice(0, AI_SITE_INVENTORY_LISTED_PER_KIND)
+        .map((row) => aiInventoryLine(kind, row)),
+    ]),
   ) as Record<AiInventoryKind, string[]>
-  const truncated = new Set(inventory.truncated)
+  const truncated = new Set([
+    ...inventory.truncated,
+    ...AI_INVENTORY_KINDS.filter(
+      (kind) => aiInventoryRows(inventory, kind).length > AI_SITE_INVENTORY_LISTED_PER_KIND,
+    ),
+  ])
   const render = (): string => {
     const parts = [
       'Site inventory: what this site already has. Reuse these by id before creating anything.',
     ]
     for (const kind of AI_INVENTORY_KINDS) {
-      parts.push(`${KIND_HEADINGS[kind]}:`)
+      parts.push(`${AI_INVENTORY_KIND_HEADINGS[kind]}:`)
       parts.push(...(lines[kind].length ? lines[kind].map((line) => `- ${line}`) : ['- none']))
     }
     if (inventory.theme) {
@@ -337,7 +333,7 @@ export function aiSiteInventoryBlock(inventory: AiSiteInventory | null): string 
     }
     if (truncated.size) {
       parts.push(
-        `More exist than are listed for: ${AI_INVENTORY_KINDS.filter((kind) => truncated.has(kind)).join(', ')}. Do not assume one is missing because it is not listed.`,
+        `More exist than are listed for: ${AI_INVENTORY_KINDS.filter((kind) => truncated.has(kind)).join(', ')}. Do not assume one is missing because it is not listed — call ${AI_INVENTORY_LOOKUP_TOOL_NAME} to find it.`,
       )
     }
     return parts.join('\n')
@@ -775,7 +771,11 @@ export interface AiCustomGenerationInput<T> extends Omit<AiGenerationInputBase, 
 
 /** What a generation spent, whatever its outcome. */
 export interface AiGenerationSpend {
-  /** Model calls made: 1, or 2 when the first answer was re-asked. */
+  /**
+   * Model calls made, all of which the meter bills: one per answer — 2 when
+   * the first was re-asked — plus one per site-inventory lookup answered
+   * along the way (AGL-2937).
+   */
   attempts: number
   /** Tokens across every attempt; the meter bills all of them. */
   usage: AiUsage
@@ -904,15 +904,28 @@ export async function runValidatedGeneration(
     stopReason: null,
     effort: input.effort ?? null,
   }
+  // "More on request" (AGL-2937). A door that reads a site is offered the
+  // lookup tool beside its own on EVERY request, whatever the site's size:
+  // the tool list renders ahead of the system blocks and is part of what a
+  // cache entry is keyed on, so offering it only to the sites large enough to
+  // need it would split the platform's one cached prefix in two. A kind that
+  // builds from no site structure — a theme, a listing — passes no inventory
+  // and is offered nothing.
+  const lookup = input.inventory === undefined ? null : aiInventoryLookupTool()
+  const tools = lookup ? [input.tool, lookup] : [input.tool]
   let messages: AiMessage[] = [...input.messages]
   let violations: AiDoctrineViolation[] = []
-  while (spend.attempts < AI_GENERATION_MAX_ATTEMPTS) {
+  // Answer attempts, which the re-ask bounds, are counted apart from model
+  // calls, which lookups also spend.
+  let answers = 0
+  let lookups = 0
+  while (answers < AI_GENERATION_MAX_ATTEMPTS) {
     spend.attempts += 1
     const result = await runAiRequest({
       model,
       system,
       messages,
-      tools: [input.tool],
+      tools,
       maxTokens,
       stream: false,
       ...(input.thinking ? { thinking: input.thinking } : {}),
@@ -932,6 +945,29 @@ export async function runValidatedGeneration(
     if (result.kind === 'refusal') return { ...spend, status: 'refused' }
 
     const answer = answerOf(result, input.tool.name)
+    // A turn that asked to look something up rather than answering is not an
+    // answer attempt: it is answered from the window already in memory and
+    // the model is asked again. Bounded, because each round is a model call
+    // the caller pays for; the last one says so, so the bound costs a turn
+    // rather than a re-ask.
+    const asked = answer ? undefined : result.toolUse.find((use) => use.name === lookup?.name)
+    if (asked && lookups < AI_INVENTORY_LOOKUP_MAX_ROUNDS) {
+      lookups += 1
+      const last =
+        lookups === AI_INVENTORY_LOOKUP_MAX_ROUNDS
+          ? `\n\nThat was the last lookup. Answer with ${input.tool.name} now.`
+          : ''
+      messages = [
+        ...messages,
+        { role: 'assistant', content: `Called ${AI_INVENTORY_LOOKUP_TOOL_NAME}.` },
+        {
+          role: 'user',
+          content: `${answerAiInventoryLookup(input.inventory ?? null, asked.input)}${last}`,
+        },
+      ]
+      continue
+    }
+    answers += 1
     const checked = answer
       ? check(answer)
       : { value: null, violations: [unreadableAnswer(kind, input.tool.name, result.stopReason)] }
@@ -941,8 +977,10 @@ export async function runValidatedGeneration(
     violations = checked.violations.length
       ? checked.violations
       : [unreadableAnswer(kind, input.tool.name, result.stopReason)]
+    // The re-ask continues the turn rather than replacing it, so whatever the
+    // model looked up is still in front of it and is not asked for twice.
     messages = [
-      ...input.messages,
+      ...messages,
       { role: 'assistant', content: `Submitted the ${kind} with ${input.tool.name}.` },
       {
         role: 'user',
