@@ -450,6 +450,144 @@ describe('StaffOrgActions (AGL-939)', () => {
     })
   })
 
+  /**
+   * THE PLAN AS IT RESOLVES (AGL-3034). This dialog showed only the stored
+   * plan, so saving Pro on a canceled workspace looked done and did nothing.
+   * These cases pin what it now states before anything changes, and what it
+   * sends: a comp only when one is chosen, a removal only when one is asked
+   * for, and never a comp built out of a stored plan.
+   */
+  describe('the plan it shows, and the comp it sends (AGL-3034)', () => {
+    const openOverride = async (orgDoc: Record<string, unknown>) => {
+      render(<StaffOrgActions org={org(orgDoc)} onChanged={jest.fn()} />)
+      fireEvent.click(screen.getByText('Override'))
+      const dialog = screen.getByRole('dialog')
+      fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Reason' }))
+      fireEvent.click(
+        await screen.findByRole('option', { name: 'Early access to an unreleased feature' }),
+      )
+      return dialog
+    }
+    const save = async (dialog: HTMLElement) => {
+      fireEvent.click(within(dialog).getByText('Save (audited)'))
+      await waitFor(() => expect(overrideRequests().length).toBe(1))
+      return overrideRequests()[0].body
+    }
+    const CANCELED = { plan: 'pro', billingStatus: 'canceled' }
+
+    it('states the effective plan beside the stored one, the dead subscription, and that a plan here is a comp', async () => {
+      const dialog = await openOverride(CANCELED)
+      expect(within(dialog).getByText('Effective: Free')).toBeTruthy()
+      expect(within(dialog).getByText('Stored: Pro')).toBeTruthy()
+      expect(within(dialog).getByText('Subscription: canceled (dead)')).toBeTruthy()
+      expect(within(dialog).getByRole('alert').textContent).toMatch(
+        /canceled, so this workspace resolves as Free — the stored Pro grants nothing\. A plan set here is written as a staff comp\./,
+      )
+      expect(within(dialog).getByRole('combobox', { name: 'Comp plan' })).toBeTruthy()
+      expect(within(dialog).queryByRole('combobox', { name: 'Stored plan' })).toBeNull()
+      expect(dialog.textContent).toMatch(/saved as a STAFF COMP/)
+    })
+
+    it('an untouched save sends NO comp, and the stored plan back as it was', async () => {
+      // The stored Pro is what the customer used to pay for. Nothing about
+      // saving a reason and a quota may turn it into a grant.
+      const dialog = await openOverride(CANCELED)
+      const body = await save(dialog)
+      expect(body).not.toHaveProperty('comp')
+      expect(body.plan).toBe('pro')
+    })
+
+    it('choosing a comp plan sends it as the comp, and leaves the stored plan alone', async () => {
+      const dialog = await openOverride(CANCELED)
+      fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Comp plan' }))
+      fireEvent.click(await screen.findByRole('option', { name: 'Pro' }))
+      const body = await save(dialog)
+      expect(body.comp).toEqual({ plan: 'pro' })
+      expect(body.plan).toBe('pro')
+    })
+
+    it('shows a standing comp, keeps it on an untouched save, and removes it only when asked', async () => {
+      const comped = {
+        ...CANCELED,
+        entitlements: {
+          planComp: {
+            plan: 'pro',
+            reason: 'beta',
+            note: 'AGL-3024 live run',
+            grantedBy: 'staff-0',
+            grantedAt: '2026-09-16T12:00:00.000Z',
+          },
+        },
+      }
+      const dialog = await openOverride(comped)
+      expect(within(dialog).getByText('Effective: Pro')).toBeTruthy()
+      expect(within(dialog).getByText('Comp: Pro')).toBeTruthy()
+      expect(within(dialog).getByRole('alert').textContent).toMatch(
+        /Pro is in force as a staff comp.*Granted by staff-0.*Early access to an unreleased feature — AGL-3024 live run/,
+      )
+      // No "No comp" option to drift back to: removal is the checkbox.
+      fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Comp plan' }))
+      expect(screen.queryByRole('option', { name: /No comp/ })).toBeNull()
+      fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+
+      fireEvent.click(
+        within(dialog).getByLabelText(/Remove the Pro comp on save — this workspace then resolves as Free/),
+      )
+      const body = await save(dialog)
+      expect(body.comp).toBeNull()
+    })
+
+    it('keeps a standing comp on a save that does not touch it', async () => {
+      const dialog = await openOverride({
+        ...CANCELED,
+        entitlements: { planComp: { plan: 'business', reason: 'trial', note: null, grantedBy: 'staff-0', grantedAt: null } },
+      })
+      const body = await save(dialog)
+      expect(body).not.toHaveProperty('comp')
+    })
+
+    it('a live subscription: the stored plan select, saying the subscription governs, and no comp', async () => {
+      const dialog = await openOverride({ plan: 'business', billingStatus: 'active' })
+      expect(within(dialog).getByText('Effective: Business')).toBeTruthy()
+      expect(within(dialog).getByText('Subscription: active')).toBeTruthy()
+      expect(within(dialog).getByRole('alert').textContent).toMatch(
+        /The live subscription \(active\) decides the plan: Business/,
+      )
+      expect(within(dialog).queryByRole('combobox', { name: 'Comp plan' })).toBeNull()
+      fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Stored plan' }))
+      fireEvent.click(await screen.findByRole('option', { name: 'Scale' }))
+      const body = await save(dialog)
+      expect(body.plan).toBe('scale')
+      expect(body).not.toHaveProperty('comp')
+    })
+
+    it('reports what took effect in the route\'s words, not just "updated"', async () => {
+      global.fetch = jest.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          written: true,
+          planEffect: {
+            compChange: 'granted',
+            planChange: 'unchanged',
+            summary: 'Pro comp granted. Effective plan: Free → Pro.',
+          },
+        }),
+      })) as unknown as typeof fetch
+      const dialog = await openOverride(CANCELED)
+      fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Comp plan' }))
+      fireEvent.click(await screen.findByRole('option', { name: 'Pro' }))
+      fireEvent.click(within(dialog).getByText('Save (audited)'))
+      await waitFor(() =>
+        expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+          'Organization updated (audited). Pro comp granted. Effective plan: Free → Pro.',
+          expect.objectContaining({ variant: 'success', persist: true }),
+        ),
+      )
+    })
+  })
+
   it('renders disabled actions for a null org instead of crashing', () => {
     render(<StaffOrgActions org={null} onChanged={jest.fn()} />)
     for (const label of ['Override', 'Suspend', 'Erasure']) {

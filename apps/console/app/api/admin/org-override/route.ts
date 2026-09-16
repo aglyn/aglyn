@@ -100,12 +100,52 @@
  * console says "unchanged" only when it reads `written: false` from a body
  * this handler actually wrote. Anything else — a transport failure, a
  * gateway error page — is reported as UNKNOWN rather than as safe.
+ *
+ * ## A plan with no live subscription behind it is a COMP (AGL-3034)
+ *
+ *   POST { …, comp?: { plan } | null }
+ *
+ * `plan` is the STORED plan, and it only decides anything where a live
+ * subscription does (or, for a workspace that never subscribed, where staff
+ * stored one before comps existed). On a canceled subscription it grants
+ * nothing — `resolveEffectivePlan` reads it as Free, AGL-247's rule — so this
+ * handler used to write it, answer 200, and change nothing, which is how a
+ * staff override on test-org did nothing at all and said nothing about it.
+ * The stored plan cannot simply win instead: a paid `plan` beside a canceled
+ * subscription is also what a customer who left looks like.
+ *
+ * So a plan granted where no subscription governs is an explicit comp,
+ * `entitlements.planComp`, with its plan, reason, note, staff uid and time,
+ * in the same batch and the same audit row as everything else here:
+ *
+ *  - `comp: { plan }` grants or changes it. Refused while a subscription is
+ *    live, because the subscription decides and the comp would do nothing.
+ *  - `comp: null` removes it — the only thing that does. An omitted `comp`
+ *    leaves it exactly as stored, so a quota edit from a dialog that knows
+ *    nothing about comps can never drop one.
+ *  - A CHANGE to `plan` on a dead or absent subscription is refused, not
+ *    written: on a dead one it would be silently ignored, and on an absent
+ *    one it would be a comp with no record. The one change allowed there is
+ *    clearing a plan stored directly on a workspace that never subscribed,
+ *    which really does return it to Free. The same refusal is what stops a
+ *    console tab older than this contract from comping a canceled customer by
+ *    saving a quota change with their old plan pre-filled.
+ *
+ * Every success answers `planEffect` — `describeOrgPlan` of the document as
+ * committed, plus what changed and one sentence saying it — so the dialog
+ * reports what took effect rather than "updated". A live subscription says
+ * that it governs, and that Stripe's next event rewrites the stored plan.
  */
 
 import {
+  describeOrgPlan,
   normalizeOrgOverrideReason,
+  orgPlanDescriptionSentence,
+  orgSubscriptionState,
   PLAN_ENTITLEMENTS,
+  PLAN_LABELS,
   pluginRequestFromWeb,
+  readOrgPlanComp,
   RELEASE_FLAGS,
   type OrgPlan,
 } from '@aglyn/aglyn/server'
@@ -115,6 +155,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { revalidateOrgHosts } from '../../../../utils/server/tenant-revalidate'
 import { FieldValue } from 'firebase-admin/firestore'
 
 export const dynamic = 'force-dynamic'
@@ -190,6 +231,45 @@ function withInheritDeletes<T extends boolean | number>(
   }
   return payload
 }
+
+/** What the caller asked of the comp (AGL-3034). */
+type CompRequest =
+  | { kind: 'untouched' }
+  | { kind: 'remove' }
+  | { kind: 'grant'; plan: OrgPlan }
+
+/**
+ * `comp` off the wire. ABSENCE IS "LEAVE IT" here, the opposite of the
+ * quota and flag maps, on purpose: those maps are the whole editor's state
+ * and a missing key is a cleared field, while a comp is removed only by
+ * asking for its removal — `null`, which JSON carries — and never because a
+ * caller did not mention it.
+ */
+function readCompRequest(raw: unknown): CompRequest | { error: string } {
+  if (raw === undefined) return { kind: 'untouched' }
+  if (raw === null) return { kind: 'remove' }
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return { error: 'comp must be { plan } to grant one, or null to remove it' }
+  }
+  const plan = (raw as Record<string, unknown>)['plan']
+  if (typeof plan !== 'string' || !PLAN_KEYS.has(plan)) {
+    return { error: `Unknown comp plan: ${String(plan)}` }
+  }
+  if (plan === 'free') {
+    return {
+      error:
+        'A comp of Free grants nothing. To remove a comp, send comp: null.',
+    }
+  }
+  return { kind: 'grant', plan: plan as OrgPlan }
+}
+
+/**
+ * A stored plan for comparison: `free` and no plan resolve the same, so
+ * moving between them is not a plan change anyone could observe.
+ */
+const comparablePlan = (plan: unknown): string =>
+  typeof plan === 'string' && plan !== 'free' ? plan : ''
 
 /** Do two flag maps express the same overrides? Junk counts as different. */
 function sameFlagMap(a: unknown, b: Record<string, boolean>): boolean {
@@ -312,6 +392,8 @@ async function handler(request: Request): Promise<Response> {
     if ('error' in releaseRead) return refuse(releaseRead.error, 400)
     const explicitFeatures = featureRead.values
     const explicitReleaseFlags = releaseRead.values
+    const compRead = readCompRequest(body?.['comp'])
+    if ('error' in compRead) return refuse(compRead.error, 400)
 
     const firestore = firebaseAdmin.app().firestore()
     const orgRef = firestore.collection('orgs').doc(orgId)
@@ -336,6 +418,104 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // THE PLAN, decided against the LIVE document (AGL-3034) — see "A plan
+    // with no live subscription behind it is a COMP" in the header. Every
+    // refusal here is before the batch, so each one writes nothing.
+    const planBefore = describeOrgPlan(orgData as never)
+    const governed = orgSubscriptionState(orgData as never) === 'live'
+    const statusWord = planBefore.subscriptionStatus ?? 'none'
+    const planLabel = (value: string) =>
+      PLAN_LABELS[value as OrgPlan] ?? 'no plan'
+    const planChanged = comparablePlan(plan) !== comparablePlan(orgData['plan'])
+    if (governed && compRead.kind === 'grant') {
+      return refuse(
+        `This organization's subscription is ${statusWord}, and a live ` +
+          'subscription decides the plan, so a comp would do nothing while ' +
+          'it lasts. Set the plan instead, or grant the comp once the ' +
+          'subscription has ended.',
+        409,
+      )
+    }
+    if (!governed && planChanged && comparablePlan(plan)) {
+      return refuse(
+        planBefore.subscription === 'dead'
+          ? `This organization's subscription is ${statusWord}, so a stored ` +
+              `plan grants nothing: saving ${planLabel(plan)} there would ` +
+              'change nothing. Grant it as a staff comp instead — reload the ' +
+              'override dialog if it did not offer one.'
+          : 'No subscription pays for this organization, so ' +
+              `${planLabel(plan)} has to be granted as a staff comp, which ` +
+              'records why and can be removed. Reload the override dialog if ' +
+              'it did not offer one.',
+        409,
+      )
+    }
+    if (!governed && planChanged && planBefore.subscription === 'dead') {
+      return refuse(
+        `This organization's subscription is ${statusWord}, so its stored ` +
+          `plan (${planLabel(String(orgData['plan'] ?? ''))}) is Stripe's ` +
+          'record and grants nothing; it is left as it is. It resolves as ' +
+          `${planLabel(planBefore.effectivePlan)}` +
+          (planBefore.compInForce ? ', through its comp.' : '.'),
+        409,
+      )
+    }
+    // What reaches `plan`: exactly as before under a live subscription, and
+    // otherwise nothing — except the one change allowed without one, clearing
+    // a plan stored directly on a workspace that never subscribed.
+    const planWrite: { plan?: string | FieldValue } = governed
+      ? { plan: plan || FieldValue.delete() }
+      : planChanged
+        ? { plan: FieldValue.delete() }
+        : {}
+    const storedPlanAfter: string | null = governed
+      ? plan || null
+      : planChanged
+        ? null
+        : ((orgData['plan'] as string | undefined) ?? null)
+    const planChange: 'set' | 'cleared' | 'unchanged' = !planChanged
+      ? 'unchanged'
+      : plan
+        ? 'set'
+        : 'cleared'
+
+    // THE COMP. `storedCompRaw` is whatever sits at the key, malformed or not,
+    // because the audit row records state; `storedComp` is the reading that
+    // grants a plan.
+    const storedCompRaw =
+      ((orgData['entitlements'] as Record<string, unknown> | undefined)?.[
+        'planComp'
+      ] as unknown) ?? undefined
+    const storedComp = readOrgPlanComp(orgData as never)
+    let compChange: 'granted' | 'replaced' | 'removed' | 'kept' | 'none' =
+      'none'
+    let compWrite: Record<string, unknown> | FieldValue | undefined
+    let compAfter: unknown = storedCompRaw
+    if (compRead.kind === 'grant') {
+      if (storedComp?.plan === compRead.plan) {
+        // The grant already stands. Rewriting it would replace who granted
+        // it and when with this act's; this act has its own audit row.
+        compChange = 'kept'
+      } else {
+        compChange = storedComp ? 'replaced' : 'granted'
+        compWrite = {
+          plan: compRead.plan,
+          reason: reason.reason,
+          note: reason.note,
+          grantedBy: decoded.uid,
+          grantedAt: FieldValue.serverTimestamp(),
+        }
+        compAfter = compWrite
+      }
+    } else if (compRead.kind === 'remove') {
+      if (storedCompRaw !== undefined) {
+        compWrite = FieldValue.delete()
+        compChange = storedComp ? 'removed' : 'none'
+      }
+      compAfter = undefined
+    }
+    const compRemains = compAfter !== undefined
+
     // Deletes do not count as overrides, or clearing the last one would
     // leave an empty map behind instead of removing the field — and
     // `overrideCount` reads key presence, so the row chip would never clear.
@@ -355,10 +535,16 @@ async function handler(request: Request): Promise<Response> {
     // sibling, the pre-AGL-240 host-keyed overrides the resolver still
     // honours — are left alone. They are not rendered by the dialog, so the
     // operator cannot have meant to clear them; clearing every offered quota
-    // still drops the whole map below.
+    // still drops the whole map below, unless a comp keeps it (AGL-3034).
+    //
+    // `planComp` is written only when this act changes it. Left out of a
+    // merge, a stored comp survives a save of quotas and flags untouched.
     const entitlements: Record<string, unknown> = {
       ...withInheritDeletes(quotas, QUOTA_KEYS),
-      features: withInheritDeletes(explicitFeatures, FEATURE_KEYS),
+      features: hasOverrides
+        ? withInheritDeletes(explicitFeatures, FEATURE_KEYS)
+        : FieldValue.delete(),
+      ...(compWrite !== undefined ? { planComp: compWrite } : {}),
     }
 
     // `before` is read from the LIVE document, not taken from the caller.
@@ -370,14 +556,65 @@ async function handler(request: Request): Promise<Response> {
       entitlements: orgData['entitlements'] ?? null,
       releaseFlags: orgData['releaseFlags'] ?? null,
     }
-    // The resulting STATE, never the sentinels: a `FieldValue.delete()` does
-    // not serialise to anything a reader of the audit log can act on.
+    // The resulting STATE, never the delete sentinels: a
+    // `FieldValue.delete()` does not serialize to anything a reader of the
+    // audit log can act on. A new comp's `grantedAt` is the server timestamp
+    // the org document gets, which the row stores as the same instant.
     const after = {
-      plan: plan || null,
-      entitlements: hasOverrides
-        ? { ...quotas, features: explicitFeatures }
-        : null,
+      plan: storedPlanAfter,
+      entitlements:
+        hasOverrides || compRemains
+          ? {
+              ...(hasOverrides ? { ...quotas, features: explicitFeatures } : {}),
+              ...(compRemains ? { planComp: compAfter } : {}),
+            }
+          : null,
       releaseFlags: hasReleaseOverrides ? explicitReleaseFlags : null,
+    }
+
+    // WHAT TOOK EFFECT (AGL-3034), off the document as it will be committed —
+    // the answer the dialog shows instead of "updated", and a line on the row
+    // saying which plan the act left the workspace on.
+    const planAfter = describeOrgPlan({
+      ...orgData,
+      plan: storedPlanAfter ?? undefined,
+      entitlements: after.entitlements ?? undefined,
+    } as never)
+    const effectiveMoved = planBefore.effectivePlan !== planAfter.effectivePlan
+    const lead = [
+      compChange === 'granted' && planAfter.comp
+        ? `${planLabel(planAfter.comp.plan)} comp granted.`
+        : null,
+      compChange === 'replaced' && planAfter.comp && storedComp
+        ? `Comp changed from ${planLabel(storedComp.plan)} to ` +
+          `${planLabel(planAfter.comp.plan)}.`
+        : null,
+      compChange === 'removed' && storedComp
+        ? `${planLabel(storedComp.plan)} comp removed.`
+        : null,
+      compChange === 'kept' && storedComp
+        ? `The ${planLabel(storedComp.plan)} comp already stands and is unchanged.`
+        : null,
+      planChange === 'set' ? `Stored plan set to ${planLabel(plan)}.` : null,
+      planChange === 'cleared' ? 'Stored plan cleared.' : null,
+      effectiveMoved
+        ? `Effective plan: ${planLabel(planBefore.effectivePlan)} → ` +
+          `${planLabel(planAfter.effectivePlan)}.`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(' ')
+    const planEffect = {
+      ...planAfter,
+      compChange,
+      planChange,
+      before: {
+        effectivePlan: planBefore.effectivePlan,
+        decidedBy: planBefore.decidedBy,
+      },
+      summary: [lead, orgPlanDescriptionSentence(planAfter)]
+        .filter(Boolean)
+        .join(' '),
     }
 
     // ONE atomic commit, the property AGL-1784 established and this must not
@@ -388,8 +625,9 @@ async function handler(request: Request): Promise<Response> {
     batch.set(
       orgRef,
       {
-        plan: plan || FieldValue.delete(),
-        entitlements: hasOverrides ? entitlements : FieldValue.delete(),
+        ...planWrite,
+        entitlements:
+          hasOverrides || compRemains ? entitlements : FieldValue.delete(),
         releaseFlags: hasReleaseOverrides
           ? withInheritDeletes(explicitReleaseFlags, RELEASE_FLAG_KEYS)
           : FieldValue.delete(),
@@ -409,12 +647,46 @@ async function handler(request: Request): Promise<Response> {
       // absent; Firestore rejects `undefined`.
       reason: reason.reason,
       note: reason.note,
+      // Which plan the act left the workspace on, and what decided it
+      // (AGL-3034). `before`/`after` above hold the stored fields; this is
+      // the resolution of them, which is the question a comp is asked months
+      // later — and a stored plan alone cannot answer it.
+      planEffect: {
+        before: planEffect.before,
+        after: {
+          effectivePlan: planAfter.effectivePlan,
+          decidedBy: planAfter.decidedBy,
+          compInForce: planAfter.compInForce,
+        },
+        compChange,
+        planChange,
+      },
       at: FieldValue.serverTimestamp(),
     })
     await batch.commit()
     committed = true
 
-    return Response.json({ ok: true, written: true, after }, { status: 200 })
+    // The published sites render the plan too — the free-tier badge is
+    // resolved in the tenant loader (AGL-1152) — so a plan that MOVED drops
+    // their cached pages, the way the billing webhook does on a Stripe
+    // transition. After the commit because it is a cache hint over HTTP, not
+    // a write, and `revalidateOrgHosts` never throws; a quota-only save moves
+    // no plan and fans nothing out.
+    if (effectiveMoved) await revalidateOrgHosts(firestore, orgId)
+
+    // `after` as the row records it, with the comp as it READS — a new comp's
+    // server timestamp has no JSON form until it has been committed.
+    const responseAfter = {
+      ...after,
+      entitlements:
+        after.entitlements && compRemains
+          ? { ...after.entitlements, planComp: planAfter.comp ?? compAfter }
+          : after.entitlements,
+    }
+    return Response.json(
+      { ok: true, written: true, after: responseAfter, planEffect },
+      { status: 200 },
+    )
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours
     // (AGL-1993). Null for anything else, so a real failure keeps its 500.
@@ -424,9 +696,10 @@ async function handler(request: Request): Promise<Response> {
     return Response.json(
       {
         error: 'Override failed',
-        // Never assumed. Nothing runs after the commit, so this is false for
-        // every reachable throw — but reading it from the flag is what keeps
-        // that true if something is ever added below it.
+        // Never assumed. Only a cache hint that never throws runs after the
+        // commit, so this is false for every reachable throw — but reading it
+        // from the flag is what keeps that true if something is ever added
+        // below it.
         written: committed,
       },
       { status: 500 },

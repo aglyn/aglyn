@@ -50,12 +50,14 @@ nothing until the trial converts, which is not a failure.
 **Past due** orgs are counted as contracted because the money is genuinely owed — Stripe
 is still retrying the card. This is dunning, and it is the most actionable line on the page.
 
-**Comped orgs** — an org sitting on a paid plan with no Stripe subscription behind it,
-typically from a staff plan override — contribute **$0 to both bases**, with no dollar
-figure attached at all. Pricing a comp off the plan table would invent revenue that never
-existed, which is exactly the mistake this page is built to avoid: a staff override writes
-the plan field and never writes a subscription, so the plan field alone cannot tell a
-comped org from a paying one.
+**Comped orgs** — an org holding a [staff comp](overview.md#plan-comps), or sitting on a
+paid plan with no Stripe subscription behind it — contribute **$0 to both bases**, with no
+dollar figure attached at all. Pricing a comp off the plan table would invent revenue that
+never existed, which is exactly the mistake this page is built to avoid: a staff grant
+never writes a subscription, so the plan field alone cannot tell a comped org from a paying
+one. A comp counts as comped even over a canceled subscription, because it is the explicit
+record that the plan was given away. A canceled subscription with no comp is churn, not a
+comp.
 
 The same applies to an org on a 100%-off coupon (bills $0), an enterprise org on a
 negotiated rate (bills that rate, not the plan's list price), and an org carrying add-ons
