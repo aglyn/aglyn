@@ -234,17 +234,15 @@ const mountPanel = async () => {
 
 /** The Consent cell each address is showing, keyed by address. */
 const consentByAddress = () => {
-  const headers = Array.from(document.querySelectorAll('thead th')).map(
+  const headers = Array.from(document.querySelectorAll('[role="columnheader"]')).map(
     (cell) => cell.textContent,
   )
-  const column = headers.indexOf('Consent')
-  expect(column).toBeGreaterThan(-1)
+  expect(headers).toContain('Consent')
   const shown = new Map<string, string>()
-  for (const row of Array.from(document.querySelectorAll('tbody tr'))) {
-    const cells = Array.from(row.querySelectorAll('td'))
+  for (const row of Array.from(document.querySelectorAll('[role="row"][data-id]'))) {
     shown.set(
-      cells[0]?.textContent?.trim() ?? '',
-      cells[column]?.textContent?.trim() ?? '',
+      row.querySelector('[data-field="email"]')?.textContent?.trim() ?? '',
+      row.querySelector('[data-field="consent"]')?.textContent?.trim() ?? '',
     )
   }
   return shown

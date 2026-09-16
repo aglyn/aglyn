@@ -24,24 +24,18 @@ import {
 } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import RowActionsMenu, {
-  type RowActionsMenuItem,
-} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import {
-  Alert,
-  Button,
-  Chip,
-  Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material'
+import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   doc,
@@ -283,6 +277,77 @@ export function OrgListsCard(props: OrgListsCardProps) {
     },
   ]
 
+  /*
+   * One row per list. The name is a link AND the row opens the list: a click
+   * handler cannot be middle-clicked, copied or opened from the context menu,
+   * and a link alone loses the whole-row target.
+   */
+  const columns: GridColDef[] = [
+    {
+      field: 'name',
+      headerName: 'List',
+      flex: 1,
+      minWidth: 200,
+      renderCell: ({ row }) => (
+        <AppLink
+          href={listHref(row)}
+          // The row's own handler would fire too and push the same route
+          // twice — one history entry per back press.
+          onClick={(event: { stopPropagation: () => void }) =>
+            event.stopPropagation()
+          }
+        >
+          {row.name}
+        </AppLink>
+      ),
+    },
+    {
+      field: 'kind',
+      headerName: 'Membership',
+      flex: 1,
+      minWidth: 220,
+      valueGetter: (_value, row) =>
+        row.kind === 'dynamic' ? 'Rule' : 'Manual',
+      renderCell: ({ row }) =>
+        row.kind === 'dynamic' ? (
+          <Chip
+            size="small"
+            color="primary"
+            variant="outlined"
+            /*
+              Freshness, not just kind. A dynamic list that has stopped being
+              swept looks exactly like one whose population has not changed,
+              so the last evaluation time is the only thing that tells them
+              apart — and it is the first thing to look at when a merchant
+              reports that somebody is missing from an audience.
+             */
+            label={
+              row.lastEvaluatedAt?.toDate
+                ? `Rule · ${row.lastEvaluatedAt.toDate().toLocaleString()}`
+                : 'Rule · not yet evaluated'
+            }
+          />
+        ) : (
+          <Chip size="small" variant="outlined" label="Manual" />
+        ),
+    },
+    {
+      field: 'subscribers',
+      headerName: 'Subscribers',
+      width: 130,
+      valueGetter: (_value, row) => counts[row.$id] ?? '…',
+    },
+    listActionsColumn(
+      (row) => (
+        <ListRowActions
+          label={String(row.name ?? row.$id)}
+          items={rowActions(row)}
+        />
+      ),
+      { width: 72 },
+    ),
+  ]
+
   return (
     <CardDisplay
       header="Email lists"
@@ -332,78 +397,15 @@ export function OrgListsCard(props: OrgListsCardProps) {
         />
         {lists.length === 0 ? null : (
           <>
-            <ScrollTable size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'List'}</TableCell>
-                  <TableCell>{'Membership'}</TableCell>
-                  <TableCell>{'Subscribers'}</TableCell>
-                  <TableCell align="right" />
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {lists.map((list) => (
-                  <TableRow
-                    key={list.$id}
-                    hover
-                    onClick={() => router.push(listHref(list))}
-                    sx={{ cursor: 'pointer' }}
-                  >
-                    <TableCell>
-                      {/*
-                        The row's own handler would fire too and push the same
-                        route twice — one history entry per back press.
-                       */}
-                      <AppLink
-                        href={listHref(list)}
-                        onClick={(event: { stopPropagation: () => void }) =>
-                          event.stopPropagation()
-                        }
-                      >
-                        {list.name}
-                      </AppLink>
-                    </TableCell>
-                    <TableCell>
-                      {list.kind === 'dynamic' ? (
-                        <Chip
-                          size="small"
-                          color="primary"
-                          variant="outlined"
-                          /*
-                            Freshness, not just kind. A dynamic list that has
-                            stopped being swept looks exactly like one whose
-                            population has not changed, so the last evaluation
-                            time is the only thing that tells them apart — and
-                            it is the first thing to look at when a merchant
-                            reports that somebody is missing from an audience.
-                           */
-                          label={
-                            list.lastEvaluatedAt?.toDate
-                              ? `Rule · ${list.lastEvaluatedAt
-                                  .toDate()
-                                  .toLocaleString()}`
-                              : 'Rule · not yet evaluated'
-                          }
-                        />
-                      ) : (
-                        <Chip size="small" variant="outlined" label="Manual" />
-                      )}
-                    </TableCell>
-                    <TableCell>{counts[list.$id] ?? '…'}</TableCell>
-                    <TableCell
-                      align="right"
-                      sx={{ width: 56 }}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <RowActionsMenu
-                        label={String(list.name ?? list.$id)}
-                        items={rowActions(list)}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </ScrollTable>
+            <ListTable
+              aria-label="Email lists"
+              rows={lists}
+              columns={columns}
+              rowHeight={TABLE_ROW_HEIGHT}
+              onOpen={(_id, row) => router.push(listHref(row))}
+              // Paged by the footer below, so the grid must not also slice.
+              hideFooter
+            />
             <ListPagination
               page={page}
               pageSize={pageSize}

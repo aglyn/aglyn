@@ -136,7 +136,7 @@ const mountCard = async () => {
 }
 
 const rowFor = (name: string) =>
-  Array.from(document.querySelectorAll('tbody tr')).find((row) =>
+  Array.from(document.querySelectorAll('[role="row"][data-id]')).find((row) =>
     row.textContent?.includes(name),
   ) as HTMLElement
 
@@ -180,8 +180,8 @@ beforeEach(() => {
 describe('the templates list draws the site’s email templates', () => {
   it('lists the email screens and nothing else in the collection', async () => {
     await mountCard()
-    const names = Array.from(document.querySelectorAll('tbody tr')).map((row) =>
-      row.querySelector('td')?.textContent?.trim(),
+    const names = Array.from(document.querySelectorAll('[role="row"][data-id]')).map((row) =>
+      row.querySelector('[data-field="displayName"]')?.textContent?.trim(),
     )
     expect(names).toEqual(['Promo', 'Welcome'])
     // THE CONTROL for the filter: a card that drew every screen would list
@@ -317,8 +317,7 @@ describe('the template row’s actions are in the shared overflow menu', () => {
 
   it('and neither does clicking the actions column beside it', async () => {
     await mountCard()
-    const cells = rowFor('Welcome').querySelectorAll('td')
-    fireEvent.click(cells[cells.length - 1])
+    fireEvent.click(rowFor('Welcome').querySelector('[data-field="actions"]') as HTMLElement)
     expect(mockPush).not.toHaveBeenCalled()
   })
 })

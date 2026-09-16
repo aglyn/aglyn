@@ -68,8 +68,12 @@ import {
 import { mdiAccountRemoveOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -79,13 +83,10 @@ import {
   Chip,
   FormControlLabel,
   Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   deleteDoc,
@@ -551,6 +552,94 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
     ? preview.optedIn + preview.needAttestation
     : 0
 
+  const columns: GridColDef[] = [
+    {
+      field: 'email',
+      headerName: 'Address',
+      flex: 1,
+      minWidth: 220,
+      valueGetter: (_value, row) => row.email ?? '—',
+    },
+    {
+      field: 'name',
+      headerName: 'Name',
+      flex: 1,
+      minWidth: 160,
+      valueGetter: (_value, row) => row.name ?? '—',
+    },
+    {
+      field: 'addedAt',
+      headerName: 'Joined',
+      width: 120,
+      // Sorted on the instant, drawn as a local date.
+      valueGetter: (_value, row) => row.addedAt?.toDate?.()?.getTime?.() ?? 0,
+      renderCell: ({ row }) =>
+        row.addedAt?.toDate ? row.addedAt.toDate().toLocaleDateString() : '—',
+    },
+    {
+      field: 'via',
+      headerName: 'How',
+      width: 200,
+      valueGetter: (_value, row) => (row.via === 'rule' ? 'Rule' : 'Added'),
+      /*
+        `via` says whether a rule put them here or a person did, which is what
+        decides whether they LEAVE on their own: the materializer reconciles its
+        own rows away and never touches a manual one. `source` is the finer
+        provenance underneath it.
+       */
+      renderCell: ({ row, value }) => (
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+          <Chip size="small" variant="outlined" label={value} />
+          {row.source ? (
+            <Typography variant="caption" color="text.secondary" noWrap>
+              {row.source}
+            </Typography>
+          ) : null}
+        </Stack>
+      ),
+    },
+    {
+      field: 'consent',
+      headerName: 'Consent',
+      width: 190,
+      valueGetter: (_value, row) => consentLabel(row, consentGroup).label,
+      renderCell: ({ row }) => {
+        const consent = consentLabel(row, consentGroup)
+        return (
+          <Chip
+            size="small"
+            variant="outlined"
+            color={consent.color}
+            label={consent.label}
+          />
+        )
+      },
+    },
+    /*
+      A SUBSCRIBER HAS NO PAGE of their own here, so the row opens nothing —
+      but taking somebody off an audience is the one act performed on one, and
+      it belongs in the trailing cluster with every other list's actions rather
+      than as a red text button sitting in the row.
+     */
+    listActionsColumn(
+      (row) => (
+        <ListRowActions
+          label={String(row.email ?? row.$id)}
+          items={[
+            {
+              key: 'remove',
+              label: 'Remove from this list',
+              icon: <MdiIcon path={mdiAccountRemoveOutline.path} size={0.8} />,
+              destructive: true,
+              onClick: () => void handleRemove(row),
+            },
+          ]}
+        />
+      ),
+      { width: 72 },
+    ),
+  ]
+
   return (
     <Stack spacing={2} sx={{ py: 2 }}>
       {/*
@@ -753,91 +842,14 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
         </Typography>
       ) : (
         <>
-          <ScrollTable size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{'Address'}</TableCell>
-                <TableCell>{'Name'}</TableCell>
-                <TableCell>{'Joined'}</TableCell>
-                <TableCell>{'How'}</TableCell>
-                <TableCell>{'Consent'}</TableCell>
-                <TableCell align="right" />
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {members.map((member) => {
-                const consent = consentLabel(member, consentGroup)
-                return (
-                  <TableRow key={member.$id}>
-                    <TableCell>{member.email ?? '—'}</TableCell>
-                    <TableCell>{member.name ?? '—'}</TableCell>
-                    <TableCell>
-                      {member.addedAt?.toDate
-                        ? member.addedAt.toDate().toLocaleDateString()
-                        : '—'}
-                    </TableCell>
-                    <TableCell>
-                      {/*
-                        `via` says whether a rule put them here or a person
-                        did, which is what decides whether they LEAVE on their
-                        own: the materializer reconciles its own rows away and
-                        never touches a manual one. `source` is the finer
-                        provenance underneath it.
-                       */}
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        label={member.via === 'rule' ? 'Rule' : 'Added'}
-                      />
-                      {member.source ? (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ ml: 1 }}
-                        >
-                          {member.source}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        color={consent.color}
-                        label={consent.label}
-                      />
-                    </TableCell>
-                    {/*
-                      A SUBSCRIBER HAS NO PAGE of their own here, so the row
-                      opens nothing — but taking somebody off an audience is
-                      the one act performed on one, and it belongs in the
-                      trailing cluster with every other table's actions rather
-                      than as a red text button sitting in the row.
-                     */}
-                    <TableCell align="right" sx={{ width: 56 }}>
-                      <RowActionsMenu
-                        label={String(member.email ?? member.$id)}
-                        items={[
-                          {
-                            key: 'remove',
-                            label: 'Remove from this list',
-                            icon: (
-                              <MdiIcon
-                                path={mdiAccountRemoveOutline.path}
-                                size={0.8}
-                              />
-                            ),
-                            destructive: true,
-                            onClick: () => void handleRemove(member),
-                          },
-                        ]}
-                      />
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </ScrollTable>
+          <ListTable
+            aria-label={`Members of ${listName}`}
+            rows={members}
+            columns={columns}
+            rowHeight={TABLE_ROW_HEIGHT}
+            // Paged by the footer below, so the grid must not also slice.
+            hideFooter
+          />
           <ListPagination
             page={page}
             pageSize={pageSize}
