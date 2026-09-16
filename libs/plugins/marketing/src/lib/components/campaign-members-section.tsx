@@ -21,9 +21,8 @@ import {
   Figure,
   Section,
 } from '@aglyn/shared-ui-email-campaigns/components/report-figures'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
   buildRoute,
   CAMPAIGN_MEMBERSHIP_FIELD,
@@ -32,15 +31,8 @@ import {
   type FormStats,
   type FormStatsTotals,
 } from '@aglyn/aglyn'
-import {
-  Alert,
-  Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material'
+import { Alert, Stack, Typography } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   documentId,
@@ -49,7 +41,7 @@ import {
   query,
   where,
 } from 'firebase/firestore'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import {
   useConsoleHostRoute,
   useFirestore,
@@ -483,16 +475,24 @@ function statCell(value: number | null | undefined) {
   return value === null || value === undefined ? '—' : value.toLocaleString()
 }
 
+/** The counters a form carries on its own document, in the order they are read. */
+const MEMBER_FIGURES = [
+  ['views', 'Views'],
+  ['starts', 'Started'],
+  ['submissions', 'Submissions'],
+  ['leads', 'Leads'],
+] as const
+
 /**
- * One kind's members, paged on the shared footer.
+ * One kind's members, as a record list in the shared grid.
  *
- * The page is a SLICE of a window this component already holds — the same
- * arrangement the campaign's emails table beside it uses, and for the same
- * reason: the ceiling bounds the read, and the footer lets a reader walk what
- * came back without the card deciding how many rows fit.
+ * The rows are a window this component already holds — the same arrangement
+ * the campaign's emails list beside it uses, and for the same reason: the
+ * ceiling bounds the read, and the grid's footer lets a reader walk what came
+ * back without the card deciding how many rows fit.
  *
  * `figures` adds the counter columns for a kind that carries them on its own
- * document. It is a prop rather than two tables because the row grammar — the
+ * document. It is a prop rather than two lists because the row grammar — the
  * name cell, the reason a member has no link, the footer — is the part that
  * has to stay identical between screens and forms.
  */
@@ -505,9 +505,57 @@ function MemberTable(props: {
   figures?: boolean
 }) {
   const { heading, noun, rows, truncated, settled, figures } = props
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const visible = rows.slice(page * pageSize, page * pageSize + pageSize)
+  const columns = useMemo<GridColDef<MemberRow>[]>(
+    () => [
+      {
+        field: 'name',
+        headerName: 'Name',
+        flex: 1,
+        minWidth: 240,
+        renderCell: ({ row }) => (
+          <Stack sx={{ py: 1, minWidth: 0 }}>
+            {row.href ? (
+              <AppLink href={row.href}>{row.name}</AppLink>
+            ) : (
+              <>
+                <Typography variant="body2">{row.name}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {row.hrefReason}
+                </Typography>
+              </>
+            )}
+            {/*
+              The overlap, on the row that causes it. A reader comparing two
+              campaigns has to be able to see which rows they have in common
+              without opening either.
+             */}
+            {(row.campaigns ?? 1) > 1 ? (
+              <Typography variant="caption" color="text.secondary">
+                {`Also in ${(row.campaigns ?? 1) - 1} other campaign${
+                  (row.campaigns ?? 1) - 1 === 1 ? '' : 's'
+                }`}
+              </Typography>
+            ) : null}
+          </Stack>
+        ),
+      },
+      ...(figures
+        ? MEMBER_FIGURES.map(
+            ([figure, headerName]): GridColDef<MemberRow> => ({
+              field: figure,
+              headerName,
+              type: 'number',
+              align: 'right',
+              headerAlign: 'right',
+              width: 120,
+              valueGetter: (_value, row) => row.totals?.[figure] ?? null,
+              renderCell: ({ row }) => statCell(row.totals?.[figure]),
+            }),
+          )
+        : []),
+    ],
+    [figures],
+  )
   return (
     <Stack spacing={0.5}>
       <Typography variant="overline" color="text.secondary">
@@ -520,80 +568,15 @@ function MemberTable(props: {
         </Alert>
       ) : null}
       {rows.length ? (
-        <ScrollTable size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{'Name'}</TableCell>
-              {figures ? (
-                <>
-                  <TableCell align="right">{'Views'}</TableCell>
-                  <TableCell align="right">{'Started'}</TableCell>
-                  <TableCell align="right">{'Submissions'}</TableCell>
-                  <TableCell align="right">{'Leads'}</TableCell>
-                </>
-              ) : null}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {visible.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell>
-                  <Stack>
-                    {row.href ? (
-                      <AppLink href={row.href}>{row.name}</AppLink>
-                    ) : (
-                      <>
-                        <Typography variant="body2">{row.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {row.hrefReason}
-                        </Typography>
-                      </>
-                    )}
-                    {/*
-                      The overlap, on the row that causes it. A reader
-                      comparing two campaigns has to be able to see which
-                      rows they have in common without opening either.
-                     */}
-                    {(row.campaigns ?? 1) > 1 ? (
-                      <Typography variant="caption" color="text.secondary">
-                        {`Also in ${(row.campaigns ?? 1) - 1} other campaign${
-                          (row.campaigns ?? 1) - 1 === 1 ? '' : 's'
-                        }`}
-                      </Typography>
-                    ) : null}
-                  </Stack>
-                </TableCell>
-                {figures ? (
-                  <>
-                    <TableCell align="right">
-                      {statCell(row.totals?.views)}
-                    </TableCell>
-                    <TableCell align="right">
-                      {statCell(row.totals?.starts)}
-                    </TableCell>
-                    <TableCell align="right">
-                      {statCell(row.totals?.submissions)}
-                    </TableCell>
-                    <TableCell align="right">
-                      {statCell(row.totals?.leads)}
-                    </TableCell>
-                  </>
-                ) : null}
-              </TableRow>
-            ))}
-          </TableBody>
-        </ScrollTable>
-      ) : null}
-      {rows.length ? (
-        <ListPagination
-          page={page}
-          pageSize={pageSize}
-          rowCount={visible.length}
-          // The members this card HOLDS — bounded by the ceiling, which the
-          // notice above owns up to when it bites.
-          count={rows.length}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
+        <ListTable
+          aria-label={heading}
+          rows={rows}
+          columns={columns}
+          getRowId={(row: MemberRow) => row.id}
+          rowHeight={TABLE_ROW_HEIGHT}
+          // A member's name carries why it has no link, and the other
+          // campaigns it is in, beneath it.
+          getRowHeight={() => 'auto'}
         />
       ) : (
         <Typography variant="body2" color="text.secondary">
