@@ -102,3 +102,9 @@ version before it goes.
 - **Send test** delivers a proof to a real address without recording a
   campaign.
 - Scheduling and A/B experiments work exactly as with plain campaigns.
+
+## Start from a brief instead
+
+[Generate an email with AI](./generate-with-ai.md) writes a draft design from
+a description — blocks, copy, and three subject lines to choose between —
+which you then edit here like any other.

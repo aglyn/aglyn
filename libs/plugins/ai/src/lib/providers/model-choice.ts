@@ -111,6 +111,13 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   'job.plan': { inputTokens: 500, outputTokens: 400, cacheReadTokens: 3_400, cacheWriteTokens: 0 },
   'job.layout': { inputTokens: 700, outputTokens: 1_000, cacheReadTokens: 5_400, cacheWriteTokens: 0 },
   'job.template': { inputTokens: 1_200, outputTokens: 700, cacheReadTokens: 6_200, cacheWriteTokens: 0 },
+  // The email step, and the campaign step that shares its generation: the
+  // doctrine, the email instructions, the email palette catalog and the
+  // tool's schema (about 10,300 characters) are the cached prefix, the site
+  // inventory and the brief ride uncached, and the answer is one email's
+  // node map with three subject lines and three preheaders.
+  'job.email': { inputTokens: 600, outputTokens: 1_500, cacheReadTokens: 3_400, cacheWriteTokens: 0 },
+  'job.campaign': { inputTokens: 600, outputTokens: 1_500, cacheReadTokens: 3_400, cacheWriteTokens: 0 },
 }
 
 /** The fewest measured exchanges a median is taken over. */

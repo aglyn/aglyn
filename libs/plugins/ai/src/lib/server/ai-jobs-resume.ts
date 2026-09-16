@@ -99,6 +99,7 @@ export async function POST(
         hostId: existing.hostId ?? null,
         inputs: existing.inputs ?? {},
         org: gate.org,
+        uid: gate.uid,
       })
     } catch (error) {
       await release()

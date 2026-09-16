@@ -44,6 +44,12 @@ export interface AiJobAdmissionContext {
   inputs: Readonly<Record<string, unknown>>
   /** The org document the gate ladder read; a check narrows it to the fields it reads. */
   org: object | null
+  /**
+   * The member whose request spends: the creator at the create door, the
+   * member confirming at the resume door. A kind whose draft another plugin
+   * writes asks that plugin whether this member may create one.
+   */
+  uid?: string | null
 }
 
 export interface AiJobAdmissionRefusal {

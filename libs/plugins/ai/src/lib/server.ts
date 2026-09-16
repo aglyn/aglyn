@@ -25,6 +25,10 @@ import './jobs/ai-job-plan-step'
 // checks before a job of it is created or resumed (AGL-2909).
 import './jobs/ai-job-layout-step'
 import './jobs/ai-job-template-step'
+// Registers the email and campaign steps, whose drafts the email and
+// marketing plugins write on the resource-draft seam (AGL-2912).
+import './jobs/ai-job-email-step'
+import './jobs/ai-job-campaign-step'
 import { ensureFirstPartyAiProviders } from './providers/registry'
 import { aiAssistHandler } from './server/ai-assist'
 import { POST as cancelAiJob } from './server/ai-jobs-cancel'

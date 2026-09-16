@@ -28,7 +28,10 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { campaignProcessScheduledHandler } from './server/campaign-process-scheduled'
 import { listsMaterializeHandler } from './server/lists-materialize'
-import { campaignManageHandler } from './server/campaign-manage'
+import {
+  campaignManageHandler,
+  registerCampaignDraftWriter,
+} from './server/campaign-manage'
 import { campaignSendHandler } from './server/campaign-send'
 import { campaignRecipientsHandler } from './server/campaign-recipients'
 
@@ -124,10 +127,15 @@ export function registerMarketingApi(): void {
   registerPluginApiRoute('experiments/track', trackHandler)
   // Site-page contributions (AGL-418): overlays, automations, experiments.
   registerSitePageEnricher(marketingSitePageEnricher)
+  // The campaign draft writer another plugin reaches through the core's
+  // resource-drafts seam (AGL-2912): the tenant's job beat runs there.
+  registerCampaignDraftWriter()
 }
 
 /** Registers the marketing plugin's console-side API routes (AGL-396). */
 export function registerMarketingConsoleApi(): void {
+  // The same writer, for a job step a console route runs inline (AGL-2912).
+  registerCampaignDraftWriter()
   registerPluginApiRoute('campaigns/send', campaignSendHandler)
   // Taking a campaign or an abandoned draft away, which is the one class of
   // change the send route may not carry: both write to the SEND collection,

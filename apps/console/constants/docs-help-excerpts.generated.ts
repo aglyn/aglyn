@@ -101,6 +101,7 @@ export const DOCS_HELP_EXCERPTS = {
   firstPlugin: 'The full loop — scaffold, develop against a live workspace, verify, publish, install, uninstall.',
   forms: 'Add forms to your site, collect submissions in an inbox, and write them into datasets.',
   generateSection: 'Produce a whole section of components on the canvas from a prompt.',
+  generateWithAi: 'Turn a brief into a draft email design, or a draft campaign and the email it would send. Nothing is sent, and nothing is aimed at anybody until you choose.',
   gettingStarted: 'Sign in, create your first site, and understand what a site contains.',
   glossary: 'What organization, workspace, tenant, host, and site each mean — and which word to use where.',
   googleAnalytics: 'Every event your site sends to your own GA4 property, with the exact parameters each one carries — so you can build a report against it before you have any data.',

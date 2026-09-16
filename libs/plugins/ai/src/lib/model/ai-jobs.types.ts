@@ -188,6 +188,12 @@ export interface AiJobOutput {
    */
   proposal?: Record<string, unknown>
   /**
+   * What the person decides next about this output, in customer-safe words:
+   * a routing the draft could not store, or part of the brief it could not
+   * build. Absent when there is nothing to decide.
+   */
+  note?: string | null
+  /**
    * What a first visit is estimated to transfer, as the doctrine measured
    * the generated document (AGL-2935) — the weight the proposal shows before
    * anything is applied. Absent where the output is not a page's document.

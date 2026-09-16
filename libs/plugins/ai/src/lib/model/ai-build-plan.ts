@@ -69,6 +69,7 @@ export type AiBuildPlanCreateKind =
   | 'form'
   | 'theme-change'
   | 'dataset'
+  | 'email'
 
 export const AI_BUILD_PLAN_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = [
   'component',
@@ -77,6 +78,7 @@ export const AI_BUILD_PLAN_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = [
   'form',
   'theme-change',
   'dataset',
+  'email',
 ]
 
 export interface AiBuildPlanReuse {

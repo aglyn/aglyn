@@ -45,6 +45,8 @@ export const AI_STEP_MODEL_SETTING: Record<AiStepKind, string> = {
   'job.text': 'jobTextModel',
   'job.theme': 'jobThemeModel',
   'job.plan': 'jobPlanModel',
+  'job.email': 'jobEmailModel',
+  'job.campaign': 'jobCampaignModel',
 }
 
 const MODEL_OPTIONS = [
@@ -89,6 +91,8 @@ export const AI_CONFIG_SCHEMA: PluginConfigSchema = {
     modelField('job.text', 'Generation job (text) model', 'The text step of a generation job.'),
     modelField('job.theme', 'Generation job (theme) model', 'Proposing a change to a site’s theme.'),
     modelField('job.plan', 'Generation job (plan) model', 'The plan step of a generation job.'),
+    modelField('job.email', 'Generation job (email) model', 'Generating an email design from a confirmed plan.'),
+    modelField('job.campaign', 'Generation job (campaign) model', 'Drafting a campaign and its email from a brief.'),
   ],
   defaults: {
     provider: AI_SETTING_PLATFORM,

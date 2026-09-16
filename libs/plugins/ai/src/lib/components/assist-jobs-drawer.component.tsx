@@ -94,7 +94,9 @@ const BESIGNER_SEGMENT: Partial<Record<AiJobOutput['resource'], string>> = {
   reusableComponent: 'components',
   layout: 'layouts',
   template: 'templates',
-  emailScreen: 'emails',
+  // An email design is a screen: it opens in the screen besigner, as the
+  // Emails page's own Edit design does.
+  emailScreen: 'screens',
 }
 
 /**
@@ -125,6 +127,10 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
   }
   if (output.resource === 'theme') {
     return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
+  }
+  if (output.resource === 'campaign') {
+    // A campaign's page belongs to the Marketing console, under the site.
+    return `${buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'marketing' })}/campaigns/${output.id}`
   }
   return null
 }
@@ -452,6 +458,11 @@ export function AssistJobsDrawer({
                       {output.load ? (
                         <Typography variant="caption" color="text.secondary" component="div">
                           About {formatBytes(output.load.totalBytes)} on a first visit
+                        </Typography>
+                      ) : null}
+                      {output.note ? (
+                        <Typography variant="caption" color="text.secondary" component="div">
+                          {output.note}
                         </Typography>
                       ) : null}
                     </Box>

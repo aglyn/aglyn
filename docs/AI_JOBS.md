@@ -38,7 +38,7 @@ rules deny every client write). Fields:
 
 | field | meaning |
 | --- | --- |
-| `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout` and `template` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
+| `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout`, `template`, `email` and `campaign` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
 | `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` and `needs_review` as the two parked states (below). |
 | `brief`, `inputs` | The customer's brief verbatim and the kind-specific scalars a runner reads. |
 | `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`. |
@@ -286,6 +286,78 @@ the theme editor exposes, and nothing the editor does not.
   Save stores it the way every edit is stored: an installed theme's override
   patch, the changed values only on a default theme, or the site's own theme
   in place.
+
+## The email and campaign kinds
+
+`email` and `campaign` (AGL-2912) are the first kinds whose drafts ANOTHER
+plugin writes. `email` is a planned kind — its plan is confirmed first, then
+its generation step builds one design; `campaign` is unplanned, because there
+is one thing to build and a plan over it would be a plan of one.
+
+- **Runners.** `src/lib/jobs/ai-job-email-step.ts` and
+  `ai-job-campaign-step.ts`, registered by the plugin's server surface. Both
+  generate through `generateAiEmail`, which calls
+  `runValidatedGeneration('email', …)` with the doctrine's email tree tool
+  widened by `subjects` and `preheaders`, no extended thinking, and a
+  6,000-token ceiling so the step and its one re-ask fit the beat's budget.
+  Only the step kind differs (`job.email`, `job.campaign`), so the routing
+  table can price and route them apart.
+- **The door's own checks** ride `extend`: every block sits inside an
+  `emailSection`; every `emailButton` links somewhere; the only merge tokens
+  are `{{contact.firstName}}`, `{{contact.name}}` and `{{contact.email}}`, and
+  only in text; exactly as many `emailProduct` blocks as the job binds
+  products; three different subject lines and three preheaders, within their
+  lengths and carrying no merge token. When those hold, the design is rendered
+  through the owning plugin's `check` and a render problem is re-asked as a
+  violation, so a design that does not render is never stored.
+- **Drafts through a seam, not an import.** A plugin never imports another's
+  internals, so the owner registers a writer for its resource on
+  `libs/aglyn/src/lib/plugin-manager/plugin-resource-drafts.ts` — the email
+  plugin for `emailDesign` (`server-email-drafts.ts`), the marketing plugin
+  for `campaign` (`server/campaign-manage.ts`) — and the step asks for one by
+  resource name. Every rule stays the owner's: `refusal` (role and room),
+  `check` (well-formed, pure), `read` (the draft under an id) and `write`.
+  Both writes are keyed by the job's id, so a run cut off between them finds
+  what it wrote: two drafts are reported, a design alone is drafted into its
+  campaign from the copy the design stores, and neither spends.
+- **Admission.** `src/lib/jobs/ai-job-plugin-drafts.ts` is the caller's half of
+  that contract: a site of the job's own org, the owning plugin on for the
+  site and past its release flag with its writer registered, the kind's own
+  check, then each owner's `refusal` for the member the drafts are for.
+- **Where campaign email begins.** A campaign job also needs the entitlement
+  the composer and the send route read,
+  `checkQuota(org, 'emailSendsPerMonth', 0).allowed` — asked in the admission
+  and again in the step, where a refusal stops the job `needs_review` with
+  `reason: 'limit'`. The refusal names no plan; the billing page does. Email
+  designs are generated on any plan with AI generation.
+- **Nothing is sent.** The campaign is written `draft` with only the fields a
+  draft holds — the design it sends, its subject, its preheader and the
+  alternatives — and no audience, schedule, sender or experiment. The
+  scheduled processor queries `status == 'scheduled'`, which a draft never is,
+  and no send function is reachable from either step; `ai-job-campaign-step.spec.ts`
+  holds both halves.
+- **What the model is NOT shown** (`src/lib/jobs/ai-email-bindings.ts`). The
+  published disclosure covers the brief, the site summary and the content
+  being worked on — not lists, contacts, CRM records, product records or
+  engagement statistics. So each of those runs in code and reaches the model
+  at most as a count:
+  - **Products** are bound by id from `inputs.productIds`, else from products
+    the brief names verbatim. The prompt carries how many cards to place; the
+    ids are set on the `emailProduct` nodes after the answer.
+  - **The list** a campaign is for is suggested when the brief names one of
+    the org's lists, and is set on nothing. It reaches the person as the
+    output's `note`.
+  - **The send time** is `campaignSendTime` in `@aglyn/shared-ui-email-campaigns`
+    over that list's past sends on this site, and is said only in the note.
+- **Outputs.** An `emailScreen` output for the design (which opens in the
+  screen besigner, as the Emails page's Edit design does) and, for a campaign,
+  a `campaign` output carrying the note. A campaign that could not be drafted
+  reports NO outputs, because the design alone is not what was asked for.
+- **Where the subject and preheader alternatives live**, for the experiments
+  kind to read later: on the screen document as `emailSubjectVariants` and
+  `emailPreheaderVariants`, and on the drafted campaign email as
+  `subjectVariants` and `preheaderVariants`. The first of each is also the
+  stored subject and preheader.
 
 ## The beat
 

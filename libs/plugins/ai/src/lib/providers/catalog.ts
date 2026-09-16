@@ -227,6 +227,8 @@ export type AiStepKind =
   | 'job.text'
   | 'job.theme'
   | 'job.plan'
+  | 'job.email'
+  | 'job.campaign'
 
 /** The tier each step kind is served from when no setting overrides it. */
 export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
@@ -244,6 +246,11 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   // judgment is in the color choices, which the fast tier makes worse.
   'job.theme': 'balanced',
   'job.plan': 'balanced',
+  // An email is one tree held to every building rule, with subject lines
+  // whose judgment is the point of asking; the fast tier re-asks more than it
+  // saves. A campaign is the same email, drafted into a campaign.
+  'job.email': 'balanced',
+  'job.campaign': 'balanced',
 }
 
 /** The first catalog model of a tier on a provider, or the provider's first model. */
