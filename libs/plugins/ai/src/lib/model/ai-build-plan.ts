@@ -71,6 +71,26 @@ export type AiBuildPlanCreateKind =
   | 'dataset'
   | 'email'
 
+/**
+ * What each creation is called in a sentence, and where a member makes one.
+ *
+ * Total over the union deliberately: a refusal that cannot name a creation is
+ * a refusal a member cannot act on, so widening `AiBuildPlanCreateKind`
+ * without saying where the new thing is made does not compile.
+ */
+export const AI_BUILD_PLAN_CREATION_NOUNS: Record<
+  AiBuildPlanCreateKind,
+  { noun: string; where: string }
+> = {
+  component: { noun: 'component', where: 'on the Components page' },
+  form: { noun: 'form', where: 'on the Forms page' },
+  layout: { noun: 'layout', where: 'on the Layouts page' },
+  template: { noun: 'template', where: 'in the Templates library' },
+  'theme-change': { noun: 'theme change', where: 'in the Theme section' },
+  dataset: { noun: 'dataset', where: 'on the Datasets page' },
+  email: { noun: 'email design', where: 'in Emails → Templates' },
+}
+
 export const AI_BUILD_PLAN_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = [
   'component',
   'layout',

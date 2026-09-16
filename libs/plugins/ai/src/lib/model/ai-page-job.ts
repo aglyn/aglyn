@@ -16,6 +16,7 @@
  */
 
 import {
+  AI_BUILD_PLAN_CREATION_NOUNS,
   aiPlanCreateFor,
   isAiPlanNewRef,
   type AiBuildPlan,
@@ -123,17 +124,6 @@ export function parseAiPageJobInputs(
     : `pageType must be one of ${AI_PAGE_TYPES.map((type) => type.id).join(', ')}`
 }
 
-/** What each creation is called in a sentence, and where a member makes one. */
-const CREATION_NOUNS: Record<AiBuildPlanCreateKind, { noun: string; where: string }> = {
-  component: { noun: 'component', where: 'on the Components page' },
-  form: { noun: 'form', where: 'on the Forms page' },
-  layout: { noun: 'layout', where: 'on the Layouts page' },
-  template: { noun: 'template', where: 'in the Templates library' },
-  'theme-change': { noun: 'theme change', where: 'in the Theme section' },
-  dataset: { noun: 'dataset', where: 'on the Datasets page' },
-  email: { noun: 'email design', where: 'in Emails → Templates' },
-}
-
 /** A creation a plan names, as the refusal lists it. */
 export interface AiPagePrerequisite {
   kind: AiBuildPlanCreateKind
@@ -185,7 +175,7 @@ export function aiPagePlanRefusal(plan: AiBuildPlan): string | null {
   const prerequisites = aiPagePlanPrerequisites(plan)
   if (!prerequisites.length) return null
   const parts = prerequisites.map(
-    ({ kind, name }) => `the ${CREATION_NOUNS[kind].noun} “${name}” ${CREATION_NOUNS[kind].where}`,
+    ({ kind, name }) => `the ${AI_BUILD_PLAN_CREATION_NOUNS[kind].noun} “${name}” ${AI_BUILD_PLAN_CREATION_NOUNS[kind].where}`,
   )
   const listed =
     parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`

@@ -16,6 +16,7 @@
  */
 
 import {
+  AI_BUILD_PLAN_CREATION_NOUNS,
   aiPlanCreateFor,
   isAiPlanNewRef,
   type AiBuildPlan,
@@ -159,19 +160,6 @@ export function parseAiSiteJobInputs(
   }
 }
 
-/** What each creation is called in a sentence, and where a member makes one. */
-const CREATION_NOUNS: Record<
-  AiBuildPlanCreateKind,
-  { noun: string; where: string }
-> = {
-  component: { noun: 'component', where: 'on the Components page' },
-  form: { noun: 'form', where: 'on the Forms page' },
-  layout: { noun: 'layout', where: 'on the Layouts page' },
-  template: { noun: 'template', where: 'in the Templates library' },
-  'theme-change': { noun: 'theme change', where: 'in the Theme section' },
-  dataset: { noun: 'dataset', where: 'on the Datasets page' },
-}
-
 /**
  * What a scaffold builds for itself: the layout its pages render inside, the
  * form they place, and the palette suggestion a member applies in the Theme
@@ -248,7 +236,7 @@ export function aiSitePlanRefusal(plan: AiBuildPlan): string | null {
   if (!prerequisites.length) return null
   const parts = prerequisites.map(
     ({ kind, name }) =>
-      `the ${CREATION_NOUNS[kind].noun} “${name}” ${CREATION_NOUNS[kind].where}`,
+      `the ${AI_BUILD_PLAN_CREATION_NOUNS[kind].noun} “${name}” ${AI_BUILD_PLAN_CREATION_NOUNS[kind].where}`,
   )
   const listed =
     parts.length === 1
