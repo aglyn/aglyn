@@ -633,10 +633,25 @@ export const CONSOLE_WIDGET_SLOTS = {
    * published site before that.
    */
   hostSeo: 'hostSeo',
+  /**
+   * A site's Screens page, beside its Templates and Create New Screen actions
+   * (AGL-2907): another way to start a screen. Props:
+   * {@link ConsoleHostScreensZoneProps}. A widget here runs its own flow and
+   * writes nothing through the page; the screens list shows what it makes once
+   * it exists.
+   */
+  hostScreens: 'hostScreens',
 } as const
 
 export type ConsoleWidgetSlot =
   (typeof CONSOLE_WIDGET_SLOTS)[keyof typeof CONSOLE_WIDGET_SLOTS]
+
+/** What the `hostScreens` zone hands each widget (AGL-2907). */
+export interface ConsoleHostScreensZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+}
 
 /** What the `hostTheme` zone hands each widget (AGL-2938). */
 export interface ConsoleHostThemeZoneProps {

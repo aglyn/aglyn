@@ -263,6 +263,8 @@ describe('writeAiDraft — the create route’s document', () => {
     }
     expect([...AI_DRAFT_FIELDS.layout]).toEqual(fieldsOf('layout'))
     expect([...AI_DRAFT_FIELDS.template]).toEqual(fieldsOf('template'))
+    // A page job's screen (AGL-2907); `ai-job-drafts-screen.spec.ts` holds the rest of its band.
+    expect([...AI_DRAFT_FIELDS.screen]).toEqual(fieldsOf('screen'))
 
     const versions = readFileSync(join(REPO_ROOT, 'apps/console/app/api/hosts/versions/route.ts'), 'utf8')
       .replace(/\/\/.*$/gm, '')

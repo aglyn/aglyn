@@ -221,6 +221,9 @@ import {
   AI_JOB_STEP_MAX_PASSES,
   AI_JOB_STEP_RESERVE_CREDITS,
   aiJobRefusalText,
+  AI_JOB_SWEEP_MAX_JOBS,
+  aiJobNextStepMinimumMs,
+  aiJobStepMinimumMs,
   aiJobStepNames,
   aiJobStepRunnerFor,
   aiJobStepSpentNothing,
@@ -1387,5 +1390,125 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
     const job = await newTextJob()
     expect((await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, NOW)).changed).toBe(false)
     expect((await getAiJob(firestore, ORG, job.$id))?.status).toBe('queued')
+  })
+})
+
+describe('a step that says how long it needs (AGL-2907)', () => {
+  const timedRunner = jest.fn()
+  // A kind no other test in this file creates, so its minimum changes no other path.
+  beforeAll(() => registerAiJobStep('insight', (context) => timedRunner(context), { minimumMs: 20_000 }))
+  afterAll(() => registerAiJobStep('insight', (context) => timedRunner(context)))
+
+  const newTimedJob = () =>
+    createAiJob(
+      firestore,
+      { orgId: ORG, hostId: 'host-1', kind: 'insight', brief: 'What changed on the site this month.', createdBy: 'uid-1' },
+      NOW,
+    )
+  const jobOf = async (jobId: string) => (await getAiJob(firestore, ORG, jobId)) as never
+
+  it('records the least time a kind’s own step needs, never for the plan step, and clears it on re-registration', async () => {
+    expect(aiJobStepMinimumMs('insight', 'generate')).toBe(20_000)
+    expect(aiJobStepMinimumMs('insight', AI_JOB_PLAN_STEP)).toBe(0)
+    expect(aiJobStepMinimumMs('text', 'draft')).toBe(0)
+    expect(aiJobNextStepMinimumMs(await newTimedJob())).toBe(20_000)
+    expect(aiJobNextStepMinimumMs(await newTextJob())).toBe(0)
+    registerAiJobStep('insight', (context) => timedRunner(context))
+    expect(aiJobStepMinimumMs('insight', 'generate')).toBe(0)
+    registerAiJobStep('insight', (context) => timedRunner(context), { minimumMs: 20_000 })
+  })
+
+  it('leaves a step with less time left than it needs untouched, so it keeps its place for the next beat', async () => {
+    const untimed = await newTextJob()
+    const timed = await newTimedJob()
+    let clock = NOW.getTime()
+    const ran: string[] = []
+    const result = await sweepAiJobs({
+      firestore,
+      owner: 'beat',
+      now: () => clock,
+      budgetMs: 45_000,
+      listDue: async () => [
+        { orgId: ORG, jobId: untimed.$id },
+        { orgId: ORG, jobId: timed.$id },
+      ],
+      runStep: async (_orgId, jobId) => {
+        ran.push(jobId)
+        clock += 30_000
+        return { outcome: 'done', job: await jobOf(jobId) }
+      },
+    })
+    // 15 s are left when the timed step's turn comes, and it needs 20 s.
+    expect(ran).toEqual([untimed.$id])
+    expect(result).toEqual({ due: 2, ran: 1, skipped: 0, remaining: 1, budgetExhausted: false })
+    expect(await getAiJob(firestore, ORG, timed.$id)).toMatchObject({ status: 'queued', updatedAt: NOW })
+  })
+
+  it('runs a timed step again once every due job has had its turn, while the time it needs is left', async () => {
+    const timed = await newTimedJob()
+    const untimed = await newTextJob()
+    let clock = NOW.getTime()
+    let passes = 0
+    const ran: string[] = []
+    const result = await sweepAiJobs({
+      firestore,
+      owner: 'beat',
+      now: () => clock,
+      budgetMs: 45_000,
+      listDue: async () => [
+        { orgId: ORG, jobId: timed.$id },
+        { orgId: ORG, jobId: untimed.$id },
+      ],
+      runStep: async (_orgId, jobId) => {
+        ran.push(jobId)
+        clock += 5_000
+        const job = (await jobOf(jobId)) as unknown as Record<string, unknown>
+        if (jobId === timed.$id && ++passes >= 3) {
+          return { outcome: 'done', job: { ...job, status: 'done' } as never }
+        }
+        return { outcome: 'done', job: job as never }
+      },
+    })
+    // Its first pass, the other job's turn, then its passes until it is done.
+    // A step that says nothing about its time is never run again here.
+    expect(ran).toEqual([timed.$id, untimed.$id, timed.$id, timed.$id])
+    expect(result).toEqual({ due: 2, ran: 4, skipped: 0, remaining: 0, budgetExhausted: false })
+  })
+
+  it('stops running it again when less time is left than it needs, and after the sweep’s candidate count', async () => {
+    const timed = await newTimedJob()
+    let clock = NOW.getTime()
+    let runs = 0
+    const spaced = await sweepAiJobs({
+      firestore,
+      owner: 'beat',
+      now: () => clock,
+      budgetMs: 45_000,
+      listDue: async () => [{ orgId: ORG, jobId: timed.$id }],
+      runStep: async (_orgId, jobId) => {
+        runs += 1
+        clock += 15_000
+        return { outcome: 'done', job: await jobOf(jobId) }
+      },
+    })
+    // 15 s, then 30 s: 15 s left is less than the 20 s it needs.
+    expect(runs).toBe(2)
+    expect(spaced).toMatchObject({ ran: 2, remaining: 0 })
+
+    runs = 0
+    const frozen = await sweepAiJobs({
+      firestore,
+      owner: 'beat',
+      now: () => NOW.getTime(),
+      budgetMs: 45_000,
+      listDue: async () => [{ orgId: ORG, jobId: timed.$id }],
+      runStep: async (_orgId, jobId) => {
+        runs += 1
+        return { outcome: 'done', job: await jobOf(jobId) }
+      },
+    })
+    // A clock that never moves is still bounded.
+    expect(runs).toBe(1 + AI_JOB_SWEEP_MAX_JOBS)
+    expect(frozen.ran).toBe(1 + AI_JOB_SWEEP_MAX_JOBS)
   })
 })

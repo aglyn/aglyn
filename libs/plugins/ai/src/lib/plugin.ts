@@ -41,6 +41,7 @@ import StaffOrgAiCard from './components/staff-org-ai-card.component'
 import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.component'
 import AiSeoAuditCard from './components/ai-seo-audit-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
+import AiDescribePageButton from './components/ai-describe-page.component'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
 
@@ -214,6 +215,17 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiSeoAuditCard,
+      },
+      // A page from a brief (AGL-2907): "Describe it" beside Templates and
+      // Create New Screen. Gated as the other generative widgets are, and it
+      // asks the jobs route about the release flag before it shows anything.
+      {
+        slot: 'hostScreens',
+        widgetId: 'ai-describe-page',
+        title: 'Describe a page',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribePageButton,
       },
     ],
   })

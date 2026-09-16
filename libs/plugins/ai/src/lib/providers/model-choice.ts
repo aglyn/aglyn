@@ -111,6 +111,13 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   'job.plan': { inputTokens: 500, outputTokens: 400, cacheReadTokens: 3_400, cacheWriteTokens: 0 },
   'job.layout': { inputTokens: 700, outputTokens: 1_000, cacheReadTokens: 5_400, cacheWriteTokens: 0 },
   'job.template': { inputTokens: 1_200, outputTokens: 700, cacheReadTokens: 6_200, cacheWriteTokens: 0 },
+  // One page section's exchange (AGL-2907), from the modules' own text: the
+  // doctrine (6,281 characters), the page instructions (1,524), the screen
+  // palette catalog (8,353) and the section tool (484) are the cached prefix;
+  // the site inventory (711 on the median golden site), the brief, the plan
+  // and the section line ride uncached; and a golden section answer is 901
+  // characters at the median, asked for with no thinking.
+  'job.page': { inputTokens: 600, outputTokens: 300, cacheReadTokens: 4_200, cacheWriteTokens: 0 },
   // The SEO step's listing exchange, which a page's or a product's listing is
   // exactly one of: the acceptable-use block, the listing rules and the tool's
   // schema (about 3,600 characters) are the cached prefix; the page text,

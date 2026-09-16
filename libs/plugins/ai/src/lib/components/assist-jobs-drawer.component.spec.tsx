@@ -152,6 +152,27 @@ describe('the gate', () => {
   })
 })
 
+/**
+ * A page is described FOR a site (AGL-2907), so the entry point is here only
+ * while the console page the panel is docked to names one — and opening the
+ * brief dialog still asks the route for nothing until a brief is sent.
+ */
+describe('describing a page', () => {
+  it('offers it only on a site’s own routes', () => {
+    expect(screen.queryByRole('button', { name: 'Describe a page' })).toBeNull()
+    renderDrawer({ hostId: 'host-1' })
+    expect(screen.getByRole('button', { name: 'Describe a page' })).toBeTruthy()
+  })
+
+  it('opens the brief dialog, which sends nothing of its own until a brief is written', () => {
+    renderDrawer({ hostId: 'host-1' })
+    fireEvent.click(screen.getByRole('button', { name: 'Describe a page' }))
+    expect(screen.getByLabelText('What is the page for?')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Plan the page' }).hasAttribute('disabled')).toBe(true)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+})
+
 describe('the list', () => {
   it('loads the org’s jobs on expand, with steps, the copy of a text output and an open-draft link', async () => {
     mockFetch.mockImplementation(async (url: string) => {

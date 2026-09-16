@@ -22,6 +22,7 @@ import { randomUUID } from 'crypto'
 import { aiJobAdmissionRefusal } from '../jobs/ai-job-admission'
 import {
   AI_JOB_INLINE_BUDGET_MS,
+  aiJobNextStepMinimumMs,
   aiJobSummary,
   getAiJob,
   resumeAiJob,
@@ -99,6 +100,8 @@ export async function POST(
         hostId: existing.hostId ?? null,
         inputs: existing.inputs ?? {},
         org: gate.org,
+        // The plan being confirmed, for a kind that builds only some plans.
+        plan: existing.plan ?? null,
       })
     } catch (error) {
       await release()
@@ -141,6 +144,14 @@ export async function POST(
     },
   })
   if (job.status !== 'queued') {
+    await release()
+    return Response.json({ job: aiJobSummary(job, now) }, { status: 200 })
+  }
+  // A step that needs more time than this request has (AGL-2907) is left
+  // queued for the beat, which starts it with a budget of its own: a provider
+  // call this request's timeout cut off would be billed upstream and metered
+  // nowhere.
+  if (aiJobNextStepMinimumMs(job) > AI_JOB_INLINE_BUDGET_MS) {
     await release()
     return Response.json({ job: aiJobSummary(job, now) }, { status: 200 })
   }

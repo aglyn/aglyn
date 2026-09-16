@@ -201,11 +201,49 @@ export const AI_PLANNED_JOB_KINDS: readonly AiJobKind[] = [
 ]
 
 const stepRunners = new Map<AiJobKind, AiJobStepRunner>()
+const stepMinimums = new Map<AiJobKind, number>()
 let planStepRunner: AiJobStepRunner | null = null
 
+export interface AiJobStepRegistration {
+  /**
+   * The least time, in milliseconds, one run of the kind's step needs before
+   * it starts (AGL-2907): its generation's worst case at the rates
+   * `ai-job-budget.ts` assumes, with the step's own reads and writes. The
+   * beat leaves the step queued rather than start it with less time left, and
+   * an inline door leaves it for the beat, because a provider call the
+   * caller's budget cuts off is still generated and billed upstream while the
+   * meter records nothing. Absent, the step starts whenever it is claimed.
+   */
+  minimumMs?: number
+}
+
 /** Idempotent per kind; last registration wins. */
-export function registerAiJobStep(kind: AiJobKind, runner: AiJobStepRunner): void {
+export function registerAiJobStep(
+  kind: AiJobKind,
+  runner: AiJobStepRunner,
+  registration: AiJobStepRegistration = {},
+): void {
   stepRunners.set(kind, runner)
+  if (registration.minimumMs && registration.minimumMs > 0) {
+    stepMinimums.set(kind, registration.minimumMs)
+  } else {
+    stepMinimums.delete(kind)
+  }
+}
+
+/**
+ * The least time a step needs before it starts: the kind's registered
+ * minimum for its own step, and none for the plan step, which a door runs
+ * inline before any kind's generation.
+ */
+export function aiJobStepMinimumMs(kind: AiJobKind, stepName: string): number {
+  return stepName === AI_JOB_PLAN_STEP ? 0 : (stepMinimums.get(kind) ?? 0)
+}
+
+/** The least time the job's next step needs; 0 when no step is left to run. */
+export function aiJobNextStepMinimumMs(job: AiJob): number {
+  const index = nextStepIndex(job)
+  return index === -1 ? 0 : aiJobStepMinimumMs(job.kind, job.steps[index].name)
 }
 
 export function aiJobStepRunnerFor(kind: AiJobKind): AiJobStepRunner | null {
@@ -1423,22 +1461,24 @@ export async function sweepAiJobs(
     remaining: 0,
     budgetExhausted: false,
   }
-  for (let index = 0; index < due.length; index += 1) {
-    const elapsed = now() - startedAt
-    if (index > 0 && elapsed >= budgetMs) {
-      result.budgetExhausted = true
-      result.remaining = due.length - index
-      break
-    }
-    const { orgId, jobId } = due[index]
-    const left = Math.max(1_000, budgetMs - elapsed)
+  // Jobs a run left with more of a timed step to do, in the order they ran.
+  const again: DueAiJob[] = []
+  const attempt = async (candidate: DueAiJob, left: number, first: boolean): Promise<void> => {
+    const { orgId, jobId } = candidate
     try {
-      const parked = await getAiJob(options.firestore, orgId, jobId)
-      if (parked?.status === 'needs_input') {
-        await transition(options.firestore, orgId, jobId, (current) =>
-          current.status === 'needs_input'
-            ? { status: 'queued', updatedAt: new Date(now()) }
-            : null,
+      const current = await getAiJob(options.firestore, orgId, jobId)
+      // A step that needs more time than is left is not started (AGL-2907): a
+      // provider call the abort cuts off is billed upstream and metered
+      // nowhere. The job is left as it is, so it keeps its place at the front
+      // of the next beat's queue.
+      const minimumMs = current ? aiJobNextStepMinimumMs(current) : 0
+      if (minimumMs > left) {
+        if (first) result.remaining += 1
+        return
+      }
+      if (current?.status === 'needs_input') {
+        await transition(options.firestore, orgId, jobId, (job) =>
+          job.status === 'needs_input' ? { status: 'queued', updatedAt: new Date(now()) } : null,
         )
       }
       const run = await runStep(orgId, jobId, {
@@ -1446,13 +1486,47 @@ export async function sweepAiJobs(
         now: new Date(now()),
         signal: AbortSignal.timeout(left),
       })
-      if (run.outcome === 'not-claimable') result.skipped += 1
-      else result.ran += 1
+      if (run.outcome === 'not-claimable') {
+        if (first) result.skipped += 1
+        return
+      }
+      result.ran += 1
+      // Only a step that says how long it needs is run again in this sweep:
+      // one that does not could start with too little time left.
+      if (
+        run.outcome === 'done' &&
+        run.job.status === 'queued' &&
+        aiJobNextStepMinimumMs(run.job) > 0
+      ) {
+        again.push(candidate)
+      }
     } catch (error) {
       // One job's fault is isolated, as the runner isolates one job's.
       console.error('ai job sweep step failed', { orgId, jobId, error })
-      result.skipped += 1
+      if (first) result.skipped += 1
     }
+  }
+
+  for (let index = 0; index < due.length; index += 1) {
+    const elapsed = now() - startedAt
+    if (index > 0 && elapsed >= budgetMs) {
+      result.budgetExhausted = true
+      result.remaining += due.length - index
+      return result
+    }
+    await attempt(due[index], Math.max(1_000, budgetMs - elapsed), true)
+  }
+  // Once every due job has had its turn, a job whose timed step has more to
+  // do runs again while the time it needs is left (AGL-2907): a page built a
+  // section a pass otherwise waits a beat between sections. Bounded by the
+  // budget, and by the sweep's candidate count so no clock is trusted alone.
+  for (let round = 0; again.length && round < AI_JOB_SWEEP_MAX_JOBS; round += 1) {
+    const elapsed = now() - startedAt
+    if (elapsed >= budgetMs) {
+      result.budgetExhausted = true
+      break
+    }
+    await attempt(again.shift() as DueAiJob, budgetMs - elapsed, false)
   }
   return result
 }

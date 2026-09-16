@@ -25,6 +25,10 @@ import './jobs/ai-job-plan-step'
 // checks before a job of it is created or resumed (AGL-2909).
 import './jobs/ai-job-layout-step'
 import './jobs/ai-job-template-step'
+// Registers the page generation step with the least time one pass of it
+// needs, and what a page job checks when it is created or its plan is
+// confirmed (AGL-2907).
+import './jobs/ai-job-page-step'
 import { ensureFirstPartyAiProviders } from './providers/registry'
 import { aiAssistHandler } from './server/ai-assist'
 import { POST as cancelAiJob } from './server/ai-jobs-cancel'

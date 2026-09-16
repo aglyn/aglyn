@@ -586,6 +586,24 @@ describe('POST /api/ai/jobs — the green path', () => {
       registerAiJobAdmission('component', null)
     }
   })
+
+  it('leaves a first step that needs more time than the request has for the beat, handing the message back (AGL-2907)', async () => {
+    const runner = jest.fn()
+    // An unplanned kind no other test here creates; ten minutes is longer than any request.
+    registerAiJobStep('crm', runner, { minimumMs: 10 * 60_000 })
+    try {
+      const response = await createJob(post({ ...VALID, kind: 'crm' }))
+      expect(response.status).toBe(200)
+      const { job } = await response.json()
+      expect(job).toMatchObject({ kind: 'crm', status: 'queued' })
+      expect(job.steps).toEqual([expect.objectContaining({ name: 'generate', status: 'pending' })])
+      expect(runner).not.toHaveBeenCalled()
+      expect(mockRunAiRequest).not.toHaveBeenCalled()
+      expect(mockDocs.get(`orgs/${ORG}/assistUsage/${assistUsageMonth()}`)?.['messages']).toBe(0)
+    } finally {
+      registerAiJobStep('crm', runner)
+    }
+  })
 })
 
 describe('parseCreateAiJobBody', () => {
@@ -956,6 +974,32 @@ describe('POST /api/ai/jobs/[jobId]/resume (AGL-2935)', () => {
       expect(siteRunner).toHaveBeenCalledTimes(1)
     } finally {
       registerAiJobAdmission('site', null)
+    }
+  })
+
+  it('hands the admission the plan being confirmed, and leaves a step that needs more time than the request has for the beat (AGL-2907)', async () => {
+    const job = await proposed()
+    const admission = jest.fn().mockResolvedValue(null)
+    registerAiJobAdmission('site', admission)
+    // Ten minutes is longer than any request's budget.
+    registerAiJobStep('site', (context) => siteRunner(context), { minimumMs: 10 * 60_000 })
+    try {
+      const response = await resume(job.id)
+      expect(response.status).toBe(200)
+      expect(admission).toHaveBeenCalledWith(
+        expect.objectContaining({ plan: expect.objectContaining({ status: 'proposed', screens: [] }) }),
+      )
+      expect((await response.json()).job).toMatchObject({
+        status: 'queued',
+        plan: { status: 'confirmed', confirmedBy: 'uid-1' },
+        review: null,
+      })
+      expect(siteRunner).not.toHaveBeenCalled()
+      // The message this request reserved went back: only the plan's exchange counts.
+      expect(messages()).toBe(1)
+    } finally {
+      registerAiJobAdmission('site', null)
+      registerAiJobStep('site', (context) => siteRunner(context))
     }
   })
 })

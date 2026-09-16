@@ -100,6 +100,7 @@ export const DOCS_HELP_EXCERPTS = {
   featureFlags: 'Release-gate console features with Firebase Remote Config — staff always see everything, customers see what\'s launched.',
   firstPlugin: 'The full loop — scaffold, develop against a live workspace, verify, publish, install, uninstall.',
   forms: 'Add forms to your site, collect submissions in an inbox, and write them into datasets.',
+  generateAPage: 'Describe a page and an AI build job plans it, then builds it section by section as an unpublished draft from your site\'s theme, layout, components and forms.',
   generateSection: 'Produce a whole section of components on the canvas from a prompt.',
   gettingStarted: 'Sign in, create your first site, and understand what a site contains.',
   glossary: 'What organization, workspace, tenant, host, and site each mean — and which word to use where.',

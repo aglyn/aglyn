@@ -109,6 +109,7 @@ import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
 } from '../../../../../../components/templates/save-as-template-dialog.component'
 import TemplateGalleryDialog from '../../../../../../components/templates/template-gallery-dialog.component'
+import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.component'
 import {
   compareScreenSiblings,
   ScreensHierarchyTableComponent,
@@ -1001,6 +1002,12 @@ function Screens(props) {
               noun="screen"
             />
             <Stack direction="row" spacing={1}>
+              {/* Other ways to start a screen, from plugins (AGL-2907). */}
+              <PluginWidgetSlot
+                slot="hostScreens"
+                hostId={hostId}
+                orgId={org?.$id}
+              />
               <Button
                 size="small"
                 variant="outlined"
