@@ -66,7 +66,7 @@ import {
   type AiGenerationSpend,
   type AiValidatedGeneration,
 } from '../runtime/ai-doctrine'
-import { generateSeoFields } from '../runtime/seo-fields'
+import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fields'
 import {
   AI_SEO_PAGE_TEXT_MAX_CHARS,
   aiSeoPageFacts,
@@ -85,6 +85,11 @@ import {
   type AiSeoBatchAnswer,
   type AiSeoBatchPage,
 } from '../tools/ai-seo-tool'
+import {
+  AI_SEO_FIXES_MAX_TOKENS,
+  AI_SEO_SITE_MAX_TOKENS,
+  aiSeoGenerationMaxTokens,
+} from './ai-job-seo-budget'
 import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
 
 /**
@@ -132,12 +137,12 @@ export const AI_SEO_LAYOUT_SCAN_LIMIT = 20
 export const AI_SEO_BATCH_PAGE_TEXT_CHARS = 700
 
 /**
- * Output budgets. A batch's largest answer — every page with a title,
- * description, heading and image descriptions at their limits — and the site
- * proposal's are measured in `ai-job-seo-step.spec.ts`.
+ * Output budgets, declared with the step's time (`ai-job-seo-budget.ts`,
+ * AGL-3035). A batch's largest answer — every page with a title, description,
+ * heading and image descriptions at their limits — and the site proposal's are
+ * measured in `ai-job-seo-step.spec.ts`.
  */
-export const AI_SEO_FIXES_MAX_TOKENS = 4_000
-export const AI_SEO_SITE_MAX_TOKENS = 1_500
+export { AI_SEO_FIXES_MAX_TOKENS, AI_SEO_SITE_MAX_TOKENS }
 
 /** Documents read at once. */
 const READ_CHUNK = 10
@@ -391,6 +396,7 @@ async function runScreenListing(
     keywords,
     otherTitles: await siteTitles(hostRef, new Set([screenId])),
     model,
+    maxTokens: aiSeoGenerationMaxTokens(model, AI_SEO_FIELDS_MAX_TOKENS),
     ...(signal ? { signal } : {}),
   })
   return listingOutcome(generation, job, { kind: 'screen', id: screenId, name, path }, {
@@ -426,6 +432,7 @@ async function runProductListing(
     image: null,
     keywords,
     model,
+    maxTokens: aiSeoGenerationMaxTokens(model, AI_SEO_FIELDS_MAX_TOKENS),
     ...(signal ? { signal } : {}),
   })
   return listingOutcome(generation, job, { kind: 'product', id: productId, name }, {
@@ -685,7 +692,7 @@ async function proposeSite(
     instructions: AI_SEO_SITE_INSTRUCTIONS,
     messages: [{ role: 'user', content: prompt }],
     tool: aiSeoSiteTool(),
-    maxTokens: AI_SEO_SITE_MAX_TOKENS,
+    maxTokens: aiSeoGenerationMaxTokens(model, AI_SEO_SITE_MAX_TOKENS),
     ...(signal ? { signal } : {}),
     check: (answer) => checkAiSeoSite(answer, { blank, siteText }),
   })
@@ -835,7 +842,9 @@ async function proposeFixes(
       instructions: AI_SEO_FIXES_INSTRUCTIONS,
       messages: [{ role: 'user', content: aiSeoFixesPrompt(pages, titlesElsewhere) }],
       tool: aiSeoFixesTool(pages.map((page) => page.screenId)),
-      maxTokens: AI_SEO_FIXES_MAX_TOKENS,
+      // Lowered on a tier too slow to answer a whole batch and ask again
+      // inside the least time the step registers.
+      maxTokens: aiSeoGenerationMaxTokens(model, AI_SEO_FIXES_MAX_TOKENS),
       ...(signal ? { signal } : {}),
       check: (answer) => checkAiSeoFixes(answer, pages, titlesElsewhere),
     })

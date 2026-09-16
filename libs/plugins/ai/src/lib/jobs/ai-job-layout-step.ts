@@ -19,6 +19,7 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
+import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
   aiDoctrineTreeTool,
@@ -56,6 +57,7 @@ import {
   aiUnspentOutcome,
 } from './ai-job-generation'
 import type { AiJobStepRunner } from './ai-job-text-step'
+import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
 
 /**
@@ -75,14 +77,28 @@ import { registerAiJobStep } from './ai-jobs'
  * assigns it. A plan that starts from a copy of a layout the site has gets
  * that copy, through the platform's duplicate module, and nothing generated.
  *
- * A generation step has the job beat's budget for one step, its re-ask
- * included, so it runs without extended thinking — the plan was reasoned out
- * and confirmed before it — and under a tighter answer ceiling than the
- * doctrine's default for a layout.
+ * A generation step runs on the job beat, never at an inline door: it
+ * registers the least time its lookup rounds, its answer and its re-ask need
+ * (AGL-3035), runs without extended thinking — the plan was reasoned out and
+ * confirmed before it — and asks for no more of a tighter ceiling than the
+ * doctrine's default for a layout than fits that time on the model it runs.
  */
 
 /** The longest answer a layout may run to; the tree is held to the layout budget either way. */
 export const AI_JOB_LAYOUT_MAX_TOKENS = AI_ROUTING_TABLE['job.layout'].maxTokens
+
+/**
+ * The layout step's time (AGL-3035, AGL-3036): its two inventory-lookup
+ * rounds, its answer and its re-ask at the routing table's ceiling on the tier
+ * `job.layout` is served from, fitted to what a beat can give a step.
+ */
+export const AI_JOB_LAYOUT_STEP_BUDGET = aiJobStepBudget({
+  tier: AI_STEP_TIERS['job.layout'],
+  maxTokens: AI_JOB_LAYOUT_MAX_TOKENS,
+})
+
+/** The least time one layout step needs before it starts. */
+export const AI_JOB_LAYOUT_STEP_MINIMUM_MS = AI_JOB_LAYOUT_STEP_BUDGET.minimumMs
 
 /** A layout's name when the plan names none. */
 export const AI_JOB_LAYOUT_DEFAULT_NAME = 'Site layout'
@@ -239,7 +255,7 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
       inventory,
       messages: [{ role: 'user', content: aiJobLayoutPrompt(job, plan, name) }],
       tool: aiDoctrineTreeTool('layout'),
-      maxTokens: AI_JOB_LAYOUT_MAX_TOKENS,
+      maxTokens: AI_JOB_LAYOUT_STEP_BUDGET.maxTokens(model),
       ...(AI_ROUTING_TABLE['job.layout'].thinking ? { thinking: AI_ROUTING_TABLE['job.layout'].thinking } : {}),
       ...(AI_ROUTING_TABLE['job.layout'].effort ? { effort: AI_ROUTING_TABLE['job.layout'].effort } : {}),
       extend: aiLayoutReuseCheck(inventory, plan),
@@ -271,6 +287,6 @@ export const runAiJobLayoutStep = createAiJobLayoutStep()
 
 /** Registers the layout step and the check a layout job passes before it is created or resumed. */
 export function registerAiLayoutJob(): void {
-  registerAiJobStep('layout', runAiJobLayoutStep)
+  registerAiJobStep('layout', runAiJobLayoutStep, { minimumMs: AI_JOB_LAYOUT_STEP_MINIMUM_MS })
   registerAiJobAdmission('layout', aiLayoutJobAdmission)
 }

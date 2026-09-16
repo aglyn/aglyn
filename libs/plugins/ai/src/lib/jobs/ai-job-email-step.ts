@@ -22,7 +22,7 @@ import type {
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
-import type { AiStepKind } from '../providers/catalog'
+import { AI_STEP_TIERS, type AiStepKind } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
   aiDoctrineTreeTool,
@@ -44,6 +44,7 @@ import {
   type AiEmailProductBinding,
 } from './ai-email-bindings'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
+import { aiJobStepBudget, type AiJobStepBudget } from './ai-job-budget'
 import { aiSiteSubdomain } from './ai-job-drafts'
 import {
   aiConfirmedPlan,
@@ -96,9 +97,11 @@ import { registerAiJobStep } from './ai-jobs'
  * the Emails page's templates, that no campaign sends until a member picks it.
  * The job never sends, schedules or publishes anything.
  *
- * Like the other generation steps, it has the job beat's budget for one step,
- * its re-ask included, so it runs without extended thinking under a tighter
- * answer ceiling than the doctrine's default for an email.
+ * Like the other generation steps, it runs on the job beat, never at an inline
+ * door: it registers the least time its lookup rounds, its answer and its
+ * re-ask need (AGL-3035), and runs without extended thinking under a tighter
+ * answer ceiling than the doctrine's default for an email, lowered on a tier
+ * too slow to answer it inside that time.
  */
 
 /** The resource the email plugin writes an email design under. */
@@ -109,6 +112,29 @@ export const AI_EMAIL_PLUGIN_ID = 'email'
 
 /** The longest answer an email may run to; the tree is held to the email budget either way. */
 export const AI_JOB_EMAIL_MAX_TOKENS = AI_ROUTING_TABLE['job.email'].maxTokens
+
+/**
+ * The time an email generation takes (AGL-3035, AGL-3036), for each step kind
+ * that runs one: its two inventory-lookup rounds, its answer and its re-ask at
+ * the kind's routing ceiling on the tier the kind is served from, fitted to
+ * what a beat can give a step. The email step registers the first, and the
+ * campaign step — whose email is this same generation — the second.
+ */
+export const AI_JOB_EMAIL_STEP_BUDGETS: Readonly<
+  Record<AiEmailGenerationInput['step'], AiJobStepBudget>
+> = {
+  'job.email': aiJobStepBudget({
+    tier: AI_STEP_TIERS['job.email'],
+    maxTokens: AI_ROUTING_TABLE['job.email'].maxTokens,
+  }),
+  'job.campaign': aiJobStepBudget({
+    tier: AI_STEP_TIERS['job.campaign'],
+    maxTokens: AI_ROUTING_TABLE['job.campaign'].maxTokens,
+  }),
+}
+
+/** The least time one email step needs before it starts. */
+export const AI_JOB_EMAIL_STEP_MINIMUM_MS = AI_JOB_EMAIL_STEP_BUDGETS['job.email'].minimumMs
 
 /** How many subject lines, and how many preheaders, an email is written with. */
 export const AI_EMAIL_VARIANTS = 3
@@ -461,7 +487,7 @@ export async function generateAiEmail(input: AiEmailGenerationInput): Promise<Ai
       },
     ],
     tool: AI_JOB_EMAIL_TOOL,
-    maxTokens: AI_JOB_EMAIL_MAX_TOKENS,
+    maxTokens: AI_JOB_EMAIL_STEP_BUDGETS[input.step].maxTokens(input.model),
     thinking: 'off',
     extend: (tree, answer) => {
       const copy = parseAiEmailCopy(answer)
@@ -591,6 +617,6 @@ export const runAiJobEmailStep = createAiJobEmailStep()
 
 /** Registers the email step and the check a email job passes before it is created or resumed. */
 export function registerAiEmailJob(): void {
-  registerAiJobStep('email', runAiJobEmailStep)
+  registerAiJobStep('email', runAiJobEmailStep, { minimumMs: AI_JOB_EMAIL_STEP_MINIMUM_MS })
   registerAiJobAdmission('email', aiEmailJobAdmission)
 }

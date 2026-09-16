@@ -28,6 +28,7 @@ import {
   parseAiTemplateJobInputs,
   type AiTemplateSubjectDefinition,
 } from '../model/ai-template-subjects'
+import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
   aiDoctrineTreeTool,
@@ -65,6 +66,7 @@ import {
   aiUnspentOutcome,
 } from './ai-job-generation'
 import type { AiJobStepRunner } from './ai-job-text-step'
+import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
 
 /**
@@ -93,6 +95,21 @@ import { registerAiJobStep } from './ai-jobs'
 
 /** The longest answer a template may run to; the tree is held to the template budget either way. */
 export const AI_JOB_TEMPLATE_MAX_TOKENS = AI_ROUTING_TABLE['job.template'].maxTokens
+
+/**
+ * The template step's time (AGL-3035, AGL-3036): its two inventory-lookup
+ * rounds, its answer and its re-ask at the routing table's ceiling on the tier
+ * `job.template` is served from, fitted to what a beat can give a step. It
+ * runs on the job beat, never at an inline door, and asks for no more of the
+ * ceiling than fits that time on the model it runs.
+ */
+export const AI_JOB_TEMPLATE_STEP_BUDGET = aiJobStepBudget({
+  tier: AI_STEP_TIERS['job.template'],
+  maxTokens: AI_JOB_TEMPLATE_MAX_TOKENS,
+})
+
+/** The least time one template step needs before it starts. */
+export const AI_JOB_TEMPLATE_STEP_MINIMUM_MS = AI_JOB_TEMPLATE_STEP_BUDGET.minimumMs
 
 /** The template step's own instructions, cached after the doctrine and before the examples. */
 export const AI_JOB_TEMPLATE_INSTRUCTIONS: readonly AiSystemBlock[] = [
@@ -402,7 +419,7 @@ export function createAiJobTemplateStep(deps: AiJobTemplateStepDeps = {}): AiJob
         },
       ],
       tool: aiDoctrineTreeTool('template'),
-      maxTokens: AI_JOB_TEMPLATE_MAX_TOKENS,
+      maxTokens: AI_JOB_TEMPLATE_STEP_BUDGET.maxTokens(model),
       ...(AI_ROUTING_TABLE['job.template'].thinking ? { thinking: AI_ROUTING_TABLE['job.template'].thinking } : {}),
       ...(AI_ROUTING_TABLE['job.template'].effort ? { effort: AI_ROUTING_TABLE['job.template'].effort } : {}),
       context: { bindingTokens: aiTemplateAddressTokens(definition) },
@@ -436,6 +453,6 @@ export const runAiJobTemplateStep = createAiJobTemplateStep()
 
 /** Registers the template step and the check a template job passes before it is created or resumed. */
 export function registerAiTemplateJob(): void {
-  registerAiJobStep('template', runAiJobTemplateStep)
+  registerAiJobStep('template', runAiJobTemplateStep, { minimumMs: AI_JOB_TEMPLATE_STEP_MINIMUM_MS })
   registerAiJobAdmission('template', createAiTemplateJobAdmission())
 }

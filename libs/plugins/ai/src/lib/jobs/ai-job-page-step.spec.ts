@@ -80,11 +80,14 @@ jest.mock('@aglyn/tenant-data-admin/server/duplicate-resource', () => ({
 // The machine is not under test here — only that the step registers with it,
 // and which kinds have a runner a page's creations can be built by.
 const mockRunners = new Set<string>(['layout', 'form', 'component'])
+/** What each kind a creation is built by registers as its least time, told apart by value. */
+const mockMinimums: Record<string, number> = { layout: 111_000, form: 122_000, component: 133_000 }
 jest.mock('./ai-jobs', () => ({
   __esModule: true,
   registerAiJobStep: jest.fn(),
   registerAiJobStepPasses: jest.fn(),
   aiJobStepRunnerFor: (kind: string) => (mockRunners.has(kind) ? jest.fn() : null),
+  aiJobStepRunMinimumMs: (job: { kind: string }) => mockMinimums[job.kind] ?? 0,
 }))
 
 import { readFileSync } from 'node:fs'
@@ -108,7 +111,6 @@ import {
   AI_JOB_STEP_MAX_MINIMUM_MS,
   AI_JOB_STEP_OVERHEAD_MS,
   AI_JOB_SWEEP_BUDGET_MS,
-  aiGenerationWorstCaseMs,
   aiGenerationWorstCaseOnTierMs,
   aiJobAssumedAnswerMs,
   aiJobBudgetTier,
@@ -130,6 +132,7 @@ import {
   AI_JOB_PAGE_TOKENS_PER_ELEMENT,
   aiJobPageSectionMaxTokens,
   aiPageJobAdmission,
+  aiPageJobRunMinimumMs,
   aiPageJobUnits,
   createAiJobPageStep,
   runAiJobPageStep,
@@ -137,7 +140,7 @@ import {
 } from './ai-job-page-step'
 import type { AiJobStepContext, AiJobStepOutcome } from './ai-job-text-step'
 import { registerAiJobStep, registerAiJobStepPasses } from './ai-jobs'
-import { AI_PAGE_BRIEF_FIXTURES, AI_PAGE_CREATION_FIXTURE } from './fixtures/ai-page-briefs'
+import { AI_PAGE_BRIEF_FIXTURES } from './fixtures/ai-page-briefs'
 import {
   AI_INVENTORY_LOOKUP_MAX_ROUNDS,
   AI_INVENTORY_LOOKUP_TOOL_NAME,
@@ -329,7 +332,10 @@ beforeEach(() => {
 describe('the page step’s registration', () => {
   it('registers the page runner with the least time a pass needs, and the admission both doors ask', async () => {
     registerAiPageJob()
-    expect(registerAiJobStep).toHaveBeenCalledWith('page', runAiJobPageStep, { minimumMs: AI_JOB_PAGE_STEP_MINIMUM_MS })
+    expect(registerAiJobStep).toHaveBeenCalledWith('page', runAiJobPageStep, {
+      minimumMs: AI_JOB_PAGE_STEP_MINIMUM_MS,
+      minimumMsFor: aiPageJobRunMinimumMs,
+    })
     const ask = (patch: Record<string, unknown> = {}) =>
       aiJobAdmissionRefusal('page', { firestore, orgId: 'org-1', hostId: 'host-1', inputs: {}, org: STARTER_ORG, ...patch })
     expect(await ask({ hostId: null })).toEqual({ status: 400, error: 'Open the site the page is for before starting the job' })
@@ -568,21 +574,31 @@ describe('the passes', () => {
     expect(mockDocs.get(DRAFT)?.['seo']).toEqual({ title: SCREEN.seoTitle, description: SCREEN.seoDescription })
   })
 
-  it('fits a creation built inside a page pass — its answer and its re-ask, at the size its golden measures — inside the minimum the page registers (AGL-3031)', () => {
-    // A creation's own step keeps the ceiling it keeps as a job of its kind;
-    // what a real answer is sized at is what its golden measures, JSON at
-    // three characters a token, as the component step's own fit is measured.
-    const balanced = AI_MODEL_CATALOG.find((entry) => entry.tier === 'balanced')?.id as string
-    const golden = <T,>(path: string): T => JSON.parse(readFileSync(join(__dirname, path), 'utf8')) as T
-    const answers: Record<string, unknown> = {
-      layout: { tree: JSON.stringify(AI_PAGE_CREATION_FIXTURE.layout) },
-      component: golden<{ answer: unknown }>(`goldens/${AI_PAGE_CREATION_FIXTURE.componentGolden}.json`).answer,
-      form: golden<Record<string, { answer: unknown }>>('fixtures/ai-job-form-goldens.json')[AI_PAGE_CREATION_FIXTURE.formGolden].answer,
+  it('gives a pass that builds a creation the time the creation’s own step needs, and a section pass a section’s (AGL-3035)', () => {
+    // A creation's step keeps the ceiling it keeps as a job of its own kind,
+    // and its lookup rounds, answer and re-ask at that ceiling are far past a
+    // section's time: a pass that builds one starts only with its step's time.
+    const creating: AiJobPlan = {
+      ...PLAN,
+      create: [
+        { kind: 'component', name: 'Price tier', why: 'Three tiers repeat.', duplicateOf: null, fields: ['tier:text'] },
+        { kind: 'layout', name: 'Site frame', why: 'The site has no layout.', duplicateOf: null, fields: [] },
+        { kind: 'form', name: 'Quote request', why: 'The site has no form.', duplicateOf: null, fields: ['email'] },
+      ],
     }
-    for (const [kind, answer] of Object.entries(answers)) {
-      const tokens = Math.ceil(JSON.stringify(answer).length / 3)
-      expect([kind, aiGenerationWorstCaseMs({ maxTokens: tokens, model: balanced }) <= AI_JOB_PAGE_STEP_MINIMUM_MS]).toEqual([kind, true])
+    const built: Record<string, AiJobOutput> = {
+      layout: { resource: 'layout', id: 'job-1-c1', versionId: 'v-frame', hostId: 'host-1', label: 'Site frame' },
+      form: { resource: 'form', id: 'job-1-c2', versionId: null, hostId: 'host-1', label: 'Quote request' },
+      component: { resource: 'reusableComponent', id: 'job-1-c0', versionId: null, hostId: 'host-1', label: 'Price tier' },
     }
+    const next = (outputs: AiJobOutput[]) => aiPageJobRunMinimumMs(job({ plan: creating, outputs }))
+    expect(next([])).toBe(mockMinimums['layout'])
+    expect(next([built['layout']])).toBe(mockMinimums['form'])
+    expect(next([built['layout'], built['form']])).toBe(mockMinimums['component'])
+    expect(next([built['layout'], built['form'], built['component']])).toBe(AI_JOB_PAGE_STEP_MINIMUM_MS)
+    // A page whose plan creates nothing, and a job with no plan to build, need a section pass's.
+    expect(aiPageJobRunMinimumMs(job())).toBe(AI_JOB_PAGE_STEP_MINIMUM_MS)
+    expect(aiPageJobRunMinimumMs(job({ plan: { ...PLAN, status: 'proposed' } }))).toBe(AI_JOB_PAGE_STEP_MINIMUM_MS)
   })
 })
 

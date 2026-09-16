@@ -66,10 +66,13 @@ import {
 import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
 import { AI_JOB_INLINE_BUDGET_MS, AI_JOB_SWEEP_BUDGET_MS } from './ai-job-budget'
 import {
+  AI_JOB_TEXT_STEP_MINIMUM_MS,
   runAiJobTextStep,
   type AiJobStepOutcome,
   type AiJobStepRunner,
 } from './ai-job-text-step'
+import { AI_JOB_SEO_STEP_MINIMUM_MS } from './ai-job-seo-budget'
+import { AI_JOB_THEME_STEP_MINIMUM_MS } from './ai-job-theme-budget'
 import {
   assistExchangeExpiry,
   recordAssistCost,
@@ -223,6 +226,7 @@ export const AI_PLANNED_JOB_KINDS: readonly AiJobKind[] = [
 
 const stepRunners = new Map<AiJobKind, AiJobStepRunner>()
 const stepMinimums = new Map<AiJobKind, number>()
+const stepRunMinimums = new Map<AiJobKind, (job: AiJob) => number>()
 let planStepRunner: AiJobStepRunner | null = null
 /** The plan step's least time: one step every planned kind shares, so kept by the step, not by a kind. */
 let planStepMinimumMs = 0
@@ -232,13 +236,25 @@ export interface AiJobStepRegistration {
   /**
    * The least time, in milliseconds, one run of the kind's step needs before
    * it starts (AGL-2907): its generation's worst case at the rates
-   * `ai-job-budget.ts` assumes, with the step's own reads and writes. The
-   * beat leaves the step queued rather than start it with less time left, and
-   * an inline door leaves it for the beat, because a provider call the
-   * caller's budget cuts off is still generated and billed upstream while the
-   * meter records nothing. Absent, the step starts whenever it is claimed.
+   * `ai-job-budget.ts` assumes — every model call it may make, with the step's
+   * own reads and writes (AGL-3036). The beat leaves the step queued rather
+   * than start it with less time left, and an inline door leaves it for the
+   * beat, because a provider call the caller's budget cuts off is still
+   * generated and billed upstream while the meter records nothing.
+   *
+   * Every generation step the plugin registers declares one (AGL-3035), and a
+   * spec over the console surface's registrations fails on a step that does
+   * not. Absent, the step starts whenever it is claimed.
    */
   minimumMs?: number
+  /**
+   * For a step whose runs need different times, the least time the run this
+   * job would make next needs (AGL-3035): a page job's pass that builds a
+   * layout needs a layout's time, where its section passes need a section's,
+   * and a scaffold's pass needs what the unit it hands on needs. Never read as
+   * less than `minimumMs`, which is then the least any run of the step needs.
+   */
+  minimumMsFor?: (job: AiJob) => number
 }
 
 /** Idempotent per kind; last registration wins. */
@@ -253,21 +269,39 @@ export function registerAiJobStep(
   } else {
     stepMinimums.delete(kind)
   }
+  if (registration.minimumMsFor) {
+    stepRunMinimums.set(kind, registration.minimumMsFor)
+  } else {
+    stepRunMinimums.delete(kind)
+  }
 }
 
 /**
  * The least time a step needs before it starts: the plan step's own minimum
  * for the plan step of any kind (AGL-3026), and the kind's registered
- * minimum for the kind's own step.
+ * minimum for the kind's own step — the least any run of it needs.
  */
 export function aiJobStepMinimumMs(kind: AiJobKind, stepName: string): number {
   return stepName === AI_JOB_PLAN_STEP ? planStepMinimumMs : (stepMinimums.get(kind) ?? 0)
 }
 
+/**
+ * The least time the next run of a job's own step needs (AGL-3035): what the
+ * kind registered, or more where the kind says this job's next run needs
+ * more. A step that delegates a unit to another kind — a page job's creation,
+ * a scaffold's page — asks this of the job it derives for the unit.
+ */
+export function aiJobStepRunMinimumMs(job: AiJob): number {
+  const least = stepMinimums.get(job.kind) ?? 0
+  const forRun = stepRunMinimums.get(job.kind)
+  return forRun ? Math.max(least, forRun(job)) : least
+}
+
 /** The least time the job's next step needs; 0 when no step is left to run. */
 export function aiJobNextStepMinimumMs(job: AiJob): number {
   const index = nextStepIndex(job)
-  return index === -1 ? 0 : aiJobStepMinimumMs(job.kind, job.steps[index].name)
+  if (index === -1) return 0
+  return job.steps[index].name === AI_JOB_PLAN_STEP ? planStepMinimumMs : aiJobStepRunMinimumMs(job)
 }
 
 export function aiJobStepRunnerFor(kind: AiJobKind): AiJobStepRunner | null {
@@ -328,29 +362,43 @@ export function aiJobStepNames(kind: AiJobKind): string[] {
     : ['generate']
 }
 
-/** The text step (AGL-2904). Every kind with no runner refuses until its issue lands. */
-registerAiJobStep('text', runAiJobTextStep)
+/**
+ * The text step (AGL-2904). Every kind with no runner refuses until its issue
+ * lands. Its least time fits an inline door's budget (AGL-3035), so the doors
+ * run a text job where it is asked for.
+ */
+registerAiJobStep('text', runAiJobTextStep, { minimumMs: AI_JOB_TEXT_STEP_MINIMUM_MS })
 
 /**
  * The theme step (AGL-2938), loaded the first time a theme job runs rather
  * than when this module does: it builds the brand themes it measures
  * contrast against and may read a site's logo, and a process that never runs
- * a theme job should pay for neither.
+ * a theme job should pay for neither. Its least time is declared apart from
+ * the step (`ai-job-theme-budget.ts`, AGL-3035) for the same reason.
  */
-registerAiJobStep('theme', async (context) => {
-  const { runAiJobThemeStep } = await import('./ai-job-theme-step')
-  return runAiJobThemeStep(context)
-})
+registerAiJobStep(
+  'theme',
+  async (context) => {
+    const { runAiJobThemeStep } = await import('./ai-job-theme-step')
+    return runAiJobThemeStep(context)
+  },
+  { minimumMs: AI_JOB_THEME_STEP_MINIMUM_MS },
+)
 
 /**
  * The SEO step (AGL-2910), loaded the first time an SEO job runs rather than
  * when this module does: it reads pages, versions and layouts, and a process
- * that never runs one should load none of that.
+ * that never runs one should load none of that. Its least time is declared
+ * apart from the step (`ai-job-seo-budget.ts`, AGL-3035) for the same reason.
  */
-registerAiJobStep('seo', async (context) => {
-  const { runAiJobSeoStep } = await import('./ai-job-seo-step')
-  return runAiJobSeoStep(context)
-})
+registerAiJobStep(
+  'seo',
+  async (context) => {
+    const { runAiJobSeoStep } = await import('./ai-job-seo-step')
+    return runAiJobSeoStep(context)
+  },
+  { minimumMs: AI_JOB_SEO_STEP_MINIMUM_MS },
+)
 
 // ── Documents ─────────────────────────────────────────────────────────────
 

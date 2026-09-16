@@ -350,8 +350,8 @@ describe('the time budget: no inline door starts a plan, and the beat can (AGL-3
     expect(AI_JOB_PLAN_STEP_MINIMUM_MS).toBe(aiGenerationWorstCaseMs({ model: served, maxTokens: ceiling }))
     expect(aiGenerationWorstCaseMs({ model: served, maxTokens: ceiling + 1 })).toBeGreaterThan(AI_JOB_STEP_MAX_MINIMUM_MS)
     // It stays above what the live Free plan measured (AGL-3024: 3,954
-    // output tokens on the balanced tier), so counting lookups cuts off no
-    // plan that has already been answered.
+    // output tokens on the balanced tier): the ceiling cuts off no plan a live
+    // run has answered.
     expect(ceiling).toBeGreaterThan(3_954)
   })
 

@@ -102,6 +102,7 @@ import {
   createAiJobCampaignStep,
   runAiJobCampaignStep,
   registerAiCampaignJob,
+  AI_JOB_CAMPAIGN_STEP_MINIMUM_MS,
 } from './ai-job-campaign-step'
 import { registerAiJobStep } from './ai-jobs'
 
@@ -356,7 +357,9 @@ beforeEach(() => {
 describe('the campaign step', () => {
   it('registers the campaign runner', () => {
     registerAiCampaignJob()
-    expect(registerAiJobStep).toHaveBeenCalledWith('campaign', runAiJobCampaignStep)
+    expect(registerAiJobStep).toHaveBeenCalledWith('campaign', runAiJobCampaignStep, {
+      minimumMs: AI_JOB_CAMPAIGN_STEP_MINIMUM_MS,
+    })
   })
 
   it('drafts an email design AND the campaign that would send it', async () => {

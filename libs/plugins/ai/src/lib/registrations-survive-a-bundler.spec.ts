@@ -60,6 +60,7 @@ const SERVER_ENTRY = `
 export { registerAiConsoleApi } from ${JSON.stringify(join(LIB, 'server'))}
 export {
   AI_PLANNED_JOB_KINDS,
+  aiJobNextStepMinimumMs,
   aiJobRunnerForStep,
   aiJobStepMaxPasses,
   aiJobStepMinimumMs,
@@ -270,6 +271,45 @@ describe('the AI plugin, loaded through a bundler that honors sideEffects', () =
       const plan = bundled.registered.steps[kind].find(({ step }) => step === 'plan')
       expect([kind, (plan?.minimumMs ?? 0) > AI_JOB_INLINE_BUDGET_MS]).toEqual([kind, true])
     }
+  })
+
+  it('keeps the least time every step needs, so a bundled door starts only the step that fits it (AGL-3035)', () => {
+    // A generation step registered without its minimum starts inline too.
+    const bundled = isolated(() => {
+      const plugin = load(serverBundle)
+      const summary = registered(plugin)
+      // A page pass that builds a layout needs a layout's time, which only a
+      // per-run minimum registered beside the runner can say.
+      const creating = {
+        kind: 'page',
+        steps: [{ name: 'plan', status: 'done' }, { name: 'generate', status: 'pending' }],
+        outputs: [],
+        inputs: {},
+        brief: 'A pricing page',
+        plan: {
+          status: 'confirmed',
+          reuse: [],
+          create: [{ kind: 'layout', name: 'Site frame', why: 'none yet', duplicateOf: null, fields: [] }],
+          screens: [],
+          labels: {},
+        },
+      }
+      return {
+        summary,
+        creationPass: plugin.aiJobNextStepMinimumMs(creating) as number,
+        layout: plugin.aiJobStepMinimumMs('layout', 'generate') as number,
+      }
+    })
+    const { AI_JOB_INLINE_BUDGET_MS } = require('./jobs/ai-jobs')
+    const steps = Object.entries(bundled.summary.steps).flatMap(([kind, list]) =>
+      list.filter(({ runner }) => runner).map(({ step, minimumMs }) => ({ kind, step, minimumMs })),
+    )
+    expect(steps.filter(({ minimumMs }) => !(minimumMs > 0))).toEqual([])
+    expect(steps.filter(({ minimumMs }) => minimumMs <= AI_JOB_INLINE_BUDGET_MS).map(({ kind, step }) => `${kind}/${step}`)).toEqual([
+      'text/draft',
+    ])
+    expect(bundled.creationPass).toBe(bundled.layout)
+    expect(bundled.creationPass).toBeGreaterThan(bundled.summary.steps['page'].find(({ step }) => step === 'generate')?.minimumMs ?? 0)
   })
 
   it('registers a runner for the kind of every step module beside the machine', () => {

@@ -43,6 +43,7 @@ import {
   AI_EMAIL_DESIGN_RESOURCE,
   AI_EMAIL_PLUGIN_ID,
   AI_EMAIL_SAVE_FAILURE_COPY,
+  AI_JOB_EMAIL_STEP_BUDGETS,
   aiEmailDesignContent,
   aiEmailDesignOutput,
   aiJobInputName,
@@ -360,8 +361,15 @@ async function draftCampaign(input: AiCampaignDraftInput): Promise<AiJobStepOutc
 
 export const runAiJobCampaignStep = createAiJobCampaignStep()
 
+/**
+ * The least time one campaign step needs before it starts (AGL-3035): the
+ * email generation it drafts the campaign's design with, on the campaign's own
+ * routing row. Writing the draft campaign asks no model.
+ */
+export const AI_JOB_CAMPAIGN_STEP_MINIMUM_MS = AI_JOB_EMAIL_STEP_BUDGETS['job.campaign'].minimumMs
+
 /** Registers the campaign step and the check a campaign job passes before it is created or resumed. */
 export function registerAiCampaignJob(): void {
-  registerAiJobStep('campaign', runAiJobCampaignStep)
+  registerAiJobStep('campaign', runAiJobCampaignStep, { minimumMs: AI_JOB_CAMPAIGN_STEP_MINIMUM_MS })
   registerAiJobAdmission('campaign', aiCampaignJobAdmission)
 }

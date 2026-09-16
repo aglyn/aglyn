@@ -218,6 +218,12 @@ export interface GenerateSeoFieldsInput extends Omit<AiSeoFieldsPromptInput, 'fi
   step?: AiStepKind
   settings?: AiPluginSettings
   model?: string
+  /**
+   * The answer's ceiling: `AI_SEO_FIELDS_MAX_TOKENS` when omitted. A job step
+   * passes the most its registered time allows on the model it runs
+   * (AGL-3035).
+   */
+  maxTokens?: number
   signal?: AbortSignal
   provider?: AiProvider
 }
@@ -255,7 +261,7 @@ export async function generateSeoFields(
     }),
     messages: [{ role: 'user', content: aiSeoFieldsPrompt({ ...input, fields, keywords }) }],
     tool: aiSeoFieldsTool(fields),
-    maxTokens: AI_SEO_FIELDS_MAX_TOKENS,
+    maxTokens: input.maxTokens ?? AI_SEO_FIELDS_MAX_TOKENS,
     ...(input.signal ? { signal: input.signal } : {}),
     ...(input.provider ? { provider: input.provider } : {}),
     check: (answer) =>

@@ -45,7 +45,9 @@ import {
   type AiJobStepOutcome,
   type AiJobStepRunner,
 } from './ai-job-text-step'
+import { AI_JOB_PAGE_STEP_MINIMUM_MS } from './ai-job-page-budget'
 import {
+  aiJobStepRunMinimumMs,
   aiJobStepRunnerFor,
   registerAiJobStep,
   registerAiJobStepPasses,
@@ -79,7 +81,9 @@ import {
  * the org's monthly ceiling binds a scaffold exactly as it binds a chat turn.
  * Credits running out mid-scaffold is therefore the machine's own park: the
  * job waits as `needs_input` with the meter's words, and the beat resumes it
- * where it stopped once the workspace's standing has changed.
+ * where it stopped once the workspace's standing has changed. A pass needs the
+ * time its unit's own step needs (`aiSiteJobRunMinimumMs`), so the beat starts
+ * a palette change only with a palette change's time left.
  *
  * Where it stopped is read from the job's OUTPUTS rather than kept anywhere:
  * each unit reports exactly one output when it completes, so the units
@@ -555,11 +559,37 @@ export function createAiJobSiteStep(
 export const runAiJobSiteStep = createAiJobSiteStep()
 
 /**
- * Registers the site scaffold, the passes a whole site's plan may take, and
- * the check a site job passes before it is created or resumed.
+ * The least time a scaffold's next pass needs (AGL-3035). The scaffold asks no
+ * model itself: each pass hands one unit to the step registered for its kind,
+ * under the job derived for it, so it needs what that step registers for that
+ * job — a palette change's or a layout's time for those units, a page pass's
+ * for a page. A scaffold with nothing left to build, or with no plan it can
+ * build, spends nothing, and a page pass's time covers it.
+ */
+export function aiSiteJobRunMinimumMs(job: AiJob): number {
+  const plan = aiConfirmedPlan(job)
+  const inputs = parseAiSiteJobInputs(job.inputs)
+  if (!plan || typeof inputs === 'string') return AI_JOB_PAGE_STEP_MINIMUM_MS
+  const units = aiSiteJobUnits(plan, { welcomeEmail: inputs.welcomeEmail }).filter((unit) =>
+    aiJobStepRunnerFor(unit.jobKind),
+  )
+  const outputs = job.outputs ?? []
+  const [unit] = aiSitePendingUnits(units, outputs)
+  if (!unit) return AI_JOB_PAGE_STEP_MINIMUM_MS
+  return aiJobStepRunMinimumMs(aiSiteUnitJob(job, unit, aiSiteBuiltRefs(units, outputs)))
+}
+
+/**
+ * Registers the site scaffold with the least time a pass needs — every
+ * scaffold builds pages, and a page pass needs the least of any unit — and the
+ * time its next pass needs, the passes a whole site's plan may take, and the
+ * check a site job passes before it is created or resumed.
  */
 export function registerAiSiteJob(): void {
-  registerAiJobStep('site', runAiJobSiteStep)
+  registerAiJobStep('site', runAiJobSiteStep, {
+    minimumMs: AI_JOB_PAGE_STEP_MINIMUM_MS,
+    minimumMsFor: aiSiteJobRunMinimumMs,
+  })
   registerAiJobStepPasses('site', AI_SITE_MAX_PASSES)
   registerAiJobAdmission('site', aiSiteJobAdmission)
 }

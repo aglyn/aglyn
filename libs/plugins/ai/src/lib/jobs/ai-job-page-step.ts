@@ -29,8 +29,7 @@ import {
   parseAiPageJobInputs,
 } from '../model/ai-page-job'
 import { aiPlanCapabilitiesForJob, aiPlanUncreatable } from '../model/ai-plan-capabilities'
-import type { AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
-import { AI_STEP_TIERS } from '../providers/catalog'
+import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import { aiModelForStep } from '../providers/routing'
 import { aiDoctrineNeedsInputMessage, runValidatedGeneration } from '../runtime/ai-doctrine'
 import { validateAiDoctrineTree } from '../runtime/ai-doctrine-validators'
@@ -38,7 +37,7 @@ import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fields'
 import { readSiteInventory } from '../runtime/site-inventory'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
-import { aiGenerationWorstCaseMs, aiJobStepBudget } from './ai-job-budget'
+import { aiGenerationWorstCaseMs } from './ai-job-budget'
 import {
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
@@ -59,6 +58,13 @@ import {
   aiUnspentOutcome,
 } from './ai-job-generation'
 import {
+  AI_JOB_PAGE_SECTION_MAX_TOKENS,
+  AI_JOB_PAGE_SECTION_TOKENS,
+  AI_JOB_PAGE_STEP_BUDGET,
+  AI_JOB_PAGE_STEP_MINIMUM_MS,
+  aiJobPageSectionMaxTokens,
+} from './ai-job-page-budget'
+import {
   AI_JOB_PAGE_INSTRUCTIONS,
   AI_PAGE_SECTION_TOOL,
   aiEmptyPage,
@@ -78,7 +84,12 @@ import {
   type AiSiteUnit,
 } from './ai-job-site-step'
 import type { AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
-import { aiJobStepRunnerFor, registerAiJobStep, registerAiJobStepPasses } from './ai-jobs'
+import {
+  aiJobStepRunMinimumMs,
+  aiJobStepRunnerFor,
+  registerAiJobStep,
+  registerAiJobStepPasses,
+} from './ai-jobs'
 
 /**
  * The page step (AGL-2907): the generation step of a `page` job, run once a
@@ -92,9 +103,9 @@ import { aiJobStepRunnerFor, registerAiJobStep, registerAiJobStepPasses } from '
  * takes several times that. The confirmed plan already names the page's
  * sections, so the step builds one section per pass and asks the machine to
  * continue. Every pass is one reservation and one generation — the section's
- * answer and, when it breaks a rule, its one re-ask — sized so that worst case
- * fits `AI_JOB_PAGE_STEP_MINIMUM_MS`, which the step registers as the least
- * time it needs before it starts.
+ * lookup rounds, its answer and, when it breaks a rule, its one re-ask — sized
+ * so that worst case fits `AI_JOB_PAGE_STEP_MINIMUM_MS`, which the step
+ * registers as the least time a section pass needs before it starts.
  *
  *  - The first pass builds the top section, which holds the page's h1, and
  *    writes the draft screen and its first version.
@@ -117,7 +128,9 @@ import { aiJobStepRunnerFor, registerAiJobStep, registerAiJobStepPasses } from '
  * `new:<name>` resolved to the record that was built, which the site's
  * inventory now lists — so the page places the new component and binds the new
  * form by id, and renders inside the new layout, exactly as it would one the
- * site always had.
+ * site always had. A pass that builds a creation needs the time the step that
+ * builds it registers, not a section's (`aiPageJobRunMinimumMs`, AGL-3035), so
+ * neither the beat nor a door starts it with only a section's time left.
  *
  * ── Never published ──────────────────────────────────────────────────────
  *
@@ -129,40 +142,17 @@ import { aiJobStepRunnerFor, registerAiJobStep, registerAiJobStepPasses } from '
  * until a member publishes it.
  */
 
-/** The most one section's answer may run to on any model; slower tiers get less. */
-export const AI_JOB_PAGE_SECTION_MAX_TOKENS = 2_000
-
 /**
- * The ceiling a section's answer asks on the tier the page step is served
- * from (AGL-2907): twenty-three elements at `AI_JOB_PAGE_TOKENS_PER_ELEMENT`,
- * the size every golden section fits (`ai-job-page-evals.spec.ts`) and a Free
- * page's credits are counted at (`ai-job-free-page.spec.ts`). A faster tier
- * asks more in the same time, up to `AI_JOB_PAGE_SECTION_MAX_TOKENS`, and a
- * slower one less.
+ * A section pass's time, and the ceiling each pass asks on each model, are
+ * declared apart from the step (`ai-job-page-budget.ts`): the site scaffold
+ * builds its pages through this step and reads them without loading it.
  */
-export const AI_JOB_PAGE_SECTION_TOKENS = 1_050
-
-/**
- * A section pass's time (AGL-3036): its two inventory-lookup rounds, its
- * answer and its re-ask at `AI_JOB_PAGE_SECTION_TOKENS` on the served tier,
- * with the step's reads and writes, at the rates `ai-job-budget.ts` assumes.
- */
-export const AI_JOB_PAGE_STEP_BUDGET = aiJobStepBudget({
-  tier: AI_STEP_TIERS['job.page'],
-  maxTokens: AI_JOB_PAGE_SECTION_TOKENS,
-  cap: AI_JOB_PAGE_SECTION_MAX_TOKENS,
-})
-
-/**
- * The least time one section pass needs before it starts. Registered with the
- * step, so neither the beat nor an inline door starts a pass that its budget
- * would cut off. A spec holds it inside the beat's own budget.
- */
-export const AI_JOB_PAGE_STEP_MINIMUM_MS = AI_JOB_PAGE_STEP_BUDGET.minimumMs
-
-/** The ceiling a section's answer asks on this model: the most whose worst case fits a pass. */
-export function aiJobPageSectionMaxTokens(model: string): number {
-  return AI_JOB_PAGE_STEP_BUDGET.maxTokens(model)
+export {
+  AI_JOB_PAGE_SECTION_MAX_TOKENS,
+  AI_JOB_PAGE_SECTION_TOKENS,
+  AI_JOB_PAGE_STEP_BUDGET,
+  AI_JOB_PAGE_STEP_MINIMUM_MS,
+  aiJobPageSectionMaxTokens,
 }
 
 /**
@@ -211,6 +201,23 @@ export function aiPageJobUnits(plan: Pick<AiJobPlan, 'create'>): AiSiteUnit[] {
       return unit ? [unit] : []
     }),
   )
+}
+
+/**
+ * The least time this page job's next pass needs (AGL-3035). A pass that
+ * builds a creation hands it to the step registered for that kind, under the
+ * job derived for it, so it needs what that step registers for that job — a
+ * layout's time, not a section's. Every other pass — a section, the last one —
+ * needs a section pass's.
+ */
+export function aiPageJobRunMinimumMs(job: AiJob): number {
+  const confirmed = aiConfirmedPlan(job)
+  if (!confirmed) return AI_JOB_PAGE_STEP_MINIMUM_MS
+  const units = aiPageJobUnits(confirmed)
+  const outputs = job.outputs ?? []
+  const [unit] = aiSitePendingUnits(units, outputs)
+  if (!unit) return AI_JOB_PAGE_STEP_MINIMUM_MS
+  return aiJobStepRunMinimumMs(aiSiteUnitJob(job, unit, aiSiteBuiltRefs(units, outputs)))
 }
 
 /** The one-segment address a draft asks for, from the plan's slug. */
@@ -525,12 +532,15 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
 export const runAiJobPageStep = createAiJobPageStep()
 
 /**
- * Registers the page step with the least time one pass of it needs, the
- * passes a page with its creations may take, and the check a page job passes
- * when it is created or its plan is confirmed.
+ * Registers the page step with the least time a section pass needs and the
+ * time its next pass needs, the passes a page with its creations may take, and
+ * the check a page job passes when it is created or its plan is confirmed.
  */
 export function registerAiPageJob(): void {
-  registerAiJobStep('page', runAiJobPageStep, { minimumMs: AI_JOB_PAGE_STEP_MINIMUM_MS })
+  registerAiJobStep('page', runAiJobPageStep, {
+    minimumMs: AI_JOB_PAGE_STEP_MINIMUM_MS,
+    minimumMsFor: aiPageJobRunMinimumMs,
+  })
   registerAiJobStepPasses('page', AI_JOB_PAGE_MAX_PASSES)
   registerAiJobAdmission('page', aiPageJobAdmission)
 }

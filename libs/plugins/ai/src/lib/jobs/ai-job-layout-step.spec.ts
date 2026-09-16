@@ -84,11 +84,12 @@ import { AI_DRAFT_VERSION_NAME } from './ai-job-drafts'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import {
   AI_JOB_LAYOUT_INSTRUCTIONS,
-  AI_JOB_LAYOUT_MAX_TOKENS,
   aiJobLayoutPrompt,
   createAiJobLayoutStep,
   runAiJobLayoutStep,
   registerAiLayoutJob,
+  AI_JOB_LAYOUT_STEP_BUDGET,
+  AI_JOB_LAYOUT_STEP_MINIMUM_MS,
 } from './ai-job-layout-step'
 import { registerAiJobStep } from './ai-jobs'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
@@ -285,7 +286,9 @@ beforeEach(() => {
 describe('the layout step', () => {
   it('registers the layout runner, with the admission the create and resume doors ask', async () => {
     registerAiLayoutJob()
-    expect(registerAiJobStep).toHaveBeenCalledWith('layout', runAiJobLayoutStep)
+    expect(registerAiJobStep).toHaveBeenCalledWith('layout', runAiJobLayoutStep, {
+      minimumMs: AI_JOB_LAYOUT_STEP_MINIMUM_MS,
+    })
     const ask = (hostId: string | null, org: object) =>
       aiJobAdmissionRefusal('layout', { firestore, orgId: 'org-1', hostId, inputs: {}, org })
     expect(await ask(null, STARTER_ORG)).toEqual({
@@ -323,7 +326,9 @@ describe('the layout step', () => {
     expect(request).toMatchObject({
       model: 'routed-model',
       tools: [aiDoctrineTreeTool('layout'), aiInventoryLookupTool()],
-      maxTokens: AI_JOB_LAYOUT_MAX_TOKENS,
+      // The routing ceiling, as much of it as fits the step's least time on
+      // the model the job runs.
+      maxTokens: AI_JOB_LAYOUT_STEP_BUDGET.maxTokens('routed-model'),
       thinking: 'off',
       stream: false,
       messages: [{ role: 'user', content: aiJobLayoutPrompt(job(), PLAN, 'Main layout') }],
