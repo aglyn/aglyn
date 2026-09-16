@@ -69,6 +69,7 @@ import { mdiAccountRemoveOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -78,7 +79,6 @@ import {
   Chip,
   FormControlLabel,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -753,7 +753,7 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
         </Typography>
       ) : (
         <>
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Address'}</TableCell>
@@ -837,7 +837,7 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
                 )
               })}
             </TableBody>
-          </Table>
+          </ScrollTable>
           <ListPagination
             page={page}
             pageSize={pageSize}

@@ -27,6 +27,7 @@ import { AppLink, CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/sh
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import {
@@ -35,7 +36,6 @@ import {
   Chip,
   Divider,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -848,7 +848,7 @@ export function EmailDetail(props: EmailDetailProps) {
           <Divider />
 
           <Section title="Where this went">
-            <Table size="small">
+            <ScrollTable size="small">
               <TableBody>
                 {/*
                   WHAT THIS EMAIL IS DOING, not the field it stores.
@@ -1031,7 +1031,7 @@ export function EmailDetail(props: EmailDetailProps) {
                   </TableCell>
                 </TableRow>
               </TableBody>
-            </Table>
+            </ScrollTable>
             {/*
              * The list is named as the SEND recorded it, and saying so is
              * what stops a renamed or deleted list quietly rewriting the
@@ -1173,7 +1173,7 @@ export function EmailDetail(props: EmailDetailProps) {
                     'then. These figures describe the send, not the audience ' +
                     'as it stands today.'}
                 </Typography>
-                <Table size="small">
+                <ScrollTable size="small">
                   <TableBody>
                     {report.populations.map((population) => (
                       <TableRow key={population.id}>
@@ -1189,7 +1189,7 @@ export function EmailDetail(props: EmailDetailProps) {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                </ScrollTable>
               </Section>
             </>
           ) : null}
@@ -1199,7 +1199,7 @@ export function EmailDetail(props: EmailDetailProps) {
           <Section title="Links">
             {linkReport.rows.length ? (
               <>
-                <Table size="small">
+                <ScrollTable size="small">
                   <TableHead>
                     <TableRow>
                       <TableCell>{'Destination'}</TableCell>
@@ -1224,7 +1224,7 @@ export function EmailDetail(props: EmailDetailProps) {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                </ScrollTable>
                 <Typography variant="caption" color="text.secondary">
                   {'Counted by address and path — query strings are dropped, ' +
                     'so two links to the same page with different tracking ' +

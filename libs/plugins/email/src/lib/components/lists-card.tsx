@@ -28,6 +28,7 @@ import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -35,7 +36,6 @@ import {
   Button,
   Chip,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -332,7 +332,7 @@ export function OrgListsCard(props: OrgListsCardProps) {
         />
         {lists.length === 0 ? null : (
           <>
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'List'}</TableCell>
@@ -403,7 +403,7 @@ export function OrgListsCard(props: OrgListsCardProps) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
             <ListPagination
               page={page}
               pageSize={pageSize}

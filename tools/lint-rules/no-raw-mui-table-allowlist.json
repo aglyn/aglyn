@@ -6,50 +6,6 @@
       "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
     },
     {
-      "path": "libs/plugins/email/src/lib/components/email-detail.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/email/src/lib/components/email-recipients-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/email/src/lib/components/email-screens-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/email/src/lib/components/email-template-detail.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/email/src/lib/components/email-topics-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/email/src/lib/components/emails-list-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/email/src/lib/components/list-import-drawer.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/email/src/lib/components/list-members-panel.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/email/src/lib/components/lists-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/email/src/lib/components/sending-domains-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/email/src/lib/components/suppressions-card.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
       "path": "libs/plugins/forms/src/lib/components/form-detail-card.tsx",
       "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
     },

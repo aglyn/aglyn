@@ -19,6 +19,7 @@
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
@@ -26,7 +27,6 @@ import {
   Chip,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -273,7 +273,7 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
               : 'Nobody in the delivery log matches that yet.'}
           </Typography>
         ) : (
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Recipient'}</TableCell>
@@ -328,7 +328,7 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </ScrollTable>
         )}
 
         {/*

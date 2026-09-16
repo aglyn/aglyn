@@ -40,13 +40,13 @@ import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.com
  * the wrapper.
  */
 import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Chip,
   IconButton,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -520,7 +520,7 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
                   })
               )}
             </Stack>
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Address'}</TableCell>
@@ -591,7 +591,7 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
                   )
                 })}
               </TableBody>
-            </Table>
+            </ScrollTable>
             <ListPagination
               page={page}
               pageSize={pageSize}

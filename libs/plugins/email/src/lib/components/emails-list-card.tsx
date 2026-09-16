@@ -36,6 +36,7 @@ import RowActionsMenu, {
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   ceilingedWindow,
@@ -52,7 +53,6 @@ import {
   Button,
   Chip,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -495,7 +495,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
           </Stack>
         ) : (
           <>
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Subject'}</TableCell>
@@ -577,7 +577,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
                   )
                 })}
               </TableBody>
-            </Table>
+            </ScrollTable>
             <ListPagination
               page={page}
               pageSize={pageSize}
