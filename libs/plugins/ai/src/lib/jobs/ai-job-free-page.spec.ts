@@ -45,8 +45,11 @@
  *    plan change that pushes a Free page past the wall is red here;
  *  - a recording of the Free-shaped eval brief, when a live run has left one
  *    (`AI_EVAL_LIVE=1 AI_EVAL_CASES=page-free-law-firm-about npm run
- *    eval:ai-live`), fits the wall at the credits it actually metered.
- *    Recordings are never committed, so CI holds the arithmetic alone.
+ *    eval:ai-live`), built its page and fits the wall at the credits it
+ *    actually metered. A recording that stopped, answered its plan alone or
+ *    ran no page pass proves nothing about the wall and is red here
+ *    (AGL-3040). Recordings are never committed, so CI holds the arithmetic,
+ *    and the first live recording's shape, alone.
  */
 
 const mockRunAiRequest = jest.fn()
@@ -105,12 +108,13 @@ import type { AiUsage } from '../providers/contract'
 import { AI_STEP_NOMINAL_USAGE } from '../providers/model-choice'
 import { validateAiBuildPlan, validateAiDoctrineTree } from '../runtime/ai-doctrine-validators'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
-import type { AiEvalRecording } from '../runtime/ai-eval'
+import type { AiEvalCandidate, AiEvalRecording } from '../runtime/ai-eval'
 import type { generateSeoFields } from '../runtime/seo-fields'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import { AI_PAGE_SECTION_INLINE_LINE, aiPageCheckContext } from './ai-job-page-sections'
 import { createAiJobPageStep } from './ai-job-page-step'
 import { AI_JOB_PLAN_REVIEW_COPY, AI_JOB_PLAN_SCOPES, createAiJobPlanStep } from './ai-job-plan-step'
+import { AI_FREE_PAGE_STOPPED_RECORDING } from './fixtures/ai-free-page-recording'
 import { AI_FREE_PAGE_FIXTURE } from './fixtures/ai-page-briefs'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
@@ -508,13 +512,46 @@ describe('one Free page fits the Free taste, end to end', () => {
           .map((name) => JSON.parse(readFileSync(join(dir, name), 'utf8')) as AiEvalRecording)
       : []
     for (const recording of recordings) {
-      const steps = recording.candidate.steps ?? []
-      const metered = steps.reduce((sum, step) => sum + step.credits, 0)
-      expect([recording.candidate.model, steps.length > 1, metered <= FREE_AI_TASTE_CREDITS_PER_MONTH]).toEqual([
+      const metered = meteredCredits(recording.candidate)
+      expect([recording.candidate.model, unbuiltPage(recording.candidate), metered <= FREE_AI_TASTE_CREDITS_PER_MONTH]).toEqual([
         recording.candidate.model,
-        true,
+        [],
         true,
       ])
     }
   })
+
+  it('takes nothing about the wall from a recording that did not build its page, as the first live one did not (AGL-3040)', () => {
+    const { candidate } = AI_FREE_PAGE_STOPPED_RECORDING
+    // It metered its plan well inside the wall, and that proves nothing: the
+    // page it was recorded to measure was never built.
+    expect(meteredCredits(candidate)).toBeLessThanOrEqual(FREE_AI_TASTE_CREDITS_PER_MONTH)
+    expect(unbuiltPage(candidate)).toEqual([candidate.note, 'answered scope plan', 'ran no job.page pass'])
+    // Any one of the three is enough to prove nothing.
+    const [plan] = candidate.steps ?? []
+    const built: AiEvalCandidate = { ...candidate, scope: 'full', note: undefined, steps: [plan, { ...plan, step: 'job.page' }] }
+    expect(unbuiltPage(built)).toEqual([])
+    expect(unbuiltPage({ ...built, note: candidate.note })).toEqual([candidate.note])
+    expect(unbuiltPage({ ...built, scope: 'plan' })).toEqual(['answered scope plan'])
+    expect(unbuiltPage({ ...built, steps: candidate.steps })).toEqual(['ran no job.page pass'])
+  })
 })
+
+/** What a recording metered, every exchange as the machine meters a step. */
+function meteredCredits(candidate: AiEvalCandidate): number {
+  return (candidate.steps ?? []).reduce((sum, step) => sum + step.credits, 0)
+}
+
+/**
+ * Why a recording of the Free brief proves nothing about the wall (AGL-3040);
+ * empty when it built its page. Only a built page measures what a page costs:
+ * a recording that stopped, or answered its plan alone, or never ran a page
+ * pass metered less than a page and fits any wall.
+ */
+function unbuiltPage(candidate: AiEvalCandidate): string[] {
+  return [
+    ...(candidate.note?.startsWith('stopped:') ? [candidate.note] : []),
+    ...((candidate.scope ?? 'full') === 'full' ? [] : [`answered scope ${candidate.scope}`]),
+    ...((candidate.steps ?? []).some((step) => step.step === 'job.page') ? [] : ['ran no job.page pass']),
+  ]
+}

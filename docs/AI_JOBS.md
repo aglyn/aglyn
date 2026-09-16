@@ -1404,8 +1404,12 @@ balanced tier's answer ceiling, under the element measure.
   a doctrine or plan change pushes the figure past the wall or out of step with this
   sentence. When a live run has recorded the Free brief
   (`AI_EVAL_LIVE=1 AI_EVAL_CASES=page-free-law-firm-about npm run eval:ai-live`), the
-  spec also holds the credits that recording metered to the wall; recordings are
-  never committed.
+  spec also holds that recording to a built page and to the wall at the credits it
+  metered: a recording that stopped, answered its plan alone or ran no page pass
+  metered less than a page and proves nothing, so it is red (AGL-3040).
+  Recordings are never committed; the first live one, which stopped at its plan, is
+  kept by hand as `src/lib/jobs/fixtures/ai-free-page-recording.ts` for the specs to
+  hold that check and the plan rules to.
 - **Accessibility: an axe audit.** Zero violations of any impact on all ten
   golden pages, and so none serious or critical, under axe-core 4.12.1.
   `tools/scripts/record-ai-page-axe.mts` assembles each page through the
