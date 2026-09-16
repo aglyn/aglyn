@@ -390,6 +390,7 @@ describe('writeAiDraft — the create route’s document', () => {
       template: 'template',
       form: 'form',
       component: 'reusableComponent',
+      screen: 'screen',
     }
     for (const kind of Object.keys(RESOURCE_OF) as AiDraftKind[]) {
       const start = route.indexOf(`\n  ${RESOURCE_OF[kind]}: {`)

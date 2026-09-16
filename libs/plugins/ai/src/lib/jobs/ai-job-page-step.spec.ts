@@ -416,6 +416,7 @@ describe('the passes', () => {
       value: { title: 'Spring Roof Inspections in Springfield', description: 'A licensed roofer checks shingles, flashing and gutters.' },
       attempts: 1,
       usage: { inputTokens: 700, outputTokens: 80, cacheReadTokens: 900, cacheWriteTokens: 0 },
+      effort: null,
       estCostUsd: 0.001,
       model: 'claude-haiku-4-5',
       stopReason: 'tool_use',
@@ -458,7 +459,7 @@ describe('the passes', () => {
   it('writes the plan’s listing, held to the editor’s lengths, when the listing cannot be written', async () => {
     await buildSections()
     const long = { ...PLAN, screens: [{ ...SCREEN, seoTitle: 'Spring roof inspections for homes across Springfield, Riverton and Oak Hill', seoDescription: SCREEN.seoDescription }] }
-    seoFields.mockResolvedValueOnce({ status: 'needs_input', violations: [], message: 'no', attempts: 2, usage: USAGE, estCostUsd: 0.002, model: 'claude-haiku-4-5', stopReason: 'tool_use' })
+    seoFields.mockResolvedValueOnce({ status: 'needs_input', violations: [], message: 'no', attempts: 2, usage: USAGE, estCostUsd: 0.002, effort: null, model: 'claude-haiku-4-5', stopReason: 'tool_use' })
     await step()(context({ plan: long }))
     const seo = mockDocs.get(DRAFT)?.['seo'] as { title: string; description: string }
     expect(seo.title.length).toBeLessThanOrEqual(SCREEN_SEO_TEXT_GUIDANCE.title)

@@ -214,6 +214,19 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       "a form's fields, its consent and routing declaration and the design that renders them, written as JSON",
     eval: { kinds: ['form'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
   },
+  'job.page': {
+    // One section of a page, written against a plan a member already
+    // confirmed, so it writes without thinking (AGL-2907). The ceiling here
+    // is the MOST a pass may ask for; each pass sizes its own down from it to
+    // what fits the time the job beat can give the step, which on the
+    // balanced tier is about half of this.
+    thinking: 'off',
+    effort: null,
+    maxTokens: 2000,
+    maxTokensBasis:
+      "a section of a page written as JSON, about forty elements at the step's measured 45 tokens an element; a pass lowers it to the worst case that fits AI_JOB_PAGE_STEP_MINIMUM_MS on the model it runs",
+    eval: { kinds: ['page'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+  },
   'job.seo': {
     thinking: null,
     effort: null,
