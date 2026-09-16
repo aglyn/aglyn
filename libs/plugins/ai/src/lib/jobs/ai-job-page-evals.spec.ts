@@ -94,7 +94,7 @@ import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import { aiPagePlanRefusal } from '../model/ai-page-job'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
-import { AI_MODEL_CATALOG, AI_STEP_TIERS, estimateAiCostUsd } from '../providers/catalog'
+import { AI_MODEL_CATALOG, AI_STEP_TIERS, estimateAiBilledUsd } from '../providers/catalog'
 import type { AiUsage } from '../providers/contract'
 import { AI_STEP_NOMINAL_USAGE } from '../providers/model-choice'
 import { validateAiBuildPlan, validateAiDoctrineTree } from '../runtime/ai-doctrine-validators'
@@ -260,7 +260,7 @@ async function replay(fixture: AiPageBriefFixture, index: number): Promise<PageR
     value: fixture.seo,
     attempts: 1,
     usage: SEO_USAGE,
-    estCostUsd: estimateAiCostUsd(SEO_USAGE, SEO_MODEL),
+    estCostUsd: estimateAiBilledUsd(SEO_USAGE, SEO_MODEL),
     model: SEO_MODEL,
     stopReason: 'tool_use',
   }))
@@ -351,10 +351,10 @@ function passUsage(request: SentRequest, answer: AiGoldenSection, first: boolean
 function creditsOf(requests: readonly SentRequest[], answers: readonly AiGoldenSection[]): number {
   const sections = requests.reduce(
     (sum, request, pass) =>
-      sum + assistCreditsFromUsd(estimateAiCostUsd(passUsage(request, answers[pass], pass === 0), request.model)),
+      sum + assistCreditsFromUsd(estimateAiBilledUsd(passUsage(request, answers[pass], pass === 0), request.model)),
     0,
   )
-  return sections + assistCreditsFromUsd(estimateAiCostUsd(SEO_USAGE, SEO_MODEL))
+  return sections + assistCreditsFromUsd(estimateAiBilledUsd(SEO_USAGE, SEO_MODEL))
 }
 
 beforeEach(() => {
