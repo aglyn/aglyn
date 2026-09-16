@@ -584,6 +584,8 @@ export const CAMPAIGN_DRAFT_HEADER_MAX_CHARS = 200
 /** The most alternative subject lines or preheaders a drafted email keeps. */
 export const CAMPAIGN_DRAFT_MAX_VARIANTS = 10
 
+/** The site roles that may compose this site's mail. */
+export const CAMPAIGN_DRAFT_ROLES = ['admin', 'editor'] as const
 /** The send route's refusal for a member who may not compose this site's mail. */
 export const CAMPAIGN_DRAFT_ROLE_REFUSAL = 'Not a site admin or editor'
 
@@ -665,7 +667,7 @@ function campaignDraftRoleRefusal(
   uid: string,
 ): PluginDraftRefusal | null {
   const role = (host.get('memberRoles') ?? {})[uid]
-  return role === 'admin' || role === 'editor'
+  return CAMPAIGN_DRAFT_ROLES.includes(role)
     ? null
     : { status: 403, error: CAMPAIGN_DRAFT_ROLE_REFUSAL }
 }
