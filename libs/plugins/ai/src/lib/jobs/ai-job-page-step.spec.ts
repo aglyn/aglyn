@@ -114,6 +114,7 @@ import {
   aiPageJobAdmission,
   createAiJobPageStep,
   runAiJobPageStep,
+  registerAiPageJob,
 } from './ai-job-page-step'
 import { registerAiJobStep } from './ai-jobs'
 import { AI_PAGE_BRIEF_FIXTURES } from './fixtures/ai-page-briefs'
@@ -310,7 +311,8 @@ beforeEach(() => {
 })
 
 describe('the page step’s registration', () => {
-  it('registers as the page runner with the least time a pass needs, and the admission both doors ask', async () => {
+  it('registers the page runner with the least time a pass needs, and the admission both doors ask', async () => {
+    registerAiPageJob()
     expect(registerAiJobStep).toHaveBeenCalledWith('page', runAiJobPageStep, { minimumMs: AI_JOB_PAGE_STEP_MINIMUM_MS })
     const ask = (patch: Record<string, unknown> = {}) =>
       aiJobAdmissionRefusal('page', { firestore, orgId: 'org-1', hostId: 'host-1', inputs: {}, org: STARTER_ORG, ...patch })

@@ -589,5 +589,8 @@ export function createAiJobEmailStep(deps: AiJobEmailStepDeps = {}): AiJobStepRu
 
 export const runAiJobEmailStep = createAiJobEmailStep()
 
-registerAiJobStep('email', runAiJobEmailStep)
-registerAiJobAdmission('email', aiEmailJobAdmission)
+/** Registers the email step and the check a email job passes before it is created or resumed. */
+export function registerAiEmailJob(): void {
+  registerAiJobStep('email', runAiJobEmailStep)
+  registerAiJobAdmission('email', aiEmailJobAdmission)
+}

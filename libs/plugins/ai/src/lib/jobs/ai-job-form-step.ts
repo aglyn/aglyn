@@ -542,5 +542,8 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
 
 export const runAiJobFormStep = createAiJobFormStep()
 
-registerAiJobStep('form', runAiJobFormStep)
-registerAiJobAdmission('form', aiFormJobAdmission)
+/** Registers the form step and the check a form job passes before it is created or resumed. */
+export function registerAiFormJob(): void {
+  registerAiJobStep('form', runAiJobFormStep)
+  registerAiJobAdmission('form', aiFormJobAdmission)
+}

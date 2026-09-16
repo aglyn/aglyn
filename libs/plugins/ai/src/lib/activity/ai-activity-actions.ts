@@ -233,25 +233,28 @@ const AI_ACTIVITY_ACTION_SCOPES: Record<
  * The catalog, declared through the generic activity-action seam
  * (AGL-2940) so the feed's chip, the actor table's filter and the staff
  * facet read it from the registry beside every other plugin's codes.
+ * `registerAiDeclarations` calls it, in both apps and in the browser.
  */
-registerPluginActivityActions({
-  pluginId: 'ai',
-  group: {
-    id: STAFF_AUDIT_AI_GROUP,
-    label: AI_ACTIVITY_FILTER_LABEL,
-    staffAuditPrefixes: AI_STAFF_AUDIT_ACTION_PREFIXES.filter(
-      (prefix) => prefix !== 'ai.',
-    ),
-    // The staff cards opening on an org (AGL-2930) and on one account
-    // (AGL-2928): reads of spend and attribution, and nothing altered.
-    staffAuditAccessActions: ['org.ai-viewed', 'user.ai-usage-viewed'],
-  },
-  actions: AI_ACTIVITY_ACTION_LIST.map((key) => ({
-    key,
-    label: AI_ACTIVITY_ACTION_LABELS[key],
-    scope: AI_ACTIVITY_ACTION_SCOPES[key],
-  })),
-})
+export function registerAiActivityActions(): void {
+  registerPluginActivityActions({
+    pluginId: 'ai',
+    group: {
+      id: STAFF_AUDIT_AI_GROUP,
+      label: AI_ACTIVITY_FILTER_LABEL,
+      staffAuditPrefixes: AI_STAFF_AUDIT_ACTION_PREFIXES.filter(
+        (prefix) => prefix !== 'ai.',
+      ),
+      // The staff cards opening on an org (AGL-2930) and on one account
+      // (AGL-2928): reads of spend and attribution, and nothing altered.
+      staffAuditAccessActions: ['org.ai-viewed', 'user.ai-usage-viewed'],
+    },
+    actions: AI_ACTIVITY_ACTION_LIST.map((key) => ({
+      key,
+      label: AI_ACTIVITY_ACTION_LABELS[key],
+      scope: AI_ACTIVITY_ACTION_SCOPES[key],
+    })),
+  })
+}
 
 /**
  * The group the staff audit facet files an action under: `ai` for every

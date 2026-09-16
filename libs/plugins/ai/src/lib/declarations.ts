@@ -27,8 +27,7 @@ import {
 import { AI_PLUGIN_ID } from './constants'
 import { AI_ORG_PERMISSIONS } from './model/ai-permissions'
 import { AI_CONFIG_SCHEMA } from './plugin-config'
-// Registers the activity codes at module scope (AGL-2940).
-import './activity/ai-activity-actions'
+import { registerAiActivityActions } from './activity/ai-activity-actions'
 
 /**
  * The plugin's DECLARATIONS (AGL-2939): what core must know about this
@@ -101,14 +100,19 @@ export const AI_PLUGIN_ENTITLEMENTS: PluginEntitlementRegistration = {
 let declared = false
 
 /**
- * Registers everything above. Idempotent: the declarations manifest runs
- * it once per process, and a surface's register fn may call it again.
+ * Registers everything above, and the activity codes. Idempotent: the
+ * declarations manifest runs it once per process, and a surface's register
+ * fn may call it again. The codes are a call rather than an import made
+ * for what the module does as it loads, because the browser's manifest
+ * reaches that module through nothing else, and a bundler honoring this
+ * package's `sideEffects` deletes such an import (AGL-3025).
  */
 export function registerAiDeclarations(): void {
   if (declared) return
   declared = true
   registerPluginEntitlements(AI_PLUGIN_ENTITLEMENTS)
   registerPluginConfigSchema(AI_CONFIG_SCHEMA)
+  registerAiActivityActions()
 }
 
 registerAiDeclarations()

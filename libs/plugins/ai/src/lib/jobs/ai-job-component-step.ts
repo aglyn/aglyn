@@ -568,5 +568,8 @@ export function createAiJobComponentStep(deps: AiJobComponentStepDeps = {}): AiJ
 
 export const runAiJobComponentStep = createAiJobComponentStep()
 
-registerAiJobStep('component', runAiJobComponentStep)
-registerAiJobAdmission('component', aiComponentJobAdmission)
+/** Registers the component step and the check a component job passes before it is created or resumed. */
+export function registerAiComponentJob(): void {
+  registerAiJobStep('component', runAiJobComponentStep)
+  registerAiJobAdmission('component', aiComponentJobAdmission)
+}

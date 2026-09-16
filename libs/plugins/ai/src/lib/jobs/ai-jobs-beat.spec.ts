@@ -64,20 +64,9 @@ jest.mock('./ai-jobs', () => ({
   sweepAiJobs: (...args: unknown[]) => mockSweep(...args),
 }))
 
-let AI_JOBS_PLUGIN_ID: string
-let runAiJobsBeat: () => Promise<void>
+import { AI_JOBS_PLUGIN_ID, registerAiJobsBeat, runAiJobsBeat } from './ai-jobs-beat'
 
-beforeAll(() => {
-  // Required after the mocks above are in place rather than imported: the
-  // registration is a module-scope side effect, and a hoisted import would
-  // run it before the capture variable exists.
-  const beat = require('./ai-jobs-beat') as {
-    AI_JOBS_PLUGIN_ID: string
-    runAiJobsBeat: () => Promise<void>
-  }
-  AI_JOBS_PLUGIN_ID = beat.AI_JOBS_PLUGIN_ID
-  runAiJobsBeat = beat.runAiJobsBeat
-})
+beforeAll(registerAiJobsBeat)
 
 beforeEach(() => {
   mockLocked = null

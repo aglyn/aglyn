@@ -17,31 +17,16 @@
 
 import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { registerAiDeclarations } from './declarations'
-// Registers the jobs beat at module scope (AGL-2904, AGL-435).
-import './jobs/ai-jobs-beat'
-// Registers the plan step every planned job kind runs first (AGL-2935).
-import './jobs/ai-job-plan-step'
-// Registers the component generation step, and what a component job checks
-// before it is created or resumed (AGL-2908).
-import './jobs/ai-job-component-step'
-// Registers the layout and template generation steps, and what each kind
-// checks before a job of it is created or resumed (AGL-2909).
-import './jobs/ai-job-layout-step'
-import './jobs/ai-job-template-step'
-// Registers the form generation step and what a form job checks before it is
-// created or resumed (AGL-2913).
-import './jobs/ai-job-form-step'
-// Registers the page generation step with the least time one pass of it
-// needs, and what a page job checks when it is created or its plan is
-// confirmed (AGL-2907).
-import './jobs/ai-job-page-step'
-// Registers the email and campaign steps, whose drafts the email and
-// marketing plugins write on the resource-draft seam (AGL-2912).
-import './jobs/ai-job-email-step'
-import './jobs/ai-job-campaign-step'
-// Registers the site scaffold, which builds a whole site through the steps
-// above and the page step, and the agency batch's own door (AGL-2911).
-import './jobs/ai-job-site-step'
+import { registerAiJobsBeat } from './jobs/ai-jobs-beat'
+import { registerAiJobPlan } from './jobs/ai-job-plan-step'
+import { registerAiComponentJob } from './jobs/ai-job-component-step'
+import { registerAiLayoutJob } from './jobs/ai-job-layout-step'
+import { registerAiTemplateJob } from './jobs/ai-job-template-step'
+import { registerAiFormJob } from './jobs/ai-job-form-step'
+import { registerAiPageJob } from './jobs/ai-job-page-step'
+import { registerAiEmailJob } from './jobs/ai-job-email-step'
+import { registerAiCampaignJob } from './jobs/ai-job-campaign-step'
+import { registerAiSiteJob } from './jobs/ai-job-site-step'
 import { ensureFirstPartyAiProviders } from './providers/registry'
 import { aiAssistHandler } from './server/ai-assist'
 import { POST as cancelAiJob } from './server/ai-jobs-cancel'
@@ -80,6 +65,37 @@ export * from './runtime/ai-runtime'
 const registerFirstPartyProviders = ensureFirstPartyAiProviders
 
 /**
+ * Every job kind this plugin runs beyond the three the machine registers
+ * itself (AGL-3025). Each is a CALL, never an import made for what the
+ * module does as it loads: this package declares only this file
+ * effect-ful, so a bundler honoring `sideEffects` deletes an import whose
+ * exports go unused — and a step registered that way ran in every spec and
+ * in neither app. `registrations-survive-a-bundler.spec.ts` holds this.
+ *
+ * Both surfaces call it: the console runs a job's first step inline, and
+ * the tenant's beat runs every step after it.
+ */
+function registerAiJobKinds(): void {
+  // The plan step every planned kind runs first (AGL-2935).
+  registerAiJobPlan()
+  // Components, layouts and templates (AGL-2908, AGL-2909).
+  registerAiComponentJob()
+  registerAiLayoutJob()
+  registerAiTemplateJob()
+  // Forms (AGL-2913).
+  registerAiFormJob()
+  // Pages, with the least time one pass needs (AGL-2907).
+  registerAiPageJob()
+  // Email designs and campaigns, whose drafts the email and marketing
+  // plugins write on the resource-draft seam (AGL-2912).
+  registerAiEmailJob()
+  registerAiCampaignJob()
+  // The site scaffold, which builds a whole site through the steps above
+  // (AGL-2911).
+  registerAiSiteJob()
+}
+
+/**
  * The console-side API (AGL-2939): every AI door, under the `ai` and
  * `assist` prefixes the plugin owns. The URLs the panel and the besigner
  * call are unchanged — `/api/assist/chat`, `/api/ai/assist`,
@@ -90,6 +106,7 @@ const registerFirstPartyProviders = ensureFirstPartyAiProviders
 export function registerAiConsoleApi(): void {
   registerAiDeclarations()
   registerFirstPartyProviders()
+  registerAiJobKinds()
   registerPluginApiRoute('assist/chat', { web: assistChat })
   registerPluginApiRoute('assist/feedback', { web: assistFeedback })
   // The applied-edit record (AGL-2906): counts of a proposal the author
@@ -145,10 +162,14 @@ export function registerAiConsoleApi(): void {
 }
 
 /**
- * The tenant-side surface (AGL-2939): the jobs beat, which the module
- * import above registers, and the providers the sweep runs steps on.
+ * The tenant-side surface (AGL-2939): the jobs beat, the job kinds it runs
+ * steps of, and the providers those steps call. The beat is registered
+ * here alone, because the tenant's `/api/plugins/run-jobs` is the only
+ * runner that reads it.
  */
 export function registerAiApi(): void {
   registerAiDeclarations()
   registerFirstPartyProviders()
+  registerAiJobKinds()
+  registerAiJobsBeat()
 }

@@ -360,5 +360,8 @@ async function draftCampaign(input: AiCampaignDraftInput): Promise<AiJobStepOutc
 
 export const runAiJobCampaignStep = createAiJobCampaignStep()
 
-registerAiJobStep('campaign', runAiJobCampaignStep)
-registerAiJobAdmission('campaign', aiCampaignJobAdmission)
+/** Registers the campaign step and the check a campaign job passes before it is created or resumed. */
+export function registerAiCampaignJob(): void {
+  registerAiJobStep('campaign', runAiJobCampaignStep)
+  registerAiJobAdmission('campaign', aiCampaignJobAdmission)
+}

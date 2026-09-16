@@ -479,6 +479,12 @@ export function createAiJobSiteStep(
 
 export const runAiJobSiteStep = createAiJobSiteStep()
 
-registerAiJobStep('site', runAiJobSiteStep)
-registerAiJobStepPasses('site', AI_SITE_MAX_PASSES)
-registerAiJobAdmission('site', aiSiteJobAdmission)
+/**
+ * Registers the site scaffold, the passes a whole site's plan may take, and
+ * the check a site job passes before it is created or resumed.
+ */
+export function registerAiSiteJob(): void {
+  registerAiJobStep('site', runAiJobSiteStep)
+  registerAiJobStepPasses('site', AI_SITE_MAX_PASSES)
+  registerAiJobAdmission('site', aiSiteJobAdmission)
+}

@@ -98,6 +98,7 @@ import {
   aiJobComponentPrompt,
   createAiJobComponentStep,
   runAiJobComponentStep,
+  registerAiComponentJob,
 } from './ai-job-component-step'
 import { AI_DRAFT_ENTITLEMENT_REFUSAL } from './ai-job-drafts'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
@@ -291,7 +292,8 @@ beforeEach(() => {
 })
 
 describe('the component step', () => {
-  it('registers itself as the component runner, with the admission the create and resume doors ask', async () => {
+  it('registers the component runner, with the admission the create and resume doors ask', async () => {
+    registerAiComponentJob()
     expect(registerAiJobStep).toHaveBeenCalledWith('component', runAiJobComponentStep)
     const ask = (hostId: string | null, org: object) =>
       aiJobAdmissionRefusal('component', { firestore, orgId: 'org-1', hostId, inputs: {}, org })

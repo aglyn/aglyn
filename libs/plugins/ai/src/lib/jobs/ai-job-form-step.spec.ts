@@ -114,6 +114,7 @@ import {
   createAiJobFormStep,
   parseAiFormAnswer,
   runAiJobFormStep,
+  registerAiFormJob,
 } from './ai-job-form-step'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import { AI_JOB_LAYOUT_MAX_TOKENS } from './ai-job-layout-step'
@@ -447,7 +448,8 @@ describe.each(Object.keys(EXPECTED))('the %s golden', (key) => {
 // ── The step ─────────────────────────────────────────────────────────────
 
 describe('the form step', () => {
-  it('registers itself as the form runner, with the admission the create and resume doors ask', async () => {
+  it('registers the form runner, with the admission the create and resume doors ask', async () => {
+    registerAiFormJob()
     expect(registerAiJobStep).toHaveBeenCalledWith('form', runAiJobFormStep)
     const ask = (hostId: string | null, org: object) =>
       aiJobAdmissionRefusal('form', { firestore, orgId: 'org-1', hostId, inputs: {}, org })

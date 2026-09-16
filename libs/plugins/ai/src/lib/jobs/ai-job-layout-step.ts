@@ -269,5 +269,8 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
 
 export const runAiJobLayoutStep = createAiJobLayoutStep()
 
-registerAiJobStep('layout', runAiJobLayoutStep)
-registerAiJobAdmission('layout', aiLayoutJobAdmission)
+/** Registers the layout step and the check a layout job passes before it is created or resumed. */
+export function registerAiLayoutJob(): void {
+  registerAiJobStep('layout', runAiJobLayoutStep)
+  registerAiJobAdmission('layout', aiLayoutJobAdmission)
+}

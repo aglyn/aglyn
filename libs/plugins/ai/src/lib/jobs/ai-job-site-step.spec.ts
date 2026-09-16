@@ -68,6 +68,7 @@ import {
   aiSitePendingUnits,
   aiSiteUnitJob,
   createAiJobSiteStep,
+  registerAiSiteJob,
 } from './ai-job-site-step'
 import {
   AI_JOB_STEP_MAX_PASSES,
@@ -572,6 +573,8 @@ describe('what a scaffold refuses before it spends', () => {
 })
 
 describe('what a scaffold is admitted with', () => {
+  beforeAll(registerAiSiteJob)
+
   beforeEach(() => {
     mockOwners.clear()
     mockOwners.set('host-1', 'org-1')
@@ -623,6 +626,7 @@ describe('what a scaffold is admitted with', () => {
 
 describe('the passes a scaffold may take', () => {
   it('registers a bound of its own, above the default an audit keeps', () => {
+    registerAiSiteJob()
     expect(aiJobStepMaxPasses('site')).toBe(AI_SITE_MAX_PASSES)
     expect(AI_SITE_MAX_PASSES).toBeGreaterThan(AI_JOB_STEP_MAX_PASSES)
     expect(aiJobStepMaxPasses('seo')).toBe(AI_JOB_STEP_MAX_PASSES)

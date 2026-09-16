@@ -94,6 +94,7 @@ import {
   aiJobEmailPrompt,
   createAiJobEmailStep,
   runAiJobEmailStep,
+  registerAiEmailJob,
 } from './ai-job-email-step'
 import { registerAiJobStep } from './ai-jobs'
 
@@ -330,7 +331,8 @@ beforeEach(() => {
 })
 
 describe('the email step', () => {
-  it('registers itself as the email runner, with the admission the doors ask', async () => {
+  it('registers the email runner, with the admission the doors ask', async () => {
+    registerAiEmailJob()
     expect(registerAiJobStep).toHaveBeenCalledWith('email', runAiJobEmailStep)
     const ask = (hostId: string | null) =>
       aiJobAdmissionRefusal('email', {

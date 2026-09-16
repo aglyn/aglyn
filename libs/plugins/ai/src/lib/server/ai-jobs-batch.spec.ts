@@ -99,8 +99,8 @@ jest.mock('../jobs/ai-jobs', () => ({
 
 import type { AiJobStepRunner } from '../jobs/ai-job-text-step'
 import { registerAiJobStep } from '../jobs/ai-jobs'
-// Registers the scaffold's own admission, which every site in a batch meets.
-import '../jobs/ai-job-site-step'
+// The scaffold's own admission, which every site in a batch meets.
+import { registerAiSiteJob } from '../jobs/ai-job-site-step'
 import { AI_SITE_BATCH_MAX, AI_SITE_PAGES } from '../model/ai-site-job'
 import {
   AI_SITE_BATCH_PLAN_REFUSAL,
@@ -158,6 +158,8 @@ const BODY = {
   pages: AI_SITE_PAGES.min,
   sites: SITES,
 }
+
+beforeAll(registerAiSiteJob)
 
 beforeEach(() => {
   mockPermitted = new Map()

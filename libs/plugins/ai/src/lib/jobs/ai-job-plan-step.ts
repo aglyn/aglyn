@@ -364,4 +364,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
 
 export const runAiJobPlanStep = createAiJobPlanStep()
 
-registerAiJobPlanStep(runAiJobPlanStep)
+/** Registers the plan step every planned kind runs first; the plugin's surfaces call it. */
+export function registerAiJobPlan(): void {
+  registerAiJobPlanStep(runAiJobPlanStep)
+}

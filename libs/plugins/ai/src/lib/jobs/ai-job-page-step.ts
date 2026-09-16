@@ -379,5 +379,11 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
 
 export const runAiJobPageStep = createAiJobPageStep()
 
-registerAiJobStep('page', runAiJobPageStep, { minimumMs: AI_JOB_PAGE_STEP_MINIMUM_MS })
-registerAiJobAdmission('page', aiPageJobAdmission)
+/**
+ * Registers the page step with the least time one pass of it needs, and the
+ * check a page job passes when it is created or its plan is confirmed.
+ */
+export function registerAiPageJob(): void {
+  registerAiJobStep('page', runAiJobPageStep, { minimumMs: AI_JOB_PAGE_STEP_MINIMUM_MS })
+  registerAiJobAdmission('page', aiPageJobAdmission)
+}

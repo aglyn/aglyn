@@ -101,6 +101,7 @@ import {
   AI_CAMPAIGN_RESOURCE,
   createAiJobCampaignStep,
   runAiJobCampaignStep,
+  registerAiCampaignJob,
 } from './ai-job-campaign-step'
 import { registerAiJobStep } from './ai-jobs'
 
@@ -353,7 +354,8 @@ beforeEach(() => {
 })
 
 describe('the campaign step', () => {
-  it('registers itself as the campaign runner', () => {
+  it('registers the campaign runner', () => {
+    registerAiCampaignJob()
     expect(registerAiJobStep).toHaveBeenCalledWith('campaign', runAiJobCampaignStep)
   })
 
@@ -402,6 +404,8 @@ describe('the campaign step', () => {
 })
 
 describe('where campaign email begins', () => {
+  beforeAll(registerAiCampaignJob)
+
   const ask = (org: object) =>
     aiJobAdmissionRefusal('campaign', {
       firestore,

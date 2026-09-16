@@ -88,6 +88,7 @@ import {
   aiJobLayoutPrompt,
   createAiJobLayoutStep,
   runAiJobLayoutStep,
+  registerAiLayoutJob,
 } from './ai-job-layout-step'
 import { registerAiJobStep } from './ai-jobs'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
@@ -282,7 +283,8 @@ beforeEach(() => {
 })
 
 describe('the layout step', () => {
-  it('registers itself as the layout runner, with the admission the create and resume doors ask', async () => {
+  it('registers the layout runner, with the admission the create and resume doors ask', async () => {
+    registerAiLayoutJob()
     expect(registerAiJobStep).toHaveBeenCalledWith('layout', runAiJobLayoutStep)
     const ask = (hostId: string | null, org: object) =>
       aiJobAdmissionRefusal('layout', { firestore, orgId: 'org-1', hostId, inputs: {}, org })

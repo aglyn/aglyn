@@ -434,5 +434,8 @@ export function createAiJobTemplateStep(deps: AiJobTemplateStepDeps = {}): AiJob
 
 export const runAiJobTemplateStep = createAiJobTemplateStep()
 
-registerAiJobStep('template', runAiJobTemplateStep)
-registerAiJobAdmission('template', createAiTemplateJobAdmission())
+/** Registers the template step and the check a template job passes before it is created or resumed. */
+export function registerAiTemplateJob(): void {
+  registerAiJobStep('template', runAiJobTemplateStep)
+  registerAiJobAdmission('template', createAiTemplateJobAdmission())
+}

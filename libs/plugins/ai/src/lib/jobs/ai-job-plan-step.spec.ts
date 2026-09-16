@@ -72,6 +72,7 @@ import {
   createAiJobPlanStep,
   runAiJobPlanStep,
   type AiJobPlanCandidate,
+  registerAiJobPlan,
 } from './ai-job-plan-step'
 import { registerAiJobPlanStep } from './ai-jobs'
 
@@ -170,7 +171,8 @@ beforeEach(() => {
 })
 
 describe('the plan step', () => {
-  it('registers itself as the plan step every planned kind runs first', () => {
+  it('registers the plan step every planned kind runs first', () => {
+    registerAiJobPlan()
     expect(registerAiJobPlanStep).toHaveBeenCalledWith(runAiJobPlanStep)
   })
 

@@ -80,6 +80,11 @@ export function registerAiJobAdmission(kind: AiJobKind, admission: AiJobAdmissio
   else admissions.delete(kind)
 }
 
+/** The kind's registered admission, or `null` when it has none. */
+export function aiJobAdmissionFor(kind: AiJobKind): AiJobAdmission | null {
+  return admissions.get(kind) ?? null
+}
+
 /** The kind's refusal, or `null` when it admits the job or has nothing to check. */
 export async function aiJobAdmissionRefusal(
   kind: AiJobKind,
