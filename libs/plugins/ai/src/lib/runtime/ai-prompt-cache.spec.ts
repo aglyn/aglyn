@@ -61,6 +61,7 @@ import {
 } from '../tools/ai-seo-tool'
 import { aiThemeTool } from '../tools/ai-theme-tool'
 import { aiTemplateExamplesSystemBlock } from './ai-template-examples'
+import { assistModeSystemBlocks, assistSectionTool } from '../server/ai-assist-prompts'
 import {
   AI_CACHE_PREFIX_TOKEN_CHARS,
   aiCachedPrefixCaches,
@@ -178,7 +179,7 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
   'server/ai-assist.ts': {
     step: 'copy.element',
     caches: false,
-    why: "the copy assistant's mode prompts, measured in its own spec",
+    why: "the copy assistant's three mode prompts, each measured below",
   },
   'server/assist-chat.ts': {
     step: 'assist.chat',
@@ -322,6 +323,28 @@ const REQUESTS: Record<string, Composed> = {
     blocks: () => [...AI_JOB_TEXT_SYSTEM],
     tools: () => [],
   },
+  // The copy assistant's three modes. Their prompts are short and two of the
+  // three run on a model whose minimum they cannot reach, so the breakpoints
+  // they carry are a statement about the blocks rather than a saving — which
+  // is exactly the kind of claim this ledger exists to settle.
+  'copy.element': {
+    door: 'server/ai-assist.ts',
+    step: 'copy.element',
+    blocks: () => assistModeSystemBlocks('element'),
+    tools: () => [],
+  },
+  'copy.blog': {
+    door: 'server/ai-assist.ts',
+    step: 'copy.blog',
+    blocks: () => assistModeSystemBlocks('blog'),
+    tools: () => [],
+  },
+  'copy.section': {
+    door: 'server/ai-assist.ts',
+    step: 'copy.section',
+    blocks: () => assistModeSystemBlocks('section'),
+    tools: () => [assistSectionTool()],
+  },
 }
 
 /** Every block through the last breakpoint: the bytes a cache entry is keyed on. */
@@ -419,6 +442,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // The text step marks a breakpoint its prompt is far too short to fill.
       // It costs nothing and it caches nothing; the brief is the request.
       text: { prefixTokens: 128, minimum: 1_024, caches: false, toolsStable: true },
+      'copy.element': { prefixTokens: 339, minimum: 4_096, caches: false, toolsStable: true },
+      'copy.blog': { prefixTokens: 340, minimum: 1_024, caches: false, toolsStable: true },
+      'copy.section': { prefixTokens: 694, minimum: 1_024, caches: false, toolsStable: true },
     })
   })
 

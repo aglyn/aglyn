@@ -55,19 +55,22 @@ import { logAiAssistSection } from '../activity/ai-activity'
 // error boundary rather than a stub that agrees with the handler.
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
-  AI_ACCEPTABLE_USE_BLOCK,
   AiUpstreamError,
   aiProviderReady,
   runAiRequest,
   type AiResult,
+  type AiTool,
 } from '../runtime/ai-runtime'
+import {
+  ASSIST_SECTION_TOOL_NAME,
+  assistModeSystemBlocks,
+  assistSectionTool,
+  readAssistSection,
+  type AiAssistMode,
+} from './ai-assist-prompts'
 // By its own entry point for the same reason (AGL-2925): the per-address
 // rung is real in the spec, keyed on whatever address the harness sends.
 import { checkAiClientIpRateLimit } from '../runtime/ai-abuse-guards'
-import {
-  MARKETPLACE_COMPONENT_ID_ALLOWLIST,
-  sanitizeMarketplaceDefinition,
-} from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 
 /**
  * The model each mode is served by, through the routing table — tiered by
@@ -85,14 +88,15 @@ import {
  *   task with a schema the sanitizer will reject if it is got wrong, and a
  *   rejected generation costs the whole request rather than part of it.
  *
- * ⚠️ NO PROMPT CACHING IS LOST BY THE FAST RUNG — because this route has
- * never had any. Its system prompts carry no cache breakpoints at all, which
- * is why the tier drop is free here and NOT free on `/api/assist/chat`: a
- * fast-tier model's minimum cacheable prefix can exceed that route's
- * ~1,030-token system prefix, so moving the console chat to the fast tier
- * would silently stop its five-block cache design from caching anything
- * while leaving the markers in place. Cheaper per token, dearer per request,
- * and invisible either way. See the header of `assist-chat.ts`.
+ * ⚠️ NO PROMPT CACHING IS LOST BY THE FAST RUNG. Each mode's static text now
+ * carries a breakpoint (`assistModeSystemBlocks`), but none of the three is
+ * long enough for its model to cache: the catalog states each model's
+ * minimum and `runtime/ai-prompt-cache.spec.ts` measures every door against
+ * it. That is why the tier drop is free here and NOT free on
+ * `/api/assist/chat`, whose ~1,030-token prefix clears the balanced tier's
+ * minimum and would stop caching entirely on the fast tier's — cheaper per
+ * token, dearer per request, and invisible either way without that
+ * measurement. See the header of `assist-chat.ts`.
  *
  * The cost meter prices by model id, so the value returned here MUST be the
  * one passed to `recordAssistCost` — same call, same variable. A tiering
@@ -100,13 +104,13 @@ import {
  * for another tier's tokens, which is the failure the by-model rate table
  * exists to stop.
  */
-export function assistModelForMode(mode: 'element' | 'blog' | 'section'): string {
+export function assistModelForMode(mode: AiAssistMode): string {
   return aiModelForStep(assistStepKindForMode(mode))
 }
 
 /** The routing table's step kind for each mode. */
 export function assistStepKindForMode(
-  mode: 'element' | 'blog' | 'section',
+  mode: AiAssistMode,
 ): 'copy.element' | 'copy.blog' | 'copy.section' {
   return mode === 'element' ? 'copy.element' : mode === 'blog' ? 'copy.blog' : 'copy.section'
 }
@@ -142,14 +146,18 @@ const REFUSED = {
  * Stripe); auth via Firebase ID token.
  *
  * The provider call is `runAiRequest`, the runtime every AI door shares
- * (AGL-2903). This handler owns the three prompts, the ladder below and the
- * response shapes; the runtime owns the wire, the usage arithmetic and the
- * error boundary. Nothing about the request the provider sees changed when
- * the call moved: the same model per mode, the same `max_tokens`, no
- * `thinking` field (a fast-tier model rejects an explicit one, and the
- * balanced modes keep the model default they always had) and no cache
- * markers — see
- * `assistModelForMode` for why the last one is deliberate.
+ * (AGL-2903). This handler owns the ladder below and the response shapes;
+ * `ai-assist-prompts.ts` owns the three prompts and the section tool; the
+ * runtime owns the wire, the usage arithmetic and the error boundary. The
+ * request keeps the model per mode, the `max_tokens` and the absent
+ * `thinking` field it has always had — a fast-tier model rejects an explicit
+ * one, and the balanced modes keep the model default.
+ *
+ * A section arrives through a strict tool (AGL-2937). It used to be asked
+ * for as bare JSON and parsed: a parse that failed answered 502 with the
+ * tokens already spent, so the whole request bought nothing and the member's
+ * next move was to spend it again. The text parse is kept behind the tool,
+ * for a provider whose adapter has none.
  *
  * ── The spend ladder (AGL-2073) ────────────────────────────────────────────
  *
@@ -435,20 +443,21 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
      * provider and is left to the outer catch, which refunds too.
      */
     const ask = async (
-      system: string,
       content: string,
       maxTokens: number,
+      tools?: AiTool[],
     ): Promise<AiResult | null> => {
       try {
         const result = await runAiRequest({
           model,
           maxTokens,
           stream: false,
-          // The acceptable-use rules ahead of every mode's own prompt
-          // (AGL-2925): one block, shared with the console assistant, and
-          // no per-org byte in it.
-          system: [{ text: `${AI_ACCEPTABLE_USE_BLOCK}\n\n${system}` }],
+          // The mode's prompt with the acceptable-use rules ahead of it
+          // (AGL-2925), from `ai-assist-prompts.ts` so a spec can read what
+          // this route sends without standing up the route.
+          system: assistModeSystemBlocks(mode),
           messages: [{ role: 'user', content }],
+          ...(tools ? { tools } : {}),
         })
         providerAnswered = true
         await meter(result)
@@ -468,65 +477,34 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
     // sanitizer as marketplace installs before it ever reaches a canvas.
     if (mode === 'section') {
       const result = await ask(
-        'You design one website section inside a site builder. Reply ' +
-            'with ONLY a JSON object, no prose or code fences: ' +
-            '{"rootId":"n1","nodes":{"n1":{"$id":"n1","componentId":"muiStack","parentId":null,"props":{},"nodes":["n2"]},...}}. ' +
-            'Every node needs $id, componentId, parentId (null for the ' +
-            'root), and children listed in "nodes" (child ids). Allowed ' +
-            `componentIds: ${MARKETPLACE_COMPONENT_ID_ALLOWLIST.join(', ')}. ` +
-            'Useful props — muiStack: {direction:"row"|"column", spacing, ' +
-            'justifyContent, alignItems}; muiTypography: {children, ' +
-            'variant:"h1".."h6"|"body1"|"subtitle1"}; muiButton: ' +
-            '{children, variant:"contained"|"outlined", color}; image: ' +
-            '{src, alt}; muiContainer: {maxWidth:"sm"|"md"|"lg"}. Keep it ' +
-          'small: 4-12 nodes, one root container. Leave image src empty. ' +
-          'Write real copy, not lorem ipsum.',
         `Section to design: ${instruction}`,
         SECTION_MAX_TOKENS,
+        [assistSectionTool()],
       )
       if (!result) return
       if (result.kind === 'refusal') {
         return res.status(502).json({ ...REFUSED, meter: meterFor(result) })
       }
-      const raw = result.text
-        .trim()
-        .replace(/^```(?:json)?\s*/i, '')
-        .replace(/\s*```$/, '')
-      let parsed: any
-      try {
-        parsed = JSON.parse(raw)
-      } catch {
-        return res.status(502).json({ error: 'AI returned invalid JSON' })
-      }
-      const sanitized = sanitizeMarketplaceDefinition({
-        rootId: String(parsed?.rootId ?? ''),
-        nodes: parsed?.nodes ?? {},
-      })
-      if (sanitized.ok === false) {
-        return res.status(422).json({ error: sanitized.error })
+      const read = readAssistSection(result)
+      if (read.status !== 'ok') {
+        // Unreadable is the provider's fault and rejected is the answer's,
+        // the two statuses this route has always drawn that line between.
+        return res.status(read.status === 'unreadable' ? 502 : 422).json({ error: read.error })
       }
       // A subtree is going back (AGL-2929): the act, its size and its site in
       // the customer's feed — never the instruction or the copy generated.
       await logAiAssistSection(
         { uid: decoded.uid, email: decoded.email ?? null },
-        { orgId, hostId: hostId || null, nodeCount: Object.keys(sanitized.nodes).length },
+        {
+          orgId,
+          hostId: hostId || null,
+          nodeCount: Object.keys(read.section.nodes).length,
+        },
       )
-      return res.status(200).json({
-        section: { rootId: sanitized.rootId, nodes: sanitized.nodes },
-        meter: meterFor(result),
-      })
+      return res.status(200).json({ section: read.section, meter: meterFor(result) })
     }
 
     const result = await ask(
-      mode === 'blog'
-        ? 'You write blog posts inside a site builder. Reply with ONLY ' +
-            'the post body in markdown-lite: **bold**, *italic*, ## ' +
-            'headings, - lists, [links](https://url). No front matter, ' +
-            'title line, or preamble — the title renders separately.'
-        : 'You write website copy inside a site builder. Reply with ' +
-            'ONLY the final text for the element — no quotes, preamble, ' +
-            'or markdown. Keep roughly the same length and role as the ' +
-            'current text unless the instruction says otherwise.',
       mode === 'blog'
         ? [
             title && `Title: ${title}`,
