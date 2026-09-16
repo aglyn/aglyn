@@ -2151,6 +2151,29 @@ describe('the Free taste readout and knobs (AGL-2925)', () => {
     ).toEqual({ accountUid: 'o' })
   })
 
+  it('a comped workspace is not metered as Free, whatever its dead subscription says (AGL-3034)', () => {
+    // test-org's shape once comped: the stored plan and the canceled
+    // subscription alone read Free, and the owner's 300-credit account
+    // allowance capped a 5,000-credit override. The comp is the plan now.
+    const canceled = { plan: 'pro', billingStatus: 'canceled', ownerUid: 'o' }
+    expect(freeAssistAccount(canceled as never)).toEqual({ accountUid: 'o' })
+    expect(
+      freeAssistAccount({
+        ...canceled,
+        entitlements: { assistCreditsPerMonth: 5000, planComp: { plan: 'pro', reason: 'beta' } },
+      } as never),
+    ).toBeNull()
+    // …and a comp a live Free subscription outranks is still Free's taste.
+    expect(
+      freeAssistAccount({
+        plan: 'free',
+        billingStatus: 'active',
+        ownerUid: 'o',
+        entitlements: { planComp: { plan: 'pro' } },
+      } as never),
+    ).toEqual({ accountUid: 'o' })
+  })
+
   it('the knobs default, honour a number, and never fail open', () => {
     expect(aiFreeDailyRequests()).toBe(30)
     expect(aiFreeDailyPlatformCeilingUsd()).toBe(25)
