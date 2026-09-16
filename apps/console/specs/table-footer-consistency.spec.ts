@@ -823,8 +823,14 @@ describe('a paged list names its order (AGL-2501)', () => {
  * such file must be classified — converted, or named here with the reason it
  * is not a list. A file in neither list fails, which is what stops the next
  * one arriving unnoticed.
+ *
+ * `ScrollTable` counts as a table, because it is one: it is MUI's `Table` in a
+ * box that scrolls sideways (AGL-3045), the only way a table outside the
+ * shared grid may be drawn at all. A detector that knew only `<Table` would go
+ * blind to every table the moment it gained its scroll box, and each
+ * classification below would read as stale while its table stood unchanged.
  */
-const RENDERS_A_TABLE = /<Table\b/
+const RENDERS_A_TABLE = /<(?:Scroll)?Table\b/
 const MAPS_ROWS_INTO_IT = /\.map\([\s\S]{0,400}?<TableRow/
 /** A grid renders its own footer unless the caller turns it off. */
 const GRID_FOOTER_SWITCHED_OFF = /hideFooter/
@@ -1485,6 +1491,12 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     expect(
       unpaginatedTable(`
         <Table><TableBody>{rows.map((row) => (<TableRow key={row.id} />))}</TableBody></Table>
+      `),
+    ).toBe(true)
+    // The same table in its scroll box is the same table with no footer.
+    expect(
+      unpaginatedTable(`
+        <ScrollTable><TableBody>{rows.map((row) => (<TableRow key={row.id} />))}</TableBody></ScrollTable>
       `),
     ).toBe(true)
     // A grid whose own footer was switched off and given nothing in its place.
