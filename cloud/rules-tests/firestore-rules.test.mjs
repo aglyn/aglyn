@@ -323,7 +323,8 @@ const hostServerOnlySubcollections = memoize(() => {
  */
 describe('the rules parser reads the whole file (AGL-2002)', () => {
   it('strips a line comment that quotes a wildcard path, without eating the file', () => {
-    // The literal line that caused AGL-2004, still in the rules today.
+    // The literal line that caused AGL-2004. AGL-3027's comment trim took it
+    // out of the rules; any new note that quotes a wildcard path recreates it.
     //
     // The trailing block comment is load-bearing, not scenery: the phantom
     // comment a block-first strip opens at `datasets/*` runs to the NEXT
