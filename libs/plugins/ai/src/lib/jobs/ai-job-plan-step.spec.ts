@@ -65,9 +65,13 @@ import { AI_DOCTRINE_RULES } from '../runtime/ai-doctrine-validators'
 import {
   AI_JOB_PLAN_INSTRUCTIONS,
   AI_JOB_PLAN_REVIEW_COPY,
+  AI_PLAN_REUSE_WINDOW_MS,
+  aiJobPlanKey,
   aiJobPlanPrompt,
+  aiReusablePlan,
   createAiJobPlanStep,
   runAiJobPlanStep,
+  type AiJobPlanCandidate,
 } from './ai-job-plan-step'
 import { registerAiJobPlanStep } from './ai-jobs'
 
@@ -147,9 +151,22 @@ function planAnswer(plan: AiBuildPlan) {
   }
 }
 
+/**
+ * Plans another job of this org already carries under the key the step
+ * computes. Empty by default: reuse is a seam like the inventory reader, and
+ * a test that is not about reuse says so by leaving it empty.
+ */
+const mockFindPlans = jest.fn<Promise<AiJobPlanCandidate[]>, [string, string, unknown?]>()
+
+/** The runner under test, with both seams faked unless a test names its own. */
+function planStep(deps: Parameters<typeof createAiJobPlanStep>[0] = {}) {
+  return createAiJobPlanStep({ findPlansByKey: mockFindPlans, ...deps })
+}
+
 beforeEach(() => {
   mockRunAiRequest.mockReset()
   mockReadInventory.mockReset().mockResolvedValue(INVENTORY)
+  mockFindPlans.mockReset().mockResolvedValue([])
 })
 
 describe('the plan step', () => {
@@ -159,7 +176,7 @@ describe('the plan step', () => {
 
   it('reads the site through the machine’s handle and proposes a plan the doctrine held, for review', async () => {
     mockRunAiRequest.mockResolvedValueOnce(planAnswer(PLAN))
-    const outcome = await createAiJobPlanStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
+    const outcome = await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
     expect(mockReadInventory).toHaveBeenCalledWith('org-1', 'host-1', { firestore })
     expect(outcome).toEqual({
       outputs: [],
@@ -174,6 +191,8 @@ describe('the plan step', () => {
         proposedAt: NOW,
         confirmedAt: null,
         confirmedBy: null,
+        // The digest the next identical request would find this plan by.
+        key: expect.stringMatching(/^[0-9a-f]{64}$/),
       },
       review: { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] },
     })
@@ -195,7 +214,7 @@ describe('the plan step', () => {
   it('runs on the model the machine resolves for job.plan, and reports that model', async () => {
     mockRunAiRequest.mockResolvedValueOnce(planAnswer(PLAN))
     const modelFor = jest.fn(() => 'picked-model')
-    const outcome = await createAiJobPlanStep()({ job: job(), stepIndex: 0, now: NOW, firestore, modelFor })
+    const outcome = await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore, modelFor })
     expect(modelFor).toHaveBeenCalledWith('job.plan')
     expect(mockRunAiRequest.mock.calls[0][0]).toMatchObject({ model: 'picked-model' })
     expect(outcome.model).toBe('picked-model')
@@ -206,7 +225,7 @@ describe('the plan step', () => {
     mockRunAiRequest
       .mockResolvedValueOnce(planAnswer(unlaid))
       .mockResolvedValueOnce(planAnswer(unlaid))
-    const outcome = await createAiJobPlanStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
+    const outcome = await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     expect(outcome.plan).toBeUndefined()
     expect(outcome.usage.inputTokens).toBe(4_000)
@@ -226,7 +245,7 @@ describe('the plan step', () => {
       estCostUsd: 0.001,
       stopReason: 'refusal',
     })
-    const outcome = await createAiJobPlanStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
+    const outcome = await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
     expect(outcome).toMatchObject({ refused: true, outputs: [], estCostUsd: 0.001 })
     expect(outcome.plan).toBeUndefined()
     expect(outcome.review).toBeUndefined()
@@ -248,7 +267,7 @@ describe('the plan step', () => {
         screens: [],
       }),
     )
-    const outcome = await createAiJobPlanStep()({
+    const outcome = await planStep()({
       job: job({ hostId: null, kind: 'component' }),
       stepIndex: 0,
       now: NOW,
@@ -265,7 +284,7 @@ describe('the plan step', () => {
       .fn()
       .mockRejectedValue(new Error('host host-1 is not a site of the workspace that asked'))
     await expect(
-      createAiJobPlanStep({ readInventory: reader })({ job: job(), stepIndex: 0, now: NOW, firestore }),
+      planStep({ readInventory: reader })({ job: job(), stepIndex: 0, now: NOW, firestore }),
     ).rejects.toThrow('not a site of the workspace')
     expect(mockRunAiRequest).not.toHaveBeenCalled()
   })
@@ -279,5 +298,163 @@ describe('aiJobPlanPrompt', () => {
     expect(aiJobPlanPrompt(job({ brief: 'x'.repeat(5_000), inputs: {} }))).toHaveLength(
       'Job kind: page\nBrief: '.length + 4_000,
     )
+  })
+})
+
+/**
+ * Identical-brief plan reuse (AGL-2937). A plan is the dearest step of a job
+ * and the one most often asked for twice — the same brief run again in a
+ * sitting, a job resubmitted after a refused reservation, two members
+ * starting the same work — so a request that would have been sent the same
+ * bytes to the same model keeps the first answer instead of buying it again.
+ *
+ * What the tests hold: that the key is the whole REQUEST, that a reuse spends
+ * nothing (which is what makes the machine release the reservation and meter
+ * no credit), that it is still the member's to confirm, and that the window
+ * and the statuses shut the door on a plan that should not be handed on.
+ */
+
+function candidate(patch: Partial<AiJobPlanCandidate> = {}): AiJobPlanCandidate {
+  return {
+    jobId: 'job-earlier',
+    status: 'needs_review',
+    plan: {
+      ...PLAN,
+      status: 'proposed',
+      labels: {},
+      proposedAt: new Date(NOW.getTime() - 60_000) as never,
+      confirmedAt: null,
+      confirmedBy: null,
+      key: 'the-key',
+    },
+    ...patch,
+  }
+}
+
+describe('aiJobPlanKey', () => {
+  const base = {
+    job: { kind: 'page' as const, hostId: 'host-1' },
+    prompt: 'Job kind: page\nBrief: A pricing page.',
+    model: 'routed-model',
+    system: [{ text: 'Doctrine.' }, { text: 'Site inventory: one component.' }],
+  }
+
+  it('is the same digest for the same request, and a different one for every part of it', () => {
+    expect(aiJobPlanKey(base)).toBe(aiJobPlanKey(base))
+    expect(aiJobPlanKey(base)).toMatch(/^[0-9a-f]{64}$/)
+    const differs = [
+      { ...base, job: { ...base.job, kind: 'template' as const } },
+      { ...base, job: { ...base.job, hostId: 'host-2' } },
+      { ...base, prompt: `${base.prompt} ` },
+      { ...base, model: 'other-model' },
+      // The rendered inventory is part of the prompt, so a site that gained a
+      // component since is a different request and asks the model again.
+      { ...base, system: [base.system[0], { text: 'Site inventory: two components.' }] },
+    ]
+    for (const input of differs) expect(aiJobPlanKey(input)).not.toBe(aiJobPlanKey(base))
+  })
+
+  it('cannot be collided by moving characters across the parts it hashes', () => {
+    expect(aiJobPlanKey({ ...base, model: 'a', prompt: 'bc' })).not.toBe(
+      aiJobPlanKey({ ...base, model: 'ab', prompt: 'c' }),
+    )
+  })
+})
+
+describe('aiReusablePlan', () => {
+  const context = { jobId: 'job-1', now: NOW }
+
+  it('takes the newest plan of another job, proposed or already confirmed', () => {
+    const older = candidate({ jobId: 'job-old' })
+    const newer = candidate({
+      jobId: 'job-new',
+      status: 'done',
+      plan: {
+        ...candidate().plan,
+        status: 'confirmed',
+        proposedAt: new Date(NOW.getTime() - 10_000) as never,
+      },
+    })
+    expect(aiReusablePlan([older, newer], context)?.jobId).toBe('job-new')
+  })
+
+  it('refuses this job’s own plan, a canceled or failed job’s, and a plan past the window', () => {
+    expect(aiReusablePlan([candidate({ jobId: 'job-1' })], context)).toBeNull()
+    expect(aiReusablePlan([candidate({ status: 'canceled' })], context)).toBeNull()
+    expect(aiReusablePlan([candidate({ status: 'failed' })], context)).toBeNull()
+    const stale = candidate({
+      plan: {
+        ...candidate().plan,
+        proposedAt: new Date(NOW.getTime() - AI_PLAN_REUSE_WINDOW_MS - 1) as never,
+      },
+    })
+    expect(aiReusablePlan([stale], context)).toBeNull()
+  })
+
+  it('refuses a plan that is not the job’s answer yet, and one with no instant at all', () => {
+    const superseded = candidate({
+      plan: { ...candidate().plan, status: 'superseded' as never },
+    })
+    expect(aiReusablePlan([superseded], context)).toBeNull()
+    expect(
+      aiReusablePlan([candidate({ plan: { ...candidate().plan, proposedAt: null as never } })], context),
+    ).toBeNull()
+  })
+})
+
+describe('the plan step — reuse', () => {
+  it('keeps an identical brief’s plan, spends nothing, and still asks the member to confirm', async () => {
+    mockFindPlans.mockResolvedValue([candidate()])
+    const outcome = await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(outcome.usage).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    })
+    expect(outcome.estCostUsd).toBe(0)
+    // Proposed to THIS member, whatever the last one did with theirs, and
+    // labelled from the inventory this job read.
+    expect(outcome.plan).toMatchObject({
+      status: 'proposed',
+      reusedFrom: 'job-earlier',
+      proposedAt: NOW,
+      confirmedAt: null,
+      confirmedBy: null,
+      labels: { 'lay-site': 'Site layout', 'cmp-card': 'Service card' },
+    })
+    expect(outcome.review).toEqual({
+      reason: 'plan',
+      message: AI_JOB_PLAN_REVIEW_COPY,
+      findings: [],
+    })
+  })
+
+  it('looks the plan up by the key this request would have been sent under', async () => {
+    mockFindPlans.mockResolvedValue([])
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(PLAN))
+    const outcome = await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
+    const [orgId, key, handle] = mockFindPlans.mock.calls[0]
+    expect(orgId).toBe('org-1')
+    expect(handle).toBe(firestore)
+    // The key the step searched by is the key it then stored, so the next
+    // identical request finds this one.
+    expect(outcome.plan?.key).toBe(key)
+  })
+
+  it('asks the model when nothing matches, and never reuses a job that was canceled', async () => {
+    mockFindPlans.mockResolvedValue([candidate({ status: 'canceled' })])
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(PLAN))
+    const outcome = await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect(outcome.plan?.reusedFrom).toBeUndefined()
+  })
+
+  it('asks the model when reuse is turned off, and reads no jobs for it', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(PLAN))
+    await planStep({ findPlansByKey: null })({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(mockFindPlans).not.toHaveBeenCalled()
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
   })
 })

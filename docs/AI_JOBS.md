@@ -314,6 +314,44 @@ beat query matches `needs_review`, and only a member resumes it:
 
 `resumeAiJob` is that transition, in one transaction, and cancel ends either.
 
+### An identical brief reuses the plan
+
+A plan is the dearest step of a job and the one most often asked for twice: the
+same brief run again in a sitting, a job resubmitted after a refused
+reservation, two members starting the same work. So the step looks before it
+asks (AGL-2937).
+
+`plan.key` is a sha256 of the whole REQUEST — the job's kind and site, the user
+turn (which carries the trimmed brief and every scalar input), the model that
+would answer, every rendered system block including the site inventory, and the
+plan tool's schema — hashed with each part length-prefixed so no two splits of
+the same characters collide. It hashes what the model was asked and shown,
+never what it answered, and nothing of the brief is recoverable from it. A
+`plan.v1` tag leads it, so a change to what a key MEANS strands the old ones
+harmlessly: a key nothing matches simply asks the model.
+
+`findAiJobsByPlanKey` reads `orgs/{orgId}/aiJobs` on one equality, `plan.key ==
+key`, with no ordering beside it, so Firestore's automatic single-field index
+answers it and **no composite index is deployed**. The window and the statuses
+are applied in memory, which is what keeps it that way; it is injected as
+`findPlansByKey`, like the inventory reader, and `null` turns reuse off.
+
+`aiReusablePlan` takes the newest plan of ANOTHER job that is still `proposed`
+or already `confirmed`, on a job that was neither canceled nor failed, proposed
+inside `AI_PLAN_REUSE_WINDOW_MS` (fifteen minutes). A canceled or failed job is
+excluded even when its plan is good: those are the jobs a member walked away
+from, and handing their plan to the next one would make a rejected answer look
+like a fresh one. The window covers what the key cannot see — a page published,
+a component renamed since the inventory was read, a member who meant something
+else the second time.
+
+A reused plan is recorded with `reusedFrom` naming the job it came from,
+`status: 'proposed'` whatever the source's was, a fresh `proposedAt` and labels
+read from THIS job's inventory: it is this member's plan to confirm. The step
+returns zero usage, so the machine's spent-nothing branch releases the
+reservation, meters no credit and records no token run, and the step still
+completes — confirming runs the generation step as it always did.
+
 ## The building doctrine
 
 Every generator — the plan step today, the page, component, layout, template,

@@ -694,6 +694,44 @@ describe('a step’s own failure, and what a runner is handed (AGL-2938)', () =>
     expect(Number(month['estCostUsd'] ?? 0)).toBe(0)
   })
 
+  it('records a plan the step reused without spending, and meters no credit for it (AGL-2937)', async () => {
+    // A plan reused from an identical brief returns zero usage, which is what
+    // makes the machine release the reservation and meter nothing — and it
+    // still completes the step, so confirming runs the next one.
+    registerAiJobStep('insight', async () => ({
+      outputs: [],
+      usage: ZERO,
+      estCostUsd: 0,
+      model: 'claude-sonnet-5',
+      stopReason: null,
+      plan: {
+        reuse: [],
+        create: [],
+        screens: [],
+        status: 'proposed',
+        labels: {},
+        proposedAt: NOW as never,
+        confirmedAt: null,
+        confirmedBy: null,
+        key: 'a-key',
+        reusedFrom: 'job-earlier',
+      },
+      review: { reason: 'plan', message: 'Review the plan.', findings: [] },
+    }))
+    const job = await newInsightJob()
+    const run = await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
+    expect(run.outcome).toBe('needs_review')
+    const stored = await getAiJob(firestore, ORG, job.$id)
+    expect(stored).toMatchObject({ status: 'needs_review', creditsSpent: 0 })
+    expect(stored?.plan).toMatchObject({ reusedFrom: 'job-earlier', key: 'a-key' })
+    // A step that ran no model adds no run to the token measure.
+    expect(stored?.steps[0]).toMatchObject({ status: 'done', creditsSpent: 0 })
+    expect(stored?.steps[0].tokens).toBeUndefined()
+    const month = mockDocs.get(`orgs/${ORG}/assistUsage/${assistUsageMonth(NOW)}`) ?? {}
+    expect(Number(month['messages'] ?? 0)).toBe(0)
+    expect(Number(month['estCostUsd'] ?? 0)).toBe(0)
+  })
+
   it('fails after an unusable answer: metered first, then failed with the step’s sentence and no output', async () => {
     registerAiJobStep('insight', async () => ({
       outputs: [],

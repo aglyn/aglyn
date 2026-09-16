@@ -146,6 +146,11 @@ const recordPlan: AiEvalRecorder = async (evalCase, options) => {
       if (!evalCase.inventory) throw new Error(`${evalCase.id} has no inventory to plan from`)
       return evalCase.inventory
     },
+    // No plan reuse in a recording (AGL-2937): the point of a live run is to
+    // measure what the model answers for this brief, and a reused plan would
+    // record someone else's answer as this case's. There is no workspace to
+    // reuse from here either — a recorder runs off a fixture, not a job.
+    findPlansByKey: null,
   })
   const outcome = await runner({
     job: evalJob(evalCase, kind),

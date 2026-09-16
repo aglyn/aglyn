@@ -15,19 +15,21 @@
  * limitations under the License.
  */
 
+import { createHash } from 'node:crypto'
 import {
   AI_BUILD_PLAN_TOOL,
   isAiPlanNewRef,
   type AiBuildPlan,
 } from '../model/ai-build-plan'
-import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
+import type { AiJob, AiJobPlan, AiJobStatus } from '../model/ai-jobs.types'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
-import { runValidatedGeneration } from '../runtime/ai-doctrine'
-import { AI_ROUTING_TABLE } from '../providers/routing'
+import { aiDoctrineSystemBlocks, runValidatedGeneration } from '../runtime/ai-doctrine'
+import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
 import { AI_JOB_BRIEF_MAX_CHARS, type AiJobStepRunner } from './ai-job-text-step'
-import { registerAiJobPlanStep } from './ai-jobs'
+import { aiUnspentOutcome } from './ai-job-generation'
+import { AI_JOBS_COLLECTION, registerAiJobPlanStep } from './ai-jobs'
 
 /**
  * The plan step (AGL-2935): the first step of every job that builds site
@@ -109,13 +111,158 @@ export function aiPlanLabels(
   return labels
 }
 
+/* ------------------------------------------------------------------------ *
+ * Reusing an identical brief's plan
+ * ------------------------------------------------------------------------ */
+
+/**
+ * How long a plan may be reused for (AGL-2937).
+ *
+ * The window is what makes reuse safe rather than merely cheap. The key
+ * already covers everything the request said — the brief, the inputs, the
+ * model and the prompt as rendered, site inventory included — so a plan is
+ * reused only when nothing the model was shown has changed. What the key
+ * cannot see is the world outside the request: a page published, a component
+ * renamed after the inventory was read, a member who meant something
+ * different the second time. Fifteen minutes is short enough that the answer
+ * is still the one the site would give, and long enough to cover what reuse
+ * is actually for — the same brief run twice in a sitting, a job resubmitted
+ * after a refused reservation, two members starting the same work.
+ */
+export const AI_PLAN_REUSE_WINDOW_MS = 15 * 60 * 1_000
+
+/** Jobs one lookup reads. More than one can share a key; the newest plan wins. */
+export const AI_PLAN_REUSE_CANDIDATES = 5
+
+/** A job whose plan might be reused, as the finder reports it. */
+export interface AiJobPlanCandidate {
+  jobId: string
+  status: AiJobStatus
+  plan: AiJobPlan
+}
+
+/**
+ * The digest a plan is reused by: the whole request, never the answer.
+ *
+ * It hashes what the model was asked and what it was shown — the job's kind
+ * and site, the user turn (which carries the trimmed brief and every scalar
+ * input), the model that would answer, every rendered system block including
+ * the site inventory, and the tool's schema. Two requests that hash the same
+ * would have been sent the same bytes to the same model, so the second can
+ * keep the first's answer.
+ *
+ * The version tag is the escape hatch: anything that changes what a key
+ * MEANS, rather than what it covers, bumps it and strands every old key
+ * harmlessly, since a key nothing matches simply asks the model.
+ */
+export function aiJobPlanKey(input: {
+  job: Pick<AiJob, 'kind' | 'hostId'>
+  prompt: string
+  model: string
+  system: readonly AiSystemBlock[]
+}): string {
+  const digest = createHash('sha256')
+  for (const part of [
+    'plan.v1',
+    input.job.kind,
+    input.job.hostId ?? '',
+    input.model,
+    input.prompt,
+    ...input.system.map((block) => block.text),
+    JSON.stringify(AI_BUILD_PLAN_TOOL),
+  ]) {
+    // Length-prefixed, so two different splits of the same characters cannot
+    // collide by running into one another.
+    digest.update(`${part.length}:${part}\u0000`)
+  }
+  return digest.digest('hex')
+}
+
+/** A job that could not have produced a reusable plan, whatever its key says. */
+const UNREUSABLE: readonly AiJobStatus[] = ['canceled', 'failed']
+
+function planMillis(plan: AiJobPlan): number | null {
+  const at = plan.proposedAt as unknown
+  if (at instanceof Date) return at.getTime()
+  if (at && typeof (at as { toMillis?: unknown }).toMillis === 'function') {
+    return (at as { toMillis(): number }).toMillis()
+  }
+  return null
+}
+
+/**
+ * The newest plan worth reusing out of what the finder returned: another
+ * job's, still proposed or already confirmed, on a job that was neither
+ * canceled nor failed, proposed inside the window.
+ *
+ * A canceled or failed job is excluded even though its plan may be perfectly
+ * good: those are the jobs a member walked away from, and handing their plan
+ * to the next one would make a rejected answer look like a fresh one.
+ */
+export function aiReusablePlan(
+  candidates: readonly AiJobPlanCandidate[],
+  context: { jobId: string; now: Date },
+): AiJobPlanCandidate | null {
+  const floor = context.now.getTime() - AI_PLAN_REUSE_WINDOW_MS
+  let best: AiJobPlanCandidate | null = null
+  let bestAt = -1
+  for (const candidate of candidates) {
+    if (candidate.jobId === context.jobId) continue
+    if (UNREUSABLE.includes(candidate.status)) continue
+    if (candidate.plan.status !== 'proposed' && candidate.plan.status !== 'confirmed') continue
+    const at = planMillis(candidate.plan)
+    if (at === null || at < floor || at > context.now.getTime()) continue
+    if (at > bestAt) {
+      best = candidate
+      bestAt = at
+    }
+  }
+  return best
+}
+
+export type AiJobPlanFinder = (
+  orgId: string,
+  key: string,
+  firestore?: FirebaseFirestore.Firestore,
+) => Promise<AiJobPlanCandidate[]>
+
+/**
+ * The finder the step uses in production: an equality on `plan.key` inside
+ * the org's own jobs.
+ *
+ * One equality on one field, with no ordering beside it, so Firestore's
+ * automatic single-field index answers it and no composite index is deployed.
+ * The window and the statuses are applied in memory instead, which is what
+ * keeps it that way.
+ */
+export const findAiJobsByPlanKey: AiJobPlanFinder = async (orgId, key, firestore) => {
+  if (!firestore) return []
+  const snapshot = await firestore
+    .collection('orgs')
+    .doc(orgId)
+    .collection(AI_JOBS_COLLECTION)
+    .where('plan.key', '==', key)
+    .limit(AI_PLAN_REUSE_CANDIDATES)
+    .get()
+  return snapshot.docs.flatMap((doc) => {
+    const data = doc.data() as { status?: AiJobStatus; plan?: AiJobPlan | null }
+    return data.plan
+      ? [{ jobId: doc.id, status: data.status ?? 'queued', plan: data.plan }]
+      : []
+  })
+}
+
 export interface AiJobPlanStepDeps {
   /** The inventory reader; specs hand in a fake. */
   readInventory?: typeof readSiteInventory
+  /** The reuse lookup; specs hand in a fake, and `null` turns reuse off. */
+  findPlansByKey?: AiJobPlanFinder | null
 }
 
 export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunner {
   const readInventory = deps.readInventory ?? readSiteInventory
+  const findPlansByKey =
+    deps.findPlansByKey === undefined ? findAiJobsByPlanKey : deps.findPlansByKey
   return async ({ job, now, signal, firestore, modelFor }) => {
     const inventory = job.hostId
       ? await readInventory(job.orgId, job.hostId, { firestore })
@@ -126,12 +273,52 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // doctrine asks the routing table itself.
     const model = modelFor?.('job.plan')
     const route = AI_ROUTING_TABLE['job.plan']
+    const prompt = aiJobPlanPrompt(job)
+
+    // Reuse before asking (AGL-2937). The key covers the whole request, so a
+    // hit is a request that would have been sent the same bytes to the same
+    // model; the window covers what the key cannot see. A reused plan spends
+    // nothing, so the machine's spent-nothing branch releases the reservation
+    // and meters no credit, and the job still stops for the member to confirm
+    // — this job's plan is proposed to this member, whatever the last one did
+    // with theirs.
+    const resolved = model ?? aiModelForStep('job.plan')
+    const key = aiJobPlanKey({
+      job,
+      prompt,
+      model: resolved,
+      system: aiDoctrineSystemBlocks(inventory, { instructions: AI_JOB_PLAN_INSTRUCTIONS }),
+    })
+    const reused = findPlansByKey
+      ? aiReusablePlan(await findPlansByKey(job.orgId, key, firestore), {
+          jobId: job.$id,
+          now,
+        })
+      : null
+    if (reused) {
+      const plan: AiJobPlan = {
+        ...reused.plan,
+        status: 'proposed',
+        labels: aiPlanLabels(reused.plan, inventory),
+        proposedAt: now as unknown as AiJobPlan['proposedAt'],
+        confirmedAt: null,
+        confirmedBy: null,
+        key,
+        reusedFrom: reused.jobId,
+      }
+      return {
+        ...aiUnspentOutcome(resolved),
+        plan,
+        review: { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] },
+      }
+    }
+
     const result = await runValidatedGeneration('plan', {
       step: 'job.plan',
       ...(model ? { model } : {}),
       instructions: AI_JOB_PLAN_INSTRUCTIONS,
       inventory,
-      messages: [{ role: 'user', content: aiJobPlanPrompt(job) }],
+      messages: [{ role: 'user', content: prompt }],
       tool: AI_BUILD_PLAN_TOOL,
       maxTokens: route.maxTokens,
       ...(route.thinking ? { thinking: route.thinking } : {}),
@@ -165,6 +352,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       proposedAt: now as unknown as AiJobPlan['proposedAt'],
       confirmedAt: null,
       confirmedBy: null,
+      key,
     }
     return {
       ...spent,

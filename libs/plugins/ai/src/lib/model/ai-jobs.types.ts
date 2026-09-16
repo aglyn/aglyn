@@ -293,6 +293,17 @@ export interface AiJobPlan extends AiBuildPlan {
   confirmedAt: ITimestamp | null
   /** The member who confirmed it. */
   confirmedBy: string | null
+  /**
+   * A digest of the whole request that produced this plan (AGL-2937): the
+   * job's kind, site, brief and scalar inputs, the model that answered, and
+   * the prompt as it was rendered — the site inventory included. A later job
+   * whose request hashes the same reuses this plan rather than paying for the
+   * same answer again. A hash of the request, never of the answer, and no
+   * part of the brief is recoverable from it.
+   */
+  key?: string
+  /** The job this plan was reused from, when it was not asked for again. */
+  reusedFrom?: string
 }
 
 export interface AiJob {
@@ -361,6 +372,8 @@ export interface AiJobPlanSummary extends AiBuildPlan {
   proposedAt: string | null
   confirmedAt: string | null
   confirmedBy: string | null
+  key?: string
+  reusedFrom?: string
 }
 
 /**
