@@ -49,7 +49,7 @@ rules deny every client write). Fields:
 | `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. A page's document carries its estimated first-visit `load`. An output may carry a customer-safe `note`: what the person decides next about it. |
 | `plan` | The plan a planned kind builds from: `reuse`, `create`, `screens`, the inventory `labels` it references, and `status` `proposed` → `confirmed` with who confirmed it and when. |
 | `review` | While the job is `needs_review`: the `reason` (`plan`, `doctrine` or `limit`), the customer-safe `message`, and the rules the last answer broke. |
-| `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step, and the real spend at the plan's credit rate. |
+| `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step while the job can run — zero while it waits for a person — and the real spend at the plan's credit rate. |
 | `lease` | `{ owner, until }` while a step runs — see below. |
 | `expiresAt` | 180 days from creation, the assist exchange's clock: the brief is verbatim customer text (`docs/DATA_RETENTION.md`). |
 | `error` | Customer-safe only. Provider detail goes to the server log beside the ids. |
@@ -117,6 +117,18 @@ no room for its draft, hands its message back the same way.
 
 A step runner writes drafts and returns. It does not touch the job document,
 the meter or the lease.
+
+**`creditsReserved` is nominal, and nothing counts it (AGL-3030).** The one real
+reservation a step takes is the message `reserveAssistMessage` counts, and it is
+settled before the step is recorded: metered with the step's cost, or handed back
+when the step spent nothing. The band, the Free taste's account allowance and every
+refusal are measured on recorded spend, so a job between steps holds nothing real
+against either. The figure is what the console shows a running job as costing
+before its bill is known: `AI_JOB_STEP_RESERVE_CREDITS` a step at creation, one
+step's worth released as each settles. A job parked `needs_review` shows nothing
+held — the step that parks it releases the figure in the write that records it —
+and `resumeAiJob` holds it again for the steps a resume queues. A meter park
+(`needs_input`) keeps it, because its step runs as soon as the meter admits it.
 
 ## Tokens, per step and per kind
 
@@ -238,7 +250,9 @@ live answer.
   `element`, `blog`, `text` and `chat`. A generator adds its briefs there.
 - **What a case holds.** The brief and its framing; the site `inventory` it is
   built for, in the shape `readSiteInventory` returns, and the media `assets`
-  its images are measured against; for a planned kind, the plan shape a good
+  its images are measured against; for a workspace that lacks something, its
+  `capabilities` (what it may create, and whether it keeps reusable components),
+  which hold the answer to the inline doctrine and the plan to what it may create; for a planned kind, the plan shape a good
   answer has (`expected.plan`: how many screens, what it must reuse, its
   layout, what it may create); `candidates`, each an answer with its plan, its
   rubric grade, and whether it was `authored` by hand or `recorded` from a
@@ -269,11 +283,16 @@ live answer.
   `recordAiEvalLive`). Each recorder answers through the door that answers
   the kind in production — the plan step's runner, the text step's runner, the
   theme step's own generation call — so a recording measures the production
-  request. A planned kind records its plan alone until its generator lands
-  (a `plan`-scope answer, counted toward the plan step rather than the kind's
-  floor); a kind whose door is a request route (the copy assistant's modes,
-  the chat door) has no recorder yet, and a door that gains one registers it
-  with `registerAiEvalRecorder`.
+  request. A page brief is recorded end to end (AGL-3030): the plan step's
+  runner, the plan confirmed, then every pass of the page step's runner against
+  a site kept in memory (`src/lib/runtime/ai-eval-memory-firestore.ts`), with
+  each exchange's tokens and credits under `candidate.steps`, metered as the
+  machine meters a step. Any other planned kind records its plan alone until its
+  generator is recorded the same way (a `plan`-scope answer, counted toward the
+  plan step rather than the kind's floor); a kind whose door is a request route
+  (the copy assistant's modes, the chat door) has no recorder yet, and a door
+  that gains one registers it with `registerAiEvalRecorder`.
+  `AI_EVAL_CASES=<id>[,<id>]` records only the briefs it names.
 
 ## The routing table
 
@@ -322,6 +341,53 @@ beat query matches `needs_review`, and only a member resumes it:
   it once more with its attempts started over.
 
 `resumeAiJob` is that transition, in one transaction, and cancel ends either.
+
+### What the plan may create
+
+A plan that names a creation nothing can make is a dead end the member pays for
+twice (AGL-3030): once for the plan, and again for the plan they describe after
+being told to make the creation by hand — which, on a workspace whose plan does not
+include it, they cannot. So before it asks, the plan step reads what the job may
+create on its site (`src/lib/model/ai-plan-capabilities.ts`):
+
+- **The workspace.** `readAiPlanCapabilities` in `src/lib/jobs/ai-job-drafts.ts`
+  answers every creation kind from the resolved entitlements and the site's counts,
+  in the draft writer's own band arithmetic: `reusableComponents` for a component,
+  that feature then `formsPerHost` for a saved form, `sharedLayoutsPerHost` and
+  `templatesPerHost` with the room each has left, and the plan's datasets. It reads
+  only the collections a finite allowance counts. A theme change counts against
+  nothing, and an email design is the email plugin's to refuse.
+- **The job.** A kind that builds only some plans narrows that
+  (`AI_JOB_PLAN_SCOPES` in the plan step): a page job and a site scaffold each build
+  only the creations their lists name, and refuse a plan of the wrong shape.
+- **The request.** The lines ride the plan's USER turn (`aiJobPlanPrompt`), never a
+  system block: they are per workspace and per site, and the doctrine's cached prefix
+  stays one entry for the platform. The doctrine states the rule once — rule 7,
+  create only what the request says this job may create — and the request states the
+  facts. The lines are part of the plan key, so a plan made under other capabilities
+  is never reused.
+- **The rules.** `validateAiBuildPlan(plan, inventory, framing, capabilities)`
+  refuses a creation outside them (`plan-create-not-allowed`, rule 7, one violation a
+  creation, saying why and what to do instead), and the plan step adds the kind's
+  shape refusal (`plan-job-shape`) — both with the one re-ask every rule gets. A site
+  with no layout, where the job may not create one, is not refused for a screen that
+  names none; a long list, where no dataset may be made, is asked to be shorter.
+- **Inline, where the workspace keeps no reusable components.** A workspace whose plan
+  lacks `reusableComponents` can place no component and save no form, so there — and
+  only there — the doctrine builds inline: a form is a Form element the page carries,
+  with its Form Fields inside it, and a repeated item is drawn in its own section.
+  Rules 1 and 3 state that exception, the plan rules accept it on those capabilities,
+  and the tree rules accept it where `AiDoctrineTreeContext.reusableComponents` is
+  `false`, which the page step sets from the org's entitlement. Loose fields and a
+  form with no field to send are still refused. The tenant renders such a Form as
+  authored (only a form bound by `formId` is replaced by its entity's design), and
+  `/api/forms/submit` collects a submission with no `formId` under its `formName`,
+  within the plan's `formSubmissionsPerMonth`.
+- **Refused before a Confirm.** A plan that passes is asked the kind's admission with
+  the plan, as the resume door asks it. A refusal fails the job with the door's
+  sentence before any member is shown a Confirm: its plan is not kept, and it holds
+  nothing. A door that cannot answer keeps the plan, because the resume door asks
+  again before anything is built.
 
 ### An identical brief reuses the plan
 
@@ -1042,7 +1108,10 @@ AI jobs in the Assist panel.
   generation spend, a plan that is not one screen with sections or that
   creates anything (`aiPagePlanRefusal` in `src/lib/model/ai-page-job.ts`). A
   new component is a component job's work (AGL-2908) and a new form a form
-  job's (AGL-2913), so the refusal names what to create first and where.
+  job's (AGL-2913), so the refusal names what to create first and where. The
+  plan step is told the page job creates nothing, re-asks a plan that does,
+  and asks the same admission of the plan before it is kept, so such a plan is
+  refused before a member is shown a Confirm (AGL-3030).
 
 ### The time budget
 
@@ -1106,7 +1175,7 @@ keeps the doctrine, carries no main landmark of its own (the layout's slot is
 the document's one main) and no raw binding token; and every section fits the
 balanced tier's answer ceiling, under the element measure.
 
-- **Credits per page: an estimate.** 45 credits per page: the median
+- **Credits per page: an estimate.** 46 credits per page: the median
   (the higher middle value) of the ten golden pages, each priced from the
   requests the step sent and the golden answers at four characters a token,
   at the catalog rates of the models the routing table picks, with the cached
@@ -1114,6 +1183,23 @@ balanced tier's answer ceiling, under the element measure.
   and the listing exchange at the SEO step's nominal usage. It is not a
   measurement, and customer docs quote no figure: a job shows what it used in
   AI jobs. A recorded run through AGL-2937's harness replaces it.
+- **A Free page fits the taste.** `ai-job-free-page.spec.ts` replays
+  `AI_FREE_PAGE_FIXTURE` — an about page with four practice areas and a
+  consultation form, on a Free site that already has its one layout — through the
+  real plan and page steps on a Free org, and holds the arithmetic: the page plan at
+  the tokens measured live on a Free workspace (1,366 input, 4,059 cache read,
+  4,059 cache write and 3,954 output on claude-sonnet-5, 80 credits), grown with the
+  cached prefix and the capability lines as they stand now; every section pass at
+  its answer ceiling, the first writing the cache; and the listing at the SEO step's
+  nominal usage. Characters are read four to a token and scaled by what the live
+  run measured against the ledger's estimate, the higher of the plan's and the
+  layout's ratios. The four-section Free page comes to at most 190 credits of the
+  300, and a Free page fits 9 sections at every pass's ceiling. The spec fails when
+  a doctrine or plan change pushes the figure past the wall or out of step with this
+  sentence. When a live run has recorded the Free brief
+  (`AI_EVAL_LIVE=1 AI_EVAL_CASES=page-free-law-firm-about npm run eval:ai-live`), the
+  spec also holds the credits that recording metered to the wall; recordings are
+  never committed.
 - **Accessibility: an axe audit.** Zero violations of any impact on all ten
   golden pages, and so none serious or critical, under axe-core 4.12.1.
   `tools/scripts/record-ai-page-axe.mts` assembles each page through the

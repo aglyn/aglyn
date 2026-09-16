@@ -36,16 +36,27 @@ jest.mock('./ai-runtime', () => ({
   runAiRequest: (...args: unknown[]) => mockRunAiRequest(...args),
 }))
 
+// The page step's draft writer loads the host index; a recording never asks it.
+jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
+  __esModule: true,
+  resolveOrgIdForHost: async () => null,
+}))
+
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+import { AI_PAGE_SECTION_INLINE_LINE, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
 import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
+import { AI_FREE_PAGE_FIXTURE } from '../jobs/fixtures/ai-page-briefs'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
+import { AI_SEO_FIELDS_TOOL_NAME } from '../tools/ai-seo-tool'
 import { AI_THEME_TOOL_NAME } from '../tools/ai-theme-tool'
 import { readAiEvalCase, scoreAiEvalCandidate, type AiEvalCase } from './ai-eval'
 import {
   AI_EVAL_PLAN_GRADER_NOTE,
   AI_EVAL_RUBRIC_TOOL,
   AiEvalLiveRefusedError,
+  aiEvalCasesNamed,
   aiEvalGraderPrompt,
   readAiEvalGrade,
   recordAiEvalLive,
@@ -57,6 +68,8 @@ const fixture = (path: string): AiEvalCase =>
   readAiEvalCase(JSON.parse(readFileSync(join(REPO_ROOT, 'tools', 'ai-eval', 'cases', path), 'utf8')), path)
 
 const page = fixture('page/roof-repair-service.json')
+const layout = fixture('layout/bakery-site-layout.json')
+const freePage = fixture('page/free-law-firm-about.json')
 const text = fixture('text/bakery-tagline.json')
 const theme = fixture('theme/warmer-accents.json')
 const section = fixture('section/storm-leak-call-to-action.json')
@@ -74,10 +87,16 @@ const toolCall = (name: string, input: unknown) => ({
 })
 
 /** The fake provider answers each door as the fixture's reference answer would. */
-function armReferenceAnswers(grade: Record<string, unknown> = { structure: 4, copy: 4, reuse: 5, notes: 'Holds up.' }) {
+function armReferenceAnswers(
+  grade: Record<string, unknown> = { structure: 4, copy: 4, reuse: 5, notes: 'Holds up.' },
+  planned: AiEvalCase = layout,
+) {
+  const sections = [...AI_FREE_PAGE_FIXTURE.answers]
   mockRunAiRequest.mockImplementation(async (request: { tools?: Array<{ name: string }> }) => {
     const tool = request.tools?.[0]?.name
-    if (tool === AI_BUILD_PLAN_TOOL.name) return toolCall(tool, page.candidates[0].plan)
+    if (tool === AI_BUILD_PLAN_TOOL.name) return toolCall(tool, planned.candidates[0].plan)
+    if (tool === AI_PAGE_SECTION_TOOL.name) return toolCall(tool, { tree: JSON.stringify(sections.shift()) })
+    if (tool === AI_SEO_FIELDS_TOOL_NAME) return toolCall(tool, AI_FREE_PAGE_FIXTURE.seo)
     if (tool === AI_THEME_TOOL_NAME) return toolCall(tool, theme.candidates[0].answer)
     if (tool === AI_EVAL_RUBRIC_TOOL.name) return toolCall(tool, grade)
     return {
@@ -129,12 +148,49 @@ describe('the live run', () => {
 
   it('records a planned brief through the plan step, as a plan answer held to the expected shape', async () => {
     armReferenceAnswers()
-    const [{ candidate }] = (await recordAiEvalLive([page], LIVE)).recorded
+    const [{ candidate }] = (await recordAiEvalLive([layout], LIVE)).recorded
     expect(candidate).toMatchObject({ scope: 'plan', step: 'job.plan', answer: null })
     expect(mockRunAiRequest.mock.calls[0][0].system[0].text).toContain('How to build on this platform.')
-    const score = scoreAiEvalCandidate(page, candidate)
+    const score = scoreAiEvalCandidate(layout, candidate)
     expect(score.checks).toEqual({ readable: null, rules: null, budget: null, plan: true, rubric: true })
     expect(score.pass).toBe(true)
+  })
+
+  it('records a page brief end to end — the plan, every section pass and the listing — each exchange metered as the machine meters a step (AGL-3030)', async () => {
+    armReferenceAnswers(undefined, freePage)
+    const [{ candidate }] = (await recordAiEvalLive([freePage], LIVE)).recorded
+    const sent = mockRunAiRequest.mock.calls.map((call) => call[0])
+    // The plan was told what the Free workspace may create, and every section to build inline.
+    expect(String(sent[0].messages[0].content)).toContain("- component: no, because this workspace's plan does not include reusable components")
+    const passes = sent.filter((request) => request.tools?.[0]?.name === AI_PAGE_SECTION_TOOL.name)
+    expect(passes).toHaveLength(AI_FREE_PAGE_FIXTURE.answers.length)
+    for (const request of passes) expect(String(request.messages[0].content)).toContain(AI_PAGE_SECTION_INLINE_LINE)
+
+    expect(candidate).toMatchObject({ source: 'recorded', scope: 'full', step: 'job.page', model: 'eval-model' })
+    expect(candidate.steps?.map((step) => step.step)).toEqual([
+      'job.plan',
+      ...AI_FREE_PAGE_FIXTURE.answers.map(() => 'job.page'),
+      'job.seo',
+    ])
+    for (const step of candidate.steps ?? []) {
+      expect(step.credits).toBe(assistCreditsFromUsd(step.estCostUsd))
+    }
+    const plan = candidate.plan as { screens: Array<{ title: string }> }
+    expect(plan.screens.map((screen) => screen.title)).toEqual(['About Brightwater Law'])
+    // The page it answers is the draft the step wrote, held to the Free workspace's doctrine.
+    const score = scoreAiEvalCandidate(freePage, candidate)
+    expect({ checks: score.checks, findings: score.findings }).toEqual({
+      checks: { readable: true, rules: true, budget: true, plan: true, rubric: true },
+      findings: [],
+    })
+  })
+
+  it('records only the briefs AI_EVAL_CASES names, and refuses a name no brief has', () => {
+    expect(aiEvalCasesNamed([page, layout, freePage], {}).map((entry) => entry.id)).toEqual([page.id, layout.id, freePage.id])
+    expect(
+      aiEvalCasesNamed([page, layout, freePage], { AI_EVAL_CASES: ` ${freePage.id} ` }).map((entry) => entry.id),
+    ).toEqual([freePage.id])
+    expect(() => aiEvalCasesNamed([page], { AI_EVAL_CASES: 'page-nobody' })).toThrow('page-nobody')
   })
 
   it('records a theme brief through the theme step’s own call, keeping the tool input the harness scores', async () => {

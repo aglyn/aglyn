@@ -17,7 +17,12 @@
 
 import type { HostTheme } from '@aglyn/shared-data-types'
 import type { HostThemeSource } from '@aglyn/aglyn/app-utils/marketplace-theme'
-import type { AiBuildPlanCreateKind } from '../model/ai-build-plan'
+import { AI_BUILD_PLAN_CREATE_KINDS, type AiBuildPlanCreateKind } from '../model/ai-build-plan'
+import {
+  aiUnrestrictedPlanCapabilities,
+  type AiPlanCapabilities,
+  type AiPlanCreation,
+} from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import type { AiStepKind } from '../providers/catalog'
 import type { AiEffort, AiUsage } from '../providers/contract'
@@ -164,8 +169,25 @@ export interface AiEvalCandidate {
   answer: unknown
   /** What a recorded answer spent; `null` for an authored one. */
   usage: AiUsage | null
+  /**
+   * A recorded answer's spend, one entry per metered exchange in the order
+   * the job ran them — the plan, then every pass of its generation — with
+   * the credits each came to as the machine meters a step (AGL-3030).
+   * Absent on an authored answer, and on a recording of a single exchange.
+   */
+  steps?: AiEvalRecordedStep[]
   rubric: AiEvalRubric
   note?: string
+}
+
+/** One metered exchange of a recorded job. */
+export interface AiEvalRecordedStep {
+  step: AiStepKind
+  model: string
+  usage: AiUsage
+  estCostUsd: number
+  /** What the machine meters it as: the billed cost in credits, rounded up per exchange. */
+  credits: number
 }
 
 /** An answer that must fail, and the checks it must fail. */
@@ -193,6 +215,13 @@ export interface AiEvalCase {
   /** For a theme brief: the site's current theme and where it comes from. */
   siteTheme?: HostTheme
   themeSource?: HostThemeSource
+  /**
+   * What the workspace may create on the case's site (AGL-3030): a brief
+   * for a workspace that keeps no reusable components is held to the inline
+   * doctrine, and its plan to what the workspace may create. Absent, the
+   * doctrine applies whole.
+   */
+  capabilities?: AiPlanCapabilities
   expected?: { plan?: AiEvalPlanShape }
   candidates: AiEvalCandidate[]
   controls: AiEvalControl[]
@@ -277,6 +306,7 @@ function checkTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unkno
     aiDoctrineTreeContext(evalCase.inventory, {
       ...(evalCase.assets ? { assets: evalCase.assets } : {}),
       framing: evalCase.framing,
+      ...(evalCase.capabilities?.reusableComponents === false ? { reusableComponents: false } : {}),
     }),
   )
   const result = check(isRecord(answer) ? answer : { tree: answer })
@@ -437,7 +467,7 @@ export function checkAiEvalPlan(
 ): { pass: boolean; findings: string[] } {
   const shape = evalCase.expected?.plan
   if (!shape) return { pass: true, findings: [] }
-  const result = aiDoctrinePlanCheck(evalCase.inventory, evalCase.framing)(
+  const result = aiDoctrinePlanCheck(evalCase.inventory, evalCase.framing, evalCase.capabilities ?? null)(
     isRecord(plan) ? plan : {},
   )
   if (!result.value) return { pass: false, findings: ['plan-unreadable', ...codes(result.violations)] }
@@ -640,9 +670,50 @@ export function readAiEvalCase(raw: unknown, file: string): AiEvalCase {
     const fails = isRecord(control) ? control['fails'] : undefined
     if (!Array.isArray(fails) || !fails.length) fail(`controls[${index}] names no check it fails`)
   }
+  const capabilities =
+    raw['capabilities'] === undefined ? undefined : readAiEvalCapabilities(raw['capabilities'], fail)
   return {
     framing: null,
     inventory: null,
     ...(raw as object),
+    ...(capabilities ? { capabilities } : {}),
   } as AiEvalCase
+}
+
+/**
+ * A case's capabilities read and checked for shape. A creation kind the case
+ * leaves out may be created, so a case names only what its workspace lacks.
+ */
+function readAiEvalCapabilities(raw: unknown, fail: (why: string) => never): AiPlanCapabilities {
+  if (!isRecord(raw) || typeof raw['reusableComponents'] !== 'boolean') {
+    return fail('capabilities.reusableComponents is not true or false')
+  }
+  const create = isRecord(raw['create']) ? raw['create'] : {}
+  const unrestricted = aiUnrestrictedPlanCapabilities()
+  const entries: Array<[AiBuildPlanCreateKind, AiPlanCreation]> = AI_BUILD_PLAN_CREATE_KINDS.map((kind) => {
+    const entry = create[kind]
+    if (entry === undefined) return [kind, unrestricted.create[kind]]
+    if (!isRecord(entry) || typeof entry['allowed'] !== 'boolean') {
+      return fail(`capabilities.create.${kind}.allowed is not true or false`)
+    }
+    const left = entry['left']
+    const reason = entry['reason']
+    return [
+      kind,
+      {
+        allowed: entry['allowed'],
+        left: typeof left === 'number' ? left : null,
+        reason: typeof reason === 'string' ? reason : null,
+      },
+    ]
+  })
+  for (const kind of Object.keys(create)) {
+    if (!(AI_BUILD_PLAN_CREATE_KINDS as readonly string[]).includes(kind)) {
+      fail(`capabilities.create.${kind} is not a creation kind`)
+    }
+  }
+  return {
+    reusableComponents: raw['reusableComponents'],
+    create: Object.fromEntries(entries) as AiPlanCapabilities['create'],
+  }
 }

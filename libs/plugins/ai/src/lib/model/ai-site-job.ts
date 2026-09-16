@@ -204,10 +204,13 @@ export function aiSitePlanPrerequisites(
 }
 
 /**
- * Why a scaffold cannot build this plan, in a sentence a member reads when
- * confirming it; `null` when it can.
+ * Why a scaffold cannot build a plan of this SHAPE — the page band, a page's
+ * sections, its addresses, its navigation — in a sentence a member reads;
+ * `null` when the shape is one it builds. The plan step holds a plan to it
+ * with a re-ask (AGL-3030), and the doors hold a confirmed plan to it again
+ * through `aiSitePlanRefusal`.
  */
-export function aiSitePlanRefusal(plan: AiBuildPlan): string | null {
+export function aiSitePlanShapeRefusal(plan: AiBuildPlan): string | null {
   const { screens } = plan
   if (
     screens.length < AI_SITE_PAGES.min ||
@@ -232,6 +235,16 @@ export function aiSitePlanRefusal(plan: AiBuildPlan): string | null {
   if (!screens.some((screen) => screen.nav)) {
     return 'No page in this plan is in the site navigation. Describe the site again.'
   }
+  return null
+}
+
+/**
+ * Why a scaffold cannot build this plan, in a sentence a member reads when
+ * confirming it; `null` when it can.
+ */
+export function aiSitePlanRefusal(plan: AiBuildPlan): string | null {
+  const shape = aiSitePlanShapeRefusal(plan)
+  if (shape) return shape
   const prerequisites = aiSitePlanPrerequisites(plan)
   if (!prerequisites.length) return null
   const parts = prerequisites.map(

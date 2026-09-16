@@ -21,9 +21,10 @@
 // offline harness to score.
 //
 //   AI_EVAL_LIVE=1 npm run eval:ai-live
+//   AI_EVAL_LIVE=1 AI_EVAL_CASES=<case id>[,<case id>] npm run eval:ai-live
 //
-// It spends real money on the provider, so without AI_EVAL_LIVE=1 it refuses
-// before anything runs. The recording itself is the plugin spec
+// The second form records only the briefs it names. It spends real money on
+// the provider, so without AI_EVAL_LIVE=1 it refuses before anything runs. The recording itself is the plugin spec
 // `ai-eval.live.spec.ts`, which reuses the production step runners.
 
 import { spawnSync } from 'node:child_process'

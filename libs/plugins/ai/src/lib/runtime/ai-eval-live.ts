@@ -15,12 +15,17 @@
  * limitations under the License.
  */
 
+import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
+import { createAiJobPageStep } from '../jobs/ai-job-page-step'
 import { createAiJobPlanStep } from '../jobs/ai-job-plan-step'
+import type { AiJobStepOutcome } from '../jobs/ai-job-text-step'
 import { runAiJobTextStep } from '../jobs/ai-job-text-step'
 import { aiJobThemeCheck, aiJobThemeGeneration, aiJobThemeMode } from '../jobs/ai-job-theme-step'
-import type { AiJob } from '../model/ai-jobs.types'
+import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import { aiDefaultModelFor, type AiStepKind } from '../providers/catalog'
-import type { AiProvider, AiSystemBlock, AiTool } from '../providers/contract'
+import type { AiProvider, AiSystemBlock, AiTool, AiUsage } from '../providers/contract'
 import { aiModelForStep, resolveAiProvider } from '../providers/routing'
 import { aiSiteInventoryBlock, runValidatedGeneration } from './ai-doctrine'
 import {
@@ -28,8 +33,10 @@ import {
   type AiEvalCandidate,
   type AiEvalCase,
   type AiEvalKind,
+  type AiEvalRecordedStep,
   type AiEvalRubric,
 } from './ai-eval'
+import { aiEvalMemoryFirestore } from './ai-eval-memory-firestore'
 
 /**
  * THE EVAL HARNESS, LIVE (AGL-2937): recording new answers from the model.
@@ -51,6 +58,12 @@ import {
  * recorder, and neither does a planned kind's document until its generator
  * lands: its brief records the plan alone. A door that gains a recorder
  * registers it with `registerAiEvalRecorder`.
+ *
+ * A page brief is recorded END TO END (AGL-3030): the plan step's runner,
+ * the plan confirmed as a member confirms it, and every pass of the page
+ * step's runner against a site kept in memory, each exchange's spend kept
+ * as the machine meters it. That is what proves what one page costs, on the
+ * workspace the case describes.
  */
 
 /** The environment variable a live run must be named by. */
@@ -69,6 +82,27 @@ export class AiEvalLiveRefusedError extends Error {
 /** Whether the environment names a live run. */
 export function aiEvalLiveAllowed(env: Record<string, string | undefined>): boolean {
   return env[AI_EVAL_LIVE_ENV] === '1'
+}
+
+/**
+ * The variable a live run names the briefs it records by: case ids, comma
+ * separated. Unset records every brief a recorder covers.
+ */
+export const AI_EVAL_CASES_ENV = 'AI_EVAL_CASES'
+
+/** The briefs a run records: the ones `AI_EVAL_CASES` names, else every one. */
+export function aiEvalCasesNamed<T extends { id: string }>(
+  cases: readonly T[],
+  env: Record<string, string | undefined>,
+): T[] {
+  const named = (env[AI_EVAL_CASES_ENV] ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean)
+  if (!named.length) return [...cases]
+  const unknown = named.filter((id) => !cases.some((evalCase) => evalCase.id === id))
+  if (unknown.length) throw new Error(`${AI_EVAL_CASES_ENV} names no golden brief: ${unknown.join(', ')}`)
+  return cases.filter((evalCase) => named.includes(evalCase.id))
 }
 
 export interface AiEvalLiveOptions {
@@ -138,21 +172,41 @@ function withProvider<T extends object>(input: T, options: AiEvalLiveOptions): T
   return options.provider ? { ...input, provider: options.provider } : input
 }
 
+/** The case's site, as a reader the step runners are handed. */
+function inventoryOf(evalCase: AiEvalCase) {
+  return async () => {
+    if (!evalCase.inventory) throw new Error(`${evalCase.id} has no inventory to build from`)
+    return evalCase.inventory
+  }
+}
+
+/**
+ * The plan step's runner for a brief, on the case's site and the case's
+ * workspace. No plan reuse in a recording (AGL-2937): the point of a live run
+ * is to measure what the model answers for this brief, and a reused plan
+ * would record someone else's answer as this case's. No admission either: a
+ * recording writes to no workspace a door would count against.
+ */
+function evalPlanStep(evalCase: AiEvalCase) {
+  return createAiJobPlanStep({
+    readInventory: inventoryOf(evalCase),
+    findPlansByKey: null,
+    readCapabilities: async () => evalCase.capabilities ?? null,
+    admissionRefusal: async () => null,
+  })
+}
+
+/** A plan outcome's plan, as a candidate records it. */
+function planOf(outcome: AiJobStepOutcome): AiEvalRecordedAnswer['plan'] {
+  return outcome.plan
+    ? { reuse: outcome.plan.reuse, create: outcome.plan.create, screens: outcome.plan.screens }
+    : null
+}
+
 /** A planned kind's brief, recorded through the plan step: the plan alone. */
 const recordPlan: AiEvalRecorder = async (evalCase, options) => {
   const kind = evalCase.kind as AiJob['kind']
-  const runner = createAiJobPlanStep({
-    readInventory: async () => {
-      if (!evalCase.inventory) throw new Error(`${evalCase.id} has no inventory to plan from`)
-      return evalCase.inventory
-    },
-    // No plan reuse in a recording (AGL-2937): the point of a live run is to
-    // measure what the model answers for this brief, and a reused plan would
-    // record someone else's answer as this case's. There is no workspace to
-    // reuse from here either — a recorder runs off a fixture, not a job.
-    findPlansByKey: null,
-  })
-  const outcome = await runner({
+  const outcome = await evalPlanStep(evalCase)({
     job: evalJob(evalCase, kind),
     stepIndex: 0,
     now: options.now ?? new Date(),
@@ -165,10 +219,142 @@ const recordPlan: AiEvalRecorder = async (evalCase, options) => {
     step: 'job.plan',
     model: outcome.model,
     effort: outcome.effort ?? null,
-    plan: outcome.plan ? { reuse: outcome.plan.reuse, create: outcome.plan.create, screens: outcome.plan.screens } : null,
+    plan: planOf(outcome),
     answer: null,
     usage: outcome.usage,
     note: outcome.review?.reason === 'doctrine' ? `needs review: ${outcome.review.message}` : undefined,
+  }
+}
+
+/** The most passes a recorded page may take: the plan limit's sections and the listing, with room. */
+const AI_EVAL_PAGE_MAX_PASSES = 64
+
+/** One exchange's spend, as the machine meters a step. */
+function recordedStep(step: AiStepKind, outcome: AiJobStepOutcome): AiEvalRecordedStep {
+  return {
+    step,
+    model: outcome.model,
+    usage: outcome.usage,
+    estCostUsd: outcome.estCostUsd,
+    credits: assistCreditsFromUsd(outcome.estCostUsd),
+  }
+}
+
+/** Several exchanges' tokens, added. */
+function totalUsage(steps: readonly AiEvalRecordedStep[]): AiUsage {
+  return steps.reduce<AiUsage>(
+    (sum, step) => ({
+      inputTokens: sum.inputTokens + step.usage.inputTokens,
+      outputTokens: sum.outputTokens + step.usage.outputTokens,
+      cacheReadTokens: sum.cacheReadTokens + step.usage.cacheReadTokens,
+      cacheWriteTokens: sum.cacheWriteTokens + step.usage.cacheWriteTokens,
+    }),
+    { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  )
+}
+
+/**
+ * The workspace a case describes, as the org document the page step reads:
+ * a workspace that keeps no reusable components is the Free plan's shape,
+ * and any other is a plan that keeps them.
+ */
+function evalOrgDocument(evalCase: AiEvalCase): Record<string, unknown> {
+  return evalCase.capabilities?.reusableComponents === false
+    ? { plan: 'free' }
+    : { plan: 'business', billingStatus: 'active' }
+}
+
+/**
+ * A page brief, recorded end to end (AGL-3030): the plan, confirmed, then the
+ * page step's passes until it reports the draft or stops for a person. What
+ * it answers is the page as the draft holds it, and what it spent is every
+ * exchange, each metered as the machine meters a step. A plan that stops for
+ * review records the plan alone, as a plan answer.
+ */
+const recordPage: AiEvalRecorder = async (evalCase, options) => {
+  const now = options.now ?? new Date()
+  const job = evalJob(evalCase, 'page')
+  const hostId = job.hostId as string
+  const org = evalOrgDocument(evalCase)
+  const site = aiEvalMemoryFirestore({
+    [`orgs/${EVAL_ORG}`]: org,
+    [`hosts/${hostId}`]: {
+      subdomain: 'eval',
+      displayName: evalCase.id,
+      screens: Object.fromEntries((evalCase.inventory?.screens ?? []).map((row) => [row.id, row.slug])),
+    },
+  })
+  const context = { stepIndex: 0, now, firestore: site.firestore, modelFor: modelFor(options), org }
+  const planned = await evalPlanStep(evalCase)({ ...context, job })
+  const steps: AiEvalRecordedStep[] = [recordedStep('job.plan', planned)]
+  const planOnly = (note?: string): AiEvalRecordedAnswer => ({
+    source: 'recorded',
+    scope: 'plan',
+    step: 'job.plan',
+    model: planned.model,
+    effort: planned.effort ?? null,
+    plan: planOf(planned),
+    answer: null,
+    usage: planned.usage,
+    ...(note ? { note } : {}),
+  })
+  if (!planned.plan || planned.review?.reason !== 'plan') {
+    return planOnly(
+      planned.failure
+        ? `refused before confirm: ${planned.failure}`
+        : planned.review
+          ? `needs review: ${planned.review.message}`
+          : undefined,
+    )
+  }
+
+  const confirmed: AiJob = {
+    ...job,
+    plan: {
+      ...planned.plan,
+      status: 'confirmed',
+      confirmedAt: now as unknown as AiJobPlan['confirmedAt'],
+      confirmedBy: 'eval',
+    },
+  }
+  const generate = createAiJobPageStep({
+    readInventory: inventoryOf(evalCase),
+    // A case's site holds no documents to copy, so a plan that starts from a
+    // copy is built from its brief, as a page step builds one whose source
+    // is gone.
+    duplicate: async () => ({ ok: false, status: 404, error: 'A recording copies nothing' }),
+  })
+  let outputs: AiJobOutput[] = []
+  let stopped: string | undefined
+  for (let pass = 0; pass < AI_EVAL_PAGE_MAX_PASSES; pass += 1) {
+    const outcome = await generate({ ...context, stepIndex: 1, job: { ...confirmed, outputs } })
+    // The pass that reports the draft asks for the listing, on the SEO step's model.
+    steps.push(recordedStep(outcome.outputs.some((output) => output.resource === 'screen') ? 'job.seo' : 'job.page', outcome))
+    outputs = [...outputs, ...outcome.outputs]
+    if (outcome.refused || outcome.failure || outcome.review) {
+      stopped = outcome.refused ? 'refused' : (outcome.failure ?? outcome.review?.message)
+      break
+    }
+    if (!outcome.continue) break
+  }
+
+  const screen = site.docs.get(`hosts/${hostId}/screens/${job.$id}`)
+  const version = screen
+    ? site.docs.get(`hosts/${hostId}/screens/${job.$id}/versions/${String(screen['versionId'])}`)
+    : undefined
+  const nodes = version ? decodeStoredNodes<Record<string, unknown>>(version['nodes']) : null
+  const built = outputs.some((output) => output.resource === 'screen')
+  return {
+    source: 'recorded',
+    scope: built && nodes ? 'full' : 'plan',
+    step: 'job.page',
+    model: steps.find((entry) => entry.step === 'job.page')?.model ?? planned.model,
+    effort: null,
+    plan: planOf(planned),
+    answer: built && nodes ? { tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes } } : null,
+    usage: totalUsage(steps),
+    steps,
+    ...(stopped ? { note: `stopped: ${stopped}` } : {}),
   }
 }
 
@@ -238,6 +424,7 @@ for (const kind of Object.keys(AI_EVAL_TREE_OUTPUT) as AiEvalKind[]) {
   // A section rewrite is the copy assistant's, a request route: no plan step.
   if (kind !== 'section' && kind !== 'email') registerAiEvalRecorder(kind, recordPlan)
 }
+registerAiEvalRecorder('page', recordPage)
 registerAiEvalRecorder('text', recordText)
 registerAiEvalRecorder('theme', recordTheme)
 

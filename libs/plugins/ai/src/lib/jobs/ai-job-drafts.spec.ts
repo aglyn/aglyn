@@ -66,7 +66,9 @@ import {
   AI_DRAFT_VERSION_NAME,
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
+  aiPlanCapabilitiesFrom,
   readAiDraft,
+  readAiPlanCapabilities,
   writeAiDraft,
   type AiDraftInput,
   type AiDraftKind,
@@ -756,5 +758,93 @@ describe('aiDraftAdmissionRefusal', () => {
     })
     expect(await ask({ kind: 'component' })).toBeNull()
     expect(commits).toEqual([])
+  })
+})
+
+describe('readAiPlanCapabilities — what a plan may create on the site (AGL-3030)', () => {
+  /** The double, recording which of a site's collections a read asked for. */
+  function recording(): { handle: FirebaseFirestore.Firestore; read: string[] } {
+    const read: string[] = []
+    const handle = {
+      collection: (name: string) => {
+        const ref = firestore.collection(name) as unknown as {
+          doc: (id: string) => { collection: (sub: string) => unknown }
+        }
+        return {
+          ...ref,
+          doc: (id: string) => {
+            const doc = ref.doc(id)
+            return {
+              ...doc,
+              collection: (sub: string) => {
+                read.push(sub)
+                return doc.collection(sub)
+              },
+            }
+          },
+        }
+      },
+    }
+    return { handle: handle as unknown as FirebaseFirestore.Firestore, read }
+  }
+
+  it('tells a Free workspace it keeps no reusable components, saved forms or datasets, and what room its site has', async () => {
+    seedLiveSite()
+    const { handle, read } = recording()
+    const capabilities = await readAiPlanCapabilities(handle, { hostId: 'host-1', org: FREE_ORG })
+    expect(capabilities.reusableComponents).toBe(false)
+    expect(capabilities.create.component).toEqual({
+      allowed: false,
+      left: 0,
+      reason: "this workspace's plan does not include reusable components",
+    })
+    expect(capabilities.create.form).toEqual({
+      allowed: false,
+      left: 0,
+      reason: "this workspace's plan does not include saved forms",
+    })
+    // The live site holds two layouts against the one the Free plan includes,
+    // and its starter template counts against nothing.
+    expect(capabilities.create.layout).toEqual({
+      allowed: false,
+      left: 0,
+      reason: 'this site already holds the 1 shared layout its plan includes',
+    })
+    expect(capabilities.create.template).toEqual({ allowed: true, left: 10, reason: null })
+    expect(capabilities.create.dataset).toEqual({
+      allowed: false,
+      left: 0,
+      reason: "this workspace's plan does not include datasets",
+    })
+    expect(capabilities.create['theme-change']).toEqual({ allowed: true, left: null, reason: null })
+    // Only the kinds a Free plan counts are read; a component or a form is refused on the feature.
+    expect(read.sort()).toEqual(['layouts', 'templates'])
+    expect(commits).toEqual([])
+  })
+
+  it('counts a Starter site against its own allowances, in the draft writer’s arithmetic', async () => {
+    seedLiveSite()
+    const { handle, read } = recording()
+    const capabilities = await readAiPlanCapabilities(handle, { hostId: 'host-1', org: STARTER_ORG })
+    expect(capabilities.reusableComponents).toBe(true)
+    expect(capabilities.create.component).toEqual({ allowed: true, left: null, reason: null })
+    expect(capabilities.create.layout).toEqual({ allowed: true, left: 1, reason: null })
+    expect(capabilities.create.template).toEqual({ allowed: true, left: 50, reason: null })
+    expect(capabilities.create.form).toMatchObject({ allowed: true })
+    expect(read.sort()).toEqual(['forms', 'layouts', 'templates'])
+    // The last layout it has room for is one the writer admits; one more is not.
+    expect(await aiDraftAllowanceRefusal(firestore, { kind: 'layout', hostId: 'host-1', org: STARTER_ORG })).toBeNull()
+    mockDocs.set('hosts/host-1/layouts/lay-third', { displayName: 'Third' })
+    const full = aiPlanCapabilitiesFrom(STARTER_ORG, {
+      layout: ['lay-site', 'lay-inner', 'lay-third'].map((id) => ({ id, kind: undefined, sourceType: undefined, deletedAt: undefined })),
+    })
+    expect(full.create.layout).toEqual({
+      allowed: false,
+      left: 0,
+      reason: 'this site already holds the 3 shared layouts its plan includes',
+    })
+    expect(await aiDraftAllowanceRefusal(firestore, { kind: 'layout', hostId: 'host-1', org: STARTER_ORG })).toBe(
+      'Your plan includes 3 shared layouts — upgrade in Billing for more',
+    )
   })
 })

@@ -24,7 +24,12 @@ import {
   type FormRouting,
 } from '@aglyn/aglyn/app-utils/forms'
 import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
-import { checkEntitlement, checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  checkDatasetQuota,
+  checkEntitlement,
+  checkQuota,
+  resolveOrgEntitlements,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   billableScreenIds,
   normalizeScreenSlug,
@@ -39,6 +44,11 @@ import type {
 import type { ReusableComponentProp } from '@aglyn/aglyn/foundation/definitions/platform.types'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
+import {
+  aiUnrestrictedPlanCapabilities,
+  type AiPlanCapabilities,
+  type AiPlanCreation,
+} from '../model/ai-plan-capabilities'
 import type { AiJobAdmissionRefusal } from './ai-job-admission'
 
 /**
@@ -258,6 +268,111 @@ export function aiDraftBandRefusal(
   return quota.allowed
     ? null
     : `Your plan includes ${quota.limit} ${band.label} — upgrade in Billing for more`
+}
+
+/** The draft kinds a plan's creations land as, whose band a plan is told about (AGL-3030). */
+const AI_PLAN_DRAFT_KINDS = ['component', 'form', 'layout', 'template'] as const
+
+type AiPlanDraftKind = (typeof AI_PLAN_DRAFT_KINDS)[number]
+
+/** Every draft kind's plural label made singular, for a band of one. */
+function bandLabel(label: string, count: number): string {
+  return count === 1 ? label.replace(/s$/, '') : label
+}
+
+/**
+ * Whether the site may take `used + 1` of a kind, in the create route's
+ * arithmetic: the feature first, then the allowance. `null` for a kind whose
+ * allowance is unlimited or counts nothing, which needs no rows read.
+ */
+function planCreation(
+  kind: AiPlanDraftKind,
+  org: Partial<AglynOrgBilling> | null,
+  rows: ReadonlyArray<Pick<SiblingRow, 'id' | 'kind' | 'sourceType' | 'deletedAt'>> | null,
+): AiPlanCreation {
+  const band = AI_DRAFT_BANDS[kind]
+  if (band.entitlement && !checkEntitlement(org, band.entitlement)) {
+    return {
+      allowed: false,
+      left: 0,
+      reason: `this workspace's plan does not include ${kind === 'form' ? 'saved forms' : band.label}`,
+    }
+  }
+  const limit = band.quotaKey ? resolveOrgEntitlements(org)[band.quotaKey] : Number.POSITIVE_INFINITY
+  if (!rows || !Number.isFinite(limit)) return { allowed: true, left: null, reason: null }
+  // The route's own arithmetic decides; the count beside it is what is left.
+  const refusal = aiDraftBandRefusal(kind, rows, org)
+  const used =
+    kind === 'template'
+      ? rows.filter((row) => row.sourceType !== undefined && row.sourceType !== 'starter').length
+      : rows.length
+  return refusal
+    ? {
+        allowed: false,
+        left: 0,
+        reason: `this site already holds the ${limit} ${bandLabel(band.label, limit)} its plan includes`,
+      }
+    : { allowed: true, left: Math.max(0, limit - used), reason: null }
+}
+
+/** Whether a kind's rows are counted at all on this plan: included, and under a finite allowance. */
+function countsRows(kind: AiPlanDraftKind, org: Partial<AglynOrgBilling> | null): boolean {
+  const band = AI_DRAFT_BANDS[kind]
+  if (!band.quotaKey) return false
+  if (band.entitlement && !checkEntitlement(org, band.entitlement)) return false
+  return Number.isFinite(resolveOrgEntitlements(org)[band.quotaKey])
+}
+
+/**
+ * What a plan may create on this site (AGL-3030), from the workspace's plan
+ * and the rows each counted kind already holds — pure, so the specs and the
+ * eval harness hold the arithmetic without a Firestore. A kind whose rows
+ * are not given is counted as having room, which is what an unlimited
+ * allowance means.
+ *
+ * A theme change is a proposal a member applies, never a draft, so it counts
+ * against nothing. A dataset is org data that no job writes; a plan may name
+ * one only where the workspace's plan includes datasets at all. An email
+ * design is written by the email plugin, whose own gate decides.
+ */
+export function aiPlanCapabilitiesFrom(
+  org: Partial<AglynOrgBilling> | null,
+  rows: Partial<Record<AiPlanDraftKind, ReadonlyArray<Pick<SiblingRow, 'id' | 'kind' | 'sourceType' | 'deletedAt'>>>> = {},
+): AiPlanCapabilities {
+  const unrestricted = aiUnrestrictedPlanCapabilities()
+  const datasets = checkDatasetQuota(org, 0).limit > 0
+  return {
+    reusableComponents: checkEntitlement(org, 'reusableComponents'),
+    create: {
+      ...unrestricted.create,
+      component: planCreation('component', org, rows.component ?? null),
+      form: planCreation('form', org, rows.form ?? null),
+      layout: planCreation('layout', org, rows.layout ?? null),
+      template: planCreation('template', org, rows.template ?? null),
+      dataset: datasets
+        ? unrestricted.create.dataset
+        : { allowed: false, left: 0, reason: "this workspace's plan does not include datasets" },
+    },
+  }
+}
+
+/**
+ * What a plan may create on this site, read: the rows of each kind whose
+ * allowance the workspace's plan counts, as the draft writer reads them, and
+ * nothing for a kind the plan leaves out or leaves unlimited.
+ */
+export async function readAiPlanCapabilities(
+  firestore: Firestore,
+  input: { hostId: string; org: Partial<AglynOrgBilling> | null },
+): Promise<AiPlanCapabilities> {
+  const counted = AI_PLAN_DRAFT_KINDS.filter((kind) => countsRows(kind, input.org))
+  const snapshots = await Promise.all(
+    counted.map((kind) => siblingsOf(draftCollection(firestore, input.hostId, kind)).get()),
+  )
+  return aiPlanCapabilitiesFrom(
+    input.org,
+    Object.fromEntries(counted.map((kind, index) => [kind, siblingRows(snapshots[index])])),
+  )
 }
 
 /**

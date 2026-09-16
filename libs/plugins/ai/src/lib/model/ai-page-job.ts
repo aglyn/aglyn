@@ -158,11 +158,20 @@ export function aiPagePlanPrerequisites(plan: AiBuildPlan): AiPagePrerequisite[]
 }
 
 /**
- * Why a page job cannot build this plan, in a sentence a member reads when
- * confirming it; `null` when it can. A page job builds exactly one screen,
- * from what the site already has.
+ * The creations a page job builds itself from its own plan (AGL-3030): none.
+ * The plan step is told so before it answers, and the plan rules refuse a
+ * creation outside this list with the one re-ask every rule gets, so a plan
+ * that needs one never reaches a member's Confirm.
  */
-export function aiPagePlanRefusal(plan: AiBuildPlan): string | null {
+export const AI_PAGE_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = []
+
+/**
+ * Why a page job cannot build a plan of this SHAPE — no page, several pages,
+ * a page with no sections — in a sentence a member reads; `null` when the
+ * shape is one it builds. The plan step holds a plan to it with a re-ask, and
+ * the doors hold a confirmed plan to it again through `aiPagePlanRefusal`.
+ */
+export function aiPagePlanShapeRefusal(plan: AiBuildPlan): string | null {
   if (plan.screens.length === 0) {
     return 'This plan has no page to build. Describe the page again.'
   }
@@ -172,6 +181,17 @@ export function aiPagePlanRefusal(plan: AiBuildPlan): string | null {
   if (!plan.screens[0].sections.length) {
     return 'This plan’s page has no sections to build. Describe the page again.'
   }
+  return null
+}
+
+/**
+ * Why a page job cannot build this plan, in a sentence a member reads when
+ * confirming it; `null` when it can. A page job builds exactly one screen,
+ * from what the site already has.
+ */
+export function aiPagePlanRefusal(plan: AiBuildPlan): string | null {
+  const shape = aiPagePlanShapeRefusal(plan)
+  if (shape) return shape
   const prerequisites = aiPagePlanPrerequisites(plan)
   if (!prerequisites.length) return null
   const parts = prerequisites.map(

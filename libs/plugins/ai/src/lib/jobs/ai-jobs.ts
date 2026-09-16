@@ -139,6 +139,15 @@ export const AI_JOB_STEP_MAX_PASSES = 40
  * The nominal credit figure shown as held per outstanding step. Not a
  * bound — the reservation and the monthly ceiling are — but the console
  * must show a running job as costing something before its bill is known.
+ *
+ * NOMINAL, and nothing reads it as more (AGL-3030): the band, the Free
+ * taste's account allowance and every refusal are measured on recorded
+ * spend, and the one real reservation a step takes is a message, counted
+ * when the step is claimed and settled — metered or handed back — before the
+ * step is recorded. So a job holds nothing real between steps, and a job
+ * parked for a person shows nothing held either: `recordStep` releases the
+ * figure when a step parks for review, and `resumeAiJob` holds it again for
+ * the steps a person's resume queues.
  */
 export const AI_JOB_STEP_RESERVE_CREDITS = 50
 
@@ -746,9 +755,13 @@ export async function recordStep(
       steps,
       outputs: [...(job.outputs ?? []), ...(input.outputs ?? [])],
       creditsSpent: (job.creditsSpent ?? 0) + input.creditsSpent,
-      creditsReserved: settled
-        ? Math.max(0, (job.creditsReserved ?? 0) - AI_JOB_STEP_RESERVE_CREDITS)
-        : (job.creditsReserved ?? 0),
+      // A job parked for a person holds nothing: no step of it can run until
+      // someone resumes it, and the resume holds the figure again (AGL-3030).
+      creditsReserved: parksForReview
+        ? 0
+        : settled
+          ? Math.max(0, (job.creditsReserved ?? 0) - AI_JOB_STEP_RESERVE_CREDITS)
+          : (job.creditsReserved ?? 0),
       updatedAt: now,
       ...(ownsLease ? { lease: null } : {}),
       // A plan the step produced is kept whatever the job's status is by
@@ -928,7 +941,8 @@ export async function cancelAiJob(
  * so two confirmations land once; anything but a `needs_review` job comes
  * back unchanged. The pending step's attempts start over — a person asking
  * again is not a provider failing again — and a confirmed plan with no step
- * left behind it completes the job rather than queueing nothing.
+ * left behind it completes the job rather than queueing nothing. The steps
+ * it queues are held at the nominal figure again, which the park released.
  */
 export async function resumeAiJob(
   firestore: Firestore,
@@ -942,7 +956,8 @@ export async function resumeAiJob(
     const steps = current.steps.map((step) =>
       step.status === 'pending' ? { ...step, attempts: 0 } : step,
     )
-    const pending = steps.some((step) => step.status === 'pending')
+    const outstanding = steps.filter((step) => step.status === 'pending').length
+    const pending = outstanding > 0
     const confirmed =
       current.review?.reason === 'plan' && current.plan
         ? {
@@ -960,7 +975,7 @@ export async function resumeAiJob(
       review: null,
       error: null,
       ...confirmed,
-      ...(pending ? {} : { creditsReserved: 0 }),
+      creditsReserved: outstanding * AI_JOB_STEP_RESERVE_CREDITS,
       updatedAt: now,
     }
   })

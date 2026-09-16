@@ -1277,10 +1277,16 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
       error: null,
       lease: null,
       creditsSpent: 6,
-      creditsReserved: AI_JOB_STEP_RESERVE_CREDITS,
+      // Parked for a person, the job shows nothing held (AGL-3030).
+      creditsReserved: 0,
       plan: { status: 'proposed', confirmedAt: null },
       review: { reason: 'plan' },
     })
+    // And holds nothing real: the plan step's one message is spent and its
+    // cost metered, and no reservation stands open behind the review.
+    const month = mockDocs.get(`orgs/${ORG}/assistUsage/${assistUsageMonth(NOW)}`) ?? {}
+    expect(month['messages']).toBe(1)
+    expect(Number(month['estCostUsd'])).toBeCloseTo(0.006, 6)
     expect(stored?.steps.map((step) => step.status)).toEqual(['done', 'pending'])
     expect(mockAiActivity.logAiJobNeedsInput).toHaveBeenCalledWith(ORG, { uid: null }, {
       jobId: job.$id,
@@ -1315,6 +1321,8 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
       review: null,
       error: null,
       plan: { status: 'confirmed', confirmedBy: 'uid-2', confirmedAt: LATER },
+      // The step the confirmation queues is held again.
+      creditsReserved: AI_JOB_STEP_RESERVE_CREDITS,
     })
     expect((await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-2' }, LATER)).changed).toBe(false)
 
@@ -1343,6 +1351,7 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
       status: 'needs_review',
       error: 'This could not be built within the building rules.',
       creditsSpent: 6,
+      creditsReserved: 0,
       review: { reason: 'doctrine', findings: [{ rule: 2, code: 'plan-screen-without-layout' }] },
     })
     expect(parked?.plan).toBeUndefined()
@@ -1359,7 +1368,13 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
     })
 
     const resumed = await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, LATER)
-    expect(resumed.job).toMatchObject({ status: 'queued', error: null, review: null })
+    // Trying again holds both steps the plan's retry queues ahead of.
+    expect(resumed.job).toMatchObject({
+      status: 'queued',
+      error: null,
+      review: null,
+      creditsReserved: 2 * AI_JOB_STEP_RESERVE_CREDITS,
+    })
     expect(resumed.job.steps[0]).toMatchObject({ status: 'pending', attempts: 0 })
 
     expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-2', now: LATER })).outcome).toBe(

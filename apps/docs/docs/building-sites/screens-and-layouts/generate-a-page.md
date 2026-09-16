@@ -34,9 +34,16 @@ builds anything: the layout the page renders in, the components and forms it pla
 page's address and search title, and its sections from top to bottom. Open **AI jobs** in the
 Assist panel to read it, then choose **Confirm plan** to build it, or cancel.
 
-A page job builds one page from what your site already has. When the plan needs something the
-site does not have yet, such as a new component or form, confirming it tells you what to
-create first and where. Create it, then describe the page again.
+A page job builds one page from what your site already has. A plan only proposes what your
+workspace can create, and a plan the job could not build is not offered for confirmation: when
+it would need something the site does not have yet, such as a new component or form, the job
+stops before you confirm anything and tells you what to create first and where. Create it,
+then describe the page again.
+
+On a plan without reusable components or saved forms, such as Free, the page is built from
+what that plan can make: a block that repeats, such as a row of service cards, is built into
+the page each time, and a form is part of the page, with its fields, collecting submissions
+into your inbox like any form.
 
 ## How the page is built
 

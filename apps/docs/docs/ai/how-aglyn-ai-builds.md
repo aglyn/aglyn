@@ -27,6 +27,10 @@ Before it generates anything, a build job proposes a **plan**:
 - the **screens** it will build, each with its layout, address, search title and
   sections.
 
+A plan only proposes what your workspace can create: what your plan includes, and what
+your site still has room for. A plan the job could not build is stopped before you are
+asked to confirm it, with the reason.
+
 The job then waits for you. Open **AI jobs** in the Assist panel, read the plan,
 and choose **Confirm plan** to build it, or **Cancel** to stop. Nothing is
 generated until you confirm.
@@ -36,13 +40,17 @@ generated until you confirm.
 1. **Repeats become one reusable component.** A block that appears three or more
    times on a page, such as the same card with different words, is built once as
    a reusable component and placed as instances. The AI looks for a component you
-   already have first, and never makes a second copy of one.
+   already have first, and never makes a second copy of one. On a plan without
+   reusable components, such as Free, the block is built into the page each time it
+   repeats instead.
 2. **Site-wide regions live in the layout.** Headers, navigation, footers,
    announcement bars and cookie notices belong to the site's layout. A generated
    page sits in your layout and never carries its own copy of them.
 3. **Forms are built on the Forms page, then placed.** A form is created with its
    fields, validation, consent and routing on the Forms page, and a page places it
-   by reference, so you edit it in one place. A search is never built as a form,
+   by reference, so you edit it in one place. On a plan without saved forms, such as
+   Free, the page carries the form itself, with its fields, and its submissions reach
+   your inbox like any form's. A search is never built as a form,
    because a form collects submissions: the AI places a
    [Search Box](../building-sites/site-search/overview.md) for your site search, or a
    Collection Search for the entries of one collection.
@@ -55,7 +63,8 @@ generated until you confirm.
 6. **Emails use your brand.** Email designs use your brand's colors and fonts, and
    campaigns start from an email template.
 7. **Reuse before creating.** Creating something new is the exception, and the plan
-   says why.
+   says why. A plan never creates something your plan does not include or your site
+   has no room for.
 8. **Data is bound, not typed.** A list you already keep as a dataset, collection
    or product catalog is bound to it rather than typed into the page, so it stays
    current. A long list your site does not have yet becomes a proposed dataset.

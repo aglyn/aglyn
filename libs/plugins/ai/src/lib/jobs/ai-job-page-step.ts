@@ -16,6 +16,7 @@
  */
 
 import { buildPageMarkdown } from '@aglyn/aglyn/app-utils/page-markdown'
+import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fields'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
@@ -248,7 +249,10 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     if (written && !stored) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_DELETED_COPY }
     const page = stored?.nodes ?? aiEmptyPage()
     const index = sectionIds.findIndex((id) => !(id in page))
-    const context = aiPageCheckContext(inventory)
+    // A workspace that keeps no reusable components or saved forms builds its
+    // page inline, and every pass is held to the rules that way (AGL-3030).
+    const reusableComponents = checkEntitlement(org, 'reusableComponents')
+    const context = aiPageCheckContext(inventory, { reusableComponents })
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
     if (index === -1 && written) {
@@ -323,6 +327,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             screen,
             index,
             maxElements: Math.max(1, Math.floor(maxTokens / AI_JOB_PAGE_TOKENS_PER_ELEMENT)),
+            reusableComponents,
           }),
         },
       ],

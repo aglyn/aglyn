@@ -29,9 +29,11 @@
 import { AI_PAGE_BRIEF_FIXTURES } from '../jobs/fixtures/ai-page-briefs'
 import type { AiBuildPlan } from './ai-build-plan'
 import {
+  AI_PAGE_CREATE_KINDS,
   AI_PAGE_TYPES,
   aiPagePlanPrerequisites,
   aiPagePlanRefusal,
+  aiPagePlanShapeRefusal,
   aiPageTypeDefinition,
   parseAiPageJobInputs,
 } from './ai-page-job'
@@ -129,6 +131,17 @@ describe('the plans a page job builds', () => {
       { kind: 'component', name: 'Service card' },
       { kind: 'component', name: 'Quote strip' },
     ])
+  })
+
+  it('builds no creation of its own, and holds a plan’s shape apart from what it creates (AGL-3030)', () => {
+    expect(AI_PAGE_CREATE_KINDS).toEqual([])
+    // The plan step re-asks a plan of the wrong shape, and the plan rules
+    // refuse a creation, so the shape refusal says nothing about creations.
+    const creating = withCreations([creation('component', 'Service card')])
+    expect(aiPagePlanShapeRefusal(creating)).toBeNull()
+    expect(aiPagePlanRefusal(creating)).toContain('Create the component “Service card”')
+    const twoPages = { ...FIXTURE.plan, screens: [FIXTURE.plan.screens[0], FIXTURE.plan.screens[0]] }
+    expect(aiPagePlanShapeRefusal(twoPages)).toBe(aiPagePlanRefusal(twoPages))
   })
 
   it('refuses a plan with no page, with two pages, and a page with no sections', () => {

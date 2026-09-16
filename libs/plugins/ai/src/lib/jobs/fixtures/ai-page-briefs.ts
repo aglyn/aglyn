@@ -158,6 +158,57 @@ function form(prefix: string, input: { name: string; heading: string; intro: str
   )
 }
 
+/**
+ * Items drawn where they repeat, each a Card: what a workspace that keeps no
+ * reusable components builds instead of placing a component (AGL-3030).
+ */
+function inlineCards(prefix: string, input: { name: string; heading: string; items: Array<{ title: string; summary: string }> }): Built {
+  return section(prefix, input.name, [], input.items.length, (add) => {
+    const cards = input.items.map((item) =>
+      add({
+        componentId: 'muiCard',
+        props: { variant: 'outlined' },
+        nodes: [add({ componentId: 'muiCardContent', nodes: [add(typography('h3', item.title, 'h3')), add(typography('body2', item.summary))] })],
+      }),
+    )
+    return framed(add, [add(typography('h2', input.heading, 'h2')), add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: cards })], 'lg', 8)
+  })
+}
+
+/**
+ * A form the page carries itself: a Form with no formId, holding its Form
+ * Fields — what a workspace that keeps no saved forms builds instead of
+ * placing one (AGL-3030). The site's submit route collects it by its name.
+ */
+function inlineForm(
+  prefix: string,
+  input: {
+    name: string
+    heading: string
+    intro: string
+    formName: string
+    submitLabel: string
+    fields: Array<{ fieldName: string; label: string; fieldType: string; required?: boolean }>
+  },
+): Built {
+  return section(prefix, input.name, [], 0, (add) =>
+    framed(
+      add,
+      [
+        add(typography('h2', input.heading, 'h2')),
+        add(typography('body1', input.intro)),
+        add({
+          componentId: 'form',
+          props: { formName: input.formName, submitLabel: input.submitLabel },
+          nodes: input.fields.map((field) => add({ componentId: 'formField', props: { ...field } })),
+        }),
+      ],
+      'sm',
+      8,
+    ),
+  )
+}
+
 function callToAction(prefix: string, input: { name: string; heading: string; body: string; label: string; screenId: string }): Built {
   return section(prefix, input.name, [input.screenId], 0, (add) =>
     framed(
@@ -761,3 +812,64 @@ export const AI_PAGE_BRIEF_FIXTURES: readonly AiPageBriefFixture[] = [
     ],
   }),
 ]
+
+/**
+ * A page brief for a Free workspace (AGL-3030): a site that keeps no reusable
+ * components and no saved forms, with the one layout its plan includes. Its
+ * practice areas repeat and its consultation request is a form, so the page
+ * is built the one way such a workspace can build it — the cards drawn where
+ * they repeat, and the form carried by the page with its fields inside it.
+ * The plan the page job keeps for it is held to the Free workspace's
+ * capabilities, never the whole doctrine.
+ */
+export const AI_FREE_PAGE_FIXTURE: AiPageBriefFixture = brief({
+  id: 'free-law-firm-about',
+  icp: 'small-business',
+  pageType: 'about',
+  brief: 'An about page for Brightwater Law: who we are, the four areas we practice, how we work with clients, and a form to request a consultation.',
+  inventory: site('host-brightwater-law', {}),
+  title: 'About Brightwater Law',
+  slug: '/about',
+  layout: 'lay-site',
+  nav: true,
+  seo: {
+    title: 'About Brightwater Law',
+    description: 'A small firm for families and small businesses: estate planning, real estate, business formation and landlord-tenant matters.',
+  },
+  sections: [
+    hero('a', {
+      title: 'About Brightwater Law',
+      lead: 'We are a small firm that helps families and small businesses in [city] plan ahead and settle disputes before they reach a courtroom.',
+    }),
+    inlineCards('b', {
+      name: 'practice areas',
+      heading: 'What we help with',
+      items: [
+        { title: 'Estate planning', summary: 'Wills, trusts and powers of attorney, written so your family knows what you wanted.' },
+        { title: 'Real estate', summary: 'Purchase agreements, title questions and closings for homes and small commercial property.' },
+        { title: 'Business formation', summary: 'Choosing an entity, operating agreements and the contracts a new business signs first.' },
+        { title: 'Landlord and tenant', summary: 'Leases, deposits and notices, for owners with a few units and the people who rent from them.' },
+      ],
+    }),
+    prose('c', {
+      name: 'how we work',
+      heading: 'How we work with you',
+      paragraphs: [
+        'Your first call is with the attorney who will handle the matter. We quote a flat fee where the work allows one, and we say so before we start when it does not.',
+      ],
+    }),
+    inlineForm('d', {
+      name: 'consultation request form',
+      heading: 'Request a consultation',
+      intro: 'Tell us a little about what you need. We reply within one business day.',
+      formName: 'Consultation request',
+      submitLabel: 'Request a consultation',
+      fields: [
+        { fieldName: 'name', label: 'Your name', fieldType: 'text', required: true },
+        { fieldName: 'email', label: 'Email', fieldType: 'email', required: true },
+        { fieldName: 'phone', label: 'Phone', fieldType: 'text' },
+        { fieldName: 'matter', label: 'What can we help with?', fieldType: 'textarea', required: true },
+      ],
+    }),
+  ],
+})

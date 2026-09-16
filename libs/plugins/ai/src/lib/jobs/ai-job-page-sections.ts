@@ -93,6 +93,7 @@ export const AI_JOB_PAGE_INSTRUCTIONS: readonly AiSystemBlock[] = [
       'You build a web page one section at a time, in the order a confirmed plan gives. Each answer is ONE section: call submit_section with a flat node map whose root is the document wrapper (componentId "div") holding exactly one Section (section).',
       'The first section is the top of the page and holds the page’s one h1, its title. Every later section opens with an h2, and headings below it step down one level at a time.',
       'Place what the section’s plan line names. A component the site has is placed as an instance, never drawn again: componentId "reusableInstance", props {"refId": "<component id>", "propValues": {…}} filling the props the inventory lists. A form the site has is a Form (form) whose formId is that form’s id. Another screen of the site is linked by its screen id, with a Screen Link (muiScreenLink) or a Button (muiButton) whose screenId is that id.',
+      'Where the request says the site keeps no saved forms or reusable components, draw them in the section instead: a repeated item is written out each time, and a form is a Form (form) with no formId, a formName saying what it collects and a submitLabel, holding one Form Field (formField) for each answer with its fieldName, label and fieldType.',
       'Lay the section out with a Container, a Grid or a Stack, and size nothing with a fixed width. Colors come from the theme’s palette tokens such as primary.main, spacing from the spacing scale, and type from the text variants.',
       'The page renders inside the site’s layout, so a section is never a header, navigation or footer.',
       'A picture is an Image (image) with alt text that says what it should show and no src, for the site owner to fill from the media library.',
@@ -115,7 +116,16 @@ export interface AiPageSectionPromptInput {
   index: number
   /** The most elements the section may carry at this pass's answer ceiling. */
   maxElements: number
+  /**
+   * Whether the workspace keeps reusable components and saved forms
+   * (AGL-3030); `false` asks for the section built inline. Absent is `true`.
+   */
+  reusableComponents?: boolean
 }
+
+/** What a section request says where the workspace keeps no reusable components or saved forms. */
+export const AI_PAGE_SECTION_INLINE_LINE =
+  'This site keeps no saved forms or reusable components: write a repeated item out each time, and draw a form as a Form holding its Form Fields.'
 
 /** One pass's user turn: the page, the brief, the plan, this section and what is built above it. */
 export function aiPageSectionPrompt(input: AiPageSectionPromptInput): string {
@@ -137,6 +147,7 @@ export function aiPageSectionPrompt(input: AiPageSectionPromptInput): string {
     built.length
       ? `Already built, above it: ${built.join('; ')}. The page’s h1 is in section 1.`
       : 'Nothing is built yet: this section holds the page’s h1.',
+    ...(input.reusableComponents === false ? [AI_PAGE_SECTION_INLINE_LINE] : []),
     `Keep this section to at most ${input.maxElements} elements.`,
   ].join('\n')
 }
@@ -205,11 +216,19 @@ export function aiPageWithSection(
   return nodes as unknown as NodesMap
 }
 
-/** What a tree generated against this inventory may reference, and the brand it is held to. */
-export function aiPageCheckContext(inventory: AiSiteInventory | null): AiDoctrineTreeContext {
+/**
+ * What a tree generated against this inventory may reference, the brand it is
+ * held to, and — where the workspace keeps no reusable components or saved
+ * forms (AGL-3030) — that the page is built inline.
+ */
+export function aiPageCheckContext(
+  inventory: AiSiteInventory | null,
+  options: { reusableComponents?: boolean } = {},
+): AiDoctrineTreeContext {
   return {
     brand: inventory?.theme ? { colors: inventory.theme.colors, fonts: inventory.theme.fonts } : null,
     ...aiNodeTreeContextFromInventory(inventory),
+    ...(options.reusableComponents === false ? { reusableComponents: false } : {}),
   }
 }
 

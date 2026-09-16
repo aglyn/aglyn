@@ -16,19 +16,35 @@
  */
 
 import { createHash } from 'node:crypto'
+import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import {
   AI_BUILD_PLAN_TOOL,
   isAiPlanNewRef,
   type AiBuildPlan,
 } from '../model/ai-build-plan'
-import type { AiJob, AiJobPlan, AiJobStatus } from '../model/ai-jobs.types'
+import type { AiJob, AiJobKind, AiJobPlan, AiJobStatus } from '../model/ai-jobs.types'
+import { AI_PAGE_CREATE_KINDS, aiPagePlanShapeRefusal } from '../model/ai-page-job'
+import {
+  aiPlanCapabilitiesForJob,
+  aiPlanCapabilityLines,
+  type AiPlanCapabilities,
+  type AiPlanJobScope,
+} from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
+import { AI_SITE_CREATE_KINDS, aiSitePlanShapeRefusal } from '../model/ai-site-job'
 import { aiDoctrineSystemBlocks, runValidatedGeneration } from '../runtime/ai-doctrine'
 import { AI_STEP_TIERS } from '../providers/catalog'
+import type { AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
-import { AI_JOB_BRIEF_MAX_CHARS, type AiJobStepRunner } from './ai-job-text-step'
+import { aiJobAdmissionRefusal } from './ai-job-admission'
+import { readAiPlanCapabilities } from './ai-job-drafts'
+import {
+  AI_JOB_BRIEF_MAX_CHARS,
+  type AiJobStepOutcome,
+  type AiJobStepRunner,
+} from './ai-job-text-step'
 import { aiGenerationMaxTokensWithin, aiGenerationWorstCaseOnTierMs } from './ai-job-budget'
 import { aiUnspentOutcome } from './ai-job-generation'
 import { AI_JOBS_COLLECTION, registerAiJobPlanStep } from './ai-jobs'
@@ -46,6 +62,18 @@ import { AI_JOBS_COLLECTION, registerAiJobPlanStep } from './ai-jobs'
  * re-ask stops the job the same way, with the rules named. Either way the
  * step writes nothing itself; the machine records the plan, the spend and
  * the stop, as it records every step.
+ *
+ * ── Told what it may create, refused what it cannot build (AGL-3030) ─────
+ *
+ * Before it asks, the step reads what the job may create on its site: the
+ * workspace's plan, the site's counts against its limits, and — for a kind
+ * that builds only some plans — what the job builds itself. The user turn
+ * states it, the plan rules refuse a creation outside it with the one re-ask,
+ * and where the workspace keeps no reusable components they accept the page
+ * built inline. A plan the confirm door would still refuse — the kind's own
+ * admission, handed the plan, as the resume door hands it — is refused HERE,
+ * before a member is shown a Confirm: the job fails with the door's sentence,
+ * its plan is not kept, and it holds nothing.
  */
 
 /** The plan step's own instructions, cached after the doctrine. */
@@ -54,7 +82,7 @@ export const AI_JOB_PLAN_INSTRUCTIONS: readonly AiSystemBlock[] = [
     text:
       'You plan what a website builder job will build, before anything is built. You are given the kind of job and the brief from the person who owns the site. ' +
       'Answer with submit_build_plan: what the site inventory already has that the job reuses, what it must create and why nothing listed will do, and each screen it builds with its layout, template, slug, search title, search description and sections from top to bottom. ' +
-      'Refer to inventory records by id and to what the plan creates as new:<name>. Plan only what the brief asks for: a component, layout, template, form or email job plans no screens unless the brief asks for pages.',
+      'Refer to inventory records by id and to what the plan creates as new:<name>. Plan only what the brief asks for: a component, layout, template, form or email job plans no screens unless the brief asks for pages, and a page job plans exactly one screen.',
   },
 ]
 
@@ -92,15 +120,50 @@ export function aiJobPlanMaxTokens(model: string): number {
 export const AI_JOB_PLAN_REVIEW_COPY =
   'The plan is ready. Review what the job will reuse and create, then confirm it to build.'
 
-/** The job as the plan step's user turn: its kind, its brief and its scalar inputs. */
-export function aiJobPlanPrompt(job: Pick<AiJob, 'kind' | 'brief' | 'inputs'>): string {
+/**
+ * The job as the plan step's user turn: its kind, its brief, its scalar
+ * inputs and, where the job read them, what it may create on its site
+ * (AGL-3030). Per workspace and per site, which is why they ride here and
+ * never in a system block the platform's cache entry is keyed on.
+ */
+export function aiJobPlanPrompt(
+  job: Pick<AiJob, 'kind' | 'brief' | 'inputs'>,
+  capabilities: AiPlanCapabilities | null = null,
+): string {
   const lines = [`Job kind: ${job.kind}`, `Brief: ${job.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`]
   for (const [key, value] of Object.entries(job.inputs ?? {})) {
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
       lines.push(`${key}: ${String(value)}`)
     }
   }
+  if (capabilities) lines.push(...aiPlanCapabilityLines(capabilities))
   return lines.join('\n')
+}
+
+/** A kind that builds only some plans: the creations it makes, and the shapes it refuses. */
+export interface AiJobPlanScope extends AiPlanJobScope {
+  /** Why a job of the kind cannot build a plan of this shape; `null` when it can. Pure. */
+  shapeRefusal: (plan: AiBuildPlan) => string | null
+}
+
+/**
+ * The kinds whose confirm door builds only some plans (AGL-3030). A page job
+ * builds one screen and a scaffold four to eight; each builds only the
+ * creations its list names. Every other planned kind builds its own one
+ * output, and its plan is held to the workspace alone.
+ */
+export const AI_JOB_PLAN_SCOPES: Readonly<Partial<Record<AiJobKind, AiJobPlanScope>>> = {
+  page: { noun: 'a page job', creates: AI_PAGE_CREATE_KINDS, shapeRefusal: aiPagePlanShapeRefusal },
+  site: { noun: 'a site scaffold', creates: AI_SITE_CREATE_KINDS, shapeRefusal: aiSitePlanShapeRefusal },
+}
+
+/** A kind's shape refusal as the violation the plan's one re-ask names. */
+function shapeViolations(scope: AiJobPlanScope | null): ((plan: AiBuildPlan) => AiDoctrineViolation[]) | undefined {
+  if (!scope) return undefined
+  return (plan) => {
+    const message = scope.shapeRefusal(plan)
+    return message ? [{ rule: null, code: 'plan-job-shape', message }] : []
+  }
 }
 
 /**
@@ -284,28 +347,74 @@ export const findAiJobsByPlanKey: AiJobPlanFinder = async (orgId, key, firestore
   })
 }
 
+/** What a job may create on its site, read for the plan step; `null` for no site. */
+export type AiPlanCapabilitiesReader = (input: {
+  job: AiJob
+  org: Partial<AglynOrgBilling> | null
+  firestore: FirebaseFirestore.Firestore
+}) => Promise<AiPlanCapabilities | null>
+
+/** The reader the step uses in production: the draft bands' own arithmetic, for the job's site. */
+export const readAiJobPlanCapabilities: AiPlanCapabilitiesReader = async ({ job, org, firestore }) =>
+  job.hostId ? readAiPlanCapabilities(firestore, { hostId: job.hostId, org }) : null
+
 export interface AiJobPlanStepDeps {
   /** The inventory reader; specs hand in a fake. */
   readInventory?: typeof readSiteInventory
   /** The reuse lookup; specs hand in a fake, and `null` turns reuse off. */
   findPlansByKey?: AiJobPlanFinder | null
+  /** What the job may create on its site (AGL-3030); specs and the eval recorder hand in their own. */
+  readCapabilities?: AiPlanCapabilitiesReader
+  /** The kind's admission, asked of a plan before it is kept; the registry's otherwise. */
+  admissionRefusal?: typeof aiJobAdmissionRefusal
 }
 
 export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunner {
   const readInventory = deps.readInventory ?? readSiteInventory
   const findPlansByKey =
     deps.findPlansByKey === undefined ? findAiJobsByPlanKey : deps.findPlansByKey
-  return async ({ job, now, signal, firestore, modelFor }) => {
-    const inventory = job.hostId
-      ? await readInventory(job.orgId, job.hostId, { firestore })
-      : null
+  const readCapabilities = deps.readCapabilities ?? readAiJobPlanCapabilities
+  const admissionRefusal = deps.admissionRefusal ?? aiJobAdmissionRefusal
+  return async ({ job, now, signal, firestore, modelFor, org: orgDocument }) => {
+    const org = (orgDocument ?? null) as Partial<AglynOrgBilling> | null
+    const [inventory, workspace] = await Promise.all([
+      job.hostId ? readInventory(job.orgId, job.hostId, { firestore }) : Promise.resolve(null),
+      readCapabilities({ job, org, firestore }),
+    ])
+    const scope = AI_JOB_PLAN_SCOPES[job.kind] ?? null
+    const capabilities = workspace ? aiPlanCapabilitiesForJob(workspace, scope) : null
     // The model switch's answer for this job (AGL-2942): the creator's pick
     // where the plan, the org restriction and the allotment allowlists allow
     // it, and Auto held to those same lists otherwise. Without a resolver the
     // doctrine asks the routing table itself.
     const model = modelFor?.('job.plan')
     const route = AI_ROUTING_TABLE['job.plan']
-    const prompt = aiJobPlanPrompt(job)
+    const prompt = aiJobPlanPrompt(job, capabilities)
+
+    /**
+     * The confirm door's answer for this plan, asked before the plan is kept
+     * (AGL-3030): the kind's own admission, handed the plan as the resume
+     * door hands it. A refusal fails the job with the door's sentence; a door
+     * that could not answer keeps the plan, since the resume door asks again
+     * before anything is built.
+     */
+    const refusalOnKeep = async (plan: AiJobPlan, outcome: AiJobStepOutcome): Promise<AiJobStepOutcome | null> => {
+      let refusal: Awaited<ReturnType<typeof aiJobAdmissionRefusal>> = null
+      try {
+        refusal = await admissionRefusal(job.kind, {
+          firestore,
+          orgId: job.orgId,
+          hostId: job.hostId ?? null,
+          inputs: job.inputs ?? {},
+          org,
+          plan,
+          uid: job.createdBy,
+        })
+      } catch (error) {
+        console.error('ai plan admission failed', { orgId: job.orgId, jobId: job.$id, error })
+      }
+      return refusal ? { ...outcome, failure: refusal.error } : null
+    }
 
     // Reuse before asking (AGL-2937). The key covers the whole request, so a
     // hit is a request that would have been sent the same bytes to the same
@@ -338,11 +447,14 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         key,
         reusedFrom: reused.jobId,
       }
-      return {
-        ...aiUnspentOutcome(resolved),
-        plan,
-        review: { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] },
-      }
+      const unspent = aiUnspentOutcome(resolved)
+      return (
+        (await refusalOnKeep(plan, unspent)) ?? {
+          ...unspent,
+          plan,
+          review: { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] },
+        }
+      )
     }
 
     const result = await runValidatedGeneration('plan', {
@@ -358,8 +470,10 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       ...(route.thinking ? { thinking: route.thinking } : {}),
       ...(route.effort ? { effort: route.effort } : {}),
       ...(signal ? { signal } : {}),
+      capabilities,
+      extend: shapeViolations(scope),
     })
-    const spent = {
+    const spent: AiJobStepOutcome = {
       outputs: [],
       usage: result.usage,
       estCostUsd: result.estCostUsd,
@@ -388,11 +502,13 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       confirmedBy: null,
       key,
     }
-    return {
-      ...spent,
-      plan,
-      review: { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] },
-    }
+    return (
+      (await refusalOnKeep(plan, spent)) ?? {
+        ...spent,
+        plan,
+        review: { reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] },
+      }
+    )
   }
 }
 

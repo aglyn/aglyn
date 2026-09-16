@@ -40,6 +40,7 @@ import {
   aiSiteCreditEstimate,
   aiSitePlanPrerequisites,
   aiSitePlanRefusal,
+  aiSitePlanShapeRefusal,
   parseAiSiteJobInputs,
 } from './ai-site-job'
 
@@ -243,6 +244,11 @@ describe('the plans a scaffold can build', () => {
     expect(aiSitePlanPrerequisites(outside)).toEqual([
       { kind: 'component', name: 'Price card' },
     ])
+    // The plan step re-asks the shape and the plan rules refuse the creation
+    // (AGL-3030), so the shape refusal says nothing about creations.
+    expect(aiSitePlanShapeRefusal(outside)).toBeNull()
+    const short = plan({ screens: plan().screens.slice(0, 2) })
+    expect(aiSitePlanShapeRefusal(short)).toBe(aiSitePlanRefusal(short))
   })
 
   it('names an unbuildable reference the create list does not carry', () => {
