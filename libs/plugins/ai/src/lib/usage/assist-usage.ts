@@ -61,6 +61,7 @@ import {
   assistOperatorCeilingUsd,
   assistOrgMonthlyCostLimitUsd,
 } from '@aglyn/aglyn/app-utils/usage-budget'
+import { isUncappedPlanComp } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { estimateAiBilledUsd, estimateAiProviderCostUsd } from '../providers/catalog'
 import { recordAssistRefusal } from './assist-refusals'
@@ -254,9 +255,9 @@ export function assistEntitledMonthlyLimit(): number {
  * `off` removes the operator's ceiling and does NOT remove a plan band: the
  * word turns off a backstop, and the band is not one.
  *
- * An org with no band (`budgetUsd === null` — Free, Starter, and any org
- * whose plan sells no assist) is unchanged in every case: it gets exactly the
- * ceiling it got before, default and all.
+ * An org with no band (`budgetUsd === null` — Starter without the AI add-on,
+ * and any org whose plan sells no assist band) is unchanged in every case: it
+ * gets exactly the ceiling it got before, default and all.
  *
  * ## When the band is a line rather than a wall (AGL-2653)
  *
@@ -268,12 +269,28 @@ export function assistEntitledMonthlyLimit(): number {
  * leaves nothing. The message cap is still there either way, so a workspace
  * buying overage is bounded by messages a month rather than by nothing; the
  * overage it buys is priced by `report-usage` at the plan's rate.
+ *
+ * ## An uncapped staff comp (AGL-3049)
+ *
+ * `uncapped` is `isUncappedPlanComp(org)`. Its band resolves `null` — there
+ * is no band — but it is not a workspace that was never sold one, so the
+ * repo default must not stand in for a band here any more than it may
+ * undercut a sold one: a $40 wall on the workspace staff uncapped is exactly
+ * the cap uncapping removes. It composes like a band that does not refuse:
+ * the operator's explicit figure binds, because that is an incident
+ * decision about every workspace, and nothing else does. The message cap
+ * still applies, as it does to every entitled workspace.
  */
 export function assistMonthlyCeilingUsd(
   budgetUsd: number | null,
   bandRefuses = true,
+  uncapped = false,
 ): number | null {
   const configured = process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
+  if (uncapped) {
+    const operator = assistOperatorCeilingUsd(configured)
+    return typeof operator === 'number' ? operator : null
+  }
   if (budgetUsd === null) return assistOrgMonthlyCostLimitUsd(configured)
   const operator = assistOperatorCeilingUsd(configured)
   if (!bandRefuses) return typeof operator === 'number' ? operator : null
@@ -654,7 +671,12 @@ async function reserveInTransaction(
   // attempts.
   const budgetUsd = resolveAssistBudgetUsd(org)
   const bandRefuses = assistBandRefuses(org)
-  const costLimitUsd = assistMonthlyCeilingUsd(budgetUsd, bandRefuses)
+  // An uncapped staff comp has no band and no backstop default (AGL-3049).
+  const costLimitUsd = assistMonthlyCeilingUsd(
+    budgetUsd,
+    bandRefuses,
+    isUncappedPlanComp(org),
+  )
   // The ceiling IS the band when the band refuses and nothing lower undercut
   // it. That is the refusal the surface has to attribute to the org's own
   // switch (or to a plan that sells no overage); a lower operator figure is
