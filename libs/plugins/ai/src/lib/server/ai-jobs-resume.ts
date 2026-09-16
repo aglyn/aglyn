@@ -102,6 +102,7 @@ export async function POST(
         org: gate.org,
         // The plan being confirmed, for a kind that builds only some plans.
         plan: existing.plan ?? null,
+        uid: gate.uid,
       })
     } catch (error) {
       await release()

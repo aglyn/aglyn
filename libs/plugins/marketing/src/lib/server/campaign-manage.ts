@@ -106,6 +106,14 @@ import {
 import {
   CAMPAIGN_SEND_CONTAINER_FIELD,
 } from '@aglyn/shared-ui-email-campaigns/model'
+import { SCREEN_KIND_EMAIL } from '@aglyn/aglyn/app-utils/screen-route'
+import {
+  registerPluginResourceDraftWriter,
+  type PluginDraftRecord,
+  type PluginDraftRefusal,
+  type PluginDraftWrite,
+  type PluginResourceDraftWriter,
+} from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 
 /**
  * Sends detached in one write.
@@ -524,6 +532,262 @@ async function duplicateMessage(
     )
   }
   return { status: outcome.status, body: outcome.body }
+}
+
+/*==========================================
+ * A CAMPAIGN THAT EXISTS BEFORE ANYBODY CHOSE WHO GETS IT (AGL-2912).
+ *
+ * The draft writer this plugin registers for the `campaign` resource on the
+ * core's resource-drafts seam. Another plugin that produces a campaign — a
+ * generator working from a brief, an importer bringing campaigns over from
+ * another tool — asks for it by name, and gets exactly two documents:
+ *
+ *  - the CONTAINER at `emailCampaigns/{id}`, written as the campaigns list's
+ *    create drawer writes one, aimed at no list;
+ *  - ONE EMAIL inside it at `campaigns/{id}-email`, `status: 'draft'`, naming
+ *    the email design it sends and holding its subject, preheader and the
+ *    alternatives to them.
+ *
+ * ## What a drafted email never holds
+ *
+ * An audience, a list, a segment, addresses, a topic, a sender, a send time or
+ * an experiment. Those are the decisions a person makes about a send — the
+ * duplicate above strips the same ones for the same reason — and a draft that
+ * arrived holding any of them would be one click from mailing people nobody
+ * chose. So the writer has no field for them to arrive in.
+ *
+ * ## Why a draft cannot escape
+ *
+ * Nothing here reserves an allowance, claims a budget or calls the send path,
+ * and the scheduled processor queries `status == 'scheduled'`, which a draft
+ * never is. `performCampaignSend` is the only thing that mails a draft, behind
+ * the send route's own authorization, when a member asks.
+ *
+ * The id of the email is derived from the campaign's rather than minted, so a
+ * write asked again finds the email it made — and differs from it, because a
+ * campaign URL names a container OR a send, and one id naming both would read
+ * as either.
+ *=========================================*/
+
+/** The resource name the campaign draft writer is registered under. */
+export const CAMPAIGN_DRAFT_RESOURCE = 'campaign'
+
+/** The id `plugins.config.json` registers this plugin under. */
+const MARKETING_PLUGIN_ID = 'marketing'
+
+/** A drafted campaign's name when the caller asks for none. */
+export const CAMPAIGN_DRAFT_DEFAULT_NAME = 'Untitled campaign'
+
+/** The longest subject or preheader a drafted email stores: the send route's header cap. */
+export const CAMPAIGN_DRAFT_HEADER_MAX_CHARS = 200
+
+/** The most alternative subject lines or preheaders a drafted email keeps. */
+export const CAMPAIGN_DRAFT_MAX_VARIANTS = 10
+
+/** The send route's refusal for a member who may not compose this site's mail. */
+export const CAMPAIGN_DRAFT_ROLE_REFUSAL = 'Not a site admin or editor'
+
+/** The id of the one email inside a drafted campaign. */
+export function campaignDraftEmailId(campaignId: string): string {
+  return `${campaignId}-email`
+}
+
+/** Every field a drafted email is written with, and so every field it can hold. */
+export const CAMPAIGN_DRAFT_EMAIL_FIELDS = [
+  'subject',
+  'preheader',
+  'templateScreenId',
+  'subjectVariants',
+  'preheaderVariants',
+  CAMPAIGN_SEND_CONTAINER_FIELD,
+  'status',
+  'createdAtMs',
+  'draftedAt',
+  'draftedBy',
+] as const
+
+/** What a caller sends as `content`. */
+export interface CampaignDraftContent {
+  /** The email design the email sends: a `kind: 'email'` screen on the site. */
+  templateScreenId: string
+  subject: string
+  preheader: string
+  subjectVariants: string[]
+  preheaderVariants: string[]
+}
+
+/** A header value on one line: controls and runs of space folded to one space. */
+function draftHeaderLine(value: unknown): string {
+  return String(value ?? '').replace(/[\p{Cc}\s]+/gu, ' ').trim()
+}
+
+function draftVariants(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const lines: string[] = []
+  for (const raw of value) {
+    const line = draftHeaderLine(raw)
+    if (!line || seen.has(line.toLowerCase())) continue
+    seen.add(line.toLowerCase())
+    lines.push(line)
+  }
+  return lines.slice(0, CAMPAIGN_DRAFT_MAX_VARIANTS)
+}
+
+export function readCampaignDraftContent(
+  content: Readonly<Record<string, unknown>>,
+): { ok: true; value: CampaignDraftContent } | { ok: false; problems: string[] } {
+  const value: CampaignDraftContent = {
+    templateScreenId: String(content['templateScreenId'] ?? ''),
+    subject: draftHeaderLine(content['subject']),
+    preheader: draftHeaderLine(content['preheader']),
+    subjectVariants: draftVariants(content['subjectVariants']),
+    preheaderVariants: draftVariants(content['preheaderVariants']),
+  }
+  const problems: string[] = []
+  if (!isDocumentId(value.templateScreenId)) {
+    problems.push('A drafted campaign needs the email design it sends')
+  }
+  if (!value.subject) problems.push('A drafted campaign needs a subject line')
+  const long = (lines: string[]) =>
+    lines.some((line) => line.length > CAMPAIGN_DRAFT_HEADER_MAX_CHARS)
+  if (long([value.subject, ...value.subjectVariants])) {
+    problems.push(`A subject line is longer than ${CAMPAIGN_DRAFT_HEADER_MAX_CHARS} characters`)
+  }
+  if (long([value.preheader, ...value.preheaderVariants])) {
+    problems.push(`A preheader is longer than ${CAMPAIGN_DRAFT_HEADER_MAX_CHARS} characters`)
+  }
+  return problems.length ? { ok: false, problems } : { ok: true, value }
+}
+
+function campaignDraftRoleRefusal(
+  host: FirebaseFirestore.DocumentSnapshot,
+  uid: string,
+): PluginDraftRefusal | null {
+  const role = (host.get('memberRoles') ?? {})[uid]
+  return role === 'admin' || role === 'editor'
+    ? null
+    : { status: 403, error: CAMPAIGN_DRAFT_ROLE_REFUSAL }
+}
+
+function campaignDraftRecord(campaign: FirebaseFirestore.DocumentSnapshot): PluginDraftRecord {
+  return {
+    id: campaign.id,
+    name: String(campaign.get('name') ?? ''),
+    versionId: null,
+    facts: { emailId: campaignDraftEmailId(campaign.id) },
+  }
+}
+
+export interface CampaignDraftWriterDeps {
+  /** The Admin SDK handle; specs hand in a double. */
+  firestore?: () => FirebaseFirestore.Firestore
+}
+
+export function createCampaignDraftWriter(
+  deps: CampaignDraftWriterDeps = {},
+): PluginResourceDraftWriter {
+  const firestore =
+    deps.firestore ??
+    (() => firebaseAdmin.app().firestore() as unknown as FirebaseFirestore.Firestore)
+  return {
+    refusal: async ({ hostId, uid }) => {
+      const host = await firestore().collection('hosts').doc(hostId).get()
+      if (!host.exists) return { status: 404, error: 'Unknown site' }
+      return campaignDraftRoleRefusal(host, uid)
+    },
+
+    check: (content) => {
+      const read = readCampaignDraftContent(content)
+      return read.ok === false
+        ? read
+        : { ok: true, facts: { fields: [...CAMPAIGN_DRAFT_EMAIL_FIELDS] } }
+    },
+
+    read: async ({ hostId, id }) => {
+      if (!isDocumentId(id)) return null
+      const campaign = await firestore()
+        .collection('hosts')
+        .doc(hostId)
+        .collection('emailCampaigns')
+        .doc(id)
+        .get()
+      return campaign.exists ? campaignDraftRecord(campaign) : null
+    },
+
+    write: async (request): Promise<PluginDraftWrite> => {
+      const read = readCampaignDraftContent(request.content)
+      if (read.ok === false) return { ok: false, status: 400, error: read.problems[0] }
+      if (!isDocumentId(request.id)) return { ok: false, status: 400, error: 'Invalid campaignId' }
+      const db = firestore()
+      const hostRef = db.collection('hosts').doc(request.hostId)
+      const campaignRef = hostRef.collection('emailCampaigns').doc(request.id)
+      const emailId = campaignDraftEmailId(request.id)
+      const emailRef = hostRef.collection('campaigns').doc(emailId)
+      const designRef = hostRef.collection('screens').doc(read.value.templateScreenId)
+      return db.runTransaction(async (transaction): Promise<PluginDraftWrite> => {
+        const [host, campaign, email, design] = await Promise.all([
+          transaction.get(hostRef),
+          transaction.get(campaignRef),
+          transaction.get(emailRef),
+          transaction.get(designRef),
+        ])
+        if (!host.exists) return { ok: false, status: 404, error: 'Unknown site' }
+        if (campaign.exists) {
+          return { ok: true, replayed: true, ...campaignDraftRecord(campaign) }
+        }
+        const refusal = campaignDraftRoleRefusal(host, request.uid)
+        if (refusal) return { ok: false, ...refusal }
+        if (
+          !design.exists ||
+          design.get('deletedAt') != null ||
+          design.get('kind') !== SCREEN_KIND_EMAIL
+        ) {
+          return { ok: false, status: 400, error: 'Unknown email design' }
+        }
+        if (email.exists) return { ok: false, status: 409, error: 'That email already exists' }
+        const name = draftHeaderLine(request.name) || CAMPAIGN_DRAFT_DEFAULT_NAME
+        const nowMs = request.now.getTime()
+        // The create drawer's own document: a name, no dates, no lists.
+        transaction.create(campaignRef, {
+          name,
+          listIds: [],
+          createdAtMs: nowMs,
+          createdBy: request.uid,
+        })
+        const { value } = read
+        transaction.create(emailRef, {
+          subject: value.subject,
+          ...(value.preheader ? { preheader: value.preheader } : {}),
+          templateScreenId: value.templateScreenId,
+          ...(value.subjectVariants.length ? { subjectVariants: value.subjectVariants } : {}),
+          ...(value.preheaderVariants.length ? { preheaderVariants: value.preheaderVariants } : {}),
+          [CAMPAIGN_SEND_CONTAINER_FIELD]: request.id,
+          status: 'draft',
+          createdAtMs: nowMs,
+          draftedAt: request.now,
+          draftedBy: request.uid,
+        })
+        return {
+          ok: true,
+          replayed: false,
+          id: request.id,
+          name,
+          versionId: null,
+          facts: { emailId },
+        }
+      })
+    },
+  }
+}
+
+export const campaignDraftWriter = createCampaignDraftWriter()
+
+/** Registers the writer; both server surfaces call it, and the second replaces the first. */
+export function registerCampaignDraftWriter(): void {
+  registerPluginResourceDraftWriter(CAMPAIGN_DRAFT_RESOURCE, campaignDraftWriter, {
+    pluginId: MARKETING_PLUGIN_ID,
+  })
 }
 
 export const campaignManageHandler: PluginApiHandler = async (req, res) => {

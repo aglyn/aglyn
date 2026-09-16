@@ -104,6 +104,7 @@ export const DOCS_HELP_EXCERPTS = {
   generateAForm: 'Describe the form you need and an Aglyn AI build job makes it as a draft on the Forms page, with its fields, required answers, marketing consent and routing agreeing with each other.',
   generateAPage: 'Describe a page and an AI build job plans it, then builds it section by section as an unpublished draft from your site\'s theme, layout, components and forms.',
   generateSection: 'Produce a whole section of components on the canvas from a prompt.',
+  generateWithAi: 'Turn a brief into a draft email design, or a draft campaign and the email it would send. Nothing is sent, and nothing is aimed at anybody until you choose.',
   gettingStarted: 'Sign in, create your first site, and understand what a site contains.',
   glossary: 'What organization, workspace, tenant, host, and site each mean — and which word to use where.',
   googleAnalytics: 'Every event your site sends to your own GA4 property, with the exact parameters each one carries — so you can build a report against it before you have any data.',

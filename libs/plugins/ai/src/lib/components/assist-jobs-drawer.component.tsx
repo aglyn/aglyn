@@ -95,7 +95,9 @@ const BESIGNER_SEGMENT: Partial<Record<AiJobOutput['resource'], string>> = {
   reusableComponent: 'components',
   layout: 'layouts',
   template: 'templates',
-  emailScreen: 'emails',
+  // An email design is a screen: it opens in the screen besigner, as the
+  // Emails page's own Edit design does.
+  emailScreen: 'screens',
 }
 
 /**
@@ -131,6 +133,10 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
     // A new form has no version for the besigner to open: its own page mints
     // the first one, and holds the routing and consent it declares.
     return buildRoute(Route.FORM_DETAILS, { orgSlug, host, formId: output.id })
+  }
+  if (output.resource === 'campaign') {
+    // A campaign's page belongs to the Marketing console, under the site.
+    return `${buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'marketing' })}/campaigns/${output.id}`
   }
   return null
 }

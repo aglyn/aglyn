@@ -193,6 +193,7 @@ export async function POST(request: Request): Promise<Response> {
       hostId: parsed.hostId,
       inputs: parsed.inputs,
       org: gate.org,
+      uid: gate.uid,
     })
   } catch (error) {
     await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(

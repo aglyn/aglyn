@@ -106,3 +106,4 @@ Build jobs need the **Generate with AI** permission. See
 - [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai)
 - [Generate a reusable component](../building-sites/components/generate-a-component-with-aglyn-ai.md)
 - [Generate a page from a brief](../building-sites/screens-and-layouts/generate-a-page.md)
+- [Generate an email with AI](../marketing-and-automation/email-campaigns/generate-with-ai.md)

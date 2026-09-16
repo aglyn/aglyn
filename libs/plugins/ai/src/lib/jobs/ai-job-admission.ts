@@ -54,6 +54,12 @@ export interface AiJobAdmissionContext {
    * creation, when no plan exists yet.
    */
   plan?: AiJobPlan | null
+  /**
+   * The member whose request spends: the creator at the create door, the
+   * member confirming at the resume door. A kind whose draft another plugin
+   * writes asks that plugin whether this member may create one.
+   */
+  uid?: string | null
 }
 
 export interface AiJobAdmissionRefusal {

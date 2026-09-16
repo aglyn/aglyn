@@ -360,8 +360,17 @@ describe('aiJobOutputHref', () => {
     expect(aiJobOutputHref(output({ resource: 'reusableComponent' }) as never, 'acme')).toBe(
       '/acme/hosts/shop/components/scr-1',
     )
+    // An email design IS a screen (AGL-2912): the Emails page's own Edit
+    // design opens it in the screen besigner, and `/emails/{id}` is the
+    // transactional template route, which opens nothing for a design.
     expect(aiJobOutputHref(output({ resource: 'emailScreen', versionId: 'v-2' }) as never, 'acme')).toBe(
-      '/acme/hosts/shop/emails/scr-1/versions/v-2/besigner',
+      '/acme/hosts/shop/screens/scr-1/versions/v-2/besigner',
+    )
+  })
+
+  it('opens a drafted campaign on its page in the site’s Marketing console (AGL-2912)', () => {
+    expect(aiJobOutputHref(output({ resource: 'campaign', id: 'cmp-1' }) as never, 'acme')).toBe(
+      '/acme/hosts/shop/marketing/campaigns/cmp-1',
     )
   })
 
