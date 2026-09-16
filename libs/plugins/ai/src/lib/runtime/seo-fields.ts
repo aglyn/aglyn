@@ -69,33 +69,76 @@ export const AI_SEO_FIELDS_MAX_TOKENS = AI_ROUTING_TABLE['job.seo'].maxTokens
 /** How many other pages' titles a prompt lists for the model to avoid. */
 const OTHER_TITLES_LISTED = 40
 
-/** The rules, byte-identical on every request so they cache. */
-export const AI_SEO_FIELDS_INSTRUCTIONS: AiSystemBlock[] = [
-  {
-    text:
-      'You write the search listing for one page or one product of a website: the title and ' +
-      'the summary a search result shows, the short name a breadcrumb trail uses, and a ' +
-      'description of the share image.\n\n' +
-      `Answer by calling ${AI_SEO_FIELDS_TOOL_NAME} exactly once. A reply in prose cannot be used.\n\n` +
-      'Rules:\n' +
-      '- Write only from the text you are given. Never invent a fact, a price, a name, a place, ' +
-      'an offer or a claim the text does not state.\n' +
-      '- The title says what this page is, specifically and in plain words. It is published ' +
-      'exactly as written, so add the site name only where it fits and helps. Keep every length ' +
-      'the tool states.\n' +
-      '- The description is one or two sentences telling a searcher what they will find. No ' +
-      'quotation marks, no emoji, no capitals for emphasis.\n' +
-      '- The breadcrumb label is the page’s short name, one to three words.\n' +
-      '- The image description says what the picture shows, never what the page is about. ' +
-      'Answer null when nothing you were given says what the picture shows.\n' +
-      '- A target keyword goes in only where the page is about it and it reads naturally: at ' +
-      'most once in the title and once in the description. Never list keywords, never repeat a ' +
-      'word to rank, and leave out a keyword the page is not about.\n' +
-      '- Do not reuse a title another page of the site already uses.\n' +
-      '- Write in the language of the page text.',
-    cacheBreakpoint: true,
-  },
-]
+/**
+ * The rule for one listing field, stated only when that field is asked for
+ * (AGL-2937). The tool is built from the same field list, so a listing that
+ * writes three fields no longer carries a paragraph about the fourth — and
+ * neither the rule nor the tool states a length, because the schema's own
+ * descriptions carry them and `checkAiSeoFields` enforces them.
+ */
+const AI_SEO_FIELD_RULES: Readonly<Record<SeoListingFieldKey, string>> = {
+  title:
+    'The title says what this page is, specifically and in plain words. It is published exactly as written, so add the site name only where it fits and helps.',
+  description:
+    'The description is one or two sentences telling a searcher what they will find. No quotation marks, no emoji, no capitals for emphasis.',
+  breadcrumb: 'The breadcrumb label is the page\u2019s short name, one to three words.',
+  imageAlt:
+    'The image description says what the picture shows, never what the page is about. Answer null when nothing you were given says what the picture shows.',
+}
+
+/** What a listing request carries, and therefore which rules it is sent. */
+export interface AiSeoFieldsInstructionShape {
+  fields: readonly SeoListingFieldKey[]
+  keywords: boolean
+  otherTitles: boolean
+}
+
+/**
+ * The rules for one listing request.
+ *
+ * Byte-identical for every request of the same SHAPE, and identical across
+ * workspaces at every shape: no site's name, text or listing is in here, so
+ * two tenants writing the same kind of listing send the same rules. That is
+ * the invariant `runtime/ai-prompt-cache.spec.ts` holds, and it is weaker
+ * than "one block for everything" on purpose — a rule about target keywords
+ * is worth nothing to a request that carries none, and `job.seo` runs on a
+ * model that caches no prompt this short, so an unread rule is simply paid
+ * for at full input rate on every attempt and every re-ask.
+ */
+export function aiSeoFieldsInstructions(
+  shape: AiSeoFieldsInstructionShape,
+): AiSystemBlock[] {
+  const fields = orderedSeoListingFields(shape.fields)
+  const rules = [
+    'Write only from the text you are given. Never invent a fact, a price, a name, a place, an offer or a claim the text does not state.',
+    ...fields.map((key) => AI_SEO_FIELD_RULES[key]),
+    ...(shape.keywords
+      ? [
+          'A target keyword goes in only where the page is about it and it reads naturally: at most once in the title and once in the description. Never list keywords, never repeat a word to rank, and leave out a keyword the page is not about.',
+        ]
+      : []),
+    ...(shape.otherTitles
+      ? ['Do not reuse a title another page of the site already uses.']
+      : []),
+    'Write in the language of the page text.',
+  ]
+  return [
+    {
+      text:
+        'You write the search listing for one page or one product of a website: what a search result shows, and the short name a breadcrumb trail uses.\n\n' +
+        `Answer by calling ${AI_SEO_FIELDS_TOOL_NAME} exactly once. A reply in prose cannot be used.\n\n` +
+        `Rules:\n${rules.map((rule) => `- ${rule}`).join('\n')}`,
+      cacheBreakpoint: true,
+    },
+  ]
+}
+
+/** The rules for a listing of the default shape, for a door that names no other. */
+export const AI_SEO_FIELDS_INSTRUCTIONS: AiSystemBlock[] = aiSeoFieldsInstructions({
+  fields: ['title', 'description', 'breadcrumb'],
+  keywords: false,
+  otherTitles: false,
+})
 
 export interface AiSeoFieldsPromptInput {
   subject: { kind: 'screen' | 'product'; name: string; path?: string | null }
@@ -192,7 +235,11 @@ export async function generateSeoFields(
     step: input.step ?? 'job.seo',
     ...(input.settings ? { settings: input.settings } : {}),
     ...(input.model ? { model: input.model } : {}),
-    instructions: AI_SEO_FIELDS_INSTRUCTIONS,
+    instructions: aiSeoFieldsInstructions({
+      fields,
+      keywords: keywords.length > 0,
+      otherTitles: Boolean(input.otherTitles?.length),
+    }),
     messages: [{ role: 'user', content: aiSeoFieldsPrompt({ ...input, fields, keywords }) }],
     tool: aiSeoFieldsTool(fields),
     maxTokens: AI_SEO_FIELDS_MAX_TOKENS,

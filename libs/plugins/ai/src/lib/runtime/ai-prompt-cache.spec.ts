@@ -32,11 +32,18 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
 import { aiModelCacheMinTokens } from '../providers/catalog'
+import { AI_STEP_NOMINAL_USAGE } from '../providers/model-choice'
 import type { AiStepKind } from '../providers/catalog'
 import type { AiSystemBlock, AiTool } from '../providers/contract'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import { AI_EVAL_GRADER_INSTRUCTIONS } from './ai-eval-live'
-import { aiDoctrineSystemBlocks, aiDoctrineTreeTool } from './ai-doctrine'
+import {
+  aiDoctrineScopeFor,
+  aiDoctrineSystemBlock,
+  aiDoctrineSystemBlocks,
+  aiDoctrineTreeTool,
+} from './ai-doctrine'
+import { detectPublishIntent } from './ai-doctrine-validators'
 import { AI_JOB_FORM_INSTRUCTIONS } from '../jobs/ai-job-form-step'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
 import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
@@ -45,8 +52,13 @@ import { AI_JOB_TEXT_SYSTEM } from '../jobs/ai-job-text-step'
 import { AI_JOB_THEME_INSTRUCTIONS } from '../jobs/ai-job-theme-step'
 import { AI_SEO_FIXES_INSTRUCTIONS, AI_SEO_SITE_INSTRUCTIONS } from '../jobs/ai-job-seo-step'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
-import { AI_SEO_FIELDS_INSTRUCTIONS } from './seo-fields'
-import { aiSeoFieldsTool, aiSeoFixesTool, aiSeoSiteTool } from '../tools/ai-seo-tool'
+import { AI_SEO_FIELDS_INSTRUCTIONS, aiSeoFieldsInstructions } from './seo-fields'
+import {
+  aiSeoFieldsTool,
+  aiSeoFixesTool,
+  aiSeoSiteTool,
+  checkAiSeoFields,
+} from '../tools/ai-seo-tool'
 import { aiThemeTool } from '../tools/ai-theme-tool'
 import { aiTemplateExamplesSystemBlock } from './ai-template-examples'
 import {
@@ -250,23 +262,52 @@ const REQUESTS: Record<string, Composed> = {
     blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_JOB_THEME_INSTRUCTIONS }),
     tools: () => [aiThemeTool()],
   },
+  // The default listing shape: the three fields a page's SEO card asks for,
+  // with no share image, no target keywords and no other titles to avoid.
   'seo-fields': {
     door: 'runtime/seo-fields.ts',
     step: 'job.seo',
     blocks: () =>
-      aiDoctrineSystemBlocks(undefined, { instructions: AI_SEO_FIELDS_INSTRUCTIONS }),
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: AI_SEO_FIELDS_INSTRUCTIONS,
+        scope: aiDoctrineScopeFor('seo-fields'),
+      }),
     tools: () => [aiSeoFieldsTool(SEO_LISTING_FIELDS)],
+  },
+  // The heaviest listing shape: every field, keywords and other titles. It is
+  // the one to watch, because it is the one a busy site asks for.
+  'seo-fields-full': {
+    door: 'runtime/seo-fields.ts',
+    step: 'job.seo',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: aiSeoFieldsInstructions({
+          fields: ['title', 'description', 'breadcrumb', 'imageAlt'],
+          keywords: true,
+          otherTitles: true,
+        }),
+        scope: aiDoctrineScopeFor('seo-fields'),
+      }),
+    tools: () => [aiSeoFieldsTool(['title', 'description', 'breadcrumb', 'imageAlt'])],
   },
   'seo-site': {
     door: 'jobs/ai-job-seo-step.ts',
     step: 'job.seo',
-    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_SEO_SITE_INSTRUCTIONS }),
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: AI_SEO_SITE_INSTRUCTIONS,
+        scope: aiDoctrineScopeFor('seo-site'),
+      }),
     tools: () => [aiSeoSiteTool()],
   },
   'seo-fixes': {
     door: 'jobs/ai-job-seo-step.ts',
     step: 'job.seo',
-    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_SEO_FIXES_INSTRUCTIONS }),
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: AI_SEO_FIXES_INSTRUCTIONS,
+        scope: aiDoctrineScopeFor('seo-fixes'),
+      }),
     tools: (site) => [aiSeoFixesTool(site.screens.map((screen) => screen.id))],
   },
   'eval-grade': {
@@ -289,7 +330,7 @@ function cachedPrefix(blocks: readonly AiSystemBlock[]): string {
   return blocks
     .slice(0, last + 1)
     .map((block) => block.text)
-    .join(' ')
+    .join('\u0000')
 }
 
 describe('the door table', () => {
@@ -366,18 +407,51 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       template: { prefixTokens: 4_651, minimum: 1_024, caches: true, toolsStable: true },
       form: { prefixTokens: 2_194, minimum: 1_024, caches: true, toolsStable: true },
       theme: { prefixTokens: 3_186, minimum: 1_024, caches: true, toolsStable: true },
-      'seo-fields': { prefixTokens: 2_119, minimum: 4_096, caches: false, toolsStable: true },
-      'seo-site': { prefixTokens: 2_176, minimum: 4_096, caches: false, toolsStable: true },
+      'seo-fields': { prefixTokens: 759, minimum: 4_096, caches: false, toolsStable: true },
+      'seo-fields-full': { prefixTokens: 943, minimum: 4_096, caches: false, toolsStable: true },
+      'seo-site': { prefixTokens: 951, minimum: 4_096, caches: false, toolsStable: true },
       // The fixes tool's schema enumerates the eight pages of THIS batch, so
       // its prefix is per-batch as well as too short. The enumeration is kept
       // deliberately: on a door that cannot cache either way, a schema that
       // refuses a page outside the batch is worth more than a stable prefix.
-      'seo-fixes': { prefixTokens: 2_147, minimum: 4_096, caches: false, toolsStable: false },
+      'seo-fixes': { prefixTokens: 921, minimum: 4_096, caches: false, toolsStable: false },
       'eval-grade': { prefixTokens: 1_661, minimum: 1_024, caches: true, toolsStable: true },
       // The text step marks a breakpoint its prompt is far too short to fill.
       // It costs nothing and it caches nothing; the brief is the request.
       text: { prefixTokens: 128, minimum: 1_024, caches: false, toolsStable: true },
     })
+  })
+
+  it('never drops a rule the scope’s own doors can still refuse an answer for', () => {
+    // The quality half of the ledger. An offline harness scores answers, not
+    // prompts, so it cannot see a rule leave a prompt — but the loop can
+    // still REFUSE an answer for a rule, and refusing one for a rule the
+    // model was never told is the failure a cheaper prompt would cause. So:
+    // whatever a scope's doors can cite, that scope has to state.
+    const publishing = { title: 'Roof repair', description: 'Fast work.', publish: true }
+    const cited = [
+      ...checkAiSeoFields(publishing, { fields: ['title', 'description'], hasImage: false, keywords: [] })
+        .violations,
+      ...detectPublishIntent(publishing),
+    ]
+      .map((violation) => violation.rule)
+      .filter((rule): rule is NonNullable<typeof rule> => rule !== null)
+    expect(cited).toContain(13)
+    const fields = aiDoctrineSystemBlock('fields').text
+    for (const rule of new Set(cited)) {
+      expect([rule, fields.includes(`\n${rule}. `)]).toEqual([rule, true])
+    }
+  })
+
+  it('lets no step price a cache read it will never get', () => {
+    // `AI_STEP_NOMINAL_USAGE` is what the model picker quotes before a
+    // workspace has measured anything, and a cache read is priced at a tenth
+    // of an input token. A step whose prefix cannot cache and still claims
+    // cache reads quotes roughly a tenth of what it will actually cost.
+    for (const [name, row] of Object.entries(measured())) {
+      const nominal = AI_STEP_NOMINAL_USAGE[REQUESTS[name].step]
+      expect([name, nominal.cacheReadTokens > 0]).toEqual([name, row.caches])
+    }
   })
 
   it('knows a minimum for every catalog model, and errs dear for an unknown id', () => {

@@ -113,42 +113,152 @@ function budgetLine(kind: AiOutputKind): string {
 }
 
 /**
- * The procedures in the model's terms. Static text only: the budgets are
- * read from `AI_OUTPUT_BUDGETS` once, at load, so the block is the same bytes
- * on every request and changes only when a budget does.
+ * What a generation kind produces, and therefore which of the rules below can
+ * bind it (AGL-2937).
+ *
+ * The seventeen rules are written for a kind that composes a DOCUMENT: they
+ * name nodes, instances, layouts, slugs and budgets. A kind that produces
+ * short fields a door checks itself — a page's search listing, an audit's
+ * fixes — can break exactly one of them, and the other sixteen are bytes it
+ * pays for on every attempt without ever being held to them. On a fast-tier
+ * model, whose cached-prefix minimum no SEO prompt reaches, those bytes are
+ * billed at full input rate every single time.
+ *
+ * Sending fewer rules is not only cheaper here, it is more accurate: rule 14
+ * tells a writer to mark a fact it lacks in square brackets, which is right
+ * for page copy a person edits before publishing and wrong for a search title
+ * that is published exactly as written — and the SEO doors' own rules already
+ * say to write only from the text they were given.
  */
-export const AI_BUILDING_DOCTRINE = [
-  'How to build on this platform. Every plan and every document you produce is checked against these rules; an answer that breaks one is refused and asked for again with the rule named.',
-  '',
-  '1. Repeats become one reusable component. A block with the same elements and props that differs only in its copy, links or images, appearing 3 or more times on a page or on 2 pages built together, is one reusable component with typed props, placed as instances: a "reusableInstance" node whose "refId" names the component and whose "propValues" fill its props. Search the site inventory first, and never create a component that duplicates one listed there; reuse it, or propose extending it.',
-  '2. Site-wide regions live in the layout. A header, navigation, footer, announcement bar or cookie notice belongs in a layout. Every screen declares the site\'s layout, or one the plan creates, and never carries its own copy of a layout region.',
-  '3. Forms are built on the Forms page, then placed. A form is created there with its fields, validation, consent and routing, and a page places a "form" element bound by its "formId", with no fields drawn inside it. Never draw loose form fields on a page.',
-  '4. Similar pages share one template. When pages share one structure and differ by copy or data (products, locations, team members, services), plan one template and apply it once per page, or bind it to a collection when the data exists.',
-  '5. Colors, spacing and type come from the theme. Use palette tokens such as "primary.main", "text.secondary" and "background.paper", plain numbers on the spacing scale, the theme\'s shape and its typography variants. Never write a hex, rgb or named color, or a px, rem or em length. A color the theme lacks is a theme change in the plan, never a value on an element.',
-  '6. Emails use the brand. An email uses only the brand colors and fonts the site inventory lists, and a campaign starts from an email template rather than a one-off design.',
-  '7. Reuse before creating. Prefer what the site inventory lists: components, layouts, templates, forms, themes, datasets, collections and screens, referenced by id. Creating is the exception, and every creation says why nothing listed will do. In a plan, refer to something the plan itself creates as new:<name>.',
-  '8. Data is bound, not typed. A list that exists as a dataset, collection, product or record is bound to it and never copied into text; a long list the site lacks becomes a dataset in the plan.',
-  '9. Images come from the media library, with alt text. Place images by media reference, or leave "src" empty for an upload; never link an image from another website. Every image has alt text describing it, or "decorative": true.',
-  '10. Navigation and SEO travel with a page. Every new screen has a slug of lowercase words joined by hyphens that the site does not already use, a search title of at most 70 characters, a search description of at most 170, and a navigation entry when the brief implies one.',
-  '11. One main landmark and an ordered outline. A page declares at most one "main"; a component, form or email declares none; a layout has exactly one "layoutSlot". A page has exactly one h1 and never skips a heading level, and a layout has no h1. Set a heading\'s level with the Typography "component" (h1 to h6).',
-  '12. Responsive by the theme\'s breakpoints. Widths come from a Container\'s maxWidth, a Grid\'s size, a percentage, or responsive values keyed by xs, sm, md, lg and xl, never a fixed px or viewport width.',
-  '13. Drafts only. Everything you produce is a new draft that a person reviews and publishes. Never ask to publish, and never change something already live.',
-  '14. The site\'s voice, with no filler. Write real copy in the tone of the site and the brief, never lorem ipsum or "your text here". When the brief lacks a fact such as a phone number, a price or a name, mark it in square brackets instead of inventing it. For agencies and enterprises, never call the work simple, cheap or effortless.',
-  '15. Start from a duplicate of the nearest thing. When the site has a similar screen, template or email, plan a duplicate of it and edit that, which keeps its versions, bindings and SEO.',
-  '16. The smallest document that does the job. Build the flattest tree that renders the design: no container wrapping a single container, no empty containers, no inline style repeated across elements, text as text, images lazy below the first, video by poster and click-to-play, no fonts beyond the theme\'s, and no third-party embed or script unless the brief asks for it and the plan names its cost.',
-  `17. A measured budget for every output. Each document is measured and refused over its budget: ${AI_OUTPUT_KINDS.map(budgetLine).join('; ')}.`,
-  '',
-  'Answer through the tool you are given, and only through it.',
-].join('\n')
+export type AiDoctrineScope =
+  /** A document the palette composes, or a plan for them: all seventeen rules. */
+  | 'documents'
+  /** Values a door reads and checks itself, composing nothing. */
+  | 'fields'
+
+/** One numbered rule, and the scopes it binds. */
+interface AiDoctrineRuleText {
+  /**
+   * The rule's number, which the re-ask and every violation name. It is fixed
+   * to the rule and not to its position, so a scope that renders a subset
+   * still calls rule 13 rule 13.
+   */
+  n: number
+  scopes: readonly AiDoctrineScope[]
+  text: string
+}
+
+const DOCUMENTS: readonly AiDoctrineScope[] = ['documents']
+const EVERY_SCOPE: readonly AiDoctrineScope[] = ['documents', 'fields']
+
+const AI_DOCTRINE_RULE_TEXT: readonly AiDoctrineRuleText[] = [
+  { n: 1, scopes: DOCUMENTS, text: 'Repeats become one reusable component. A block with the same elements and props that differs only in its copy, links or images, appearing 3 or more times on a page or on 2 pages built together, is one reusable component with typed props, placed as instances: a "reusableInstance" node whose "refId" names the component and whose "propValues" fill its props. Search the site inventory first, and never create a component that duplicates one listed there; reuse it, or propose extending it.' },
+  { n: 2, scopes: DOCUMENTS, text: 'Site-wide regions live in the layout. A header, navigation, footer, announcement bar or cookie notice belongs in a layout. Every screen declares the site\'s layout, or one the plan creates, and never carries its own copy of a layout region.' },
+  { n: 3, scopes: DOCUMENTS, text: 'Forms are built on the Forms page, then placed. A form is created there with its fields, validation, consent and routing, and a page places a "form" element bound by its "formId", with no fields drawn inside it. Never draw loose form fields on a page.' },
+  { n: 4, scopes: DOCUMENTS, text: 'Similar pages share one template. When pages share one structure and differ by copy or data (products, locations, team members, services), plan one template and apply it once per page, or bind it to a collection when the data exists.' },
+  { n: 5, scopes: DOCUMENTS, text: 'Colors, spacing and type come from the theme. Use palette tokens such as "primary.main", "text.secondary" and "background.paper", plain numbers on the spacing scale, the theme\'s shape and its typography variants. Never write a hex, rgb or named color, or a px, rem or em length. A color the theme lacks is a theme change in the plan, never a value on an element.' },
+  { n: 6, scopes: DOCUMENTS, text: 'Emails use the brand. An email uses only the brand colors and fonts the site inventory lists, and a campaign starts from an email template rather than a one-off design.' },
+  { n: 7, scopes: DOCUMENTS, text: 'Reuse before creating. Prefer what the site inventory lists: components, layouts, templates, forms, themes, datasets, collections and screens, referenced by id. Creating is the exception, and every creation says why nothing listed will do. In a plan, refer to something the plan itself creates as new:<name>.' },
+  { n: 8, scopes: DOCUMENTS, text: 'Data is bound, not typed. A list that exists as a dataset, collection, product or record is bound to it and never copied into text; a long list the site lacks becomes a dataset in the plan.' },
+  { n: 9, scopes: DOCUMENTS, text: 'Images come from the media library, with alt text. Place images by media reference, or leave "src" empty for an upload; never link an image from another website. Every image has alt text describing it, or "decorative": true.' },
+  { n: 10, scopes: DOCUMENTS, text: 'Navigation and SEO travel with a page. Every new screen has a slug of lowercase words joined by hyphens that the site does not already use, a search title of at most 70 characters, a search description of at most 170, and a navigation entry when the brief implies one.' },
+  { n: 11, scopes: DOCUMENTS, text: 'One main landmark and an ordered outline. A page declares at most one "main"; a component, form or email declares none; a layout has exactly one "layoutSlot". A page has exactly one h1 and never skips a heading level, and a layout has no h1. Set a heading\'s level with the Typography "component" (h1 to h6).' },
+  { n: 12, scopes: DOCUMENTS, text: 'Responsive by the theme\'s breakpoints. Widths come from a Container\'s maxWidth, a Grid\'s size, a percentage, or responsive values keyed by xs, sm, md, lg and xl, never a fixed px or viewport width.' },
+  { n: 13, scopes: EVERY_SCOPE, text: 'Drafts only. Everything you produce is a new draft that a person reviews and publishes. Never ask to publish, and never change something already live.' },
+  { n: 14, scopes: DOCUMENTS, text: 'The site\'s voice, with no filler. Write real copy in the tone of the site and the brief, never lorem ipsum or "your text here". When the brief lacks a fact such as a phone number, a price or a name, mark it in square brackets instead of inventing it. For agencies and enterprises, never call the work simple, cheap or effortless.' },
+  { n: 15, scopes: DOCUMENTS, text: 'Start from a duplicate of the nearest thing. When the site has a similar screen, template or email, plan a duplicate of it and edit that, which keeps its versions, bindings and SEO.' },
+  { n: 16, scopes: DOCUMENTS, text: 'The smallest document that does the job. Build the flattest tree that renders the design: no container wrapping a single container, no empty containers, no inline style repeated across elements, text as text, images lazy below the first, video by poster and click-to-play, no fonts beyond the theme\'s, and no third-party embed or script unless the brief asks for it and the plan names its cost.' },
+  { n: 17, scopes: DOCUMENTS, text: `A measured budget for every output. Each document is measured and refused over its budget: ${AI_OUTPUT_KINDS.map(budgetLine).join('; ')}.` },
+]
+
+/** How a scope opens: what the rules under it are for. */
+const SCOPE_OPENING: Readonly<Record<AiDoctrineScope, string>> = {
+  documents:
+    'How to build on this platform. Every plan and every document you produce is checked against these rules; an answer that breaks one is refused and asked for again with the rule named.',
+  fields:
+    'An answer that breaks one of these rules is refused and asked for again with the rule named.',
+}
 
 /**
- * The doctrine as the cached system block: the procedures and the platform's
- * acceptable-use rules (AGL-2925), which every generation prompt carries and
- * which ride here so a generator cannot leave them out.
+ * How a scope closes. The document scope names the tool generically because
+ * every generator it serves is handed a different one; the field doors name
+ * their own tool in their own rules, so repeating it here would be the same
+ * sentence twice.
  */
-export const AI_DOCTRINE_SYSTEM_BLOCK: AiSystemBlock = {
-  text: `${AI_BUILDING_DOCTRINE}\n\n${AI_ACCEPTABLE_USE_BLOCK}`,
-  cacheBreakpoint: true,
+const SCOPE_CLOSING: Readonly<Record<AiDoctrineScope, string | null>> = {
+  documents:
+    'Answer through the tool you are given, and only through it.',
+  fields: null,
+}
+
+/**
+ * The procedures in the model's terms, for one scope. Static text only: the
+ * budgets are read from `AI_OUTPUT_BUDGETS` once, at load, so a scope's text
+ * is the same bytes on every request and changes only when a budget does.
+ */
+export function aiBuildingDoctrine(scope: AiDoctrineScope): string {
+  const closing = SCOPE_CLOSING[scope]
+  return [
+    SCOPE_OPENING[scope],
+    '',
+    ...AI_DOCTRINE_RULE_TEXT.filter((rule) => rule.scopes.includes(scope)).map(
+      (rule) => `${rule.n}. ${rule.text}`,
+    ),
+    ...(closing ? ['', closing] : []),
+  ].join('\n')
+}
+
+/** Every rule, as the kinds that compose a document are told them. */
+export const AI_BUILDING_DOCTRINE = aiBuildingDoctrine('documents')
+
+/**
+ * The doctrine as the cached system block, one per scope: the procedures and
+ * the platform's acceptable-use rules (AGL-2925), which every generation
+ * prompt carries and which ride here so a generator cannot leave them out.
+ *
+ * The acceptable-use rules are in EVERY scope, whole. They are the platform's
+ * abuse guard rather than a building rule, a published title can carry a scam
+ * claim as easily as a page can, and a scope that dropped them to save bytes
+ * would be trading the thing this issue is forbidden to trade.
+ *
+ * Built once, at load, so a scope's block is the same object and the same
+ * bytes on every request: two workspaces on one door share one cache entry,
+ * and `runtime/ai-prompt-cache.spec.ts` holds them to it.
+ */
+const AI_DOCTRINE_SCOPE_BLOCKS: Readonly<Record<AiDoctrineScope, AiSystemBlock>> = {
+  documents: {
+    text: `${aiBuildingDoctrine('documents')}\n\n${AI_ACCEPTABLE_USE_BLOCK}`,
+    cacheBreakpoint: true,
+  },
+  fields: {
+    text: `${aiBuildingDoctrine('fields')}\n\n${AI_ACCEPTABLE_USE_BLOCK}`,
+    cacheBreakpoint: true,
+  },
+}
+
+/** The doctrine block a kind that composes a document is sent. */
+export const AI_DOCTRINE_SYSTEM_BLOCK: AiSystemBlock = AI_DOCTRINE_SCOPE_BLOCKS.documents
+
+/** The doctrine block for one scope. */
+export function aiDoctrineSystemBlock(scope: AiDoctrineScope): AiSystemBlock {
+  return AI_DOCTRINE_SCOPE_BLOCKS[scope]
+}
+
+/**
+ * The scope a generation kind is told the rules in. A kind absent from this
+ * map composes a document and is told all seventeen — the three SEO kinds are
+ * the only ones today that write values instead, and a new kind that does the
+ * same names itself here rather than paying for rules it cannot break.
+ */
+export const AI_DOCTRINE_KIND_SCOPE: Readonly<Record<string, AiDoctrineScope>> = {
+  'seo-fields': 'fields',
+  'seo-site': 'fields',
+  'seo-fixes': 'fields',
+}
+
+/** The scope for a kind; `documents` unless the kind names another. */
+export function aiDoctrineScopeFor(kind: string): AiDoctrineScope {
+  return AI_DOCTRINE_KIND_SCOPE[kind] ?? 'documents'
 }
 
 // ── The inventory block ──────────────────────────────────────────────────
@@ -268,6 +378,8 @@ export interface AiDoctrineSystemOptions {
   instructions?: readonly AiSystemBlock[]
   /** The palette surface a tree is composed on; its catalog is cached after the instructions. */
   surface?: AiSurface
+  /** Which rules the doctrine block states; `documents` when the door names none. */
+  scope?: AiDoctrineScope
 }
 
 /**
@@ -309,7 +421,7 @@ export function aiDoctrineSystemBlocks(
     instructions[last] = { ...instructions[last], cacheBreakpoint: true }
   }
   return [
-    AI_DOCTRINE_SYSTEM_BLOCK,
+    aiDoctrineSystemBlock(options.scope ?? 'documents'),
     ...instructions,
     ...catalog,
     ...(inventory === undefined
@@ -777,6 +889,7 @@ export async function runValidatedGeneration(
   }
   const system = aiDoctrineSystemBlocks(input.inventory, {
     instructions: input.instructions,
+    scope: aiDoctrineScopeFor(kind),
     ...(isAiOutputKind(kind) ? { surface: AI_OUTPUT_SURFACE[kind] } : {}),
   })
   const maxTokens =

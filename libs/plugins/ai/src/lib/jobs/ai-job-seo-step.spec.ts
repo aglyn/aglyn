@@ -50,7 +50,11 @@ import { aiSeoAuditView, readAiSeoProposal, type AiSeoAuditReport } from '../mod
 import { aiModelForStep } from '../providers/routing'
 import { AI_TEXT_LIMITS } from '../runtime/ai-palette'
 import { AI_SEO_AUDIT_BATCH_SIZE } from '../runtime/seo-audit'
-import { AI_DOCTRINE_SYSTEM_BLOCK, aiDoctrineNeedsInputMessage } from '../runtime/ai-doctrine'
+import {
+  AI_DOCTRINE_SYSTEM_BLOCK,
+  aiDoctrineNeedsInputMessage,
+  aiDoctrineSystemBlock,
+} from '../runtime/ai-doctrine'
 import { AI_SEO_FIELDS_MAX_TOKENS } from '../runtime/seo-fields'
 import {
   AI_SEO_AGENT_GUIDANCE_MAX_CHARS,
@@ -276,9 +280,18 @@ describe('a page’s listing', () => {
     // No image on this listing, so the tool asks for no image description.
     expect(Object.keys(request.tools[0].inputSchema.properties)).toEqual(['title', 'description', 'breadcrumb'])
     const system = request.system as Array<{ text: string; cacheBreakpoint?: true; volatile?: true }>
-    // The doctrine's cached block first, carrying the acceptable-use rules once, then the listing rules, cached.
-    expect(system[0]).toEqual(AI_DOCTRINE_SYSTEM_BLOCK)
+    // The doctrine's cached block first, in its FIELD scope (AGL-2937): a
+    // listing composes no document, so it is told the one rule it can break
+    // and carries the acceptable-use rules whole, once.
+    expect(system[0]).toEqual(aiDoctrineSystemBlock('fields'))
+    expect(system[0]).not.toEqual(AI_DOCTRINE_SYSTEM_BLOCK)
+    expect(system[0].text).toContain('13. Drafts only.')
+    // Rule 14 would have a title publish "[city]" rather than say nothing;
+    // the listing's own rules say to write only from the text it was given.
+    expect(system[0].text).not.toContain('square brackets')
     expect(system.filter((block) => block.text.includes('Acceptable use'))).toHaveLength(1)
+    // The fourth field is not asked for here, so its rule is not sent either.
+    expect(system[1].text).not.toContain('image description')
     expect(system[system.length - 1].cacheBreakpoint).toBe(true)
     // A listing is written from its page, so no site inventory rides with it.
     expect(system.some((block) => block.volatile || block.text.startsWith('Site inventory'))).toBe(false)
