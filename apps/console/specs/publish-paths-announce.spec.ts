@@ -270,9 +270,23 @@ describe('every editor publish surface reaches the seam', () => {
     )
   })
 
-  it('the screens list announces on create, delete and move', () => {
+  /*
+   * CREATE IS NO LONGER ON THIS LIST (AGL-3021).
+   *
+   * It used to be: creating a screen published its route in the same chain,
+   * so the announce had to ride along. That was the defect — a blank page
+   * went live because somebody clicked *create* — and creating now writes
+   * the screen and its first version and nothing else. A path that publishes
+   * nothing has nothing to announce, so the assertion that used to live here
+   * (`{ hostId, screenId: newId, user }`) would now pin the bug rather than
+   * the seam. `create-screen-is-a-draft.spec.ts` holds the other side of it.
+   *
+   * The two routing-map writes the list still makes are below, and the new
+   * row-menu Unpublish shares the delete path's call shape.
+   */
+  it('the screens list announces on unpublish, delete and move', () => {
     const source = readRepo(SCREENS_LIST)
-    expect(source).toMatch(/\{ hostId, screenId: newId, user \}/)
+    expect(source).not.toMatch(/\{ hostId, screenId: newId, user \}/)
     expect(source).toMatch(/unpublishScreenRoute\(firestore, \{ hostId, screenId: id, user \}\)/)
     // The move path, asserted by the CALL rather than by what sits next to
     // it. This read `publish: false, }), { user },` — the entries object and

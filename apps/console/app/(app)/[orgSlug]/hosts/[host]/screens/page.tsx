@@ -16,7 +16,6 @@
  */
 'use client'
 
-import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn'
 import {
   billableScreenIds,
   buildScreenRouteEntries,
@@ -59,6 +58,7 @@ import {
   mdiBookmarkOutline,
   mdiContentCopy,
   mdiOpenInNew,
+  mdiPublishOff,
   mdiTranslate,
 } from '@aglyn/shared-data-mdi'
 import {
@@ -126,11 +126,11 @@ import usePresenceSummary from '../../../../../../hooks/use-presence-summary'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { resolveScreenLiveUrl } from '../../../../../../constants/tenant-links'
 import {
-  publishScreenRoute,
   syncScreenRouteEntries,
   unpublishScreenRoute,
 } from '../../../../../../constants/screen-publishing'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
+import createScreenDraft from '../../../../../../utils/create-screen-draft'
 import {
   ceilingedWindow,
   hostArtifactQuery,
@@ -140,6 +140,7 @@ import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useFirestoreCollection from '../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../hooks/use-host-activity-logger'
+import useHostRole from '../../../../../../hooks/use-host-role'
 
 const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   (props, ref) => {
@@ -291,6 +292,17 @@ function Screens(props) {
   /** The cap behind the header readout; the create gate reads the same key. */
   const screenQuota = checkOrgQuota(org, 'screensPerHost', billableScreenCount)
   const logActivity = useHostActivityLogger(hostId)
+  /**
+   * The `author` host role edits content and may NOT publish it (AGL-2334).
+   * The rules refuse it either way; a control that invites the click and
+   * answers `permission-denied` is the failure that doctrine exists to stop,
+   * so the row's Unpublish is DISABLED with a reason rather than hidden — a
+   * control that vanishes reads as a bug.
+   */
+  const { canPublish, loaded: hostRoleLoaded } = useHostRole(hostId)
+  const publishBlock = hostRoleLoaded
+    ? 'Your role on this site can edit content but not publish it'
+    : 'Checking your access…'
 
   const [error, setError] = useState(null)
 
@@ -333,7 +345,6 @@ function Screens(props) {
       const dequeueLoading = queueLoading()
       const newId = createResourceUid()
       const newVersionId = createResourceUid()
-      const timestamp = Timestamp.now()
       const { slug: slugInput, ...fields } = values
 
       // A `/` typed INSIDE the value (AGL-2572). `normalizeScreenSlug`
@@ -381,54 +392,46 @@ function Screens(props) {
         }
       }
 
-      // createdAt/updatedAt are stamped server-side by the resources API
-      // (AGL-473) — client Timestamps don't survive the JSON hop.
-      const newValues = {
-        ...fields,
-        ...(path && { slug: path }),
-        versionId: newVersionId,
-      }
-      // No createdAt/updatedAt: /api/hosts/versions stamps both server-side
-      // (AGL-1369), and a client Timestamp does not survive the JSON hop —
-      // the same reason the resources API stamps the doc above.
-      const newVersionValue = {
-        screenId: newId,
-        nodes: {
-          [CANVAS_ROOT_ELEMENT_ID]: {
-            $id: CANVAS_ROOT_ELEMENT_ID,
-            componentId: 'div',
-            nodes: [],
-          },
-        },
-      }
-      // Screen doc rides the quota-enforcing resources API (AGL-473); the
-      // first version rides /api/hosts/versions (AGL-1369). Rules deny client
-      // `create` under a screen's `versions` now, because that create is what
-      // the `versioning` entitlement sells — the route allows a resource's
-      // FIRST version on every plan and charges only for retaining more.
-      await createHostResource({
+      /*
+       * CREATING A SCREEN PUBLISHES NOTHING (AGL-3021).
+       *
+       * This chain used to end in `publishScreenRoute`, so a blank page went
+       * live in the same second it was created — `Updated 1:16:07 PM`,
+       * `Published 1:16:08 PM` — and stayed live until somebody thought to
+       * visit View details and unpublish it. A page became public because
+       * someone clicked *create*, which is the opposite of every other
+       * publish path in the product.
+       *
+       * The slug the author typed is still STORED on the screen (that is what
+       * `path` rides into `createScreenDraft` for), so the Publish control
+       * opens with the address already filled in. What creating no longer
+       * does is register it in the host's `screens` map — the only document
+       * the tenant matches request paths against. The guarantee is structural
+       * rather than a promise: `createScreenDraft` is handed the two resource
+       * APIs and nothing else, so it holds no `firestore` and no `user` and
+       * could not publish if it tried.
+       *
+       * The checks above still run on the way in. A slug that can never be
+       * published is worth refusing at the moment it is typed rather than at
+       * the moment somebody tries to use it.
+       */
+      await createScreenDraft(createHostResource, createHostVersion, {
         hostId,
-        resource: 'screen',
-        id: newId,
-        data: newValues,
+        screenId: newId,
+        versionId: newVersionId,
+        fields,
+        slug: path ?? undefined,
       })
         .then(() =>
-          createHostVersion({
-            hostId,
-            kind: 'screen',
-            parentId: newId,
-            id: newVersionId,
-            data: newVersionValue,
-          }),
-        )
-        .then(() =>
-          path
-            ? publishScreenRoute(
-                firestore,
-                { hostId, screenId: newId, user },
-                path,
-              )
-            : undefined,
+          // SAY that it is a draft. An author who watched the old create put
+          // a page on the live site has no way to see that this one did not,
+          // and a state change nobody is told about is one they will assume
+          // the old answer to. Mirrors the duplicate path's sentence.
+          enqueueSnackbar(
+            `Created “${values?.displayName ?? 'screen'}” — a draft until ` +
+              'you publish it',
+            { variant: 'success', persist: false },
+          ),
         )
         .catch((error) => {
           console.error(error)
@@ -457,7 +460,6 @@ function Screens(props) {
       createHostResource,
       createHostVersion,
       logActivity,
-      user,
     ],
   )
 
@@ -514,6 +516,66 @@ function Screens(props) {
         })
     },
     [confirm, firestore, hostId, queueLoading, logActivity, screens, user],
+  )
+
+  /**
+   * Take a live screen off the site, from the row (AGL-3021).
+   *
+   * Unpublish existed only on `View details`, two navigations away, which is
+   * the reason a page created by accident stayed up: the state was reversible
+   * in principle and unreachable in practice. The list is where somebody
+   * looks when they notice, so the control belongs where the noticing
+   * happens.
+   *
+   * Confirmed, unlike the same control on the details page. There the author
+   * arrived at a Publishing card and read a chip on the way; here it sits one
+   * click from `Open live page` in a menu people open to reach the besigner,
+   * and it takes a page off the public internet. The dialog names the address
+   * that stops resolving, which is the fact the decision turns on.
+   *
+   * `unpublishScreenRoute` removes the routing-map entry and drops
+   * `publishedAt`; the screen, its versions and its slug are untouched, so
+   * Publish puts it back at the same address.
+   */
+  const handleUnpublishScreen = useCallback(
+    (id: string, name: string, path: string | undefined) => async () => {
+      const confirmed = await confirm({
+        title: 'Unpublish this screen?',
+        description: path
+          ? `${screenRoutePathToUrl(path)} will stop resolving on the live ` +
+            'site. The screen, its content and its address are kept — ' +
+            'publishing again puts it back.'
+          : 'This screen will stop resolving on the live site. Its content ' +
+            'and address are kept — publishing again puts it back.',
+        confirmationText: 'Unpublish',
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!confirmed) return
+      const dequeueLoading = queueLoading()
+      try {
+        await unpublishScreenRoute(firestore, { hostId, screenId: id, user })
+        enqueueSnackbar('Screen unpublished', {
+          variant: 'success',
+          persist: false,
+        })
+        logActivity('Unpublished screen', { type: 'screen', id, name })
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('An error has occurred', { variant: 'error' })
+      } finally {
+        dequeueLoading()
+      }
+    },
+    [
+      confirm,
+      firestore,
+      hostId,
+      queueLoading,
+      enqueueSnackbar,
+      logActivity,
+      user,
+    ],
   )
 
   // Drop handler for the hierarchy table: re-parents/reorders the screen,
@@ -932,6 +994,33 @@ function Screens(props) {
               icon: <MdiIcon path={mdiBookmarkOutline.path} size={0.8} />,
               onClick: () => setSaveTemplateFor(buildTemplateSource(row)),
             },
+            /*
+              UNPUBLISH, WHERE PEOPLE ACTUALLY ARE (AGL-3021).
+
+              Offered only on a screen the routing map names, because on a
+              draft there is nothing to take down and a disabled item would
+              read as a broken control rather than an inapplicable one —
+              the opposite of `Open live page` above, which stays and says
+              why, because there the author is looking for the live page and
+              its absence is the answer.
+            */
+            ...(routingMap?.[row.$id] != null
+              ? [
+                  {
+                    key: 'unpublish',
+                    label: 'Unpublish',
+                    icon: <MdiIcon path={mdiPublishOff.path} size={0.8} />,
+                    disabled: !canPublish,
+                    disabledReason: canPublish ? undefined : publishBlock,
+                    onClick: () =>
+                      void handleUnpublishScreen(
+                        row.$id,
+                        label,
+                        routingMap[row.$id],
+                      )(),
+                  },
+                ]
+              : []),
             {
               key: 'delete',
               label: 'Delete',
@@ -947,7 +1036,10 @@ function Screens(props) {
       )
     },
     [
+      canPublish,
+      publishBlock,
       handleDeleteScreen,
+      handleUnpublishScreen,
       rowHref,
       hostLocales.length,
       screens,
