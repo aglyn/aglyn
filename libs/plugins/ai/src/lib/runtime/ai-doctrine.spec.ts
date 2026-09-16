@@ -43,6 +43,8 @@ import {
   AI_DOCTRINE_SYSTEM_BLOCK,
   AI_GENERATION_MAX_TOKENS,
   aiDoctrineCatalog,
+  aiDoctrineScopeFor,
+  aiDoctrineSystemBlock,
   aiDoctrineSystemBlocks,
   aiDoctrineTreeTool,
   aiNodeTreeContextFromInventory,
@@ -128,6 +130,48 @@ describe('the doctrine block', () => {
     expect(createHash('sha256').update(AI_DOCTRINE_SYSTEM_BLOCK.text).digest('hex')).toBe(
       'cfd26bc7239183ff2a43029e0a69c381bbcf77a744b3a14d149bb397856b1158',
     )
+  })
+
+  it('tells a kind that writes values only the rules it can break, with the abuse rules whole', () => {
+    const fields = aiDoctrineSystemBlock('fields')
+    // Rule 13 is the one the loop holds every custom kind to, through
+    // `detectPublishIntent`, so it is the one rule that has to be stated: an
+    // answer may not be refused for a rule it was never told.
+    expect(fields.text).toContain('13. Drafts only.')
+    for (const rule of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17]) {
+      expect([rule, fields.text.includes(`\n${rule}. `)]).toEqual([rule, false])
+    }
+    // The acceptable-use rules are an abuse guard, not a building rule: a
+    // published title can carry a scam claim as easily as a page can, so
+    // every scope carries them whole.
+    expect(fields.text).toContain(AI_ACCEPTABLE_USE_BLOCK)
+    expect(fields.cacheBreakpoint).toBe(true)
+    expect(fields.text.length).toBeLessThan(AI_DOCTRINE_SYSTEM_BLOCK.text.length / 3)
+    // Built once, so two requests share one cache entry rather than two
+    // equal-looking objects.
+    expect(aiDoctrineSystemBlock('fields')).toBe(fields)
+    expect(aiDoctrineSystemBlock('documents')).toBe(AI_DOCTRINE_SYSTEM_BLOCK)
+  })
+
+  it('sends the field scope to the kinds that write values, and the document scope to the rest', () => {
+    expect(['seo-fields', 'seo-site', 'seo-fixes'].map(aiDoctrineScopeFor)).toEqual([
+      'fields',
+      'fields',
+      'fields',
+    ])
+    expect(['plan', 'page', 'theme', 'eval-grade', 'edit'].map(aiDoctrineScopeFor)).toEqual([
+      'documents',
+      'documents',
+      'documents',
+      'documents',
+      'documents',
+    ])
+    expect(
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: [{ text: 'Write the listing.' }],
+        scope: 'fields',
+      })[0],
+    ).toBe(aiDoctrineSystemBlock('fields'))
   })
 
   it('caches a door’s instructions behind the palette catalog, or on their own last block', () => {

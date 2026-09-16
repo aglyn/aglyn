@@ -98,7 +98,10 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   'copy.section': { inputTokens: 700, outputTokens: 1_400, cacheReadTokens: 0, cacheWriteTokens: 0 },
   'copy.blog': { inputTokens: 600, outputTokens: 1_100, cacheReadTokens: 0, cacheWriteTokens: 0 },
   'generate.section': { inputTokens: 700, outputTokens: 1_400, cacheReadTokens: 0, cacheWriteTokens: 0 },
-  'job.text': { inputTokens: 300, outputTokens: 500, cacheReadTokens: 150, cacheWriteTokens: 0 },
+  // The text step's rules are about 500 characters — far under the balanced
+  // tier's cacheable minimum, so they are billed as input every time rather
+  // than read from a cache (`runtime/ai-prompt-cache.spec.ts` measures it).
+  'job.text': { inputTokens: 450, outputTokens: 500, cacheReadTokens: 0, cacheWriteTokens: 0 },
   // The theme step: the tool's schema and both system blocks (about 7,500
   // characters) are the cached prefix, the site's inventory and the brief ride
   // uncached, and a full-palette answer is about 1,300 characters of JSON with
@@ -112,14 +115,17 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   'job.layout': { inputTokens: 700, outputTokens: 1_000, cacheReadTokens: 5_400, cacheWriteTokens: 0 },
   'job.template': { inputTokens: 1_200, outputTokens: 700, cacheReadTokens: 6_200, cacheWriteTokens: 0 },
   // The SEO step's listing exchange, which a page's or a product's listing is
-  // exactly one of: the doctrine's block, which carries the acceptable-use
-  // rules, the listing rules and the tool's schema (about 8,800 characters)
-  // are the cached prefix; the page text, capped at 2,000 characters, rides
-  // uncached with the current listing and a dozen other titles (about 3,000);
-  // the largest answer the tool accepts is about 600 characters of JSON, and
-  // the request asks for no thinking. An audit pass is heavier: eight pages'
-  // findings and text, about 9,000 characters, with up to about 8,000 back.
-  'job.seo': { inputTokens: 1_100, outputTokens: 250, cacheReadTokens: 2_900, cacheWriteTokens: 0 },
+  // exactly one of. NOTHING is cached here, whatever the breakpoints say: the
+  // step runs on the fast tier, whose cacheable minimum is four times what
+  // this prompt reaches, so every static byte is billed as input on every
+  // attempt — the doctrine's block in its field scope, the listing rules and
+  // the tool's schema, about 760 tokens together. The page text, capped at
+  // 2,000 characters, rides with the current listing and a dozen other titles
+  // for about another 750. The largest answer the tool accepts is about 600
+  // characters of JSON, and the request asks for no thinking. An audit pass
+  // is heavier: eight pages' findings and text, about 9,000 characters, with
+  // up to about 8,000 back.
+  'job.seo': { inputTokens: 1_500, outputTokens: 250, cacheReadTokens: 0, cacheWriteTokens: 0 },
   // The form step: the doctrine, the form instructions, the form surface's
   // catalog (about 150 tokens) and the tool's schema are the cached prefix, the
   // site inventory and the brief ride uncached, and a form's answer is 200 to
