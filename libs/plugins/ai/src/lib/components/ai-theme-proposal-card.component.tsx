@@ -22,6 +22,7 @@ import type { HostThemeSource } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import type { ConsoleHostThemeZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import type { HostThemeScheme } from '@aglyn/shared-data-types'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { themeEditorControl } from '@aglyn/shared-ui-theme/util/theme-editor-fields'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -34,7 +35,6 @@ import {
   Grid,
   Stack,
   Tab,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -378,8 +378,8 @@ export function AiThemeProposalCard(props: ConsoleHostThemeZoneProps) {
               ) : null}
 
               {proposal.changes.length || proposal.components.length || proposal.resetComponents ? (
-                <Box sx={{ overflowX: 'auto' }}>
-                  <Table size="small" aria-label="Proposed changes">
+                <Box>
+                  <ScrollTable size="small" aria-label="Proposed changes">
                     <TableHead>
                       <TableRow>
                         <TableCell>{'Control'}</TableCell>
@@ -432,7 +432,7 @@ export function AiThemeProposalCard(props: ConsoleHostThemeZoneProps) {
                         </TableRow>
                       ))}
                     </TableBody>
-                  </Table>
+                  </ScrollTable>
                 </Box>
               ) : (
                 <Typography variant="body2">{'No changes proposed.'}</Typography>

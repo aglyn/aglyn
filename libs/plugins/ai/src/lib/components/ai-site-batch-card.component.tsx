@@ -20,6 +20,9 @@
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import type { ConsoleOrgSitesZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -32,7 +35,6 @@ import {
   Collapse,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -40,6 +42,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AI_JOB_TERMINAL_STATUSES,
@@ -222,6 +225,57 @@ export function AiSiteBatchCard(
     },
     [hosts, orgMount.hostsPath],
   )
+  /*
+   * One row per job of the run. A job has no page of its own — it is
+   * confirmed and followed in the Assist panel — so the row opens nothing,
+   * and the site it built for is a link when the console has an address for
+   * that site.
+   */
+  const runColumns = useMemo<GridColDef<AiJobSummary>[]>(
+    () => [
+      {
+        field: 'site',
+        headerName: 'Site',
+        flex: 1,
+        minWidth: 180,
+        valueGetter: (_value, job) => siteName(job.hostId),
+        renderCell: ({ row: job }) => {
+          const href = siteHref(job.hostId)
+          return href ? (
+            <AppLink href={href}>{siteName(job.hostId)}</AppLink>
+          ) : (
+            siteName(job.hostId)
+          )
+        },
+      },
+      {
+        field: 'status',
+        headerName: 'Status',
+        width: 180,
+        valueGetter: (_value, job) => STATUS_LABEL[job.status],
+        renderCell: ({ row: job }) => (
+          <Chip
+            size="small"
+            label={STATUS_LABEL[job.status]}
+            color={STATUS_COLOR[job.status]}
+          />
+        ),
+      },
+      {
+        field: 'drafts',
+        headerName: 'Drafts',
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+        width: 100,
+        valueGetter: (_value, job) =>
+          isTerminal(job) || job.outputs.length ? job.outputs.length : null,
+        valueFormatter: (value: number | null) =>
+          value === null ? '—' : String(value),
+      },
+    ],
+    [siteHref, siteName],
+  )
 
   const update = (hostId: string, patch: Partial<AiSiteBatchRow>) =>
     setRows((current) =>
@@ -308,43 +362,13 @@ export function AiSiteBatchCard(
             <Typography variant="subtitle2" gutterBottom>
               {`Last run · ${runJobs.length} ${runJobs.length === 1 ? 'site' : 'sites'}`}
             </Typography>
-            <Table size="small" aria-label="Sites in this run">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'Site'}</TableCell>
-                  <TableCell>{'Status'}</TableCell>
-                  <TableCell>{'Drafts'}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {runJobs.map((job) => {
-                  const href = siteHref(job.hostId)
-                  return (
-                    <TableRow key={job.id}>
-                      <TableCell>
-                        {href ? (
-                          <AppLink href={href}>{siteName(job.hostId)}</AppLink>
-                        ) : (
-                          siteName(job.hostId)
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          size="small"
-                          label={STATUS_LABEL[job.status]}
-                          color={STATUS_COLOR[job.status]}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {isTerminal(job) || job.outputs.length
-                          ? `${job.outputs.length}`
-                          : '—'}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
+            <ListTable
+              aria-label="Sites in this run"
+              rows={runJobs}
+              columns={runColumns}
+              getRowId={(job: AiJobSummary) => job.id}
+              rowHeight={TABLE_ROW_HEIGHT}
+            />
           </Box>
         )}
         <Box>
@@ -402,7 +426,7 @@ export function AiSiteBatchCard(
                 <MenuItem value="no">{'No'}</MenuItem>
               </TextField>
             </Stack>
-            <Table size="small" aria-label="Sites to generate for">
+            <ScrollTable size="small" aria-label="Sites to generate for">
               <TableHead>
                 <TableRow>
                   <TableCell padding="checkbox" />
@@ -479,7 +503,7 @@ export function AiSiteBatchCard(
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
             <Typography variant="body2" color="text.secondary">
               {picked.length
                 ? `Estimated cost: about ${perSite.toLocaleString('en-US')} credits a site, ` +

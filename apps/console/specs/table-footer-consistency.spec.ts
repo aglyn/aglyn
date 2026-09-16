@@ -1361,10 +1361,12 @@ const NOT_A_LIST: Array<[string, string]> = [
   ],
   [
     'libs/plugins/ai/src/lib/components/staff-org-ai-card.component.tsx',
-    'Staff previews, each capped by the route (AGL-2930): the ' +
-      '`JOBS_RECENT` (10) most recent generation jobs, and the ' +
-      '`TOP_USERS` (10) dearest members this month. The counts beside the ' +
-      'jobs table are the whole population; the rows are a sample of it.',
+    'The month’s tokens by KIND (AGL-2937): one row per kind of request ' +
+      'the plugin makes — a page, a theme, an answer — read off the one ' +
+      'month document’s `kinds` map, so the count is bounded by what the ' +
+      'plugin can be asked to do, not by the org’s traffic. The recent ' +
+      'jobs and the dearest members beside it are record lists in the ' +
+      'shared grid, which draws their footer (AGL-3045).',
   ],
   [
     'libs/plugins/ai/src/lib/components/ai-theme-proposal-card.component.tsx',

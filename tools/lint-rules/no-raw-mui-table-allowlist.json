@@ -122,42 +122,6 @@
       "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
     },
     {
-      "path": "libs/plugins/ai/src/lib/components/ai-seo-audit-card.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/ai/src/lib/components/ai-site-batch-card.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/ai/src/lib/components/ai-theme-proposal-card.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/ai/src/lib/components/assist-signals-page.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/ai/src/lib/components/billing-ai-allotments.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/ai/src/lib/components/billing-ai-top-users.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/ai/src/lib/components/member-ai-usage-card.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/ai/src/lib/components/staff-org-ai-card.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
-      "path": "libs/plugins/ai/src/lib/components/staff-user-ai-usage-card.component.tsx",
-      "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
-    },
-    {
       "path": "libs/plugins/commerce/src/lib/components/console/host-orders-card.component.tsx",
       "reason": "Draws a raw MUI Table that has not yet moved to ScrollTable or ListTable (AGL-3045)."
     },
