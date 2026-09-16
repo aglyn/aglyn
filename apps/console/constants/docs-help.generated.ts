@@ -305,6 +305,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/screens-and-layouts/generate-a-page',
     title: 'Generate a page with Aglyn AI',
   },
+  generateASite: {
+    path: '/ai/generate-a-site',
+    title: 'Generate a whole site from a brief',
+  },
   generateSection: {
     path: '/marketing-and-automation/ai-assist/generate-section',
     title: 'AI Generate Section',
@@ -735,6 +739,7 @@ export const DOCS_HELP_ANCHORS = {
   generateAComponentWithAglynAi: ['#from-a-brief', '#what-the-job-builds', '#optional-parts', '#defaults', '#where-it-lands', '#from-a-section-on-your-page', '#related'],
   generateAForm: ['#what-the-form-gets', '#what-a-form-cannot-collect', '#nothing-is-live-until-you-place-it', '#who-can-use-it', '#related'],
   generateAPage: ['#describe-the-page', '#review-the-plan', '#how-the-page-is-built', '#the-draft', '#what-a-page-job-uses', '#who-can-use-it', '#related'],
+  generateASite: ['#what-a-scaffold-builds', '#nothing-is-published', '#what-it-costs-before-it-starts', '#watching-it-build', '#generate-for-several-sites-at-once'],
   generateSection: ['#use-it', '#tips', '#related'],
   generateWithAi: ['#what-you-get', '#write-the-brief', '#products', '#who-receives-it', '#merge-tokens', '#what-it-will-not-do', '#where-it-runs', '#related'],
   gettingStarted: ['#create-your-first-site', '#what-a-site-contains', '#switching-between-sites', '#next'],

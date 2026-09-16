@@ -208,6 +208,17 @@ const MOUNTS: Record<
     how: 'slot',
     props: { hostId: 'host-1', orgId: 'org-1' },
   },
+  // AGL-2911: beside the sites on the organization's Sites page, for an
+  // action taken across many of them at once.
+  orgSites: {
+    file: 'apps/console/app/(app)/[orgSlug]/hosts/page.tsx',
+    how: 'slot',
+    props: {
+      hostId: null,
+      orgMount: { orgId: 'org-1', hosts: [], hostsReady: true, hostsPath: '/acme/hosts' },
+      basePath: '/acme/hosts',
+    },
+  },
 }
 
 const NEW_ZONES = Object.keys(MOUNTS)

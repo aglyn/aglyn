@@ -17,6 +17,7 @@
 
 import { isAiPlanNewRef } from '../model/ai-build-plan'
 import type { AiJobSummary } from '../model/ai-jobs.types'
+import { aiPlanCreditEstimate } from '../model/ai-site-job'
 import { Box, Button, Stack, Typography } from '@mui/material'
 
 /**
@@ -34,13 +35,27 @@ export interface AiJobPlanProps {
   busy?: boolean
 }
 
-export function AiJobPlan({ job, onResume, busy = false }: AiJobPlanProps): JSX.Element | null {
+export function AiJobPlan({
+  job,
+  onResume,
+  busy = false,
+}: AiJobPlanProps): JSX.Element | null {
   const { plan, review } = job
   if (!plan && !review) return null
   /** A reference as a person reads it: the record's name, or what the plan creates. */
   const named = (ref: string | null): string =>
-    !ref ? '' : isAiPlanNewRef(ref) ? ref.slice('new:'.length) : (plan?.labels[ref] ?? ref)
+    !ref
+      ? ''
+      : isAiPlanNewRef(ref)
+        ? ref.slice('new:'.length)
+        : (plan?.labels[ref] ?? ref)
   const waiting = job.status === 'needs_review' && review !== null
+  // The guard rail (AGL-2911): what the plan is estimated to cost is read
+  // before it is confirmed, not after it has been spent. An estimate, and
+  // said to be one — the plan's own passes at the nominal credits a step
+  // holds, where what a step really costs is its model's tokens.
+  const estimate =
+    plan && waiting && review.reason === 'plan' ? aiPlanCreditEstimate(plan) : 0
   return (
     <Box sx={{ mt: 1 }}>
       {plan && (
@@ -56,7 +71,10 @@ export function AiJobPlan({ job, onResume, busy = false }: AiJobPlanProps): JSX.
           {plan.create.map((entry, index) => (
             <Typography key={`create-${index}`} variant="body2" role="listitem">
               Creates the {entry.kind} {entry.name}
-              {entry.duplicateOf ? `, from a copy of ${named(entry.duplicateOf)}` : ''} — {entry.why}
+              {entry.duplicateOf
+                ? `, from a copy of ${named(entry.duplicateOf)}`
+                : ''}{' '}
+              — {entry.why}
             </Typography>
           ))}
           {plan.screens.map((screen, index) => (
@@ -71,13 +89,30 @@ export function AiJobPlan({ job, onResume, busy = false }: AiJobPlanProps): JSX.
         </Stack>
       )}
       {review?.reason === 'doctrine' && review.findings.length > 0 && (
-        <Box component="ul" sx={{ my: 0.5, pl: 2.5 }} aria-label="Building rules broken">
+        <Box
+          component="ul"
+          sx={{ my: 0.5, pl: 2.5 }}
+          aria-label="Building rules broken"
+        >
           {review.findings.map((finding, index) => (
-            <Typography key={`finding-${index}`} component="li" variant="caption">
+            <Typography
+              key={`finding-${index}`}
+              component="li"
+              variant="caption"
+            >
               {finding.message}
             </Typography>
           ))}
         </Box>
+      )}
+      {estimate > 0 && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: 1 }}
+        >
+          {`Estimated cost: about ${estimate.toLocaleString('en-US')} credits. What it costs is what its steps spend.`}
+        </Typography>
       )}
       {waiting && (
         <Button

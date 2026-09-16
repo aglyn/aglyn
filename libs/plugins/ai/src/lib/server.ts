@@ -39,10 +39,14 @@ import './jobs/ai-job-page-step'
 // marketing plugins write on the resource-draft seam (AGL-2912).
 import './jobs/ai-job-email-step'
 import './jobs/ai-job-campaign-step'
+// Registers the site scaffold, which builds a whole site through the steps
+// above and the page step, and the agency batch's own door (AGL-2911).
+import './jobs/ai-job-site-step'
 import { ensureFirstPartyAiProviders } from './providers/registry'
 import { aiAssistHandler } from './server/ai-assist'
 import { POST as cancelAiJob } from './server/ai-jobs-cancel'
 import { GET as aiJobEvents } from './server/ai-jobs-events-route'
+import { POST as createAiSiteBatch } from './server/ai-jobs-batch'
 import { GET as listAiJobs, POST as createAiJob } from './server/ai-jobs-route'
 import { POST as resumeAiJob } from './server/ai-jobs-resume'
 import { POST as aiGenerateComponent } from './server/ai-generate-component'
@@ -97,6 +101,9 @@ export function registerAiConsoleApi(): void {
   registerPluginApiRoute('ai/jobs', {
     web: (request) => (request.method === 'GET' ? listAiJobs(request) : createAiJob(request)),
   })
+  // The agency batch (AGL-2911): one brief, one `site` job per named site,
+  // under one batch id. Before the `:jobId` routes, which it is not one of.
+  registerPluginApiRoute('ai/jobs/batch', { web: createAiSiteBatch })
   registerPluginApiRoute('ai/jobs/:jobId/cancel', {
     web: (request, context) =>
       cancelAiJob(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),

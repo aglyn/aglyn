@@ -122,9 +122,10 @@ export const AI_JOB_LEASE_MS = 90_000
 export const AI_JOB_STEP_MAX_ATTEMPTS = 3
 
 /**
- * The most passes one step may take by asking to continue (AGL-2910). A site
- * audit's passes are its units of generated work; this bounds a runner that
- * never finishes, not a real site.
+ * The most passes one step may take by asking to continue (AGL-2910), for a
+ * kind that registers no bound of its own. A site audit's passes are its
+ * units of generated work; this bounds a runner that never finishes, not a
+ * real site.
  */
 export const AI_JOB_STEP_MAX_PASSES = 40
 
@@ -209,6 +210,7 @@ export const AI_PLANNED_JOB_KINDS: readonly AiJobKind[] = [
 const stepRunners = new Map<AiJobKind, AiJobStepRunner>()
 const stepMinimums = new Map<AiJobKind, number>()
 let planStepRunner: AiJobStepRunner | null = null
+const stepPassCaps = new Map<AiJobKind, number>()
 
 export interface AiJobStepRegistration {
   /**
@@ -254,6 +256,23 @@ export function aiJobNextStepMinimumMs(job: AiJob): number {
 
 export function aiJobStepRunnerFor(kind: AiJobKind): AiJobStepRunner | null {
   return stepRunners.get(kind) ?? null
+}
+
+/**
+ * A kind whose step works through more units than the default bounds
+ * (AGL-2911). A scaffold's unit is a whole page and its site is eight of
+ * them, where an audit's is one page's listing, so the runaway bound the
+ * default gives an audit would cut a real site short. The kind registers its
+ * own beside its runner, so the machine keeps no list of kinds and the bound
+ * sits with the plan that explains it.
+ */
+export function registerAiJobStepPasses(kind: AiJobKind, maxPasses: number): void {
+  stepPassCaps.set(kind, Math.max(1, Math.floor(maxPasses)))
+}
+
+/** The passes a kind's step may take; the default where it registered none. */
+export function aiJobStepMaxPasses(kind: AiJobKind): number {
+  return stepPassCaps.get(kind) ?? AI_JOB_STEP_MAX_PASSES
 }
 
 /**
@@ -432,6 +451,7 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
     kind: job.kind,
     status: job.status,
     brief: job.brief,
+    batch: typeof job.inputs?.['batchId'] === 'string' ? job.inputs['batchId'] : null,
     steps: (job.steps ?? []).map((step) => ({
       name: step.name,
       status: step.status,
@@ -1339,7 +1359,9 @@ export async function runAiJobStep(
   // recorded as the step's last, and what it produced stands.
   const review = outcome.review
   const continuing =
-    !review && Boolean(outcome.continue) && (step.passes ?? 0) + 1 < AI_JOB_STEP_MAX_PASSES
+    !review &&
+    Boolean(outcome.continue) &&
+    (step.passes ?? 0) + 1 < aiJobStepMaxPasses(job.kind)
   if (!review && outcome.continue && !continuing) {
     console.warn('ai job step reached its pass cap', { orgId, jobId, stepIndex })
   }

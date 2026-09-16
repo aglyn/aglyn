@@ -40,7 +40,7 @@ rules deny every client write). Fields:
 
 | field | meaning |
 | --- | --- |
-| `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout`, `template`, `form`, `component`, `seo`, `page`, `email` and `campaign` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
+| `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout`, `template`, `form`, `component`, `seo`, `page`, `email`, `campaign` and `site` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
 | `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` and `needs_review` as the two parked states (below). |
 | `brief`, `inputs` | The customer's brief verbatim and the kind-specific scalars a runner reads. |
 | `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`. |
@@ -552,6 +552,59 @@ answering an `AssistEditProposal` that AGL-2906's own card applies.
 - **The golden.** `src/lib/jobs/goldens/component-from-selection.json`: a
   feature section with an optional second button.
 
+## The `site` kind
+
+`site` (AGL-2911) is the full-site scaffold, and the one kind that generates
+nothing itself.
+
+- **It delegates.** `src/lib/jobs/ai-job-site-step.ts` reads the confirmed plan,
+  works out the UNITS it implies, and hands each to the runner registered for
+  the kind that owns it — `theme` for the palette change, `layout`, `form`,
+  `page` for each screen, `email` for the welcome email — under a job of that
+  kind derived from the scaffold's. So a page a scaffold builds is a page job's
+  page, held to the same doctrine and written by the same draft writer, and a
+  kind whose step this deployment has not loaded is simply not among the units.
+  The scaffold asks no model anything.
+- **The units, in build order.** The palette change first (a member reads it
+  while the pages build), then the layout every page renders inside and the form
+  they place — a page binds both by id, so they must exist — then the pages,
+  then the welcome email. Each unit's derived job carries `$id`
+  `<jobId>-<slot>`, which is what every step already addresses its draft by, so
+  a unit re-run after its write finds its own draft rather than writing a
+  second.
+- **One unit a pass.** The step runs one delegated pass and asks the machine to
+  continue, so every pass is one reservation, one provider exchange and one
+  recorded spend: the org's monthly ceiling binds a scaffold exactly as it binds
+  a chat turn, and credits running out mid-scaffold is the machine's own
+  `needs_input` park, resumed by the beat where it stopped. Where it stopped is
+  read from the job's OUTPUTS — each unit reports one output of its own resource
+  when it completes — so nothing is kept anywhere else.
+- **What a page is told.** The derived plan holds ONE screen and no creations,
+  with every `new:<name>` reference the scaffold has already built resolved to
+  the real id and added to `reuse`. That is what a page job's plan rules accept,
+  and it is why a page places the scaffold's own form by id rather than planning
+  one of its own. SEO travels with each page: the page step writes its search
+  listing on its own last pass.
+- **The plans it admits.** `src/lib/model/ai-site-job.ts`: four to eight screens,
+  each with sections and at most eight of them, unique addresses, at least one
+  page in the navigation, and creations limited to a layout, a form and a theme
+  change. Anything else is a job of its own, named in the refusal with where a
+  member makes it. Refused at confirmation, before a credit is spent.
+- **The pass bound.** A scaffold's unit is a whole page, so the default bound an
+  audit keeps would cut a real site short: the kind registers its own through
+  `registerAiJobStepPasses`, sized to the largest plan the rules admit.
+- **The estimate is the guard rail.** `aiPlanCreditEstimate` counts the plan's
+  passes — one a section, one more a page, one a creation — at the machine's
+  nominal credits per step, and the plan proposal shows it beside the button
+  that confirms it. It is an estimate and says so; what a step really costs is
+  its model's tokens, recorded on the job as it runs.
+- **The agency batch.** `src/lib/server/ai-jobs-batch.ts` with the `orgSites`
+  console zone's card (`ai-site-batch-card.component.tsx`): one brief across
+  many of the org's sites with the business name, city and brand varied per
+  site, one `site` job each under one batch id, and a progress table that links
+  into each site. Every job is an ordinary scaffold — it plans, it waits for its
+  own confirmation, it writes only drafts.
+
 ## The doors
 
 Registered under `/api/ai/jobs` by the plugin's console API surface:
@@ -565,7 +618,20 @@ Registered under `/api/ai/jobs` by the plugin's console API surface:
   needs more than that budget (`minimumMs`, below) is never started here at
   all: the door hands the reservation back and answers `queued`, so the beat
   runs it with a budget of its own. A `theme` job must name its site.
-- `GET /api/ai/jobs?orgId=` lists the org's jobs newest first.
+- `POST /api/ai/jobs/batch` `{ orgId, brief, businessType, pages, welcomeEmail?,
+  sites: [{ hostId, businessName?, city?, brand? }], model? }` is the agency
+  batch (AGL-2911): it climbs the same ladder on the ORG axis, holds the plan
+  band (`hostLimit ≥ 25`), asks `ai.generate` again for each named site and
+  puts each site through the `site` kind's own admission, then creates one
+  `site` job per admitted site under one `batchId` and runs NO step — so it
+  spends nothing and hands the ladder's reservation straight back. It answers
+  `202 { batchId, jobs, refused }`; a site the caller cannot use is reported in
+  `refused`, never silently dropped, and a batch where no site could start is a
+  403.
+- `GET /api/ai/jobs?orgId=` lists the org's jobs newest first. Each summary
+  carries `batch`, read off the job's inputs, which is how the console groups a
+  run — the only input on the wire form, because a batch id names nothing the
+  member wrote.
 - `GET /api/ai/jobs/{jobId}/events?orgId=` is server-sent events: a `state`
   frame now, a re-read every 2 s that emits on change, `reconnect` at 55 s.
 - `POST /api/ai/jobs/{jobId}/cancel` `{ orgId }` — idempotent; a step in

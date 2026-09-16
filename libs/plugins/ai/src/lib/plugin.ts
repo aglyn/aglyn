@@ -58,6 +58,7 @@ import {
 } from './components/staff-orgs-ai-spend-column.component'
 import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.component'
 import AiSeoAuditCard from './components/ai-seo-audit-card.component'
+import AiSiteBatchCard from './components/ai-site-batch-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
 import AiDescribePageButton from './components/ai-describe-page.component'
 import { AI_PLUGIN_ID } from './constants'
@@ -321,6 +322,19 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiDescribePageButton,
+      },
+      // The agency batch (AGL-2911): one brief across many of the org's
+      // sites, from the page that lists them. The card asks the jobs route
+      // about the release flag before it shows anything, and its own door
+      // holds the plan band and the caller's permission on every site it is
+      // pointed at.
+      {
+        slot: 'orgSites',
+        widgetId: 'ai-site-batch',
+        title: 'Generate sites with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiSiteBatchCard,
       },
     ],
   })
