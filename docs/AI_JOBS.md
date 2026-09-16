@@ -1145,6 +1145,19 @@ ask before anything is spent. Kinds with more than one step extend
 `aiJobStepNames`. A runner that loads heavy modules registers a lazy wrapper,
 as `theme` does, so the machine stays light to load.
 
+**Register by a call, never by an import.** A kind's registrations — its
+runner, its admission, its pass bound — go in one exported function in the
+kind's own module (`registerAiPageJob`), and `registerAiJobKinds` in
+`server.ts` calls it for both surfaces. Never register at a module's top level
+and import the module for that: the plugin's `package.json` declares only
+`server.ts` effect-ful, so Turbopack deletes such an import in both apps while
+jest still runs it. That is how every generative kind answered "not available
+yet" in a built console with every project green (AGL-3025).
+`registrations-survive-a-bundler.spec.ts` bundles the plugin with webpack
+against that `package.json`, runs the bundle, and fails when a registration
+does not survive it or when a `jobs/ai-job-*-step.ts` module's kind ends up
+with no runner.
+
 Two settings shape when a runner gets to run:
 
 - `registerAiJobStep(kind, runner, { minimumMs })` says the least time one run

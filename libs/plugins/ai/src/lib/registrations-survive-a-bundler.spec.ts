@@ -38,7 +38,7 @@
  * registers, and every planned kind must be able to plan and then generate.
  */
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve, sep } from 'node:path'
 import webpack, { type Configuration } from 'webpack'
@@ -248,6 +248,17 @@ describe('the AI plugin, loaded through a bundler that honors sideEffects', () =
     expect(Object.fromEntries(bundled.kinds.map((kind) => [kind, bundled.registered.steps[kind]])))
       .toEqual(Object.fromEntries(bundled.kinds.map((kind) => [kind, both])))
     expect(bundled.registered.admissions).toEqual(expect.arrayContaining(bundled.kinds))
+  })
+
+  it('registers a runner for the kind of every step module beside the machine', () => {
+    // A new step module that nothing calls registers nowhere, bundled or
+    // not, so comparing the two cannot see it; its file can.
+    const kinds = readdirSync(join(LIB, 'jobs'))
+      .map((file) => /^ai-job-([a-z-]+)-step\.ts$/.exec(file)?.[1])
+      .filter((kind): kind is string => kind !== undefined && kind !== 'plan')
+    const bundled = isolated(() => registered(load(serverBundle)))
+    expect(kinds.length).toBeGreaterThan(0)
+    expect(kinds.filter((kind) => !bundled.steps[kind]?.every(({ runner }) => runner))).toEqual([])
   })
 
   it('registers the jobs beat the tenant runs', () => {

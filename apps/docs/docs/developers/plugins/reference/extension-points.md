@@ -35,6 +35,15 @@ The surface matrix: what a plugin can extend, from which entry
 | Install preset mappers | barrel | Besigner drawer presets | On install-doc render |
 | Realm bundles (`register(host)` / `registerApi()`) | remote artifact | Everything above via the host ABI | After the trust chain verifies |
 
+**"Declared at module scope" means a module the bundler keeps.** A registry
+call at a file's top level runs only when that file is evaluated. If your
+`package.json` declares `sideEffects` and does not list the file, Turbopack
+and webpack delete an import that uses none of its exports, such as
+`import './register-jobs'`, while jest still runs it, so the registration
+works in every spec and in neither app (AGL-3025). Make the call from a
+register function your manifest entry names, or list the file in
+`sideEffects`.
+
 **Which app area does each reach?** Console = nav/pages/widgets/providers
 and the `assistPanel` dock; org = `orgData`/`orgSettings`/`orgAddons`/
 `orgBillingUsage`/`orgBillingOverview`/`orgMember`/`orgMembersListColumn`
