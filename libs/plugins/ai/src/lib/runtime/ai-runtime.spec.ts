@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 
-import { estimateAiCostUsd } from '../providers/catalog'
+import { estimateAiBilledUsd } from '../providers/catalog'
 import {
   anthropicFailureIsRetryable,
   anthropicProvider,
@@ -321,10 +321,10 @@ describe('a non-streaming request', () => {
     // Haiku rates, because that is the model the request named — a runtime
     // that priced every door at Sonnet would report the wrong margin.
     expect(result.estCostUsd).toBe(
-      estimateAiCostUsd(result.usage, 'claude-haiku-4-5'),
+      estimateAiBilledUsd(result.usage, 'claude-haiku-4-5'),
     )
     expect(result.estCostUsd).not.toBe(
-      estimateAiCostUsd(result.usage, 'claude-sonnet-5'),
+      estimateAiBilledUsd(result.usage, 'claude-sonnet-5'),
     )
   })
 
@@ -398,7 +398,7 @@ describe('a streaming request', () => {
           cacheReadTokens: 400,
           cacheWriteTokens: 50,
         },
-        estCostUsd: estimateAiCostUsd(
+        estCostUsd: estimateAiBilledUsd(
           { inputTokens: 900, outputTokens: 42, cacheReadTokens: 400, cacheWriteTokens: 50 },
           'claude-sonnet-5',
         ),

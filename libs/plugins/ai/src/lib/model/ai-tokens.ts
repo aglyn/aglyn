@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import {
+  assistProviderCostUsd,
+  ASSIST_PROVIDER_COST_FIELD,
+} from '@aglyn/aglyn/app-utils/assist-credits'
 import type { AiUsage } from '../providers/contract'
 
 /**
@@ -30,7 +34,7 @@ import type { AiUsage } from '../providers/contract'
  * Stored shapes:
  *
  *   orgs/{orgId}/assistUsage/{YYYY-MM}
- *     kinds: { [kind]: { requests, estCostUsd,
+ *     kinds: { [kind]: { requests, estCostUsd, providerCostUsd,
  *                        tokens: { input, cached, cacheWrite, output } } }
  *   orgs/{orgId}/aiUsageByUser/{uid}/months/{YYYY-MM}
  *     tokens: { input, cached, cacheWrite, output }
@@ -122,22 +126,41 @@ export interface AiKindMonth {
   kind: string
   /** Metered model requests; a docs answer or a cache hit is not one. */
   requests: number
-  /** Their measured provider spend. */
+  /** What the kind DREW, at billed rates — the credits behind it. */
   estCostUsd: number
+  /**
+   * What the kind COST US (AGL-3015). Equal to `estCostUsd` on a kind served
+   * only by models billed at their provider's list, and below it wherever a
+   * marked-up model served. A month written before the split answers the
+   * billed figure here, which over-reads our bill rather than under-reads it.
+   */
+  providerCostUsd: number
   tokens: AiTokenTotals
 }
 
-/** The month document's `kinds` map as rows, dearest first. */
+/**
+ * The month document's `kinds` map as rows, dearest first.
+ *
+ * Ordered on what each kind DREW, not on what it cost us: the reader asking
+ * "which kind is expensive" is asking about the meter every other figure on
+ * the card is denominated in, and the two orders differ only where a kind's
+ * model mix differs from its neighbour's.
+ */
 export function readAiKindMonths(raw: unknown): AiKindMonth[] {
   if (!isRecord(raw)) return []
   const rows: AiKindMonth[] = []
   for (const [kind, value] of Object.entries(raw)) {
     if (!isRecord(value)) continue
     const cost = Number(value['estCostUsd'] ?? 0)
+    const billed = Number.isFinite(cost) && cost > 0 ? cost : 0
     rows.push({
       kind,
       requests: count(value['requests']),
-      estCostUsd: Number.isFinite(cost) && cost > 0 ? cost : 0,
+      estCostUsd: billed,
+      providerCostUsd: assistProviderCostUsd(
+        billed,
+        value[ASSIST_PROVIDER_COST_FIELD],
+      ),
       tokens: readAiTokenTotals(value[AI_USAGE_TOKENS_FIELD]),
     })
   }

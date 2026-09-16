@@ -25,6 +25,7 @@
  */
 import { FieldValue } from 'firebase-admin/firestore'
 import {
+  ASSIST_PROVIDER_COST_FIELD,
   assistBandRefuses,
   assistCreditsFromUsd,
   assistOverageCapReached,
@@ -45,7 +46,7 @@ import {
   assistOrgMonthlyCostLimitUsd,
 } from '@aglyn/aglyn/app-utils/usage-budget'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
-import { estimateAiCostUsd } from '../providers/catalog'
+import { estimateAiBilledUsd, estimateAiProviderCostUsd } from '../providers/catalog'
 import { recordAssistRefusal } from './assist-refusals'
 import {
   announcePlatformFreeSpend,
@@ -273,24 +274,46 @@ export interface AssistTokenUsage {
 }
 
 /**
- * Estimated cost in USD for one exchange, at the SERVING model's list
- * rates, rounded to 6dp — telemetry for margin tuning, not billing.
+ * What one exchange DRAWS FROM THE CUSTOMER, at the serving model's billed
+ * rates, rounded to 6dp — the figure `assistCreditsFromUsd` turns into
+ * credits and the one the band, the cap and the invoice are measured in.
  *
  * The rates are the model catalog's (AGL-2939), keyed by model rather than
  * fixed at one model's because `ASSIST_MODEL` is an env override: a
  * one-line incident swap to a dearer model would otherwise keep reporting
  * the cheaper money, and per-org cost would read as roughly right — the
  * failure mode this whole meter exists to prevent. An unknown id is priced
- * at the dearest known tier on purpose, because a cost estimate that errs
- * low is worse than one that errs high, and a docs-only answer is metered
- * under a zero-priced sentinel (`AI_METER_SENTINELS`) so it lands in the
- * same rollup as a served one.
+ * at the dearest known tier on purpose, because an estimate that errs low is
+ * worse than one that errs high, and a docs-only answer is metered under a
+ * zero-priced sentinel (`AI_METER_SENTINELS`) so it lands in the same rollup
+ * as a served one.
+ *
+ * NOT A COST (AGL-3015). A model may be billed above what its provider
+ * charges, so this overstates what the exchange cost us by exactly that
+ * markup. `estimateAssistProviderCostUsd` is the figure a margin or a spend
+ * meter takes.
  */
 export function estimateAssistCostUsd(
   usage: AssistTokenUsage,
   model: string,
 ): number {
-  return estimateAiCostUsd(usage, model)
+  return estimateAiBilledUsd(usage, model)
+}
+
+/**
+ * What one exchange COST US, at the serving model's provider rates, rounded
+ * to 6dp — real money, recorded beside the billed figure so a margin is
+ * taken against a bill we actually pay rather than against a price we
+ * charge.
+ *
+ * At or below `estimateAssistCostUsd` for the same tokens, and equal to it
+ * on every model billed at its provider's list.
+ */
+export function estimateAssistProviderCostUsd(
+  usage: AssistTokenUsage,
+  model: string,
+): number {
+  return estimateAiProviderCostUsd(usage, model)
 }
 
 export interface AssistQuotaVerdict {
@@ -1025,6 +1048,11 @@ function writeSignalAndRollup(
   const increment = FieldValue.increment
   const serverTimestamp = FieldValue.serverTimestamp
   const estCostUsd = estimateAssistCostUsd(record.usage, record.model)
+  // What the same tokens COST US (AGL-3015). Recorded beside the billed
+  // figure rather than derived from it later: a month is a sum over models
+  // and a markup lives on the model, so once the exchanges are added up the
+  // mix is gone and the two can no longer be told apart.
+  const providerCostUsd = estimateAssistProviderCostUsd(record.usage, record.model)
   const deflected = record.deflected === true
   const free = record.free ?? null
   // On the Free taste a `refusal` stop draws no credits (AGL-2925): the
@@ -1054,6 +1082,7 @@ function writeSignalAndRollup(
     cacheReadTokens: record.usage.cacheReadTokens,
     cacheWriteTokens: record.usage.cacheWriteTokens,
     estCostUsd,
+    [ASSIST_PROVIDER_COST_FIELD]: providerCostUsd,
     docsPaths: record.docsPaths,
     stopReason: record.stopReason,
     deflected,
@@ -1087,6 +1116,11 @@ function writeSignalAndRollup(
       cacheReadTokens: increment(record.usage.cacheReadTokens),
       cacheWriteTokens: increment(record.usage.cacheWriteTokens),
       estCostUsd: increment(refusedFree ? 0 : estCostUsd),
+      // Our bill for the same turns, credited and refused alike on the same
+      // rule as `estCostUsd` above, so the month's two dollar figures always
+      // describe the same set of exchanges and a margin taken across them is
+      // a margin over one period.
+      [ASSIST_PROVIDER_COST_FIELD]: increment(refusedFree ? 0 : providerCostUsd),
       // The refused half of a Free month, kept beside the credited half so
       // the rollup still says what the month cost us in total. Its own field
       // name (AGL-2986): `refusals` on this document is the gate's map of
@@ -1096,8 +1130,11 @@ function writeSignalAndRollup(
       refusedCostUsd: increment(refusedFree ? estCostUsd : 0),
       // What each model request was for, with its tokens (AGL-2937): cost
       // per generation, tokens per kind and the cache hit rate are read off
-      // this map. A docs answer bought nothing and is left out, and the cost
-      // is the measured provider spend, a declined Free turn's included.
+      // this map. A docs answer bought nothing and is left out. Both dollar
+      // figures are kept — what the kind drew and what it cost us — because
+      // the staff card reading this map is asking the second question and
+      // the credit meter beside it is asking the first.
+      // A declined Free turn is counted in both.
       ...(deflected
         ? {}
         : {
@@ -1105,6 +1142,7 @@ function writeSignalAndRollup(
               [kind]: {
                 requests: increment(1),
                 estCostUsd: increment(estCostUsd),
+                [ASSIST_PROVIDER_COST_FIELD]: increment(providerCostUsd),
                 [AI_USAGE_TOKENS_FIELD]: aiTokenIncrements(record.usage),
               },
             },

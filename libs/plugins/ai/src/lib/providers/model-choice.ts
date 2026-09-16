@@ -21,8 +21,8 @@ import {
   AI_MODEL_CATALOG,
   AI_STEP_TIERS,
   aiCatalogEntry,
-  aiRatesForModel,
-  estimateAiCostUsd,
+  aiBilledRatesForModel,
+  estimateAiBilledUsd,
   type AiCatalogEntry,
   type AiStepKind,
 } from './catalog'
@@ -182,9 +182,18 @@ export function aiModelsSelectable(
   )
 }
 
-/** A model's blended list rate, for "the cheapest allowed" and nothing else. */
+/**
+ * A model's blended BILLED rate, for "the cheapest allowed" and nothing
+ * else.
+ *
+ * Billed and not provider (AGL-3015): the substitution below happens when a
+ * workspace asked for a model its bounds do not allow, and the party it
+ * falls back for is the one whose credits are drawn. "Cheapest" has to mean
+ * the same thing here as in the selector this substitution stands in for,
+ * which sorts on `creditsPerRequest`.
+ */
 const blendedRate = (id: string): number => {
-  const rates = aiRatesForModel(id)
+  const rates = aiBilledRatesForModel(id)
   return rates.inputPerToken + rates.outputPerToken
 }
 
@@ -285,9 +294,13 @@ export function aiModelOptions(
   const auto = resolveAiModelChoice(kind, null, bounds, settings)
   if (!route || !auto) return null
   const typical = measured ?? AI_STEP_NOMINAL_USAGE[kind]
-  const autoCost = estimateAiCostUsd(typical, auto.model)
+  // Billed rates throughout (AGL-3015): every figure below is what the
+  // workspace will be charged for picking this model — credits per request
+  // and the multiple of Auto those credits come to. Our own cost for the
+  // same request is not this selector's subject and would misstate both.
+  const autoCost = estimateAiBilledUsd(typical, auto.model)
   const priced = (entry: AiCatalogEntry): AiModelOption => {
-    const cost = estimateAiCostUsd(typical, entry.id)
+    const cost = estimateAiBilledUsd(typical, entry.id)
     return {
       id: entry.id,
       label: entry.label,

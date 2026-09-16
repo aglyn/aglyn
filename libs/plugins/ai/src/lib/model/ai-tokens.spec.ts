@@ -68,6 +68,7 @@ describe('tokens as every rollup keeps them (AGL-2937)', () => {
         assist: {
           requests: 30,
           estCostUsd: 0.3,
+          providerCostUsd: 0.2,
           tokens: { input: 1_000, cached: 9_000, cacheWrite: 0, output: 500 },
         },
         page: { requests: 4, estCostUsd: 2.2, tokens: { input: 2_000, cacheWrite: 3_000, output: 1_000 } },
@@ -78,12 +79,16 @@ describe('tokens as every rollup keeps them (AGL-2937)', () => {
         kind: 'page',
         requests: 4,
         estCostUsd: 2.2,
+        // A bucket written before the split has only the billed figure and
+        // answers with it, which over-reads our bill (AGL-3015).
+        providerCostUsd: 2.2,
         tokens: { input: 2_000, cached: 0, cacheWrite: 3_000, output: 1_000 },
       },
       {
         kind: 'assist',
         requests: 30,
         estCostUsd: 0.3,
+        providerCostUsd: 0.2,
         tokens: { input: 1_000, cached: 9_000, cacheWrite: 0, output: 500 },
       },
     ])

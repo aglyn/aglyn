@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { aiCatalogEntry, aiModelIdsForProvider, estimateAiCostUsd } from './catalog'
+import { aiCatalogEntry, aiModelIdsForProvider, estimateAiBilledUsd } from './catalog'
 import {
   AiUpstreamError,
   aiTokenCount,
@@ -188,7 +188,7 @@ async function complete(input: AiProviderRequest): Promise<AiResult> {
     input: aiToolInputOf(call?.function?.arguments),
   }))
   const usage = openAiCompatibleUsageFrom(payload?.usage)
-  const estCostUsd = estimateAiCostUsd(usage, input.model)
+  const estCostUsd = estimateAiBilledUsd(usage, input.model)
   const stopReason = stopReasonOf(choice?.finish_reason)
   if (stopReason === 'refusal') {
     return { kind: 'refusal', text, usage, estCostUsd, stopReason }
@@ -291,7 +291,7 @@ async function* streamEvents(
   yield {
     type: 'done',
     usage,
-    estCostUsd: estimateAiCostUsd(usage, model),
+    estCostUsd: estimateAiBilledUsd(usage, model),
     stopReason,
   }
 }

@@ -126,7 +126,13 @@ export interface AiCompletion {
   text: string
   toolUse: AiToolUse[]
   usage: AiUsage
-  /** At the serving model's list rates — see the model catalog. */
+  /**
+   * The exchange at the serving model's BILLED rates — what a customer's
+   * credits are drawn from, and never a margin's cost side (AGL-3015). What
+   * the same exchange cost us is `estimateAiProviderCostUsd`, recorded by
+   * the meter; a result travels no further than the credit path, so it
+   * carries the one figure that path needs.
+   */
   estCostUsd: number
   stopReason: string | null
 }
@@ -163,7 +169,7 @@ export type AiStreamEvent =
       stopReason: string | null
     }
 
-/** What a provider says about one of its models; the catalog carries the rates. */
+/** What a provider says about one of its models; the catalog carries both rates. */
 export interface AiModelDescriptor {
   id: string
   /** The provider id the model is served by. */

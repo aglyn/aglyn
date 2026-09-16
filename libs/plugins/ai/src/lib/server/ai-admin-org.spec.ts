@@ -406,6 +406,9 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
       kind: 'page',
       requests: 4,
       estCostUsd: 2.2,
+      // The bucket above carries no provider figure, so it answers with the
+      // billed one — over-reading our bill, never under (AGL-3015).
+      providerCostUsd: 2.2,
       costPerRequestUsd: 0.55,
       tokens: { input: 2_000, cached: 0, cacheWrite: 3_000, output: 1_000 },
       cacheHitRate: 0,

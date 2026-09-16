@@ -26,14 +26,14 @@ import { rankAssistSpend, type AssistSpendRow } from './assist-signal-mining'
 
 const row = (
   orgId: string,
-  estCostUsd: number,
-  credits = Math.ceil(estCostUsd * 1000),
+  providerCostUsd: number,
+  credits = Math.ceil(providerCostUsd * 1000),
 ): AssistSpendRow => ({
   orgId,
   plan: 'pro',
   aiAddon: false,
   credits,
-  estCostUsd,
+  providerCostUsd,
   refusals: {
     band: 0,
     cap: 0,

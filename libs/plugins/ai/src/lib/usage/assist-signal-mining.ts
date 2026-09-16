@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import {
+  assistProviderCostUsd,
+  ASSIST_PROVIDER_COST_FIELD,
+} from '@aglyn/aglyn/app-utils/assist-credits'
 import { aiCacheHitRate } from '../model/ai-tokens'
 import { aiUsageKindFromRoute } from '../model/ai-usage-by-user'
 
@@ -79,7 +83,12 @@ export interface AssistSignalRow {
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
-  estCostUsd: number
+  /**
+   * What this turn cost us, at the serving model's provider rates. Every
+   * dollar mined out of this module is that figure: the signals page asks
+   * one money question and it is "what are we spending" (AGL-3015).
+   */
+  providerCostUsd: number
   docsPaths: string[]
   stopReason: string | null
   feedback: 'up' | 'down' | null
@@ -95,7 +104,7 @@ export interface DocsGapRow {
   down: number
   /** Distinct orgs that landed here — a gap one org has is not a gap. */
   orgs: number
-  estCostUsd: number
+  providerCostUsd: number
   /** `down / (up + down)`, or null when nobody rated. */
   downRate: number | null
 }
@@ -149,20 +158,20 @@ export interface OrgCostRow {
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
-  estCostUsd: number
+  providerCostUsd: number
   down: number
 }
 
 /** One row of a cost breakdown — see `totals.byTier` / `totals.byModel`. */
 export interface CostSplit {
   messages: number
-  estCostUsd: number
+  providerCostUsd: number
 }
 
 /** One kind of model turn, summed (AGL-2937) — see `totals.byKind`. */
 export interface KindTokenSplit {
   messages: number
-  estCostUsd: number
+  providerCostUsd: number
   inputTokens: number
   outputTokens: number
   cacheReadTokens: number
@@ -184,7 +193,7 @@ export function kindTokenRows(
     .map(([kind, value]) => ({ kind, ...value }))
     .sort(
       (a, b) =>
-        b.estCostUsd - a.estCostUsd || b.messages - a.messages || a.kind.localeCompare(b.kind),
+        b.providerCostUsd - a.providerCostUsd || b.messages - a.messages || a.kind.localeCompare(b.kind),
     )
 }
 
@@ -205,14 +214,14 @@ export function nearestRankPercentile(values: readonly number[], percentile: num
  */
 export function costSplitRows(
   split: Record<string, CostSplit>,
-): { key: string; messages: number; estCostUsd: number }[] {
+): { key: string; messages: number; providerCostUsd: number }[] {
   return Object.entries(split)
     .map(([key, value]) => ({
       key,
       messages: value.messages,
-      estCostUsd: value.estCostUsd,
+      providerCostUsd: value.providerCostUsd,
     }))
-    .sort((a, b) => b.estCostUsd - a.estCostUsd || a.key.localeCompare(b.key))
+    .sort((a, b) => b.providerCostUsd - a.providerCostUsd || a.key.localeCompare(b.key))
 }
 
 /**
@@ -232,7 +241,7 @@ export interface AssistSpendRow {
   aiAddon: boolean
   /** Credits drawn this month, from the measured spend. */
   credits: number
-  estCostUsd: number
+  providerCostUsd: number
   refusals: {
     band: number
     cap: number
@@ -267,7 +276,7 @@ export function rankAssistSpend(
 ): { rows: AssistSpendRow[]; ranked: number } {
   const sorted = [...rows].sort(
     (a, b) =>
-      b.estCostUsd - a.estCostUsd ||
+      b.providerCostUsd - a.providerCostUsd ||
       b.credits - a.credits ||
       a.orgId.localeCompare(b.orgId),
   )
@@ -284,6 +293,13 @@ export function rankAssistSpend(
 export interface AssistFreeSpendReadout {
   /** The UTC day the figures describe. */
   day: string
+  /**
+   * The day's free spend as the CEILING measures it — the billed figure,
+   * because the ceiling this is compared against was sized against it and
+   * the reservation refuses on the same reading (AGL-3015). The one dollar
+   * on this page that is not our provider bill, and it is a wall rather than
+   * a cost.
+   */
   estCostUsd: number
   requests: number
   refusals: number
@@ -304,7 +320,7 @@ export interface AssistMiningReport {
     outputTokens: number
     cacheReadTokens: number
     cacheWriteTokens: number
-    estCostUsd: number
+    providerCostUsd: number
     /**
      * Turns answered with NO model call — docs retrieval or an answer-cache
      * hit (AGL-2486). Counted separately from `messages`, which is every
@@ -330,7 +346,7 @@ export interface AssistMiningReport {
     /**
      * Cost split by entitlement tier, then by model (AGL-2340).
      *
-     * Both carried as `{ messages, estCostUsd }` rather than a bare turn
+     * Both carried as `{ messages, providerCostUsd }` rather than a bare turn
      * count, because the questions these answer are money questions and a
      * count cannot answer either of them. `byTier` settles "is the free tier
      * eating the margin, or are paying orgs?" — the free tier can be a
@@ -424,7 +440,15 @@ export function assistSignalRow(
     outputTokens: number(data['outputTokens']),
     cacheReadTokens: number(data['cacheReadTokens']),
     cacheWriteTokens: number(data['cacheWriteTokens']),
-    estCostUsd: number(data['estCostUsd']),
+    // What the turn COST US (AGL-3015). The stored `estCostUsd` beside it
+    // is the same turn at BILLED rates — the figure the customer's credits
+    // came out of — and every dollar on the signals page is asking the other
+    // question. A signal written before the split carries only the billed
+    // figure, which over-reads our bill rather than under-reads it.
+    providerCostUsd: assistProviderCostUsd(
+      data['estCostUsd'],
+      data[ASSIST_PROVIDER_COST_FIELD],
+    ),
     docsPaths: rawPaths.map((path) => String(path)).filter(Boolean),
     stopReason: data['stopReason'] == null ? null : String(data['stopReason']),
     feedback: feedback === 'up' || feedback === 'down' ? feedback : null,
@@ -440,11 +464,11 @@ export function assistSignalRow(
 function addToSplit(
   split: Record<string, CostSplit>,
   key: string,
-  estCostUsd: number,
+  providerCostUsd: number,
 ) {
-  const bucket = split[key] ?? { messages: 0, estCostUsd: 0 }
+  const bucket = split[key] ?? { messages: 0, providerCostUsd: 0 }
   bucket.messages += 1
-  bucket.estCostUsd += estCostUsd
+  bucket.providerCostUsd += providerCostUsd
   split[key] = bucket
 }
 
@@ -468,7 +492,7 @@ export function mineAssistSignals(
     outputTokens: 0,
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
-    estCostUsd: 0,
+    providerCostUsd: 0,
     deflected: 0,
     deflectionRate: null as number | null,
     cacheReadRate: null as number | null,
@@ -499,15 +523,15 @@ export function mineAssistSignals(
     totals.outputTokens += row.outputTokens
     totals.cacheReadTokens += row.cacheReadTokens
     totals.cacheWriteTokens += row.cacheWriteTokens
-    totals.estCostUsd += row.estCostUsd
+    totals.providerCostUsd += row.providerCostUsd
     if (row.deflected) totals.deflected += 1
-    addToSplit(totals.byTier, row.tier, row.estCostUsd)
-    addToSplit(totals.byModel, row.model, row.estCostUsd)
+    addToSplit(totals.byTier, row.tier, row.providerCostUsd)
+    addToSplit(totals.byModel, row.model, row.providerCostUsd)
     if (!row.deflected) {
       const kind = row.kind || 'unknown'
       const bucket = kinds.get(kind) ?? {
         messages: 0,
-        estCostUsd: 0,
+        providerCostUsd: 0,
         inputTokens: 0,
         outputTokens: 0,
         cacheReadTokens: 0,
@@ -515,7 +539,7 @@ export function mineAssistSignals(
         outputs: [],
       }
       bucket.messages += 1
-      bucket.estCostUsd += row.estCostUsd
+      bucket.providerCostUsd += row.providerCostUsd
       bucket.inputTokens += row.inputTokens
       bucket.outputTokens += row.outputTokens
       bucket.cacheReadTokens += row.cacheReadTokens
@@ -536,7 +560,7 @@ export function mineAssistSignals(
       outputTokens: 0,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
-      estCostUsd: 0,
+      providerCostUsd: 0,
       down: 0,
     }
     org.messages += 1
@@ -544,7 +568,7 @@ export function mineAssistSignals(
     org.outputTokens += row.outputTokens
     org.cacheReadTokens += row.cacheReadTokens
     org.cacheWriteTokens += row.cacheWriteTokens
-    org.estCostUsd += row.estCostUsd
+    org.providerCostUsd += row.providerCostUsd
     if (row.feedback === 'down') org.down += 1
     orgs.set(row.orgId, org)
 
@@ -590,11 +614,11 @@ export function mineAssistSignals(
     // column exists to find pages worth rewriting, not to balance a ledger.
     for (const path of new Set(row.docsPaths)) {
       const entry = gaps.get(path) ?? {
-        row: { path, questions: 0, up: 0, down: 0, estCostUsd: 0 },
+        row: { path, questions: 0, up: 0, down: 0, providerCostUsd: 0 },
         orgs: new Set<string>(),
       }
       entry.row.questions += 1
-      entry.row.estCostUsd += row.estCostUsd
+      entry.row.providerCostUsd += row.providerCostUsd
       if (row.feedback === 'up') entry.row.up += 1
       if (row.feedback === 'down') entry.row.down += 1
       entry.orgs.add(row.orgId)
@@ -655,7 +679,7 @@ export function mineAssistSignals(
     (a, b) => b.questions - a.questions || b.down - a.down,
   )
   const orgRows = [...orgs.values()].sort(
-    (a, b) => b.estCostUsd - a.estCostUsd || b.messages - a.messages,
+    (a, b) => b.providerCostUsd - a.providerCostUsd || b.messages - a.messages,
   )
 
   return {

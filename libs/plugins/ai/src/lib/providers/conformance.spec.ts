@@ -36,7 +36,7 @@ import { resolve } from 'node:path'
 import { setRegisteringPluginId } from '@aglyn/aglyn/app-utils/registering-plugin'
 import { resetPluginServicesForTests } from '@aglyn/aglyn'
 import { anthropicProvider, buildAnthropicRequestBody } from './anthropic'
-import { estimateAiCostUsd } from './catalog'
+import { estimateAiBilledUsd } from './catalog'
 import {
   AI_UPSTREAM_FAILURE_COPY,
   AiUpstreamError,
@@ -237,7 +237,7 @@ describe.each(SUBJECTS)('$prefix adapter conforms to the provider contract', (su
     ])
     expect(result.stopReason).toBe('tool_use')
     expect(result.usage).toEqual(usageOf(subject, 120))
-    expect(result.estCostUsd).toBe(estimateAiCostUsd(result.usage, subject.model))
+    expect(result.estCostUsd).toBe(estimateAiBilledUsd(result.usage, subject.model))
     expect(result.estCostUsd).toBeGreaterThan(0)
   })
 
@@ -264,7 +264,7 @@ describe.each(SUBJECTS)('$prefix adapter conforms to the provider contract', (su
         type: 'done',
         stopReason: 'tool_use',
         usage: usageOf(subject, 42),
-        estCostUsd: estimateAiCostUsd(usageOf(subject, 42), subject.model),
+        estCostUsd: estimateAiBilledUsd(usageOf(subject, 42), subject.model),
       },
     ])
     subject.assertShape(JSON.parse(String(mock.mock.calls[0][1].body)), true)

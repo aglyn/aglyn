@@ -25,16 +25,33 @@ import type { AiModelDescriptor, AiUsage } from './contract'
  * routing table maps a step kind to an id through here, the meter prices
  * usage by id through here, and a settings form offers ids from here.
  *
- * ## Rates
+ * ## Two rates, because one figure was answering two questions
  *
- * List-rate unit costs (USD per token) BY MODEL: telemetry estimates for
- * margin tuning, not billing. Keyed by model rather than fixed at one
- * model's rates because the default is an env override: a one-line incident
- * swap to a dearer model would otherwise keep reporting the cheaper money,
- * and per-org cost would read as roughly right — the failure mode this
- * whole meter exists to prevent. An unknown id falls back to the most
- * EXPENSIVE known tier on purpose: a cost estimate that errs low is worse
- * than one that errs high.
+ * Every row carries a PROVIDER rate and a BILLED rate (AGL-3015):
+ *
+ * - `providerRates` is what the vendor charges us. It is money leaving the
+ *   company, so cost accounting, the margin surfaces and every staff spend
+ *   meter price usage through this one and no other.
+ * - `billedRates` is what a customer's credits are charged at. The credit
+ *   meter, the band, the overage ladder and the model selector price usage
+ *   through this one, because it is the figure a customer's balance moves by.
+ *
+ * They are equal on nearly every row, and a helper writes the pair from one
+ * figure so an unmarked row cannot drift apart by a typo. A row may be
+ * billed ABOVE its provider rate deliberately — the markup is carried in the
+ * rate rather than in the credit conversion, which keeps a credit a fixed
+ * quantity of billed spend on every model and leaves the band, the ladder
+ * and the invoice on the one arithmetic they were sized with. A row billed
+ * BELOW its provider rate would sell tokens at a loss, and
+ * `billed-rate-is-not-provider-cost.spec.ts` refuses one.
+ *
+ * Both are keyed by model rather than fixed at one model's rates because the
+ * default is an env override: a one-line incident swap to a dearer model
+ * would otherwise keep reporting the cheaper money, and per-org cost would
+ * read as roughly right — the failure mode this whole meter exists to
+ * prevent. An unknown id falls back to the most EXPENSIVE known tier on
+ * purpose, on both rates: an estimate that errs low is worse than one that
+ * errs high, whether the figure is our bill or the customer's.
  */
 
 export interface AiTokenRates {
@@ -54,8 +71,34 @@ export function aiRatesPerMTok(inputPerMTok: number, outputPerMTok: number): AiT
   }
 }
 
-export interface AiCatalogEntry extends AiModelDescriptor {
-  rates: AiTokenRates
+/**
+ * The two rate tables a catalog row carries. Separate fields rather than one
+ * table and a multiplier: a reader that wants our cost has to name it, and
+ * a reader that wants the customer's has to name that, so neither can be
+ * reached by accident.
+ */
+export interface AiCatalogRates {
+  /** What the provider bills us for this model. */
+  providerRates: AiTokenRates
+  /** What a customer's credits are charged at for this model. */
+  billedRates: AiTokenRates
+}
+
+/**
+ * A row billed at exactly the provider's list rate — the usual case, written
+ * once so the pair cannot drift.
+ */
+export function aiRatesAtList(
+  inputPerMTok: number,
+  outputPerMTok: number,
+): AiCatalogRates {
+  return {
+    providerRates: aiRatesPerMTok(inputPerMTok, outputPerMTok),
+    billedRates: aiRatesPerMTok(inputPerMTok, outputPerMTok),
+  }
+}
+
+export interface AiCatalogEntry extends AiModelDescriptor, AiCatalogRates {
   /**
    * The tier a routing decision reads: `fast` for short, constrained
    * answers; `balanced` for the assistant and briefs; `deep` for the
@@ -155,7 +198,22 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     provider: ANTHROPIC,
     label: 'Claude Sonnet 5',
     capabilities: anthropicCapabilities,
-    rates: aiRatesPerMTok(3, 15),
+    /*
+     * THE ONE ROW BILLED ABOVE ITS PROVIDER RATE (AGL-3015).
+     *
+     * The balanced tier prices most requests, so this markup is most of the
+     * platform's AI margin. It is carried in the rate and not in the credit
+     * conversion for the reason the module head gives: a credit stays a
+     * fixed quantity of billed spend on every model, so the band, the
+     * overage ladder and the invoice keep the arithmetic they were sized
+     * with, and nothing below has to know which model served a request.
+     *
+     * Everything that reasons about what we PAY — the margin surfaces, the
+     * staff spend meters, the discount guardrail's cost of goods — reads
+     * `providerRates`, which is the vendor's published list.
+     */
+    providerRates: aiRatesPerMTok(2, 10),
+    billedRates: aiRatesPerMTok(3, 15),
     tier: 'balanced',
     cacheMinTokens: 1_024,
   },
@@ -164,7 +222,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     provider: ANTHROPIC,
     label: 'Claude Sonnet 4.6',
     capabilities: anthropicCapabilities,
-    rates: aiRatesPerMTok(3, 15),
+    ...aiRatesAtList(3, 15),
     tier: 'balanced',
     cacheMinTokens: 1_024,
   },
@@ -174,7 +232,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     provider: ANTHROPIC,
     label: 'Claude Haiku 4.5',
     capabilities: { ...anthropicCapabilities, thinking: false },
-    rates: aiRatesPerMTok(1, 5),
+    ...aiRatesAtList(1, 5),
     tier: 'fast',
     // Four times the balanced tier's minimum: the cheapest model per token
     // is the hardest one to cache for, which is why a short prompt moved
@@ -186,7 +244,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     provider: ANTHROPIC,
     label: 'Claude Opus 5',
     capabilities: anthropicCapabilities,
-    rates: aiRatesPerMTok(5, 25),
+    ...aiRatesAtList(5, 25),
     tier: 'deep',
     cacheMinTokens: 512,
   },
@@ -195,23 +253,24 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     provider: ANTHROPIC,
     label: 'Claude Opus 4.8',
     capabilities: anthropicCapabilities,
-    rates: aiRatesPerMTok(5, 25),
+    ...aiRatesAtList(5, 25),
     tier: 'deep',
     cacheMinTokens: 1_024,
   },
   /**
    * The OpenAI-compatible adapter serves whatever the endpoint behind
    * `AI_OPENAI_COMPAT_BASE_URL` serves; these are the ids the routing table
-   * may name on it. A self-host points the base URL at its own gateway and
-   * sets the rates it pays through `AI_OPENAI_COMPAT_RATES` (see
-   * `aiCatalogEntry`); the figures here are a public list price.
+   * may name on it. The figures are the vendor's public list, billed at
+   * list: a deployment that reaches its own gateway at a negotiated price
+   * is paying less than this says, so its margin reads low rather than
+   * high — the direction a cost figure may be wrong in.
    */
   {
     id: 'gpt-5',
     provider: OPENAI_COMPATIBLE,
     label: 'GPT-5',
     capabilities: { streaming: true, tools: true, thinking: false, promptCache: true },
-    rates: aiRatesPerMTok(1.25, 10),
+    ...aiRatesAtList(1.25, 10),
     tier: 'balanced',
     cacheMinTokens: 1_024,
   },
@@ -220,7 +279,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     provider: OPENAI_COMPATIBLE,
     label: 'GPT-5 mini',
     capabilities: { streaming: true, tools: true, thinking: false, promptCache: true },
-    rates: aiRatesPerMTok(0.25, 2),
+    ...aiRatesAtList(0.25, 2),
     tier: 'fast',
     cacheMinTokens: 1_024,
   },
@@ -249,21 +308,37 @@ export function aiCatalogEntry(modelId: string): AiCatalogEntry | undefined {
   return AI_MODEL_CATALOG.find((entry) => entry.id === modelId)
 }
 
+const isSentinel = (modelId: string): boolean =>
+  (Object.values(AI_METER_SENTINELS) as string[]).includes(modelId)
+
 /**
- * List rates for a model id. A meter sentinel is free; an unknown id is
- * priced at the dearest tier.
+ * What the PROVIDER charges for a model id — our bill. A meter sentinel is
+ * free; an unknown id is priced at the dearest tier.
+ *
+ * The figure every cost and margin surface prices usage at. Answering the
+ * customer's question from here would report a margin the platform does not
+ * earn, and answering ours from `aiBilledRatesForModel` reports one it does
+ * not pay; the two are separate functions so neither is reachable by
+ * forgetting which one was meant.
  */
-export function aiRatesForModel(modelId: string): AiTokenRates {
-  if ((Object.values(AI_METER_SENTINELS) as string[]).includes(modelId)) return ZERO_RATES
-  return aiCatalogEntry(modelId)?.rates ?? AI_FALLBACK_RATES
+export function aiProviderRatesForModel(modelId: string): AiTokenRates {
+  if (isSentinel(modelId)) return ZERO_RATES
+  return aiCatalogEntry(modelId)?.providerRates ?? AI_FALLBACK_RATES
 }
 
 /**
- * Estimated cost in USD for one exchange, at the SERVING model's list
- * rates, rounded to 6dp.
+ * What a CUSTOMER'S CREDITS are charged at for a model id. A meter sentinel
+ * is free; an unknown id is priced at the dearest tier.
+ *
+ * The figure the credit meter, the band and the model selector price usage
+ * at. It is at or above `aiProviderRatesForModel` on every row.
  */
-export function estimateAiCostUsd(usage: AiUsage, modelId: string): number {
-  const rate = aiRatesForModel(modelId)
+export function aiBilledRatesForModel(modelId: string): AiTokenRates {
+  if (isSentinel(modelId)) return ZERO_RATES
+  return aiCatalogEntry(modelId)?.billedRates ?? AI_FALLBACK_RATES
+}
+
+function priceUsage(usage: AiUsage, rate: AiTokenRates): number {
   const raw =
     usage.inputTokens * rate.inputPerToken +
     usage.outputTokens * rate.outputPerToken +
@@ -272,12 +347,21 @@ export function estimateAiCostUsd(usage: AiUsage, modelId: string): number {
   return Math.round(raw * 1_000_000) / 1_000_000
 }
 
-/** The rate table as one record: model id → rates, sentinels at zero. */
-export function aiModelRatesTable(): Record<string, AiTokenRates> {
-  const table: Record<string, AiTokenRates> = {}
-  for (const sentinel of Object.values(AI_METER_SENTINELS)) table[sentinel] = ZERO_RATES
-  for (const entry of AI_MODEL_CATALOG) table[entry.id] = entry.rates
-  return table
+/**
+ * What one exchange COST US, at the serving model's provider rates, rounded
+ * to 6dp. Real money, and the only figure a margin may be taken against.
+ */
+export function estimateAiProviderCostUsd(usage: AiUsage, modelId: string): number {
+  return priceUsage(usage, aiProviderRatesForModel(modelId))
+}
+
+/**
+ * What one exchange DRAWS FROM A CUSTOMER, at the serving model's billed
+ * rates, rounded to 6dp — the figure `assistCreditsFromUsd` turns into
+ * credits. At or above `estimateAiProviderCostUsd` for the same exchange.
+ */
+export function estimateAiBilledUsd(usage: AiUsage, modelId: string): number {
+  return priceUsage(usage, aiBilledRatesForModel(modelId))
 }
 
 /** Every catalog id a provider serves. */
