@@ -141,7 +141,17 @@ describe('the routing table (AGL-2937)', () => {
     '%s carries the eval score its briefs hold, at or above the floor',
     (_step, row) => {
       const own = scores.filter((score) => row.eval.kinds.includes(score.kind))
-      expect(row.eval.source).toBe(own.some((score) => score.source === 'recorded') ? 'recorded' : 'authored')
+      // A row's provenance is the provenance of the scores the row carries,
+      // not of every candidate its kinds hold (AGL-3022). A live run that
+      // records the plans a page is built from leaves `job.page` scoring the
+      // authored references still, so the row goes on saying `authored`;
+      // only `job.plan`, which scores those plans, turns over.
+      const scored = own.filter((score) =>
+        row.eval.scores === 'plans' ? score.checks.plan !== null : score.scope === 'full',
+      )
+      expect(row.eval.source).toBe(
+        scored.some((score) => score.source === 'recorded') ? 'recorded' : 'authored',
+      )
       if (row.eval.scores === 'plans') {
         const plans = summarizeAiEvalPlans(own)
         expect(plans.plans).toBeGreaterThan(0)
@@ -152,7 +162,7 @@ describe('the routing table (AGL-2937)', () => {
         expect(row.eval.passRate).toBe(1)
         return
       }
-      const answers = own.filter((score) => score.scope === 'full')
+      const answers = scored
       expect(answers.length).toBeGreaterThan(0)
       const passRate = answers.filter((score) => score.pass).length / answers.length
       const meanScore =
