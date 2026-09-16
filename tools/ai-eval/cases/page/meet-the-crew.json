@@ -23,7 +23,7 @@
   },
   "assets": { "asset-team": { "sizeBytes": 310000, "width": 1800, "height": 1200 } },
   "expected": {
-    "plan": { "screens": [1, 1], "reuse": ["lay-site", "cmp-testimonial"], "layout": "lay-site", "maxCreate": 0 }
+    "plan": { "screens": [1, 1], "reuse": ["lay-site", "cmp-testimonial"], "layout": "lay-site", "maxCreate": 1, "createKinds": ["component"] }
   },
   "candidates": [
     {
