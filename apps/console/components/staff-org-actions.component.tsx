@@ -29,6 +29,9 @@ import {
   orgPlanDescriptionSentence,
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
+  planCompLabel,
+  planCompPhrase,
+  PRICE_ENTITLEMENT_KEYS,
   RELEASE_FLAGS,
   resolveEffectivePlan,
   type OrgOverrideReasonCode,
@@ -46,8 +49,12 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   FormControlLabel,
+  FormLabel,
   MenuItem,
+  Radio,
+  RadioGroup,
   Stack,
   TextField,
   Typography,
@@ -388,6 +395,11 @@ const StaffOrgActions = ({
      * (AGL-3034): the stored comp's plan when one exists, `''` for none.
      */
     compPlan: '' | OrgPlan
+    /**
+     * Whether the comp lifts every cap (AGL-3049): the stored comp's flag
+     * when one exists, `false` for none.
+     */
+    compUncapped: boolean
     /** Remove the stored comp on save — the only thing that removes one. */
     removeComp: boolean
     /**
@@ -432,6 +444,17 @@ const StaffOrgActions = ({
           ? planWithoutComp(org)
           : editor.compPlan ||
             (editor.clearStoredPlan ? 'free' : planWithoutComp(org))
+  /**
+   * How the comp will hold the bands once saved (AGL-3049): `null` where no
+   * comp will be in force, else whether it lifts every cap. What the quota
+   * section explains and what its placeholders show.
+   */
+  const savedCompCaps: 'capped' | 'uncapped' | null =
+    !editor || !planState || planGoverned || editor.removeComp || !editor.compPlan
+      ? null
+      : editor.compUncapped
+        ? 'uncapped'
+        : 'capped'
 
   // Suspension (AGL-202, rewired by AGL-1505): reversible, but NOT a flag
   // write — the lockdown core behind /api/admin/lockdown does the org doc,
@@ -674,13 +697,15 @@ const StaffOrgActions = ({
       if (value === true) releaseFlags[field.key] = 'on'
       if (value === false) releaseFlags[field.key] = 'off'
     }
+    const standingComp = describeOrgPlan(org).comp
     setEditor({
       id: org.$id,
       plan: org.plan ?? '',
       // Opens on the comp that STANDS, never on the stored plan: a canceled
       // customer's stored plan is what they used to pay for, and a select
       // pre-filled with it would comp them their old plan on any save.
-      compPlan: describeOrgPlan(org).comp?.plan ?? '',
+      compPlan: standingComp?.plan ?? '',
+      compUncapped: standingComp?.uncapped ?? false,
       removeComp: false,
       clearStoredPlan: false,
       quotas,
@@ -722,13 +747,21 @@ const StaffOrgActions = ({
     // comp rides its own field — `null` removes it, a plan grants or changes
     // it, and ABSENCE leaves it alone, so an untouched select sends nothing
     // that could create or drop one.
+    //
+    // A grant states `uncapped` either way (AGL-3049), and goes over the wire
+    // when the plan OR the caps differ from the comp that stands — lifting or
+    // restoring the caps of a standing comp is a change to that comp.
     const planState = describeOrgPlan(org)
     const governed = planState.subscription === 'live'
-    const comp: { plan: OrgPlan } | null | undefined = editor.removeComp
-      ? null
-      : !governed && editor.compPlan && editor.compPlan !== planState.comp?.plan
-        ? { plan: editor.compPlan }
-        : undefined
+    const comp: { plan: OrgPlan; uncapped: boolean } | null | undefined =
+      editor.removeComp
+        ? null
+        : !governed &&
+            editor.compPlan &&
+            (editor.compPlan !== planState.comp?.plan ||
+              editor.compUncapped !== (planState.comp?.uncapped ?? false))
+          ? { plan: editor.compPlan, uncapped: editor.compUncapped }
+          : undefined
     const wirePlan = !governed && editor.clearStoredPlan ? null : plan || null
     // WHAT THE WIRE CARRIES IS INTENT, NOT A FIRESTORE PAYLOAD (AGL-1786).
     //
@@ -1118,10 +1151,10 @@ const StaffOrgActions = ({
                 <Chip
                   size="small"
                   color="secondary"
-                  label={
-                    `Comp: ${PLAN_LABELS[planState.comp.plan]}` +
-                    (planState.compInForce ? '' : ' (dormant)')
-                  }
+                  label={`Comp: ${planCompLabel(
+                    planState.comp,
+                    planState.compInForce,
+                  )}`}
                 />
               ) : null}
             </Stack>
@@ -1187,10 +1220,9 @@ const StaffOrgActions = ({
               helperText={
                 'No live subscription decides this workspace’s plan, so a ' +
                 'plan chosen here is saved as a STAFF COMP: in force at once, ' +
-                'recorded with the reason above, billing nothing and selling ' +
-                'nothing past any band (raise a band with a quota override). ' +
-                'It lasts until it is removed, and a live subscription ' +
-                'outranks it while one lasts.'
+                'recorded with the reason above, and billing nothing. It lasts ' +
+                'until it is removed, and a live subscription outranks it ' +
+                'while one lasts.'
               }
               onChange={(event) =>
                 setEditor((prev) =>
@@ -1218,6 +1250,50 @@ const StaffOrgActions = ({
               ))}
             </TextField>
           ) : null}
+          {/*
+            HOW THE COMP HOLDS THE BANDS (AGL-3049), offered wherever a comp
+            is chosen and staying. Two named choices rather than one checkbox,
+            so a capped comp is a decision staff read the consequence of —
+            which bands stop, and how to raise one — and not an unticked box.
+          */}
+          {savedCompCaps ? (
+            <FormControl>
+              <FormLabel id="staff-org-comp-caps">{'Comp caps'}</FormLabel>
+              <RadioGroup
+                aria-labelledby="staff-org-comp-caps"
+                value={savedCompCaps}
+                onChange={(event) =>
+                  setEditor((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          compUncapped: event.target.value === 'uncapped',
+                        }
+                      : prev,
+                  )
+                }
+              >
+                <FormControlLabel
+                  value="capped"
+                  control={<Radio size="small" />}
+                  label={
+                    'Capped — every band is a hard limit at the comp plan’s ' +
+                    'figure, because a comp sells nothing past one. Raise a ' +
+                    'single band with a quota override below.'
+                  }
+                />
+                <FormControlLabel
+                  value="uncapped"
+                  control={<Radio size="small" />}
+                  label={
+                    'Uncapped — no band or quota limits at all while the comp ' +
+                    'is in force, for an internal workspace. It still bills ' +
+                    'nothing.'
+                  }
+                />
+              </RadioGroup>
+            </FormControl>
+          ) : null}
           {planState?.comp ? (
             <FormControlLabel
               control={
@@ -1233,6 +1309,9 @@ const StaffOrgActions = ({
                             compPlan: event.target.checked
                               ? prev.compPlan
                               : (planState.comp?.plan ?? prev.compPlan),
+                            compUncapped: event.target.checked
+                              ? prev.compUncapped
+                              : (planState.comp?.uncapped ?? prev.compUncapped),
                           }
                         : prev,
                     )
@@ -1240,7 +1319,7 @@ const StaffOrgActions = ({
                 />
               }
               label={
-                `Remove the ${PLAN_LABELS[planState.comp.plan]} comp on save` +
+                `Remove the ${planCompPhrase(planState.comp)} on save` +
                 (planState.compInForce
                   ? ` — this workspace then resolves as ${
                       PLAN_LABELS[planWithoutComp(org)]
@@ -1276,6 +1355,26 @@ const StaffOrgActions = ({
             />
           ) : null}
           <Typography variant="subtitle2">{'Quota overrides'}</Typography>
+          {/* What the comp being saved does to these fields (AGL-3049). Body
+              text rather than a second alert: the plan state above is the
+              one alert this dialog raises. */}
+          {savedCompCaps === 'capped' ? (
+            <Typography variant="body2">
+              {'This comp caps every band below at the figure its empty ' +
+                'field shows; a band showing ∞ has no cap on this plan. To ' +
+                'raise one band for this workspace, type a higher figure into ' +
+                'it — that figure becomes its hard limit. The three fee ' +
+                'percentages are prices, not caps.'}
+            </Typography>
+          ) : savedCompCaps === 'uncapped' ? (
+            <Typography variant="body2">
+              {'This comp is uncapped: every band below reads as unlimited ' +
+                'while it is in force, whatever a field holds. A figure typed ' +
+                'here is kept, and applies again if the comp is capped or ' +
+                'removed. The three fee percentages are prices, not caps, and ' +
+                'still apply.'}
+            </Typography>
+          ) : null}
           <Typography variant="caption" color="text.secondary">
             {'Empty = plan default: only filled fields persist as ' +
               'per-organization overrides, and emptying one REMOVES that ' +
@@ -1286,11 +1385,16 @@ const StaffOrgActions = ({
             {QUOTA_FIELDS.map((field) => {
               // The defaults of the plan the org will RESOLVE as once saved,
               // comp included (AGL-3034) — not the stored plan, which a
-              // canceled workspace does not get.
+              // canceled workspace does not get. An uncapped comp reads every
+              // band as unlimited, and never a fee (AGL-3049).
               const plan = savedPlan
-              const fallback = plan
-                ? (PLAN_ENTITLEMENTS[plan] as any)?.[field.key]
-                : undefined
+              const fallback =
+                savedCompCaps === 'uncapped' &&
+                !PRICE_ENTITLEMENT_KEYS.has(field.key)
+                  ? Number.POSITIVE_INFINITY
+                  : plan
+                    ? (PLAN_ENTITLEMENTS[plan] as any)?.[field.key]
+                    : undefined
               return (
                 <TextField
                   key={field.key}

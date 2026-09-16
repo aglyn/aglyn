@@ -136,6 +136,27 @@
  * committed, plus what changed and one sentence saying it — so the dialog
  * reports what took effect rather than "updated". A live subscription says
  * that it governs, and that Stripe's next event rewrites the stored plan.
+ *
+ * ## A comp is capped unless the grant says `uncapped: true` (AGL-3049)
+ *
+ * `comp` is `{ plan, uncapped }`. A capped comp holds the workspace to its
+ * plan's bands as hard limits, and a quota override beside it raises one band;
+ * an uncapped comp reads every band and quota as unlimited while it is in
+ * force. Neither sells or bills anything.
+ *
+ * - `uncapped` is a JSON boolean or absent. Absent is `false`, so a console
+ *   tab older than this contract can never lift a cap, and anything that is
+ *   not a boolean is refused rather than read — a `"false"` string must not
+ *   reach a check that treats every truthy value as a grant.
+ * - The flag is WRITTEN on every grant, `false` included. The org write is a
+ *   merge, and a merge writes a nested map key by key, so a capped grant that
+ *   omitted the key would leave the `true` of the comp it replaced in force.
+ * - A grant that changes only the flag is a change to the comp, not a comp
+ *   that "already stands": `compChange` says `uncapped` or `capped`, and the
+ *   grant is re-stamped with this act's staff member, reason and time.
+ * - `planEffect` and the audit row carry `uncapped` before and after, as
+ *   booleans. Nothing that crosses JSON here is an `Infinity` — the lifted
+ *   bands exist only where `resolveOrgEntitlements` runs.
  */
 
 import {
@@ -145,6 +166,7 @@ import {
   orgSubscriptionState,
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
+  planCompPhrase,
   pluginRequestFromWeb,
   readOrgPlanComp,
   RELEASE_FLAGS,
@@ -233,11 +255,11 @@ function withInheritDeletes<T extends boolean | number>(
   return payload
 }
 
-/** What the caller asked of the comp (AGL-3034). */
+/** What the caller asked of the comp (AGL-3034, AGL-3049). */
 type CompRequest =
   | { kind: 'untouched' }
   | { kind: 'remove' }
-  | { kind: 'grant'; plan: OrgPlan }
+  | { kind: 'grant'; plan: OrgPlan; uncapped: boolean }
 
 /**
  * `comp` off the wire. ABSENCE IS "LEAVE IT" here, the opposite of the
@@ -245,12 +267,18 @@ type CompRequest =
  * and a missing key is a cleared field, while a comp is removed only by
  * asking for its removal — `null`, which JSON carries — and never because a
  * caller did not mention it.
+ *
+ * Inside a grant, `uncapped` is the opposite again: absent is `false`. A cap
+ * is lifted only by a request that says so (see the header).
  */
 function readCompRequest(raw: unknown): CompRequest | { error: string } {
   if (raw === undefined) return { kind: 'untouched' }
   if (raw === null) return { kind: 'remove' }
   if (typeof raw !== 'object' || Array.isArray(raw)) {
-    return { error: 'comp must be { plan } to grant one, or null to remove it' }
+    return {
+      error:
+        'comp must be { plan, uncapped } to grant one, or null to remove it',
+    }
   }
   const plan = (raw as Record<string, unknown>)['plan']
   if (typeof plan !== 'string' || !PLAN_KEYS.has(plan)) {
@@ -262,8 +290,16 @@ function readCompRequest(raw: unknown): CompRequest | { error: string } {
         'A comp of Free grants nothing. To remove a comp, send comp: null.',
     }
   }
-  return { kind: 'grant', plan: plan as OrgPlan }
+  const uncapped = (raw as Record<string, unknown>)['uncapped']
+  if (uncapped !== undefined && typeof uncapped !== 'boolean') {
+    return { error: 'comp.uncapped must be true or false' }
+  }
+  return { kind: 'grant', plan: plan as OrgPlan, uncapped: uncapped === true }
 }
+
+/** "uncapped Enterprise comp" → "Uncapped Enterprise comp", to open a sentence. */
+const sentenceCase = (phrase: string): string =>
+  phrase.charAt(0).toUpperCase() + phrase.slice(1)
 
 /**
  * A stored plan for comparison: `free` and no plan resolve the same, so
@@ -488,19 +524,35 @@ async function handler(request: Request): Promise<Response> {
         'planComp'
       ] as unknown) ?? undefined
     const storedComp = readOrgPlanComp(orgData as never)
-    let compChange: 'granted' | 'replaced' | 'removed' | 'kept' | 'none' =
-      'none'
+    let compChange:
+      | 'granted'
+      | 'replaced'
+      | 'uncapped'
+      | 'capped'
+      | 'removed'
+      | 'kept'
+      | 'none' = 'none'
     let compWrite: Record<string, unknown> | FieldValue | undefined
     let compAfter: unknown = storedCompRaw
     if (compRead.kind === 'grant') {
-      if (storedComp?.plan === compRead.plan) {
+      const samePlan = storedComp?.plan === compRead.plan
+      if (samePlan && storedComp?.uncapped === compRead.uncapped) {
         // The grant already stands. Rewriting it would replace who granted
         // it and when with this act's; this act has its own audit row.
         compChange = 'kept'
       } else {
-        compChange = storedComp ? 'replaced' : 'granted'
+        compChange = !storedComp
+          ? 'granted'
+          : !samePlan
+            ? 'replaced'
+            : compRead.uncapped
+              ? 'uncapped'
+              : 'capped'
+        // Every key, `uncapped: false` included: this lands in a merge, and
+        // a key left out keeps whatever the replaced comp stored there.
         compWrite = {
           plan: compRead.plan,
+          uncapped: compRead.uncapped,
           reason: reason.reason,
           note: reason.note,
           grantedBy: decoded.uid,
@@ -582,19 +634,31 @@ async function handler(request: Request): Promise<Response> {
       entitlements: after.entitlements ?? undefined,
     } as never)
     const effectiveMoved = planBefore.effectivePlan !== planAfter.effectivePlan
+    // Lifting or restoring every cap changes what the published sites may
+    // do as surely as a plan change does (AGL-3049).
+    const capsMoved = planBefore.uncapped !== planAfter.uncapped
+    /** "Pro" or "uncapped Enterprise", for "Comp changed from … to …". */
+    const compName = (comp: { plan: OrgPlan; uncapped: boolean }) =>
+      `${comp.uncapped ? 'uncapped ' : ''}${planLabel(comp.plan)}`
     const lead = [
       compChange === 'granted' && planAfter.comp
-        ? `${planLabel(planAfter.comp.plan)} comp granted.`
+        ? `${sentenceCase(planCompPhrase(planAfter.comp))} granted.`
         : null,
       compChange === 'replaced' && planAfter.comp && storedComp
-        ? `Comp changed from ${planLabel(storedComp.plan)} to ` +
-          `${planLabel(planAfter.comp.plan)}.`
+        ? `Comp changed from ${compName(storedComp)} to ` +
+          `${compName(planAfter.comp)}.`
+        : null,
+      compChange === 'uncapped' && planAfter.comp
+        ? `The ${planLabel(planAfter.comp.plan)} comp is now uncapped.`
+        : null,
+      compChange === 'capped' && planAfter.comp
+        ? `The ${planLabel(planAfter.comp.plan)} comp is now capped.`
         : null,
       compChange === 'removed' && storedComp
-        ? `${planLabel(storedComp.plan)} comp removed.`
+        ? `${sentenceCase(planCompPhrase(storedComp))} removed.`
         : null,
       compChange === 'kept' && storedComp
-        ? `The ${planLabel(storedComp.plan)} comp already stands and is unchanged.`
+        ? `The ${planCompPhrase(storedComp)} already stands and is unchanged.`
         : null,
       planChange === 'set' ? `Stored plan set to ${planLabel(plan)}.` : null,
       planChange === 'cleared' ? 'Stored plan cleared.' : null,
@@ -612,6 +676,7 @@ async function handler(request: Request): Promise<Response> {
       before: {
         effectivePlan: planBefore.effectivePlan,
         decidedBy: planBefore.decidedBy,
+        uncapped: planBefore.uncapped,
       },
       summary: [lead, orgPlanDescriptionSentence(planAfter)]
         .filter(Boolean)
@@ -658,6 +723,7 @@ async function handler(request: Request): Promise<Response> {
           effectivePlan: planAfter.effectivePlan,
           decidedBy: planAfter.decidedBy,
           compInForce: planAfter.compInForce,
+          uncapped: planAfter.uncapped,
         },
         compChange,
         planChange,
@@ -670,10 +736,11 @@ async function handler(request: Request): Promise<Response> {
     // The published sites render the plan too — the free-tier badge is
     // resolved in the tenant loader (AGL-1152) — so a plan that MOVED drops
     // their cached pages, the way the billing webhook does on a Stripe
-    // transition. After the commit because it is a cache hint over HTTP, not
-    // a write, and `revalidateOrgHosts` never throws; a quota-only save moves
-    // no plan and fans nothing out.
-    if (effectiveMoved) await revalidateOrgHosts(firestore, orgId)
+    // transition, and so do caps lifted or restored (AGL-3049). After the
+    // commit because it is a cache hint over HTTP, not a write, and
+    // `revalidateOrgHosts` never throws; a quota-only save moves no plan and
+    // fans nothing out.
+    if (effectiveMoved || capsMoved) await revalidateOrgHosts(firestore, orgId)
 
     // `after` as the row records it, with the comp as it READS — a new comp's
     // server timestamp has no JSON form until it has been committed.

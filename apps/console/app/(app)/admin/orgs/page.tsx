@@ -20,6 +20,7 @@ import {
   describeOrgPlan,
   isEnterpriseOrg,
   PLAN_LABELS,
+  planCompLabel,
   resolveEffectivePlan,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn'
@@ -405,12 +406,15 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
               ) : null}
               {/* A staff comp (AGL-3034) — the reason the effective plan can
                   exceed what any subscription pays for. Dormant while a
-                  live subscription decides the plan. */}
+                  live subscription decides the plan, and uncapped when it
+                  lifts every band (AGL-3049). */}
               {planState.comp ? (
                 <Chip
-                  label={`comp: ${planState.comp.plan}${
-                    planState.compInForce ? '' : ' (dormant)'
-                  }`}
+                  label={`comp: ${planCompLabel(
+                    planState.comp,
+                    planState.compInForce,
+                    planState.comp.plan,
+                  )}`}
                   size="small"
                   color="secondary"
                 />

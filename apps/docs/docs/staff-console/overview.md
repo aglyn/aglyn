@@ -166,13 +166,34 @@ What saving a plan does depends on the subscription:
   subscribed and had a plan stored directly before comps existed: you can clear
   that plan, which returns it to Free.
 
-A comp **bills nothing**:
+Once a comp plan is chosen, **Comp caps** sets how the comp holds the
+organization's bands:
 
-- **Every band on it is a wall.** Nothing is sold past a band: no AI credit
-  overage, no metered storage or bandwidth, no CRM, API, dataset-storage or
-  email overage. A comped site can hit the bandwidth cap the way a Free site
-  does. If a comped organization needs more of something, raise that band with
-  a quota override in the same dialog.
+- **Capped** (the default). Every band is a hard limit at the comp plan's
+  figure, because nothing is sold past it: no AI credit overage, no metered
+  storage or bandwidth, no CRM, API, dataset-storage or email overage. A comped
+  site can hit the bandwidth cap the way a Free site does. To raise one band,
+  type a higher figure into its **Quota overrides** field. The empty field
+  shows the figure the comp caps it at, and the figure you type becomes its
+  hard limit. A band showing **∞** has no cap on that plan.
+- **Uncapped**, for an internal workspace. While the comp is in force, every
+  band and quota reads as unlimited, whatever the plan or a quota override
+  says. Overrides stay stored and apply again if the comp is capped or
+  removed. The three fee percentages are prices, not caps, and still apply.
+  The platform's own safeguards still apply too: the bandwidth and form
+  submission abuse ceilings, the per-site caps on webhooks, actions and
+  collection entries, email send pacing, the AI assistant's monthly message
+  cap, an operator's AI spend ceiling, and staff pauses and suspensions.
+
+Choosing **Uncapped** or **Capped** on a standing comp changes the comp: it is
+saved with your reason, recorded on the audit row, and the comp's grant is
+stamped with you and the time. **Remove the comp on save** removes the comp and
+its caps setting together, and the organization's own bands apply again.
+
+A comp **bills nothing**, capped or uncapped:
+
+- **Nothing is sold past a band.** A capped comp stops at its bands, and an
+  uncapped comp has none to sell past.
 - **Stripe never sees it.** It is never charged, never invoiced, never counted
   as a card on file, and never counted as MRR. On the staff overview and the
   revenue page it counts as **comped**.
@@ -185,13 +206,15 @@ subscription ends, the comp applies again, so remove a comp when it should end.
 Only **Remove the comp on save** removes one. A save that doesn't mention the
 comp, such as a quota edit or an older console tab, leaves it exactly as stored.
 The success message quotes the server's account of what took effect, for
-example *"Pro comp granted. Effective plan: Free → Pro."* A plan change also
-refreshes the organization's published pages, so a Free-tier badge goes away
-without waiting for the cache.
+example *"Pro comp granted. Effective plan: Free → Pro."* or *"Uncapped
+Enterprise comp granted."* A plan change, or lifting or restoring a comp's
+caps, also refreshes the organization's published pages, so a Free-tier badge
+or a paused site clears without waiting for the cache.
 
 The organizations list and the organization's summary card show the effective
 plan, a **stored:** chip when it differs from the stored plan, and a **comp:**
-chip.
+chip that says **uncapped** and **dormant** where they apply. The override
+dialog and the organization's AI card name an uncapped comp the same way.
 
 ### Users admin {#users-admin}
 
