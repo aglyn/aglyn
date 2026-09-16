@@ -85,6 +85,9 @@ page spaces it there:
   grid.
 - `hostScreens`, `hostTemplates`, `hostLayouts`, `hostForms`,
   `hostComponents` and `besignerToolbar`: a control in a row.
+- `hostAutomations`, `automationEditor` and `automationRun`: a control the
+  workflows plugin places beside its Actions buttons, in an automation's
+  editor, and on a failed run.
 - `besignerInspector` and `seoFields`: a section among a panel's own fields.
 - `besignerFunctions`, `orgData`, `orgMarketplace`, `orgAddons` and
   `marketplaceListing`: the body of a dialog or a page.

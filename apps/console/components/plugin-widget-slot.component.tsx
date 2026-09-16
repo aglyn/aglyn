@@ -120,6 +120,12 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   hostLayouts: 'bare',
   hostForms: 'bare',
   hostComponents: 'bare',
+  // Controls the workflows plugin places on its Automation page: a button
+  // beside Add action and Recipes, one in a saved automation's editor, and
+  // one on each failed run of its history.
+  hostAutomations: 'bare',
+  automationEditor: 'bare',
+  automationRun: 'bare',
   orgSites: 'stack',
 }
 
