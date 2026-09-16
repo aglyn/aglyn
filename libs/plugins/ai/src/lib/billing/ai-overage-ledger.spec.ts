@@ -461,3 +461,53 @@ describe('settling a charge', () => {
     expect(row?.['rateUsdPer1k']).toBe(3)
   })
 })
+
+describe('Starter WITH the AI add-on is charged at the rate its card quotes (AGL-3014)', () => {
+  /**
+   * Starter lists no band and no rate. The add-on brings both: a 4,000-credit
+   * band, and $3.00 per 1,000 from `resolveAssistOverageRateUsdPer1k`. From
+   * the cutover month this claim is the invoice for that overage, so it has
+   * to price the month exactly as the overage card, the ceiling, the 100%
+   * alert and the gate do.
+   */
+  const STARTER_WITH_AI = {
+    plan: 'starter',
+    subscription: { status: 'active' },
+    seatAddons: { aiAddon: 1 },
+  }
+
+  beforeAll(() => {
+    // The band arrives with the plugin's declaration of the add-on, which a
+    // running app registers by a call at boot.
+    const { registerAiDeclarations } = require('../declarations') as typeof import('../declarations')
+    registerAiDeclarations()
+  })
+
+  it('claims the overage past the add-on band at $3.00 per 1,000', async () => {
+    // 14,000 credits drawn: 10,000 past the band, $30.00. FORCED RED by
+    // deciding `not-sold` off the plan table: the claim was refused and
+    // nothing was invoiced.
+    docs.set(USAGE, { month: MONTH, estCostUsd: spendPricingTo(30, 3, 4_000) })
+    const result = await claimAiOverageCharge(makeFirestore(), {
+      orgId: 'org-1',
+      org: STARTER_WITH_AI as never,
+      month: MONTH,
+      kind: 'threshold',
+    })
+    expect(result.refused).toBeNull()
+    expect(result.claimed).toMatchObject({ amountUsd: 30, credits: 10_000, rateUsdPer1k: 3 })
+    expect(readAiOverageMonthLedger(docs.get(USAGE)).invoicedUsd).toBe(30)
+  })
+
+  it('THE CONTROL: without the add-on the same month has nothing sold past a band, so nothing is claimed', async () => {
+    docs.set(USAGE, { month: MONTH, estCostUsd: spendPricingTo(30, 3, 4_000) })
+    const result = await claimAiOverageCharge(makeFirestore(), {
+      orgId: 'org-1',
+      org: { plan: 'starter', subscription: { status: 'active' } } as never,
+      month: MONTH,
+      kind: 'threshold',
+    })
+    expect(result).toEqual({ claimed: null, refused: 'not-sold' })
+    expect(readAiOverageMonthLedger(docs.get(USAGE)).invoicedUsd).toBe(0)
+  })
+})

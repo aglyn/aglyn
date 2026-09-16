@@ -377,6 +377,36 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
     expect(body.overage.sellsOverage).toBe(false)
   })
 
+  it('prices Starter WITH the add-on past its band at the rate the invoice bills (AGL-3014)', async () => {
+    // Starter lists no rate on `PLAN_PRICING`; the add-on's $3.00 per 1,000
+    // comes from the resolver `assistMonthOverage` asks. Staff reading "not
+    // sold past the band" beside a real overage line on the workspace's
+    // invoice would be this issue on the staff surface.
+    staff()
+    mockDocsByPath['orgs/org-1'] = { name: 'Starter AI', plan: 'starter', seatAddons: { aiAddon: 1 } }
+    // $10.50 drawn: 10,500 credits, 6,500 past the add-on's 4,000.
+    mockDocsByPath['orgs/org-1/assistUsage/2026-09'] = {
+      month: '2026-09',
+      estCostUsd: 10.5,
+      messages: 90,
+    }
+    const body = await (await get({ token: 'tok' })).json()
+    expect(body.addon.on).toBe(true)
+    expect(body.pool).toMatchObject({
+      planCredits: 0,
+      addonCredits: AI_ADDON_CREDITS_PER_MONTH.starter,
+      totalCredits: 4_000,
+      usedCredits: 10_500,
+    })
+    expect(body.overage).toMatchObject({
+      overageCredits: 6_500,
+      rateUsdPer1k: 3,
+      accruedUsd: 19.5,
+      sellsOverage: true,
+      bandRefuses: false,
+    })
+  })
+
   it('reads tokens by kind and the cache hit rate off the month document (AGL-2937)', async () => {
     staff()
     mockDocsByPath['orgs/org-1/assistUsage/2026-09'] = {

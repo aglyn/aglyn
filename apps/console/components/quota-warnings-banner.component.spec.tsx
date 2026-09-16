@@ -599,6 +599,23 @@ describe('QuotaWarningsBanner AI credits row (AGL-2898)', () => {
     expect(links[0].getAttribute('href')).toBe('/acme/billing/usage')
   })
 
+  it('at the band on Starter WITH the AI add-on: billed past it, not "nothing is billed" (AGL-3014)', async () => {
+    // Starter lists no rate on `PLAN_PRICING`; the add-on's comes from the
+    // resolver `assistBandRefuses` asks. A banner that read the table would
+    // tell this workspace nothing is billed while its invoice bills $3.00
+    // per 1,000 past the add-on's 4,000 credits.
+    currentOrg.org = { plan: 'starter', seatAddons: { aiAddon: 1 } }
+    answerCredits({ used: 4_100, limit: 4_000 })
+    const { unmount } = render(<QuotaWarningsBanner />)
+    await screen.findByText(/extra credits are billed at your plan’s rate unless you set a stop under Billing → Usage/)
+    expect(screen.queryByText(/nothing is billed/)).toBeNull()
+    unmount()
+    // The control: the same workspace with its switch on is the wall.
+    currentOrg.org = { plan: 'starter', seatAddons: { aiAddon: 1 }, assistOverage: { hardCap: true } }
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/AI assist stops until next month or an upgrade, and nothing is billed/)
+  })
+
   it('at the band with the org’s own switch on: AI stops, nothing billed', async () => {
     currentOrg.org = { plan: 'business', assistOverage: { hardCap: true } }
     answerCredits({ used: 2_800, limit: 2_750 })
