@@ -33,8 +33,13 @@ import {
 } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -53,14 +58,11 @@ import {
   Divider,
   MenuItem,
   Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   deleteDoc,
@@ -320,6 +322,153 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
     [confirm, firestore, hostId, enqueueSnackbar],
   )
 
+  /*
+   * One row per submission, newest first: who sent it, what it said and how
+   * long ago. The row opens the reader, which also marks it read.
+   */
+  const submissionActions = (submission: any): RowActionsMenuItem[] => {
+    const senderEmail = submissionSender(submission.fields).email
+    return [
+      ...(crmHubPath
+        ? [
+            {
+              key: 'crm',
+              label: 'Open contact in CRM',
+              icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
+              ...(senderEmail
+                ? { href: crmRoutes(crmHubPath).contactByEmail(senderEmail) }
+                : {
+                    disabled: true,
+                    disabledReason:
+                      'This submission carried no email address, so no contact was updated.',
+                  }),
+            },
+          ]
+        : []),
+      {
+        key: 'read',
+        label: submission.read ? 'Mark unread' : 'Mark read',
+        icon: (
+          <MdiIcon
+            path={submission.read ? mdiEmailOutline.path : mdiEmailOpenOutline.path}
+            size={0.8}
+          />
+        ),
+        onClick: handleToggleRead(submission),
+      },
+      {
+        key: 'delete',
+        label: 'Delete',
+        icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
+        destructive: true,
+        onClick: handleDelete(submission),
+      },
+    ]
+  }
+  const submissionColumns: GridColDef[] = [
+    {
+      /*
+        The mockup's list is people, not forms (AGL-2168): an initials avatar,
+        the sender, and the form name beneath it. The unread DOT replaces the
+        `New` chip — the row is already bold, and a chip that says "New" beside
+        bold text is the same fact twice.
+       */
+      field: 'from',
+      headerName: 'From',
+      flex: 1,
+      minWidth: 220,
+      valueGetter: (_value, submission) => submissionSender(submission.fields).label,
+      renderCell: ({ row: submission }) => {
+        const sender = submissionSender(submission.fields)
+        const hue = senderHue(sender.label)
+        return (
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+            {!submission.read ? (
+              <Box
+                aria-label="Unread"
+                sx={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  bgcolor: 'primary.main',
+                  flexShrink: 0,
+                }}
+              />
+            ) : (
+              <Box sx={{ width: 8, flexShrink: 0 }} />
+            )}
+            <Avatar
+              sx={{
+                width: 28,
+                height: 28,
+                fontSize: 13,
+                bgcolor: `hsl(${hue} 55% 45%)`,
+              }}
+            >
+              {sender.initials}
+            </Avatar>
+            <Stack sx={{ minWidth: 0 }}>
+              <Typography variant="body2" noWrap>
+                {sender.label}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {submission.formName ?? 'Form'}
+              </Typography>
+            </Stack>
+          </Stack>
+        )
+      },
+    },
+    {
+      field: 'message',
+      headerName: 'Message',
+      flex: 2,
+      minWidth: 260,
+      valueGetter: (_value, submission) =>
+        Object.entries(submission.fields ?? {})
+          .map(([key, value]) => `${key}: ${value}`)
+          .join(' · '),
+      renderCell: ({ value }) => (
+        <Typography variant="body2" noWrap>
+          {value}
+        </Typography>
+      ),
+    },
+    {
+      /*
+        Relative, as the mockup shows it — an inbox is scanned for recency and a
+        locale timestamp makes the reader do the subtraction. The absolute time
+        stays on the detail dialog, where it is the fact you actually want.
+       */
+      field: 'createdAt',
+      headerName: 'Received',
+      width: 130,
+      valueGetter: (_value, submission) =>
+        submission.createdAt?.toDate?.()?.getTime?.() ?? 0,
+      renderCell: ({ row: submission }) => (
+        <Tooltip title={submission.createdAt?.toDate?.().toLocaleString() ?? ''}>
+          <span>{relativeTime(submission.createdAt?.toDate?.().getTime())}</span>
+        </Tooltip>
+      ),
+    },
+    /*
+      One overflow menu, as the Members & leads rows have: two inline buttons
+      had no room for a third, and the contact link is the one a reader
+      reaches for after reading. Present but disabled for a submission with no
+      address, with the reason — a row that simply lacked the item would read
+      as the contact not existing.
+     */
+    listActionsColumn(
+      (submission) => (
+        <ListRowActions
+          label={String(submissionSender(submission.fields).email ?? submission.$id)}
+          items={submissionActions(submission)}
+        />
+      ),
+      { width: 72 },
+    ),
+  ]
+
   return (
     <>
       <CardDisplay
@@ -385,200 +534,22 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
           </Typography>
         ) : (
           <>
-            <ScrollTable size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'From'}</TableCell>
-                  <TableCell>{'Message'}</TableCell>
-                  <TableCell>{'Received'}</TableCell>
-                  <TableCell align="right">{'Actions'}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {submissions.map((submission) => (
-                  <TableRow
-                    key={submission.$id}
-                    hover
-                    onClick={handleOpenReader(submission)}
-                    sx={{
-                      cursor: 'pointer',
-                      '& td': {
-                        fontWeight: submission.read ? undefined : 600,
-                      },
-                    }}
-                  >
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {/*
-                        The mockup's list is people, not forms (AGL-2168):
-                        an initials avatar, the sender, and the form name
-                        beneath it. The unread DOT replaces the `New` chip
-                        — the row is already bold, and a chip that says
-                        "New" beside bold text is the same fact twice.
-                       */}
-                      {(() => {
-                        const sender = submissionSender(submission.fields)
-                        const hue = senderHue(sender.label)
-                        return (
-                          <Stack
-                            direction="row"
-                            spacing={1}
-                            sx={{ alignItems: 'center' }}
-                          >
-                            {!submission.read ? (
-                              <Box
-                                aria-label="Unread"
-                                sx={{
-                                  width: 8,
-                                  height: 8,
-                                  borderRadius: '50%',
-                                  bgcolor: 'primary.main',
-                                  flexShrink: 0,
-                                }}
-                              />
-                            ) : (
-                              <Box sx={{ width: 8, flexShrink: 0 }} />
-                            )}
-                            <Avatar
-                              sx={{
-                                width: 28,
-                                height: 28,
-                                fontSize: 13,
-                                bgcolor: `hsl(${hue} 55% 45%)`,
-                              }}
-                            >
-                              {sender.initials}
-                            </Avatar>
-                            <Stack sx={{ minWidth: 0 }}>
-                              <Typography variant="body2" noWrap>
-                                {sender.label}
-                              </Typography>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                noWrap
-                              >
-                                {submission.formName ?? 'Form'}
-                              </Typography>
-                            </Stack>
-                          </Stack>
-                        )
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      <Typography
-                        variant="body2"
-                        component="div"
-                        sx={{
-                          maxWidth: 480,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {Object.entries(submission.fields ?? {})
-                          .map(([key, value]) => `${key}: ${value}`)
-                          .join(' · ')}
-                      </Typography>
-                    </TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {/*
-                        Relative, as the mockup shows it — an inbox is
-                        scanned for recency and a locale timestamp makes
-                        the reader do the subtraction. The absolute time
-                        stays on the detail dialog, where it is the fact
-                        you actually want.
-                       */}
-                      <Tooltip
-                        title={
-                          submission.createdAt?.toDate?.().toLocaleString() ??
-                          ''
-                        }
-                      >
-                        <span>
-                          {relativeTime(
-                            submission.createdAt?.toDate?.().getTime(),
-                          )}
-                        </span>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell
-                      align="right"
-                      sx={{ whiteSpace: 'nowrap', width: 56 }}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {/*
-                        One overflow menu, as the Members & leads rows have:
-                        two inline buttons had no room for a third, and the
-                        contact link is the one a reader reaches for after
-                        reading. Present but disabled for a submission with
-                        no address, with the reason — a row that simply
-                        lacked the item would read as the contact not
-                        existing.
-                      */}
-                      {(() => {
-                        const senderEmail = submissionSender(submission.fields).email
-                        return (
-                          <RowActionsMenu
-                            label={String(senderEmail ?? submission.$id)}
-                            items={[
-                              ...(crmHubPath
-                                ? [
-                                    {
-                                      key: 'crm',
-                                      label: 'Open contact in CRM',
-                                      icon: (
-                                        <MdiIcon
-                                          path={mdiAccountArrowRight.path}
-                                          size={0.8}
-                                        />
-                                      ),
-                                      ...(senderEmail
-                                        ? {
-                                            href: crmRoutes(
-                                              crmHubPath,
-                                            ).contactByEmail(senderEmail),
-                                          }
-                                        : {
-                                            disabled: true,
-                                            disabledReason:
-                                              'This submission carried no email address, so no contact was updated.',
-                                          }),
-                                    },
-                                  ]
-                                : []),
-                              {
-                                key: 'read',
-                                label: submission.read ? 'Mark unread' : 'Mark read',
-                                icon: (
-                                  <MdiIcon
-                                    path={
-                                      submission.read
-                                        ? mdiEmailOutline.path
-                                        : mdiEmailOpenOutline.path
-                                    }
-                                    size={0.8}
-                                  />
-                                ),
-                                onClick: handleToggleRead(submission),
-                              },
-                              {
-                                key: 'delete',
-                                label: 'Delete',
-                                icon: (
-                                  <MdiIcon path={mdiDeleteOutline.path} size={0.8} />
-                                ),
-                                destructive: true,
-                                onClick: handleDelete(submission),
-                              },
-                            ]}
-                          />
-                        )
-                      })()}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </ScrollTable>
+            <ListTable
+              aria-label={scoped ? 'Submissions to this form' : 'Form submissions'}
+              rows={submissions}
+              columns={submissionColumns}
+              rowHeight={TABLE_ROW_HEIGHT}
+              onOpen={(_id, submission) => handleOpenReader(submission)()}
+              // An unread submission reads bold across its row, which is why
+              // the list needs no `New` chip.
+              getRowClassName={({ row }) => (row.read ? '' : 'submission-unread')}
+              sx={{
+                '& .submission-unread .MuiDataGrid-cell, & .submission-unread .MuiTypography-root':
+                  { fontWeight: 'fontWeightBold' },
+              }}
+              // Paged by the footer below, so the grid must not also slice.
+              hideFooter
+            />
             <ListPagination
               page={submissionPage}
               pageSize={submissionPageSize}

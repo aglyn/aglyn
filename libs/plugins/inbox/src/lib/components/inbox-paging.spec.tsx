@@ -318,11 +318,11 @@ const mountPage = async (section: 'submissions' | 'contacts') => {
   })
 }
 
-/** The tables on screen. One section is open, so there is exactly one. */
-const tables = () => Array.from(document.querySelectorAll('table'))
-const rowsOf = (table: Element) =>
-  Array.from(table.querySelectorAll('tbody tr')).map((row) =>
-    Array.from(row.querySelectorAll('td')).map(
+/** The lists on screen. One section is open, so there is exactly one. */
+const tables = () => Array.from(document.querySelectorAll('[role="grid"]'))
+const rowsOf = (grid: Element) =>
+  Array.from(grid.querySelectorAll('[role="row"][data-id]')).map((row) =>
+    Array.from(row.querySelectorAll('[role="gridcell"]')).map(
       (cell) => cell.textContent?.trim() ?? '',
     ),
   )

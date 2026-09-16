@@ -25,12 +25,19 @@ import { default as ConversionAttribution } from '@aglyn/plugins-marketing/compo
 // The CRM's route builder by its leaf path, not the plugin barrel: the barrel
 // carries the plugin registration, and a link needs only the address grammar.
 import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
-import { mdiAccountArrowRight, mdiBullhornOutline } from '@aglyn/shared-data-mdi'
+import {
+  mdiAccountArrowRight,
+  mdiAccountRemoveOutline,
+  mdiBullhornOutline,
+} from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -45,12 +52,9 @@ import {
   DialogContent,
   DialogTitle,
   Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Typography,
 } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   deleteDoc,
@@ -139,13 +143,6 @@ export function ContactsCard({ hostId }: { hostId: string }) {
     (memberDocs?.length ?? 0) > CONTACT_CEILING ||
     (leadDocs?.length ?? 0) > CONTACT_CEILING
   /*
-   * The contacts table is ONE list of two collections — members first, then
-   * the leads that are not already members — so the page is a window over the
-   * concatenation rather than over either read. Slicing each half by the same
-   * global offsets is what keeps a page exactly `pageSize` rows across the
-   * seam between them.
-   */
-  /*
    * One person renders once, whichever way they came in.
    *
    * Raw `===` made `Bob@x.com` and `bob@x.com` two different people, so
@@ -169,15 +166,19 @@ export function ContactsCard({ hostId }: { hostId: string }) {
       (lead: any) => !memberKeys.has(normalizeContactEmail(lead.email)),
     )
   }, [leads, siteMembers])
-  const [contactPage, setContactPage] = useState(0)
-  const [contactPageSize, setContactPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const contactCount = siteMembers.length + dedupedLeads.length
-  const contactStart = contactPage * contactPageSize
-  const contactEnd = contactStart + contactPageSize
-  const visibleMembers = siteMembers.slice(contactStart, contactEnd)
-  const visibleLeads = dedupedLeads.slice(
-    Math.max(0, contactStart - siteMembers.length),
-    Math.max(0, contactEnd - siteMembers.length),
+  /*
+   * ONE list of two collections — members first, then the leads that are not
+   * already members — so the grid pages the concatenation rather than either
+   * read, and a page stays whole across the seam between them. Both reads are
+   * ceilinged and complete below the ceiling, so the grid's count is the whole
+   * deduped list.
+   */
+  const contacts = useMemo(
+    () => [
+      ...siteMembers.map((member: any) => ({ ...member, contactKind: 'member' })),
+      ...dedupedLeads.map((lead: any) => ({ ...lead, contactKind: 'lead' })),
+    ],
+    [siteMembers, dedupedLeads],
   )
   const handleDeleteMember = useCallback(
     (member: any) => async () => {
@@ -207,6 +208,107 @@ export function ContactsCard({ hostId }: { hostId: string }) {
    */
   const [leadOrigin, setLeadOrigin] = useState<any | null>(null)
 
+  const contactActions = (contact: any): RowActionsMenuItem[] =>
+    contact.contactKind === 'member'
+      ? [
+          {
+            key: 'remove',
+            label: 'Remove member',
+            icon: <MdiIcon path={mdiAccountRemoveOutline.path} size={0.8} />,
+            destructive: true,
+            onClick: () => void handleDeleteMember(contact)(),
+          },
+        ]
+      : [
+          ...(crmHubPath
+            ? [
+                {
+                  key: 'crm',
+                  label: 'Open in CRM',
+                  icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
+                  href: crmRoutes(crmHubPath).lead(String(contact.$id)),
+                },
+              ]
+            : []),
+          {
+            key: 'origin',
+            label: 'Where this came from',
+            icon: <MdiIcon path={mdiBullhornOutline.path} size={0.8} />,
+            onClick: () => setLeadOrigin(contact),
+          },
+        ]
+  const contactColumns: GridColDef[] = [
+    {
+      field: 'email',
+      headerName: 'Email',
+      flex: 1,
+      minWidth: 240,
+      /*
+        The name beside the address — a member's `displayName`, and the name
+        the lead writer stores (AGL-2303) — because a list of bare addresses is
+        a list nobody recognizes anyone in.
+       */
+      renderCell: ({ row: contact }) => {
+        const name =
+          contact.contactKind === 'member' ? contact.displayName : contact.name
+        return (
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', minWidth: 0 }}>
+            <Typography variant="body2" noWrap>
+              {contact.email}
+            </Typography>
+            {name ? (
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {name}
+              </Typography>
+            ) : null}
+          </Stack>
+        )
+      },
+    },
+    {
+      /*
+        WHERE A LEAD CAME FROM (AGL-2338). `source` has been written by both
+        lead writers — `'signup'` and `'booking'` — since AGL-109, so a site
+        owner can tell a membership sign-up from a booking. Falls back to the
+        bare label for a row written before the field, or by a future writer
+        that omits it.
+       */
+      field: 'contactKind',
+      headerName: 'Type',
+      width: 170,
+      valueGetter: (_value, contact) =>
+        contact.contactKind === 'member'
+          ? 'Member'
+          : contact.source
+            ? `Lead · ${contact.source}`
+            : 'Lead',
+      renderCell: ({ row: contact, value }) =>
+        contact.contactKind === 'member' ? (
+          <Chip label={value} color="primary" size="small" />
+        ) : (
+          <Chip label={value} size="small" variant="outlined" />
+        ),
+    },
+    {
+      field: 'createdAt',
+      headerName: 'Joined',
+      width: 200,
+      // Sorted on the instant, drawn as a local string.
+      valueGetter: (_value, contact) => contact.createdAt?.toDate?.()?.getTime?.() ?? 0,
+      renderCell: ({ row: contact }) =>
+        contact.createdAt?.toDate?.().toLocaleString() ?? '--',
+    },
+    listActionsColumn(
+      (contact) => (
+        <ListRowActions
+          label={String(contact.email ?? contact.$id)}
+          items={contactActions(contact)}
+        />
+      ),
+      { width: 72 },
+    ),
+  ]
+
   return (
     <>
       <CardDisplay
@@ -225,141 +327,14 @@ export function ContactsCard({ hostId }: { hostId: string }) {
           </Typography>
         ) : (
           <>
-            <ScrollTable size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'Email'}</TableCell>
-                  <TableCell>{'Type'}</TableCell>
-                  <TableCell>{'Joined'}</TableCell>
-                  <TableCell align="right">{'Actions'}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {visibleMembers.map((member: any) => (
-                  <TableRow key={member.$id} hover>
-                    <TableCell>
-                      {member.email}
-                      {member.displayName ? (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ ml: 1 }}
-                          component="span"
-                        >
-                          {member.displayName}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <Chip label="Member" color="primary" size="small" />
-                    </TableCell>
-                    <TableCell>
-                      {member.createdAt?.toDate?.().toLocaleString() ?? '--'}
-                    </TableCell>
-                    <TableCell align="right">
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={handleDeleteMember(member)}
-                      >
-                        {'Remove'}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {visibleLeads.map((lead: any) => (
-                  <TableRow key={lead.$id} hover>
-                    <TableCell>
-                      {lead.email}
-                      {/*
-                        The name the lead writer now stores (AGL-2303),
-                        same treatment as a member's `displayName` above
-                        — a list of bare addresses is a list nobody
-                        recognizes anyone in.
-                      */}
-                      {lead.name ? (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ ml: 1 }}
-                          component="span"
-                        >
-                          {lead.name}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      {/*
-                        WHERE THE LEAD CAME FROM (AGL-2338).
-                        `source` has been written by both lead writers —
-                        `'signup'` and `'booking'` — since AGL-109, and
-                        nothing read it: every row rendered the same flat
-                        "Lead" chip, so a site owner could not tell a
-                        membership sign-up from a booking, and the
-                        campaign audience selector treated them alike.
-                        Attribution collected and invisible.
-
-                        Falls back to the bare label rather than printing
-                        an empty suffix for a row written before the
-                        field, or by a future writer that omits it.
-                      */}
-                      <Chip
-                        label={lead.source ? `Lead · ${lead.source}` : 'Lead'}
-                        size="small"
-                        variant="outlined"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {lead.createdAt?.toDate?.().toLocaleString() ?? '--'}
-                    </TableCell>
-                    <TableCell align="right" sx={{ width: 56 }}>
-                      <RowActionsMenu
-                        label={String(lead.email ?? lead.$id)}
-                        items={[
-                          ...(crmHubPath
-                            ? [
-                                {
-                                  key: 'crm',
-                                  label: 'Open in CRM',
-                                  icon: (
-                                    <MdiIcon
-                                      path={mdiAccountArrowRight.path}
-                                      size={0.8}
-                                    />
-                                  ),
-                                  href: crmRoutes(crmHubPath).lead(
-                                    String(lead.$id),
-                                  ),
-                                },
-                              ]
-                            : []),
-                          {
-                            key: 'origin',
-                            label: 'Where this came from',
-                            icon: (
-                              <MdiIcon
-                                path={mdiBullhornOutline.path}
-                                size={0.8}
-                              />
-                            ),
-                            onClick: () => setLeadOrigin(lead),
-                          },
-                        ]}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </ScrollTable>
-            <ListPagination
-              page={contactPage}
-              pageSize={contactPageSize}
-              rowCount={visibleMembers.length + visibleLeads.length}
-              // The whole deduped list, which this card genuinely holds —
-              // both reads are ceilinged and complete below the ceiling.
-              count={contactCount}
-              onPageChange={setContactPage}
-              onPageSizeChange={setContactPageSize}
+            <ListTable
+              aria-label="Site members and leads"
+              rows={contacts}
+              columns={contactColumns}
+              // A member and a lead are two collections, so an id alone could
+              // name one of each.
+              getRowId={(contact: any) => `${contact.contactKind}:${contact.$id}`}
+              rowHeight={TABLE_ROW_HEIGHT}
             />
             {contactsTruncated ? (
               <Alert severity="info" sx={{ mt: 1 }}>
