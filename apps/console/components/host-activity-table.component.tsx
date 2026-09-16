@@ -34,6 +34,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
+  activityActionLabel,
   activityActorLabel,
   activityHref,
   activityTargetLabel,
@@ -125,7 +126,16 @@ export function HostActivityTable(props: HostActivityTableProps) {
    */
   const activityColumns: GridColDef[] = useMemo(
     () => [
-      { field: 'action', headerName: 'Action', flex: 1.2, minWidth: 180 },
+      {
+        field: 'action',
+        headerName: 'Action',
+        flex: 1.2,
+        minWidth: 180,
+        // The STORED action stays the cell's value, so the grid sorts on it;
+        // what is drawn is its label, so a plugin's code (`ai.job.output`)
+        // reads as the sentence its catalog declares.
+        renderCell: ({ row }: any) => activityActionLabel(row.action) || '—',
+      },
       {
         field: 'target',
         headerName: 'Target',

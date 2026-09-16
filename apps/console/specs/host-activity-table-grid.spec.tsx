@@ -86,6 +86,11 @@ jest.mock('firebase/firestore', () => ({
 }))
 
 import { HostActivityTable } from '../components/host-activity-table.component'
+import { registerPluginDeclarations } from '../constants/plugins.declarations.generated'
+
+// The AI codes' labels are the AI plugin's declaration, loaded the way the
+// console shell loads it.
+beforeAll(() => registerPluginDeclarations())
 
 const at = (iso: string) => ({ toDate: () => new Date(iso) })
 
@@ -136,5 +141,19 @@ describe('HostActivityTable (AGL-3045)', () => {
     expect(screen.queryByText('Saved the screen 1')).toBeNull()
     // The second read resumed after the last row of the first page.
     expect(mockCursors).toEqual([undefined, 'entry-10'])
+  })
+})
+
+describe('HostActivityTable reads a plugin’s code as its label (AGL-3065)', () => {
+  it('draws the label a coded entry’s plugin declared, and a prose entry as written', async () => {
+    mockEntries = [
+      { ...entry(1), action: 'ai.job.output' },
+      { ...entry(2), action: 'Saved the screen' },
+    ]
+    const { container } = render(<HostActivityTable hostId="host-1" />)
+    const grid = await screen.findByRole('grid')
+    expect(await within(grid).findByText('AI generated')).toBeTruthy()
+    expect(within(grid).getByText('Saved the screen')).toBeTruthy()
+    expect(container.textContent).not.toContain('ai.job.output')
   })
 })
