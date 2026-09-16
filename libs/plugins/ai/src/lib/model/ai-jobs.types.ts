@@ -375,6 +375,14 @@ export interface AiJobSummary {
   kind: AiJobKind
   status: AiJobStatus
   brief: string
+  /**
+   * The batch a door created this job as one of (AGL-2911), read off the
+   * job's inputs; `null` for a job created on its own. The console groups a
+   * run of jobs by it, which is the one thing it cannot do from a list whose
+   * rows carry no inputs — and the only input the wire form carries, because
+   * a batch id names nothing the member wrote.
+   */
+  batch: string | null
   steps: Array<{
     name: string
     status: AiJobStepStatus

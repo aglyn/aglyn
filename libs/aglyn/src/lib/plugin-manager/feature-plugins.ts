@@ -664,10 +664,34 @@ export const CONSOLE_WIDGET_SLOTS = {
    * names no site).
    */
   besignerToolbar: 'besignerToolbar',
+  /**
+   * The organization's sites page, beside the sites themselves (AGL-2911):
+   * an action a member takes across MANY of the org's sites at once, rather
+   * than a card totaling them. Props: {@link ConsoleOrgSitesZoneProps}.
+   *
+   * Distinct from `orgDashboard`, which is on the same page and gated on the
+   * org CRM hub's reach verdict because every card there reads across the
+   * host boundary. A widget here reads nothing of the kind: the sites it acts
+   * on are the ones the page already resolved for this reader, and its own
+   * door proves the reader's permission on each of them again. So the zone
+   * carries no gate beyond the slot's own — enablement, entitlement, and the
+   * widget's declared permission.
+   */
+  orgSites: 'orgSites',
 } as const
 
 export type ConsoleWidgetSlot =
   (typeof CONSOLE_WIDGET_SLOTS)[keyof typeof CONSOLE_WIDGET_SLOTS]
+
+/** What the `orgSites` zone hands each widget (AGL-2911). */
+export interface ConsoleOrgSitesZoneProps {
+  /** Always `null`: the zone belongs to the organization, not to one site. */
+  hostId: null
+  /** The org and the sites the page resolved for this reader. */
+  orgMount: ConsolePluginOrgMount
+  /** The sites page's own path, for the links a widget builds. */
+  basePath: string
+}
 
 /** What the `hostTheme` zone hands each widget (AGL-2938). */
 export interface ConsoleHostThemeZoneProps {

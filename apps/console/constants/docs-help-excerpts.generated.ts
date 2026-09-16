@@ -101,6 +101,7 @@ export const DOCS_HELP_EXCERPTS = {
   firstPlugin: 'The full loop — scaffold, develop against a live workspace, verify, publish, install, uninstall.',
   forms: 'Add forms to your site, collect submissions in an inbox, and write them into datasets.',
   generateAForm: 'Describe the form you need and an Aglyn AI build job makes it as a draft on the Forms page, with its fields, required answers, marketing consent and routing agreeing with each other.',
+  generateASite: 'Describe a business and an Aglyn AI build job plans a small site — its pages, navigation, layout, contact form and palette — then builds each page as a draft, and an agency can run the same brief across many sites at once.',
   generateSection: 'Produce a whole section of components on the canvas from a prompt.',
   gettingStarted: 'Sign in, create your first site, and understand what a site contains.',
   glossary: 'What organization, workspace, tenant, host, and site each mean — and which word to use where.',

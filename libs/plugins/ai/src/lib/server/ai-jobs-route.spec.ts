@@ -696,6 +696,7 @@ describe('aiJobEventStream — the poll', () => {
     kind: 'text' as const,
     status: 'running' as const,
     brief: 'b',
+    batch: null,
     steps: [],
     outputs: [],
     creditsReserved: 50,
