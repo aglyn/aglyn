@@ -18,6 +18,7 @@
 
 import { Box } from '@mui/material'
 import type { ReactNode } from 'react'
+import { EMPTY_FRAME_SELECTOR } from './grid-items'
 
 export interface CardColumnsProps {
   /** The cards, in reading order. */
@@ -137,6 +138,10 @@ export function CardColumns({
         // More specific than the `& > *` above (`:empty` adds a class-level
         // component), so `display: none` wins over `display: block`.
         '& > *:empty': { display: 'none' },
+        // A wrapper whose one element is a marked frame with nothing drawn in
+        // it weighs the same (AGL-3050): a widget zone whose widgets all
+        // rendered nothing is that frame.
+        [`& > *:has(> ${EMPTY_FRAME_SELECTOR})`]: { display: 'none' },
       }}
     >
       {items.map((item, index) => (

@@ -37,6 +37,10 @@ import {
   CardColumns,
   type CardColumnsProps,
 } from '@aglyn/shared-ui-jsx/components/card-columns'
+import {
+  ABSENT_WHEN_EMPTY,
+  EMPTY_FRAME_SELECTOR,
+} from '@aglyn/shared-ui-jsx/components/grid-items'
 
 /** Every rule emotion emitted for the rendered tree, as text. */
 const stylesheet = () =>
@@ -145,6 +149,33 @@ describe('CardColumns', () => {
       (rule) => rule.includes('>*') && !rule.includes(':empty'),
     )
     expect(child).toContain('display: block')
+  })
+
+  it('hides a wrapper whose one element is a marked frame that drew nothing (AGL-3050)', () => {
+    // A widget zone whose widgets all rendered nothing is that frame. The
+    // wrapper holds it, so the wrapper is not `:empty`, and without this it
+    // would weigh on the balance and carry its gutter as an empty wrapper did.
+    const { rules } = mount()
+    const frameRule = rules.find((rule) => rule.includes(`>*:has(> ${EMPTY_FRAME_SELECTOR})`))
+    expect(frameRule).toContain('display: none')
+    const { container } = render(
+      <CardColumns
+        items={[
+          { key: 'zone', children: <div {...ABSENT_WHEN_EMPTY} data-widget-zone="staffOrg" /> },
+          { key: 'skeleton', children: <span className="MuiSkeleton-root" /> },
+          { key: 'card', children: <div>{'card'}</div> },
+        ]}
+      />,
+    )
+    const flow = container.firstElementChild as HTMLElement
+    const [zoneWrapper, skeletonWrapper, cardWrapper] = Array.from(flow.children)
+    const holdsAnEmptyFrame = `:has(> ${EMPTY_FRAME_SELECTOR})`
+    expect(zoneWrapper.matches(holdsAnEmptyFrame)).toBe(true)
+    // An element that draws something with no children of its own is `:empty`
+    // too; only the mark makes a frame, so a loading skeleton stays.
+    expect(skeletonWrapper.matches(holdsAnEmptyFrame)).toBe(false)
+    // THE CONTROL: a wrapper holding a card is not picked out.
+    expect(cardWrapper.matches(holdsAnEmptyFrame)).toBe(false)
   })
 
   it('renders every item it is handed, in order', () => {

@@ -18,7 +18,7 @@
 import React from 'react'
 import {render, screen} from '@testing-library/react'
 
-import GridItems from './grid-items'
+import GridItems, {ABSENT_WHEN_EMPTY, EMPTY_FRAME_SELECTOR} from './grid-items'
 
 
 describe('GridItems', () => {
@@ -248,5 +248,141 @@ describe('GridItems masonry', () => {
       />,
     )
     expect(columns()).toEqual([['before'], ['divider'], ['after']])
+  })
+})
+
+/**
+ * AGL-3050: an absent band leaves no gap where it would have been.
+ *
+ * jsdom applies no `@media` rule a page's breakpoints emit and performs no
+ * layout, so these pin the rules the grid EMITS and the elements their
+ * selectors pick out. The geometry was measured in headless Chrome against
+ * exactly these declarations: 48px between the cards around an empty
+ * full-width band without the column rules, 24px with them, at 400, 700, 1000
+ * and 1300px.
+ */
+describe('GridItems masonry · an empty band', () => {
+  const card = (name: string) => <div data-card={name}>{name}</div>
+
+  /** The column's two empty shapes, and the item that holds an empty frame. */
+  const ITEM_EMPTY = ':has(> :only-child:empty)'
+  const ONLY_AN_EMPTY_FRAME = `:has(> :only-child > ${EMPTY_FRAME_SELECTOR})`
+  const ITEM_HOLDS_AN_EMPTY_FRAME = `:has(> ${EMPTY_FRAME_SELECTOR})`
+
+  /** Every emitted rule that names the element's generated class. */
+  const rulesNaming = (element: Element) => {
+    const generated = element.className
+      .split(' ')
+      .find((name) => name.startsWith('css-') || name.startsWith('mui-'))
+    // Guard the guard: with no generated class the search runs over nothing.
+    expect(generated).toBeTruthy()
+    return Array.from(document.styleSheets)
+      .flatMap((sheet) => {
+        try {
+          return Array.from(sheet.cssRules).map((rule) => rule.cssText)
+        } catch {
+          return []
+        }
+      })
+      .filter((rule) => rule.includes(generated as string))
+  }
+
+  /** The column's own rules for a selector, not the item rules beside them. */
+  const columnRules = (column: Element, selector: string) =>
+    rulesNaming(column).filter((rule) => rule.includes(selector) && !rule.includes('>*'))
+
+  const draw = (items: Array<{size: Record<string, number>; children: React.ReactNode}>) => {
+    render(<GridItems data-testid="grid" masonry spacing={3} items={items} />)
+    return [...screen.getByTestId('grid').children] as HTMLElement[]
+  }
+
+  it('hides a full-width column whose item rendered nothing, at every width', () => {
+    const [, absent] = draw([
+      {size: {xs: 12}, children: card('traffic')},
+      {size: {xs: 12}, children: null},
+      {size: {xs: 12}, children: card('raw-json')},
+    ])
+    expect(absent.matches(ITEM_EMPTY)).toBe(true)
+    const [rule] = columnRules(absent, ITEM_EMPTY)
+    expect(rule).toContain('min-width:0px')
+    expect(rule).toContain('display: none')
+    expect(rule).not.toContain('display: flex')
+  })
+
+  it('hides a full-width column whose one item holds only a marked frame that drew nothing', () => {
+    // A widget zone whose widgets all rendered nothing: the item is not
+    // `:empty`, the frame in it is.
+    const [, absent] = draw([
+      {size: {xs: 12}, children: card('plans')},
+      {size: {xs: 12}, children: <div {...ABSENT_WHEN_EMPTY} data-widget-zone="orgBillingOverview" />},
+      {size: {xs: 12}, children: card('after')},
+    ])
+    expect(absent.matches(ONLY_AN_EMPTY_FRAME)).toBe(true)
+    expect(columnRules(absent, ONLY_AN_EMPTY_FRAME)[0]).toContain('display: none')
+    // And the item itself, which is what hides it inside a column of several.
+    const item = absent.firstElementChild as HTMLElement
+    expect(item.matches(ITEM_HOLDS_AN_EMPTY_FRAME)).toBe(true)
+    expect(
+      rulesNaming(absent).find((rule) => rule.includes(`>*${ITEM_HOLDS_AN_EMPTY_FRAME}`)),
+    ).toContain('display: none')
+  })
+
+  it('never hides an item whose one element draws something with no children of its own', () => {
+    // A chart's canvas, a divider, a loading skeleton and a bare box are all
+    // `:empty` in CSS terms. Only the mark says an element is a frame, so none
+    // of these may be taken for an absent card.
+    const [chart, divider, skeleton, bare] = draw([
+      {size: {xs: 12}, children: <canvas />},
+      {size: {xs: 12}, children: <hr />},
+      {size: {xs: 12}, children: <span className="MuiSkeleton-root" />},
+      {size: {xs: 12}, children: <div />},
+    ])
+    for (const column of [chart, divider, skeleton, bare]) {
+      expect(column.matches(ONLY_AN_EMPTY_FRAME)).toBe(false)
+      expect(column.matches(ITEM_EMPTY)).toBe(false)
+      expect((column.firstElementChild as HTMLElement).matches(ITEM_HOLDS_AN_EMPTY_FRAME)).toBe(false)
+    }
+  })
+
+  it('CONTROL: a marked frame with a card drawn in it is not empty', () => {
+    const [drawn] = draw([
+      {size: {xs: 12}, children: <div {...ABSENT_WHEN_EMPTY}>{card('ai-credits')}</div>},
+    ])
+    expect(drawn.matches(ONLY_AN_EMPTY_FRAME)).toBe(false)
+    expect((drawn.firstElementChild as HTMLElement).matches(ITEM_HOLDS_AN_EMPTY_FRAME)).toBe(false)
+  })
+
+  it('keeps a column that still has a card to draw beside an item that rendered nothing', () => {
+    // Two 4-wide items share a column beside an 8-wide one. The empty item
+    // hides on its own; the column stays for the card.
+    const [shared] = draw([
+      {size: {xs: 12, md: 4}, children: null},
+      {size: {xs: 12, md: 8}, children: card('usage')},
+      {size: {xs: 12, md: 4}, children: card('estimate')},
+    ])
+    expect(shared.children).toHaveLength(2)
+    expect(shared.matches(ITEM_EMPTY)).toBe(false)
+    expect((shared.firstElementChild as HTMLElement).matches(':empty')).toBe(true)
+  })
+
+  it('hides a narrower column only where it spans the row, so the next column never slides into its tracks', () => {
+    const [empty] = draw([
+      {size: {xs: 12, md: 4}, children: null},
+      {size: {xs: 12, md: 8}, children: card('usage')},
+    ])
+    for (const selector of [ITEM_EMPTY, ONLY_AN_EMPTY_FRAME]) {
+      const rules = columnRules(empty, selector)
+      expect(rules.find((rule) => rule.includes('min-width:0px'))).toContain('display: none')
+      expect(rules.find((rule) => rule.includes('min-width:900px'))).toContain('display: flex')
+    }
+  })
+
+  it('CONTROL: a column with a card to draw is laid out', () => {
+    const [drawn] = draw([{size: {xs: 12}, children: card('drawn')}])
+    // No media rule reaches jsdom; the base declaration is what it computes,
+    // and the column holds a card, so no `:has()` rule may match it either.
+    expect(getComputedStyle(drawn).display).toBe('flex')
+    expect(drawn.matches(ITEM_EMPTY)).toBe(false)
+    expect(drawn.matches(ONLY_AN_EMPTY_FRAME)).toBe(false)
   })
 })
