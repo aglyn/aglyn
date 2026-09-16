@@ -36,8 +36,8 @@ import {
   AI_ADDON_CREDITS_PER_MONTH,
   hasAiAddon,
   PLAN_ENTITLEMENTS,
-  PLAN_PRICING,
   resolveEffectivePlan,
+  resolvePlanPricing,
   type DiscountMarginRating,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AssistRefusalCounts } from './assist-refusals'
@@ -366,10 +366,11 @@ export function composeStaffOrgAiAddon(
   org: Partial<AglynOrgBilling> | null | undefined,
   since: Pick<StaffOrgAiAddon, 'since' | 'sinceSource'>,
 ): StaffOrgAiAddon {
-  const plan = resolveEffectivePlan(org) as OrgPlan
   return {
     on: hasAiAddon(org),
-    priceUsd: PLAN_PRICING[plan]?.aiAddonMonthlyUsd ?? null,
+    // What this workspace would be charged — none for a staff comp, which
+    // has no subscription to carry the item (AGL-3034).
+    priceUsd: resolvePlanPricing(org).aiAddonMonthlyUsd ?? null,
     ...since,
   }
 }

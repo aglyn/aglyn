@@ -374,7 +374,7 @@ describe('checkEmailDesignContent', () => {
 })
 
 describe('registration', () => {
-  it('registers the writer as the email plugin’s, from both server surfaces', () => {
+  it('registers the writer as the email plugin’s, from the console surface alone', () => {
     registerEmailDesignDraftWriter()
     expect(pluginResourceDraftWriter(EMAIL_DESIGN_DRAFT_RESOURCE)).toEqual({
       pluginId: 'email',
@@ -382,9 +382,11 @@ describe('registration', () => {
     })
     const tenant = readFileSync(join(__dirname, 'server.ts'), 'utf8')
     const consoleApi = readFileSync(join(__dirname, 'server-console.ts'), 'utf8')
-    expect(tenant).toMatch(/export function registerEmailApi\(\): void \{[^}]*registerEmailDesignDraftWriter\(\)/)
     expect(consoleApi).toMatch(
       /export function registerEmailConsoleApi\(\): void \{[\s\S]*?registerEmailDesignDraftWriter\(\)[\s\S]*?\n\}/,
     )
+    // The AI jobs that write through it run only on the console (AGL-3026),
+    // so the tenant surface that serves published sites registers nothing.
+    expect(tenant).not.toContain('registerEmailDesignDraftWriter')
   })
 })

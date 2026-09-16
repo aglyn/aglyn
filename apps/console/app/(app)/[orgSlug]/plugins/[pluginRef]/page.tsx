@@ -18,6 +18,7 @@
 
 import {
   FIRST_PARTY_PLUGINS,
+  isLockedOnForWorkspace,
   listConsoleExtensions,
   planLabelGrantingFeature,
   resolveUpdateState,
@@ -336,8 +337,12 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
                       ? 'Always on, for every site in this organization — it ' +
                         'is what sites are built out of, so it cannot be ' +
                         'turned off.'
-                      : 'Every site in this organization, while it is ' +
-                        'switched on here.'}
+                      : firstParty.alwaysOnForWorkspace
+                        ? 'On for this organization and every site in it. It ' +
+                          'has no switch here — a site switches it off for ' +
+                          'itself, on that site’s Admin › Plugins page.'
+                        : 'Every site in this organization, while it is ' +
+                          'switched on here.'}
                   </Typography>
                   {/*
                     The switch, on the page about the thing it switches. It
@@ -349,9 +354,12 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
                     control.
                   */}
                   <Switch
-                    checked={switchboard.isOn(pluginRef) || firstParty.alwaysOn}
+                    checked={
+                      switchboard.isOn(pluginRef) ||
+                      isLockedOnForWorkspace(pluginRef)
+                    }
                     disabled={
-                      firstParty.alwaysOn ||
+                      isLockedOnForWorkspace(pluginRef) ||
                       !switchboard.canWrite ||
                       // Unready means this position is the DEFAULT set rather
                       // than this workspace's, so it is not something to act

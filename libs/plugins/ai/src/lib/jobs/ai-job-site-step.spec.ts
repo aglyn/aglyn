@@ -63,6 +63,8 @@ import {
   AI_SITE_NO_PAGE_STEP_COPY,
   AI_SITE_NO_PLAN_COPY,
   AI_SITE_UNIT_EMPTY_COPY,
+  aiCreationUnit,
+  aiRunJobUnit,
   aiSiteBuiltRefs,
   aiSiteJobUnits,
   aiSitePendingUnits,
@@ -658,5 +660,82 @@ describe('the passes a scaffold may take', () => {
       0,
     )
     expect(passes).toBeLessThanOrEqual(AI_SITE_MAX_PASSES)
+  })
+})
+
+describe('the unit machinery a page job shares (AGL-3031)', () => {
+  const CARD = {
+    kind: 'component' as const,
+    name: 'Price tier',
+    why: 'Three tiers repeat.',
+    duplicateOf: null,
+    fields: ['tier:text'],
+  }
+
+  it('builds a creation as the unit of its kind, and a creation no unit builds as none', () => {
+    expect(aiCreationUnit(CARD, 'c0')).toEqual({
+      kind: 'component',
+      jobKind: 'component',
+      resource: 'reusableComponent',
+      slot: 'c0',
+      creation: CARD,
+      label: 'Price tier',
+    })
+    expect(aiCreationUnit(LAYOUT, 'c1')).toMatchObject({ kind: 'layout', resource: 'layout' })
+    expect(aiCreationUnit(PALETTE, 'c2')).toMatchObject({ kind: 'theme', resource: 'theme' })
+    expect(aiCreationUnit({ ...CARD, kind: 'dataset' }, 'c3')).toBeNull()
+    expect(aiCreationUnit({ ...CARD, kind: 'template' }, 'c4')).toBeNull()
+  })
+
+  it('resolves a built component into an id a page places', () => {
+    const units = [aiCreationUnit(CARD, 'c0'), aiCreationUnit(LAYOUT, 'c1')].filter((unit) => unit !== null)
+    const built = aiSiteBuiltRefs(units, [
+      output('reusableComponent', 'job-1-c0', 'Price tier'),
+      output('layout', 'job-1-c1', 'Site frame'),
+    ])
+    expect(built.get('price tier')).toEqual({ id: 'job-1-c0', label: 'Price tier', kind: 'component' })
+  })
+
+  it('tells a creation the plan’s reuse, less what the plan’s screens place themselves', () => {
+    const plan = confirmedPlan({
+      reuse: [
+        { kind: 'component', id: 'cmp-quote', purpose: 'customer words' },
+        { kind: 'component', id: 'cmp-nav', purpose: 'the header menu' },
+      ],
+      create: [LAYOUT],
+      screens: [
+        planScreen({ sections: [{ name: 'customer words', uses: ['cmp-quote'], items: 2 }] }),
+        ...confirmedPlan().screens.slice(1),
+      ],
+    })
+    const layout = aiCreationUnit(LAYOUT, 'l')
+    if (!layout) throw new Error('a layout is a unit')
+    expect(aiSiteUnitJob(siteJob({ plan }), layout, new Map()).plan?.reuse).toEqual([
+      { kind: 'component', id: 'cmp-nav', purpose: 'the header menu' },
+    ])
+  })
+
+  it('reports one delegated pass: built, still going, stopped, or empty', async () => {
+    const unit = aiCreationUnit(CARD, 'c0')
+    if (!unit) throw new Error('a component is a unit')
+    const job = siteJob({ kind: 'page', plan: confirmedPlan({ create: [CARD] }) })
+    const seen: AiJob[] = []
+    const run = (outcome: Partial<AiJobStepOutcome>) =>
+      aiRunJobUnit(context(job), {
+        unit,
+        units: [unit],
+        runner: fakeRunner(seen, () => outcome),
+        emptyCopy: 'Nothing was built.',
+      })
+    const card = output('reusableComponent', 'job-1-c0', 'Price tier')
+    expect(await run({ outputs: [card] })).toMatchObject({ built: true, outcome: { outputs: [card] } })
+    expect(seen[0]).toMatchObject({ $id: 'job-1-c0', kind: 'component', steps: [], outputs: [] })
+    expect(await run({ continue: true })).toMatchObject({ built: false, outcome: { continue: true } })
+    const review = { reason: 'limit' as const, message: 'No room.', findings: [] }
+    expect(await run({ review })).toMatchObject({ built: false, outcome: { review } })
+    expect(await run({})).toMatchObject({ built: false, outcome: { failure: 'Nothing was built.' } })
+    // A delegate's own plan never rides back to the job that delegated.
+    const proposed = await run({ outputs: [card], plan: confirmedPlan() })
+    expect(proposed.outcome.plan).toBeUndefined()
   })
 })

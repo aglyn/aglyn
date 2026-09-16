@@ -35,9 +35,9 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
 import { NodeType, type NodesMap } from '@aglyn/aglyn/types/nodes'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
-import { aiModelForStep } from '../providers/routing'
+import { AI_STEP_TIERS } from '../providers/catalog'
+import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
-  AI_GENERATION_MAX_TOKENS,
   aiDoctrineTreeTool,
   runValidatedGeneration,
   type AiValidatedTree,
@@ -68,6 +68,7 @@ import {
   aiUnspentOutcome,
 } from './ai-job-generation'
 import type { AiJobStepRunner } from './ai-job-text-step'
+import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
 
 /**
@@ -104,13 +105,32 @@ import { registerAiJobStep } from './ai-jobs'
  * nothing promotes. A plan that starts from a copy of a form the site has gets
  * that copy, through the platform's duplicate module, and nothing generated.
  *
- * Like the other generation steps, it has the job beat's budget for one step,
- * its re-ask included, so it runs without extended thinking under the
- * doctrine's answer ceiling for a form.
+ * Like the other generation steps, it runs on the job beat, never at an inline
+ * door: it registers the least time its lookup rounds, its answer and its
+ * re-ask need (AGL-3035), and runs without extended thinking under the routing
+ * table's ceiling for a form, which is the doctrine's own.
  */
 
-/** The longest answer a form may run to: the doctrine's ceiling for the form kind. */
-export const AI_JOB_FORM_MAX_TOKENS = AI_GENERATION_MAX_TOKENS.form
+/**
+ * The longest answer a form may run to: the routing table's `job.form`
+ * ceiling, which holds the largest form the output budget admits
+ * (`ai-job-form-step.spec.ts` measures it) and is the doctrine's ceiling for
+ * the form kind.
+ */
+export const AI_JOB_FORM_MAX_TOKENS = AI_ROUTING_TABLE['job.form'].maxTokens
+
+/**
+ * The form step's time (AGL-3035, AGL-3036): its two inventory-lookup rounds,
+ * its answer and its re-ask at that ceiling on the tier `job.form` is served
+ * from, fitted to what a beat can give a step.
+ */
+export const AI_JOB_FORM_STEP_BUDGET = aiJobStepBudget({
+  tier: AI_STEP_TIERS['job.form'],
+  maxTokens: AI_JOB_FORM_MAX_TOKENS,
+})
+
+/** The least time one form step needs before it starts. */
+export const AI_JOB_FORM_STEP_MINIMUM_MS = AI_JOB_FORM_STEP_BUDGET.minimumMs
 
 /** A form's name when the plan names none. */
 export const AI_JOB_FORM_DEFAULT_NAME = 'New form'
@@ -501,7 +521,7 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
       inventory,
       messages: [{ role: 'user', content: aiJobFormPrompt(job, plan, name) }],
       tool: AI_JOB_FORM_TOOL,
-      maxTokens: AI_JOB_FORM_MAX_TOKENS,
+      maxTokens: AI_JOB_FORM_STEP_BUDGET.maxTokens(model),
       thinking: 'off',
       extend: check.extend,
       ...(signal ? { signal } : {}),
@@ -544,6 +564,6 @@ export const runAiJobFormStep = createAiJobFormStep()
 
 /** Registers the form step and the check a form job passes before it is created or resumed. */
 export function registerAiFormJob(): void {
-  registerAiJobStep('form', runAiJobFormStep)
+  registerAiJobStep('form', runAiJobFormStep, { minimumMs: AI_JOB_FORM_STEP_MINIMUM_MS })
   registerAiJobAdmission('form', aiFormJobAdmission)
 }

@@ -52,10 +52,4 @@ export const TENANT_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     register: {"tenantApi":"registerWorkflowsApi"},
     load: () => import('@aglyn/plugins-workflows/server'),
   },
-  {
-    id: 'ai',
-    apiPrefixes: ["ai","assist"],
-    register: {"tenantApi":"registerAiApi"},
-    load: () => import('@aglyn/plugins-ai/server'),
-  },
 ]

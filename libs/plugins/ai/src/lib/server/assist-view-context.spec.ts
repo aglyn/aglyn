@@ -107,6 +107,23 @@ describe('GUARD: page context never carries another org’s data or a secret', (
     }
   })
 
+  it('safeOrgFacts names the plan the workspace resolves to, not the stored field (AGL-3034)', () => {
+    const canceled = { name: 'Acme', plan: 'pro', billingStatus: 'canceled' }
+    expect(safeOrgFacts(canceled).plan).toBe('free')
+
+    const comped = {
+      ...canceled,
+      entitlements: {
+        planComp: { plan: 'business', note: 'STAFF-NOTE-SECRET', grantedBy: 'staff-uid-SECRET' },
+      },
+    }
+    expect(safeOrgFacts(comped)).toEqual({ name: 'Acme', plan: 'business' })
+    expect(Object.values(safeOrgFacts(comped)).join(' ')).not.toContain('SECRET')
+
+    // A live subscription decides the plan, whatever comp waits behind it.
+    expect(safeOrgFacts({ ...comped, billingStatus: 'active' }).plan).toBe('pro')
+  })
+
   it('FORCED RED: spreading the org doc instead of allowlisting leaks it', () => {
     // The failure mode is silent — a new field appears on the doc and rides
     // along — so the check has to be shown catching the spread it replaced.

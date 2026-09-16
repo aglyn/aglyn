@@ -809,6 +809,21 @@ jobs:
 
       - run: npm run check:rules-parse
 
+      # AGL-3027. Parsing is not deploying. The v1.0.0-beta.125 Firestore rules
+      # passed both steps above and the emulator matrix, and the Rules API
+      # refused the deploy with a bare `400 INVALID_ARGUMENT`: the source was
+      # 262,161 bytes, 17 over the 256 KiB ruleset-source limit, and comments
+      # count toward it. Nothing that compiles the file checks that limit, so
+      # this measures all three rules sources against the limit each one's
+      # own service applies (the Realtime Database's is not the Rules API's;
+      # see tools/scripts/lib/rules-size.mjs). It fails at the limit and warns,
+      # as an annotation on the file, within 2 KiB of it. The self-test runs
+      # first because it rebuilds the incident: the refused 262,161 bytes must
+      # read OVER and the 262,087 the API accepted must not.
+      - run: npm run test:rules-size
+
+      - run: npm run check:rules-size
+
       # AGL-2486. `compiler.reactRemoveProperties` deletes JSX props from the
       # BROWSER build only, and jest's transform keeps them — so a prop being
       # erased in production still renders under test and its spec passes.

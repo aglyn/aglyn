@@ -116,6 +116,7 @@ import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import useHostRole from '../../../../../../../../../../hooks/use-host-role'
+import useFormsPublishBlock from '../../../../../../../../../../hooks/use-forms-publish-block'
 import { useEditorSession } from '../../../../../../../../../../hooks/use-editor-session'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
@@ -514,7 +515,11 @@ function ComponentBesignerPage(props) {
    * and is still true in the same tick, so a save chaining into the guarded
    * function would always refuse itself.
    */
+  const { refuse: refuseFormsOff } = useFormsPublishBlock()
   const promoteToSites = useCallback(async () => {
+    // A component carrying a form does not go live on a site that switched
+    // Forms off (AGL-3029): every page placing it would draw an empty space.
+    if (refuseFormsOff(canvas.toJSON().nodes)) return
     setPublishing(true)
     try {
       // The same resolution the Versions dialog's Publish runs (AGL-2878):
@@ -600,6 +605,7 @@ function ComponentBesignerPage(props) {
     componentResult?.data?.rootId,
     data,
     enqueueSnackbar,
+    refuseFormsOff,
     // The revalidate route authenticates with the caller's ID token, so the
     // signed-in user is a real input to publishing now (AGL-2486).
     user,

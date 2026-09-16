@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { isAiPlanNewRef } from '../model/ai-build-plan'
+import { AI_BUILD_PLAN_CREATION_NOUNS, isAiPlanNewRef } from '../model/ai-build-plan'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { aiPlanCreditEstimate } from '../model/ai-site-job'
+import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
 import { Box, Button, Stack, Typography } from '@mui/material'
 
 /**
@@ -53,9 +53,10 @@ export function AiJobPlan({
   // The guard rail (AGL-2911): what the plan is estimated to cost is read
   // before it is confirmed, not after it has been spent. An estimate, and
   // said to be one — the plan's own passes at the nominal credits a step
-  // holds, where what a step really costs is its model's tokens.
+  // holds, where what a step really costs is its model's tokens. A page job
+  // counts the creations it builds before its page (AGL-3031).
   const estimate =
-    plan && waiting && review.reason === 'plan' ? aiPlanCreditEstimate(plan) : 0
+    plan && waiting && review.reason === 'plan' ? aiJobPlanCreditEstimate(job.kind, plan) : 0
   return (
     <Box sx={{ mt: 1 }}>
       {plan && (
@@ -70,7 +71,7 @@ export function AiJobPlan({
           ))}
           {plan.create.map((entry, index) => (
             <Typography key={`create-${index}`} variant="body2" role="listitem">
-              Creates the {entry.kind} {entry.name}
+              Creates the {AI_BUILD_PLAN_CREATION_NOUNS[entry.kind].noun} {entry.name}
               {entry.duplicateOf
                 ? `, from a copy of ${named(entry.duplicateOf)}`
                 : ''}{' '}

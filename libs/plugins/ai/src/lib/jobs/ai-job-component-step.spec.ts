@@ -99,6 +99,8 @@ import {
   createAiJobComponentStep,
   runAiJobComponentStep,
   registerAiComponentJob,
+  AI_JOB_COMPONENT_STEP_BUDGET,
+  AI_JOB_COMPONENT_STEP_MINIMUM_MS,
 } from './ai-job-component-step'
 import { AI_DRAFT_ENTITLEMENT_REFUSAL } from './ai-job-drafts'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
@@ -294,7 +296,9 @@ beforeEach(() => {
 describe('the component step', () => {
   it('registers the component runner, with the admission the create and resume doors ask', async () => {
     registerAiComponentJob()
-    expect(registerAiJobStep).toHaveBeenCalledWith('component', runAiJobComponentStep)
+    expect(registerAiJobStep).toHaveBeenCalledWith('component', runAiJobComponentStep, {
+      minimumMs: AI_JOB_COMPONENT_STEP_MINIMUM_MS,
+    })
     const ask = (hostId: string | null, org: object) =>
       aiJobAdmissionRefusal('component', { firestore, orgId: 'org-1', hostId, inputs: {}, org })
     expect(await ask(null, STARTER_ORG)).toEqual({
@@ -331,7 +335,7 @@ describe('the component step', () => {
     expect(request).toMatchObject({
       model: 'routed-model',
       tools: [aiComponentTool(), aiInventoryLookupTool()],
-      maxTokens: AI_JOB_COMPONENT_MAX_TOKENS,
+      maxTokens: AI_JOB_COMPONENT_STEP_BUDGET.maxTokens('routed-model'),
       thinking: 'off',
       stream: false,
       messages: [{ role: 'user', content: aiJobComponentPrompt(job(), PLAN, 'Testimonial card') }],
@@ -689,7 +693,7 @@ describe('the component step’s fit, measured', () => {
   const answerTokens = (text: string) => Math.ceil(text.length / 3)
   const sweepBudgetMs = Number(
     /export const AI_JOB_SWEEP_BUDGET_MS = ([\d_]+)/
-      .exec(readFileSync(join(__dirname, 'ai-jobs.ts'), 'utf8'))?.[1]
+      .exec(readFileSync(join(__dirname, 'ai-job-budget.ts'), 'utf8'))?.[1]
       .replace(/_/g, ''),
   )
 
@@ -704,12 +708,12 @@ describe('the component step’s fit, measured', () => {
         .join('') + JSON.stringify(request.tools),
     )
     const answer = answerTokens(JSON.stringify(toolInput(TESTIMONIAL.answer.tree, TESTIMONIAL.answer.props)))
-    expect(sweepBudgetMs).toBe(45_000)
+    expect(sweepBudgetMs).toBe(280_000)
     // The answer and the re-ask's answer, each after its wait, inside one step's share of the beat.
     expect(2 * (SECONDS_BEFORE_FIRST_TOKEN + answer / OUTPUT_TOKENS_PER_SECOND) * 1_000).toBeLessThan(sweepBudgetMs)
     // The ceiling is far above a real answer, so it cuts only a runaway, which the doctrine re-asks as too long.
     expect(answer * 4).toBeLessThan(AI_JOB_COMPONENT_MAX_TOKENS)
-    expect(request).toMatchObject({ thinking: 'off', maxTokens: AI_JOB_COMPONENT_MAX_TOKENS })
+    expect(request).toMatchObject({ thinking: 'off', maxTokens: AI_JOB_COMPONENT_STEP_BUDGET.maxTokens('routed-model') })
     // The model switch prices a typical request from the nominal row: within a quarter of what this one measures.
     const nominal = AI_STEP_NOMINAL_USAGE['job.component']
     expect(Math.abs(nominal.cacheReadTokens - cached) / cached).toBeLessThan(0.25)

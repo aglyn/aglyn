@@ -35,11 +35,13 @@ import {
   AI_SITE_NOMINAL_SECTIONS,
   AI_SITE_PAGES,
   AI_SITE_PASS_CREDITS,
+  aiJobPlanCreditEstimate,
   aiPlanCreditEstimate,
   aiPlanPasses,
   aiSiteCreditEstimate,
   aiSitePlanPrerequisites,
   aiSitePlanRefusal,
+  aiSitePlanShapeRefusal,
   parseAiSiteJobInputs,
 } from './ai-site-job'
 
@@ -243,6 +245,11 @@ describe('the plans a scaffold can build', () => {
     expect(aiSitePlanPrerequisites(outside)).toEqual([
       { kind: 'component', name: 'Price card' },
     ])
+    // The plan step re-asks the shape and the plan rules refuse the creation
+    // (AGL-3030), so the shape refusal says nothing about creations.
+    expect(aiSitePlanShapeRefusal(outside)).toBeNull()
+    const short = plan({ screens: plan().screens.slice(0, 2) })
+    expect(aiSitePlanShapeRefusal(short)).toBe(aiSitePlanRefusal(short))
   })
 
   it('names an unbuildable reference the create list does not carry', () => {
@@ -287,6 +294,27 @@ describe('the plans a scaffold can build', () => {
       'the component “Card” on the Components page and the dataset “Menu” on the Datasets page',
     )
     expect(refusal.match(/Card/g)).toHaveLength(1)
+  })
+})
+
+describe('what a page job is estimated to cost (AGL-3031)', () => {
+  it('counts the layout, forms and components a page job builds before its page, and what a scaffold would for any other kind', () => {
+    const page: AiBuildPlan = {
+      reuse: [],
+      create: (['layout', 'form', 'component', 'template'] as const).map((kind) => ({
+        kind,
+        name: kind,
+        why: 'needed',
+        duplicateOf: null,
+        fields: [],
+      })),
+      screens: [screen({ sections: [{ name: 'hero', uses: [], items: 0 }, { name: 'cards', uses: [], items: 3 }] })],
+    }
+    // Two sections and the last pass, and three creations a page job builds; a template is another job's.
+    expect(aiJobPlanCreditEstimate('page', page)).toBe((2 + 1 + 3) * AI_SITE_PASS_CREDITS)
+    // A scaffold builds its layout and form, and no component.
+    expect(aiJobPlanCreditEstimate('site', page)).toBe(aiPlanCreditEstimate(page))
+    expect(aiPlanCreditEstimate(page)).toBe((2 + 1 + 2) * AI_SITE_PASS_CREDITS)
   })
 })
 

@@ -22,10 +22,11 @@ import type {
   AiJobPlan,
   AiJobReview,
 } from '../model/ai-jobs.types'
-import type { AiStepKind } from '../providers/catalog'
+import { AI_STEP_TIERS, type AiStepKind } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import { runAiRequest, type AiEffort, type AiSystemBlock } from '../runtime/ai-runtime'
 import type { AssistTokenUsage } from '../usage/assist-usage'
+import { aiJobStepBudget } from './ai-job-budget'
 
 /**
  * The `text` step (AGL-2904): a brief in, a short piece of copy out.
@@ -49,6 +50,24 @@ export function aiJobTextModel(): string {
 
 /** The text step's answer ceiling, from the routing table. */
 export const AI_JOB_TEXT_MAX_TOKENS = AI_ROUTING_TABLE['job.text'].maxTokens
+
+/**
+ * The text step's time (AGL-3035): ONE request — no re-ask, and no site
+ * inventory to look anything up in — at the routing table's ceiling on the
+ * tier `job.text` is served from, with the step's reads and writes. That fits
+ * an inline door's budget, so a door runs a text job where it is asked for,
+ * and the least time is the helper's worst case rather than a figure anyone
+ * chose; a slower tier asks less so its worst case still fits.
+ */
+export const AI_JOB_TEXT_STEP_BUDGET = aiJobStepBudget({
+  tier: AI_STEP_TIERS['job.text'],
+  maxTokens: AI_JOB_TEXT_MAX_TOKENS,
+  attempts: 1,
+  lookups: 0,
+})
+
+/** The least time one text step needs before it starts. */
+export const AI_JOB_TEXT_STEP_MINIMUM_MS = AI_JOB_TEXT_STEP_BUDGET.minimumMs
 
 /** How much of a brief is sent. Past this a brief is a document, not a brief. */
 export const AI_JOB_BRIEF_MAX_CHARS = 4_000
@@ -160,7 +179,9 @@ export const runAiJobTextStep: AiJobStepRunner = async ({ job, signal, modelFor 
     model,
     system: AI_JOB_TEXT_SYSTEM,
     messages: [{ role: 'user', content: aiJobTextPrompt(job) }],
-    maxTokens: AI_JOB_TEXT_MAX_TOKENS,
+    // The routing ceiling, lowered on a tier too slow to answer it inside the
+    // least time the step registered.
+    maxTokens: AI_JOB_TEXT_STEP_BUDGET.maxTokens(model),
     ...(AI_ROUTING_TABLE['job.text'].thinking ? { thinking: AI_ROUTING_TABLE['job.text'].thinking } : {}),
     ...(AI_ROUTING_TABLE['job.text'].effort ? { effort: AI_ROUTING_TABLE['job.text'].effort } : {}),
     stream: false,

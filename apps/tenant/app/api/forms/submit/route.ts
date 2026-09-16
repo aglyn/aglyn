@@ -319,6 +319,31 @@ export async function POST(request: Request): Promise<Response> {
     // Plan/quota gates ride the owning org's doc (AGL-238).
     const owningOrg = await getOrgForHost(hostId)
     const orgBilling = owningOrg?.org
+
+    /*
+     * A site that switched Forms off accepts no form submission (AGL-3029).
+     *
+     * Asked of the site's own plugin set — the org's resolved set minus this
+     * host's deny-list, the same answer the tenant draws the page from — and
+     * about the plugin whose door the submission came through: a Marketing
+     * popup's capture belongs to Marketing, and keeps working on a site that
+     * still shows the popup. Core imports no plugin, so both are ids.
+     *
+     * Placed after the site is known to exist and before the quota read and
+     * every write: a refused submission is not counted, not billed and not
+     * stored. 404, the answer the route already gives a retired form, because
+     * the honest reply to the visitor is the same — this site takes no form
+     * here — and the sentence names no setting a stranger has no use for.
+     */
+    if (
+      !Aglyn.isHostPluginEnabled(
+        orgBilling as never,
+        hostSnapshot.data() as never,
+        Aglyn.formSubmissionDoorPlugin(payload),
+      )
+    ) {
+      return json({ error: Aglyn.FORMS_OFF_FOR_SITE_REFUSAL }, 404)
+    }
     // Shared with the console surface that reads these counters back
     // (AGL-1666) — a differently-derived key there would read 0 refusals on
     // exactly the sites being refused.

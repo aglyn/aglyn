@@ -22,8 +22,10 @@ import {
   isEnterpriseOrg,
   orgMonthlyCogsUsd,
   orgMonthlyRevenueUsd,
+  resolveEffectivePlan,
   type OrgPlan,
 } from '@aglyn/aglyn/server'
+import { classifyOrgRevenueState } from '../../../../utils/server/revenue-report'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -155,7 +157,6 @@ async function handler(request: Request): Promise<Response> {
     for (const doc of orgsSnapshot.docs) {
       const data = doc.data()
       const plan = (data['plan'] ?? '') as OrgPlan | ''
-      planCounts[plan || 'none'] = (planCounts[plan || 'none'] ?? 0) + 1
       // MRR follows the Stripe subscription mirror, not the plan field: a
       // staff override sets `plan` and never writes `subscription`, so
       // billing state is the only honest signal of revenue (AGL-925).
@@ -168,10 +169,20 @@ async function handler(request: Request): Promise<Response> {
         ...data,
         ...(billingByOrgId.get(doc.id) ?? {}),
       } as { plan?: OrgPlan; subscription?: any }
+      // The plan each org GETS (AGL-3034): a staff comp's, or Free for a
+      // stored plan whose subscription died. Orgs that never stored a plan
+      // keep their own bucket, as before.
+      const effectivePlan = resolveEffectivePlan(billing as never)
+      const planBucket = plan || effectivePlan !== 'free' ? effectivePlan : 'none'
+      planCounts[planBucket] = (planCounts[planBucket] ?? 0) + 1
       if (isBillingSubscription(billing)) {
         payingOrgs += 1
         mrrUsd += orgMonthlyRevenueUsd(billing)
-      } else if (plan && plan !== 'free') {
+      } else if (classifyOrgRevenueState(billing as never) === 'comped') {
+        // The revenue page's one classification (AGL-2486), so the two staff
+        // surfaces count the same orgs: an explicit comp (AGL-3034) or a paid
+        // plan with no subscription at all — never a canceled one, which is
+        // churn wearing a stale plan field.
         compedOrgs += 1
       }
       const createdMs = data['createdAt']?.toMillis?.() ?? null
@@ -186,7 +197,12 @@ async function handler(request: Request): Promise<Response> {
           // plan plus a custom price / comped marker — listing it as "agency"
           // is how the staff table kept contradicting the org's own Billing
           // page.
-          plan: (isEnterpriseOrg(billing) ? 'enterprise' : plan) || null,
+          plan:
+            (isEnterpriseOrg(billing)
+              ? 'enterprise'
+              : plan || effectivePlan !== 'free'
+                ? effectivePlan
+                : '') || null,
           createdAt: createdMs,
         })
       }

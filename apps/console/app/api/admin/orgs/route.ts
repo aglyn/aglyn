@@ -199,7 +199,11 @@ async function handler(request: Request): Promise<Response> {
         name: data['name'] ?? null,
         slug: data['slug'] ?? null,
         plan: data['plan'] ?? null,
+        // Carries the staff plan comp (AGL-3034), which the row resolves.
         entitlements: data['entitlements'] ?? null,
+        // The status mirror the resolver reads FIRST — without it the row's
+        // effective plan leaned on the billing doc alone.
+        billingStatus: data['billingStatus'] ?? null,
         // The two fields that make an org read as Enterprise off a lower base
         // plan (AGL-1110). They were projected away, so `isEnterpriseOrg` on
         // the staff list could only ever see the base plan and the table said

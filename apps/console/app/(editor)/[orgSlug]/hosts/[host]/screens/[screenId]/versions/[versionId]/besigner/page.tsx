@@ -187,6 +187,7 @@ import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import useHostRole from '../../../../../../../../../../hooks/use-host-role'
+import useFormsPublishBlock from '../../../../../../../../../../hooks/use-forms-publish-block'
 import { useEditorSession } from '../../../../../../../../../../hooks/use-editor-session'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
@@ -227,6 +228,7 @@ function BesignerPage(props) {
   // Disabled with a reason rather than hidden, so the console says no instead
   // of the rules answering with a bare `permission-denied`.
   const { canPublish, loaded: hostRoleLoaded } = useHostRole(hostId)
+  const { refuse: refuseFormsOff } = useFormsPublishBlock()
   const publishBlock = hostRoleLoaded
     ? 'Your role on this site can edit content but not publish it'
     : 'Checking your access…'
@@ -1107,6 +1109,9 @@ function BesignerPage(props) {
     // push the stored page live and then clear the draft as published
     // (AGL-2874).
     if (refuseOverUnopenedDraft('publish')) return
+    // A page carrying a form does not go live on a site that switched Forms
+    // off (AGL-3029): it would draw an empty space where the author sees one.
+    if (refuseFormsOff(canvas.toJSON().nodes)) return
     savedLandedRef.current = false
     saveRefusedRef.current = false
     await handleSave()
@@ -1242,6 +1247,7 @@ function BesignerPage(props) {
     )
   }, [
     refuseOverUnopenedDraft,
+    refuseFormsOff,
     handleSave,
     isEmailScreen,
     livePublished,

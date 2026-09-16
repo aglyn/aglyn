@@ -64,7 +64,10 @@ const pageWith = (
   },
 })
 
-/** What this org has switched on. Forms is always-on, so it is always here. */
+/**
+ * What this site runs. Forms is on for every workspace, and this site has not
+ * switched it off, so it is here.
+ */
 const ENABLED = ['mui', 'forms', 'commerce', 'email', 'bookings']
 
 describe('a form placed before the move still renders', () => {

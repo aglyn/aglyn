@@ -62,6 +62,7 @@ import {
   type AiJobStepOutcome,
   type AiJobStepRunner,
 } from './ai-job-text-step'
+import { AI_JOB_THEME_STEP_BUDGET } from './ai-job-theme-budget'
 import {
   AI_THEME_BRAND_SOURCE_WORDS,
   gatherAiThemeBrandInputs,
@@ -101,6 +102,16 @@ export function aiJobThemeModel(): string {
  * model to think before it answers.
  */
 export const AI_JOB_THEME_MAX_TOKENS = AI_ROUTING_TABLE['job.theme'].maxTokens
+
+/**
+ * The theme's answer ceiling on the model a job runs (AGL-3035): the most
+ * whose worst case — the answer, its re-ask and the brand reads — fits the
+ * least time the step registers (`ai-job-theme-budget.ts`), and never more
+ * than the routing table's.
+ */
+export function aiJobThemeMaxTokens(model: string): number {
+  return AI_JOB_THEME_STEP_BUDGET.maxTokens(model)
+}
 
 /** How many of a site's own component override leaves the prompt lists. */
 export const AI_JOB_THEME_INVENTORY_LEAVES = 40
@@ -301,7 +312,7 @@ export function aiJobThemeGeneration(
     instructions: AI_JOB_THEME_INSTRUCTIONS,
     messages: [{ role: 'user', content: aiJobThemePrompt(request) }],
     tool: aiThemeTool(),
-    maxTokens: AI_JOB_THEME_MAX_TOKENS,
+    maxTokens: aiJobThemeMaxTokens(request.model),
     ...(AI_ROUTING_TABLE['job.theme'].thinking ? { thinking: AI_ROUTING_TABLE['job.theme'].thinking } : {}),
     ...(AI_ROUTING_TABLE['job.theme'].effort ? { effort: AI_ROUTING_TABLE['job.theme'].effort } : {}),
     ...(request.signal ? { signal: request.signal } : {}),

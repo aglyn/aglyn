@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  FIRST_PARTY_PLUGINS,
   PLUGIN_CASCADE_IS_DECLARED_ONLY,
   PUBLISHED_SITE_IMPACT,
   type PublishedSiteImpact,
@@ -79,6 +80,8 @@ interface ImpactCount {
   placements: number
   affectedScreens: number
   truncated: boolean
+  /** The published pages behind `affectedScreens`, by name and address. */
+  pages?: Array<{ id: string; name: string; path: string | null }>
 }
 
 /**
@@ -105,6 +108,14 @@ interface ImpactCount {
  * reports `truncated`, and drafts are not scanned at all. It is rendered with
  * "at least" whenever the scan says so, because a confirmation that rounds a
  * lower bound into a total is a confirmation people are right to stop reading.
+ *
+ * ## A switch that asks with nothing depending on it (AGL-3029)
+ *
+ * A plugin whose catalog entry sets `siteOff.confirm` opens this dialog for a
+ * plain disable too — Forms, whose switch-off stops every form on the site's
+ * published pages rendering and accepting submissions. Then there is no
+ * cascade to list, and the dialog says what stops, NAMES the published pages
+ * the scan found carrying the plugin's elements, and says what keeps running.
  */
 export function PluginDisableCascadeDialog(
   props: PluginDisableCascadeDialogProps,
@@ -194,6 +205,17 @@ export function PluginDisableCascadeDialog(
     }
   }, [impactKey])
 
+  /**
+   * A switch that asks before it applies with nothing depending on it
+   * (AGL-3029). The catalog decides which plugins ask — `siteOff.confirm` —
+   * because what they are about to break is not a dependent but the site's
+   * own published pages: Forms off stops every form on them rendering and
+   * accepting submissions, and the confirmation names those pages.
+   */
+  const confirmOnly = cascade.length === 0
+  const siteOff = FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === pluginId)?.siteOff
+  const primaryImpact = counts[pluginId]
+
   const sentenceFor = (entry: CascadeEntry): string => {
     const impact = PUBLISHED_SITE_IMPACT[entry.id]
     const count = counts[entry.id]
@@ -209,67 +231,123 @@ export function PluginDisableCascadeDialog(
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="sm" fullWidth>
       <DialogTitle>
-        {`Disabling ${pluginLabel} also disables ${cascade.length} other plugin${cascade.length === 1 ? '' : 's'}`}
+        {confirmOnly
+          ? `Switch ${pluginLabel} off for ${scope === 'org' ? 'every site in this workspace' : 'this site'}?`
+          : `Disabling ${pluginLabel} also disables ${cascade.length} other plugin${cascade.length === 1 ? '' : 's'}`}
       </DialogTitle>
-      <DialogContent>
-        <Stack spacing={1.5}>
-          <Typography variant="body2">
-            {scope === 'org'
-              ? `These plugins depend on ${pluginLabel} and cannot run without it. Continuing switches them off for every site in this workspace.`
-              : `These plugins depend on ${pluginLabel} and cannot run without it. Continuing switches them off for this site.`}
-          </Typography>
-          <List dense disablePadding>
+      {confirmOnly ? (
+        <DialogContent>
+          <Stack spacing={1.5}>
+            {siteOff?.stops ? (
+              <Typography variant="body2">{siteOff.stops}</Typography>
+            ) : null}
             {/*
-              The plugin being switched off is listed FIRST, with its own
-              consequence. It is normally the element-heavy one, so a dialog
-              that costed only the cascade would be silent about the largest
-              thing on the screen — and "and 3 elements on 2 published pages
-              of your own stop rendering" is the sentence that changes minds.
+              The pages, by name. Only a SITE can be read here, and only a
+              completed scan may say "none": a scan that failed says nothing
+              beyond the sentence above, and one that stopped early says so.
             */}
-            <ListItem disableGutters>
-              <ListItemText
-                primary={`${pluginLabel} (the one you switched off)`}
-                secondary={sentenceFor({ id: pluginId, label: pluginLabel })}
-              />
-            </ListItem>
-            {cascade.map((entry) => (
-              <ListItem key={entry.id} disableGutters>
+            {scope === 'site' && siteOff?.pages ? (
+              loading ? (
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <CircularProgress size={16} />
+                  <Typography variant="caption" color="text.secondary">
+                    {'Checking this site’s published pages…'}
+                  </Typography>
+                </Stack>
+              ) : primaryImpact?.pages?.length ? (
+                <Stack spacing={0.5}>
+                  <Typography variant="body2">{siteOff.pages.heading}</Typography>
+                  <List dense disablePadding>
+                    {primaryImpact.pages.map((page) => (
+                      <ListItem key={page.id} disableGutters>
+                        <ListItemText
+                          primary={page.name}
+                          secondary={page.path ?? undefined}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                  {primaryImpact.truncated ? (
+                    <Typography variant="caption" color="text.secondary">
+                      {'The check stopped before reading every page, so there ' +
+                        'may be more.'}
+                    </Typography>
+                  ) : null}
+                </Stack>
+              ) : primaryImpact && !primaryImpact.truncated ? (
+                <Typography variant="body2">{siteOff.pages.none}</Typography>
+              ) : null
+            ) : null}
+            {siteOff?.keeps ? (
+              <Typography variant="body2" color="text.secondary">
+                {siteOff.keeps}
+              </Typography>
+            ) : null}
+          </Stack>
+        </DialogContent>
+      ) : (
+        <DialogContent>
+          <Stack spacing={1.5}>
+            <Typography variant="body2">
+              {scope === 'org'
+                ? `These plugins depend on ${pluginLabel} and cannot run without it. Continuing switches them off for every site in this workspace.`
+                : `These plugins depend on ${pluginLabel} and cannot run without it. Continuing switches them off for this site.`}
+            </Typography>
+            <List dense disablePadding>
+              {/*
+                The plugin being switched off is listed FIRST, with its own
+                consequence. It is normally the element-heavy one, so a dialog
+                that costed only the cascade would be silent about the largest
+                thing on the screen — and "and 3 elements on 2 published pages
+                of your own stop rendering" is the sentence that changes minds.
+              */}
+              <ListItem disableGutters>
                 <ListItemText
-                  primary={`${entry.label} — depends on ${pluginLabel}`}
-                  secondary={sentenceFor(entry)}
+                  primary={`${pluginLabel} (the one you switched off)`}
+                  secondary={sentenceFor({ id: pluginId, label: pluginLabel })}
                 />
               </ListItem>
-            ))}
-          </List>
-          {loading ? (
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <CircularProgress size={16} />
+              {cascade.map((entry) => (
+                <ListItem key={entry.id} disableGutters>
+                  <ListItemText
+                    primary={`${entry.label} — depends on ${pluginLabel}`}
+                    secondary={sentenceFor(entry)}
+                  />
+                </ListItem>
+              ))}
+            </List>
+            {loading ? (
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <CircularProgress size={16} />
+                <Typography variant="caption" color="text.secondary">
+                  {'Checking what is placed on this site’s published pages…'}
+                </Typography>
+              </Stack>
+            ) : null}
+            {scope === 'org' ? (
               <Typography variant="caption" color="text.secondary">
-                {'Checking what is placed on this site’s published pages…'}
+                {'This applies to every site in the workspace. A site cannot ' +
+                  'turn back on what the workspace has switched off.'}
               </Typography>
-            </Stack>
-          ) : null}
-          {scope === 'org' ? (
+            ) : null}
+            <Alert severity="warning" variant="outlined">
+              {'Turning ' +
+                pluginLabel +
+                ' back on later does NOT switch these back on — you will need to ' +
+                're-enable each one yourself.'}
+            </Alert>
             <Typography variant="caption" color="text.secondary">
-              {'This applies to every site in the workspace. A site cannot ' +
-                'turn back on what the workspace has switched off.'}
+              {PLUGIN_CASCADE_IS_DECLARED_ONLY}
             </Typography>
-          ) : null}
-          <Alert severity="warning" variant="outlined">
-            {'Turning ' +
-              pluginLabel +
-              ' back on later does NOT switch these back on — you will need to ' +
-              're-enable each one yourself.'}
-          </Alert>
-          <Typography variant="caption" color="text.secondary">
-            {PLUGIN_CASCADE_IS_DECLARED_ONLY}
-          </Typography>
-        </Stack>
-      </DialogContent>
+          </Stack>
+        </DialogContent>
+      )}
       <DialogActions>
         <Button onClick={onCancel}>{'Cancel'}</Button>
         <Button color="warning" variant="contained" onClick={onConfirm}>
-          {'Continue and disable those too'}
+          {confirmOnly
+            ? `Switch ${pluginLabel} off`
+            : 'Continue and disable those too'}
         </Button>
       </DialogActions>
     </Dialog>

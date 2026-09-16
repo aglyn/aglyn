@@ -48,8 +48,9 @@ import { useHostSubdomain } from './host-id-provider'
  * OrgPluginsCard: the org decides what the workspace may use; this card
  * narrows it for ONE site by writing the host doc's `disabledPlugins`
  * deny-list and its `enabledPlugins` opt-in list. A site can never widen
- * beyond the org — org-disabled plugins are simply not listed — and always-on
- * plugins render locked, exactly as they do on the org switchboard.
+ * beyond the org — org-disabled plugins are simply not listed — and only the
+ * base component library renders locked. A plugin locked on for the WORKSPACE
+ * (AI) is switchable here: this card is the one switch it has (AGL-3028).
  * `resolveHostEnabledPlugins` is the single enforcement point (console nav,
  * editor pages, published sites, API dispatch), so a toggle here is a
  * boundary, not a preference — which is why the write, its seed guard and its

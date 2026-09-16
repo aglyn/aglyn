@@ -35,6 +35,7 @@ import {
   type OrgSuccessManager,
 } from '../../_lib/success-manager'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 // lockdown-423: exempt — support must stay reachable: the lockdown notice itself says
 // "contact support", and a locked member doing so is the happy path.
@@ -120,6 +121,13 @@ async function handler(request: Request): Promise<Response> {
       String(query['orgId'] ?? payload?.orgId ?? '') || null,
     )
     const orgId = resolved?.orgId ?? null
+    // The plan the org GETS (AGL-3034), which is the plan its support tier
+    // is owed on: a staff comp grants one the stored field does not name, and
+    // a dead subscription's stored plan is not one the workspace has. `null`
+    // with no org, which `supportForPlan` fails closed on.
+    const effectivePlan: OrgPlan | null = resolved?.org
+      ? resolveEffectivePlan(resolved.org as never)
+      : null
 
     // Ticket access is DERIVED from the support ladder, not a second copy of
     // it (AGL-1103). This was `plan !== 'free'`, which is now wrong in a way
@@ -128,7 +136,7 @@ async function handler(request: Request): Promise<Response> {
     // A tier with no first-response window has no ticket channel, by
     // definition — one place decides, and the gate cannot drift from the copy.
     const requireTicketSupport = () =>
-      supportForPlan(resolved?.org?.plan as OrgPlan | null).firstResponse !== null
+      supportForPlan(effectivePlan).firstResponse !== null
 
     const ticketsRef = firestore.collection('supportTickets')
 
@@ -178,7 +186,7 @@ async function handler(request: Request): Promise<Response> {
       // the tier promises one AND one is assigned: those are two different
       // facts and the page has to be able to tell them apart, because the
       // sentence it used to render was true of neither.
-      const commitment = supportForPlan(resolved?.org?.plan as OrgPlan | null)
+      const commitment = supportForPlan(effectivePlan)
       const successManager = commitment.namedManager
         ? await readSuccessManager(orgId)
         : null
@@ -219,8 +227,8 @@ async function handler(request: Request): Promise<Response> {
       // history: a downgrade would retire a breach that already happened, and
       // an upgrade would invent one that never did. The plan is stamped beside
       // it so a disputed ticket can be read without reconstructing billing.
-      const plan = resolved?.org?.plan ?? null
-      const commitment = supportForPlan(plan as OrgPlan | null)
+      const plan = effectivePlan
+      const commitment = supportForPlan(plan)
       const openedAtMs = Date.now()
       const dueAtMs = responseDueAt(commitment, openedAtMs)
       await ticketRef.set({

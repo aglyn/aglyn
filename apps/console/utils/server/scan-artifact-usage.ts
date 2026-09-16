@@ -16,6 +16,8 @@
  */
 
 import {
+  FORM_COMPONENT_ID,
+  FORMS_PLUGIN_ID,
   formatCollectionLinkValue,
   nodesPlaceForm,
   nodesReferenceComponent,
@@ -662,7 +664,16 @@ export interface PluginPlacementScan {
   affectedScreenIds: string[]
 }
 
-/** How many of `pluginId`'s nodes a tree holds. */
+/**
+ * How many of `pluginId`'s nodes a tree holds.
+ *
+ * Read off each node's stamped `pluginId`, with one exception for Forms
+ * (AGL-3029): a `form` node placed before the element left the base library
+ * still carries `mui`, and a scan by stamp alone would report a page holding
+ * such a form as holding none — the one answer a warning about switching
+ * Forms off must never give. The form's `componentId` is the fact that has
+ * never changed, so it counts whatever the node was stamped with.
+ */
 export function countPluginNodes(
   nodes: Record<string, any> | null | undefined,
   pluginId: string,
@@ -670,9 +681,57 @@ export function countPluginNodes(
   if (!nodes || !pluginId) return 0
   let count = 0
   for (const node of Object.values(nodes)) {
-    if (node?.pluginId === pluginId) count += 1
+    if (
+      node?.pluginId === pluginId ||
+      (pluginId === FORMS_PLUGIN_ID && node?.componentId === FORM_COMPONENT_ID)
+    ) {
+      count += 1
+    }
   }
   return count
+}
+
+/** One published page an impact scan names. */
+export interface ImpactedPage {
+  id: string
+  name: string
+  /** The address the site serves it at, or `null` for a page with none. */
+  path: string | null
+}
+
+/**
+ * The published pages behind a placement scan's screen ids, by name and
+ * address (AGL-3029) — what a confirmation NAMES rather than counts.
+ *
+ * `routes` is the host document's routing map. Pages come back in the order a
+ * reader scans them by: addressed pages first, by address, then the rest by
+ * name.
+ */
+export function impactedPages(
+  screenIds: readonly string[],
+  screens: readonly UsageCandidate[],
+  routes: Record<string, unknown> | null | undefined,
+): ImpactedPage[] {
+  const byId = new Map(screens.map((screen) => [screen.id, screen]))
+  return screenIds
+    .map((id) => {
+      const screen = byId.get(id)
+      const path = routes?.[id]
+      return {
+        id,
+        name: screen ? labelFor(screen) : id,
+        path: typeof path === 'string' && path ? path : null,
+      }
+    })
+    .sort((a, b) =>
+      a.path && b.path
+        ? a.path.localeCompare(b.path)
+        : a.path
+          ? -1
+          : b.path
+            ? 1
+            : a.name.localeCompare(b.name),
+    )
 }
 
 /**

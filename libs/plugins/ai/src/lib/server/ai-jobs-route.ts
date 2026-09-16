@@ -29,7 +29,7 @@ import {
 // stub the barrel closed-world, and the ladder, the machine and the runtime
 // are the things under test here, not things to be stubbed away.
 import { aiGateLadder } from '../runtime/ai-gate'
-import { aiJobAdmissionRefusal } from '../jobs/ai-job-admission'
+import { aiJobAdmissionRefusal, aiJobSiteRefusal } from '../jobs/ai-job-admission'
 import { AI_JOB_BRIEF_MAX_CHARS } from '../jobs/ai-job-text-step'
 import {
   AI_JOB_INLINE_BUDGET_MS,
@@ -187,14 +187,21 @@ export async function POST(request: Request): Promise<Response> {
   // before the job exists, so a refusal spends nothing.
   let refusal: Awaited<ReturnType<typeof aiJobAdmissionRefusal>>
   try {
-    refusal = await aiJobAdmissionRefusal(parsed.kind, {
-      firestore: gate.firestore,
-      orgId: gate.orgId,
-      hostId: parsed.hostId,
-      inputs: parsed.inputs,
-      org: gate.org,
-      uid: gate.uid,
-    })
+    // A site that switched AI off first (AGL-3028), then the kind's own check.
+    refusal =
+      (await aiJobSiteRefusal({
+        firestore: gate.firestore,
+        org: gate.org,
+        hostId: parsed.hostId,
+      })) ??
+      (await aiJobAdmissionRefusal(parsed.kind, {
+        firestore: gate.firestore,
+        orgId: gate.orgId,
+        hostId: parsed.hostId,
+        inputs: parsed.inputs,
+        org: gate.org,
+        uid: gate.uid,
+      }))
   } catch (error) {
     await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
       () => undefined,
@@ -264,6 +271,8 @@ export async function POST(request: Request): Promise<Response> {
     // The caller is on the request, so what the inline step produces is
     // attributed with their address; the beat's steps carry the uid alone.
     actor: { uid: gate.uid, email: gate.decoded.email ?? null },
+    // The workspace's AI pause lets staff through, as the ladder above did.
+    staff: gate.staff,
   })
   if (run.outcome === 'not-claimable') {
     // A job created a moment ago has a claimable first step; anything else

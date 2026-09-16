@@ -126,10 +126,12 @@ export const BANDWIDTH_CAP_RETRY_AFTER_SECONDS = 3600
  *
  *  1. the marker names the CURRENT month (a stale marker is not a cap);
  *  2. the org's plan does not meter infrastructure overage — i.e. it is the
- *     free plan. Paid plans BILL bandwidth past the band and are never cut
- *     off; that promise is older than this cap and this function is where it
- *     is kept. Re-derived from the CURRENT plan on every read, which is what
- *     releases an upgraded org without a write;
+ *     free plan, or a paid plan held as a staff comp (AGL-3034), which has no
+ *     subscription to bill past the band either. Paid plans BILL bandwidth
+ *     past the band and are never cut off; that promise is older than this
+ *     cap and this function is where it is kept. Re-derived from the CURRENT
+ *     plan on every read, which is what releases an upgraded org without a
+ *     write;
  *  3. the plan is not custom-priced, and its band is finite. Enterprise also
  *     answers false to `planMetersInfraOverage` — its price is negotiated —
  *     and since 2026-09-07 its band is a FINITE fallback (twice Agency's), so

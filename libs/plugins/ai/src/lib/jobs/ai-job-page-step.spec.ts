@@ -30,13 +30,17 @@
  *
  * It holds the two decisions the issue asked for:
  *
- *  - THE TIME BUDGET. A pass is one section, and its worst case — the answer
- *    and its re-ask, each at the pass's ceiling, at the rates the budget
- *    module assumes — fits the minimum the step registers, which fits the
- *    beat's budget and not an inline door's. A fake clock measures it on
- *    every catalog tier.
+ *  - THE TIME BUDGET. A pass is one section, and its worst case — its lookup
+ *    rounds, the answer and its re-ask, out of one allowance of the pass's
+ *    ceiling, at the rates the budget module assumes (AGL-3036) — fits the
+ *    minimum the step registers, which fits the beat's budget and not an
+ *    inline door's. A fake clock measures it on every catalog tier.
  *  - AN UNPUBLISHED SCREEN. The draft is a screen and its first version, the
  *    host document is never written, and no address resolves to the draft.
+ *
+ * And, since AGL-3031, that a plan's layout, forms and components are built
+ * first, in the same job, each by the runner of its kind under a job derived
+ * from this one, and that the page then places what was built.
  */
 
 const mockRunAiRequest = jest.fn()
@@ -73,10 +77,17 @@ jest.mock('@aglyn/tenant-data-admin/server/duplicate-resource', () => ({
   duplicateResource: jest.fn(),
 }))
 
-// The machine is not under test here — only that the step registers with it.
+// The machine is not under test here — only that the step registers with it,
+// and which kinds have a runner a page's creations can be built by.
+const mockRunners = new Set<string>(['layout', 'form', 'component'])
+/** What each kind a creation is built by registers as its least time, told apart by value. */
+const mockMinimums: Record<string, number> = { layout: 111_000, form: 122_000, component: 133_000 }
 jest.mock('./ai-jobs', () => ({
   __esModule: true,
   registerAiJobStep: jest.fn(),
+  registerAiJobStepPasses: jest.fn(),
+  aiJobStepRunnerFor: (kind: string) => (mockRunners.has(kind) ? jest.fn() : null),
+  aiJobStepRunMinimumMs: (job: { kind: string }) => mockMinimums[job.kind] ?? 0,
 }))
 
 import { readFileSync } from 'node:fs'
@@ -86,8 +97,9 @@ import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fiel
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
-import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
-import { AI_MODEL_CATALOG } from '../providers/catalog'
+import { AI_BUILD_PLAN_LIMITS } from '../model/ai-build-plan'
+import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
+import { AI_MODEL_CATALOG, AI_STEP_TIERS } from '../providers/catalog'
 import { AI_DOCTRINE_SYSTEM_BLOCK } from '../runtime/ai-doctrine'
 import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import { validateAiSystemBlocks } from '../runtime/ai-runtime'
@@ -95,9 +107,12 @@ import type { generateSeoFields } from '../runtime/seo-fields'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
 import {
   AI_JOB_ASSUMED_FIRST_TOKEN_MS,
-  AI_JOB_ASSUMED_OUTPUT_TOKENS_PER_SECOND,
+  AI_JOB_INLINE_BUDGET_MS,
+  AI_JOB_STEP_MAX_MINIMUM_MS,
   AI_JOB_STEP_OVERHEAD_MS,
-  aiGenerationMaxTokensWithin,
+  AI_JOB_SWEEP_BUDGET_MS,
+  aiGenerationWorstCaseOnTierMs,
+  aiJobAssumedAnswerMs,
   aiJobBudgetTier,
 } from './ai-job-budget'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
@@ -107,31 +122,35 @@ import {
   aiPageSectionNodeId,
 } from './ai-job-page-sections'
 import {
+  AI_JOB_PAGE_CREATION_EMPTY_COPY,
+  AI_JOB_PAGE_CREATION_UNAVAILABLE_COPY,
   AI_JOB_PAGE_DELETED_COPY,
+  AI_JOB_PAGE_MAX_PASSES,
   AI_JOB_PAGE_SECTION_MAX_TOKENS,
+  AI_JOB_PAGE_SECTION_TOKENS,
   AI_JOB_PAGE_STEP_MINIMUM_MS,
   AI_JOB_PAGE_TOKENS_PER_ELEMENT,
+  aiJobPageSectionMaxTokens,
   aiPageJobAdmission,
+  aiPageJobRunMinimumMs,
+  aiPageJobUnits,
   createAiJobPageStep,
   runAiJobPageStep,
   registerAiPageJob,
 } from './ai-job-page-step'
-import { registerAiJobStep } from './ai-jobs'
+import type { AiJobStepContext, AiJobStepOutcome } from './ai-job-text-step'
+import { registerAiJobStep, registerAiJobStepPasses } from './ai-jobs'
 import { AI_PAGE_BRIEF_FIXTURES } from './fixtures/ai-page-briefs'
-import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
+import {
+  AI_INVENTORY_LOOKUP_MAX_ROUNDS,
+  AI_INVENTORY_LOOKUP_TOOL_NAME,
+  aiInventoryLookupTool,
+} from '../tools/ai-inventory-lookup-tool'
 
-const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
 const NOW = new Date('2026-09-15T22:00:00.000Z')
 const FIXTURE = AI_PAGE_BRIEF_FIXTURES[0]
 const STARTER_ORG = { plan: 'starter', billingStatus: 'active' }
 const USAGE = { inputTokens: 900, outputTokens: 300, cacheReadTokens: 4_200, cacheWriteTokens: 0 }
-
-/** A budget constant as the machine declares it, read from its source so the machine is not loaded. */
-function machineConstant(name: string): number {
-  const match = new RegExp(`export const ${name} = ([\\d_]+)`).exec(readFileSync(join(__dirname, 'ai-jobs.ts'), 'utf8'))
-  if (!match) throw new Error(`ai-jobs.ts declares no ${name}`)
-  return Number(match[1].replace(/_/g, ''))
-}
 
 // ── Firestore double ─────────────────────────────────────────────────────
 
@@ -313,7 +332,10 @@ beforeEach(() => {
 describe('the page step’s registration', () => {
   it('registers the page runner with the least time a pass needs, and the admission both doors ask', async () => {
     registerAiPageJob()
-    expect(registerAiJobStep).toHaveBeenCalledWith('page', runAiJobPageStep, { minimumMs: AI_JOB_PAGE_STEP_MINIMUM_MS })
+    expect(registerAiJobStep).toHaveBeenCalledWith('page', runAiJobPageStep, {
+      minimumMs: AI_JOB_PAGE_STEP_MINIMUM_MS,
+      minimumMsFor: aiPageJobRunMinimumMs,
+    })
     const ask = (patch: Record<string, unknown> = {}) =>
       aiJobAdmissionRefusal('page', { firestore, orgId: 'org-1', hostId: 'host-1', inputs: {}, org: STARTER_ORG, ...patch })
     expect(await ask({ hostId: null })).toEqual({ status: 400, error: 'Open the site the page is for before starting the job' })
@@ -322,44 +344,114 @@ describe('the page step’s registration', () => {
       error: 'pageType must be one of landing, about, pricing, contact, blogIndex, product, service, event',
     })
     expect(await ask({ inputs: { pageType: 'landing' } })).toBeNull()
-    // At confirmation, a plan that creates what the site does not have is refused before anything runs.
-    const creating = { ...PLAN, create: [{ kind: 'component', name: 'Service card', why: 'Three cards repeat.', duplicateOf: null, fields: [] }] }
-    expect(await ask({ plan: creating })).toEqual({ status: 400, error: expect.stringContaining('component “Service card” on the Components page') })
+    expect(registerAiJobStepPasses).toHaveBeenCalledWith('page', AI_JOB_PAGE_MAX_PASSES)
+    // At confirmation, a plan that creates what a page job builds is admitted
+    // where the workspace may make it (AGL-3031)…
+    const card = { kind: 'component' as const, name: 'Price tier', why: 'Three tiers repeat.', duplicateOf: null, fields: [] }
+    const creating = { ...PLAN, create: [card] }
+    expect(await ask({ plan: creating })).toBeNull()
+    // …refused where it may not, in a sentence naming the creation and why…
+    expect(await ask({ plan: creating, org: {} })).toEqual({
+      status: 403,
+      error: 'This page cannot be built as planned: it creates the component “Price tier”, because this workspace\'s plan does not include reusable components. Describe the page again.',
+    })
+    // …refused where nothing here builds it…
+    mockRunners.delete('component')
+    expect(await ask({ plan: creating })).toEqual({ status: 400, error: AI_JOB_PAGE_CREATION_UNAVAILABLE_COPY })
+    mockRunners.add('component')
+    // …and a creation a page job does not build is someone else's, named with where it is made.
+    const template = { ...PLAN, create: [{ ...card, kind: 'template' as const, name: 'Service page' }] }
+    expect(await ask({ plan: template })).toEqual({ status: 400, error: expect.stringContaining('template “Service page” in the Templates library') })
     expect(await ask({ plan: PLAN })).toBeNull()
     expect(aiPageJobAdmission).toBeInstanceOf(Function)
+  })
+
+  it('bounds its passes by every creation and section a plan may hold, and the last pass', () => {
+    expect(AI_JOB_PAGE_MAX_PASSES).toBe(AI_BUILD_PLAN_LIMITS.create + AI_BUILD_PLAN_LIMITS.sections + 1)
   })
 })
 
 describe('the time budget: a pass fits the least time it registers, and that fits the beat', () => {
-  it('registers a minimum inside the beat’s budget and past an inline door’s, so passes run on the beat', () => {
-    expect(AI_JOB_PAGE_STEP_MINIMUM_MS).toBeLessThanOrEqual(machineConstant('AI_JOB_SWEEP_BUDGET_MS'))
-    expect(AI_JOB_PAGE_STEP_MINIMUM_MS).toBeGreaterThan(machineConstant('AI_JOB_INLINE_BUDGET_MS'))
+  const modelOn = (tier: 'fast' | 'balanced' | 'deep') => AI_MODEL_CATALOG.find((entry) => entry.tier === tier)?.id as string
+
+  it('registers a minimum inside what a beat can give a step and past an inline door’s budget, so passes run on the beat', () => {
+    expect(AI_JOB_PAGE_STEP_MINIMUM_MS).toBeLessThanOrEqual(AI_JOB_STEP_MAX_MINIMUM_MS)
+    expect(AI_JOB_STEP_MAX_MINIMUM_MS).toBeLessThanOrEqual(AI_JOB_SWEEP_BUDGET_MS)
+    expect(AI_JOB_PAGE_STEP_MINIMUM_MS).toBeGreaterThan(AI_JOB_INLINE_BUDGET_MS)
+  })
+
+  it('is a section’s lookup rounds, its answer and its re-ask at the served tier’s section ceiling (AGL-3036)', () => {
+    const served = modelOn(AI_STEP_TIERS['job.page'])
+    expect(AI_JOB_PAGE_STEP_MINIMUM_MS).toBe(
+      aiGenerationWorstCaseOnTierMs({ tier: AI_STEP_TIERS['job.page'], maxTokens: AI_JOB_PAGE_SECTION_TOKENS }),
+    )
+    expect(aiJobPageSectionMaxTokens(served)).toBe(AI_JOB_PAGE_SECTION_TOKENS)
+    // A faster tier asks more in the same time, never past the most a section may run to.
+    expect(aiJobPageSectionMaxTokens(modelOn('fast'))).toBeGreaterThan(AI_JOB_PAGE_SECTION_TOKENS)
+    expect(aiJobPageSectionMaxTokens(modelOn('fast'))).toBeLessThanOrEqual(AI_JOB_PAGE_SECTION_MAX_TOKENS)
+  })
+
+  it('is stated in the developer notes with the figures the code computes', () => {
+    const notes = readFileSync(join(__dirname, '..', '..', '..', '..', '..', '..', 'docs', 'AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
+    const figure = (value: number) => value.toLocaleString('en-US')
+    const served = AI_STEP_TIERS['job.page']
+    expect(notes).toContain(
+      `\`AI_JOB_PAGE_SECTION_TOKENS\` (${figure(AI_JOB_PAGE_SECTION_TOKENS)} tokens) on the ${served} tier, ` +
+        `4 × ${AI_JOB_ASSUMED_FIRST_TOKEN_MS / 1_000} s + 2 × ${figure(aiJobAssumedAnswerMs(AI_JOB_PAGE_SECTION_TOKENS, served))} ms + ` +
+        `${AI_JOB_STEP_OVERHEAD_MS / 1_000} s = ${figure(AI_JOB_PAGE_STEP_MINIMUM_MS)} ms`,
+    )
+    expect(notes).toContain(
+      `${figure(aiJobPageSectionMaxTokens(modelOn('fast')))} tokens on the fast tier, ` +
+        `${figure(aiJobPageSectionMaxTokens(modelOn('balanced')))} on the balanced tier and ` +
+        `${figure(aiJobPageSectionMaxTokens(modelOn('deep')))} on the deep tier`,
+    )
   })
 
   it.each(['fast', 'balanced', 'deep'] as const)(
-    'on the %s tier, a section answered and re-asked at the pass’s ceiling finishes inside the minimum on a fake clock',
+    'on the %s tier, a section that looks records up twice, breaks a rule and is re-asked finishes inside the minimum on a fake clock',
     async (tier) => {
-      const model = AI_MODEL_CATALOG.find((entry) => entry.tier === tier)?.id as string
+      const model = modelOn(tier)
       expect(aiJobBudgetTier(model)).toBe(tier)
-      const ceiling = aiGenerationMaxTokensWithin({ budgetMs: AI_JOB_PAGE_STEP_MINIMUM_MS, model, cap: AI_JOB_PAGE_SECTION_MAX_TOKENS })
+      const ceiling = aiJobPageSectionMaxTokens(model)
       expect(ceiling).toBeGreaterThan(0)
 
       // The clock charges every exchange what the budget module assumes a
-      // provider takes: a start, then the answer at the full ceiling.
+      // provider takes: a start, then the output it answers with. Each lookup
+      // round asks for a card by name; each answer runs to all it was asked for.
       let clock = 0
+      const LOOKUP_OUTPUT = 60
       const broken = { rootId: 'root', nodes: { root: { componentId: 'div', nodes: ['s'] }, s: { componentId: 'section', props: { element: 'section' }, nodes: ['p'] }, p: { componentId: 'muiTypography', props: { variant: 'body1', children: 'No heading at all.' } } } }
       mockRunAiRequest.mockImplementation(async (request: { maxTokens: number }) => {
-        clock += AI_JOB_ASSUMED_FIRST_TOKEN_MS + Math.ceil((request.maxTokens / AI_JOB_ASSUMED_OUTPUT_TOKENS_PER_SECOND[tier]) * 1_000)
-        const tree = mockRunAiRequest.mock.calls.length === 1 ? broken : FIXTURE.answers[0]
+        const call = mockRunAiRequest.mock.calls.length
+        if (call <= AI_INVENTORY_LOOKUP_MAX_ROUNDS) {
+          clock += AI_JOB_ASSUMED_FIRST_TOKEN_MS + aiJobAssumedAnswerMs(LOOKUP_OUTPUT, tier)
+          return {
+            kind: 'completion',
+            text: '',
+            toolUse: [{ name: AI_INVENTORY_LOOKUP_TOOL_NAME, input: { kind: 'components', query: 'card' } }],
+            usage: { ...USAGE, outputTokens: LOOKUP_OUTPUT },
+            estCostUsd: 0.001,
+            stopReason: 'tool_use',
+          }
+        }
+        clock += AI_JOB_ASSUMED_FIRST_TOKEN_MS + aiJobAssumedAnswerMs(request.maxTokens, tier)
+        const tree = call === AI_INVENTORY_LOOKUP_MAX_ROUNDS + 1 ? broken : FIXTURE.answers[0]
         return sectionAnswer(tree, { ...USAGE, outputTokens: request.maxTokens })
       })
       const modelFor = (kind: string) => (kind === 'job.page' ? model : undefined)
       const outcome = await step()(context({}, { modelFor }))
 
-      // The first answer broke a rule, so this pass took its re-ask too.
-      expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+      // Both lookup rounds, then an answer that broke a rule, then its re-ask
+      // on what is left of the pass's allowance.
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(AI_INVENTORY_LOOKUP_MAX_ROUNDS + 2)
+      expect(mockRunAiRequest.mock.calls.map(([request]) => request.maxTokens)).toEqual([
+        ceiling,
+        ceiling,
+        ceiling,
+        ceiling - 2 * LOOKUP_OUTPUT,
+      ])
       for (const [request] of mockRunAiRequest.mock.calls) {
-        expect(request).toMatchObject({ model, maxTokens: ceiling, thinking: 'off' })
+        expect(request).toMatchObject({ model, thinking: 'off' })
       }
       expect(outcome).toMatchObject({ continue: true })
       expect(clock + AI_JOB_STEP_OVERHEAD_MS).toBeLessThanOrEqual(AI_JOB_PAGE_STEP_MINIMUM_MS)
@@ -481,6 +573,33 @@ describe('the passes', () => {
     expect(outcome.usage).toEqual(AI_JOB_ZERO_USAGE)
     expect(mockDocs.get(DRAFT)?.['seo']).toEqual({ title: SCREEN.seoTitle, description: SCREEN.seoDescription })
   })
+
+  it('gives a pass that builds a creation the time the creation’s own step needs, and a section pass a section’s (AGL-3035)', () => {
+    // A creation's step keeps the ceiling it keeps as a job of its own kind,
+    // and its lookup rounds, answer and re-ask at that ceiling are far past a
+    // section's time: a pass that builds one starts only with its step's time.
+    const creating: AiJobPlan = {
+      ...PLAN,
+      create: [
+        { kind: 'component', name: 'Price tier', why: 'Three tiers repeat.', duplicateOf: null, fields: ['tier:text'] },
+        { kind: 'layout', name: 'Site frame', why: 'The site has no layout.', duplicateOf: null, fields: [] },
+        { kind: 'form', name: 'Quote request', why: 'The site has no form.', duplicateOf: null, fields: ['email'] },
+      ],
+    }
+    const built: Record<string, AiJobOutput> = {
+      layout: { resource: 'layout', id: 'job-1-c1', versionId: 'v-frame', hostId: 'host-1', label: 'Site frame' },
+      form: { resource: 'form', id: 'job-1-c2', versionId: null, hostId: 'host-1', label: 'Quote request' },
+      component: { resource: 'reusableComponent', id: 'job-1-c0', versionId: null, hostId: 'host-1', label: 'Price tier' },
+    }
+    const next = (outputs: AiJobOutput[]) => aiPageJobRunMinimumMs(job({ plan: creating, outputs }))
+    expect(next([])).toBe(mockMinimums['layout'])
+    expect(next([built['layout']])).toBe(mockMinimums['form'])
+    expect(next([built['layout'], built['form']])).toBe(mockMinimums['component'])
+    expect(next([built['layout'], built['form'], built['component']])).toBe(AI_JOB_PAGE_STEP_MINIMUM_MS)
+    // A page whose plan creates nothing, and a job with no plan to build, need a section pass's.
+    expect(aiPageJobRunMinimumMs(job())).toBe(AI_JOB_PAGE_STEP_MINIMUM_MS)
+    expect(aiPageJobRunMinimumMs(job({ plan: { ...PLAN, status: 'proposed' } }))).toBe(AI_JOB_PAGE_STEP_MINIMUM_MS)
+  })
 })
 
 describe('when a pass stops', () => {
@@ -516,8 +635,8 @@ describe('when a pass stops', () => {
   })
 
   it('fails, spending nothing, for a plan a page job cannot build, and for a draft a member deleted', async () => {
-    const creating = { ...PLAN, create: [{ kind: 'form' as const, name: 'Quote request', why: 'No form yet.', duplicateOf: null, fields: [] }] }
-    expect(await step()(context({ plan: creating }))).toMatchObject({ failure: expect.stringContaining('form “Quote request” on the Forms page'), usage: AI_JOB_ZERO_USAGE })
+    const creating = { ...PLAN, create: [{ kind: 'dataset' as const, name: 'Price list', why: 'No data yet.', duplicateOf: null, fields: [] }] }
+    expect(await step()(context({ plan: creating }))).toMatchObject({ failure: expect.stringContaining('dataset “Price list” on the Datasets page'), usage: AI_JOB_ZERO_USAGE })
 
     mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(FIXTURE.answers[0]))
     await step()(context())
@@ -535,5 +654,113 @@ describe('when a pass stops', () => {
     expect(outcome.outputs).toEqual([
       { resource: 'screen', id: 'scr-copy', versionId: 'v-copy', hostId: 'host-1', hostSubdomain: 'acme', label: 'Home copy' },
     ])
+  })
+})
+
+describe('what the plan creates comes first (AGL-3031)', () => {
+  /** The plan the fixture's site needs when it has no layout, card or form yet. */
+  const CREATING: AiJobPlan = {
+    ...PLAN,
+    reuse: PLAN.reuse.filter((entry) => entry.kind !== 'layout'),
+    create: [
+      { kind: 'component', name: 'Price tier', why: 'Three tiers repeat.', duplicateOf: null, fields: ['tier:text'] },
+      { kind: 'layout', name: 'Site frame', why: 'The site has no layout.', duplicateOf: null, fields: [] },
+      { kind: 'form', name: 'Quote request', why: 'The site has no form.', duplicateOf: null, fields: ['email'] },
+    ],
+    screens: [{ ...SCREEN, layout: 'new:Site frame' }],
+  }
+  const UNIT_OUTPUTS: Record<string, AiJobOutput> = {
+    layout: { resource: 'layout', id: 'job-1-c1', versionId: 'v-frame', hostId: 'host-1', label: 'Site frame' },
+    form: { resource: 'form', id: 'job-1-c2', versionId: null, hostId: 'host-1', label: 'Quote request' },
+    component: { resource: 'reusableComponent', id: 'job-1-c0', versionId: null, hostId: 'host-1', label: 'Price tier' },
+  }
+  const spend: AiJobStepOutcome = { outputs: [], usage: USAGE, estCostUsd: 0.02, model: 'claude-sonnet-5', stopReason: 'tool_use' }
+
+  function unitRunners(patch: Partial<Record<string, (context: AiJobStepContext) => Promise<AiJobStepOutcome>>> = {}) {
+    const runners = {
+      layout: jest.fn(async () => ({ ...spend, outputs: [UNIT_OUTPUTS['layout']] })),
+      form: jest.fn(async () => ({ ...spend, outputs: [UNIT_OUTPUTS['form']] })),
+      component: jest.fn(async () => ({ ...spend, outputs: [UNIT_OUTPUTS['component']] })),
+      ...patch,
+    }
+    return {
+      runners,
+      runnerFor: (kind: string) => (runners as Record<string, unknown>)[kind] as never,
+    }
+  }
+
+  it('builds the layout, then the form, then the component, one a pass, each under a job of its own kind', async () => {
+    expect(aiPageJobUnits(CREATING).map((unit) => [unit.kind, unit.slot, unit.label])).toEqual([
+      ['layout', 'c1', 'Site frame'],
+      ['form', 'c2', 'Quote request'],
+      ['component', 'c0', 'Price tier'],
+    ])
+    const { runners, runnerFor } = unitRunners()
+    const page = createAiJobPageStep({ seoFields, duplicate, runnerFor })
+    let outputs: AiJobOutput[] = []
+    for (const kind of ['layout', 'form', 'component']) {
+      const outcome = await page(context({ plan: CREATING, outputs }))
+      expect([kind, outcome.continue, outcome.outputs]).toEqual([kind, true, [UNIT_OUTPUTS[kind]]])
+      // What the creation spent is this pass's spend, and no model of the page's was asked.
+      expect(outcome).toMatchObject({ usage: USAGE, estCostUsd: 0.02 })
+      outputs = [...outputs, ...outcome.outputs]
+    }
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    const [layoutContext] = runners.layout.mock.calls[0] as unknown as [AiJobStepContext]
+    expect(layoutContext.job).toMatchObject({
+      $id: 'job-1-c1',
+      kind: 'layout',
+      steps: [],
+      outputs: [],
+      plan: { status: 'confirmed', create: [CREATING.create[1]], screens: [] },
+    })
+    // A creation is told the plan's reuse, less what the page's sections place themselves.
+    const placed = new Set(SCREEN.sections.flatMap((section) => section.uses))
+    expect(layoutContext.job.plan?.reuse).toEqual(CREATING.reuse.filter((entry) => !placed.has(entry.id)))
+    const [componentContext] = runners.component.mock.calls[0] as unknown as [AiJobStepContext]
+    expect(componentContext.job).toMatchObject({ $id: 'job-1-c0', kind: 'component', plan: { create: [CREATING.create[0]] } })
+    expect(componentContext.job.brief).toContain('Build the component “Price tier”: Three tiers repeat.')
+  })
+
+  it('then builds the page on the plan resolved to what was built: the new layout named, the new records reused', async () => {
+    const { runnerFor } = unitRunners()
+    // The site's inventory lists what the creations built, as the reader would.
+    mockReadInventory.mockResolvedValue({
+      ...FIXTURE.inventory,
+      layouts: [...FIXTURE.inventory.layouts, { id: 'job-1-c1', name: 'Site frame', parentId: null }],
+    })
+    mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(FIXTURE.answers[0]))
+    const outputs = [UNIT_OUTPUTS['layout'], UNIT_OUTPUTS['form'], UNIT_OUTPUTS['component']]
+    const outcome = await createAiJobPageStep({ seoFields, duplicate, runnerFor })(context({ plan: CREATING, outputs }))
+    expect(outcome).toMatchObject({ continue: true, outputs: [] })
+    const [request] = mockRunAiRequest.mock.calls[0]
+    const prompt = String(request.messages[0].content)
+    expect(prompt).toContain('- reuse the layout job-1-c1 ("Site frame")')
+    expect(prompt).toContain('- reuse the component job-1-c0 ("Price tier")')
+    expect(prompt).not.toContain('- create the')
+    // The draft renders inside the layout the job built.
+    const screen = mockDocs.get(DRAFT)
+    expect(mockDocs.get(`${DRAFT}/versions/${screen?.['versionId']}`)).toMatchObject({ layoutId: 'job-1-c1' })
+  })
+
+  it('waits on a creation that stopped for a person, and fails on one that reported nothing or has no runner', async () => {
+    const review = { reason: 'limit' as const, message: 'Your plan includes 1 shared layouts — upgrade in Billing for more', findings: [] }
+    const stopped = unitRunners({ layout: jest.fn(async () => ({ ...spend, review })) })
+    const waiting = await createAiJobPageStep({ seoFields, duplicate, runnerFor: stopped.runnerFor })(context({ plan: CREATING }))
+    expect(waiting).toMatchObject({ review, outputs: [] })
+    expect(waiting.continue).toBeUndefined()
+
+    const empty = unitRunners({ layout: jest.fn(async () => spend) })
+    expect(await createAiJobPageStep({ seoFields, duplicate, runnerFor: empty.runnerFor })(context({ plan: CREATING }))).toMatchObject({
+      failure: AI_JOB_PAGE_CREATION_EMPTY_COPY,
+      usage: USAGE,
+    })
+
+    const none = createAiJobPageStep({ seoFields, duplicate, runnerFor: () => null })
+    expect(await none(context({ plan: CREATING }))).toMatchObject({
+      failure: AI_JOB_PAGE_CREATION_UNAVAILABLE_COPY,
+      usage: AI_JOB_ZERO_USAGE,
+    })
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
   })
 })

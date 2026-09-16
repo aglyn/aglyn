@@ -20,9 +20,9 @@ import {
   AI_ADDON_CREDITS_PER_MONTH,
   aiAddonName,
   hasAiAddon,
-  PLAN_PRICING,
   resolveEffectivePlan,
   resolveOrgEntitlements,
+  resolvePlanPricing,
   type AglynOrgBilling,
 } from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
@@ -94,7 +94,9 @@ export default function AiCreditsCard(props: AiCreditsCardProps) {
   if (entitlements.assistCreditsPerMonth <= 0) return null
   const plan = resolveEffectivePlan(org)
   const aiAddonCredits = hasAiAddon(org) ? AI_ADDON_CREDITS_PER_MONTH[plan] : 0
-  const aiAddonSold = PLAN_PRICING[plan].aiAddonMonthlyUsd != null
+  // Sold to THIS workspace, not merely on its plan: a staff comp has no
+  // subscription to add the item to, so its price list sells none (AGL-3034).
+  const aiAddonSold = resolvePlanPricing(org).aiAddonMonthlyUsd != null
   return (
     <CardDisplay
       header={'AI credits'}

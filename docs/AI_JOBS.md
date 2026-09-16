@@ -3,8 +3,9 @@
 The job model behind every generative door (AGL-2904): one customer brief
 carried through one or more model steps by a Firestore state machine, so that
 work longer than a request survives the request. The console route runs what
-it can inline; the platform job beat resumes whatever is left. The document is
-the whole state — no process holds anything the next beat cannot read back.
+it can inline; the AI jobs beat, a console route of its own driven every
+minute, resumes whatever is left. The document is the whole state — no process
+holds anything the next beat cannot read back.
 
 Code, all in the AI plugin (`libs/plugins/ai`, AGL-2939):
 `src/lib/model/ai-jobs.types.ts` (the model),
@@ -16,8 +17,9 @@ Code, all in the AI plugin (`libs/plugins/ai`, AGL-2939):
 `ai-job-component-step.ts` (the generation steps, below),
 `src/lib/server/ai-jobs-route.ts`, `ai-jobs-events-route.ts`,
 `ai-jobs-cancel.ts` and `ai-jobs-resume.ts` (the doors, registered on the
-console dispatcher by `src/lib/server.ts`), `src/lib/jobs/ai-jobs-beat.ts` (the
-beat). The building doctrine every generator runs through is
+console dispatcher by `src/lib/server.ts`), `src/lib/jobs/ai-jobs-beat.ts` and
+`src/lib/server/ai-jobs-beat-route.ts` (the beat, below). The building doctrine
+every generator runs through is
 `src/lib/runtime/ai-doctrine.ts`, with its validators in
 `src/lib/runtime/ai-doctrine-validators.ts` (below).
 
@@ -47,21 +49,28 @@ rules deny every client write). Fields:
 | `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. A page's document carries its estimated first-visit `load`. An output may carry a customer-safe `note`: what the person decides next about it. |
 | `plan` | The plan a planned kind builds from: `reuse`, `create`, `screens`, the inventory `labels` it references, and `status` `proposed` → `confirmed` with who confirmed it and when. |
 | `review` | While the job is `needs_review`: the `reason` (`plan`, `doctrine` or `limit`), the customer-safe `message`, and the rules the last answer broke. |
-| `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step, and the real spend at the plan's credit rate. |
+| `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step while the job can run — zero while it waits for a person, and a confirmed page or site plan's whole-job estimate where that is more — and the real spend at the plan's credit rate. |
 | `lease` | `{ owner, until }` while a step runs — see below. |
 | `expiresAt` | 180 days from creation, the assist exchange's clock: the brief is verbatim customer text (`docs/DATA_RETENTION.md`). |
 | `error` | Customer-safe only. Provider detail goes to the server log beside the ids. |
 
 ## The lease
 
-A step runs under a lease: an owner id and an `until` instant 90 s out. The
-console route and two overlapping beats can all look at one job inside the
-same minute, and only one of them may spend the reservation for its step. A
-claim is a transaction (`claimNextStep`) that refuses while another owner's
-lease is live; an expired lease is simply claimable, which is how a step
-abandoned by a frozen process is recovered — the stale lease is released by
-being taken, not by a sweep of its own. `heartbeatStep` extends a lease a long
-step still holds, and refuses once someone else has recovered it.
+A step runs under a lease: an owner id and an `until` instant
+`AI_JOB_LEASE_MS` (330 s) out. The console route and several overlapping
+beats can all look at one job inside the same minute, and only one of them may
+spend the reservation for its step. A claim is a transaction (`claimNextStep`)
+that refuses while another owner's lease is live; an expired lease is simply
+claimable, which is how a step abandoned by a process that died is recovered —
+the stale lease is released by being taken, not by a sweep of its own.
+`heartbeatStep` extends a lease a long step still holds, and refuses once
+someone else has recovered it.
+
+The lease outlasts the longest any holder can still be running a step: the
+beat route's 300 s function ceiling (AGL-3026). The beat fires every minute
+and one sweep may run for most of five, so a lease shorter than that would
+run out under a live beat, and the next beat would claim the same step and
+call the provider for it a second time.
 
 ## Tools a step may call
 
@@ -80,16 +89,19 @@ lockdown, rate, band and caps — and adds the two rungs a copy needs:
 `runAiJobStep` is the one place a step is claimed, metered, run and recorded,
 in that order:
 
-1. claim the lease (a refused claim costs nothing);
-2. `reserveAssistMessage` — the same read-and-increment transaction the chat
+1. ask the workspace's AI pause: a job of a workspace whose AI staff have
+   paused is held where it stopped, and nothing below happens (AGL-3037,
+   [The beat](#the-beat));
+2. claim the lease (a refused claim costs nothing);
+3. `reserveAssistMessage` — the same read-and-increment transaction the chat
    route takes, so a job cannot slip past the org's monthly ceiling by being
    asynchronous. The console route's gate ladder takes this reservation
    before the job exists and hands it to the first step; every later step
    reserves for itself;
-3. run the step's registered runner;
-4. `recordAssistCost` at the serving model's rates, so the usage rollup and
+4. run the step's registered runner;
+5. `recordAssistCost` at the serving model's rates, so the usage rollup and
    the invoice see a job's tokens exactly as they see a chat turn's;
-5. record the step: its credits, its outputs, one `adminAudit` row
+6. record the step: its credits, its outputs, one `adminAudit` row
    (`ai.job.output`) per output.
 
 A refused reservation is not a failure. The org is out of credits, over its
@@ -108,6 +120,20 @@ no room for its draft, hands its message back the same way.
 
 A step runner writes drafts and returns. It does not touch the job document,
 the meter or the lease.
+
+**`creditsReserved` is nominal, and nothing counts it (AGL-3030).** The one real
+reservation a step takes is the message `reserveAssistMessage` counts, and it is
+settled before the step is recorded: metered with the step's cost, or handed back
+when the step spent nothing. The band, the Free taste's account allowance and every
+refusal are measured on recorded spend, so a job between steps holds nothing real
+against either. The figure is what the console shows a running job as costing
+before its bill is known: `AI_JOB_STEP_RESERVE_CREDITS` a step at creation, one
+step's worth released as each settles. A job parked `needs_review` shows nothing
+held — the step that parks it releases the figure in the write that records it —
+and `resumeAiJob` holds it again for the steps a resume queues, or at the
+confirmed plan's whole-job estimate (`aiJobPlanCreditEstimate`, AGL-3031) where
+that is more. A meter park (`needs_input`) keeps it, because its step runs as soon
+as the meter admits it.
 
 ## Tokens, per step and per kind
 
@@ -229,7 +255,9 @@ live answer.
   `element`, `blog`, `text` and `chat`. A generator adds its briefs there.
 - **What a case holds.** The brief and its framing; the site `inventory` it is
   built for, in the shape `readSiteInventory` returns, and the media `assets`
-  its images are measured against; for a planned kind, the plan shape a good
+  its images are measured against; for a workspace that lacks something, its
+  `capabilities` (what it may create, and whether it keeps reusable components),
+  which hold the answer to the inline doctrine and the plan to what it may create; for a planned kind, the plan shape a good
   answer has (`expected.plan`: how many screens, what it must reuse, its
   layout, what it may create); `candidates`, each an answer with its plan, its
   rubric grade, and whether it was `authored` by hand or `recorded` from a
@@ -260,11 +288,16 @@ live answer.
   `recordAiEvalLive`). Each recorder answers through the door that answers
   the kind in production — the plan step's runner, the text step's runner, the
   theme step's own generation call — so a recording measures the production
-  request. A planned kind records its plan alone until its generator lands
-  (a `plan`-scope answer, counted toward the plan step rather than the kind's
-  floor); a kind whose door is a request route (the copy assistant's modes,
-  the chat door) has no recorder yet, and a door that gains one registers it
-  with `registerAiEvalRecorder`.
+  request. A page brief is recorded end to end (AGL-3030): the plan step's
+  runner, the plan confirmed, then every pass of the page step's runner against
+  a site kept in memory (`src/lib/runtime/ai-eval-memory-firestore.ts`), with
+  each exchange's tokens and credits under `candidate.steps`, metered as the
+  machine meters a step. Any other planned kind records its plan alone until its
+  generator is recorded the same way (a `plan`-scope answer, counted toward the
+  plan step rather than the kind's floor); a kind whose door is a request route
+  (the copy assistant's modes, the chat door) has no recorder yet, and a door
+  that gains one registers it with `registerAiEvalRecorder`.
+  `AI_EVAL_CASES=<id>[,<id>]` records only the briefs it names.
 
 ## The routing table
 
@@ -313,6 +346,54 @@ beat query matches `needs_review`, and only a member resumes it:
   it once more with its attempts started over.
 
 `resumeAiJob` is that transition, in one transaction, and cancel ends either.
+
+### What the plan may create
+
+A plan that names a creation nothing can make is a dead end the member pays for
+twice (AGL-3030): once for the plan, and again for the plan they describe after
+being told to make the creation by hand — which, on a workspace whose plan does not
+include it, they cannot. So before it asks, the plan step reads what the job may
+create on its site (`src/lib/model/ai-plan-capabilities.ts`):
+
+- **The workspace.** `readAiPlanCapabilities` in `src/lib/jobs/ai-job-drafts.ts`
+  answers every creation kind from the resolved entitlements and the site's counts,
+  in the draft writer's own band arithmetic: `reusableComponents` for a component,
+  that feature then `formsPerHost` for a saved form, `sharedLayoutsPerHost` and
+  `templatesPerHost` with the room each has left, and the plan's datasets. It reads
+  only the collections a finite allowance counts. A theme change counts against
+  nothing, and an email design is the email plugin's to refuse.
+- **The job.** A kind that builds only some plans narrows that
+  (`AI_JOB_PLAN_SCOPES` in the plan step): a page job builds the layout, forms and
+  components its plan creates (`AI_PAGE_CREATE_KINDS`, AGL-3031) and a site scaffold
+  its layout, form and palette change, and each refuses a plan of the wrong shape.
+- **The request.** The lines ride the plan's USER turn (`aiJobPlanPrompt`), never a
+  system block: they are per workspace and per site, and the doctrine's cached prefix
+  stays one entry for the platform. The doctrine states the rule once — rule 7,
+  create only what the request says this job may create — and the request states the
+  facts. The lines are part of the plan key, so a plan made under other capabilities
+  is never reused.
+- **The rules.** `validateAiBuildPlan(plan, inventory, framing, capabilities)`
+  refuses a creation outside them (`plan-create-not-allowed`, rule 7, one violation a
+  creation, saying why and what to do instead), and the plan step adds the kind's
+  shape refusal (`plan-job-shape`) — both with the one re-ask every rule gets. A site
+  with no layout, where the job may not create one, is not refused for a screen that
+  names none; a long list, where no dataset may be made, is asked to be shorter.
+- **Inline, where the workspace keeps no reusable components.** A workspace whose plan
+  lacks `reusableComponents` can place no component and save no form, so there — and
+  only there — the doctrine builds inline: a form is a Form element the page carries,
+  with its Form Fields inside it, and a repeated item is drawn in its own section.
+  Rules 1 and 3 state that exception, the plan rules accept it on those capabilities,
+  and the tree rules accept it where `AiDoctrineTreeContext.reusableComponents` is
+  `false`, which the page step sets from the org's entitlement. Loose fields and a
+  form with no field to send are still refused. The tenant renders such a Form as
+  authored (only a form bound by `formId` is replaced by its entity's design), and
+  `/api/forms/submit` collects a submission with no `formId` under its `formName`,
+  within the plan's `formSubmissionsPerMonth`.
+- **Refused before a Confirm.** A plan that passes is asked the kind's admission with
+  the plan, as the resume door asks it. A refusal fails the job with the door's
+  sentence before any member is shown a Confirm: its plan is not kept, and it holds
+  nothing. A door that cannot answer keeps the plan, because the resume door asks
+  again before anything is built.
 
 ### An identical brief reuses the plan
 
@@ -425,7 +506,13 @@ a model call the caller pays for but NOT an answer attempt, so the one re-ask
 is still there to be spent on a broken rule; `AI_INVENTORY_LOOKUP_MAX_ROUNDS`
 bounds it, and the last answer says it is the last. The re-ask continues the
 turn rather than replacing it, so whatever was looked up is still in front of
-the model and is not asked for twice.
+the model and is not asked for twice. A lookup round is asked at the answer's
+ceiling, and nothing tells a request that will look something up from one that
+will answer, so the whole generation — its lookup rounds, its answer and its
+re-ask — shares one allowance of output, twice the ceiling: each call is asked
+for no more than is left of it, and a generation that has spent it stops
+(AGL-3036). That is what lets a job step plan its time with lookups in it
+([The time budget](#the-time-budget)).
 
 What it buys is rule 7 on a site bigger than its prompt: without it, a plan for
 a site with two hundred components can only reuse the forty it was shown, and
@@ -452,8 +539,10 @@ confirmed `job.plan` and builds exactly one draft.
   `ai-job-template-step.ts`, registered by the plugin's server surface. Each
   calls `runValidatedGeneration('layout' | 'template', …)` on
   `ctx.modelFor?.('job.layout' | 'job.template')`, with the doctrine's tree
-  tool, no extended thinking and an 8,000-token answer ceiling, so the step
-  and its one re-ask fit the beat's budget for one step. The door's checks
+  tool, no extended thinking and the routing table's 8,000-token answer
+  ceiling, as much of it as fits the least time each step registers on the
+  model the job runs ([Every step's least time](#every-steps-least-time)). The
+  door's checks
   ride `extend`: a layout places every component the confirmed plan reuses
   and never draws navigation the site keeps as a component (rules 7 and 1); a
   template binds only the tokens its page fills, binds its h1 to the
@@ -503,7 +592,9 @@ the submit route reads, agreeing with each other. It is a planned kind, like
 
 - **Runner.** `src/lib/jobs/ai-job-form-step.ts` calls
   `runValidatedGeneration('form', …)` on `ctx.modelFor?.('job.form')`, with no
-  extended thinking and the doctrine's answer ceiling for a form, through
+  extended thinking and the routing table's `job.form` ceiling — the doctrine's
+  own for a form, which holds the largest form its output budget admits — as
+  much of it as fits the least time the step registers, through
   `AI_JOB_FORM_TOOL`: the doctrine's form tree tool plus `routing` (`inbox`,
   `list` or `lead`, with a list name only when the brief names one) and
   `cannotCollect`. The tree is composed on the palette's `form` surface, whose
@@ -553,8 +644,9 @@ draft.
 
 - **Runner.** `src/lib/jobs/ai-job-component-step.ts`, registered by the
   plugin's server surface, calls `runValidatedGeneration('component', …)` on
-  `ctx.modelFor?.('job.component')` with no extended thinking and an
-  8,000-token answer ceiling, as the layout step does. The model answers
+  `ctx.modelFor?.('job.component')` with no extended thinking and the
+  8,000-token answer ceiling the layout step keeps, as much of it as fits the
+  least time the step registers. The model answers
   through `submit_component` (`src/lib/tools/ai-component-tool.ts`): the
   doctrine's tree, and `props[]` beside it.
 - **The kinds are the Properties dialog's.** The tool offers
@@ -602,7 +694,8 @@ draft.
 - **Fit.** The step's spec measures the cached prefix and the golden answer
   (`src/lib/jobs/goldens/`), holds `AI_STEP_NOMINAL_USAGE['job.component']`
   within a quarter of both, and holds an answer and its one re-ask inside the
-  beat's 45 s at the serving rate it states.
+  beat's budget at the serving rate it states; the least time the step
+  registers is [its own](#every-steps-least-time).
 
 ### From a selection, not a brief
 
@@ -667,7 +760,10 @@ nothing itself.
   a chat turn, and credits running out mid-scaffold is the machine's own
   `needs_input` park, resumed by the beat where it stopped. Where it stopped is
   read from the job's OUTPUTS — each unit reports one output of its own resource
-  when it completes — so nothing is kept anywhere else.
+  when it completes — so nothing is kept anywhere else. A pass needs the time
+  the step that builds its unit registers for the job derived for it
+  (`aiSiteJobRunMinimumMs`, AGL-3035): the beat starts the palette change only
+  with a theme step's time left, and a page only with a page pass's.
 - **What a page is told.** The derived plan holds ONE screen and no creations,
   with every `new:<name>` reference the scaffold has already built resolved to
   the real id and added to `reuse`. That is what a page job's plan rules accept,
@@ -682,6 +778,12 @@ nothing itself.
 - **The pass bound.** A scaffold's unit is a whole page, so the default bound an
   audit keeps would cut a real site short: the kind registers its own through
   `registerAiJobStepPasses`, sized to the largest plan the rules admit.
+- **Shared with the page job.** A page job builds its plan's creations through the
+  same pieces (AGL-3031): `aiCreationUnit` makes a creation a unit, `aiRunJobUnit`
+  runs one delegated pass and reports whether the unit is built, and
+  `aiSiteBuiltRefs` with `aiSiteUnitJob` resolve `new:<name>` to what was built. A
+  creation unit is told the plan's reuse less what the plan's screens place
+  themselves, so a layout is never refused for leaving out a card a page places.
 - **The estimate is the guard rail.** `aiPlanCreditEstimate` counts the plan's
   passes — one a section, one more a page, one a creation — at the machine's
   nominal credits per step, and the plan proposal shows it beside the button
@@ -706,7 +808,13 @@ Registered under `/api/ai/jobs` by the plugin's console API surface:
   aborted, re-queued, and answers `queued` for the beat. A step that says it
   needs more than that budget (`minimumMs`, below) is never started here at
   all: the door hands the reservation back and answers `queued`, so the beat
-  runs it with a budget of its own. A `theme` job must name its site.
+  runs it with a budget of its own. Every step but a `text` job's is such a
+  step (AGL-3026, AGL-3035): a plan, every generation step and every pass of a
+  page or a scaffold registers more than 25 s, so only a `text` job — whose one
+  request at its ceiling fits the door — runs here, and every other job
+  answers `queued` and runs on the beat. A job whose workspace's AI staff paused
+  once the ladder had admitted the request is held the same way (AGL-3037). A
+  `theme` job must name its site.
 - `POST /api/ai/jobs/batch` `{ orgId, brief, businessType, pages, welcomeEmail?,
   sites: [{ hostId, businessName?, city?, brand? }], model? }` is the agency
   batch (AGL-2911): it climbs the same ladder on the ORG axis, holds the plan
@@ -801,10 +909,11 @@ is one thing to build and a plan over it would be a plan of one.
   `ai-job-campaign-step.ts`, registered by the plugin's server surface. Both
   generate through `generateAiEmail`, which calls
   `runValidatedGeneration('email', …)` with the doctrine's email tree tool
-  widened by `subjects` and `preheaders`, no extended thinking, and a
-  6,000-token ceiling so the step and its one re-ask fit the beat's budget.
-  Only the step kind differs (`job.email`, `job.campaign`), so the routing
-  table can price and route them apart.
+  widened by `subjects` and `preheaders`, no extended thinking, and the
+  routing table's 6,000-token ceiling for the step kind, as much of it as fits
+  the least time the step registers on the model the job runs. Only the step
+  kind differs (`job.email`, `job.campaign`), so the routing table can price,
+  route and time them apart.
 - **The door's own checks** ride `extend`: every block sits inside an
   `emailSection`; every `emailButton` links somewhere; the only merge tokens
   are `{{contact.firstName}}`, `{{contact.name}}` and `{{contact.email}}`, and
@@ -864,17 +973,46 @@ is one thing to build and a plan over it would be a plan of one.
 
 ## The beat
 
-`ai:ai-jobs` registers on the platform job beat every minute
-(`libs/plugins/ai/src/lib/jobs/ai-jobs-beat.ts`, registered by the plugin's
-tenant API surface, which the run-jobs route loads like every plugin's). `sweepAiJobs` reads
-queued and running jobs across every org oldest-first by `updatedAt`, plus a
-few parked jobs that have rested, and runs steps until 45 s of wall clock is
-spent — checked between jobs, with the time left handed to the step in flight
-as its abort signal. The ordering is the cursor: a job the sweep touches has
-its `updatedAt` moved to the back; one it did not reach keeps its place. Two
-collection-group queries rather than one, so a workspace with many parked jobs
-cannot fill the candidate list and starve the queue. A `needs_review` job is
-in neither query.
+The beat is a console route, `POST /api/admin/ai-jobs-beat` (AGL-3026). The
+plugin's console API surface registers its handler
+(`src/lib/server/ai-jobs-beat-route.ts`, which runs `runAiJobsBeat` in
+`src/lib/jobs/ai-jobs-beat.ts`), and the console app serves that exact path
+from a named route, `apps/console/app/api/admin/ai-jobs-beat/route.ts`, whose
+only job is the function time a sweep needs: `maxDuration = 300`, where the
+plugin dispatcher's ceiling is a door's 60. Cloud Scheduler calls it every
+minute through `consoleAiJobsBeat` in `cloud/functions/src/index.ts`, on the
+console's `CRON_SECRET` as `x-cron-secret`: the route answers 501 while the
+secret is unset and 401 to a request that does not carry it. It stamps
+`ai-jobs-beat` for `/api/health/crons` on every call that does, a call the
+switch holds included.
+
+It runs on the console because every step calls the AI provider, and the
+provider's key is held by the console alone: the tenant app serves every
+published site and holds no provider key, so a step it ran could only fail.
+The tenant loads no server surface of this plugin at all — `plugins.config.json`
+gives the plugin no `tenantApi` register function — so nothing that serves a
+site registers a job kind, a provider or a beat. `/api/admin/` is the path
+because the console's edge lets a request past its bot challenge there when it
+carries the cron secret's header; a route anywhere else would need a firewall
+rule before a scheduler could reach it. It is the one path the plugin registers
+outside its own prefixes.
+
+Each beat sweeps under a lease owner of its own (`beat:<uuid>`), fixed for the
+whole sweep. `sweepAiJobs` reads queued and running jobs across every org
+oldest-first by `updatedAt`, plus a few parked jobs that have rested, and runs
+steps until `AI_JOB_SWEEP_BUDGET_MS` (280 s) of wall clock is spent — checked
+between jobs, with the time left handed to the step in flight as its abort
+signal. The slowest step is fitted to the budget rather than the budget to
+it: no step registers more time than a beat can give the first step it starts
+([The time budget](#the-time-budget)). The 20 s left of the route's 300 s is
+the route's own work around the sweep: loading the plugin surfaces on a cold
+start, the lockdown read and the beat's mark, and the last step's record after
+its provider call. A beat still running when the next minute fires overlaps
+it, and the lease keeps the two apart. The ordering is the cursor: a job the
+sweep touches has its `updatedAt` moved to the back; one it did not reach
+keeps its place. Two collection-group queries rather than one, so a workspace
+with many parked jobs cannot fill the candidate list and starve the queue. A
+`needs_review` job is in neither query.
 
 A step that says how long it needs (`minimumMs`) is left queued and untouched
 when less than that is left, rather than started and cut off, and keeps its
@@ -884,11 +1022,38 @@ while the time it needs is left, for at most `AI_JOB_SWEEP_MAX_JOBS` further
 runs — which is how the page kind builds a page one section to a pass, under
 [The page kind](#the-page-kind).
 
-The beat is platform-scoped for the coverage guard: it resolves no host and
-writes only unpublished drafts under the org. The lock that applies is the
-`ai-generate` feature switch, which the handler asks before it claims a step
-— a lock that stopped the doors and not the beat would keep spending on every
-job already queued.
+The beat resolves no host and writes only unpublished drafts under the org.
+The lock that applies is the `ai-generate` feature switch, which the handler
+asks before it claims a step — a lock that stopped the doors and not the beat
+would keep spending on every job already queued. The switch composes the
+platform lock, and a beat it holds answers 200 `{ held: true }`: an operator's
+decision, not a fault for the scheduler to log every minute.
+
+**A workspace whose AI staff have paused runs none of its jobs (AGL-3037).** The
+staff org page's Pause AI writes the same switch for one workspace
+(`feature--ai-generate--org--{orgId}`), and every jobs door refuses that
+workspace's requests through the gate ladder's rung. A job queued before the
+pause has no request to refuse, so `runAiJobStep` asks the ladder's own verdict —
+`featureLockdownRefusal({ feature: 'ai-generate', staff, orgId })`, through the
+reader `src/lib/jobs/ai-jobs-pause.ts` registers from the console surface — before
+it claims a step, for queued and running jobs alike, whatever door or beat is
+running it.
+
+- **Held, not failed.** The pause is a spend stop that staff lift with Resume AI,
+  or that ends at its own expiry, and it leaves the plan, the add-on and every
+  entitlement as they were, so what it stops should run again once it lifts —
+  the same reading the beat already gives the switch platform-wide, where a job
+  it leaves queued stays queued. A site that switched AI off is the workspace's
+  own lasting choice instead, and its job fails (AGL-3028).
+- **Nothing spent, nothing moved but the queue.** A held job calls no runner,
+  takes no reservation and hands back one a door already held; no lease is taken
+  and no attempt counted, so resuming runs it from the step it stopped at. Only
+  its `updatedAt` moves: the beat's queue is ordered by it, and a paused
+  workspace's jobs left at the front would fill every beat's candidates and
+  starve every other workspace's. The sweep counts them as `paused`.
+- **Staff still verify.** A verified staff caller on an inline door passes, as the
+  ladder lets staff through; the beat has no caller. A reader that cannot answer
+  is not a pause, as the lockdown reads fail open.
 
 ## The `seo` kind
 
@@ -948,21 +1113,41 @@ which fails a listing's job and becomes an audit unit's note.
 
 `page` (AGL-2907) builds one screen from a brief, as an unpublished draft. It
 is a planned kind: the plan step runs first, and once a member confirms the
-plan the generation runner builds its one screen. A member starts one from
-"Describe it" on a site's Screens page (the `hostScreens` widget zone) or from
-AI jobs in the Assist panel.
+plan the generation runner builds the layout, forms and components the plan
+creates, then its one screen (AGL-3031). A member starts one from "Describe it"
+on a site's Screens page (the `hostScreens` widget zone) or from AI jobs in the
+Assist panel.
 
 - **Runner.** `src/lib/jobs/ai-job-page-step.ts`, registered by the plugin's
   server surface with `registerAiJobStep('page', runner, { minimumMs:
-  AI_JOB_PAGE_STEP_MINIMUM_MS })`. The generation step continues: each pass
-  builds the next section of the plan's screen and answers `continue`, and
-  the last pass builds nothing new. Every pass is one reservation and one
-  generation, a section's answer and its one re-ask.
+  AI_JOB_PAGE_STEP_MINIMUM_MS, minimumMsFor: aiPageJobRunMinimumMs })`. The
+  generation step continues: each pass builds the next section of the plan's
+  screen and answers `continue`, and the last pass builds nothing new. Every
+  pass is one reservation and one generation, a section's lookup rounds, its
+  answer and its one re-ask.
+- **Creations first (AGL-3031).** A doctrine-correct page plan names what the page
+  needs and the site lacks — a layout, a card that repeats, a saved form — and a job
+  that sent the member away to make them by hand and describe the page again had not
+  finished. So the generation step builds them first, one a pass, through the site
+  scaffold's unit machinery (`aiPageJobUnits`: the layout, then forms, then
+  components). Each is handed to the step registered for its kind under a job derived
+  from this one, `<jobId>-c<index>` by its place in the plan, so a pass run again finds
+  its own draft; each lands as the draft that step writes, unpublished and placed
+  nowhere; and where the job stands is read from its outputs. Once every creation is
+  built, the page's passes run on the plan with each `new:<name>` resolved to the
+  record that was built, which the site's inventory now lists, so the page places the
+  new component and binds the new form by id and renders inside the new layout. A
+  creation that stops for a person stops the job; one that reports nothing, or whose
+  kind no step builds here, fails it. `AI_JOB_PAGE_MAX_PASSES` bounds a job at every
+  creation and section the plan limits admit, and the last pass. The proposal lists
+  every creation and the whole job's estimate (`aiJobPlanCreditEstimate`: one pass a
+  section, one for the page's last pass, one a creation), and confirming holds the job
+  at that estimate.
 - **Sections.** `src/lib/jobs/ai-job-page-sections.ts` holds what a pass asks
   for and how its answer is checked. `runValidatedGeneration('page-section',
   …)` sends the section tool (`submit_section`), the page instructions with
   the screen palette catalog as the last cached block, no extended thinking,
-  and an answer ceiling from `aiGenerationMaxTokensWithin`. The request names
+  and an answer ceiling from `aiJobPageSectionMaxTokens`. The request names
   the page, its type, the brief, the confirmed plan as references, the section
   to build with the inventory ids it places, and the names of the sections
   built above it, never their content. The check runs the palette validator
@@ -999,45 +1184,152 @@ AI jobs in the Assist panel.
   when one is given, a site of the job's own org, and room under
   `screensPerHost`. The resume door hands the check the plan being confirmed
   (`AiJobAdmissionContext.plan`), and a page job refuses, before any
-  generation spend, a plan that is not one screen with sections or that
-  creates anything (`aiPagePlanRefusal` in `src/lib/model/ai-page-job.ts`). A
-  new component is a component job's work (AGL-2908) and a new form a form
-  job's (AGL-2913), so the refusal names what to create first and where.
+  generation spend, a plan that is not one screen with sections, that creates
+  what a page job does not build — a template, a theme change, a dataset or an
+  email design, named with where to create it (`aiPagePlanRefusal` in
+  `src/lib/model/ai-page-job.ts`) — that creates a kind no registered step
+  builds, or that creates what the workspace may no longer make on the site
+  (`aiPageCreationRefusal`, read with `readAiPlanCapabilities`). The plan step is
+  told what a page job may create, re-asks a plan that creates anything else,
+  and asks the same admission of the plan before it is kept, so such a plan is
+  refused before a member is shown a Confirm (AGL-3030).
 
 ### The time budget
 
-The beat gives a step what is left of `AI_JOB_SWEEP_BUDGET_MS` (45 s) as its
+The beat gives a step what is left of `AI_JOB_SWEEP_BUDGET_MS` (280 s) as its
 abort signal, and a provider call that signal cuts off is still generated and
 billed upstream while the meter records nothing. So a step says how long it
 needs, and the machine does not start it with less.
 
 - `registerAiJobStep(kind, runner, { minimumMs })` records the least time a
-  kind's generation step needs (`aiJobStepMinimumMs`; the plan step has none).
-  The sweep leaves a step whose minimum is more than its time left queued and
-  untouched, so it keeps its place at the front of the next beat's queue. An
-  inline door whose budget (`AI_JOB_INLINE_BUDGET_MS`, 25 s) is less than the
-  minimum hands the reservation back and answers with the job `queued` for the
-  beat. Once every due job has had its turn, a job whose timed step asked to
-  continue runs again in the same sweep while the time it needs is left, for
-  at most `AI_JOB_SWEEP_MAX_JOBS` further runs. A step with no minimum is
-  never run again in the same sweep, since it could start with too little
-  time left.
+  kind's generation step needs, and `registerAiJobPlanStep(runner, { minimumMs })`
+  the plan step's, which every planned kind shares (`aiJobStepMinimumMs`). A
+  step whose runs need different times also registers `minimumMsFor(job)`, the
+  time the job's next run needs, never read as less than `minimumMs`
+  (`aiJobStepRunMinimumMs`, AGL-3035): a page job's pass that builds a layout
+  needs a layout step's time, and a scaffold's pass the time of the step its
+  unit is handed to. The sweep leaves a step whose next run needs more than its
+  time left queued and untouched, so it keeps its place at the front of the
+  next beat's queue. An inline door whose budget (`AI_JOB_INLINE_BUDGET_MS`,
+  25 s) is less than that hands the reservation back and answers with the job
+  `queued` for the beat. Once every due job has had its turn, a job whose timed
+  step asked to continue runs again in the same sweep while the time it needs
+  is left, for at most `AI_JOB_SWEEP_MAX_JOBS` further runs. A step with no
+  minimum is never run again in the same sweep, since it could start with too
+  little time left.
 - `src/lib/jobs/ai-job-budget.ts` plans a generation's worst case: every
-  attempt answered at its ceiling. **The rates are declared assumptions, not
-  measurements**: 100, 60 and 40 output tokens a second on the fast, balanced
-  and deep tiers, an unknown model at the slowest, and 3 s before a provider
-  starts answering, with 3 s for the step's own reads and writes. No recorded
+  model call it may make answered at its ceiling. **The rates are declared
+  assumptions, not measurements**: 100, 60 and 40 output tokens a second on
+  the fast, balanced and deep tiers, an unknown model at the slowest, and 3 s
+  before a provider starts answering, with 3 s for the step's own reads and
+  writes and 4 s for the queue read before a sweep's first step. No recorded
   run has measured them; a measured run replaces them.
-- A page pass needs `AI_JOB_PAGE_STEP_MINIMUM_MS` (44 s). Its answer ceiling
-  is the largest whose worst case fits that on the model the job runs, and at
-  most `AI_JOB_PAGE_SECTION_MAX_TOKENS` (2,000): 1,750 tokens on the fast
-  tier, 1,050 on the balanced tier and 700 on the deep tier. The request asks
-  the section to stay under the element count that ceiling holds at
+- **Every model call, not only the answers (AGL-3036).** A generation offered
+  the site inventory may spend `AI_INVENTORY_LOOKUP_MAX_ROUNDS` (2) model calls
+  looking records up before it answers, each asked at the answer's ceiling.
+  The doctrine's loop holds the whole generation — its lookup rounds, its
+  answer and its re-ask — to one allowance of output, twice the ceiling, and
+  asks each call for no more than is left of it
+  ([The inventory, and "more on request"](#the-inventory-and-more-on-request)).
+  So a generation's worst case is a first-token wait for every call, the whole
+  allowance at the tier's rate, and the step's own reads and writes: (2 answers
+  + 2 lookup rounds) × 3 s + 2 × the ceiling's answer + 3 s. A lookup round adds
+  its wait, and the output it spends is output no answer can. A generation
+  offered no inventory — a theme, a listing — makes no lookup, and a step that
+  reads more before it generates counts that too. `ai-job-budget.spec.ts` drives
+  the loop on a fake clock through both lookup rounds, an answer that breaks a
+  rule and its re-ask, on every tier, and holds it to exactly that worst case;
+  lookup rounds that spend the whole allowance stop the loop inside it.
+- **The most a step may need.** `AI_JOB_STEP_MAX_MINIMUM_MS` is the beat's
+  280 s less its 4 s queue read: the 276,000 ms a beat can give a step. A step
+  that needed more could never start. So a generation whose worst case at its
+  routing ceiling needs more asks the tier its step kind is served from for as
+  much of that ceiling as fits, and registers what that takes
+  (`aiJobStepBudget`); a slower tier asks less, so its worst case fits the same
+  minimum. The beat's budget, the route's 300 s `maxDuration` and the 330 s
+  lease stay where they were: steps are fitted to the budget rather than the
+  budget to them, and the lease is sized from `maxDuration`, which counting
+  lookups does not move.
+- A plan needs `AI_JOB_PLAN_STEP_MINIMUM_MS` (AGL-3026, AGL-3036): its two
+  lookup rounds, its answer and its re-ask on the tier the `job.plan` step is
+  served from. At the routing table's 8,000 tokens on the balanced tier that is
+  4 × 3 s + 2 × 133,334 ms + 3 s = 281,668 ms, past the 276,000 ms a beat can
+  give a step, so the balanced tier asks for 7,830 tokens: 4 × 3 s + 2 ×
+  130,500 ms + 3 s = 276,000 ms. That is still above the 3,954 output tokens
+  the live Free plan measured, past an inline door's 25 s — so neither door
+  ever starts a plan (live plans have run 23 to 42 s, and a cut-off one is
+  billed and unmetered) — and inside the beat's `AI_JOB_SWEEP_BUDGET_MS`
+  (280 s). The fast tier asks for 8,000 tokens and the deep tier for 5,220
+  (`aiJobPlanMaxTokens`). `ai-job-plan-step.spec.ts` runs a plan on a fake
+  clock on every tier through both lookup rounds, an answer that breaks a rule
+  and its re-ask, and holds it inside the minimum, and the minimum between the
+  two budgets.
+- A page pass needs `AI_JOB_PAGE_STEP_MINIMUM_MS`: a section's two lookup
+  rounds, its answer and its re-ask at `AI_JOB_PAGE_SECTION_TOKENS` (1,050
+  tokens) on the balanced tier, 4 × 3 s + 2 × 17,500 ms + 3 s = 50,000 ms. Its
+  answer ceiling is the largest whose worst case fits that on the model the job
+  runs, and at most `AI_JOB_PAGE_SECTION_MAX_TOKENS` (2,000): 1,750 tokens on
+  the fast tier, 1,050 on the balanced tier and 700 on the deep tier — the
+  ceilings every golden section and the Free page's arithmetic are measured
+  at. The request asks the section
+  to stay under the element count that ceiling holds at
   `AI_JOB_PAGE_TOKENS_PER_ELEMENT` (45 tokens an element, measured on the
   golden sections). `ai-job-page-step.spec.ts` runs a pass on a fake clock on
-  every tier, answer and re-ask at the full ceiling, and holds it inside the
-  minimum, and the minimum inside the beat's 45 s and past an inline door's
-  25 s.
+  every tier through both lookup rounds, an answer that breaks a rule and its
+  re-ask, and holds it inside the minimum, and the minimum inside what a beat
+  can give a step and past an inline door's 25 s.
+- A creation a page job builds runs inside a page pass (AGL-3031), handed to the
+  step of its own kind, which keeps the ceiling it keeps as a job of that kind —
+  far past a section's time. So that pass needs the time the creation's step
+  registers (`aiPageJobRunMinimumMs`, AGL-3035): a layout's or a component's
+  276,000 ms, a form's 215,000 ms. `ai-job-step-minimums.spec.ts` walks a page
+  job through its creations and its sections, and a scaffold through its units,
+  against the machine's own registry.
+
+### Every step's least time
+
+Every generation step the console registers declares the least time it needs
+(AGL-3035), computed by `aiJobStepBudget` from the routing table's ceiling on the
+tier its step kind is served from — never set by hand. The table is each step's
+worst case on that tier and the ceiling it asks on each tier; a slower tier asks
+less so its worst case fits the same minimum. `ai-job-step-minimums.spec.ts`
+registers the plugin as the console does, walks every kind and every step in the
+machine's own registry, fails on a step that registered no least time, and holds
+this table to the figures the code computes.
+
+| step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
+| --- | --- | --- | --- | --- |
+| `plan` | balanced | 2 | 8,000 / 7,830 / 5,220 | 4 × 3 s + 2 × 130,500 ms + 3 s = 276,000 ms |
+| `component` | balanced | 2 | 8,000 / 7,830 / 5,220 | 4 × 3 s + 2 × 130,500 ms + 3 s = 276,000 ms |
+| `layout` | balanced | 2 | 8,000 / 7,830 / 5,220 | 4 × 3 s + 2 × 130,500 ms + 3 s = 276,000 ms |
+| `template` | balanced | 2 | 8,000 / 7,830 / 5,220 | 4 × 3 s + 2 × 130,500 ms + 3 s = 276,000 ms |
+| `form` | balanced | 2 | 6,000 / 6,000 / 4,000 | 4 × 3 s + 2 × 100,000 ms + 3 s = 215,000 ms |
+| `email` | balanced | 2 | 6,000 / 6,000 / 4,000 | 4 × 3 s + 2 × 100,000 ms + 3 s = 215,000 ms |
+| `campaign` | balanced | 2 | 6,000 / 6,000 / 4,000 | 4 × 3 s + 2 × 100,000 ms + 3 s = 215,000 ms |
+| `page`, a section pass | balanced | 2 | 1,750 / 1,050 / 700 | 4 × 3 s + 2 × 17,500 ms + 3 s = 50,000 ms |
+| `theme` | balanced | 0 | 8,000 / 7,770 / 5,180 | 2 × 3 s + 2 × 129,500 ms + 3 s + 8 s = 276,000 ms |
+| `seo`, a batch of fixes | fast | 0 | 4,000 / 2,400 / 1,600 | 2 × 3 s + 2 × 40,000 ms + 3 s + 10 s = 99,000 ms |
+| `text` | balanced | 0 | 1,024 / 1,024 / 682 | 1 × 3 s + 1 × 17,067 ms + 3 s = 23,067 ms |
+
+- **Only a `text` job runs at an inline door.** Its one request — no re-ask, and
+  no inventory to look anything up in — at its routing ceiling fits the door's
+  25 s, as the helper computes it. Every other step needs more, so both doors
+  leave it for the beat.
+- **A theme reads the brand first.** Its 8 s is `AI_THEME_BRAND_BUDGET_MS`, the
+  bound on reading the site logo's and a linked page's colors before it asks.
+- **An SEO pass is timed by its largest generation.** A listing asks at most
+  1,024 tokens and an audit's site-wide proposal 1,500, both whole on every tier
+  inside the minimum; a batch of fixes asks 4,000 on the fast tier it is served
+  from, and less on a slower one. Its 10 s is `AI_SEO_AUDIT_READS_MS`, the
+  declared assumption for an audit's read of up to 150 published pages before
+  its first pass asks.
+- **A page or a scaffold pass needs its unit's time.** The table's `page` row is
+  a section pass; a page job's pass that builds a creation needs the creation's
+  row, and a scaffold's pass the row of the step its unit is handed to — a
+  palette change the `theme` row, a page the `page` row. The theme, SEO and page
+  times are declared in `ai-job-theme-budget.ts`, `ai-job-seo-budget.ts` and
+  `ai-job-page-budget.ts`, so the machine and the scaffold read them without
+  loading the steps.
 
 ### Evals
 
@@ -1051,7 +1343,7 @@ keeps the doctrine, carries no main landmark of its own (the layout's slot is
 the document's one main) and no raw binding token; and every section fits the
 balanced tier's answer ceiling, under the element measure.
 
-- **Credits per page: an estimate.** 45 credits per page: the median
+- **Credits per page: an estimate.** 46 credits per page: the median
   (the higher middle value) of the ten golden pages, each priced from the
   requests the step sent and the golden answers at four characters a token,
   at the catalog rates of the models the routing table picks, with the cached
@@ -1059,6 +1351,36 @@ balanced tier's answer ceiling, under the element measure.
   and the listing exchange at the SEO step's nominal usage. It is not a
   measurement, and customer docs quote no figure: a job shows what it used in
   AI jobs. A recorded run through AGL-2937's harness replaces it.
+- **A plan with creations, built end to end.** `AI_PAGE_CREATION_FIXTURE` is a
+  roofing page on a Starter site with no layout, card or form: its plan creates all
+  three. `ai-job-page-evals.spec.ts` replays it through the real page step, handing
+  each creation to the real layout, form and component steps on the goldens their
+  own specs hold, with the site's inventory read as it grows, and holds the order
+  (layout, form, component, then the page), each draft under its derived id, a page
+  that renders inside the new layout and places the new card and form by id, every
+  building rule on the page, and nothing published.
+- **A Free page fits the taste.** `ai-job-free-page.spec.ts` replays
+  `AI_FREE_PAGE_FIXTURE` — an about page with four practice areas and a
+  consultation form, on a Free site that already has its one layout — through the
+  real plan and page steps on a Free org, and holds the arithmetic: the page plan at
+  the tokens measured live on a Free workspace (1,366 input, 4,059 cache read,
+  4,059 cache write and 3,954 output on claude-sonnet-5, 80 credits), grown with the
+  cached prefix and the capability lines as they stand now; every section pass at
+  its answer ceiling, the first writing the cache; and the listing at the SEO step's
+  nominal usage. Characters are read four to a token and scaled by what the live
+  run measured against the ledger's estimate, the higher of the plan's and the
+  layout's ratios. The four-section Free page comes to at most 190 credits of the
+  300, and a Free page fits 9 sections at every pass's ceiling. On a Free site with
+  no layout yet, the page job builds the one layout the Free plan includes first
+  (AGL-3031), at the layout generation measured live (1,709 input, 6,649 cache read,
+  6,649 cache write and 2,057 output), grown with the layout request's cached prefix:
+  the same page that creates its layout first comes to at most 254 credits, and a
+  Free page fits 6 sections with its layout. The spec fails when
+  a doctrine or plan change pushes the figure past the wall or out of step with this
+  sentence. When a live run has recorded the Free brief
+  (`AI_EVAL_LIVE=1 AI_EVAL_CASES=page-free-law-firm-about npm run eval:ai-live`), the
+  spec also holds the credits that recording metered to the wall; recordings are
+  never committed.
 - **Accessibility: an axe audit.** Zero violations of any impact on all ten
   golden pages, and so none serious or critical, under axe-core 4.12.1.
   `tools/scripts/record-ai-page-axe.mts` assembles each page through the
@@ -1148,9 +1470,10 @@ as `theme` does, so the machine stays light to load.
 **Register by a call, never by an import.** A kind's registrations — its
 runner, its admission, its pass bound — go in one exported function in the
 kind's own module (`registerAiPageJob`), and `registerAiJobKinds` in
-`server.ts` calls it for both surfaces. Never register at a module's top level
+`server.ts` calls it for the console surface, the only one that loads the
+plugin's server entry. Never register at a module's top level
 and import the module for that: the plugin's `package.json` declares only
-`server.ts` effect-ful, so Turbopack deletes such an import in both apps while
+`server.ts` effect-ful, so Turbopack deletes such an import in a built app while
 jest still runs it. That is how every generative kind answered "not available
 yet" in a built console with every project green (AGL-3025).
 `registrations-survive-a-bundler.spec.ts` bundles the plugin with webpack
@@ -1162,10 +1485,15 @@ Two settings shape when a runner gets to run:
 
 - `registerAiJobStep(kind, runner, { minimumMs })` says the least time one run
   of the step needs — its generation's worst case at the rates
-  `ai-job-budget.ts` assumes, plus its own reads and writes. Neither the beat
-  nor an inline door starts it with less. Size it from the budget helpers
-  rather than by hand, and hold it inside the beat's 45 s in a spec, or the
-  step can never run at all.
+  `ai-job-budget.ts` assumes, every model call it may make, plus its own reads
+  and writes. Neither the beat nor an inline door starts it with less. Every
+  generation step declares one: build it with `aiJobStepBudget` from the
+  routing table's ceiling rather than by hand, ask each model for the ceiling
+  that budget gives it, and add the step's row to
+  [Every step's least time](#every-steps-least-time) —
+  `ai-job-step-minimums.spec.ts` fails on a registered step with no least time,
+  and on a table that disagrees with the code. A step whose runs differ adds
+  `minimumMsFor(job)`.
 - A runner returning `continue: true` asks for another pass on the same step
   (`AI_JOB_STEP_MAX_PASSES`), which is how a kind too large for one answer —
   a page, a section to a pass — stays inside its budget. Each pass records its

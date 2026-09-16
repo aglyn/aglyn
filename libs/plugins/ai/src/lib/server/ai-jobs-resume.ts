@@ -19,7 +19,7 @@
 // The POST climbs `aiGateLadder`, whose lockdown rung is the verdict.
 
 import { randomUUID } from 'crypto'
-import { aiJobAdmissionRefusal } from '../jobs/ai-job-admission'
+import { aiJobAdmissionRefusal, aiJobSiteRefusal } from '../jobs/ai-job-admission'
 import {
   AI_JOB_INLINE_BUDGET_MS,
   aiJobNextStepMinimumMs,
@@ -94,16 +94,23 @@ export async function POST(
   if (existing.status === 'needs_review') {
     let refusal: Awaited<ReturnType<typeof aiJobAdmissionRefusal>>
     try {
-      refusal = await aiJobAdmissionRefusal(existing.kind, {
-        firestore: gate.firestore,
-        orgId: gate.orgId,
-        hostId: existing.hostId ?? null,
-        inputs: existing.inputs ?? {},
-        org: gate.org,
-        // The plan being confirmed, for a kind that builds only some plans.
-        plan: existing.plan ?? null,
-        uid: gate.uid,
-      })
+      // A site that switched AI off first (AGL-3028), then the kind's own check.
+      refusal =
+        (await aiJobSiteRefusal({
+          firestore: gate.firestore,
+          org: gate.org,
+          hostId: existing.hostId ?? null,
+        })) ??
+        (await aiJobAdmissionRefusal(existing.kind, {
+          firestore: gate.firestore,
+          orgId: gate.orgId,
+          hostId: existing.hostId ?? null,
+          inputs: existing.inputs ?? {},
+          org: gate.org,
+          // The plan being confirmed, for a kind that builds only some plans.
+          plan: existing.plan ?? null,
+          uid: gate.uid,
+        }))
     } catch (error) {
       await release()
       console.error('ai job admission failed', { orgId: gate.orgId, jobId, error })
@@ -164,6 +171,8 @@ export async function POST(
     org: gate.org,
     signal: AbortSignal.timeout(AI_JOB_INLINE_BUDGET_MS),
     actor: { uid: gate.uid, email: gate.decoded.email ?? null },
+    // The workspace's AI pause lets staff through, as the ladder above did.
+    staff: gate.staff,
   })
   if (run.outcome === 'not-claimable') {
     // The beat claimed the step between the resume and this run; it runs

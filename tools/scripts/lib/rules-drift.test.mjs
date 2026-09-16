@@ -808,6 +808,12 @@ describe('the checker is wired (workflow + package.json)', () => {
       // credential and is not one more guard that never executes.
       'test:linear-ids',
       'check:linear-ids',
+      // AGL-3027 — the rules source-size limit. The v1.0.0-beta.125 Firestore
+      // rules compiled, parsed and passed the emulator matrix, and the deploy
+      // refused them for being 17 bytes over 256 KiB. This workflow is the
+      // only thing that measures it before a deploy does.
+      'test:rules-size',
+      'check:rules-size',
     ]) {
       // Match the STEP syntax, not the bare script name — the workflow's own
       // comments mention these scripts, and an assertion a comment can
@@ -857,6 +863,8 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:deploy-args', // AGL-1489
       'test:linear-ids', // AGL-2500
       'check:linear-ids', // AGL-2500
+      'test:rules-size', // AGL-3027
+      'check:rules-size', // AGL-3027
     ]) {
       assert.ok(
         typeof pkg.scripts[script] === 'string' && pkg.scripts[script] !== '',

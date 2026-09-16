@@ -885,6 +885,10 @@ function PopupOverlay(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           hostId,
+          // The door this capture comes through (AGL-3029): the popup is a
+          // Marketing element, so a site that switched Forms off still
+          // collects the address it shows the popup for.
+          door: 'popup',
           formName: 'Popup',
           fields: { email: value },
           path: window.location.pathname,

@@ -34,6 +34,8 @@ export {}
 
 let mockPermitted = new Map<string, boolean>()
 let mockOwners = new Map<string, string>()
+/** Host documents, by site id: what each site's plugin switches say. */
+let mockHosts = new Map<string, Record<string, unknown>>()
 let mockGate: unknown = null
 const mockCreated: Array<Record<string, unknown>> = []
 const mockReleased: unknown[] = []
@@ -133,7 +135,18 @@ function gateFor(org: Record<string, unknown>, staff = false) {
     staff,
     orgId: 'org-1',
     org,
-    firestore: {} as unknown as FirebaseFirestore.Firestore,
+    // The host documents alone: the only read this door makes itself is the
+    // site's AI switch (AGL-3028).
+    firestore: {
+      collection: (name: string) => ({
+        doc: (id: string) => ({
+          get: async () => ({
+            exists: name === 'hosts' && mockHosts.has(id),
+            data: () => mockHosts.get(id),
+          }),
+        }),
+      }),
+    } as unknown as FirebaseFirestore.Firestore,
     rate: { allowed: true, limit: 3, remaining: 2, resetAt: 0 },
     reservation: { allowed: true, id: 'res-1' },
   }
@@ -166,6 +179,10 @@ beforeEach(() => {
   mockOwners = new Map([
     ['host-a', 'org-1'],
     ['host-b', 'org-1'],
+  ])
+  mockHosts = new Map([
+    ['host-a', {}],
+    ['host-b', {}],
   ])
   mockCreated.length = 0
   mockReleased.length = 0
@@ -324,6 +341,27 @@ describe('what the door answers', () => {
       { hostId: 'host-b', error: 'Unknown site' },
     ])
     expect(mockCreated).toHaveLength(1)
+  })
+
+  it('refuses a site that switched AI off, and starts the rest (AGL-3028)', async () => {
+    // The site rides inside `sites[]`, where the dispatcher's per-site gate
+    // does not look, so this door is where it is refused.
+    mockHosts.set('host-b', { disabledPlugins: ['ai'] })
+    const response = await createBatch(request(BODY))
+    expect(response.status).toBe(202)
+    const answer = (await response.json()) as Record<string, unknown>
+    expect(answer['refused']).toEqual([
+      { hostId: 'host-b', error: 'AI is switched off for this site.' },
+    ])
+    expect(mockCreated.map((input) => input['hostId'])).toEqual(['host-a'])
+  })
+
+  it('starts a site whose document predates the switch, which is on by default', async () => {
+    mockHosts.set('host-a', { disabledPlugins: ['commerce'] })
+    mockHosts.set('host-b', { enabledPlugins: ['accounts'] })
+    const response = await createBatch(request(BODY))
+    expect(response.status).toBe(202)
+    expect(mockCreated).toHaveLength(2)
   })
 
   it('refuses the whole batch when no site could start', async () => {

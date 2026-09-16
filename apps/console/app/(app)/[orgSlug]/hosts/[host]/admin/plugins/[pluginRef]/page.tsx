@@ -313,6 +313,27 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
                 </Typography>
               ) : null}
               {/*
+                What the switch below does on THIS site, and what it leaves
+                running (AGL-3028, AGL-3029). A plugin whose workspace half
+                carries no site — AI's add-on and billing, Forms' catalog and
+                stored submissions — reads as though switching it off here
+                stops all of that unless the page says otherwise, so both
+                halves are stated before the reader flips it.
+              */}
+              {firstParty?.siteOff && !alwaysOn ? (
+                <Stack spacing={0.5}>
+                  <Typography variant="subtitle2">
+                    {'Switching it off for this site'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {firstParty.siteOff.stops}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {firstParty.siteOff.keeps}
+                  </Typography>
+                </Stack>
+              ) : null}
+              {/*
                 The SWITCH, on the page about the thing it switches.
 
                 Per-site enablement is a boundary rather than a preference —

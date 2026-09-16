@@ -24,6 +24,11 @@ import { formatMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
 import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AiBuildPlan, AiBuildPlanScreen } from '../model/ai-build-plan'
+import {
+  aiPlanCapabilitiesForJob,
+  aiUnrestrictedPlanCapabilities,
+  type AiPlanCapabilities,
+} from '../model/ai-plan-capabilities'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
 import {
   AI_DOCTRINE_RULE_NUMBERS,
@@ -50,6 +55,7 @@ import {
   detectPlanLiteralColors,
   detectPlanRepeats,
   detectPlanTypedData,
+  detectPlanUncreatable,
   detectPublishIntent,
   detectRepeatedSubtrees,
   detectTypedData,
@@ -162,6 +168,25 @@ function planOf(patch: Partial<AiBuildPlan> = {}): AiBuildPlan {
   }
 }
 
+/**
+ * A workspace that keeps no reusable components or saved forms (AGL-3030),
+ * with room for no more layouts: the Free plan's shape on a site that already
+ * has the one it includes.
+ */
+const FREE: AiPlanCapabilities = (() => {
+  const all = aiUnrestrictedPlanCapabilities()
+  return {
+    reusableComponents: false,
+    create: {
+      ...all.create,
+      component: { allowed: false, left: 0, reason: "this workspace's plan does not include reusable components" },
+      form: { allowed: false, left: 0, reason: "this workspace's plan does not include saved forms" },
+      layout: { allowed: false, left: 0, reason: 'this site already holds the 1 shared layout its plan includes' },
+      dataset: { allowed: false, left: 0, reason: "this workspace's plan does not include datasets" },
+    },
+  }
+})()
+
 describe('the rule catalog', () => {
   it('names seventeen rules, and a violation reads as its number, its title and its sentence', () => {
     expect(AI_DOCTRINE_RULE_NUMBERS).toEqual(Array.from({ length: 17 }, (_, index) => index + 1))
@@ -218,6 +243,19 @@ describe('rule 1 — repeats become one reusable component', () => {
     expect(codes(detectPlanRepeats(twoScreens([]), INVENTORY))).toEqual(['plan-section-across-screens'])
     expect(detectPlanRepeats(twoScreens(['cmp-card']), INVENTORY)).toEqual([])
   })
+
+  it('draws a repeat where it repeats on a workspace that keeps no reusable components, and only there (AGL-3030)', () => {
+    const cards = tree(
+      page(section(card('Roofs', 'Tile and slate.'), card('Gutters', 'Seamless.'), card('Siding', 'Vinyl.'))),
+    )
+    expect(detectRepeatedSubtrees(cards, [], { reusableComponents: false })).toEqual([])
+    expect(codes(detectRepeatedSubtrees(cards, [], { reusableComponents: true }))).toEqual(['repeated-subtree'])
+    const repeated = planOf({ screens: [screen({ sections: [{ name: 'services grid', uses: [], items: 6 }] })] })
+    expect(detectPlanRepeats(repeated, INVENTORY, FREE)).toEqual([])
+    expect(codes(detectPlanRepeats(repeated, INVENTORY, aiUnrestrictedPlanCapabilities()))).toEqual([
+      'plan-repeated-items',
+    ])
+  })
 })
 
 describe('rule 2 — site-wide regions live in the layout', () => {
@@ -258,6 +296,23 @@ describe('rule 2 — site-wide regions live in the layout', () => {
     })
     expect(detectPlanLayoutRegions(created, emptyAiSiteInventory('host-1'))).toEqual([])
   })
+
+  it('in a plan: names no layout only on a site with none, where the job may not create one (AGL-3030)', () => {
+    const unlaid = planOf({ reuse: [], screens: [screen({ layout: null })] })
+    const bare = emptyAiSiteInventory('host-1')
+    // Nothing to name and nothing this job may make: the screen names none.
+    expect(detectPlanLayoutRegions(unlaid, bare, FREE)).toEqual([])
+    // A layout the site does not have is still refused, with the way out.
+    const invented = planOf({ reuse: [], screens: [screen({ layout: 'lay-invented' })] })
+    expect(detectPlanLayoutRegions(invented, bare, FREE)).toMatchObject([
+      { code: 'plan-screen-without-layout', message: expect.stringContaining('Leave the layout empty') },
+    ])
+    // Where one may be created, or the site has one, a screen names a layout.
+    expect(codes(detectPlanLayoutRegions(unlaid, bare, aiUnrestrictedPlanCapabilities()))).toEqual([
+      'plan-screen-without-layout',
+    ])
+    expect(codes(detectPlanLayoutRegions(unlaid, INVENTORY, FREE))).toEqual(['plan-screen-without-layout'])
+  })
 })
 
 describe('rule 3 — forms are built on the Forms page, then placed', () => {
@@ -292,6 +347,46 @@ describe('rule 3 — forms are built on the Forms page, then placed', () => {
     expect(codes(detectPlanInlineForms(inline, INVENTORY))).toEqual(['plan-form-not-placed'])
     const placed = planOf({ screens: [screen({ sections: [{ name: 'Contact form', uses: ['frm-contact'], items: 0 }] })] })
     expect(detectPlanInlineForms(placed, INVENTORY)).toEqual([])
+  })
+
+  describe('on a workspace that keeps no saved forms (AGL-3030)', () => {
+    const inline = { reusableComponents: false }
+
+    it('passes a form the page carries itself, with its fields inside it', () => {
+      const carried = tree(page(section({ componentId: 'form', props: { formName: 'Quote' }, children: [field('email'), field('name')] })))
+      expect(detectInlineForms(carried, 'page', inline)).toEqual([])
+      // The same form on a workspace that keeps saved forms is drawn inline.
+      expect(codes(detectInlineForms(carried, 'page'))).toEqual(['inline-form'])
+    })
+
+    it('still refuses loose fields, and a form with no field to send', () => {
+      const loose = detectInlineForms(tree(page(section(field('email')))), 'page', inline)
+      expect(loose).toMatchObject([{ rule: 3, code: 'loose-form-field', nodeIds: ['n2'] }])
+      const empty = detectInlineForms(
+        tree(page(section({ componentId: 'form', children: [text('body1', 'Tell us more.')] }))),
+        'page',
+        inline,
+      )
+      expect(empty).toMatchObject([{ rule: 3, code: 'form-without-fields', nodeIds: ['n2'] }])
+    })
+
+    it('in a plan: a section that collects answers is not refused for placing no saved form', () => {
+      const collects = planOf({ screens: [screen({ sections: [{ name: 'Contact form', uses: [], items: 0 }] })] })
+      expect(detectPlanInlineForms(collects, INVENTORY, FREE)).toEqual([])
+    })
+
+    it('holds the whole tree check to the same rules', () => {
+      const carried = tree(
+        page(
+          section(
+            text('h1', 'Get a quote', 'h1'),
+            { componentId: 'form', props: { formName: 'Quote request' }, children: [field('email'), field('name')] },
+          ),
+        ),
+      )
+      expect(validateAiDoctrineTree(carried, 'page', { reusableComponents: false }).violations).toEqual([])
+      expect(codes(validateAiDoctrineTree(carried, 'page').violations)).toEqual(['inline-form'])
+    })
   })
 })
 
@@ -450,6 +545,59 @@ describe('rule 8 — data is bound, not typed', () => {
     expect(codes(detectPlanTypedData(copied, INVENTORY))).toEqual(['plan-existing-data-unbound'])
     const bound = planOf({ screens: [screen({ sections: [{ name: 'Team members', uses: ['ds-team', 'cmp-card'], items: 12 }] })] })
     expect(detectPlanTypedData(bound, INVENTORY)).toEqual([])
+  })
+
+  it('in a plan: asks for a shorter list, not a dataset, where the job may not create one (AGL-3030)', () => {
+    const typed = planOf({ screens: [screen({ sections: [{ name: 'price list', uses: [], items: 12 }] })] })
+    expect(detectPlanTypedData(typed, INVENTORY, FREE)).toMatchObject([
+      { code: 'plan-typed-list', message: expect.stringContaining(`fewer than ${AI_TYPED_LIST_MIN_ITEMS} items`) },
+    ])
+    expect(detectPlanTypedData(typed, INVENTORY)[0].message).toContain('plan a dataset')
+  })
+})
+
+describe('rule 7 — a plan creates only what the job may create on its site (AGL-3030)', () => {
+  const creation = (kind: AiBuildPlan['create'][number]['kind'], name: string) => ({
+    kind,
+    name,
+    why: 'Nothing the site has will do.',
+    duplicateOf: null,
+    fields: [],
+  })
+
+  it('refuses each creation the workspace or the job cannot make, saying why and what to do instead', () => {
+    const plan = planOf({
+      create: [creation('component', 'Service card'), creation('form', 'Quote request'), creation('template', 'Service page')],
+    })
+    const found = detectPlanUncreatable(plan, FREE)
+    expect(found.map((violation) => [violation.rule, violation.code, violation.paths])).toEqual([
+      [7, 'plan-create-not-allowed', ['create[0]']],
+      [7, 'plan-create-not-allowed', ['create[1]']],
+    ])
+    expect(found[0].message).toBe(
+      'The plan creates a component named "Service card", and this workspace\'s plan does not include reusable components. Draw the item in its own section instead.',
+    )
+    expect(found[1].message).toContain('Draw the form on the page instead')
+    // Narrowed to what a job builds, a creation outside it says so.
+    const pageJob = aiPlanCapabilitiesForJob(aiUnrestrictedPlanCapabilities(), { noun: 'a page job', creates: [] })
+    expect(detectPlanUncreatable(planOf({ create: [creation('component', 'Service card')] }), pageJob)).toMatchObject([
+      { message: expect.stringContaining('a page job does not build one. Place a component the site already has.') },
+    ])
+  })
+
+  it('refuses only the creations past what the site has room for', () => {
+    const room: AiPlanCapabilities = {
+      ...aiUnrestrictedPlanCapabilities(),
+      create: { ...aiUnrestrictedPlanCapabilities().create, layout: { allowed: true, left: 1, reason: null } },
+    }
+    const plan = planOf({ create: [creation('layout', 'Main'), creation('layout', 'Landing')] })
+    expect(detectPlanUncreatable(plan, room)).toMatchObject([
+      { paths: ['create[1]'], message: expect.stringContaining('this site has room for 1 more') },
+    ])
+  })
+
+  it('restricts nothing where no capabilities were read', () => {
+    expect(detectPlanUncreatable(planOf({ create: [creation('component', 'Service card')] }), null)).toEqual([])
   })
 })
 
@@ -802,5 +950,26 @@ describe('validateAiBuildPlan', () => {
       INVENTORY,
     )
     expect(found.map((violation) => violation.rule)).toEqual([1, 2, 7, 8, 10, 14])
+  })
+
+  it('holds a plan to what its job may create, and to the inline doctrine where the workspace keeps no reusable components (AGL-3030)', () => {
+    const free = planOf({
+      create: [{ kind: 'component', name: 'Price tier', why: 'Tiers repeat.', duplicateOf: null, fields: [] }],
+      screens: [
+        screen({
+          sections: [
+            { name: 'price tiers', uses: [], items: 4 },
+            { name: 'contact form', uses: [], items: 0 },
+          ],
+        }),
+      ],
+    })
+    expect(validateAiBuildPlan(free, INVENTORY, null, FREE).map((violation) => violation.code)).toEqual([
+      'plan-create-not-allowed',
+    ])
+    expect(validateAiBuildPlan(free, INVENTORY).map((violation) => violation.code)).toEqual([
+      'plan-repeated-items',
+      'plan-form-not-placed',
+    ])
   })
 })

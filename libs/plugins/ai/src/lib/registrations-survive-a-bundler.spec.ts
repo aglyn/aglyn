@@ -57,11 +57,14 @@ type Loaded = Record<string, any>
 const reRequire = (id: string): Loaded => (require as unknown as (spec: string) => Loaded)(id)
 
 const SERVER_ENTRY = `
-export { registerAiApi, registerAiConsoleApi } from ${JSON.stringify(join(LIB, 'server'))}
+export { registerAiConsoleApi } from ${JSON.stringify(join(LIB, 'server'))}
 export {
   AI_PLANNED_JOB_KINDS,
+  aiJobNextStepMinimumMs,
+  aiJobPauseReaderRegistered,
   aiJobRunnerForStep,
   aiJobStepMaxPasses,
+  aiJobStepMinimumMs,
   aiJobStepNames,
 } from ${JSON.stringify(join(LIB, 'jobs', 'ai-jobs'))}
 export { aiJobAdmissionFor } from ${JSON.stringify(join(LIB, 'jobs', 'ai-job-admission'))}
@@ -163,17 +166,24 @@ function load(file: string): Loaded {
 }
 
 interface Registered {
-  steps: Record<string, Array<{ step: string; runner: boolean }>>
+  steps: Record<string, Array<{ step: string; runner: boolean; minimumMs: number }>>
   admissions: string[]
   passes: Record<string, number>
+  /** Every platform job the plugin put on a job runner: none since AGL-3026. */
   jobs: string[]
+  /** The console API paths the plugin registered. */
+  routes: string[]
+  /** Whether the jobs machine asks a workspace's AI pause before a claim (AGL-3037). */
+  pauseReader: boolean
 }
 
-/** Registers the plugin as both apps do, and reads back what that registered. */
+/**
+ * Registers the plugin as the console does — the one app that loads its
+ * server surface (AGL-3026) — and reads back what that registered.
+ */
 function registered(plugin: Loaded): Registered {
   plugin.registerAiConsoleApi()
-  plugin.registerAiApi()
-  const { listPluginJobs } = reRequire('@aglyn/aglyn/server')
+  const { listPluginApiRoutes, listPluginJobs } = reRequire('@aglyn/aglyn/server')
   const steps: Registered['steps'] = {}
   const passes: Registered['passes'] = {}
   const admissions: string[] = []
@@ -181,6 +191,7 @@ function registered(plugin: Loaded): Registered {
     steps[kind] = (plugin.aiJobStepNames(kind) as string[]).map((step) => ({
       step,
       runner: plugin.aiJobRunnerForStep(kind, step) !== null,
+      minimumMs: plugin.aiJobStepMinimumMs(kind, step),
     }))
     passes[kind] = plugin.aiJobStepMaxPasses(kind)
     if (plugin.aiJobAdmissionFor(kind)) admissions.push(kind)
@@ -189,7 +200,8 @@ function registered(plugin: Loaded): Registered {
     .filter((job) => job.pluginId === 'ai')
     .map((job) => job.name)
     .sort()
-  return { steps, admissions, passes, jobs }
+  const routes = (listPluginApiRoutes() as string[]).slice().sort()
+  return { steps, admissions, passes, jobs, routes, pauseReader: plugin.aiJobPauseReaderRegistered() as boolean }
 }
 
 /** The AI activity codes the activity registry holds, with their labels. */
@@ -242,12 +254,65 @@ describe('the AI plugin, loaded through a bundler that honors sideEffects', () =
       return { kinds: plugin.AI_PLANNED_JOB_KINDS as string[], registered: registered(plugin) }
     })
     const both = [
-      { step: 'plan', runner: true },
-      { step: 'generate', runner: true },
+      { step: 'plan', runner: true, minimumMs: expect.any(Number) },
+      { step: 'generate', runner: true, minimumMs: expect.any(Number) },
     ]
     expect(Object.fromEntries(bundled.kinds.map((kind) => [kind, bundled.registered.steps[kind]])))
       .toEqual(Object.fromEntries(bundled.kinds.map((kind) => [kind, both])))
     expect(bundled.registered.admissions).toEqual(expect.arrayContaining(bundled.kinds))
+  })
+
+  it('keeps the least time a plan needs, so a bundled door leaves every plan to the beat', () => {
+    // AGL-3026: a plan registered without its minimum starts inline, where
+    // the door's budget cuts it off billed and unmetered.
+    const bundled = isolated(() => {
+      const plugin = load(serverBundle)
+      return { kinds: plugin.AI_PLANNED_JOB_KINDS as string[], registered: registered(plugin) }
+    })
+    const { AI_JOB_INLINE_BUDGET_MS } = require('./jobs/ai-jobs')
+    for (const kind of bundled.kinds) {
+      const plan = bundled.registered.steps[kind].find(({ step }) => step === 'plan')
+      expect([kind, (plan?.minimumMs ?? 0) > AI_JOB_INLINE_BUDGET_MS]).toEqual([kind, true])
+    }
+  })
+
+  it('keeps the least time every step needs, so a bundled door starts only the step that fits it (AGL-3035)', () => {
+    // A generation step registered without its minimum starts inline too.
+    const bundled = isolated(() => {
+      const plugin = load(serverBundle)
+      const summary = registered(plugin)
+      // A page pass that builds a layout needs a layout's time, which only a
+      // per-run minimum registered beside the runner can say.
+      const creating = {
+        kind: 'page',
+        steps: [{ name: 'plan', status: 'done' }, { name: 'generate', status: 'pending' }],
+        outputs: [],
+        inputs: {},
+        brief: 'A pricing page',
+        plan: {
+          status: 'confirmed',
+          reuse: [],
+          create: [{ kind: 'layout', name: 'Site frame', why: 'none yet', duplicateOf: null, fields: [] }],
+          screens: [],
+          labels: {},
+        },
+      }
+      return {
+        summary,
+        creationPass: plugin.aiJobNextStepMinimumMs(creating) as number,
+        layout: plugin.aiJobStepMinimumMs('layout', 'generate') as number,
+      }
+    })
+    const { AI_JOB_INLINE_BUDGET_MS } = require('./jobs/ai-jobs')
+    const steps = Object.entries(bundled.summary.steps).flatMap(([kind, list]) =>
+      list.filter(({ runner }) => runner).map(({ step, minimumMs }) => ({ kind, step, minimumMs })),
+    )
+    expect(steps.filter(({ minimumMs }) => !(minimumMs > 0))).toEqual([])
+    expect(steps.filter(({ minimumMs }) => minimumMs <= AI_JOB_INLINE_BUDGET_MS).map(({ kind, step }) => `${kind}/${step}`)).toEqual([
+      'text/draft',
+    ])
+    expect(bundled.creationPass).toBe(bundled.layout)
+    expect(bundled.creationPass).toBeGreaterThan(bundled.summary.steps['page'].find(({ step }) => step === 'generate')?.minimumMs ?? 0)
   })
 
   it('registers a runner for the kind of every step module beside the machine', () => {
@@ -261,8 +326,21 @@ describe('the AI plugin, loaded through a bundler that honors sideEffects', () =
     expect(kinds.filter((kind) => !bundled.steps[kind]?.every(({ runner }) => runner))).toEqual([])
   })
 
-  it('registers the jobs beat the tenant runs', () => {
-    expect(isolated(() => registered(load(serverBundle))).jobs).toEqual(['ai-jobs'])
+  it('serves the jobs beat from the console surface, and puts nothing on the tenant’s job runner', () => {
+    // AGL-3026: every step calls the provider, whose key only the console
+    // holds, so the beat is a console route and the tenant loads no server
+    // surface of this plugin at all.
+    const bundled = isolated(() => registered(load(serverBundle)))
+    const { AI_JOBS_BEAT_PATH } = require('./jobs/ai-jobs-beat')
+    expect(bundled.routes).toContain(AI_JOBS_BEAT_PATH)
+    // …and the jobs it runs ask a workspace's AI pause before they claim a step (AGL-3037).
+    expect(bundled.pauseReader).toBe(true)
+    expect(bundled.jobs).toEqual([])
+    expect(isolated(() => require('./server').registerAiApi)).toBeUndefined()
+    const config = JSON.parse(readFileSync(resolve(PLUGIN_ROOT, '..', '..', '..', 'plugins.config.json'), 'utf8')) as {
+      plugins: Array<{ id: string; register: Record<string, string> }>
+    }
+    expect(Object.keys(config.plugins.find((plugin) => plugin.id === 'ai')?.register ?? {})).not.toContain('tenantApi')
   })
 
   it('declares the activity catalog from the declarations entry alone', () => {

@@ -17,8 +17,9 @@
 
 import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { registerAiDeclarations } from './declarations'
-import { registerAiJobsBeat } from './jobs/ai-jobs-beat'
+import { AI_JOBS_BEAT_PATH } from './jobs/ai-jobs-beat'
 import { registerAiJobPlan } from './jobs/ai-job-plan-step'
+import { registerAiJobsPause } from './jobs/ai-jobs-pause'
 import { registerAiComponentJob } from './jobs/ai-job-component-step'
 import { registerAiLayoutJob } from './jobs/ai-job-layout-step'
 import { registerAiTemplateJob } from './jobs/ai-job-template-step'
@@ -29,6 +30,7 @@ import { registerAiCampaignJob } from './jobs/ai-job-campaign-step'
 import { registerAiSiteJob } from './jobs/ai-job-site-step'
 import { ensureFirstPartyAiProviders } from './providers/registry'
 import { aiAssistHandler } from './server/ai-assist'
+import { POST as runAiJobsBeat } from './server/ai-jobs-beat-route'
 import { POST as cancelAiJob } from './server/ai-jobs-cancel'
 import { GET as aiJobEvents } from './server/ai-jobs-events-route'
 import { POST as createAiSiteBatch } from './server/ai-jobs-batch'
@@ -72,10 +74,15 @@ const registerFirstPartyProviders = ensureFirstPartyAiProviders
  * exports go unused — and a step registered that way ran in every spec and
  * in neither app. `registrations-survive-a-bundler.spec.ts` holds this.
  *
- * Both surfaces call it: the console runs a job's first step inline, and
- * the tenant's beat runs every step after it.
+ * The console surface is the only caller (AGL-3026): its doors run a job's
+ * first step inline, and its beat runs every step after it. The tenant app
+ * loads no server surface of this plugin at all, so nothing that serves a
+ * published site can reach a provider.
  */
 function registerAiJobKinds(): void {
+  // The workspace AI pause the machine asks before it claims any step, so a
+  // paused workspace's queued jobs spend nothing (AGL-3037).
+  registerAiJobsPause()
   // The plan step every planned kind runs first (AGL-2935).
   registerAiJobPlan()
   // Components, layouts and templates (AGL-2908, AGL-2909).
@@ -102,6 +109,8 @@ function registerAiJobKinds(): void {
  * `/api/ai/jobs` — because the dispatcher serves them from the registry
  * exactly where the named routes used to; the two billing doors and the
  * per-member usage read (`ai/usage`) live under the plugin's own prefix.
+ * The jobs beat is the one path outside them, for the reason
+ * `AI_JOBS_BEAT_PATH` gives.
  */
 export function registerAiConsoleApi(): void {
   registerAiDeclarations()
@@ -134,6 +143,10 @@ export function registerAiConsoleApi(): void {
     web: (request, context) =>
       aiJobEvents(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
   })
+  // The jobs beat (AGL-3026): every step the doors leave queued, run every
+  // minute by the console's scheduler on the cron secret, on the one surface
+  // that holds the provider's key.
+  registerPluginApiRoute(AI_JOBS_BEAT_PATH, { web: runAiJobsBeat })
   // A site SEO audit's "Apply all" (AGL-2910): content fixes as new
   // unpublished versions, listing values staged for their SEO cards.
   registerPluginApiRoute('ai/seo/apply', { web: applyAiSeoAudit })
@@ -159,17 +172,4 @@ export function registerAiConsoleApi(): void {
   // (AGL-3011): the ceiling override, lifting a pause — the only way a
   // dispute pause comes off — and resetting the step. Every act audited.
   registerPluginApiRoute('ai/admin/overage', { web: aiAdminOverage })
-}
-
-/**
- * The tenant-side surface (AGL-2939): the jobs beat, the job kinds it runs
- * steps of, and the providers those steps call. The beat is registered
- * here alone, because the tenant's `/api/plugins/run-jobs` is the only
- * runner that reads it.
- */
-export function registerAiApi(): void {
-  registerAiDeclarations()
-  registerFirstPartyProviders()
-  registerAiJobKinds()
-  registerAiJobsBeat()
 }

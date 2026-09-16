@@ -206,12 +206,14 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
   },
   'job.form': {
     // A form's two halves in one answer: the field declaration and the design
-    // that renders it, as JSON, with no extended thinking (AGL-2913).
+    // that renders it, as JSON, with no extended thinking (AGL-2913). The step
+    // asks this ceiling, which is the doctrine's own for a form, and registers
+    // the time it takes (AGL-3035).
     thinking: 'off',
     effort: null,
-    maxTokens: 3000,
+    maxTokens: 6000,
     maxTokensBasis:
-      "a form's fields, its consent and routing declaration and the design that renders them, written as JSON",
+      "the largest form the doctrine's output budget admits, a form's fields, its consent and routing declaration and the design that renders them written as JSON at the wordiest golden's characters a stored byte, under it with room; ai-job-form-step.spec.ts measures it",
     eval: { kinds: ['form'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
   },
   'job.page': {

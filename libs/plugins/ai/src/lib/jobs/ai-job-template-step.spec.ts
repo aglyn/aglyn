@@ -87,13 +87,14 @@ import { aiJobAdmissionRefusal } from './ai-job-admission'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import {
   AI_JOB_TEMPLATE_INSTRUCTIONS,
-  AI_JOB_TEMPLATE_MAX_TOKENS,
   aiJobTemplatePrompt,
   aiTemplateDraftName,
   aiTemplateDraftSlug,
   createAiJobTemplateStep,
   runAiJobTemplateStep,
   registerAiTemplateJob,
+  AI_JOB_TEMPLATE_STEP_BUDGET,
+  AI_JOB_TEMPLATE_STEP_MINIMUM_MS,
 } from './ai-job-template-step'
 import { registerAiJobStep } from './ai-jobs'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
@@ -312,7 +313,9 @@ beforeEach(() => {
 describe('the template step', () => {
   it('registers the template runner, with an admission that reads what the page is for', async () => {
     registerAiTemplateJob()
-    expect(registerAiJobStep).toHaveBeenCalledWith('template', runAiJobTemplateStep)
+    expect(registerAiJobStep).toHaveBeenCalledWith('template', runAiJobTemplateStep, {
+      minimumMs: AI_JOB_TEMPLATE_STEP_MINIMUM_MS,
+    })
     const ask = (inputs: Record<string, unknown>, org: object = STARTER_ORG, hostId: string | null = 'host-1') =>
       aiJobAdmissionRefusal('template', { firestore, orgId: 'org-1', hostId, inputs, org })
     expect(await ask({})).toEqual({ status: 400, error: expect.stringContaining('inputs.subject') })
@@ -370,7 +373,7 @@ describe('the template step', () => {
     expect(request).toMatchObject({
       model: 'routed-model',
       tools: [aiDoctrineTreeTool('template'), aiInventoryLookupTool()],
-      maxTokens: AI_JOB_TEMPLATE_MAX_TOKENS,
+      maxTokens: AI_JOB_TEMPLATE_STEP_BUDGET.maxTokens('routed-model'),
       thinking: 'off',
       messages: [
         {

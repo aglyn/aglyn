@@ -24,7 +24,7 @@ import { createHash } from 'node:crypto'
 import { formatMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
 import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import { AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
+import { AI_BUILD_PLAN_LIMITS, AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
 import {
   AI_SITE_INVENTORY_LISTED_PER_KIND,
   AI_SITE_INVENTORY_MAX_CHARS,
@@ -59,9 +59,15 @@ import {
   AI_INVENTORY_LOOKUP_TOOL_NAME,
   aiInventoryLookupTool,
 } from '../tools/ai-inventory-lookup-tool'
-import { AI_DOCTRINE_RULES, AI_REPEAT_MIN_COUNT, AI_SIMILAR_PAGES_MIN } from './ai-doctrine-validators'
+import {
+  AI_DOCTRINE_RULES,
+  AI_REPEAT_MIN_COUNT,
+  AI_SEO_DESCRIPTION_MAX,
+  AI_SEO_TITLE_MAX,
+  AI_SIMILAR_PAGES_MIN,
+} from './ai-doctrine-validators'
 import { AI_SURFACE_NAMES } from './ai-palette'
-import { AI_PALETTE_CATALOG } from './ai-palette.generated'
+import { AI_PALETTE, AI_PALETTE_CATALOG, AI_SURFACES } from './ai-palette.generated'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
   AI_MAX_CACHE_BREAKPOINTS,
@@ -139,11 +145,34 @@ describe('the doctrine block', () => {
     // not told is a threshold it cannot hold to.
     expect(AI_BUILDING_DOCTRINE).toContain(`When ${AI_SIMILAR_PAGES_MIN} or more pages share one structure`)
     expect(AI_BUILDING_DOCTRINE).toContain(`appearing ${AI_REPEAT_MIN_COUNT} or more times`)
+    // Rule 10 refuses a plan's search title and description well inside the
+    // ceilings `parseAiBuildPlan` cuts them at, so the rule's numbers are the
+    // ones a generator is told, and the plan tool's schema leaves them to it.
+    expect(AI_BUILDING_DOCTRINE).toContain(
+      `a search title of at most ${AI_SEO_TITLE_MAX} characters, a search description of at most ${AI_SEO_DESCRIPTION_MAX}`,
+    )
+    expect(AI_SEO_TITLE_MAX).toBeLessThan(AI_BUILD_PLAN_LIMITS.text)
+    expect(AI_SEO_DESCRIPTION_MAX).toBeLessThan(AI_BUILD_PLAN_LIMITS.seoDescription)
+  })
+
+  it('says, beside the forms rule, that a search is an element a generator can place and never a form (AGL-3022)', () => {
+    // A generator told nothing about search plans a form with one query field
+    // for "a menu search across the top". A form collects submissions; the
+    // platform's searches are elements, and naming them is worth its bytes
+    // only while every surface a search is built on can place them.
+    const rule3 = AI_BUILDING_DOCTRINE.split('\n').find((line) => line.startsWith('3. ')) ?? ''
+    expect(rule3).toContain('never a form')
+    for (const id of ['searchBox', 'collectionSearch']) {
+      expect([id, rule3.includes(`"${id}"`), AI_PALETTE[id]?.kind]).toEqual([id, true, 'element'])
+      for (const surface of ['screen', 'layout', 'component'] as const) {
+        expect([id, surface, AI_SURFACES[surface].allow.includes(id)]).toEqual([id, surface, true])
+      }
+    }
   })
 
   it('pins the doctrine’s bytes, so changing what every generator is told is a deliberate cache break', () => {
     expect(createHash('sha256').update(AI_DOCTRINE_SYSTEM_BLOCK.text).digest('hex')).toBe(
-      '006843cc161def19bb532bcd499ce0e3b2360f05a12e5d4319c9e18d443eecc2',
+      '72d97070a3c405b1fe61ff0a315fcbee8a93c1fe89ff2e955752faf0e296e1f8',
     )
   })
 
@@ -429,6 +458,38 @@ describe('runValidatedGeneration — a plan', () => {
     expect(requests).toHaveLength(4)
     expect(result).toMatchObject({ status: 'ok', attempts: 4 })
     expect(requests[3].messages.at(-1)?.content).toContain('did not come through')
+  })
+
+  it('asks every call — a lookup round as much as an answer — for no more than is left of one answer and its re-ask (AGL-3036)', async () => {
+    const spending = (answer: AiCompletion, outputTokens: number): AiCompletion => ({
+      ...answer,
+      usage: { ...answer.usage, outputTokens },
+    })
+    const ceiling = AI_GENERATION_MAX_TOKENS.plan
+    const { fake, requests } = provider([
+      spending(toolAnswer(AI_INVENTORY_LOOKUP_TOOL_NAME, { kind: 'components', query: 'price' }), 1_000),
+      spending(toolAnswer(AI_BUILD_PLAN_TOOL.name, UNLAID_PLAN), ceiling),
+      spending(toolAnswer(AI_BUILD_PLAN_TOOL.name, CLEAN_PLAN), 2_000),
+    ])
+    const result = await runValidatedGeneration('plan', planInput(fake))
+    expect(result).toMatchObject({ status: 'ok', value: CLEAN_PLAN, attempts: 3 })
+    // The lookup and the first answer spent a ceiling and a thousand tokens of
+    // the two ceilings the generation has, so the re-ask is asked for the rest.
+    expect(requests.map((request) => request.maxTokens)).toEqual([ceiling, ceiling, ceiling - 1_000])
+  })
+
+  it('stops once lookup rounds have spent the whole allowance, rather than asking with nothing left (AGL-3036)', async () => {
+    const ceiling = AI_GENERATION_MAX_TOKENS.plan
+    const lookup = (): AiCompletion => ({
+      ...toolAnswer(AI_INVENTORY_LOOKUP_TOOL_NAME, { kind: 'components', query: 'price' }),
+      usage: { inputTokens: 1_000, outputTokens: ceiling, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    })
+    const { fake, requests } = provider([lookup(), lookup(), toolAnswer(AI_BUILD_PLAN_TOOL.name, CLEAN_PLAN)])
+    const result = await runValidatedGeneration('plan', planInput(fake))
+    expect(requests).toHaveLength(AI_INVENTORY_LOOKUP_MAX_ROUNDS)
+    expect(result).toMatchObject({ status: 'needs_input', attempts: 2, usage: { outputTokens: 2 * ceiling } })
+    if (result.status !== 'needs_input') return
+    expect(result.violations.map((violation) => violation.code)).toEqual(['answer-cut-off'])
   })
 
   it('offers no lookup to a kind that builds from no site at all', async () => {

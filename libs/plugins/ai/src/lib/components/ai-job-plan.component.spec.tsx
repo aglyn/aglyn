@@ -23,7 +23,7 @@
 
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { aiPlanCreditEstimate } from '../model/ai-site-job'
+import { AI_SITE_PASS_CREDITS, aiPlanCreditEstimate } from '../model/ai-site-job'
 import { AiJobPlan } from './ai-job-plan.component'
 
 const PLAN = {
@@ -134,4 +134,21 @@ it('confirms through the caller’s own door', () => {
   render(<AiJobPlan job={job()} onResume={onResume} />)
   fireEvent.click(screen.getByRole('button', { name: 'Confirm plan' }))
   expect(onResume).toHaveBeenCalledTimes(1)
+})
+
+it('counts, for a page job, every creation it builds before its page, beside what each is (AGL-3031)', () => {
+  const pagePlan = {
+    ...PLAN,
+    create: [
+      ...PLAN.create,
+      { kind: 'component' as const, name: 'Price tier', why: 'three tiers', duplicateOf: null, fields: [] },
+      { kind: 'form' as const, name: 'Quote request', why: 'no form yet', duplicateOf: null, fields: [] },
+    ],
+  }
+  render(<AiJobPlan job={job({ kind: 'page', plan: pagePlan })} onResume={jest.fn()} />)
+  // Two sections and the page's last pass, and one pass a creation.
+  const expected = (2 + 1 + 3) * AI_SITE_PASS_CREDITS
+  expect(screen.getByText(new RegExp(`about ${expected.toLocaleString('en-US')} credits`))).toBeTruthy()
+  expect(screen.getByText(/Creates the component Price tier/)).toBeTruthy()
+  expect(screen.getByText(/Creates the form Quote request/)).toBeTruthy()
 })

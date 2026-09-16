@@ -22,16 +22,19 @@
 
 /**
  * What a page job is (AGL-2907): the page types a brief may name, the inputs
- * the doors admit, and the plans a page job can build — one screen, from
- * what the site already has, creating nothing.
+ * the doors admit, and the plans a page job can build — one screen, with the
+ * layout, forms and components it creates built first (AGL-3031).
  */
 
 import { AI_PAGE_BRIEF_FIXTURES } from '../jobs/fixtures/ai-page-briefs'
 import type { AiBuildPlan } from './ai-build-plan'
 import {
+  AI_PAGE_CREATE_KINDS,
   AI_PAGE_TYPES,
+  aiPageCreationRefusal,
   aiPagePlanPrerequisites,
   aiPagePlanRefusal,
+  aiPagePlanShapeRefusal,
   aiPageTypeDefinition,
   parseAiPageJobInputs,
 } from './ai-page-job'
@@ -88,16 +91,15 @@ describe('the plans a page job builds', () => {
     }
   })
 
-  it('refuses a plan that creates, naming each creation and where a member makes it', () => {
-    expect(aiPagePlanRefusal(withCreations([creation('component', 'Service card')]))).toBe(
-      'This page needs what the site does not have yet. Create the component “Service card” on the Components page, then describe the page again.',
-    )
+  it('builds the layout, forms and components its plan creates, and refuses what another job builds, naming where it is made (AGL-3031)', () => {
+    expect(AI_PAGE_CREATE_KINDS).toEqual(['layout', 'form', 'component'])
     expect(
       aiPagePlanRefusal(
-        withCreations([creation('component', 'Service card'), creation('form', 'Quote request')]),
+        withCreations([creation('layout', 'Site layout'), creation('component', 'Service card'), creation('form', 'Quote request')]),
       ),
-    ).toBe(
-      'This page needs what the site does not have yet. Create the component “Service card” on the Components page and the form “Quote request” on the Forms page, then describe the page again.',
+    ).toBeNull()
+    expect(aiPagePlanRefusal(withCreations([creation('template', 'Service page')]))).toBe(
+      'This page needs what the site does not have yet. Create the template “Service page” in the Templates library, then describe the page again.',
     )
     expect(
       aiPagePlanRefusal(
@@ -108,13 +110,13 @@ describe('the plans a page job builds', () => {
         ]),
       ),
     ).toBe(
-      'This page needs what the site does not have yet. Create the layout “Site layout” on the Layouts page, the theme change “Warmer accent” in the Theme section and the dataset “Team members” on the Datasets page, then describe the page again.',
+      'This page needs what the site does not have yet. Create the theme change “Warmer accent” in the Theme section and the dataset “Team members” on the Datasets page, then describe the page again.',
     )
   })
 
   it('names a creation once, and a new: reference the create list does not carry', () => {
     const plan: AiBuildPlan = {
-      ...withCreations([creation('component', 'Service card')]),
+      ...withCreations([creation('component', 'Service card'), creation('email', 'Welcome'), creation('email', 'welcome')]),
       screens: [
         {
           ...FIXTURE.plan.screens[0],
@@ -126,9 +128,31 @@ describe('the plans a page job builds', () => {
       ],
     }
     expect(aiPagePlanPrerequisites(plan)).toEqual([
-      { kind: 'component', name: 'Service card' },
+      { kind: 'email', name: 'Welcome' },
       { kind: 'component', name: 'Quote strip' },
     ])
+  })
+
+  it('holds a plan’s shape apart from what it creates (AGL-3030)', () => {
+    // The plan step re-asks a plan of the wrong shape, and the plan rules
+    // refuse a creation, so the shape refusal says nothing about creations.
+    const creating = withCreations([creation('template', 'Service page')])
+    expect(aiPagePlanShapeRefusal(creating)).toBeNull()
+    expect(aiPagePlanRefusal(creating)).toContain('Create the template “Service page”')
+    const twoPages = { ...FIXTURE.plan, screens: [FIXTURE.plan.screens[0], FIXTURE.plan.screens[0]] }
+    expect(aiPagePlanShapeRefusal(twoPages)).toBe(aiPagePlanRefusal(twoPages))
+  })
+
+  it('refuses the creations the site cannot take now, each with why, in one sentence (AGL-3031)', () => {
+    expect(aiPageCreationRefusal([])).toBeNull()
+    expect(
+      aiPageCreationRefusal([
+        { kind: 'layout', name: 'Site frame', path: 'create[0]', reason: 'this site already holds the 1 shared layout its plan includes', message: '' },
+        { kind: 'form', name: 'Quote request', path: 'create[1]', reason: "this workspace's plan does not include saved forms", message: '' },
+      ]),
+    ).toBe(
+      "This page cannot be built as planned: it creates the layout “Site frame”, because this site already holds the 1 shared layout its plan includes; and the form “Quote request”, because this workspace's plan does not include saved forms. Describe the page again.",
+    )
   })
 
   it('refuses a plan with no page, with two pages, and a page with no sections', () => {

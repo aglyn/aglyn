@@ -115,6 +115,8 @@ import {
   parseAiFormAnswer,
   runAiJobFormStep,
   registerAiFormJob,
+  AI_JOB_FORM_STEP_BUDGET,
+  AI_JOB_FORM_STEP_MINIMUM_MS,
 } from './ai-job-form-step'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import { AI_JOB_LAYOUT_MAX_TOKENS } from './ai-job-layout-step'
@@ -450,7 +452,9 @@ describe.each(Object.keys(EXPECTED))('the %s golden', (key) => {
 describe('the form step', () => {
   it('registers the form runner, with the admission the create and resume doors ask', async () => {
     registerAiFormJob()
-    expect(registerAiJobStep).toHaveBeenCalledWith('form', runAiJobFormStep)
+    expect(registerAiJobStep).toHaveBeenCalledWith('form', runAiJobFormStep, {
+      minimumMs: AI_JOB_FORM_STEP_MINIMUM_MS,
+    })
     const ask = (hostId: string | null, org: object) =>
       aiJobAdmissionRefusal('form', { firestore, orgId: 'org-1', hostId, inputs: {}, org })
     expect(await ask(null, STARTER_ORG)).toEqual({
@@ -469,7 +473,7 @@ describe('the form step', () => {
     expect(request).toMatchObject({
       model: 'routed-model',
       tools: [AI_JOB_FORM_TOOL, aiInventoryLookupTool()],
-      maxTokens: AI_JOB_FORM_MAX_TOKENS,
+      maxTokens: AI_JOB_FORM_STEP_BUDGET.maxTokens('routed-model'),
       thinking: 'off',
       stream: false,
       messages: [
@@ -693,7 +697,7 @@ describe('the form step’s budget', () => {
     await createAiJobFormStep()(context(goldenJob('clinicSurvey')))
     expect(mockRunAiRequest.mock.calls[0][0]).toMatchObject({
       thinking: 'off',
-      maxTokens: AI_JOB_FORM_MAX_TOKENS,
+      maxTokens: AI_JOB_FORM_STEP_BUDGET.maxTokens('routed-model'),
     })
   })
 

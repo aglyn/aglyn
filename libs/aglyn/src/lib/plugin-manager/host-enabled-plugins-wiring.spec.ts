@@ -18,6 +18,8 @@
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
+import { stripComments } from '../foundation/definitions/write-deny-coverage.util'
+
 /**
  * Per-site plugin enablement wiring guard (AGL-1014).
  *
@@ -35,15 +37,16 @@ import { resolve } from 'path'
 const REPO_ROOT = resolve(__dirname, '../../../../..')
 
 /**
- * The rules with comments removed.
+ * The rules with comments removed, by the shared one-pass scanner.
  *
- * Block comments first, then line comments, so a `//` inside a block cannot
- * end it early — the strip-order defect that once swallowed 551 lines of this
- * very file.
+ * Not two regexes in either order. Removing block comments first is what
+ * swallowed 551 lines of the rules file (AGL-2004): a LINE comment quoting a
+ * wildcard path, `hosts/{hostId}/datasets/*`, reads as a block opener and
+ * deletes every rule up to the next closing delimiter. Line comments first
+ * has the mirror hazard. `stripComments` lets whichever delimiter comes first
+ * win, and the regression case below holds it to that.
  */
-function withoutComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
-}
+const withoutComments = stripComments
 
 function read(relativePath: string): string {
   return readFileSync(resolve(REPO_ROOT, relativePath), 'utf8')
@@ -193,5 +196,19 @@ describe('per-site plugin enablement wiring (AGL-1014)', () => {
     `
     expect(withoutComments(prose)).not.toContain('disabledPlugins')
     expect(withoutComments(prose).indexOf("hostMemberRole(hostId) == 'admin'")).toBe(-1)
+  })
+
+  it('a line comment quoting a wildcard path does not hide the rule below it (AGL-2004)', () => {
+    // The block comment further down is load-bearing: without a closing
+    // delimiter after the quote, a block-first strip finds no match, removes
+    // nothing, and this case would pass under the very defect it pins.
+    const source = [
+      '// the name, so `hosts/{hostId}/datasets/*` stayed a client-writable',
+      "allow update: if hostMemberRole(hostId) == 'admin';",
+      '/* an ordinary block comment, further down the file */',
+    ].join('\n')
+    const stripped = withoutComments(source)
+    expect(stripped).toContain("hostMemberRole(hostId) == 'admin'")
+    expect(stripped).not.toContain('client-writable')
   })
 })

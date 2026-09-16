@@ -17,6 +17,7 @@
 
 import {
   countPluginNodes,
+  impactedPages,
   scanComponentUsage,
   scanLayoutUsage,
   scanPluginPlacements,
@@ -405,5 +406,67 @@ describe('countPluginNodes', () => {
     expect(countPluginNodes(undefined, 'promo')).toBe(0)
     expect(countPluginNodes({}, 'promo')).toBe(0)
     expect(countPluginNodes(treeWithPlugin('promo'), '')).toBe(0)
+  })
+})
+
+/**
+ * Forms, whose element left the base library after sites had already placed
+ * it (AGL-3029). A `form` node saved before the move still carries `mui`, so a
+ * scan by stamp alone would tell a site switching Forms off that a page with a
+ * form on it has none.
+ */
+describe('countPluginNodes for Forms, whatever a form node was stamped with', () => {
+  const contact = (formStamp: string) => ({
+    root: { $id: 'root', componentId: 'muiStack', pluginId: 'mui', nodes: ['form'] },
+    form: { $id: 'form', componentId: 'form', pluginId: formStamp, nodes: ['email'] },
+    email: { $id: 'email', componentId: 'formField', pluginId: formStamp, nodes: [] },
+  })
+
+  it('counts a form stamped `forms`, fields included', () => {
+    expect(countPluginNodes(contact('forms'), 'forms')).toBe(2)
+  })
+
+  it('counts a form still stamped `mui`', () => {
+    expect(countPluginNodes(contact('mui'), 'forms')).toBe(1)
+  })
+
+  it('finds the page a stale form sits on, so the warning can name it', () => {
+    const scan = scanPluginPlacements('forms', {
+      screens: [{ id: 's-contact', displayName: 'Contact', nodes: contact('mui'), versionId: 'v1' }],
+      layouts: [],
+      components: [],
+    })
+    expect(scan.affectedScreenIds).toEqual(['s-contact'])
+  })
+
+  it('does not count a form node for any other plugin', () => {
+    expect(countPluginNodes(contact('mui'), 'commerce')).toBe(0)
+  })
+})
+
+describe('impactedPages (AGL-3029)', () => {
+  const screens = [
+    { id: 's-home', displayName: 'Home' },
+    { id: 's-contact', displayName: 'Contact' },
+    { id: 's-template', name: 'Post template' },
+  ]
+
+  it('names each page with the address the site serves it at, addressed pages first', () => {
+    expect(
+      impactedPages(['s-template', 's-contact', 's-home'], screens, {
+        's-home': '/',
+        's-contact': '/contact',
+      }),
+    ).toEqual([
+      { id: 's-home', name: 'Home', path: '/' },
+      { id: 's-contact', name: 'Contact', path: '/contact' },
+      { id: 's-template', name: 'Post template', path: null },
+    ])
+  })
+
+  it('names a page it has no document for by its id rather than dropping it', () => {
+    expect(impactedPages(['s-gone'], screens, {})).toEqual([
+      { id: 's-gone', name: 's-gone', path: null },
+    ])
   })
 })

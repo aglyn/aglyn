@@ -16,6 +16,11 @@
  */
 
 import type { AiJobKind, AiJobPlan } from '../model/ai-jobs.types'
+import {
+  AI_OFF_FOR_SITE_COPY,
+  AI_OFF_FOR_SITE_STATUS,
+  isAiOffForSite,
+} from '../model/ai-site-switch'
 
 /**
  * What a job kind checks before a job of it runs (AGL-2909).
@@ -92,4 +97,21 @@ export async function aiJobAdmissionRefusal(
 ): Promise<AiJobAdmissionRefusal | null> {
   const admission = admissions.get(kind)
   return admission ? admission(context) : null
+}
+
+/**
+ * The refusal for a job on a site that switched AI off (AGL-3028), or `null`.
+ *
+ * Every kind meets it, and every door asks it BEFORE the kind's own check —
+ * the create door, each site of an agency batch, and a resume — so no job
+ * comes to exist, or runs another step, for a site that said no, and a
+ * switched-off site never pays for a kind's reads. A job with no site is
+ * workspace-level and always passes.
+ */
+export async function aiJobSiteRefusal(
+  context: Pick<AiJobAdmissionContext, 'firestore' | 'org' | 'hostId'>,
+): Promise<AiJobAdmissionRefusal | null> {
+  return (await isAiOffForSite(context.firestore, context.org, context.hostId))
+    ? { status: AI_OFF_FOR_SITE_STATUS, error: AI_OFF_FOR_SITE_COPY }
+    : null
 }

@@ -42,6 +42,7 @@ import {
   trimToSentence,
 } from '@aglyn/aglyn/app-utils/docs-deflection'
 import { retrieveDocsSections } from '@aglyn/aglyn/app-utils/docs-retrieval'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   buildReportBody,
   createLinearIssue,
@@ -375,7 +376,10 @@ export async function POST(request: Request): Promise<Response> {
       reporterEmail: decoded.email ?? null,
       orgId: resolved?.orgId ?? null,
       orgName: resolved?.org?.name ?? null,
-      orgPlan: (resolved?.org?.plan as string | undefined) ?? null,
+      // The plan the org GETS, as the release flags beside it are resolved
+      // (AGL-3034): a staff comp or a dead subscription makes the stored
+      // field name a plan the reporter does not have.
+      orgPlan: resolved?.org ? resolveEffectivePlan(resolved.org as never) : null,
       orgRole: (resolved?.member?.role as string | undefined) ?? null,
       orgRoleId: (resolved?.member?.roleId as string | undefined) ?? null,
       hostId: host?.hostId ?? null,

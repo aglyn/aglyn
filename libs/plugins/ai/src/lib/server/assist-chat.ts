@@ -28,6 +28,7 @@ import {
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { aiOverageReservationRefusal } from '../billing/ai-overage-gate'
 import { aiAllotmentRefusalText } from '../model/ai-allotments'
+import { aiOffForSiteResponse, isAiOffForSite } from '../model/ai-site-switch'
 import { AI_MODEL_AUTO, resolveAiModelChoice } from '../providers/model-choice'
 import { aiUsageMeter } from '../usage/ai-usage-meter'
 import {
@@ -930,6 +931,17 @@ async function handler(request: Request): Promise<Response> {
         },
         { status: 403 },
       )
+    }
+
+    // A site that switched AI off (AGL-3028). The dispatcher refuses a door
+    // whose body names its site as a top-level `hostId`; this one carries the
+    // site inside `context`, where the dispatcher does not look. Below the
+    // scope check, so the question is already known to be about the named
+    // workspace, and above lockdown, the rate window and the reservation, so
+    // a refused question spends nothing. A question asked off any site names
+    // none and is answered as the workspace's.
+    if (await isAiOffForSite(app.firestore(), org, body.context?.hostId)) {
+      return aiOffForSiteResponse()
     }
 
     // Lockdown: scope verdict (platform/org/user), then the ai-assist

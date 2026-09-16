@@ -56,6 +56,7 @@ import {
   AI_JOB_THEME_NO_SITE_COPY,
   aiJobThemeInventory,
   runAiJobThemeStep,
+  aiJobThemeMaxTokens,
 } from './ai-job-theme-step'
 
 const ORG = 'org-1'
@@ -156,7 +157,7 @@ describe('the request', () => {
     const request = mockRunAiRequest.mock.calls[0][0]
     expect(request).toMatchObject({
       model: aiModelForStep('job.theme'),
-      maxTokens: AI_JOB_THEME_MAX_TOKENS,
+      maxTokens: aiJobThemeMaxTokens(aiModelForStep('job.theme')),
       thinking: 'adaptive',
       stream: false,
     })
@@ -337,7 +338,7 @@ describe('the one re-ask', () => {
 })
 
 describe('a measured budget', () => {
-  it('fits the largest answer the tool accepts with as much again to think in', () => {
+  it('fits the largest answer the tool accepts with as much again to think in, at the ceiling the served tier asks inside the step’s least time', () => {
     const largest = {
       summary: 'x'.repeat(AI_THEME_SUMMARY_MAX_CHARS),
       colors: AI_THEME_COLOR_CONTROLS.map((control) => ({
@@ -367,5 +368,9 @@ describe('a measured budget', () => {
     // JSON runs well over three characters a token; three errs toward more tokens.
     const tokens = Math.ceil(JSON.stringify(largest).length / 3)
     expect(tokens * 2).toBeLessThanOrEqual(AI_JOB_THEME_MAX_TOKENS)
+    // The tier the theme step is served from asks less than the routing
+    // ceiling, as much as fits its least time with the brand reads (AGL-3035),
+    // and that still holds the largest answer with as much again to think in.
+    expect(tokens * 2).toBeLessThanOrEqual(aiJobThemeMaxTokens(aiModelForStep('job.theme')))
   })
 })

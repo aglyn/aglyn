@@ -24,6 +24,7 @@ import type {
   OrgBrandingProfile,
 } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { normalizeThemeHex } from '../tools/ai-theme-tool'
+import { AI_THEME_BRAND_BUDGET_MS } from './ai-job-theme-budget'
 
 /**
  * The brand a theme job builds on (AGL-2938): the colors that belong to the
@@ -81,11 +82,10 @@ export const AI_THEME_STYLESHEET_MAX_BYTES = 256 * 1024
 export const AI_THEME_REFERENCE_STYLESHEETS = 2
 
 /**
- * The wall clock brand colors may take. The step runs inside the route's
- * inline budget, and a proposal without a page's colors is better than no
- * proposal before the budget ends.
+ * The wall clock brand colors may take, declared with the theme step's time
+ * (`ai-job-theme-budget.ts`), which counts it (AGL-3035).
  */
-export const AI_THEME_BRAND_BUDGET_MS = 8_000
+export { AI_THEME_BRAND_BUDGET_MS }
 
 const FETCH_TIMEOUT_MS = 4_000
 const MAX_REDIRECT_HOPS = 3

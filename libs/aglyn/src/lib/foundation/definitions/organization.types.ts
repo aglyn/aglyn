@@ -136,7 +136,9 @@ export interface AglynOrganization extends AglynDocument {
   /**
    * Per-org plugin switchboard (AGL-416): ids of plugins the workspace
    * loads (see plugin-manager/enabled-plugins). Absent = all first-party
-   * plugins; always-on ids (base components) are unioned in regardless.
+   * plugins; always-on ids (base components) and the ids on for every
+   * workspace (AI) are unioned in regardless — a site switches those off for
+   * itself instead.
    */
   enabledPlugins?: string[]
   seatAddons?: OrgSeatAddons

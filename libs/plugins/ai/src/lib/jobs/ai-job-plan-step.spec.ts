@@ -56,20 +56,48 @@ jest.mock('./ai-jobs', () => ({
   registerAiJobPlanStep: jest.fn(),
 }))
 
-import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import {
+  AI_INVENTORY_LOOKUP_MAX_ROUNDS,
+  AI_INVENTORY_LOOKUP_TOOL_NAME,
+  aiInventoryLookupTool,
+} from '../tools/ai-inventory-lookup-tool'
 import { AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
+import { AI_MODEL_CATALOG, AI_STEP_TIERS } from '../providers/catalog'
+import { AI_ROUTING_TABLE } from '../providers/routing'
+import {
+  AI_JOB_ASSUMED_FIRST_TOKEN_MS,
+  AI_JOB_INLINE_BUDGET_MS,
+  AI_JOB_STEP_MAX_MINIMUM_MS,
+  AI_JOB_STEP_OVERHEAD_MS,
+  AI_JOB_SWEEP_BUDGET_MS,
+  aiGenerationWorstCaseMs,
+  aiJobAssumedAnswerMs,
+  aiJobBudgetTier,
+} from './ai-job-budget'
 import type { AiJob } from '../model/ai-jobs.types'
+import {
+  aiPlanCapabilitiesForJob,
+  aiPlanCapabilityLines,
+  aiUnrestrictedPlanCapabilities,
+  type AiPlanCapabilities,
+} from '../model/ai-plan-capabilities'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
 import { AI_DOCTRINE_SYSTEM_BLOCK } from '../runtime/ai-doctrine'
 import { AI_DOCTRINE_RULES } from '../runtime/ai-doctrine-validators'
 import {
   AI_JOB_PLAN_INSTRUCTIONS,
   AI_JOB_PLAN_REVIEW_COPY,
+  AI_JOB_PLAN_STEP_MINIMUM_MS,
+  AI_JOB_PLAN_SCOPES,
   AI_PLAN_REUSE_WINDOW_MS,
   aiJobPlanKey,
+  aiJobPlanMaxTokens,
   aiJobPlanPrompt,
   aiReusablePlan,
   createAiJobPlanStep,
+  readAiJobPlanCapabilities,
   runAiJobPlanStep,
   type AiJobPlanCandidate,
   registerAiJobPlan,
@@ -159,9 +187,17 @@ function planAnswer(plan: AiBuildPlan) {
  */
 const mockFindPlans = jest.fn<Promise<AiJobPlanCandidate[]>, [string, string, unknown?]>()
 
-/** The runner under test, with both seams faked unless a test names its own. */
+/**
+ * The runner under test, with its seams faked unless a test names its own.
+ * What the job may create reads nothing unless a test hands in capabilities:
+ * the machine's Firestore handle here is a stand-in.
+ */
 function planStep(deps: Parameters<typeof createAiJobPlanStep>[0] = {}) {
-  return createAiJobPlanStep({ findPlansByKey: mockFindPlans, ...deps })
+  return createAiJobPlanStep({
+    findPlansByKey: mockFindPlans,
+    readCapabilities: async () => null,
+    ...deps,
+  })
 }
 
 beforeEach(() => {
@@ -171,9 +207,11 @@ beforeEach(() => {
 })
 
 describe('the plan step', () => {
-  it('registers the plan step every planned kind runs first', () => {
+  it('registers the plan step every planned kind runs first, with the least time a plan needs', () => {
     registerAiJobPlan()
-    expect(registerAiJobPlanStep).toHaveBeenCalledWith(runAiJobPlanStep)
+    expect(registerAiJobPlanStep).toHaveBeenCalledWith(runAiJobPlanStep, {
+      minimumMs: AI_JOB_PLAN_STEP_MINIMUM_MS,
+    })
   })
 
   it('reads the site through the machine’s handle and proposes a plan the doctrine held, for review', async () => {
@@ -289,6 +327,234 @@ describe('the plan step', () => {
       planStep({ readInventory: reader })({ job: job(), stepIndex: 0, now: NOW, firestore }),
     ).rejects.toThrow('not a site of the workspace')
     expect(mockRunAiRequest).not.toHaveBeenCalled()
+  })
+})
+
+describe('the time budget: no inline door starts a plan, and the beat can (AGL-3026, AGL-3036)', () => {
+  const modelOn = (tier: 'fast' | 'balanced' | 'deep') => AI_MODEL_CATALOG.find((entry) => entry.tier === tier)?.id as string
+
+  it('registers a minimum past an inline door’s budget and inside what a beat can give a step', () => {
+    expect(AI_JOB_PLAN_STEP_MINIMUM_MS).toBeGreaterThan(AI_JOB_INLINE_BUDGET_MS)
+    expect(AI_JOB_PLAN_STEP_MINIMUM_MS).toBeLessThanOrEqual(AI_JOB_STEP_MAX_MINIMUM_MS)
+    expect(AI_JOB_STEP_MAX_MINIMUM_MS).toBeLessThanOrEqual(AI_JOB_SWEEP_BUDGET_MS)
+  })
+
+  it('is a plan’s lookup rounds, answer and re-ask on the tier the step is served from, at the most of the routing ceiling a beat can start', () => {
+    const route = AI_ROUTING_TABLE['job.plan']
+    const served = modelOn(AI_STEP_TIERS['job.plan'])
+    const ceiling = aiJobPlanMaxTokens(served)
+    // The whole routing ceiling could never start: counting both lookup
+    // rounds, its worst case is past what a beat can give a step.
+    expect(aiGenerationWorstCaseMs({ model: served, maxTokens: route.maxTokens })).toBeGreaterThan(AI_JOB_STEP_MAX_MINIMUM_MS)
+    expect(ceiling).toBeLessThan(route.maxTokens)
+    expect(AI_JOB_PLAN_STEP_MINIMUM_MS).toBe(aiGenerationWorstCaseMs({ model: served, maxTokens: ceiling }))
+    expect(aiGenerationWorstCaseMs({ model: served, maxTokens: ceiling + 1 })).toBeGreaterThan(AI_JOB_STEP_MAX_MINIMUM_MS)
+    // It stays above what the live Free plan measured (AGL-3024: 3,954
+    // output tokens on the balanced tier): the ceiling cuts off no plan a live
+    // run has answered.
+    expect(ceiling).toBeGreaterThan(3_954)
+  })
+
+  it('is stated in the developer notes with the figures the code computes', () => {
+    // Read as prose: a sentence the notes wrap across lines still says it.
+    const notes = readFileSync(join(__dirname, '..', '..', '..', '..', '..', '..', 'docs', 'AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
+    const figure = (value: number) => value.toLocaleString('en-US')
+    const route = AI_ROUTING_TABLE['job.plan']
+    const tier = AI_STEP_TIERS['job.plan']
+    const served = modelOn(tier)
+    const wait = `4 × ${AI_JOB_ASSUMED_FIRST_TOKEN_MS / 1_000} s`
+    const overhead = `${AI_JOB_STEP_OVERHEAD_MS / 1_000} s`
+    expect(notes).toContain(
+      `At the routing table's ${figure(route.maxTokens)} tokens on the ${tier} tier that is ${wait} + 2 × ` +
+        `${figure(aiJobAssumedAnswerMs(route.maxTokens, tier))} ms + ${overhead} = ` +
+        `${figure(aiGenerationWorstCaseMs({ model: served, maxTokens: route.maxTokens }))} ms`,
+    )
+    expect(notes).toContain(
+      `so the ${tier} tier asks for ${figure(aiJobPlanMaxTokens(served))} tokens: ${wait} + 2 × ` +
+        `${figure(aiJobAssumedAnswerMs(aiJobPlanMaxTokens(served), tier))} ms + ${overhead} = ${figure(AI_JOB_PLAN_STEP_MINIMUM_MS)} ms`,
+    )
+    expect(notes).toContain(`\`AI_JOB_SWEEP_BUDGET_MS\` (${AI_JOB_SWEEP_BUDGET_MS / 1_000} s)`)
+    expect(notes).toContain(
+      `The fast tier asks for ${figure(aiJobPlanMaxTokens(modelOn('fast')))} tokens and the deep tier for ${figure(aiJobPlanMaxTokens(modelOn('deep')))}`,
+    )
+  })
+
+  it.each(['fast', 'balanced', 'deep'] as const)(
+    'on the %s tier, a plan that looks records up twice, breaks a rule and is re-asked finishes inside the minimum on a fake clock',
+    async (tier) => {
+      const model = modelOn(tier)
+      expect(aiJobBudgetTier(model)).toBe(tier)
+      const ceiling = aiJobPlanMaxTokens(model)
+      expect(ceiling).toBeGreaterThan(0)
+      expect(ceiling).toBeLessThanOrEqual(AI_ROUTING_TABLE['job.plan'].maxTokens)
+
+      // Every exchange is charged what the budget module assumes a provider
+      // takes: a start, then the output it answers with. Each lookup round
+      // asks for a card by name; each answer runs to all it was asked for.
+      let clock = 0
+      const LOOKUP_OUTPUT = 60
+      const unlaid: AiBuildPlan = { ...PLAN, screens: [{ ...PLAN.screens[0], layout: null }] }
+      mockRunAiRequest.mockImplementation(async (request: { maxTokens: number }) => {
+        const call = mockRunAiRequest.mock.calls.length
+        if (call <= AI_INVENTORY_LOOKUP_MAX_ROUNDS) {
+          clock += AI_JOB_ASSUMED_FIRST_TOKEN_MS + aiJobAssumedAnswerMs(LOOKUP_OUTPUT, tier)
+          return {
+            kind: 'completion',
+            text: '',
+            toolUse: [{ name: AI_INVENTORY_LOOKUP_TOOL_NAME, input: { kind: 'components', query: 'price' } }],
+            usage: { ...USAGE, outputTokens: LOOKUP_OUTPUT },
+            estCostUsd: 0.001,
+            stopReason: 'tool_use',
+          }
+        }
+        clock += AI_JOB_ASSUMED_FIRST_TOKEN_MS + aiJobAssumedAnswerMs(request.maxTokens, tier)
+        return {
+          ...planAnswer(call === AI_INVENTORY_LOOKUP_MAX_ROUNDS + 1 ? unlaid : PLAN),
+          usage: { ...USAGE, outputTokens: request.maxTokens },
+        }
+      })
+      const outcome = await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore, modelFor: () => model })
+
+      // Both lookup rounds, then an answer that broke a rule, then its re-ask
+      // on what is left of the plan's allowance.
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(AI_INVENTORY_LOOKUP_MAX_ROUNDS + 2)
+      expect(mockRunAiRequest.mock.calls.map(([request]) => request.maxTokens)).toEqual([
+        ceiling,
+        ceiling,
+        ceiling,
+        ceiling - 2 * LOOKUP_OUTPUT,
+      ])
+      for (const [request] of mockRunAiRequest.mock.calls) {
+        expect(request).toMatchObject({ model, thinking: 'adaptive' })
+      }
+      expect(outcome.review?.reason).toBe('plan')
+      expect(clock + AI_JOB_STEP_OVERHEAD_MS).toBeLessThanOrEqual(AI_JOB_PLAN_STEP_MINIMUM_MS)
+    },
+  )
+})
+
+/**
+ * What the job may create on its site (AGL-3030): a Free workspace keeps no
+ * reusable components and no saved forms, and its one shared layout is the
+ * site's already.
+ */
+const FREE: AiPlanCapabilities = {
+  reusableComponents: false,
+  create: {
+    ...aiUnrestrictedPlanCapabilities().create,
+    component: { allowed: false, left: 0, reason: "this workspace's plan does not include reusable components" },
+    form: { allowed: false, left: 0, reason: "this workspace's plan does not include saved forms" },
+  },
+}
+
+/** PLAN, built the way a Free workspace can build it: the tiers drawn in their section. */
+const INLINE_PLAN: AiBuildPlan = {
+  ...PLAN,
+  create: [],
+  screens: [{ ...PLAN.screens[0], sections: [{ name: 'hero', uses: [], items: 0 }, { name: 'tiers', uses: [], items: 3 }] }],
+}
+
+describe('the plan step — what the job may create (AGL-3030)', () => {
+  it('tells the plan what a page job may create here in the user turn, never in a cached block', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(INLINE_PLAN))
+    const readCapabilities = jest.fn(async () => FREE)
+    await planStep({ readCapabilities })({
+      job: job(),
+      stepIndex: 0,
+      now: NOW,
+      firestore,
+      org: { plan: 'free' },
+    })
+    expect(readCapabilities).toHaveBeenCalledWith({ job: job(), org: { plan: 'free' }, firestore })
+    const [request] = mockRunAiRequest.mock.calls[0]
+    const told = aiPlanCapabilitiesForJob(FREE, AI_JOB_PLAN_SCOPES.page)
+    expect(request.messages[0].content).toBe(aiJobPlanPrompt(job(), told))
+    expect(request.messages[0].content).toContain('- component: no, because this workspace\'s plan does not include reusable components')
+    expect(request.messages[0].content).toContain('- template: no, because a page job does not build one')
+    // The cached prefix is the platform's: nothing of this workspace rides in it.
+    expect(request.system.slice(0, 2)).toEqual([
+      AI_DOCTRINE_SYSTEM_BLOCK,
+      { ...AI_JOB_PLAN_INSTRUCTIONS[0], cacheBreakpoint: true },
+    ])
+    for (const line of aiPlanCapabilityLines(told)) {
+      expect(request.system.map((block: { text: string }) => block.text).join('\n')).not.toContain(line)
+    }
+  })
+
+  it('asks once more for a creation the workspace cannot make, and keeps the plan the re-ask builds inline', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(PLAN)).mockResolvedValueOnce(planAnswer(INLINE_PLAN))
+    const outcome = await planStep({ readCapabilities: async () => FREE })({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    const reask = mockRunAiRequest.mock.calls[1][0].messages.at(-1).content as string
+    expect(reask).toContain(`Rule 7 (${AI_DOCTRINE_RULES[7]}): The plan creates a component named "Price table"`)
+    expect(outcome.review).toEqual({ reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] })
+    expect(outcome.plan).toMatchObject({ create: [], screens: [{ sections: INLINE_PLAN.screens[0].sections }] })
+  })
+
+  it('asks once more for a page plan of two pages, in the page job’s own sentence', async () => {
+    const twoPages: AiBuildPlan = { ...INLINE_PLAN, screens: [INLINE_PLAN.screens[0], { ...INLINE_PLAN.screens[0], slug: '/pricing-2' }] }
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(twoPages)).mockResolvedValueOnce(planAnswer(INLINE_PLAN))
+    const outcome = await planStep({ readCapabilities: async () => FREE })({ job: job(), stepIndex: 0, now: NOW, firestore })
+    const reask = mockRunAiRequest.mock.calls[1][0].messages.at(-1).content as string
+    expect(reask).toContain('This plan builds 2 pages, and a page job builds one.')
+    expect(outcome.review?.reason).toBe('plan')
+  })
+
+  it('refuses a plan the confirm door would refuse before any member sees it: the job fails with the door’s sentence and keeps no plan', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(INLINE_PLAN))
+    const admissionRefusal = jest.fn(async () => ({
+      status: 403 as const,
+      error: 'Your plan includes 5 screens — upgrade in Billing for more',
+    }))
+    const outcome = await planStep({ admissionRefusal, readCapabilities: async () => FREE })({
+      job: job(),
+      stepIndex: 0,
+      now: NOW,
+      firestore,
+      org: { plan: 'free' },
+    })
+    // The door is asked as the resume door asks it: the plan, the job's site, inputs and creator.
+    expect(admissionRefusal).toHaveBeenCalledWith('page', {
+      firestore,
+      orgId: 'org-1',
+      hostId: 'host-1',
+      inputs: { tone: 'plain' },
+      org: { plan: 'free' },
+      plan: expect.objectContaining({ status: 'proposed', screens: INLINE_PLAN.screens }),
+      uid: 'uid-1',
+    })
+    expect(outcome.failure).toBe('Your plan includes 5 screens — upgrade in Billing for more')
+    expect(outcome.plan).toBeUndefined()
+    expect(outcome.review).toBeUndefined()
+    // What the plan spent is on the bill all the same.
+    expect(outcome).toMatchObject({ usage: USAGE, estCostUsd: 0.0105 })
+  })
+
+  it('holds a reused plan to the same door, and spends nothing on it', async () => {
+    mockFindPlans.mockResolvedValue([candidate()])
+    const outcome = await planStep({
+      admissionRefusal: async () => ({ status: 400, error: 'This plan builds 2 pages, and a page job builds one.' }),
+    })({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(outcome).toMatchObject({ failure: 'This plan builds 2 pages, and a page job builds one.', estCostUsd: 0 })
+    expect(outcome.plan).toBeUndefined()
+  })
+
+  it('keeps the plan when the door cannot answer, since the resume door asks again before anything is built', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(INLINE_PLAN))
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const outcome = await planStep({
+      readCapabilities: async () => FREE,
+      admissionRefusal: async () => {
+        throw new Error('firestore unavailable')
+      },
+    })({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(outcome.failure).toBeUndefined()
+    expect(outcome.review?.reason).toBe('plan')
+  })
+
+  it('reads no capabilities for a job with no site, and restricts nothing for it', async () => {
+    expect(await readAiJobPlanCapabilities({ job: job({ hostId: null }), org: null, firestore })).toBeNull()
   })
 })
 

@@ -162,6 +162,12 @@ const LEGACY_BILLING_KEYS = [
   'enterprise',
   'discount',
   'suspendedAt',
+  // A staff override, and above all a staff PLAN COMP (AGL-3034), which
+  // lives here rather than in `plan`: a grant somebody made on purpose, with
+  // a reason on its audit row. `/api/admin/org-override` is the only writer,
+  // and `createOrganization` writes none, so an unverified workspace carrying
+  // one is one staff chose to keep, not one nobody finished signing up.
+  'entitlements',
 ]
 
 /** Whether an unarmed run reports instead of acting. See the note above. */

@@ -38,6 +38,10 @@ import {
   checkFormContract,
   formContractIsSatisfied,
   formFieldsCaptureConsent,
+  formsOffPublishViolation,
+  FORMS_OFF_FOR_SITE_PAGE_VIOLATION,
+  FORMS_OFF_FOR_SITE_VIOLATION,
+  nodesCarryForm,
   type FormContractViolation,
 } from './form-contract'
 import type { AglynNodeSchema, NodeId } from '../foundation/definitions/components.types'
@@ -386,5 +390,65 @@ describe('several failures at once', () => {
       'consent-field-missing',
     ])
     expect(formContractIsSatisfied(check(nodes))).toBe(false)
+  })
+})
+
+/**
+ * A site that switched Forms off publishes no form (AGL-3029): the page would
+ * draw none and the submit route would refuse every submission, so a publish
+ * that went through would put an empty space live behind an author who
+ * believed they had shipped a form.
+ */
+describe('a site that switched Forms off', () => {
+  const GOOD = () =>
+    design([
+      { id: 'f1', fieldName: 'name' },
+      { id: 'f2', fieldName: 'email', fieldType: 'email' },
+    ])
+
+  it('refuses a design that would otherwise publish, with one sentence and nothing else', () => {
+    expect(check(GOOD())).toEqual([])
+    const violations = checkFormContract({
+      form: {},
+      formId: FORM_ID,
+      nodes: GOOD(),
+      formNodeId: 'theForm' as NodeId,
+      formsOnForSite: false,
+    })
+    expect(violations).toEqual([FORMS_OFF_FOR_SITE_VIOLATION])
+    expect(formContractIsSatisfied(violations)).toBe(false)
+    expect(violations[0].message).toMatch(/Forms is switched off for this site/)
+  })
+
+  it('refuses nothing extra for a site that runs Forms, or one that could not be read', () => {
+    for (const formsOnForSite of [true, undefined]) {
+      expect(
+        checkFormContract({
+          form: {},
+          formId: FORM_ID,
+          nodes: GOOD(),
+          formNodeId: 'theForm' as NodeId,
+          formsOnForSite,
+        }),
+      ).toEqual([])
+    }
+  })
+
+  it('refuses a PAGE carrying a form, and names the way forward', () => {
+    expect(formsOffPublishViolation(GOOD(), false)).toEqual(FORMS_OFF_FOR_SITE_PAGE_VIOLATION)
+    expect(FORMS_OFF_FOR_SITE_PAGE_VIOLATION.message).toMatch(/Remove the form, or switch Forms back on/)
+  })
+
+  it('lets a page with no form publish, and any page on a site that runs Forms', () => {
+    const noForm = { root: { $id: 'root', componentId: 'div', nodes: [] } } as never
+    expect(formsOffPublishViolation(noForm, false)).toBeNull()
+    expect(formsOffPublishViolation(GOOD(), true)).toBeNull()
+    expect(formsOffPublishViolation(GOOD(), undefined)).toBeNull()
+  })
+
+  it('sees a form by its component id, whatever plugin the node was stamped with', () => {
+    const stale = { f: { $id: 'f', componentId: 'form', pluginId: 'mui' } } as never
+    expect(nodesCarryForm(stale)).toBe(true)
+    expect(nodesCarryForm(null)).toBe(false)
   })
 })

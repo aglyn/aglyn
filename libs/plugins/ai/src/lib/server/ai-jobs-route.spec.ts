@@ -286,7 +286,9 @@ import {
   assistUsageMonth,
 } from '../usage/assist-usage'
 import {
+  AI_JOB_INLINE_BUDGET_MS,
   AI_JOB_NOT_AVAILABLE_COPY,
+  registerAiJobPauseReader,
   registerAiJobPlanStep,
   registerAiJobStep,
 } from '../jobs/ai-jobs'
@@ -584,6 +586,44 @@ describe('POST /api/ai/jobs — the green path', () => {
       expect(jobDocs()).toHaveLength(1)
     } finally {
       registerAiJobAdmission('component', null)
+    }
+  })
+
+  it('holds a job whose workspace’s AI staff paused after the ladder admitted it: nothing runs, the message goes back, and it answers queued (AGL-3037)', async () => {
+    armCompletion()
+    const asked: Array<{ orgId: string; staff: boolean }> = []
+    registerAiJobPauseReader(async (input) => {
+      asked.push(input)
+      return true
+    })
+    try {
+      const response = await createJob(post(VALID))
+      expect(response.status).toBe(200)
+      const { job } = await response.json()
+      expect(job).toMatchObject({ kind: 'text', status: 'queued', creditsSpent: 0 })
+      expect(job.steps[0]).toMatchObject({ status: 'pending' })
+      expect(mockRunAiRequest).not.toHaveBeenCalled()
+      expect(mockDocs.get(`orgs/${ORG}/assistUsage/${assistUsageMonth()}`)?.['messages']).toBe(0)
+      expect(asked).toEqual([{ orgId: ORG, staff: false }])
+    } finally {
+      registerAiJobPauseReader(null)
+    }
+  })
+
+  it('tells the pause a verified staff caller is on the request, so staff verify a pause as the ladder lets them (AGL-3037)', async () => {
+    armCompletion()
+    mockVerifyIdToken.mockResolvedValue({ uid: 'staff-1', email: 'staff@example.com', email_verified: true, staff: true })
+    const asked: Array<{ orgId: string; staff: boolean }> = []
+    registerAiJobPauseReader(async (input) => {
+      asked.push(input)
+      return !input.staff
+    })
+    try {
+      const { job } = await (await createJob(post(VALID))).json()
+      expect(job).toMatchObject({ status: 'done' })
+      expect(asked).toEqual([{ orgId: ORG, staff: true }])
+    } finally {
+      registerAiJobPauseReader(null)
     }
   })
 
@@ -900,6 +940,22 @@ describe('POST /api/ai/jobs/[jobId]/resume (AGL-2935)', () => {
     return job
   }
 
+  it('leaves a plan that needs more time than the request has for the beat, handing the message back (AGL-3026)', async () => {
+    // The plan step registers the least time a plan needs, which no inline
+    // budget holds: the create door starts no plan and spends nothing.
+    registerAiJobPlanStep((context) => planRunner(context), { minimumMs: AI_JOB_INLINE_BUDGET_MS + 1 })
+    const response = await createJob(post({ ...VALID, kind: 'site' }))
+    expect(response.status).toBe(200)
+    const { job } = await response.json()
+    expect(job).toMatchObject({ kind: 'site', status: 'queued' })
+    expect(job.steps).toEqual([
+      expect.objectContaining({ name: 'plan', status: 'pending' }),
+      expect.objectContaining({ name: 'generate', status: 'pending' }),
+    ])
+    expect(planRunner).not.toHaveBeenCalled()
+    expect(messages()).toBe(0)
+  })
+
   it('confirms the plan and runs the next step inline on its own reservation, audited', async () => {
     const job = await proposed()
     expect(messages()).toBe(1)
@@ -920,6 +976,30 @@ describe('POST /api/ai/jobs/[jobId]/resume (AGL-2935)', () => {
       target: `orgs/${ORG}/aiJobs/${job.id}`,
       after: { status: 'queued', reason: 'plan', kind: 'site' },
     })
+  })
+
+  it('confirms the plan but holds the next step of a workspace whose AI staff paused, handing the message back (AGL-3037)', async () => {
+    const job = await proposed()
+    const asked: Array<{ orgId: string; staff: boolean }> = []
+    registerAiJobPauseReader(async (input) => {
+      asked.push(input)
+      return true
+    })
+    try {
+      const response = await resume(job.id)
+      expect(response.status).toBe(200)
+      expect((await response.json()).job).toMatchObject({
+        status: 'queued',
+        plan: { status: 'confirmed' },
+        steps: [expect.objectContaining({ name: 'plan', status: 'done' }), expect.objectContaining({ name: 'generate', status: 'pending' })],
+      })
+      expect(siteRunner).not.toHaveBeenCalled()
+      // The resume's reservation went back: only the plan's message stands.
+      expect(messages()).toBe(1)
+      expect(asked).toEqual([{ orgId: ORG, staff: false }])
+    } finally {
+      registerAiJobPauseReader(null)
+    }
   })
 
   it('refuses another site, an unknown job and a job no longer waiting, handing the message back each time', async () => {

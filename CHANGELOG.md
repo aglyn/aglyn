@@ -9,6 +9,51 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.126 — 2026-09-16
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.125...v1.0.0-beta.126)
+
+### Added
+
+- **console:** the staff override grants a comp and says which plan took effect ([AGL-3034](https://linear.app/aglyn/issue/AGL-3034))
+- **aglyn:** a staff plan comp decides the plan while a subscription is dead or absent ([AGL-3034](https://linear.app/aglyn/issue/AGL-3034), [AGL-247](https://linear.app/aglyn/issue/AGL-247))
+- **forms:** a site can switch Forms off, and every half of a form honors it ([AGL-3029](https://linear.app/aglyn/issue/AGL-3029), [AGL-3033](https://linear.app/aglyn/issue/AGL-3033))
+- **ai:** a site can switch AI off for itself, and the workspace half keeps running ([AGL-3028](https://linear.app/aglyn/issue/AGL-3028))
+- **ai:** a page job builds the layout, forms and components its plan creates ([AGL-3031](https://linear.app/aglyn/issue/AGL-3031))
+
+### Fixed
+
+- **ai:** the assistant names the plan a workspace resolves to, not its stored field ([AGL-3034](https://linear.app/aglyn/issue/AGL-3034))
+- **ai:** a workspace whose AI staff have paused runs none of its queued AI jobs ([AGL-3037](https://linear.app/aglyn/issue/AGL-3037), [AGL-3028](https://linear.app/aglyn/issue/AGL-3028))
+- **ai:** every AI generation step registers the least time it needs ([AGL-3035](https://linear.app/aglyn/issue/AGL-3035))
+- **ai:** the step time budget counts a generation's inventory-lookup rounds ([AGL-3036](https://linear.app/aglyn/issue/AGL-3036))
+- **console:** surfaces that name, gate or bill a plan read the plan a comp grants ([AGL-3034](https://linear.app/aglyn/issue/AGL-3034))
+- **rules:** the CRM suite opens for a staff comp wherever the resolver honors one ([AGL-3034](https://linear.app/aglyn/issue/AGL-3034))
+- **renderer:** the render gate never blanks the base library or a surface with no site ([AGL-3033](https://linear.app/aglyn/issue/AGL-3033))
+- **renderer:** a switched-off plugin renders on the server as it does in the browser ([AGL-3033](https://linear.app/aglyn/issue/AGL-3033))
+- **ai:** a plan is told what its workspace may create, and a Free page is built inline ([AGL-3030](https://linear.app/aglyn/issue/AGL-3030))
+- **ai:** a plan registers the least time it needs, so no inline door starts one ([AGL-3026](https://linear.app/aglyn/issue/AGL-3026))
+- **ai:** the AI jobs beat runs on the console, where the provider key is ([AGL-3026](https://linear.app/aglyn/issue/AGL-3026), [AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
+- **aglyn:** the plugin-wiring spec strips rules comments in one pass, not block-first ([AGL-3032](https://linear.app/aglyn/issue/AGL-3032), [AGL-2004](https://linear.app/aglyn/issue/AGL-2004), [AGL-2002](https://linear.app/aglyn/issue/AGL-2002), [AGL-3027](https://linear.app/aglyn/issue/AGL-3027))
+- **tools:** a rules source too big to deploy now fails CI instead of the deploy ([AGL-3027](https://linear.app/aglyn/issue/AGL-3027))
+- **rules:** the Firestore rules fit under the 256 KiB deploy limit again ([AGL-3027](https://linear.app/aglyn/issue/AGL-3027), [AGL-3011](https://linear.app/aglyn/issue/AGL-3011), [AGL-2004](https://linear.app/aglyn/issue/AGL-2004))
+- **ai:** a search is never a form, and a plan is told the ceilings it is cut at ([AGL-3022](https://linear.app/aglyn/issue/AGL-3022))
+
+### Documentation
+
+- **releasing:** a rules source has a 256 KiB deploy limit that compiling never checks ([AGL-3027](https://linear.app/aglyn/issue/AGL-3027))
+
+<details>
+<summary>Also in this release: 1 test, 3 chore, 1 style</summary>
+
+- **console:** the comp's comments and specs lint with no warnings of their own ([AGL-3034](https://linear.app/aglyn/issue/AGL-3034))
+- **ai:** a comped workspace is never metered as Free and never reaches Stripe ([AGL-3034](https://linear.app/aglyn/issue/AGL-3034), [AGL-3011](https://linear.app/aglyn/issue/AGL-3011))
+- **tools:** the Linear ceiling is 3037, read from the workspace ([AGL-3037](https://linear.app/aglyn/issue/AGL-3037), [AGL-3034](https://linear.app/aglyn/issue/AGL-3034))
+- **tools:** the Linear ceiling is 3033, read from the workspace ([AGL-3033](https://linear.app/aglyn/issue/AGL-3033), [AGL-3032](https://linear.app/aglyn/issue/AGL-3032))
+- **tools:** the Linear ceiling is 3031, read from the workspace ([AGL-3031](https://linear.app/aglyn/issue/AGL-3031), [AGL-3026](https://linear.app/aglyn/issue/AGL-3026))
+
+</details>
+
 ## v1.0.0-beta.125 — 2026-09-16
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.124...v1.0.0-beta.125)

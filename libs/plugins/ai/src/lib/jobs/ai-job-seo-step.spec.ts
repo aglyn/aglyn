@@ -66,6 +66,7 @@ import {
   AI_SEO_SITE_TOOL_NAME,
   checkAiSeoFields,
 } from '../tools/ai-seo-tool'
+import { aiSeoGenerationMaxTokens } from './ai-job-seo-budget'
 import {
   AI_SEO_FIXES_MAX_TOKENS,
   AI_SEO_NO_PAGE_COPY,
@@ -547,6 +548,9 @@ describe('measured budgets', () => {
       })),
     }
     expect(tokens(largest) * 1.25).toBeLessThanOrEqual(AI_SEO_FIXES_MAX_TOKENS)
+    // The tier the SEO step is served from asks the whole ceiling inside the
+    // step's least time (AGL-3035); a slower tier asks a batch for less.
+    expect(aiSeoGenerationMaxTokens(aiModelForStep('job.seo'), AI_SEO_FIXES_MAX_TOKENS)).toBe(AI_SEO_FIXES_MAX_TOKENS)
   })
 
   it('fits the largest site answer the check accepts', () => {

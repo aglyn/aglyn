@@ -22,6 +22,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   isPlausibleEmail,
   readSuccessManager,
@@ -83,8 +84,11 @@ async function handler(request: Request): Promise<Response> {
         .collection('orgs')
         .doc(orgId)
         .get()
+      // Owed on the plan the org GETS, a staff comp included (AGL-3034).
       const commitment = supportForPlan(
-        (orgSnapshot.get('plan') as never) ?? null,
+        orgSnapshot.exists
+          ? resolveEffectivePlan((orgSnapshot.data() ?? {}) as never)
+          : null,
       )
       return Response.json(
         {

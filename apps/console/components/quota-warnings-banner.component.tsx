@@ -20,6 +20,7 @@ import {
   checkDatasetQuota,
   checkSeatQuota,
   resolveOrgEntitlements,
+  resolvePlanComp,
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { assistBandRefuses } from '@aglyn/aglyn/app-utils/assist-credits'
@@ -176,7 +177,10 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
     setDismissed(sessionStorage.getItem(DISMISS_KEY) === '1')
   }, [])
 
-  const plan = org?.plan
+  // "Has a plan to warn against": a stored one, or a staff comp in force
+  // (AGL-3034), which grants a plan the stored field may not name at all.
+  const planComp = resolvePlanComp(org)
+  const plan = org?.plan || planComp?.plan
 
   // Host-level quotas: screens, media storage, datasets.
   useEffect(() => {
@@ -449,7 +453,11 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   // its own, and once it has there is nothing to complete — the subscription
   // is gone and the plan grid is the honest next step, not a banner nagging
   // about something unrecoverable.
-  if (billingStatus === 'incomplete') {
+  // A staff comp in force decides the plan on exactly these two statuses
+  // (AGL-3034), so both sentences below would be false for it: the plan HAS
+  // started, and the workspace is not running on Free. Staff granted it
+  // knowing the subscription's state; the invoices stay on Billing.
+  if (billingStatus === 'incomplete' && !planComp) {
     return (
       <Alert
         severity="warning"
@@ -479,7 +487,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
     )
   }
 
-  const lapsed = billingStatus === 'unpaid'
+  const lapsed = billingStatus === 'unpaid' && !planComp
   if (billingStatus === 'past_due' || lapsed) {
     return (
       <Alert

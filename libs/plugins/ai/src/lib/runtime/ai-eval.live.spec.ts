@@ -23,14 +23,15 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { readAiEvalCase, type AiEvalCase } from './ai-eval'
-import { aiEvalLiveAllowed, recordAiEvalLive } from './ai-eval-live'
+import { aiEvalCasesNamed, aiEvalLiveAllowed, recordAiEvalLive } from './ai-eval-live'
 
 /**
  * THE LIVE RUN (AGL-2937). Skipped unless `AI_EVAL_LIVE=1` names it — it asks
  * the provider for real answers and spends real money — and started by
  * `AI_EVAL_LIVE=1 npm run eval:ai-live`, never by CI. Each recording is
  * written under `tools/ai-eval/recordings/<kind>/`, where the offline
- * harness scores it beside the authored answers.
+ * harness scores it beside the authored answers. `AI_EVAL_CASES` names the
+ * briefs to record by id, so one brief can be recorded alone.
  */
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
@@ -48,8 +49,9 @@ const live = aiEvalLiveAllowed(process.env)
   it(
     'records and grades an answer for every brief a recorder covers',
     async () => {
-      const cases: AiEvalCase[] = files(CASES_DIR).map((file) =>
-        readAiEvalCase(JSON.parse(readFileSync(file, 'utf8')), file),
+      const cases: AiEvalCase[] = aiEvalCasesNamed(
+        files(CASES_DIR).map((file) => readAiEvalCase(JSON.parse(readFileSync(file, 'utf8')), file)),
+        process.env,
       )
       const report = await recordAiEvalLive(cases, { env: process.env })
       for (const { caseId, kind, candidate } of report.recorded) {

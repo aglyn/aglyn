@@ -184,11 +184,24 @@ const strings = (description: string) => ({
 })
 
 /**
+ * The ceiling `parseAiBuildPlan` cuts a field's text at, in words (AGL-3022).
+ * The reader repairs an overlong value by cutting it, and a model never told
+ * where the cut falls writes a rationale that stops mid-sentence there.
+ */
+const atMost = (limit: number = AI_BUILD_PLAN_LIMITS.text) => `at most ${limit} characters`
+
+/**
  * The plan as a strict tool's input schema. Only the keywords strict
  * structured output accepts: every object closes its properties and lists
  * every one as required, an optional value is a `null` branch, and no
- * length or count bound appears — those are enforced by `parseAiBuildPlan`,
- * which every answer passes through anyway.
+ * length or count bound appears as a keyword — those are enforced by
+ * `parseAiBuildPlan`, which every answer passes through anyway.
+ *
+ * A text ceiling is stated in words instead, on each field the model writes.
+ * A reference is copied from the inventory or from a creation's name, so its
+ * length is not the model's to choose. A search title and description are
+ * held by rule 10 to ceilings far inside the reader's, which the doctrine
+ * states, so naming the reader's here would contradict the rule.
  */
 export const AI_BUILD_PLAN_TOOL: AiTool = {
   name: 'submit_build_plan',
@@ -210,7 +223,7 @@ export const AI_BUILD_PLAN_TOOL: AiTool = {
           properties: {
             kind: { type: 'string', enum: [...AI_BUILD_PLAN_REUSE_KINDS] },
             id: string('The id from the site inventory.'),
-            purpose: string('What the plan uses it for, in a few words.'),
+            purpose: string(`What the plan uses it for, in a few words, ${atMost()}.`),
           },
         },
       },
@@ -224,13 +237,15 @@ export const AI_BUILD_PLAN_TOOL: AiTool = {
           required: ['kind', 'name', 'why', 'duplicateOf', 'fields'],
           properties: {
             kind: { type: 'string', enum: [...AI_BUILD_PLAN_CREATE_KINDS] },
-            name: string('Unique within the plan; other entries refer to it as new:<name>.'),
-            why: string('Why nothing the site already has will do.'),
+            name: string(
+              `Unique within the plan, ${atMost()}; other entries refer to it as new:<name>.`,
+            ),
+            why: string(`Why nothing the site already has will do, in one sentence of ${atMost()}.`),
             duplicateOf: nullableString(
               'The inventory id this starts from as a duplicate, or null.',
             ),
             fields: strings(
-              'A component or layout: its props as name:type. A form or dataset: its field names. A theme change: the palette paths it adds or changes.',
+              `A component or layout: its props as name:type. A form or dataset: its field names. A theme change: the palette paths it adds or changes. Each ${atMost()}.`,
             ),
           },
         },
@@ -253,9 +268,9 @@ export const AI_BUILD_PLAN_TOOL: AiTool = {
             'sections',
           ],
           properties: {
-            title: string('The screen name.'),
+            title: string(`The screen name, ${atMost()}.`),
             slug: string(
-              'The path, lowercase words joined by hyphens, e.g. /services/roof-repair.',
+              `The path, ${atMost()}: lowercase words joined by hyphens, e.g. /services/roof-repair.`,
             ),
             layout: nullableString(
               'The layout it renders inside: an inventory id or new:<name>.',
@@ -280,7 +295,7 @@ export const AI_BUILD_PLAN_TOOL: AiTool = {
                 additionalProperties: false,
                 required: ['name', 'uses', 'items'],
                 properties: {
-                  name: string('A few words: hero, services grid, contact form.'),
+                  name: string(`A few words, ${atMost()}: hero, services grid, contact form.`),
                   uses: strings('What the section places: inventory ids or new:<name>.'),
                   items: {
                     type: 'integer',

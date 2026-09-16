@@ -34,6 +34,7 @@ import {
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
+import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
   AI_COMPONENT_COPY_KINDS,
@@ -61,6 +62,7 @@ import {
   readAiComponentProps,
 } from '../tools/ai-component-tool'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
+import { aiJobStepBudget } from './ai-job-budget'
 import {
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
@@ -117,14 +119,28 @@ import { registerAiJobStep } from './ai-jobs'
  * of a component the site has gets that copy, through the platform's
  * duplicate module, and nothing generated.
  *
- * A generation step has the job beat's budget for one step, its re-ask
- * included, so it runs without extended thinking and under the answer
- * ceiling the layout and template steps keep. The step's spec measures the
- * request and the answer against that budget.
+ * A generation step runs on the job beat, never at an inline door: it
+ * registers the least time its lookup rounds, its answer and its re-ask need
+ * (AGL-3035), runs without extended thinking, and asks for no more of the
+ * ceiling the layout and template steps keep than fits that time on the model
+ * it runs. The step's spec measures the request and the answer against it.
  */
 
 /** The longest answer a component may run to; the tree is held to the component budget either way. */
 export const AI_JOB_COMPONENT_MAX_TOKENS = AI_ROUTING_TABLE['job.component'].maxTokens
+
+/**
+ * The component step's time (AGL-3035, AGL-3036): its two inventory-lookup
+ * rounds, its answer and its re-ask at the routing table's ceiling on the tier
+ * `job.component` is served from, fitted to what a beat can give a step.
+ */
+export const AI_JOB_COMPONENT_STEP_BUDGET = aiJobStepBudget({
+  tier: AI_STEP_TIERS['job.component'],
+  maxTokens: AI_JOB_COMPONENT_MAX_TOKENS,
+})
+
+/** The least time one component step needs before it starts. */
+export const AI_JOB_COMPONENT_STEP_MINIMUM_MS = AI_JOB_COMPONENT_STEP_BUDGET.minimumMs
 
 /** A component's name when the plan names none. */
 export const AI_JOB_COMPONENT_DEFAULT_NAME = 'Component'
@@ -525,7 +541,7 @@ export function createAiJobComponentStep(deps: AiJobComponentStepDeps = {}): AiJ
       inventory,
       messages: [{ role: 'user', content: aiJobComponentPrompt(job, plan, name) }],
       tool: aiComponentTool(),
-      maxTokens: AI_JOB_COMPONENT_MAX_TOKENS,
+      maxTokens: AI_JOB_COMPONENT_STEP_BUDGET.maxTokens(model),
       ...(AI_ROUTING_TABLE['job.component'].thinking
         ? { thinking: AI_ROUTING_TABLE['job.component'].thinking }
         : {}),
@@ -570,6 +586,6 @@ export const runAiJobComponentStep = createAiJobComponentStep()
 
 /** Registers the component step and the check a component job passes before it is created or resumed. */
 export function registerAiComponentJob(): void {
-  registerAiJobStep('component', runAiJobComponentStep)
+  registerAiJobStep('component', runAiJobComponentStep, { minimumMs: AI_JOB_COMPONENT_STEP_MINIMUM_MS })
   registerAiJobAdmission('component', aiComponentJobAdmission)
 }

@@ -127,14 +127,14 @@ export function registerMarketingApi(): void {
   registerPluginApiRoute('experiments/track', trackHandler)
   // Site-page contributions (AGL-418): overlays, automations, experiments.
   registerSitePageEnricher(marketingSitePageEnricher)
-  // The campaign draft writer another plugin reaches through the core's
-  // resource-drafts seam (AGL-2912): the tenant's job beat runs there.
-  registerCampaignDraftWriter()
 }
 
 /** Registers the marketing plugin's console-side API routes (AGL-396). */
 export function registerMarketingConsoleApi(): void {
-  // The same writer, for a job step a console route runs inline (AGL-2912).
+  // The campaign draft writer another plugin reaches through the core's
+  // resource-drafts seam (AGL-2912). Registered here alone: the AI jobs that
+  // write through it run only on the console, inline and on the beat
+  // (AGL-3026).
   registerCampaignDraftWriter()
   registerPluginApiRoute('campaigns/send', campaignSendHandler)
   // Taking a campaign or an abandoned draft away, which is the one class of

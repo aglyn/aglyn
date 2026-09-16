@@ -217,11 +217,13 @@ outage.
    whichever lags, every cron 401s in the gap.
 5. **THREE HOLDERS, NOT TWO (AGL-1617).** `firebase functions:secrets:set
    CRON_SECRET --project aglyn-main`, then `firebase deploy --only
-   functions:consoleFastCrons` so the new version is bound. That Cloud
-   Scheduler job drives `campaigns/process-scheduled` and
+   functions:consoleFastCrons,functions:consoleAiJobsBeat` so the new version
+   is bound. `consoleFastCrons` drives `campaigns/process-scheduled` and
    `finish-domain-attachments` every fifteen minutes; miss this step and
    those two — a feature `/product/marketing` sells, and every pending custom
    domain — 401 silently while the eleven GitHub Actions jobs stay green.
+   `consoleAiJobsBeat` drives the AI jobs beat every minute (AGL-3026); miss it
+   and no AI job that plans gets past its first step.
    `/api/health/crons` reds them within 45–60 minutes, which is the backstop,
    not the plan.
 6. Redeploy console **and** tenant (the plugin cron routes live on both).

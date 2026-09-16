@@ -17,6 +17,7 @@
 
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { parseAiBuildPlan, type AiBuildPlan } from '../model/ai-build-plan'
+import type { AiPlanCapabilities } from '../model/ai-plan-capabilities'
 import {
   AI_INVENTORY_KINDS,
   AI_INVENTORY_KIND_HEADINGS,
@@ -59,6 +60,7 @@ import {
   aiInventoryLookupTool,
   answerAiInventoryLookup,
 } from '../tools/ai-inventory-lookup-tool'
+import { AI_GENERATION_MAX_ATTEMPTS } from './ai-generation-bounds'
 import type { AiNodeTreeContext } from './ai-node-tree'
 import {
   AI_OUTPUT_BUDGETS,
@@ -167,13 +169,13 @@ const DOCUMENTS: readonly AiDoctrineScope[] = ['documents']
 const EVERY_SCOPE: readonly AiDoctrineScope[] = ['documents', 'fields']
 
 const AI_DOCTRINE_RULE_TEXT: readonly AiDoctrineRuleText[] = [
-  { n: 1, scopes: DOCUMENTS, text: 'Repeats become one reusable component. A block with the same elements and props that differs only in its copy, links or images, appearing 3 or more times on a page or on 2 pages built together, is one reusable component with typed props, placed as instances: a "reusableInstance" node whose "refId" names the component and whose "propValues" fill its props. Search the site inventory first, and never create a component that duplicates one listed there; reuse it, or propose extending it.' },
+  { n: 1, scopes: DOCUMENTS, text: 'Repeats become one reusable component. A block with the same elements and props that differs only in its copy, links or images, appearing 3 or more times on a page or on 2 pages built together, is one reusable component with typed props, placed as instances: a "reusableInstance" node whose "refId" names the component and whose "propValues" fill its props. Search the site inventory first, and never create a component that duplicates one listed there; reuse it, or propose extending it. Where the request says the workspace keeps no reusable components, draw the block each time it repeats instead.' },
   { n: 2, scopes: DOCUMENTS, text: 'Site-wide regions live in the layout. A header, navigation, footer, announcement bar or cookie notice belongs in a layout. Every screen declares the site\'s layout, or one the plan creates, and never carries its own copy of a layout region.' },
-  { n: 3, scopes: DOCUMENTS, text: 'Forms are built on the Forms page, then placed. A form is created there with its fields, validation, consent and routing, and a page places a "form" element bound by its "formId", with no fields drawn inside it. Never draw loose form fields on a page.' },
+  { n: 3, scopes: DOCUMENTS, text: 'Forms are built on the Forms page, then placed. A form is created there with its fields, validation, consent and routing, and a page places a "form" element bound by its "formId", with no fields drawn inside it. Where the request says the workspace keeps no saved forms, the page carries the form itself: a "form" element with no "formId", holding its "formField" elements. Never draw loose form fields on a page. Search is a "searchBox" or a collection\'s "collectionSearch", never a form, which collects submissions.' },
   { n: 4, scopes: DOCUMENTS, text: `Similar pages share one template. When ${AI_SIMILAR_PAGES_MIN} or more pages share one structure and differ by copy or data (products, locations, team members, services), plan one template and apply it once per page, or bind it to a collection when the data exists. Fewer than ${AI_SIMILAR_PAGES_MIN} is not a template.` },
   { n: 5, scopes: DOCUMENTS, text: 'Colors, spacing and type come from the theme. Use palette tokens such as "primary.main", "text.secondary" and "background.paper", plain numbers on the spacing scale, the theme\'s shape and its typography variants. Never write a hex, rgb or named color, or a px, rem or em length. A color the theme lacks is a theme change in the plan, never a value on an element.' },
   { n: 6, scopes: DOCUMENTS, text: 'Emails use the brand. An email uses only the brand colors and fonts the site inventory lists, and a campaign starts from an email template rather than a one-off design.' },
-  { n: 7, scopes: DOCUMENTS, text: 'Reuse before creating. Prefer what the site inventory lists: components, layouts, templates, forms, themes, datasets, collections and screens, referenced by id. Creating is the exception, and every creation says why nothing listed will do. In a plan, refer to something the plan itself creates as new:<name>.' },
+  { n: 7, scopes: DOCUMENTS, text: 'Reuse before creating. Prefer what the site inventory lists: components, layouts, templates, forms, themes, datasets, collections and screens, referenced by id. Creating is the exception, and every creation says why nothing listed will do. In a plan, refer to something the plan itself creates as new:<name>, and create only what the request says this job may create on this site.' },
   { n: 8, scopes: DOCUMENTS, text: 'Data is bound, not typed. A list that exists as a dataset, collection, product or record is bound to it and never copied into text; a long list the site lacks becomes a dataset in the plan.' },
   { n: 9, scopes: DOCUMENTS, text: 'Images come from the media library, with alt text. Place images by media reference, or leave "src" empty for an upload; never link an image from another website. Every image has alt text describing it, or "decorative": true.' },
   { n: 10, scopes: DOCUMENTS, text: 'Navigation and SEO travel with a page. Every new screen has a slug of lowercase words joined by hyphens that the site does not already use, a search title of at most 70 characters, a search description of at most 170, and a navigation entry when the brief implies one.' },
@@ -451,7 +453,7 @@ export const AI_GENERATION_MAX_TOKENS: Record<AiGenerationKind, number> = {
 export const AI_CUSTOM_GENERATION_MAX_TOKENS = 8_000
 
 /** One answer, and one re-ask with the violations named. */
-export const AI_GENERATION_MAX_ATTEMPTS = 2
+export { AI_GENERATION_MAX_ATTEMPTS }
 
 /** How much of the offending parts a re-ask quotes. */
 export const AI_REASK_OFFENDING_MAX_CHARS = 6_000
@@ -623,10 +625,15 @@ export function aiDoctrineTreeCheck(
   }
 }
 
-/** The doctrine's check for a plan: its shape, then every plan rule against the inventory. */
+/**
+ * The doctrine's check for a plan: its shape, then every plan rule against
+ * the inventory and, where the job read them, against what it may create on
+ * the site (AGL-3030).
+ */
 export function aiDoctrinePlanCheck(
   inventory: AiSiteInventory | null,
   framing: AiCopyFraming = null,
+  capabilities: AiPlanCapabilities | null = null,
 ): AiGenerationCheck<AiBuildPlan> {
   return (answer) => {
     const publish = detectPublishIntent(answer)
@@ -645,7 +652,10 @@ export function aiDoctrinePlanCheck(
         ],
       }
     }
-    const violations = [...publish, ...validateAiBuildPlan(parsed.plan, inventory, framing)]
+    const violations = [
+      ...publish,
+      ...validateAiBuildPlan(parsed.plan, inventory, framing, capabilities),
+    ]
     const paths = [...new Set(violations.flatMap((violation) => violation.paths ?? []))]
     return {
       value: parsed.plan,
@@ -732,7 +742,11 @@ interface AiGenerationInputBase {
   messages: readonly AiMessage[]
   /** The strict tool the answer arrives through. */
   tool: AiTool
-  /** `AI_GENERATION_MAX_TOKENS` for the kind when absent. */
+  /**
+   * The ceiling of one answer; `AI_GENERATION_MAX_TOKENS` for the kind when
+   * absent. The whole generation — its answers and every lookup round before
+   * them — spends at most `AI_GENERATION_MAX_ATTEMPTS` of it (AGL-3036).
+   */
   maxTokens?: number
   thinking?: AiThinking
   effort?: AiEffort
@@ -752,6 +766,12 @@ export interface AiTreeGenerationInput extends AiGenerationInputBase {
 
 export interface AiPlanGenerationInput extends AiGenerationInputBase {
   framing?: AiCopyFraming
+  /**
+   * What the job may create on its site (AGL-3030). The plan rules refuse a
+   * creation outside it, and build inline where the workspace keeps no
+   * reusable components; absent, the doctrine applies whole.
+   */
+  capabilities?: AiPlanCapabilities | null
   /** Checks the door adds to the doctrine's own, run on a plan that parsed. */
   extend?: (plan: AiBuildPlan, answer: Record<string, unknown>) => AiDoctrineViolation[]
 }
@@ -840,7 +860,10 @@ export function aiDoctrineTreeContext(
 function checkFor(kind: string, input: object): AiGenerationCheck<unknown> {
   if (kind === 'plan') {
     const plan = input as AiPlanGenerationInput
-    return withExtension(aiDoctrinePlanCheck(plan.inventory, plan.framing ?? null), plan.extend) as AiGenerationCheck<unknown>
+    return withExtension(
+      aiDoctrinePlanCheck(plan.inventory, plan.framing ?? null, plan.capabilities ?? null),
+      plan.extend,
+    ) as AiGenerationCheck<unknown>
   }
   if (isAiOutputKind(kind)) {
     const tree = input as AiTreeGenerationInput
@@ -920,14 +943,30 @@ export async function runValidatedGeneration(
   // calls, which lookups also spend.
   let answers = 0
   let lookups = 0
+  // ONE ALLOWANCE OF OUTPUT FOR THE WHOLE GENERATION (AGL-3036): an answer
+  // and its re-ask at the ceiling. A lookup round is a model call answered at
+  // the same ceiling, and nothing can tell a request that will look something
+  // up from one that will answer, so each call is asked for no more than is
+  // left of the allowance rather than for a ceiling of its own. What a
+  // generation can take is then its calls' waits for a first token plus this
+  // allowance, however it splits between lookups and answers — the worst case
+  // `jobs/ai-job-budget.ts` plans a step's least time against. A generation
+  // that has spent it all stops: nothing is left to answer with.
+  const allowance = AI_GENERATION_MAX_ATTEMPTS * maxTokens
   while (answers < AI_GENERATION_MAX_ATTEMPTS) {
+    const spent = Number(spend.usage.outputTokens)
+    const left = allowance - (Number.isFinite(spent) ? spent : 0)
+    if (left <= 0) {
+      if (!violations.length) violations = [unreadableAnswer(kind, input.tool.name, 'max_tokens')]
+      break
+    }
     spend.attempts += 1
     const result = await runAiRequest({
       model,
       system,
       messages,
       tools,
-      maxTokens,
+      maxTokens: Math.min(maxTokens, left),
       stream: false,
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(input.effort ? { effort: input.effort } : {}),

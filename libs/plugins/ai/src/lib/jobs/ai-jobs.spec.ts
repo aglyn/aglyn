@@ -225,6 +225,7 @@ import {
   AI_JOB_SWEEP_MAX_JOBS,
   aiJobNextStepMinimumMs,
   aiJobStepMinimumMs,
+  aiJobStepRunMinimumMs,
   aiJobStepNames,
   aiJobStepRunnerFor,
   aiJobStepSpentNothing,
@@ -245,6 +246,12 @@ import {
   sweepAiJobs,
   type AiJobStepRun,
 } from './ai-jobs'
+import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
+import type { AiJob } from '../model/ai-jobs.types'
+import { AI_JOB_INLINE_BUDGET_MS } from './ai-job-budget'
+import { AI_JOB_SEO_STEP_MINIMUM_MS } from './ai-job-seo-budget'
+import { AI_JOB_TEXT_STEP_MINIMUM_MS } from './ai-job-text-step'
+import { AI_JOB_THEME_STEP_MINIMUM_MS } from './ai-job-theme-budget'
 import { AI_UPSTREAM_FAILURE_COPY, AiUpstreamError } from '../runtime/ai-runtime'
 import { assistFreeTasteRefusalText } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
@@ -1102,6 +1109,7 @@ describe('sweepAiJobs — the beat', () => {
       due: 3,
       ran: 2,
       skipped: 0,
+      paused: 0,
       remaining: 1,
       budgetExhausted: true,
     })
@@ -1277,10 +1285,16 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
       error: null,
       lease: null,
       creditsSpent: 6,
-      creditsReserved: AI_JOB_STEP_RESERVE_CREDITS,
+      // Parked for a person, the job shows nothing held (AGL-3030).
+      creditsReserved: 0,
       plan: { status: 'proposed', confirmedAt: null },
       review: { reason: 'plan' },
     })
+    // And holds nothing real: the plan step's one message is spent and its
+    // cost metered, and no reservation stands open behind the review.
+    const month = mockDocs.get(`orgs/${ORG}/assistUsage/${assistUsageMonth(NOW)}`) ?? {}
+    expect(month['messages']).toBe(1)
+    expect(Number(month['estCostUsd'])).toBeCloseTo(0.006, 6)
     expect(stored?.steps.map((step) => step.status)).toEqual(['done', 'pending'])
     expect(mockAiActivity.logAiJobNeedsInput).toHaveBeenCalledWith(ORG, { uid: null }, {
       jobId: job.$id,
@@ -1315,6 +1329,8 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
       review: null,
       error: null,
       plan: { status: 'confirmed', confirmedBy: 'uid-2', confirmedAt: LATER },
+      // The step the confirmation queues is held again.
+      creditsReserved: AI_JOB_STEP_RESERVE_CREDITS,
     })
     expect((await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-2' }, LATER)).changed).toBe(false)
 
@@ -1332,6 +1348,35 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
     })
   })
 
+  it('holds a confirmed plan at what the whole job is estimated to cost, where that is more than its steps (AGL-3031)', async () => {
+    const screen = {
+      title: 'Home',
+      slug: 'home',
+      layout: 'new:Frame',
+      template: null,
+      duplicateOf: null,
+      nav: true,
+      seoTitle: 'Home',
+      seoDescription: 'The home page',
+      sections: [
+        { name: 'hero', uses: [], items: 0 },
+        { name: 'services', uses: [], items: 0 },
+      ],
+    }
+    const plan = {
+      ...proposedOutcome().plan,
+      create: [{ kind: 'layout' as const, name: 'Frame', why: 'every page', duplicateOf: null, fields: [] }],
+      screens: [screen, { ...screen, slug: 'about' }],
+    }
+    planRunner.mockResolvedValue({ ...proposedOutcome(), plan })
+    const job = await newSiteJob()
+    await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
+    const resumed = await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-2' }, LATER)
+    // Two screens of two sections and their last passes, and the layout.
+    expect(aiJobPlanCreditEstimate('site', plan)).toBe((2 * (2 + 1) + 1) * AI_JOB_STEP_RESERVE_CREDITS)
+    expect(resumed.job.creditsReserved).toBe(aiJobPlanCreditEstimate('site', plan))
+  })
+
   it('hands back a step whose answer broke a rule twice, with its spend, and trying again runs it once more', async () => {
     planRunner.mockResolvedValueOnce(doctrineOutcome()).mockResolvedValueOnce(proposedOutcome())
     const job = await newSiteJob()
@@ -1343,6 +1388,7 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
       status: 'needs_review',
       error: 'This could not be built within the building rules.',
       creditsSpent: 6,
+      creditsReserved: 0,
       review: { reason: 'doctrine', findings: [{ rule: 2, code: 'plan-screen-without-layout' }] },
     })
     expect(parked?.plan).toBeUndefined()
@@ -1359,7 +1405,13 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
     })
 
     const resumed = await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, LATER)
-    expect(resumed.job).toMatchObject({ status: 'queued', error: null, review: null })
+    // Trying again holds both steps the plan's retry queues ahead of.
+    expect(resumed.job).toMatchObject({
+      status: 'queued',
+      error: null,
+      review: null,
+      creditsReserved: 2 * AI_JOB_STEP_RESERVE_CREDITS,
+    })
     expect(resumed.job.steps[0]).toMatchObject({ status: 'pending', attempts: 0 })
 
     expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-2', now: LATER })).outcome).toBe(
@@ -1489,8 +1541,13 @@ describe('a step’s tokens (AGL-2937)', () => {
 
 describe('a step that says how long it needs (AGL-2907)', () => {
   const timedRunner = jest.fn()
-  // A kind no other test in this file creates, so its minimum changes no other path.
-  beforeAll(() => registerAiJobStep('insight', (context) => timedRunner(context), { minimumMs: 20_000 }))
+  const untimedRunner = jest.fn()
+  // Kinds no other test in this file creates, so their minimums change no
+  // other path: one that says how long it needs, and one that says nothing.
+  beforeAll(() => {
+    registerAiJobStep('insight', (context) => timedRunner(context), { minimumMs: 20_000 })
+    registerAiJobStep('experiment', (context) => untimedRunner(context))
+  })
   afterAll(() => registerAiJobStep('insight', (context) => timedRunner(context)))
 
   const newTimedJob = () =>
@@ -1499,21 +1556,93 @@ describe('a step that says how long it needs (AGL-2907)', () => {
       { orgId: ORG, hostId: 'host-1', kind: 'insight', brief: 'What changed on the site this month.', createdBy: 'uid-1' },
       NOW,
     )
+  const newUntimedJob = () =>
+    createAiJob(
+      firestore,
+      { orgId: ORG, hostId: 'host-1', kind: 'experiment', brief: 'Which headline sells more.', createdBy: 'uid-1' },
+      NOW,
+    )
   const jobOf = async (jobId: string) => (await getAiJob(firestore, ORG, jobId)) as never
 
-  it('records the least time a kind’s own step needs, never for the plan step, and clears it on re-registration', async () => {
+  it('records the least time a kind’s own step needs, not for the plan step, and clears it on re-registration', async () => {
     expect(aiJobStepMinimumMs('insight', 'generate')).toBe(20_000)
     expect(aiJobStepMinimumMs('insight', AI_JOB_PLAN_STEP)).toBe(0)
-    expect(aiJobStepMinimumMs('text', 'draft')).toBe(0)
+    expect(aiJobStepMinimumMs('experiment', 'generate')).toBe(0)
     expect(aiJobNextStepMinimumMs(await newTimedJob())).toBe(20_000)
-    expect(aiJobNextStepMinimumMs(await newTextJob())).toBe(0)
+    expect(aiJobNextStepMinimumMs(await newUntimedJob())).toBe(0)
     registerAiJobStep('insight', (context) => timedRunner(context))
     expect(aiJobStepMinimumMs('insight', 'generate')).toBe(0)
     registerAiJobStep('insight', (context) => timedRunner(context), { minimumMs: 20_000 })
   })
 
+  it('registers the three kinds the machine runs itself with the least time each needs, and only text fits an inline door (AGL-3035)', async () => {
+    expect(aiJobStepMinimumMs('text', 'draft')).toBe(AI_JOB_TEXT_STEP_MINIMUM_MS)
+    expect(aiJobNextStepMinimumMs(await newTextJob())).toBe(AI_JOB_TEXT_STEP_MINIMUM_MS)
+    expect(AI_JOB_TEXT_STEP_MINIMUM_MS).toBeGreaterThan(0)
+    expect(AI_JOB_TEXT_STEP_MINIMUM_MS).toBeLessThanOrEqual(AI_JOB_INLINE_BUDGET_MS)
+    expect(aiJobStepMinimumMs('theme', 'generate')).toBe(AI_JOB_THEME_STEP_MINIMUM_MS)
+    expect(aiJobStepMinimumMs('seo', 'generate')).toBe(AI_JOB_SEO_STEP_MINIMUM_MS)
+    for (const minimumMs of [AI_JOB_THEME_STEP_MINIMUM_MS, AI_JOB_SEO_STEP_MINIMUM_MS]) {
+      expect(minimumMs).toBeGreaterThan(AI_JOB_INLINE_BUDGET_MS)
+    }
+  })
+
+  it('asks a kind whose runs differ what its next run needs, never less than its least, and clears that on re-registration (AGL-3035)', async () => {
+    try {
+      // A run that has already produced something is the long kind here.
+      registerAiJobStep('insight', (context) => timedRunner(context), {
+        minimumMs: 20_000,
+        minimumMsFor: (job) => ((job.outputs ?? []).length ? 90_000 : 5_000),
+      })
+      const fresh = (await newTimedJob()) as AiJob
+      expect(aiJobStepMinimumMs('insight', 'generate')).toBe(20_000)
+      expect(aiJobStepRunMinimumMs(fresh)).toBe(20_000)
+      expect(aiJobNextStepMinimumMs(fresh)).toBe(20_000)
+      const along = { ...fresh, outputs: [{ resource: 'text', id: 'draft', hostId: null, label: 'Draft' }] } as AiJob
+      expect(aiJobStepRunMinimumMs(along)).toBe(90_000)
+      expect(aiJobNextStepMinimumMs(along)).toBe(90_000)
+      // A job derived for a unit carries no steps; what its kind needs is still asked of it.
+      expect(aiJobStepRunMinimumMs({ ...along, steps: [] })).toBe(90_000)
+      registerAiJobStep('insight', (context) => timedRunner(context), { minimumMs: 20_000 })
+      expect(aiJobNextStepMinimumMs(along)).toBe(20_000)
+    } finally {
+      registerAiJobStep('insight', (context) => timedRunner(context), { minimumMs: 20_000 })
+    }
+  })
+
+  it('keeps the plan step’s least time by the step, for every kind that plans, and clears it with the runner (AGL-3026)', () => {
+    const planRunner = jest.fn()
+    const planned = (kind: string, next: string) =>
+      ({
+        kind,
+        steps: [
+          { name: AI_JOB_PLAN_STEP, status: next === AI_JOB_PLAN_STEP ? 'pending' : 'done' },
+          { name: 'generate', status: 'pending' },
+        ],
+      }) as never
+    try {
+      registerAiJobPlanStep((context) => planRunner(context), { minimumMs: 30_000 })
+      // One step every planned kind shares, so one minimum, whatever the kind.
+      expect(aiJobStepMinimumMs('page', AI_JOB_PLAN_STEP)).toBe(30_000)
+      expect(aiJobStepMinimumMs('form', AI_JOB_PLAN_STEP)).toBe(30_000)
+      expect(aiJobNextStepMinimumMs(planned('form', AI_JOB_PLAN_STEP))).toBe(30_000)
+      // A kind's own step keeps its own, and the plan's reaches no other step.
+      expect(aiJobStepMinimumMs('insight', 'generate')).toBe(20_000)
+      expect(aiJobNextStepMinimumMs(planned('form', 'generate'))).toBe(0)
+      expect(aiJobStepMinimumMs('experiment', 'generate')).toBe(0)
+      // Registering again without one clears it, and so does unregistering.
+      registerAiJobPlanStep((context) => planRunner(context))
+      expect(aiJobStepMinimumMs('page', AI_JOB_PLAN_STEP)).toBe(0)
+      registerAiJobPlanStep((context) => planRunner(context), { minimumMs: 30_000 })
+      registerAiJobPlanStep(null, { minimumMs: 30_000 })
+      expect(aiJobStepMinimumMs('page', AI_JOB_PLAN_STEP)).toBe(0)
+    } finally {
+      registerAiJobPlanStep(null)
+    }
+  })
+
   it('leaves a step with less time left than it needs untouched, so it keeps its place for the next beat', async () => {
-    const untimed = await newTextJob()
+    const untimed = await newUntimedJob()
     const timed = await newTimedJob()
     let clock = NOW.getTime()
     const ran: string[] = []
@@ -1534,13 +1663,13 @@ describe('a step that says how long it needs (AGL-2907)', () => {
     })
     // 15 s are left when the timed step's turn comes, and it needs 20 s.
     expect(ran).toEqual([untimed.$id])
-    expect(result).toEqual({ due: 2, ran: 1, skipped: 0, remaining: 1, budgetExhausted: false })
+    expect(result).toEqual({ due: 2, ran: 1, skipped: 0, paused: 0, remaining: 1, budgetExhausted: false })
     expect(await getAiJob(firestore, ORG, timed.$id)).toMatchObject({ status: 'queued', updatedAt: NOW })
   })
 
   it('runs a timed step again once every due job has had its turn, while the time it needs is left', async () => {
     const timed = await newTimedJob()
-    const untimed = await newTextJob()
+    const untimed = await newUntimedJob()
     let clock = NOW.getTime()
     let passes = 0
     const ran: string[] = []
@@ -1566,7 +1695,7 @@ describe('a step that says how long it needs (AGL-2907)', () => {
     // Its first pass, the other job's turn, then its passes until it is done.
     // A step that says nothing about its time is never run again here.
     expect(ran).toEqual([timed.$id, untimed.$id, timed.$id, timed.$id])
-    expect(result).toEqual({ due: 2, ran: 4, skipped: 0, remaining: 0, budgetExhausted: false })
+    expect(result).toEqual({ due: 2, ran: 4, skipped: 0, paused: 0, remaining: 0, budgetExhausted: false })
   })
 
   it('stops running it again when less time is left than it needs, and after the sweep’s candidate count', async () => {

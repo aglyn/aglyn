@@ -95,6 +95,8 @@ import {
   createAiJobEmailStep,
   runAiJobEmailStep,
   registerAiEmailJob,
+  AI_JOB_EMAIL_STEP_BUDGETS,
+  AI_JOB_EMAIL_STEP_MINIMUM_MS,
 } from './ai-job-email-step'
 import { registerAiJobStep } from './ai-jobs'
 
@@ -333,7 +335,9 @@ beforeEach(() => {
 describe('the email step', () => {
   it('registers the email runner, with the admission the doors ask', async () => {
     registerAiEmailJob()
-    expect(registerAiJobStep).toHaveBeenCalledWith('email', runAiJobEmailStep)
+    expect(registerAiJobStep).toHaveBeenCalledWith('email', runAiJobEmailStep, {
+      minimumMs: AI_JOB_EMAIL_STEP_MINIMUM_MS,
+    })
     const ask = (hostId: string | null) =>
       aiJobAdmissionRefusal('email', {
         firestore,
@@ -532,7 +536,7 @@ describe('the email step’s budget', () => {
     await run()
     const [request] = mockRunAiRequest.mock.calls[0]
     expect(request.thinking).toBe('off')
-    expect(request.maxTokens).toBe(AI_JOB_EMAIL_MAX_TOKENS)
+    expect(request.maxTokens).toBe(AI_JOB_EMAIL_STEP_BUDGETS['job.email'].maxTokens('routed-model'))
     expect(AI_JOB_EMAIL_MAX_TOKENS).toBeLessThanOrEqual(AI_JOB_LAYOUT_MAX_TOKENS)
     expect(AI_JOB_EMAIL_MAX_TOKENS).toBeLessThan(AI_GENERATION_MAX_TOKENS.email)
   })

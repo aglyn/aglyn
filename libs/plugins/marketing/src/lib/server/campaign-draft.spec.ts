@@ -248,14 +248,19 @@ describe('no send path is reachable from a drafted campaign', () => {
 })
 
 describe('registration', () => {
-  it('registers the writer as the marketing plugin’s, from both server surfaces', () => {
+  it('registers the writer as the marketing plugin’s, from the console surface alone', () => {
     registerCampaignDraftWriter()
     expect(pluginResourceDraftWriter(CAMPAIGN_DRAFT_RESOURCE)).toEqual({
       pluginId: 'marketing',
       writer: campaignDraftWriter,
     })
     const server = readFileSync(join(__dirname, '..', 'server.ts'), 'utf8')
-    expect(server).toMatch(/export function registerMarketingApi\(\): void \{[\s\S]*?registerCampaignDraftWriter\(\)[\s\S]*?\n\}/)
-    expect(server).toMatch(/export function registerMarketingConsoleApi\(\): void \{\s*\/\/[^\n]*\n\s*registerCampaignDraftWriter\(\)/)
+    const surface = (name: string) =>
+      new RegExp(`export function ${name}\\(\\): void \\{[\\s\\S]*?\\n\\}`).exec(server)?.[0] ?? ''
+    expect(surface('registerMarketingConsoleApi')).toMatch(/^export function registerMarketingConsoleApi\(\): void \{(\s*\/\/[^\n]*)*\s*registerCampaignDraftWriter\(\)/)
+    // The AI jobs that write through it run only on the console (AGL-3026),
+    // so the tenant surface that serves published sites registers nothing.
+    expect(surface('registerMarketingApi')).not.toBe('')
+    expect(surface('registerMarketingApi')).not.toContain('registerCampaignDraftWriter')
   })
 })

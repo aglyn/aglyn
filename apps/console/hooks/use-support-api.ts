@@ -16,7 +16,12 @@
  */
 'use client'
 
-import { describeResponseWindow, supportForPlan, type SupportCommitment } from '@aglyn/aglyn'
+import {
+  describeResponseWindow,
+  resolveEffectivePlan,
+  supportForPlan,
+  type SupportCommitment,
+} from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback } from 'react'
@@ -79,7 +84,8 @@ export function useSupportApi(): SupportApi {
   // `ready` is handed back rather than folded in. Quoting the free tier's
   // "no commitment" to a paying customer is the failure this separation
   // exists to prevent.
-  const commitment = supportForPlan(org?.plan)
+  // Owed on the plan the org GETS, a staff comp included (AGL-3034).
+  const commitment = supportForPlan(org ? resolveEffectivePlan(org) : null)
   const responseWindow = describeResponseWindow(commitment.firstResponse)
 
   const request = useCallback(

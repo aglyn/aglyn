@@ -37,6 +37,7 @@ import {
   type AiBuildPlan,
   type AiBuildPlanCreateKind,
 } from '../model/ai-build-plan'
+import { aiPlanUncreatable, type AiPlanCapabilities } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import {
   AI_INSTANCE_REF_PROP,
@@ -124,7 +125,11 @@ export const AI_DOCTRINE_RULE_NUMBERS = Object.keys(AI_DOCTRINE_RULES).map(
 ) as AiDoctrineRuleNumber[]
 
 export interface AiDoctrineViolation {
-  /** The rule broken; `null` when the answer could not be read as the output at all. */
+  /**
+   * The rule broken; `null` when the answer could not be read as the output
+   * at all, or asks for what its job does not build rather than breaking a
+   * building rule.
+   */
   rule: AiDoctrineRuleNumber | null
   /** Stable per finding, for specs and logs. */
   code: string
@@ -180,6 +185,13 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
   /** The plan named a third-party embed the brief asked for, and its cost. */
   allowEmbeds?: boolean
   framing?: AiCopyFraming
+  /**
+   * Whether the workspace keeps reusable components and saved forms
+   * (AGL-3030). `false` builds inline, the one way such a workspace can: a
+   * form is a Form holding its fields, and a repeated block is drawn where it
+   * repeats. Absent is `true`, the doctrine whole.
+   */
+  reusableComponents?: boolean
 }
 
 /** One node of a walk: its id, its depth, and its ancestors' ids from the root down. */
@@ -340,11 +352,16 @@ function repeatedShapes(
 /**
  * Rule 1. A block repeated on one page, or a block this page shares with
  * another page generated beside it, is one component placed as instances.
+ *
+ * A workspace that keeps no reusable components can place no instance, so
+ * there a repeated block is drawn where it repeats, and nothing is refused.
  */
 export function detectRepeatedSubtrees(
   tree: AiDoctrineTree,
   otherPages: readonly AiDoctrineTree[] = [],
+  context: Pick<AiDoctrineTreeContext, 'reusableComponents'> = {},
 ): AiDoctrineViolation[] {
+  if (context.reusableComponents === false) return []
   const index = indexShapes(tree)
   const violations: AiDoctrineViolation[] = repeatedShapes(
     tree,
@@ -442,16 +459,25 @@ export function detectLayoutRegions(
  * Loose fields, an unbound Form, and fields drawn inside a bound Form (which
  * the page never renders: the placed form's own design replaces them) are
  * refused. A form's own design is the one place fields are drawn.
+ *
+ * A workspace that keeps no saved forms (AGL-3030) has no Forms page to build
+ * one on, so there the form IS the page's: an unbound Form holding its Form
+ * Fields, which the site's submit route collects like any other. Loose fields
+ * are still refused, and so is an unbound Form with no field to send.
  */
 export function detectInlineForms(
   tree: AiDoctrineTree,
   outputKind: AiOutputKind,
+  context: Pick<AiDoctrineTreeContext, 'reusableComponents'> = {},
 ): AiDoctrineViolation[] {
   if (outputKind === 'form' || outputKind === 'email') return []
+  const inline = context.reusableComponents === false
   const loose: string[] = []
   const unbound: string[] = []
   const shadowed: string[] = []
-  for (const visit of walkTree(tree)) {
+  const empty: string[] = []
+  const visits = walkTree(tree)
+  for (const visit of visits) {
     if (
       visit.node.componentId === 'formField' &&
       !hasAncestor(tree, visit, (node) => node.componentId === 'form')
@@ -460,12 +486,38 @@ export function detectInlineForms(
     }
     if (visit.node.componentId === 'form') {
       const bound = visit.node.props?.['formId']
-      if (typeof bound !== 'string' || !bound) unbound.push(visit.id)
-      else if ((visit.node.nodes ?? []).length) shadowed.push(visit.id)
+      if (typeof bound === 'string' && bound) {
+        if ((visit.node.nodes ?? []).length) shadowed.push(visit.id)
+      } else if (!inline) {
+        unbound.push(visit.id)
+      } else if (
+        !visits.some(
+          (inner) => inner.node.componentId === 'formField' && inner.ancestors.includes(visit.id),
+        )
+      ) {
+        empty.push(visit.id)
+      }
     }
   }
   const violations: AiDoctrineViolation[] = []
-  if (loose.length || unbound.length) {
+  if (inline && loose.length) {
+    violations.push({
+      rule: 3,
+      code: 'loose-form-field',
+      message:
+        'This draws form fields outside a form, where nothing sends them. Put every Form Field inside the Form it belongs to.',
+      nodeIds: loose,
+    })
+  }
+  if (empty.length) {
+    violations.push({
+      rule: 3,
+      code: 'form-without-fields',
+      message: 'This form has no field to send. Give it the Form Fields it collects.',
+      nodeIds: empty,
+    })
+  }
+  if (!inline && (loose.length || unbound.length)) {
     violations.push({
       rule: 3,
       code: 'inline-form',
@@ -1437,9 +1489,9 @@ export function validateAiDoctrineTree(
   }
   const violations = [
     ...publish,
-    ...detectRepeatedSubtrees(tree, otherPages),
+    ...detectRepeatedSubtrees(tree, otherPages, context),
     ...detectLayoutRegions(tree, outputKind),
-    ...detectInlineForms(tree, outputKind),
+    ...detectInlineForms(tree, outputKind, context),
     ...detectLiteralStyles(tree, outputKind),
     ...detectOffBrandEmail(tree, outputKind, context.brand),
     ...detectTypedData(tree),
@@ -1563,11 +1615,17 @@ const LAYOUT_REGION_NAME =
 const FORM_SECTION_NAME =
   /\bform\b|\bsign[- ]?up\b|\bsubscribe\b|\bnewsletter\b|\bcontact us\b|\b(?:get|request) a quote\b|\bregist(?:er|ration)\b|\b(?:en|in)quiry\b/i
 
-/** Rule 1 (plan): repeated items place a component, and a section two screens share is one. */
+/**
+ * Rule 1 (plan): repeated items place a component, and a section two screens
+ * share is one. A workspace that keeps no reusable components draws them in
+ * their sections instead (AGL-3030), and nothing is refused.
+ */
 export function detectPlanRepeats(
   plan: AiBuildPlan,
   inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
 ): AiDoctrineViolation[] {
+  if (capabilities?.reusableComponents === false) return []
   const kinds = inventoryKinds(inventory)
   const violations: AiDoctrineViolation[] = []
   const placesComponent = (uses: string[]) =>
@@ -1610,22 +1668,37 @@ export function detectPlanRepeats(
   return violations
 }
 
-/** Rule 2 (plan): every screen declares a layout, and no section is a copy of a layout region. */
+/**
+ * Rule 2 (plan): every screen declares a layout, and no section is a copy of
+ * a layout region. A site with no layout, where this job may not create one
+ * (AGL-3030), has nothing to declare: its screens name none, and a screen
+ * that names none is not refused there.
+ */
 export function detectPlanLayoutRegions(
   plan: AiBuildPlan,
   inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
 ): AiDoctrineViolation[] {
   const kinds = inventoryKinds(inventory)
   const violations: AiDoctrineViolation[] = []
+  const noLayoutToName =
+    Boolean(capabilities) &&
+    !capabilities?.create.layout.allowed &&
+    !(inventory?.layouts.length ?? 0)
   const unlaid = plan.screens
     .map((screen, index) => ({ screen, index }))
-    .filter(({ screen }) => refKind(screen.layout, plan, kinds) !== 'layout')
+    .filter(
+      ({ screen }) =>
+        refKind(screen.layout, plan, kinds) !== 'layout' &&
+        !(noLayoutToName && screen.layout === null),
+    )
   if (unlaid.length) {
     violations.push({
       rule: 2,
       code: 'plan-screen-without-layout',
-      message:
-        "A screen names no layout the site has or the plan creates. Put every screen in the site's layout, or plan one.",
+      message: noLayoutToName
+        ? 'A screen names a layout the site does not have, and this job may not create one. Leave the layout empty.'
+        : "A screen names no layout the site has or the plan creates. Put every screen in the site's layout, or plan one.",
       paths: unlaid.map(({ index }) => `screens[${index}].layout`),
     })
   }
@@ -1644,11 +1717,17 @@ export function detectPlanLayoutRegions(
   return violations
 }
 
-/** Rule 3 (plan): a section that collects answers places a form from the Forms page. */
+/**
+ * Rule 3 (plan): a section that collects answers places a form from the Forms
+ * page. A workspace that keeps no saved forms draws the form on the page
+ * (AGL-3030), and nothing is refused.
+ */
 export function detectPlanInlineForms(
   plan: AiBuildPlan,
   inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
 ): AiDoctrineViolation[] {
+  if (capabilities?.reusableComponents === false) return []
   const kinds = inventoryKinds(inventory)
   const unbound = sectionPaths(plan).filter(
     ({ section }) =>
@@ -1778,10 +1857,35 @@ export function detectCreateBeforeReuse(
   return violations
 }
 
-/** Rule 8 (plan): long lists are bound, and a list the site already holds is bound to it. */
+/**
+ * Rule 7 (plan): a plan creates only what the request says this job may
+ * create on this site (AGL-3030) — what the workspace's plan includes, what
+ * the site has room for, and what the job builds itself. One violation a
+ * creation, each saying why and what to do instead.
+ */
+export function detectPlanUncreatable(
+  plan: AiBuildPlan,
+  capabilities: AiPlanCapabilities | null,
+): AiDoctrineViolation[] {
+  if (!capabilities) return []
+  return aiPlanUncreatable(plan, capabilities).map((entry) => ({
+    rule: 7,
+    code: 'plan-create-not-allowed',
+    message: entry.message,
+    paths: [entry.path],
+  }))
+}
+
+/**
+ * Rule 8 (plan): long lists are bound, and a list the site already holds is
+ * bound to it. Where this job may not create a dataset (AGL-3030), the way
+ * out the refusal names is a shorter list rather than a dataset it would
+ * only refuse next.
+ */
 export function detectPlanTypedData(
   plan: AiBuildPlan,
   inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
 ): AiDoctrineViolation[] {
   const kinds = inventoryKinds(inventory)
   const violations: AiDoctrineViolation[] = []
@@ -1802,7 +1906,9 @@ export function detectPlanTypedData(
       rule: 8,
       code: 'plan-typed-list',
       message:
-        'A section plans a long list of typed-out items. Bind it to a dataset or collection, or plan a dataset for data the site does not have yet.',
+        capabilities && !capabilities.create.dataset.allowed
+          ? `A section plans a long list of typed-out items. Bind it to a dataset or collection the site has, or plan fewer than ${AI_TYPED_LIST_MIN_ITEMS} items.`
+          : 'A section plans a long list of typed-out items. Bind it to a dataset or collection, or plan a dataset for data the site does not have yet.',
       paths: typed,
     })
   }
@@ -1956,20 +2062,26 @@ export function detectMissedDuplicate(
   return violations
 }
 
-/** Every plan rule, against the site inventory the plan was made from. */
+/**
+ * Every plan rule, against the site inventory the plan was made from and,
+ * where the job read them, what it may create there (AGL-3030). `null`
+ * capabilities restrict nothing: the doctrine applies whole.
+ */
 export function validateAiBuildPlan(
   plan: AiBuildPlan,
   inventory: AiSiteInventory | null,
   framing: AiCopyFraming = null,
+  capabilities: AiPlanCapabilities | null = null,
 ): AiDoctrineViolation[] {
   return [
-    ...detectPlanRepeats(plan, inventory),
-    ...detectPlanLayoutRegions(plan, inventory),
-    ...detectPlanInlineForms(plan, inventory),
+    ...detectPlanRepeats(plan, inventory, capabilities),
+    ...detectPlanLayoutRegions(plan, inventory, capabilities),
+    ...detectPlanInlineForms(plan, inventory, capabilities),
     ...detectUntemplatedSimilarPages(plan),
     ...detectPlanLiteralColors(plan),
     ...detectCreateBeforeReuse(plan, inventory),
-    ...detectPlanTypedData(plan, inventory),
+    ...detectPlanUncreatable(plan, capabilities),
+    ...detectPlanTypedData(plan, inventory, capabilities),
     ...detectMissingNavAndSeo(plan, inventory),
     ...detectOffVoiceCopy(aiPlanCopy(plan), framing),
     ...detectMissedDuplicate(plan, inventory),

@@ -20,6 +20,8 @@ import {
   canManageOrg,
   FIRST_PARTY_PLUGINS,
   isDefaultOffPerSite,
+  isLockedOnForSite,
+  isLockedOnForWorkspace,
   resolveDisableCascade,
   resolveEnabledPlugins,
   resolveHostEnabledPlugins,
@@ -100,6 +102,13 @@ interface Pending {
 const catalogLabel = (pluginId: string): string =>
   FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === pluginId)?.label ??
   pluginId
+
+/** Whether switching this plugin off for a site asks first (AGL-3029). */
+const confirmsSiteDisable = (pluginId: string): boolean =>
+  Boolean(
+    FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === pluginId)?.siteOff
+      ?.confirm,
+  )
 
 export interface SwitchboardOptions {
   /**
@@ -213,10 +222,10 @@ export function useOrgPluginSwitchboard(
 
   return {
     isOn: (pluginId: string) => enabledSet.has(pluginId),
-    isLocked: (pluginId: string) =>
-      Boolean(
-        FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === pluginId)?.alwaysOn,
-      ),
+    // Locked for the base library AND for a plugin on for every workspace:
+    // `resolveEnabledPlugins` unions both back in, so a switch here would
+    // write a set that reads back unchanged.
+    isLocked: isLockedOnForWorkspace,
     requestToggle,
     ready,
     canWrite,
@@ -430,7 +439,12 @@ export function useSitePluginSwitchboard(
       // Only a DISABLE can strand a dependent. Turning one on cannot.
       if (on) return void commit([pluginId], true)
       const cascade = resolveDisableCascade(pluginId, enabledNow)
-      if (!cascade.length) return void commit([pluginId], false)
+      // A plugin whose switch-off reaches the site's published pages asks
+      // first even with nothing depending on it (AGL-3029): Forms off stops
+      // every form on them, and the dialog names those pages before it does.
+      if (!cascade.length && !confirmsSiteDisable(pluginId)) {
+        return void commit([pluginId], false)
+      }
       setPending({
         id: pluginId,
         on,
@@ -447,10 +461,9 @@ export function useSitePluginSwitchboard(
       enabledPlugins: state.optedIn,
     },
     isOn: (pluginId: string) => enabledSet.has(pluginId),
-    isLocked: (pluginId: string) =>
-      Boolean(
-        FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === pluginId)?.alwaysOn,
-      ),
+    // The base library alone: every other plugin the workspace runs — AI and
+    // Forms included — has a switch for one site.
+    isLocked: isLockedOnForSite,
     requestToggle,
     // The host doc's own staleness is what the seed guard covers; nothing
     // here claims a plan, so there is no unresolved-entitlement window to

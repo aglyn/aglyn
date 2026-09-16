@@ -785,7 +785,10 @@ export function createCampaignDraftWriter(
 
 export const campaignDraftWriter = createCampaignDraftWriter()
 
-/** Registers the writer; both server surfaces call it, and the second replaces the first. */
+/**
+ * Registers the writer; the console surface calls it, since only the console
+ * runs AI jobs (AGL-3026). Idempotent: a second call replaces the first.
+ */
 export function registerCampaignDraftWriter(): void {
   registerPluginResourceDraftWriter(CAMPAIGN_DRAFT_RESOURCE, campaignDraftWriter, {
     pluginId: MARKETING_PLUGIN_ID,
