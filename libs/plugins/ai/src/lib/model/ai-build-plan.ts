@@ -325,7 +325,14 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
     const trimmed = value.trim()
     if (trimmed.length > limit) {
       repairs.push(`${path} was over ${limit} characters; truncated`)
-      return trimmed.slice(0, limit).trimEnd()
+      // On the last word break inside the ceiling, not through a word: a
+      // rationale is read by the member confirming the plan, and half a word
+      // reads as a broken answer rather than a long one (AGL-3022). A run of
+      // `limit` characters with no break in it still has to be cut where the
+      // ceiling falls.
+      const cut = trimmed.slice(0, limit)
+      const brk = cut.search(/\s\S*$/)
+      return (brk > 0 ? cut.slice(0, brk) : cut).trimEnd()
     }
     return trimmed
   }

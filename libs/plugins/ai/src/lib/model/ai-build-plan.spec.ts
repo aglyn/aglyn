@@ -86,6 +86,25 @@ describe('parseAiBuildPlan', () => {
     ])
   })
 
+  it('cuts a rationale on its last word break, not through a word (AGL-3022)', () => {
+    const why = `${'word '.repeat(60)}truncated-here`
+    const parsed = parseAiBuildPlan(
+      plan({
+        create: [
+          { kind: 'component', name: 'Service card', why, duplicateOf: null, fields: ['name:text'] },
+        ],
+      }),
+    )
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    const cut = parsed.plan.create[0].why
+    expect(cut.length).toBeLessThanOrEqual(AI_BUILD_PLAN_LIMITS.text)
+    expect(cut.endsWith('word')).toBe(true)
+    expect(parsed.repairs).toEqual([
+      `create[0].why was over ${AI_BUILD_PLAN_LIMITS.text} characters; truncated`,
+    ])
+  })
+
   it('reads an empty optional reference as null', () => {
     const parsed = parseAiBuildPlan(
       plan({ screens: [{ ...plan().screens[0], template: '', duplicateOf: undefined as never }] }),
