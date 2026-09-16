@@ -33,10 +33,10 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * the console session actually exists — a published site cannot see it, so
  * the site sends the visitor HERE, and this route sends back a verdict it
  * can carry home. Authorization is deliberately the SAME gate the presence
- * broker applies for co-editing writes (`/api/presence/token`): host
- * `memberRoles` admin/editor, or an org roster role above viewer. Membership
- * is proven against the host the caller names — never against a caller-
- * supplied orgId, which would let anyone pick a friendly org.
+ * broker applies for co-editing writes (`/api/presence/token`): a role on
+ * THIS host that may write content, or an org role above viewer held
+ * org-wide. Membership is proven against the host the caller names — never
+ * against a caller-supplied orgId, which would let anyone pick a friendly org.
  *
  * The response also carries the host's PUBLIC origins, read from the host
  * doc — the popup refuses to postMessage the token anywhere else, so a page
