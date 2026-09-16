@@ -54,6 +54,8 @@ const read = (path: string) => readFileSync(join(REPO_ROOT, path), 'utf8')
 
 const ROUTE = 'apps/console/app/api/admin/ai-jobs-beat/route.ts'
 const MACHINE = 'libs/plugins/ai/src/lib/jobs/ai-jobs.ts'
+/** Where a step's time and the budgets it has to fit are planned (AGL-3036). */
+const BUDGET = 'libs/plugins/ai/src/lib/jobs/ai-job-budget.ts'
 const BEAT = 'libs/plugins/ai/src/lib/jobs/ai-jobs-beat.ts'
 
 function exportedNumber(source: string, name: string): number {
@@ -79,10 +81,11 @@ const VERCEL_PRO_CEILING_MS = 300_000
 describe('the arithmetic the route exists for (AGL-3026)', () => {
   const route = read(ROUTE)
   const machine = read(MACHINE)
+  const budget = read(BUDGET)
   const maxDurationMs = exportedNumber(route, 'maxDuration') * 1_000
-  const budgetMs = exportedNumber(machine, 'AI_JOB_SWEEP_BUDGET_MS')
+  const budgetMs = exportedNumber(budget, 'AI_JOB_SWEEP_BUDGET_MS')
   const leaseMs = exportedNumber(machine, 'AI_JOB_LEASE_MS')
-  const inlineMs = exportedNumber(machine, 'AI_JOB_INLINE_BUDGET_MS')
+  const inlineMs = exportedNumber(budget, 'AI_JOB_INLINE_BUDGET_MS')
   const dispatcherMs =
     exportedNumber(read('apps/console/app/api/[...pluginApi]/route.ts'), 'maxDuration') * 1_000
 

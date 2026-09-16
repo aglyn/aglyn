@@ -30,11 +30,11 @@
  *
  * It holds the two decisions the issue asked for:
  *
- *  - THE TIME BUDGET. A pass is one section, and its worst case — the answer
- *    and its re-ask, each at the pass's ceiling, at the rates the budget
- *    module assumes — fits the minimum the step registers, which fits the
- *    beat's budget and not an inline door's. A fake clock measures it on
- *    every catalog tier.
+ *  - THE TIME BUDGET. A pass is one section, and its worst case — its lookup
+ *    rounds, the answer and its re-ask, out of one allowance of the pass's
+ *    ceiling, at the rates the budget module assumes (AGL-3036) — fits the
+ *    minimum the step registers, which fits the beat's budget and not an
+ *    inline door's. A fake clock measures it on every catalog tier.
  *  - AN UNPUBLISHED SCREEN. The draft is a screen and its first version, the
  *    host document is never written, and no address resolves to the draft.
  *
@@ -96,7 +96,7 @@ import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas
 import type { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import { AI_BUILD_PLAN_LIMITS } from '../model/ai-build-plan'
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
-import { AI_MODEL_CATALOG } from '../providers/catalog'
+import { AI_MODEL_CATALOG, AI_STEP_TIERS } from '../providers/catalog'
 import { AI_DOCTRINE_SYSTEM_BLOCK } from '../runtime/ai-doctrine'
 import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import { validateAiSystemBlocks } from '../runtime/ai-runtime'
@@ -104,10 +104,13 @@ import type { generateSeoFields } from '../runtime/seo-fields'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
 import {
   AI_JOB_ASSUMED_FIRST_TOKEN_MS,
-  AI_JOB_ASSUMED_OUTPUT_TOKENS_PER_SECOND,
+  AI_JOB_INLINE_BUDGET_MS,
+  AI_JOB_STEP_MAX_MINIMUM_MS,
   AI_JOB_STEP_OVERHEAD_MS,
-  aiGenerationMaxTokensWithin,
+  AI_JOB_SWEEP_BUDGET_MS,
   aiGenerationWorstCaseMs,
+  aiGenerationWorstCaseOnTierMs,
+  aiJobAssumedAnswerMs,
   aiJobBudgetTier,
 } from './ai-job-budget'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
@@ -122,8 +125,10 @@ import {
   AI_JOB_PAGE_DELETED_COPY,
   AI_JOB_PAGE_MAX_PASSES,
   AI_JOB_PAGE_SECTION_MAX_TOKENS,
+  AI_JOB_PAGE_SECTION_TOKENS,
   AI_JOB_PAGE_STEP_MINIMUM_MS,
   AI_JOB_PAGE_TOKENS_PER_ELEMENT,
+  aiJobPageSectionMaxTokens,
   aiPageJobAdmission,
   aiPageJobUnits,
   createAiJobPageStep,
@@ -133,19 +138,16 @@ import {
 import type { AiJobStepContext, AiJobStepOutcome } from './ai-job-text-step'
 import { registerAiJobStep, registerAiJobStepPasses } from './ai-jobs'
 import { AI_PAGE_BRIEF_FIXTURES, AI_PAGE_CREATION_FIXTURE } from './fixtures/ai-page-briefs'
-import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
+import {
+  AI_INVENTORY_LOOKUP_MAX_ROUNDS,
+  AI_INVENTORY_LOOKUP_TOOL_NAME,
+  aiInventoryLookupTool,
+} from '../tools/ai-inventory-lookup-tool'
 
 const NOW = new Date('2026-09-15T22:00:00.000Z')
 const FIXTURE = AI_PAGE_BRIEF_FIXTURES[0]
 const STARTER_ORG = { plan: 'starter', billingStatus: 'active' }
 const USAGE = { inputTokens: 900, outputTokens: 300, cacheReadTokens: 4_200, cacheWriteTokens: 0 }
-
-/** A budget constant as the machine declares it, read from its source so the machine is not loaded. */
-function machineConstant(name: string): number {
-  const match = new RegExp(`export const ${name} = ([\\d_]+)`).exec(readFileSync(join(__dirname, 'ai-jobs.ts'), 'utf8'))
-  if (!match) throw new Error(`ai-jobs.ts declares no ${name}`)
-  return Number(match[1].replace(/_/g, ''))
-}
 
 // ── Firestore double ─────────────────────────────────────────────────────
 
@@ -364,35 +366,86 @@ describe('the page step’s registration', () => {
 })
 
 describe('the time budget: a pass fits the least time it registers, and that fits the beat', () => {
-  it('registers a minimum inside the beat’s budget and past an inline door’s, so passes run on the beat', () => {
-    expect(AI_JOB_PAGE_STEP_MINIMUM_MS).toBeLessThanOrEqual(machineConstant('AI_JOB_SWEEP_BUDGET_MS'))
-    expect(AI_JOB_PAGE_STEP_MINIMUM_MS).toBeGreaterThan(machineConstant('AI_JOB_INLINE_BUDGET_MS'))
+  const modelOn = (tier: 'fast' | 'balanced' | 'deep') => AI_MODEL_CATALOG.find((entry) => entry.tier === tier)?.id as string
+
+  it('registers a minimum inside what a beat can give a step and past an inline door’s budget, so passes run on the beat', () => {
+    expect(AI_JOB_PAGE_STEP_MINIMUM_MS).toBeLessThanOrEqual(AI_JOB_STEP_MAX_MINIMUM_MS)
+    expect(AI_JOB_STEP_MAX_MINIMUM_MS).toBeLessThanOrEqual(AI_JOB_SWEEP_BUDGET_MS)
+    expect(AI_JOB_PAGE_STEP_MINIMUM_MS).toBeGreaterThan(AI_JOB_INLINE_BUDGET_MS)
+  })
+
+  it('is a section’s lookup rounds, its answer and its re-ask at the served tier’s section ceiling (AGL-3036)', () => {
+    const served = modelOn(AI_STEP_TIERS['job.page'])
+    expect(AI_JOB_PAGE_STEP_MINIMUM_MS).toBe(
+      aiGenerationWorstCaseOnTierMs({ tier: AI_STEP_TIERS['job.page'], maxTokens: AI_JOB_PAGE_SECTION_TOKENS }),
+    )
+    expect(aiJobPageSectionMaxTokens(served)).toBe(AI_JOB_PAGE_SECTION_TOKENS)
+    // A faster tier asks more in the same time, never past the most a section may run to.
+    expect(aiJobPageSectionMaxTokens(modelOn('fast'))).toBeGreaterThan(AI_JOB_PAGE_SECTION_TOKENS)
+    expect(aiJobPageSectionMaxTokens(modelOn('fast'))).toBeLessThanOrEqual(AI_JOB_PAGE_SECTION_MAX_TOKENS)
+  })
+
+  it('is stated in the developer notes with the figures the code computes', () => {
+    const notes = readFileSync(join(__dirname, '..', '..', '..', '..', '..', '..', 'docs', 'AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
+    const figure = (value: number) => value.toLocaleString('en-US')
+    const served = AI_STEP_TIERS['job.page']
+    expect(notes).toContain(
+      `\`AI_JOB_PAGE_SECTION_TOKENS\` (${figure(AI_JOB_PAGE_SECTION_TOKENS)} tokens) on the ${served} tier, ` +
+        `4 × ${AI_JOB_ASSUMED_FIRST_TOKEN_MS / 1_000} s + 2 × ${figure(aiJobAssumedAnswerMs(AI_JOB_PAGE_SECTION_TOKENS, served))} ms + ` +
+        `${AI_JOB_STEP_OVERHEAD_MS / 1_000} s = ${figure(AI_JOB_PAGE_STEP_MINIMUM_MS)} ms`,
+    )
+    expect(notes).toContain(
+      `${figure(aiJobPageSectionMaxTokens(modelOn('fast')))} tokens on the fast tier, ` +
+        `${figure(aiJobPageSectionMaxTokens(modelOn('balanced')))} on the balanced tier and ` +
+        `${figure(aiJobPageSectionMaxTokens(modelOn('deep')))} on the deep tier`,
+    )
   })
 
   it.each(['fast', 'balanced', 'deep'] as const)(
-    'on the %s tier, a section answered and re-asked at the pass’s ceiling finishes inside the minimum on a fake clock',
+    'on the %s tier, a section that looks records up twice, breaks a rule and is re-asked finishes inside the minimum on a fake clock',
     async (tier) => {
-      const model = AI_MODEL_CATALOG.find((entry) => entry.tier === tier)?.id as string
+      const model = modelOn(tier)
       expect(aiJobBudgetTier(model)).toBe(tier)
-      const ceiling = aiGenerationMaxTokensWithin({ budgetMs: AI_JOB_PAGE_STEP_MINIMUM_MS, model, cap: AI_JOB_PAGE_SECTION_MAX_TOKENS })
+      const ceiling = aiJobPageSectionMaxTokens(model)
       expect(ceiling).toBeGreaterThan(0)
 
       // The clock charges every exchange what the budget module assumes a
-      // provider takes: a start, then the answer at the full ceiling.
+      // provider takes: a start, then the output it answers with. Each lookup
+      // round asks for a card by name; each answer runs to all it was asked for.
       let clock = 0
+      const LOOKUP_OUTPUT = 60
       const broken = { rootId: 'root', nodes: { root: { componentId: 'div', nodes: ['s'] }, s: { componentId: 'section', props: { element: 'section' }, nodes: ['p'] }, p: { componentId: 'muiTypography', props: { variant: 'body1', children: 'No heading at all.' } } } }
       mockRunAiRequest.mockImplementation(async (request: { maxTokens: number }) => {
-        clock += AI_JOB_ASSUMED_FIRST_TOKEN_MS + Math.ceil((request.maxTokens / AI_JOB_ASSUMED_OUTPUT_TOKENS_PER_SECOND[tier]) * 1_000)
-        const tree = mockRunAiRequest.mock.calls.length === 1 ? broken : FIXTURE.answers[0]
+        const call = mockRunAiRequest.mock.calls.length
+        if (call <= AI_INVENTORY_LOOKUP_MAX_ROUNDS) {
+          clock += AI_JOB_ASSUMED_FIRST_TOKEN_MS + aiJobAssumedAnswerMs(LOOKUP_OUTPUT, tier)
+          return {
+            kind: 'completion',
+            text: '',
+            toolUse: [{ name: AI_INVENTORY_LOOKUP_TOOL_NAME, input: { kind: 'components', query: 'card' } }],
+            usage: { ...USAGE, outputTokens: LOOKUP_OUTPUT },
+            estCostUsd: 0.001,
+            stopReason: 'tool_use',
+          }
+        }
+        clock += AI_JOB_ASSUMED_FIRST_TOKEN_MS + aiJobAssumedAnswerMs(request.maxTokens, tier)
+        const tree = call === AI_INVENTORY_LOOKUP_MAX_ROUNDS + 1 ? broken : FIXTURE.answers[0]
         return sectionAnswer(tree, { ...USAGE, outputTokens: request.maxTokens })
       })
       const modelFor = (kind: string) => (kind === 'job.page' ? model : undefined)
       const outcome = await step()(context({}, { modelFor }))
 
-      // The first answer broke a rule, so this pass took its re-ask too.
-      expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+      // Both lookup rounds, then an answer that broke a rule, then its re-ask
+      // on what is left of the pass's allowance.
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(AI_INVENTORY_LOOKUP_MAX_ROUNDS + 2)
+      expect(mockRunAiRequest.mock.calls.map(([request]) => request.maxTokens)).toEqual([
+        ceiling,
+        ceiling,
+        ceiling,
+        ceiling - 2 * LOOKUP_OUTPUT,
+      ])
       for (const [request] of mockRunAiRequest.mock.calls) {
-        expect(request).toMatchObject({ model, maxTokens: ceiling, thinking: 'off' })
+        expect(request).toMatchObject({ model, thinking: 'off' })
       }
       expect(outcome).toMatchObject({ continue: true })
       expect(clock + AI_JOB_STEP_OVERHEAD_MS).toBeLessThanOrEqual(AI_JOB_PAGE_STEP_MINIMUM_MS)

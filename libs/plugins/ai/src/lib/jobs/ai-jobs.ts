@@ -64,6 +64,7 @@ import {
   type AiUsage,
 } from '../runtime/ai-runtime'
 import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
+import { AI_JOB_INLINE_BUDGET_MS, AI_JOB_SWEEP_BUDGET_MS } from './ai-job-budget'
 import {
   runAiJobTextStep,
   type AiJobStepOutcome,
@@ -154,26 +155,11 @@ export const AI_JOB_STEP_MAX_PASSES = 40
 export const AI_JOB_STEP_RESERVE_CREDITS = 50
 
 /**
- * How long the console route waits for the first step before handing the
- * job to the beat. Inside the route's 60 s `maxDuration` with room for the
- * ladder and the writes on either side; a step still running at the bound
- * is aborted and re-queued, and the answer says `queued`.
+ * The inline doors' budget and the beat's, declared beside the time a step is
+ * planned against (`ai-job-budget.ts`, AGL-3036) so a step's least time and
+ * the budgets it has to fit are read in one place.
  */
-export const AI_JOB_INLINE_BUDGET_MS = 25_000
-
-/**
- * Wall clock one beat may spend running steps before it yields (AGL-3026).
- *
- * Sized from the slowest step, not from the beat's interval: the plan step's
- * minimum, which is its answer and its re-ask at the routing table's ceiling
- * at the rates `ai-job-budget.ts` assumes, has to fit, or no plan could ever
- * start. What is left of the beat route's 300 s function ceiling above this
- * is the route's own work around the sweep: loading the plugin surfaces on a
- * cold start, the lockdown read and the beat's mark, and the last step's
- * record after its provider call. The beat fires every minute whatever this
- * is, and overlapping beats are kept apart by the lease.
- */
-export const AI_JOB_SWEEP_BUDGET_MS = 280_000
+export { AI_JOB_INLINE_BUDGET_MS, AI_JOB_SWEEP_BUDGET_MS }
 
 /** Jobs one beat reads as candidates; the budget usually stops it first. */
 export const AI_JOB_SWEEP_MAX_JOBS = 25

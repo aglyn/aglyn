@@ -30,6 +30,7 @@ import {
 } from '../model/ai-page-job'
 import { aiPlanCapabilitiesForJob, aiPlanUncreatable } from '../model/ai-plan-capabilities'
 import type { AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
+import { AI_STEP_TIERS } from '../providers/catalog'
 import { aiModelForStep } from '../providers/routing'
 import { aiDoctrineNeedsInputMessage, runValidatedGeneration } from '../runtime/ai-doctrine'
 import { validateAiDoctrineTree } from '../runtime/ai-doctrine-validators'
@@ -37,7 +38,7 @@ import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fields'
 import { readSiteInventory } from '../runtime/site-inventory'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
-import { aiGenerationMaxTokensWithin, aiGenerationWorstCaseMs } from './ai-job-budget'
+import { aiGenerationWorstCaseMs, aiJobStepBudget } from './ai-job-budget'
 import {
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
@@ -128,17 +129,41 @@ import { aiJobStepRunnerFor, registerAiJobStep, registerAiJobStepPasses } from '
  * until a member publishes it.
  */
 
-/**
- * The least time one pass needs before it starts: a section's answer and its
- * re-ask at the ceiling on the balanced tier, with the step's reads and
- * writes, at the rates `ai-job-budget.ts` assumes. Registered with the step,
- * so neither the beat nor an inline door starts a pass that its budget would
- * cut off. A spec holds it inside the beat's own budget.
- */
-export const AI_JOB_PAGE_STEP_MINIMUM_MS = 44_000
-
 /** The most one section's answer may run to on any model; slower tiers get less. */
 export const AI_JOB_PAGE_SECTION_MAX_TOKENS = 2_000
+
+/**
+ * The ceiling a section's answer asks on the tier the page step is served
+ * from (AGL-2907): twenty-three elements at `AI_JOB_PAGE_TOKENS_PER_ELEMENT`,
+ * the size every golden section fits (`ai-job-page-evals.spec.ts`) and a Free
+ * page's credits are counted at (`ai-job-free-page.spec.ts`). A faster tier
+ * asks more in the same time, up to `AI_JOB_PAGE_SECTION_MAX_TOKENS`, and a
+ * slower one less.
+ */
+export const AI_JOB_PAGE_SECTION_TOKENS = 1_050
+
+/**
+ * A section pass's time (AGL-3036): its two inventory-lookup rounds, its
+ * answer and its re-ask at `AI_JOB_PAGE_SECTION_TOKENS` on the served tier,
+ * with the step's reads and writes, at the rates `ai-job-budget.ts` assumes.
+ */
+export const AI_JOB_PAGE_STEP_BUDGET = aiJobStepBudget({
+  tier: AI_STEP_TIERS['job.page'],
+  maxTokens: AI_JOB_PAGE_SECTION_TOKENS,
+  cap: AI_JOB_PAGE_SECTION_MAX_TOKENS,
+})
+
+/**
+ * The least time one section pass needs before it starts. Registered with the
+ * step, so neither the beat nor an inline door starts a pass that its budget
+ * would cut off. A spec holds it inside the beat's own budget.
+ */
+export const AI_JOB_PAGE_STEP_MINIMUM_MS = AI_JOB_PAGE_STEP_BUDGET.minimumMs
+
+/** The ceiling a section's answer asks on this model: the most whose worst case fits a pass. */
+export function aiJobPageSectionMaxTokens(model: string): number {
+  return AI_JOB_PAGE_STEP_BUDGET.maxTokens(model)
+}
 
 /**
  * Tokens one element takes in a section's answer: the tree as JSON text
@@ -393,7 +418,9 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           description: clip(screen.seoDescription, SCREEN_SEO_TEXT_GUIDANCE.description),
         }
         if (
-          aiGenerationWorstCaseMs({ maxTokens: AI_SEO_FIELDS_MAX_TOKENS, model: seoModel }) <=
+          // A listing is written from the page's own text, with no inventory
+          // and so no lookup round.
+          aiGenerationWorstCaseMs({ maxTokens: AI_SEO_FIELDS_MAX_TOKENS, model: seoModel, lookups: 0 }) <=
           AI_JOB_PAGE_STEP_MINIMUM_MS
         ) {
           const host = await firestore.collection('hosts').doc(hostId).get()
@@ -425,11 +452,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       const allowance = await aiDraftAllowanceRefusal(firestore, { kind: 'screen', hostId, org })
       if (allowance) return aiUnspentOutcome(model, { review: aiLimitReview(allowance) })
     }
-    const maxTokens = aiGenerationMaxTokensWithin({
-      budgetMs: AI_JOB_PAGE_STEP_MINIMUM_MS,
-      model,
-      cap: AI_JOB_PAGE_SECTION_MAX_TOKENS,
-    })
+    const maxTokens = aiJobPageSectionMaxTokens(model)
     const result = await runValidatedGeneration<AiPageSection>('page-section', {
       step: 'job.page',
       model,

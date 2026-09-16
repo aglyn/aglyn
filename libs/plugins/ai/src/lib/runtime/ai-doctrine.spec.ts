@@ -460,6 +460,38 @@ describe('runValidatedGeneration — a plan', () => {
     expect(requests[3].messages.at(-1)?.content).toContain('did not come through')
   })
 
+  it('asks every call — a lookup round as much as an answer — for no more than is left of one answer and its re-ask (AGL-3036)', async () => {
+    const spending = (answer: AiCompletion, outputTokens: number): AiCompletion => ({
+      ...answer,
+      usage: { ...answer.usage, outputTokens },
+    })
+    const ceiling = AI_GENERATION_MAX_TOKENS.plan
+    const { fake, requests } = provider([
+      spending(toolAnswer(AI_INVENTORY_LOOKUP_TOOL_NAME, { kind: 'components', query: 'price' }), 1_000),
+      spending(toolAnswer(AI_BUILD_PLAN_TOOL.name, UNLAID_PLAN), ceiling),
+      spending(toolAnswer(AI_BUILD_PLAN_TOOL.name, CLEAN_PLAN), 2_000),
+    ])
+    const result = await runValidatedGeneration('plan', planInput(fake))
+    expect(result).toMatchObject({ status: 'ok', value: CLEAN_PLAN, attempts: 3 })
+    // The lookup and the first answer spent a ceiling and a thousand tokens of
+    // the two ceilings the generation has, so the re-ask is asked for the rest.
+    expect(requests.map((request) => request.maxTokens)).toEqual([ceiling, ceiling, ceiling - 1_000])
+  })
+
+  it('stops once lookup rounds have spent the whole allowance, rather than asking with nothing left (AGL-3036)', async () => {
+    const ceiling = AI_GENERATION_MAX_TOKENS.plan
+    const lookup = (): AiCompletion => ({
+      ...toolAnswer(AI_INVENTORY_LOOKUP_TOOL_NAME, { kind: 'components', query: 'price' }),
+      usage: { inputTokens: 1_000, outputTokens: ceiling, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    })
+    const { fake, requests } = provider([lookup(), lookup(), toolAnswer(AI_BUILD_PLAN_TOOL.name, CLEAN_PLAN)])
+    const result = await runValidatedGeneration('plan', planInput(fake))
+    expect(requests).toHaveLength(AI_INVENTORY_LOOKUP_MAX_ROUNDS)
+    expect(result).toMatchObject({ status: 'needs_input', attempts: 2, usage: { outputTokens: 2 * ceiling } })
+    if (result.status !== 'needs_input') return
+    expect(result.violations.map((violation) => violation.code)).toEqual(['answer-cut-off'])
+  })
+
   it('offers no lookup to a kind that builds from no site at all', async () => {
     const { fake, requests } = provider([toolAnswer('submit_theme', { ok: true })])
     await runValidatedGeneration('theme-ish', {

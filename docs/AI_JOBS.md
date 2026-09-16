@@ -503,7 +503,13 @@ a model call the caller pays for but NOT an answer attempt, so the one re-ask
 is still there to be spent on a broken rule; `AI_INVENTORY_LOOKUP_MAX_ROUNDS`
 bounds it, and the last answer says it is the last. The re-ask continues the
 turn rather than replacing it, so whatever was looked up is still in front of
-the model and is not asked for twice.
+the model and is not asked for twice. A lookup round is asked at the answer's
+ceiling, and nothing tells a request that will look something up from one that
+will answer, so the whole generation — its lookup rounds, its answer and its
+re-ask — shares one allowance of output, twice the ceiling: each call is asked
+for no more than is left of it, and a generation that has spent it stops
+(AGL-3036). That is what lets a job step plan its time with lookups in it
+([The time budget](#the-time-budget)).
 
 What it buys is rule 7 on a site bigger than its prompt: without it, a plan for
 a site with two hundred components can only reuse the forty it was shown, and
@@ -979,9 +985,10 @@ whole sweep. `sweepAiJobs` reads queued and running jobs across every org
 oldest-first by `updatedAt`, plus a few parked jobs that have rested, and runs
 steps until `AI_JOB_SWEEP_BUDGET_MS` (280 s) of wall clock is spent — checked
 between jobs, with the time left handed to the step in flight as its abort
-signal. The budget is sized from the slowest step, a plan answered and
-re-asked at its routing ceiling, and the 20 s left of the route's 300 s is the
-route's own work around the sweep: loading the plugin surfaces on a cold
+signal. The slowest step is fitted to the budget rather than the budget to
+it: no step registers more time than a beat can give the first step it starts
+([The time budget](#the-time-budget)). The 20 s left of the route's 300 s is
+the route's own work around the sweep: loading the plugin surfaces on a cold
 start, the lockdown read and the beat's mark, and the last step's record after
 its provider call. A beat still running when the next minute fires overlaps
 it, and the lease keeps the two apart. The ordering is the cursor: a job the
@@ -1096,7 +1103,7 @@ Assist panel.
   for and how its answer is checked. `runValidatedGeneration('page-section',
   …)` sends the section tool (`submit_section`), the page instructions with
   the screen palette catalog as the last cached block, no extended thinking,
-  and an answer ceiling from `aiGenerationMaxTokensWithin`. The request names
+  and an answer ceiling from `aiJobPageSectionMaxTokens`. The request names
   the page, its type, the brief, the confirmed plan as references, the section
   to build with the inventory ids it places, and the names of the sections
   built above it, never their content. The check runs the palette validator
@@ -1163,35 +1170,66 @@ needs, and the machine does not start it with less.
   never run again in the same sweep, since it could start with too little
   time left.
 - `src/lib/jobs/ai-job-budget.ts` plans a generation's worst case: every
-  attempt answered at its ceiling. **The rates are declared assumptions, not
-  measurements**: 100, 60 and 40 output tokens a second on the fast, balanced
-  and deep tiers, an unknown model at the slowest, and 3 s before a provider
-  starts answering, with 3 s for the step's own reads and writes. No recorded
+  model call it may make answered at its ceiling. **The rates are declared
+  assumptions, not measurements**: 100, 60 and 40 output tokens a second on
+  the fast, balanced and deep tiers, an unknown model at the slowest, and 3 s
+  before a provider starts answering, with 3 s for the step's own reads and
+  writes and 4 s for the queue read before a sweep's first step. No recorded
   run has measured them; a measured run replaces them.
-- A plan needs `AI_JOB_PLAN_STEP_MINIMUM_MS` (AGL-3026): its answer and its
-  re-ask at the routing table's `job.plan` ceiling on the tier that step is
-  served from — 8,000 tokens on the balanced tier, 2 × (3 s + 133,334 ms) +
-  3 s = 275,668 ms. That is past an inline door's 25 s, so neither door ever
-  starts a plan (live plans have run 23 to 42 s, and a cut-off one is billed
-  and unmetered), and it is inside the beat's 280 s, which is sized to hold it.
-  On a slower tier the plan's ceiling is lowered to the largest whose worst
-  case fits the minimum (`aiJobPlanMaxTokens`): 8,000 tokens on the fast tier
-  and 5,333 on the deep tier. `ai-job-plan-step.spec.ts` runs a plan on a fake
-  clock on every tier, answer and re-ask at the ceiling, and holds it inside
-  the minimum, and the minimum between the two budgets.
-- The worst case counts answers, not lookups. A generation offered the site
-  inventory may also spend up to `AI_INVENTORY_LOOKUP_MAX_ROUNDS` model calls
-  looking records up before it answers, and the budget plans none of them.
-- A page pass needs `AI_JOB_PAGE_STEP_MINIMUM_MS` (44 s). Its answer ceiling
-  is the largest whose worst case fits that on the model the job runs, and at
-  most `AI_JOB_PAGE_SECTION_MAX_TOKENS` (2,000): 1,750 tokens on the fast
-  tier, 1,050 on the balanced tier and 700 on the deep tier. The request asks
-  the section to stay under the element count that ceiling holds at
+- **Every model call, not only the answers (AGL-3036).** A generation offered
+  the site inventory may spend `AI_INVENTORY_LOOKUP_MAX_ROUNDS` (2) model calls
+  looking records up before it answers, each asked at the answer's ceiling.
+  The doctrine's loop holds the whole generation — its lookup rounds, its
+  answer and its re-ask — to one allowance of output, twice the ceiling, and
+  asks each call for no more than is left of it
+  ([The inventory, and "more on request"](#the-inventory-and-more-on-request)).
+  So a generation's worst case is a first-token wait for every call, the whole
+  allowance at the tier's rate, and the step's own reads and writes: (2 answers
+  + 2 lookup rounds) × 3 s + 2 × the ceiling's answer + 3 s. A lookup round adds
+  its wait, and the output it spends is output no answer can. A generation
+  offered no inventory — a theme, a listing — makes no lookup, and a step that
+  reads more before it generates counts that too. `ai-job-budget.spec.ts` drives
+  the loop on a fake clock through both lookup rounds, an answer that breaks a
+  rule and its re-ask, on every tier, and holds it to exactly that worst case;
+  lookup rounds that spend the whole allowance stop the loop inside it.
+- **The most a step may need.** `AI_JOB_STEP_MAX_MINIMUM_MS` is the beat's
+  280 s less its 4 s queue read: the 276,000 ms a beat can give a step. A step
+  that needed more could never start. So a generation whose worst case at its
+  routing ceiling needs more asks the tier its step kind is served from for as
+  much of that ceiling as fits, and registers what that takes
+  (`aiJobStepBudget`); a slower tier asks less, so its worst case fits the same
+  minimum. The beat's budget, the route's 300 s `maxDuration` and the 330 s
+  lease stay where they were: steps are fitted to the budget rather than the
+  budget to them, and the lease is sized from `maxDuration`, which counting
+  lookups does not move.
+- A plan needs `AI_JOB_PLAN_STEP_MINIMUM_MS` (AGL-3026, AGL-3036): its two
+  lookup rounds, its answer and its re-ask on the tier the `job.plan` step is
+  served from. At the routing table's 8,000 tokens on the balanced tier that is
+  4 × 3 s + 2 × 133,334 ms + 3 s = 281,668 ms, past the 276,000 ms a beat can
+  give a step, so the balanced tier asks for 7,830 tokens: 4 × 3 s + 2 ×
+  130,500 ms + 3 s = 276,000 ms. That is still above the 3,954 output tokens
+  the live Free plan measured, past an inline door's 25 s — so neither door
+  ever starts a plan (live plans have run 23 to 42 s, and a cut-off one is
+  billed and unmetered) — and inside the beat's `AI_JOB_SWEEP_BUDGET_MS`
+  (280 s). The fast tier asks for 8,000 tokens and the deep tier for 5,220
+  (`aiJobPlanMaxTokens`). `ai-job-plan-step.spec.ts` runs a plan on a fake
+  clock on every tier through both lookup rounds, an answer that breaks a rule
+  and its re-ask, and holds it inside the minimum, and the minimum between the
+  two budgets.
+- A page pass needs `AI_JOB_PAGE_STEP_MINIMUM_MS`: a section's two lookup
+  rounds, its answer and its re-ask at `AI_JOB_PAGE_SECTION_TOKENS` (1,050
+  tokens) on the balanced tier, 4 × 3 s + 2 × 17,500 ms + 3 s = 50,000 ms. Its
+  answer ceiling is the largest whose worst case fits that on the model the job
+  runs, and at most `AI_JOB_PAGE_SECTION_MAX_TOKENS` (2,000): 1,750 tokens on
+  the fast tier, 1,050 on the balanced tier and 700 on the deep tier — the
+  ceilings a pass had before lookups were counted, which every golden section
+  and the Free page's arithmetic are measured at. The request asks the section
+  to stay under the element count that ceiling holds at
   `AI_JOB_PAGE_TOKENS_PER_ELEMENT` (45 tokens an element, measured on the
   golden sections). `ai-job-page-step.spec.ts` runs a pass on a fake clock on
-  every tier, answer and re-ask at the full ceiling, and holds it inside the
-  minimum, and the minimum inside the beat's budget and past an inline door's
-  25 s.
+  every tier through both lookup rounds, an answer that breaks a rule and its
+  re-ask, and holds it inside the minimum, and the minimum inside what a beat
+  can give a step and past an inline door's 25 s.
 - A creation a page job builds runs inside a page pass, so it starts only with
   the page's minimum left (AGL-3031). Its step keeps the ceiling it keeps as a
   job of its own kind; the same spec holds each creation golden's answer and its

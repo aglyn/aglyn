@@ -60,6 +60,7 @@ import {
   aiInventoryLookupTool,
   answerAiInventoryLookup,
 } from '../tools/ai-inventory-lookup-tool'
+import { AI_GENERATION_MAX_ATTEMPTS } from './ai-generation-bounds'
 import type { AiNodeTreeContext } from './ai-node-tree'
 import {
   AI_OUTPUT_BUDGETS,
@@ -452,7 +453,7 @@ export const AI_GENERATION_MAX_TOKENS: Record<AiGenerationKind, number> = {
 export const AI_CUSTOM_GENERATION_MAX_TOKENS = 8_000
 
 /** One answer, and one re-ask with the violations named. */
-export const AI_GENERATION_MAX_ATTEMPTS = 2
+export { AI_GENERATION_MAX_ATTEMPTS }
 
 /** How much of the offending parts a re-ask quotes. */
 export const AI_REASK_OFFENDING_MAX_CHARS = 6_000
@@ -741,7 +742,11 @@ interface AiGenerationInputBase {
   messages: readonly AiMessage[]
   /** The strict tool the answer arrives through. */
   tool: AiTool
-  /** `AI_GENERATION_MAX_TOKENS` for the kind when absent. */
+  /**
+   * The ceiling of one answer; `AI_GENERATION_MAX_TOKENS` for the kind when
+   * absent. The whole generation — its answers and every lookup round before
+   * them — spends at most `AI_GENERATION_MAX_ATTEMPTS` of it (AGL-3036).
+   */
   maxTokens?: number
   thinking?: AiThinking
   effort?: AiEffort
@@ -938,14 +943,30 @@ export async function runValidatedGeneration(
   // calls, which lookups also spend.
   let answers = 0
   let lookups = 0
+  // ONE ALLOWANCE OF OUTPUT FOR THE WHOLE GENERATION (AGL-3036): an answer
+  // and its re-ask at the ceiling. A lookup round is a model call answered at
+  // the same ceiling, and nothing can tell a request that will look something
+  // up from one that will answer, so each call is asked for no more than is
+  // left of the allowance rather than for a ceiling of its own. What a
+  // generation can take is then its calls' waits for a first token plus this
+  // allowance, however it splits between lookups and answers — the worst case
+  // `jobs/ai-job-budget.ts` plans a step's least time against. A generation
+  // that has spent it all stops: nothing is left to answer with.
+  const allowance = AI_GENERATION_MAX_ATTEMPTS * maxTokens
   while (answers < AI_GENERATION_MAX_ATTEMPTS) {
+    const spent = Number(spend.usage.outputTokens)
+    const left = allowance - (Number.isFinite(spent) ? spent : 0)
+    if (left <= 0) {
+      if (!violations.length) violations = [unreadableAnswer(kind, input.tool.name, 'max_tokens')]
+      break
+    }
     spend.attempts += 1
     const result = await runAiRequest({
       model,
       system,
       messages,
       tools,
-      maxTokens,
+      maxTokens: Math.min(maxTokens, left),
       stream: false,
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(input.effort ? { effort: input.effort } : {}),

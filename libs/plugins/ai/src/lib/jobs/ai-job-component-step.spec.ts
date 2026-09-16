@@ -689,7 +689,7 @@ describe('the component step’s fit, measured', () => {
   const answerTokens = (text: string) => Math.ceil(text.length / 3)
   const sweepBudgetMs = Number(
     /export const AI_JOB_SWEEP_BUDGET_MS = ([\d_]+)/
-      .exec(readFileSync(join(__dirname, 'ai-jobs.ts'), 'utf8'))?.[1]
+      .exec(readFileSync(join(__dirname, 'ai-job-budget.ts'), 'utf8'))?.[1]
       .replace(/_/g, ''),
   )
 

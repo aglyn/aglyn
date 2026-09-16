@@ -58,15 +58,22 @@ jest.mock('./ai-jobs', () => ({
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
+import {
+  AI_INVENTORY_LOOKUP_MAX_ROUNDS,
+  AI_INVENTORY_LOOKUP_TOOL_NAME,
+  aiInventoryLookupTool,
+} from '../tools/ai-inventory-lookup-tool'
 import { AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
 import { AI_MODEL_CATALOG, AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE } from '../providers/routing'
 import {
   AI_JOB_ASSUMED_FIRST_TOKEN_MS,
-  AI_JOB_ASSUMED_OUTPUT_TOKENS_PER_SECOND,
+  AI_JOB_INLINE_BUDGET_MS,
+  AI_JOB_STEP_MAX_MINIMUM_MS,
   AI_JOB_STEP_OVERHEAD_MS,
+  AI_JOB_SWEEP_BUDGET_MS,
   aiGenerationWorstCaseMs,
+  aiJobAssumedAnswerMs,
   aiJobBudgetTier,
 } from './ai-job-budget'
 import type { AiJob } from '../model/ai-jobs.types'
@@ -199,13 +206,6 @@ beforeEach(() => {
   mockFindPlans.mockReset().mockResolvedValue([])
 })
 
-/** A budget constant as the machine declares it, read from its source so the machine is not loaded. */
-function machineConstant(name: string): number {
-  const match = new RegExp(`export const ${name} = ([\\d_]+)`).exec(readFileSync(join(__dirname, 'ai-jobs.ts'), 'utf8'))
-  if (!match) throw new Error(`ai-jobs.ts declares no ${name}`)
-  return Number(match[1].replace(/_/g, ''))
-}
-
 describe('the plan step', () => {
   it('registers the plan step every planned kind runs first, with the least time a plan needs', () => {
     registerAiJobPlan()
@@ -330,18 +330,29 @@ describe('the plan step', () => {
   })
 })
 
-describe('the time budget: no inline door starts a plan, and the beat can (AGL-3026)', () => {
-  it('registers a minimum past an inline door’s budget and inside the beat’s', () => {
-    expect(AI_JOB_PLAN_STEP_MINIMUM_MS).toBeGreaterThan(machineConstant('AI_JOB_INLINE_BUDGET_MS'))
-    expect(AI_JOB_PLAN_STEP_MINIMUM_MS).toBeLessThanOrEqual(machineConstant('AI_JOB_SWEEP_BUDGET_MS'))
+describe('the time budget: no inline door starts a plan, and the beat can (AGL-3026, AGL-3036)', () => {
+  const modelOn = (tier: 'fast' | 'balanced' | 'deep') => AI_MODEL_CATALOG.find((entry) => entry.tier === tier)?.id as string
+
+  it('registers a minimum past an inline door’s budget and inside what a beat can give a step', () => {
+    expect(AI_JOB_PLAN_STEP_MINIMUM_MS).toBeGreaterThan(AI_JOB_INLINE_BUDGET_MS)
+    expect(AI_JOB_PLAN_STEP_MINIMUM_MS).toBeLessThanOrEqual(AI_JOB_STEP_MAX_MINIMUM_MS)
+    expect(AI_JOB_STEP_MAX_MINIMUM_MS).toBeLessThanOrEqual(AI_JOB_SWEEP_BUDGET_MS)
   })
 
-  it('is a plan answered and re-asked at the routing ceiling, on the tier the step is served from', () => {
+  it('is a plan’s lookup rounds, answer and re-ask on the tier the step is served from, at the most of the routing ceiling a beat can start', () => {
     const route = AI_ROUTING_TABLE['job.plan']
-    const served = AI_MODEL_CATALOG.find((entry) => entry.tier === AI_STEP_TIERS['job.plan'])?.id as string
-    expect(AI_JOB_PLAN_STEP_MINIMUM_MS).toBe(aiGenerationWorstCaseMs({ model: served, maxTokens: route.maxTokens }))
-    // That tier keeps the whole ceiling: the minimum was sized for it.
-    expect(aiJobPlanMaxTokens(served)).toBe(route.maxTokens)
+    const served = modelOn(AI_STEP_TIERS['job.plan'])
+    const ceiling = aiJobPlanMaxTokens(served)
+    // The whole routing ceiling could never start: counting both lookup
+    // rounds, its worst case is past what a beat can give a step.
+    expect(aiGenerationWorstCaseMs({ model: served, maxTokens: route.maxTokens })).toBeGreaterThan(AI_JOB_STEP_MAX_MINIMUM_MS)
+    expect(ceiling).toBeLessThan(route.maxTokens)
+    expect(AI_JOB_PLAN_STEP_MINIMUM_MS).toBe(aiGenerationWorstCaseMs({ model: served, maxTokens: ceiling }))
+    expect(aiGenerationWorstCaseMs({ model: served, maxTokens: ceiling + 1 })).toBeGreaterThan(AI_JOB_STEP_MAX_MINIMUM_MS)
+    // It stays above what the live Free plan measured (AGL-3024: 3,954
+    // output tokens on the balanced tier), so counting lookups cuts off no
+    // plan that has already been answered.
+    expect(ceiling).toBeGreaterThan(3_954)
   })
 
   it('is stated in the developer notes with the figures the code computes', () => {
@@ -349,38 +360,72 @@ describe('the time budget: no inline door starts a plan, and the beat can (AGL-3
     const notes = readFileSync(join(__dirname, '..', '..', '..', '..', '..', '..', 'docs', 'AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
     const figure = (value: number) => value.toLocaleString('en-US')
     const route = AI_ROUTING_TABLE['job.plan']
-    expect(notes).toContain(`${figure(route.maxTokens)} tokens on the ${AI_STEP_TIERS['job.plan']} tier`)
-    expect(notes).toContain(`= ${figure(AI_JOB_PLAN_STEP_MINIMUM_MS)} ms`)
-    expect(notes).toContain(`\`AI_JOB_SWEEP_BUDGET_MS\` (${machineConstant('AI_JOB_SWEEP_BUDGET_MS') / 1_000} s)`)
-    const deep = AI_MODEL_CATALOG.find((entry) => entry.tier === 'deep')?.id as string
-    expect(notes).toContain(`${figure(aiJobPlanMaxTokens(deep))} on the deep tier`)
+    const tier = AI_STEP_TIERS['job.plan']
+    const served = modelOn(tier)
+    const wait = `4 × ${AI_JOB_ASSUMED_FIRST_TOKEN_MS / 1_000} s`
+    const overhead = `${AI_JOB_STEP_OVERHEAD_MS / 1_000} s`
+    expect(notes).toContain(
+      `At the routing table's ${figure(route.maxTokens)} tokens on the ${tier} tier that is ${wait} + 2 × ` +
+        `${figure(aiJobAssumedAnswerMs(route.maxTokens, tier))} ms + ${overhead} = ` +
+        `${figure(aiGenerationWorstCaseMs({ model: served, maxTokens: route.maxTokens }))} ms`,
+    )
+    expect(notes).toContain(
+      `so the ${tier} tier asks for ${figure(aiJobPlanMaxTokens(served))} tokens: ${wait} + 2 × ` +
+        `${figure(aiJobAssumedAnswerMs(aiJobPlanMaxTokens(served), tier))} ms + ${overhead} = ${figure(AI_JOB_PLAN_STEP_MINIMUM_MS)} ms`,
+    )
+    expect(notes).toContain(`\`AI_JOB_SWEEP_BUDGET_MS\` (${AI_JOB_SWEEP_BUDGET_MS / 1_000} s)`)
+    expect(notes).toContain(
+      `The fast tier asks for ${figure(aiJobPlanMaxTokens(modelOn('fast')))} tokens and the deep tier for ${figure(aiJobPlanMaxTokens(modelOn('deep')))}`,
+    )
   })
 
   it.each(['fast', 'balanced', 'deep'] as const)(
-    'on the %s tier, a plan answered and re-asked at the step’s ceiling finishes inside the minimum on a fake clock',
+    'on the %s tier, a plan that looks records up twice, breaks a rule and is re-asked finishes inside the minimum on a fake clock',
     async (tier) => {
-      const model = AI_MODEL_CATALOG.find((entry) => entry.tier === tier)?.id as string
+      const model = modelOn(tier)
       expect(aiJobBudgetTier(model)).toBe(tier)
       const ceiling = aiJobPlanMaxTokens(model)
       expect(ceiling).toBeGreaterThan(0)
       expect(ceiling).toBeLessThanOrEqual(AI_ROUTING_TABLE['job.plan'].maxTokens)
 
       // Every exchange is charged what the budget module assumes a provider
-      // takes: a start, then the answer at the full ceiling.
+      // takes: a start, then the output it answers with. Each lookup round
+      // asks for a card by name; each answer runs to all it was asked for.
       let clock = 0
+      const LOOKUP_OUTPUT = 60
       const unlaid: AiBuildPlan = { ...PLAN, screens: [{ ...PLAN.screens[0], layout: null }] }
       mockRunAiRequest.mockImplementation(async (request: { maxTokens: number }) => {
-        clock +=
-          AI_JOB_ASSUMED_FIRST_TOKEN_MS +
-          Math.ceil((request.maxTokens / AI_JOB_ASSUMED_OUTPUT_TOKENS_PER_SECOND[tier]) * 1_000)
-        return planAnswer(mockRunAiRequest.mock.calls.length === 1 ? unlaid : PLAN)
+        const call = mockRunAiRequest.mock.calls.length
+        if (call <= AI_INVENTORY_LOOKUP_MAX_ROUNDS) {
+          clock += AI_JOB_ASSUMED_FIRST_TOKEN_MS + aiJobAssumedAnswerMs(LOOKUP_OUTPUT, tier)
+          return {
+            kind: 'completion',
+            text: '',
+            toolUse: [{ name: AI_INVENTORY_LOOKUP_TOOL_NAME, input: { kind: 'components', query: 'price' } }],
+            usage: { ...USAGE, outputTokens: LOOKUP_OUTPUT },
+            estCostUsd: 0.001,
+            stopReason: 'tool_use',
+          }
+        }
+        clock += AI_JOB_ASSUMED_FIRST_TOKEN_MS + aiJobAssumedAnswerMs(request.maxTokens, tier)
+        return {
+          ...planAnswer(call === AI_INVENTORY_LOOKUP_MAX_ROUNDS + 1 ? unlaid : PLAN),
+          usage: { ...USAGE, outputTokens: request.maxTokens },
+        }
       })
       const outcome = await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore, modelFor: () => model })
 
-      // The first answer broke a rule, so the plan took its re-ask too.
-      expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+      // Both lookup rounds, then an answer that broke a rule, then its re-ask
+      // on what is left of the plan's allowance.
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(AI_INVENTORY_LOOKUP_MAX_ROUNDS + 2)
+      expect(mockRunAiRequest.mock.calls.map(([request]) => request.maxTokens)).toEqual([
+        ceiling,
+        ceiling,
+        ceiling,
+        ceiling - 2 * LOOKUP_OUTPUT,
+      ])
       for (const [request] of mockRunAiRequest.mock.calls) {
-        expect(request).toMatchObject({ model, maxTokens: ceiling, thinking: 'adaptive' })
+        expect(request).toMatchObject({ model, thinking: 'adaptive' })
       }
       expect(outcome.review?.reason).toBe('plan')
       expect(clock + AI_JOB_STEP_OVERHEAD_MS).toBeLessThanOrEqual(AI_JOB_PLAN_STEP_MINIMUM_MS)
