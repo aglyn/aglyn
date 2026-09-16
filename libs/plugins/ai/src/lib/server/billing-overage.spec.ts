@@ -303,6 +303,28 @@ describe('get — what the card reads', () => {
       (await (await POST(post({ orgId: 'org-1', action: 'get' }))).json()).bandCredits,
     ).toBeGreaterThan(0)
   })
+
+  it('Starter WITH the add-on sells past its band, at the add-on rate the invoice bills (AGL-3014)', async () => {
+    // Starter's band and rate arrive with the add-on, not from `PLAN_PRICING`,
+    // where a listed rate would advertise a band the plan does not carry
+    // without it. Read from the table this card said "never charged" while
+    // `assistMonthOverage` billed the same workspace $3 per 1,000.
+    mockDocs.set('orgs/org-1', { ...org('starter'), seatAddons: { aiAddon: 1 } })
+    expect(
+      await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
+    ).toMatchObject({ bandCredits: 4_000, overageRateUsdPer1k: 3, sellsOverage: true })
+  })
+
+  it('a dead subscription takes the add-on rate away with the band (AGL-3014)', async () => {
+    mockDocs.set('orgs/org-1', {
+      plan: 'starter',
+      subscription: { status: 'canceled' },
+      seatAddons: { aiAddon: 1 },
+    })
+    expect(
+      await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
+    ).toMatchObject({ overageRateUsdPer1k: null, sellsOverage: false })
+  })
 })
 
 describe('setHardCap — the write', () => {
@@ -393,6 +415,20 @@ describe('setHardCap — the write', () => {
     expect(free.status).toBe(409)
     expect(String((await free.json()).error)).toMatch(/already stops AI assist/i)
     expect(mockAudit).toEqual([])
+  })
+
+  it('Starter WITH the add-on may throw the switch — it has overage to stop (AGL-3014)', async () => {
+    // The refusal is `!sellsOverage`, so reading the rate off `PLAN_PRICING`
+    // 409'd the one plan whose rate lives on the add-on: the workspace was
+    // billed overage and refused the control that stops it.
+    mockDocs.set('orgs/org-1', { ...org('starter'), seatAddons: { aiAddon: 1 } })
+    const response = await POST(
+      post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }),
+    )
+    expect(response.status).toBe(200)
+    expect(mockDocs.get('orgs/org-1')).toMatchObject({
+      assistOverage: { hardCap: true, hardCapSetBy: 'user-1' },
+    })
   })
 
   it('a second write records the previous state as `before`', async () => {

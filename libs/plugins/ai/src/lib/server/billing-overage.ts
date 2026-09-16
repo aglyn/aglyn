@@ -15,11 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  PLAN_PRICING,
-  pluginRequestFromWeb,
-  resolveEffectivePlan,
-} from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   ASSIST_HARD_CAP_CONTROL_LABEL,
   ASSIST_OVERAGE_CAP_CONTROL_LABEL,
@@ -28,6 +24,7 @@ import {
   resolveAssistCreditBudget,
   resolveAssistHardCap,
   resolveAssistOverageCapUsd,
+  resolveAssistOverageRateUsdPer1k,
 } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
   emailUnverifiedResponse,
@@ -49,8 +46,10 @@ import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token
  * Read or set the org's own assist controls: the hard-cap switch (AGL-2653)
  * and the dollar ceiling on overage (AGL-2898).
  *
- * Credits past the plan's assist band are SOLD by default, at
- * `PLAN_PRICING.extraAssistCreditsUsdPer1k`. This route holds the two
+ * Credits past the plan's assist band are SOLD by default, at the rate
+ * `resolveAssistOverageRateUsdPer1k` answers — the plan's listed
+ * `extraAssistCreditsUsdPer1k`, or the add-on's rate on a plan that carries
+ * its band only with the add-on. This route holds the two
  * controls a customer has over that, and nothing else — it is not a consent
  * surface, and there is nothing here an org must do before assist works.
  *
@@ -115,9 +114,12 @@ async function handler(request: Request): Promise<Response> {
     const capUsd = resolveAssistOverageCapUsd(org as never)
     const bandCredits = resolveAssistCreditBudget(org as never)
     // The rate the card quotes must be the rate the rollup bills, so it is
-    // served from the same table rather than duplicated into the bundle.
-    const overageRateUsdPer1k =
-      PLAN_PRICING[resolveEffectivePlan(org as never)].extraAssistCreditsUsdPer1k
+    // read through the one resolver every reader of the rate goes through.
+    // `PLAN_PRICING` alone is not that rate: Starter carries no listed band,
+    // and the add-on's rate is added by the resolver rather than written onto
+    // the table, where it would advertise a rate on a band the plan does not
+    // carry without the add-on (AGL-3014).
+    const overageRateUsdPer1k = resolveAssistOverageRateUsdPer1k(org as never)
     const sellsOverage = bandCredits !== null && overageRateUsdPer1k !== null
 
     if (action === 'get') {

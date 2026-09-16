@@ -61,6 +61,8 @@ interface SeededOrg {
   assistOverage?: { hardCap?: boolean; capUsd?: number | null }
   /** Per-org entitlement overrides, as staff write them. */
   entitlements?: Record<string, number>
+  /** Purchased seat add-ons, e.g. `{ aiAddon: 1 }` (AGL-2896). */
+  seatAddons?: Record<string, number>
 }
 
 let mockOrgs: SeededOrg[]
@@ -191,6 +193,7 @@ function fakeOrgDoc(org: SeededOrg) {
     ...(org.usageAlerts ? { usageAlerts: org.usageAlerts } : {}),
     ...(org.assistOverage ? { assistOverage: org.assistOverage } : {}),
     ...(org.entitlements ? { entitlements: org.entitlements } : {}),
+    ...(org.seatAddons ? { seatAddons: org.seatAddons } : {}),
   }
   return {
     id: org.id,
@@ -1109,6 +1112,28 @@ describe('the AI credits band alerts the customer (AGL-2898)', () => {
     // The same words by mail.
     const mail = mockEmails.filter((entry) => entry.context === 'usage-alert')
     expect(mail[0].text).toContain(alert.body)
+  })
+
+  it('Starter WITH the add-on is quoted the rate it is billed, not $0.00 (AGL-3014)', async () => {
+    // Starter lists no `extraAssistCreditsUsdPer1k`; the add-on's $3.00 comes
+    // from `resolveAssistOverageRateUsdPer1k`. Read off the table, this alert
+    // told a workspace its extra credits "are now billed" and quoted
+    // "$0.00 per 1,000" in the same breath, while the invoice charged $3.00.
+    mockOrgs = [
+      seededOrg({
+        plan: 'starter',
+        seatAddons: { aiAddon: 1 },
+        rollup: null,
+        assistEstCostUsd: credits(4_500),
+      }),
+    ]
+    await run()
+    expect(assistAlerts()).toHaveLength(1)
+    const [alert] = assistAlerts()
+    expect(alert.title).toContain('extra credits are now billed')
+    expect(alert.body).toContain('4,500 of 4,000 credits used')
+    expect(alert.body).toContain('metered on your monthly invoice at $3.00 per 1,000')
+    expect(alert.body).not.toContain('$0.00 per 1,000')
   })
 
   it('at the band with the org’s own switch on: AI stops, and the switch is named', async () => {

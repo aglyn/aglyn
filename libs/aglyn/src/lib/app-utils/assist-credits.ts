@@ -581,7 +581,7 @@ export function assistRefusedByOverageCap(
   return (
     refusedBy === 'cap' &&
     resolveAssistOverageCapUsd(org) !== null &&
-    PLAN_PRICING[resolveEffectivePlan(org)].extraAssistCreditsUsdPer1k !== null
+    resolveAssistOverageRateUsdPer1k(org) !== null
   )
 }
 
