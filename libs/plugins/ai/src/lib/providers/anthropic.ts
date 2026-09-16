@@ -20,6 +20,7 @@ import {
   AiUpstreamError,
   aiTokenCount,
   aiToolInputOf,
+  type AiMessage,
   type AiModelDescriptor,
   type AiProvider,
   type AiProviderRequest,
@@ -131,10 +132,24 @@ export function buildAnthropicRequestBody(
     ...(system.length ? { system } : {}),
     messages: input.messages.map((message) => ({
       role: message.role,
-      content: message.content,
+      content: anthropicContentOf(message),
     })),
     ...(tools?.length ? { tools, tool_choice: { type: 'auto' } } : {}),
   }
+}
+
+/**
+ * A turn's content in the Messages API's shape: a text-only turn as the
+ * string it is, and a turn with pictures as content blocks in order, each
+ * picture a base64 image block (AGL-2916).
+ */
+function anthropicContentOf(message: AiMessage): string | Array<Record<string, unknown>> {
+  if (typeof message.content === 'string') return message.content
+  return message.content.map((part) =>
+    part.type === 'image'
+      ? { type: 'image', source: { type: 'base64', media_type: part.mediaType, data: part.data } }
+      : { type: 'text', text: part.text },
+  )
 }
 
 /** The provider's request id, when it sent one — the log's join key. */

@@ -18,8 +18,10 @@
 import { aiCatalogEntry, aiModelIdsForProvider, estimateAiBilledUsd } from './catalog'
 import {
   AiUpstreamError,
+  aiMessageText,
   aiTokenCount,
   aiToolInputOf,
+  type AiMessage,
   type AiModelDescriptor,
   type AiProvider,
   type AiProviderRequest,
@@ -110,11 +112,28 @@ export function buildOpenAiCompatibleRequestBody(
       ...(system ? [{ role: 'system', content: system }] : []),
       ...input.messages.map((message) => ({
         role: message.role,
-        content: message.content,
+        content: openAiCompatibleContentOf(message),
       })),
     ],
     ...(tools?.length ? { tools, tool_choice: 'auto' } : {}),
   }
+}
+
+/**
+ * A turn's content in the chat-completions shape: a string for a turn with
+ * nothing but text, and content parts for a user turn with pictures, each
+ * picture an `image_url` carrying its bytes as a `data:` URL, so the endpoint
+ * fetches nothing (AGL-2916). An assistant turn is always a string: the
+ * runtime admits no picture there, and not every endpoint takes parts on it.
+ */
+function openAiCompatibleContentOf(message: AiMessage): string | Array<Record<string, unknown>> {
+  if (typeof message.content === 'string') return message.content
+  if (message.role === 'assistant') return aiMessageText(message)
+  return message.content.map((part) =>
+    part.type === 'image'
+      ? { type: 'image_url', image_url: { url: `data:${part.mediaType};base64,${part.data}` } }
+      : { type: 'text', text: part.text },
+  )
 }
 
 function requestIdOf(response: Response): string | null {

@@ -103,7 +103,12 @@ interface Subject {
   env: Record<string, string>
   requestIdHeader: string
   assertShape: (body: Record<string, unknown>, stream: boolean) => void
+  /** The user turn of a request that carries a picture, as the vendor takes it. */
+  pictureTurn: unknown
 }
+
+/** Four bytes of a JPEG's start, base64: a picture's shape, not a picture. */
+const PICTURE = '/9j/4AAQ'
 
 const SUBJECTS: Subject[] = [
   {
@@ -113,6 +118,13 @@ const SUBJECTS: Subject[] = [
     cacheWriteTokens: 50,
     env: { ANTHROPIC_API_KEY: 'sk-test' },
     requestIdHeader: 'request-id',
+    pictureTurn: {
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: PICTURE } },
+        { type: 'text', text: 'Describe this product' },
+      ],
+    },
     assertShape: (body, stream) => {
       expect(body['system']).toEqual([{ type: 'text', text: 'You build sections.' }])
       expect(body['tools']).toEqual([
@@ -137,6 +149,13 @@ const SUBJECTS: Subject[] = [
       AI_OPENAI_COMPAT_API_KEY: 'sk-compat',
     },
     requestIdHeader: 'x-request-id',
+    pictureTurn: {
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${PICTURE}` } },
+        { type: 'text', text: 'Describe this product' },
+      ],
+    },
     assertShape: (body, stream) => {
       const messages = body['messages'] as Array<{ role: string; content: string }>
       expect(messages[0]).toEqual({ role: 'system', content: 'You build sections.' })
@@ -211,6 +230,41 @@ describe.each(SUBJECTS)('$prefix adapter conforms to the provider contract', (su
     expect(models.length).toBeGreaterThan(0)
     expect(models.every((model) => model.provider === subject.prefix)).toBe(true)
     expect(models.map((model) => model.id)).toContain(subject.model)
+  })
+
+  it('describes every model it serves as reading pictures, which its vendor documents', () => {
+    // A descriptor that leaves `vision` out reads as a model that takes no
+    // picture, and the runtime then refuses to send it one (AGL-2916).
+    expect(subject.provider.models().filter((model) => model.capabilities.vision !== true)).toEqual([])
+  })
+
+  it('carries a picture in a user turn as bytes in its own shape, never as a URL to fetch', async () => {
+    const mock = armFetch(fixture(`${subject.prefix}-completion`))
+    await subject.provider.complete({
+      ...request(subject),
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', mediaType: 'image/jpeg', data: PICTURE },
+            { type: 'text', text: 'Describe this product' },
+          ],
+        },
+        { role: 'assistant', content: [{ type: 'text', text: 'A brass lamp.' }] },
+        { role: 'user', content: 'Shorter, please' },
+      ],
+    })
+    const body = JSON.parse(String(mock.mock.calls[0][1].body)) as Record<string, unknown>
+    const messages = body['messages'] as unknown[]
+    const turns = subject.prefix === 'openai-compatible' ? messages.slice(1) : messages
+    expect(turns).toEqual([
+      subject.pictureTurn,
+      // An assistant turn made of parts is its text, and a text turn stays a string.
+      subject.prefix === 'openai-compatible'
+        ? { role: 'assistant', content: 'A brass lamp.' }
+        : { role: 'assistant', content: [{ type: 'text', text: 'A brass lamp.' }] },
+      { role: 'user', content: 'Shorter, please' },
+    ])
   })
 
   it('sends the contract request in its own wire shape, with the key', async () => {

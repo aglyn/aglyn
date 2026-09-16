@@ -185,11 +185,18 @@ export const AI_CATALOG_PROVIDERS: readonly AiCatalogProvider[] = [
   { id: OPENAI_COMPATIBLE, label: 'OpenAI-compatible endpoint' },
 ]
 
+/**
+ * `vision` is written on every row rather than assumed (AGL-2916): each model
+ * below reads a picture in a user turn, in the four formats
+ * `AI_IMAGE_MEDIA_TYPES` names, as its vendor documents. A row added without
+ * it reads as a model that does not, and is never sent one.
+ */
 const anthropicCapabilities = {
   streaming: true,
   tools: true,
   thinking: true,
   promptCache: true,
+  vision: true,
 }
 
 export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
@@ -269,7 +276,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     id: 'gpt-5',
     provider: OPENAI_COMPATIBLE,
     label: 'GPT-5',
-    capabilities: { streaming: true, tools: true, thinking: false, promptCache: true },
+    capabilities: { streaming: true, tools: true, thinking: false, promptCache: true, vision: true },
     ...aiRatesAtList(1.25, 10),
     tier: 'balanced',
     cacheMinTokens: 1_024,
@@ -278,7 +285,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     id: 'gpt-5-mini',
     provider: OPENAI_COMPATIBLE,
     label: 'GPT-5 mini',
-    capabilities: { streaming: true, tools: true, thinking: false, promptCache: true },
+    capabilities: { streaming: true, tools: true, thinking: false, promptCache: true, vision: true },
     ...aiRatesAtList(0.25, 2),
     tier: 'fast',
     cacheMinTokens: 1_024,

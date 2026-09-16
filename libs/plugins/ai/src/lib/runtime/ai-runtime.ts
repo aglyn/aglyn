@@ -17,7 +17,13 @@
 
 import { aiModelCacheMinTokens } from '../providers/catalog'
 import {
+  AI_IMAGE_MAX_BYTES,
+  AI_IMAGE_MEDIA_TYPES,
+  AI_REQUEST_MAX_IMAGES,
   AiRequestShapeError,
+  aiBase64Bytes,
+  aiMessageImages,
+  type AiMessage,
   type AiProvider,
   type AiRequestBase,
   type AiResult,
@@ -33,7 +39,9 @@ export {
   AiUpstreamError,
   type AiCompletion,
   type AiEffort,
+  type AiImagePart,
   type AiMessage,
+  type AiMessagePart,
   type AiRefusal,
   type AiRequestBase,
   type AiResult,
@@ -62,6 +70,11 @@ export {
  * refused. A provider without a cache ignores the markers and keeps the
  * order, so a request that is right for the caching adapter is right for
  * every adapter.
+ *
+ * The picture rule (AGL-2916) is enforced here too, and for the same reason:
+ * a picture on an assistant turn, a picture for a model whose provider does
+ * not say it reads one, or a picture past the bounds is refused before any
+ * adapter is reached, so no door can send one a provider would reject.
  */
 
 /** The most `cacheBreakpoint` markers a request may carry. */
@@ -135,6 +148,80 @@ export function validateAiSystemBlocks(system: readonly AiSystemBlock[]): void {
       )
     }
   })
+}
+
+/**
+ * Whether a provider's model reads a picture in a user turn (AGL-2916): what
+ * the provider's own descriptor of the model says. A model the provider does
+ * not describe reads none, so an adopter's provider is never sent a picture
+ * it did not say it can take.
+ */
+export function aiModelReadsImages(provider: AiProvider, model: string): boolean {
+  return provider
+    .models()
+    .some((descriptor) => descriptor.id === model && descriptor.capabilities.vision === true)
+}
+
+/**
+ * Whether a model a door resolved reads pictures on the provider that would
+ * serve the request: what a door asks before it attaches one, so a model that
+ * does not is sent the text alone rather than refused.
+ */
+export function aiRouteReadsImages(model: string, settings?: AiPluginSettings): boolean {
+  const provider = resolveAiProvider(settings)
+  return provider ? aiModelReadsImages(provider, model) : false
+}
+
+/** Standard base64 with its padding, and nothing else: no `data:` prefix, no line breaks. */
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/
+
+/**
+ * The picture guard (AGL-2916), applied to the messages before any adapter
+ * sees them. A picture rides only a user turn, only to a model that reads
+ * pictures, only in a format every such model takes, as bare base64 within
+ * the size a provider accepts, and no more of them than a request may carry.
+ * `readsImages` is asked only when a turn carries a picture. Exported so a
+ * spec and a door can assert a request's shape without a provider.
+ */
+export function validateAiMessages(messages: readonly AiMessage[], readsImages: () => boolean): void {
+  messages.forEach((message, index) => {
+    if (typeof message.content === 'string') return
+    if (!Array.isArray(message.content) || message.content.length === 0) {
+      throw new AiRequestShapeError(`message ${index} has neither text nor parts`)
+    }
+    for (const part of message.content) {
+      if (part.type === 'text') {
+        if (typeof part.text !== 'string') {
+          throw new AiRequestShapeError(`message ${index} has a text part with no text`)
+        }
+        continue
+      }
+      if (part.type !== 'image') {
+        throw new AiRequestShapeError(`message ${index} has a part of an unknown type`)
+      }
+      if (message.role !== 'user') {
+        throw new AiRequestShapeError(`message ${index} is an assistant turn and carries a picture`)
+      }
+      if (!(AI_IMAGE_MEDIA_TYPES as readonly string[]).includes(part.mediaType)) {
+        throw new AiRequestShapeError(`message ${index} carries a picture of an unsupported type`)
+      }
+      if (typeof part.data !== 'string' || !BASE64.test(part.data)) {
+        throw new AiRequestShapeError(`message ${index} carries a picture that is not bare base64`)
+      }
+      if (aiBase64Bytes(part.data) > AI_IMAGE_MAX_BYTES) {
+        throw new AiRequestShapeError(
+          `message ${index} carries a picture over ${AI_IMAGE_MAX_BYTES} bytes`,
+        )
+      }
+    }
+  })
+  const images = aiMessageImages(messages).length
+  if (images > AI_REQUEST_MAX_IMAGES) {
+    throw new AiRequestShapeError(`${images} pictures; a request carries at most ${AI_REQUEST_MAX_IMAGES}`)
+  }
+  if (images > 0 && !readsImages()) {
+    throw new AiRequestShapeError('the request carries a picture and its model does not read pictures')
+  }
 }
 
 /**
@@ -231,6 +318,7 @@ export async function runAiRequest(
 ): Promise<AsyncIterable<AiStreamEvent> | AiResult> {
   validateAiSystemBlocks(input.system)
   const { provider, apiKey } = providerFor(input)
+  validateAiMessages(input.messages, () => aiModelReadsImages(provider, input.model))
   const { stream, settings: _settings, provider: _provider, ...request } = input
   const providerRequest = { ...request, apiKey }
   return stream ? provider.stream(providerRequest) : provider.complete(providerRequest)
