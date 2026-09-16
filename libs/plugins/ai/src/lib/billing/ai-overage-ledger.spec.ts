@@ -26,6 +26,7 @@
  * claim exists to close.
  */
 
+import { USAGE_INVOICE_MIN_CHARGE_CENTS } from '@aglyn/tenant-data-admin/server/usage-invoice'
 import {
   AI_OVERAGE_MIN_CHARGE_USD,
   AI_OVERAGE_THRESHOLD_USD,
@@ -302,10 +303,25 @@ describe('claiming a charge', () => {
       month: MONTH,
       kind: 'closeout',
     })
-    // An invoice under the minimum can never be paid; dunning would chase it
-    // forever. Carried, not sent.
+    // An invoice under the minimum is worse than unpayable: Stripe finalizes
+    // it as PAID having collected nothing (AGL-3023). Carried, not sent.
     expect(tiny.refused).toBe('below-threshold')
     expect(AI_OVERAGE_MIN_CHARGE_USD).toBe(0.5)
+  })
+
+  it('holds its floor at exactly the figure the invoice module enforces', () => {
+    /*
+     * Two floors, one number, and they must not drift (AGL-3023).
+     *
+     * `chargeOrgUsageInvoice` refuses anything under Stripe's minimum, so a
+     * close-out floor BELOW it would claim dollars the charge path then
+     * refuses — the month would read as billed and nothing would be sent.
+     * A floor above it is merely conservative and allowed; below it is a
+     * silent revenue hole, which is what this pins.
+     */
+    expect(AI_OVERAGE_MIN_CHARGE_USD * 100).toBeGreaterThanOrEqual(
+      USAGE_INVOICE_MIN_CHARGE_CENTS,
+    )
   })
 
   it('floors to the cent, because a rounded-up cent was never accrued', () => {

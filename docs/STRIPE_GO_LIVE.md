@@ -598,6 +598,45 @@ overage needs an invoice it can pay, and before the cutover there is none.
      now derives every id from a per-run value.
    - **`totalCents: 0` is the tell.** If a step reports it, the line did not
      reach the invoice; nothing after it means anything.
+   - **`void` and `uncollectible` need an OPEN invoice.** Stripe refuses both
+     on an invoice that is already paid. The drill now leaves those two
+     unpaid on a failing card, which is the real shape anyway.
+   - **A sub-minimum invoice is settled without collecting.** $0.40 finalizes
+     as `paid`; `chargeOrgUsageInvoice` refuses to raise one at all
+     (`USAGE_INVOICE_MIN_CHARGE_CENTS`), and the drill goes around the
+     library on purpose to keep recording what Stripe does.
+
+### ⚠️ A failed AI overage charge is never retried. Re-collection is ours.
+
+Measured on a test clock, 2026-09-16: the invoice sat at `attempt_count: 1`,
+`next_payment_attempt: null`, `status: open` through four clock advances
+across a week. **Stripe runs no automatic collection on these invoices at
+all** — no retry schedule, no dunning email, no second attempt.
+
+That is a consequence of creating them `auto_advance: false`, which is
+deliberate: it is what lets `chargeOrgUsageInvoice` finalize and pay as its
+own steps and return the outcome rather than a promise of one. The trade is
+that nothing chases a failed charge.
+
+What actually happens after a card declines:
+
+- the invoice stays **open and payable**, and appears on Billing → Invoices
+  where the customer can pay it (`/api/billing/pay-invoice`);
+- the workspace's overage is **paused**, and the pause lifts on
+  `invoice.paid`, `invoice.voided` or `invoice.marked_uncollectible`;
+- **included credits keep working** throughout;
+- nobody is emailed by Stripe about it, and no operator is paged.
+
+So a workspace whose card fails stays paused until a person acts — the
+customer paying, or staff voiding, writing off, or lifting the pause. Plan
+for that during an incident: the queue of open AI overage invoices does not
+drain on its own.
+
+If automatic retries are wanted later, the change is to set `auto_advance` on
+the invoice AFTER a failed attempt, which hands it to the account's dunning
+schedule. Do not make that change without first reading step 4 below: the
+account's "after the final retry" setting governs what happens at the end of
+that schedule, and nobody has read it yet.
 
 4. **Live, read only.** Record the account's default API version, the
    endpoint's version, and the retry, receipt and past-due settings for

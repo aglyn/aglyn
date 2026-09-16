@@ -27,6 +27,7 @@
 
 import {
   USAGE_INVOICE_API_VERSION,
+  USAGE_INVOICE_MIN_CHARGE_CENTS,
   chargeOrgUsageInvoice,
   findOrgUsageInvoice,
 } from './usage-invoice'
@@ -297,6 +298,35 @@ describe('charging a usage invoice', () => {
     })
     expect(result.ok).toBe(false)
     expect(result.requiresAction).toBe(true)
+  })
+
+  it('refuses an amount under Stripe’s minimum rather than raising it', async () => {
+    /*
+     * MEASURED ON A TEST CLOCK (AGL-3023): a $0.40 invoice finalizes as
+     * `paid` having collected nothing, and every later call answers "Invoice
+     * is already paid". That is the same "paid without money" shape as the
+     * fail-open this module guards against, arriving from Stripe's side
+     * instead of ours — so the invoice is never raised in the first place.
+     *
+     * The AI overage close-out already holds its own floor at exactly this
+     * figure. This is the floor under that floor, for every future caller.
+     */
+    const { calls, fetchImpl } = recorder(PAID)
+    const result = await chargeOrgUsageInvoice(
+      { ...REQUEST, amountCents: 40 },
+      { secretKey: 'sk_test_x', fetchImpl },
+    )
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('collected nothing')
+    expect(calls).toHaveLength(0)
+    // Exactly at the minimum is allowed: the close-out's own floor sits
+    // here, and automatic tax only ever adds to it.
+    const atTheLine = recorder(PAID)
+    await chargeOrgUsageInvoice(
+      { ...REQUEST, amountCents: USAGE_INVOICE_MIN_CHARGE_CENTS },
+      { secretKey: 'sk_test_x', fetchImpl: atTheLine.fetchImpl },
+    )
+    expect(atTheLine.calls.length).toBeGreaterThan(0)
   })
 
   it('creates nothing without a key, an amount, a customer or a product', async () => {

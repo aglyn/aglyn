@@ -89,11 +89,11 @@ const PLAN = [
   ['which-card', 'Read the charge to confirm WHICH payment method was used'],
   ['search', 'Search invoices by metadata[chargeId]; time how long it indexes'],
   ['charge-failed', 'Swap to pm_card_chargeCustomerFail and invoice $25 again'],
-  ['retry', 'Advance the clock a day at a time; record every retry attempt'],
+  ['no-retry', 'Advance the clock a week: confirm Stripe schedules NO retry'],
   ['pay-by-hand', 'Pay the failed invoice from the API, as Billing would'],
-  ['void', 'Invoice $25 again, then void it; read the resulting status'],
-  ['uncollectible', 'Invoice $25 again and mark it uncollectible'],
-  ['tiny', 'Invoice $0.40 and record what Stripe does with it'],
+  ['void', 'Leave an invoice OPEN on a failing card, then void it'],
+  ['uncollectible', 'Leave another open, then mark it uncollectible'],
+  ['tiny', 'Invoice $0.40 around the library and read its amount_paid'],
   ['dispute', 'Charge a disputable card and open a dispute on it'],
   ['settings', 'Read the account API version, the endpoint version and the retry policy'],
 ]
@@ -126,6 +126,18 @@ async function stripe(path, params, idempotencyKey) {
   })
   const payload = await response.json().catch(() => ({}))
   return { ok: response.ok, status: response.status, payload }
+}
+
+/**
+ * Stripe's message for a refused call, or `null`.
+ *
+ * Every step reports through this. The first run of this drill had two steps
+ * answering `{ok: false, status: null}` with no message at all, which
+ * teaches nothing — and a drill whose whole purpose is to record what Stripe
+ * said must never be the thing that drops what Stripe said.
+ */
+function errorOf(answer) {
+  return answer?.payload?.error?.message ?? null
 }
 
 /** Every answer, printed at the end as the record the design asked for. */
@@ -342,14 +354,21 @@ async function run() {
   const failed = await invoiceOverage(customer.payload.id, chargeId('002'), 2_500)
   record('charge-failed', failed)
 
-  // 4. Retries. Advancing the clock is what makes Stripe's own schedule run.
+  // 4. WHAT STRIPE DOES ABOUT A FAILED CHARGE: nothing, and that is the
+  //    finding (AGL-3023). These invoices are created `auto_advance: false`,
+  //    so Stripe runs no automatic collection on them — no retry schedule,
+  //    no dunning email, no second attempt. Advancing the clock a week is
+  //    what turns "we think nothing happens" into a measurement.
   if (failed.invoiceId) {
     for (const days of [1, 3, 5, 7]) {
       const at = Math.floor(Date.parse('2026-10-01T12:00:00Z') / 1000) + days * 86_400
       const advanced = await stripe(`test_helpers/test_clocks/${clock.payload.id}/advance`, {
         frozen_time: String(at),
       })
-      if (!advanced.ok) break
+      if (!advanced.ok) {
+        record('no-retry', { days, advanceFailed: errorOf(advanced) })
+        break
+      }
       // The clock advances asynchronously; poll until it is ready again.
       for (let i = 0; i < 30; i += 1) {
         const state = await stripe(`test_helpers/test_clocks/${clock.payload.id}`)
@@ -357,28 +376,50 @@ async function run() {
         await new Promise((resolve) => setTimeout(resolve, 2_000))
       }
       const invoice = await stripe(`invoices/${failed.invoiceId}`)
-      record('retry', {
+      record('no-retry', {
         days,
         status: invoice.payload?.status ?? null,
+        autoAdvance: invoice.payload?.auto_advance ?? null,
         attempts: invoice.payload?.attempt_count ?? null,
         nextAttempt: invoice.payload?.next_payment_attempt ?? null,
+        // `attempts: 1, nextAttempt: null, status: open` at every step is
+        // the expected result. It means re-collection is OURS: the invoice
+        // sits open and payable from Billing, and nothing chases it.
+        expected: 'no further attempt is scheduled',
       })
     }
-    // 5. Paid by hand, the way Billing's "Pay invoice" does it.
+    // 5. Paid by hand, the way Billing's "Pay invoice" does it — which, per
+    //    the step above, is the ONLY thing that collects a failed charge.
     await attachCard(customer.payload.id, 'tok_visa')
     const byHand = await stripe(`invoices/${failed.invoiceId}/pay`, {})
     record('pay-by-hand', {
       ok: byHand.ok,
       status: byHand.payload?.status ?? null,
-      error: byHand.payload?.error?.message ?? null,
+      amountPaidCents: byHand.payload?.amount_paid ?? null,
+      error: errorOf(byHand),
     })
   }
 
-  // 6. Voided, and written off.
+  // 6. Voided, and written off — the two ways an unpaid invoice ends, and
+  //    the two events that lift the overage pause it set.
+  //
+  //    BOTH NEED AN OPEN, UNPAID INVOICE. Stripe refuses to void or write
+  //    off an invoice that is already paid, which is why the first run of
+  //    this drill got a bare refusal here: it had just paid them. The
+  //    failing card is put back on so these two finalize open, which is
+  //    also the real shape — an AI charge that failed.
+  record('card-fail-again', await attachCard(customer.payload.id, 'tok_chargeCustomerFail'))
   const toVoid = await invoiceOverage(customer.payload.id, chargeId('003'), 2_500)
   if (toVoid.invoiceId) {
     const voided = await stripe(`invoices/${toVoid.invoiceId}/void`, {})
-    record('void', { ok: voided.ok, status: voided.payload?.status ?? null })
+    record('void', {
+      ok: voided.ok,
+      // The status BEFORE, so a refusal is legible: voiding a paid invoice
+      // is refused, and knowing which state it was in is the diagnosis.
+      statusBefore: toVoid.status ?? null,
+      status: voided.payload?.status ?? null,
+      error: errorOf(voided),
+    })
   }
   const toWriteOff = await invoiceOverage(customer.payload.id, chargeId('004'), 2_500)
   if (toWriteOff.invoiceId) {
@@ -386,15 +427,40 @@ async function run() {
       `invoices/${toWriteOff.invoiceId}/mark_uncollectible`,
       {},
     )
-    record('uncollectible', { ok: written.ok, status: written.payload?.status ?? null })
+    record('uncollectible', {
+      ok: written.ok,
+      statusBefore: toWriteOff.status ?? null,
+      status: written.payload?.status ?? null,
+      error: errorOf(written),
+    })
   }
 
-  // 7. Under Stripe's minimum charge — the close-out's floor case.
+  // 7. UNDER STRIPE'S MINIMUM CHARGE (AGL-3023).
+  //
+  //    `chargeOrgUsageInvoice` now REFUSES to raise one of these, so this
+  //    step is the drill deliberately going around the library to record
+  //    what Stripe does when one is raised anyway. The question it answers
+  //    is `amount_paid`: an invoice that reads `paid` having collected
+  //    nothing is the same shape as the fail-open the library guards, and
+  //    the ledger must never credit it.
+  await attachCard(customer.payload.id, 'tok_visa')
   const tiny = await invoiceOverage(customer.payload.id, chargeId('005'), 40)
+  const tinyInvoice = tiny.invoiceId
+    ? await stripe(`invoices/${tiny.invoiceId}`)
+    : { payload: {} }
   record('tiny', {
     ok: tiny.ok,
     stage: tiny.stage,
-    status: tiny.status ?? null,
+    status: tinyInvoice.payload?.status ?? tiny.status ?? null,
+    totalCents: tinyInvoice.payload?.total ?? null,
+    amountDueCents: tinyInvoice.payload?.amount_due ?? null,
+    // THE FIGURE THIS STEP EXISTS FOR. `0` beside `status: paid` means
+    // Stripe settles a sub-minimum invoice without collecting, and the
+    // library is right to refuse to raise one.
+    amountPaidCents: tinyInvoice.payload?.amount_paid ?? null,
+    amountRemainingCents: tinyInvoice.payload?.amount_remaining ?? null,
+    paidOutOfBand: tinyInvoice.payload?.paid_out_of_band ?? null,
+    charge: tinyInvoice.payload?.charge ?? null,
     error: tiny.error ?? tiny.payload?.error?.message ?? null,
   })
 

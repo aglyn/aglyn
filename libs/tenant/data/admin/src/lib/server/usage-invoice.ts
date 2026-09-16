@@ -35,10 +35,27 @@
  * ## Why an invoice and not a PaymentIntent
  *
  * An invoice carries invoice-level automatic tax, produces a document the
- * customer can see in Billing, is retried by the account's Smart Retries,
- * and reaches the platform's existing `invoice.paid` tax-ledger and revenue
- * path. A raw PaymentIntent has none of that, and a failure on one would
- * simply be lost.
+ * customer can see in Billing and pay from it, and reaches the platform's
+ * existing `invoice.paid` tax-ledger and revenue path. A raw PaymentIntent
+ * has none of that, and a failure on one would simply be lost.
+ *
+ * ## ⚠️ NOTHING RETRIES A FAILED CHARGE HERE (AGL-3023)
+ *
+ * These invoices are created `auto_advance: false`, so Stripe runs no
+ * automatic collection on them: no retry schedule, no dunning emails, no
+ * further attempt of any kind. Measured on a test clock — the invoice sat at
+ * `attempt_count: 1, next_payment_attempt: null` through four clock
+ * advances over a week.
+ *
+ * `auto_advance: false` is deliberate, because it is what lets this module
+ * finalize and pay as its own steps and RETURN the outcome rather than a
+ * promise of one. The cost is that re-collection is ours: a failed charge
+ * leaves an open invoice that the customer can pay from Billing, and nothing
+ * chases it until they do.
+ *
+ * Do not restore a claim that Smart Retries cover these. An earlier version
+ * of this comment said so; it was never true of an invoice created this way,
+ * and a comment that is wrong about money is worse than no comment.
  *
  * ## Why a failure here never threatens the subscription
  *
@@ -58,6 +75,22 @@
  * exists to prevent. The same string the checkout route pins.
  */
 export const USAGE_INVOICE_API_VERSION = '2024-06-20'
+
+/**
+ * The smallest invoice this module will raise, in cents (AGL-3023).
+ *
+ * Stripe's minimum chargeable amount in USD. Below it there is nothing to
+ * charge, and an invoice raised anyway is finalized as PAID having collected
+ * nothing — the same "paid without money" shape that a caller crediting its
+ * own claim would read as a successful charge. Measured on a test clock: a
+ * $0.40 invoice came back `status: paid` and every later call answered
+ * "Invoice is already paid".
+ *
+ * Enforced HERE rather than left to each caller's own floor, because this is
+ * the module that knows about Stripe. A caller is free to hold a higher
+ * floor of its own; none may go under this one.
+ */
+export const USAGE_INVOICE_MIN_CHARGE_CENTS = 50
 
 /** What a caller asks to be charged. */
 export interface OrgUsageInvoiceRequest {
@@ -210,6 +243,18 @@ export async function chargeOrgUsageInvoice(
   const amountCents = Math.floor(Number(request.amountCents))
   if (!Number.isFinite(amountCents) || amountCents <= 0) {
     return { ...empty, error: 'A usage invoice needs a positive amount' }
+  }
+  if (amountCents < USAGE_INVOICE_MIN_CHARGE_CENTS) {
+    // Refused rather than attempted: Stripe finalizes a sub-minimum invoice
+    // as paid without collecting, so attempting one produces a document that
+    // claims to be settled and is not. Carrying the amount to the next
+    // charge is the caller's business and the honest answer here is "no".
+    return {
+      ...empty,
+      error:
+        `A usage invoice must be at least ${USAGE_INVOICE_MIN_CHARGE_CENTS} ` +
+        `cents; ${amountCents} would finalize as paid having collected nothing`,
+    }
   }
   if (!request.stripeCustomerId || !request.productId) {
     return { ...empty, error: 'A usage invoice needs a customer and a product' }
