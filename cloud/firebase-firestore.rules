@@ -237,37 +237,24 @@ service cloud.firestore {
     }
 
     /**
-     * Whether an org's plan carries the CRM SUITE (AGL-2801): the rules'
-     * restatement of `resolveOrgEntitlements(org).features.crm`, which
-     * `checkEntitlement(org, 'crm')` answers everywhere else.
+     * Whether an org carries the CRM SUITE (AGL-2801): the rules' restatement
+     * of `checkEntitlement(org, 'crm')` for the collections the console writes
+     * client-direct. Starter and up carry it; Free has none (AGL-2851).
      *
-     * The CRM is included from Starter, and a Free workspace has none of it
-     * (the 2026-09-11 pricing decision, AGL-2851). The console locks the
-     * CRM on a plan without it and the CRM's routes refuse such a plan;
-     * these functions are the same answer for the collections the console
-     * writes client-direct.
+     * In the resolver's order: a per-org `entitlements.features.crm` wins
+     * either way; else a staff comp (`entitlements.planComp`, AGL-3034)
+     * decides while the subscription is dead or absent; else the stored plan,
+     * Free when missing or when its subscription died — `billingStatus`
+     * first, then `subscription.status`, as `subscriptionStatusOf` reads.
+     * The comp half is OR'd beside the plan half, which agrees with that
+     * order while every plan a comp can name carries the suite.
      *
-     * Three facts, in the resolver's order of precedence:
-     *
-     *  1. A per-org `entitlements.features.crm` wins either way — a staff
-     *     grant opens the suite on Free, a revocation closes it on a paid
-     *     plan.
-     *  2. Otherwise the PLAN decides, and only a plan in the list below
-     *     carries the suite. A missing or unknown plan is Free, as
-     *     `resolveEffectivePlan` says.
-     *  3. A plan whose subscription has died is Free until the billing
-     *     webhook restores it: the mirrored `billingStatus` first, then the
-     *     legacy inline `subscription.status`, as `subscriptionStatusOf`
-     *     reads them.
-     *
-     * CEL has no constants and cannot import the plan table, so both lists
-     * are the resolver's, retyped. `crm-suite-rules-drift.spec.ts` parses
-     * them out of this file and fails when either disagrees with
-     * `PLAN_ENTITLEMENTS` or `resolveEffectivePlan`.
+     * CEL cannot import the plan table, so the lists are the resolver's,
+     * retyped; `crm-suite-rules-drift.spec.ts` fails when any disagrees.
      *
      * A missing org document carries nothing. The read is one document per
-     * evaluated write, and every rule that asks this asks it LAST, so a
-     * write refused for its role or its scope never pays for it.
+     * evaluated write, asked LAST, so a write refused for its role or scope
+     * never pays for it.
      */
     function orgCarriesCrmSuite(orgId) {
       return orgId != null &&
@@ -277,16 +264,26 @@ service cloud.firestore {
     function crmSuiteCarried(org) {
       return crmSuiteOverride(org) == true ||
         (crmSuiteOverride(org) == null &&
-          org.get('plan', 'free') in
-            ['starter', 'pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] &&
-          !(orgSubscriptionStatus(org) in
-            ['canceled', 'unpaid', 'incomplete', 'incomplete_expired']));
+          ((org.get('plan', 'free') in
+              ['starter', 'pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] &&
+            !(orgSubscriptionStatus(org) in
+              ['canceled', 'unpaid', 'incomplete', 'incomplete_expired'])) ||
+          (orgPlanComp(org) in
+              ['starter', 'pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] &&
+            orgSubscriptionStatus(org) in
+              ['', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired'])));
     }
     function crmSuiteOverride(org) {
       return org.get('entitlements', {}) is map &&
           org.get('entitlements', {}).get('features', {}) is map
         ? org.get('entitlements', {}).get('features', {}).get('crm', null)
         : null;
+    }
+    function orgPlanComp(org) {
+      return org.get('entitlements', {}) is map &&
+          org.get('entitlements', {}).get('planComp', {}) is map
+        ? org.get('entitlements', {}).get('planComp', {}).get('plan', '')
+        : '';
     }
     function orgSubscriptionStatus(org) {
       return org.get('billingStatus', '') is string && org.get('billingStatus', '') != ''
