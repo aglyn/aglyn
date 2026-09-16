@@ -227,6 +227,8 @@ export const AI_PLANNED_JOB_KINDS: readonly AiJobKind[] = [
 const stepRunners = new Map<AiJobKind, AiJobStepRunner>()
 const stepMinimums = new Map<AiJobKind, number>()
 let planStepRunner: AiJobStepRunner | null = null
+/** The plan step's least time: one step every planned kind shares, so kept by the step, not by a kind. */
+let planStepMinimumMs = 0
 const stepPassCaps = new Map<AiJobKind, number>()
 
 export interface AiJobStepRegistration {
@@ -257,12 +259,12 @@ export function registerAiJobStep(
 }
 
 /**
- * The least time a step needs before it starts: the kind's registered
- * minimum for its own step, and none for the plan step, which a door runs
- * inline before any kind's generation.
+ * The least time a step needs before it starts: the plan step's own minimum
+ * for the plan step of any kind (AGL-3026), and the kind's registered
+ * minimum for the kind's own step.
  */
 export function aiJobStepMinimumMs(kind: AiJobKind, stepName: string): number {
-  return stepName === AI_JOB_PLAN_STEP ? 0 : (stepMinimums.get(kind) ?? 0)
+  return stepName === AI_JOB_PLAN_STEP ? planStepMinimumMs : (stepMinimums.get(kind) ?? 0)
 }
 
 /** The least time the job's next step needs; 0 when no step is left to run. */
@@ -296,10 +298,19 @@ export function aiJobStepMaxPasses(kind: AiJobKind): number {
  * The plan step every planned kind runs first. Registered by its own module
  * (`ai-job-plan-step.ts`), which the plugin's server surface loads, so this
  * machine — and every spec that drives it — never loads the inventory
- * reader and the Admin SDK behind it. `null` unregisters it.
+ * reader and the Admin SDK behind it. `null` unregisters it, minimum and all.
+ *
+ * `minimumMs` means for the plan step what it means for a kind's step
+ * (AGL-3026): a plan answered at its ceiling takes longer than an inline
+ * door's budget, so the step says so, and both doors leave it for the beat.
  */
-export function registerAiJobPlanStep(runner: AiJobStepRunner | null): void {
+export function registerAiJobPlanStep(
+  runner: AiJobStepRunner | null,
+  registration: AiJobStepRegistration = {},
+): void {
   planStepRunner = runner
+  planStepMinimumMs =
+    runner && registration.minimumMs && registration.minimumMs > 0 ? registration.minimumMs : 0
 }
 
 /** The runner for one step of one job: the plan step by its name, else the kind's own. */

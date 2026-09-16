@@ -56,8 +56,19 @@ jest.mock('./ai-jobs', () => ({
   registerAiJobPlanStep: jest.fn(),
 }))
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
+import { AI_MODEL_CATALOG, AI_STEP_TIERS } from '../providers/catalog'
+import { AI_ROUTING_TABLE } from '../providers/routing'
+import {
+  AI_JOB_ASSUMED_FIRST_TOKEN_MS,
+  AI_JOB_ASSUMED_OUTPUT_TOKENS_PER_SECOND,
+  AI_JOB_STEP_OVERHEAD_MS,
+  aiGenerationWorstCaseMs,
+  aiJobBudgetTier,
+} from './ai-job-budget'
 import type { AiJob } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
 import { AI_DOCTRINE_SYSTEM_BLOCK } from '../runtime/ai-doctrine'
@@ -65,8 +76,10 @@ import { AI_DOCTRINE_RULES } from '../runtime/ai-doctrine-validators'
 import {
   AI_JOB_PLAN_INSTRUCTIONS,
   AI_JOB_PLAN_REVIEW_COPY,
+  AI_JOB_PLAN_STEP_MINIMUM_MS,
   AI_PLAN_REUSE_WINDOW_MS,
   aiJobPlanKey,
+  aiJobPlanMaxTokens,
   aiJobPlanPrompt,
   aiReusablePlan,
   createAiJobPlanStep,
@@ -170,10 +183,19 @@ beforeEach(() => {
   mockFindPlans.mockReset().mockResolvedValue([])
 })
 
+/** A budget constant as the machine declares it, read from its source so the machine is not loaded. */
+function machineConstant(name: string): number {
+  const match = new RegExp(`export const ${name} = ([\\d_]+)`).exec(readFileSync(join(__dirname, 'ai-jobs.ts'), 'utf8'))
+  if (!match) throw new Error(`ai-jobs.ts declares no ${name}`)
+  return Number(match[1].replace(/_/g, ''))
+}
+
 describe('the plan step', () => {
-  it('registers the plan step every planned kind runs first', () => {
+  it('registers the plan step every planned kind runs first, with the least time a plan needs', () => {
     registerAiJobPlan()
-    expect(registerAiJobPlanStep).toHaveBeenCalledWith(runAiJobPlanStep)
+    expect(registerAiJobPlanStep).toHaveBeenCalledWith(runAiJobPlanStep, {
+      minimumMs: AI_JOB_PLAN_STEP_MINIMUM_MS,
+    })
   })
 
   it('reads the site through the machine’s handle and proposes a plan the doctrine held, for review', async () => {
@@ -290,6 +312,64 @@ describe('the plan step', () => {
     ).rejects.toThrow('not a site of the workspace')
     expect(mockRunAiRequest).not.toHaveBeenCalled()
   })
+})
+
+describe('the time budget: no inline door starts a plan, and the beat can (AGL-3026)', () => {
+  it('registers a minimum past an inline door’s budget and inside the beat’s', () => {
+    expect(AI_JOB_PLAN_STEP_MINIMUM_MS).toBeGreaterThan(machineConstant('AI_JOB_INLINE_BUDGET_MS'))
+    expect(AI_JOB_PLAN_STEP_MINIMUM_MS).toBeLessThanOrEqual(machineConstant('AI_JOB_SWEEP_BUDGET_MS'))
+  })
+
+  it('is a plan answered and re-asked at the routing ceiling, on the tier the step is served from', () => {
+    const route = AI_ROUTING_TABLE['job.plan']
+    const served = AI_MODEL_CATALOG.find((entry) => entry.tier === AI_STEP_TIERS['job.plan'])?.id as string
+    expect(AI_JOB_PLAN_STEP_MINIMUM_MS).toBe(aiGenerationWorstCaseMs({ model: served, maxTokens: route.maxTokens }))
+    // That tier keeps the whole ceiling: the minimum was sized for it.
+    expect(aiJobPlanMaxTokens(served)).toBe(route.maxTokens)
+  })
+
+  it('is stated in the developer notes with the figures the code computes', () => {
+    // Read as prose: a sentence the notes wrap across lines still says it.
+    const notes = readFileSync(join(__dirname, '..', '..', '..', '..', '..', '..', 'docs', 'AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
+    const figure = (value: number) => value.toLocaleString('en-US')
+    const route = AI_ROUTING_TABLE['job.plan']
+    expect(notes).toContain(`${figure(route.maxTokens)} tokens on the ${AI_STEP_TIERS['job.plan']} tier`)
+    expect(notes).toContain(`= ${figure(AI_JOB_PLAN_STEP_MINIMUM_MS)} ms`)
+    expect(notes).toContain(`\`AI_JOB_SWEEP_BUDGET_MS\` (${machineConstant('AI_JOB_SWEEP_BUDGET_MS') / 1_000} s)`)
+    const deep = AI_MODEL_CATALOG.find((entry) => entry.tier === 'deep')?.id as string
+    expect(notes).toContain(`${figure(aiJobPlanMaxTokens(deep))} on the deep tier`)
+  })
+
+  it.each(['fast', 'balanced', 'deep'] as const)(
+    'on the %s tier, a plan answered and re-asked at the step’s ceiling finishes inside the minimum on a fake clock',
+    async (tier) => {
+      const model = AI_MODEL_CATALOG.find((entry) => entry.tier === tier)?.id as string
+      expect(aiJobBudgetTier(model)).toBe(tier)
+      const ceiling = aiJobPlanMaxTokens(model)
+      expect(ceiling).toBeGreaterThan(0)
+      expect(ceiling).toBeLessThanOrEqual(AI_ROUTING_TABLE['job.plan'].maxTokens)
+
+      // Every exchange is charged what the budget module assumes a provider
+      // takes: a start, then the answer at the full ceiling.
+      let clock = 0
+      const unlaid: AiBuildPlan = { ...PLAN, screens: [{ ...PLAN.screens[0], layout: null }] }
+      mockRunAiRequest.mockImplementation(async (request: { maxTokens: number }) => {
+        clock +=
+          AI_JOB_ASSUMED_FIRST_TOKEN_MS +
+          Math.ceil((request.maxTokens / AI_JOB_ASSUMED_OUTPUT_TOKENS_PER_SECOND[tier]) * 1_000)
+        return planAnswer(mockRunAiRequest.mock.calls.length === 1 ? unlaid : PLAN)
+      })
+      const outcome = await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore, modelFor: () => model })
+
+      // The first answer broke a rule, so the plan took its re-ask too.
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+      for (const [request] of mockRunAiRequest.mock.calls) {
+        expect(request).toMatchObject({ model, maxTokens: ceiling, thinking: 'adaptive' })
+      }
+      expect(outcome.review?.reason).toBe('plan')
+      expect(clock + AI_JOB_STEP_OVERHEAD_MS).toBeLessThanOrEqual(AI_JOB_PLAN_STEP_MINIMUM_MS)
+    },
+  )
 })
 
 describe('aiJobPlanPrompt', () => {

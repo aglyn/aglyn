@@ -73,8 +73,21 @@ export interface AiGenerationTimeInput {
 
 /** The longest one generation can take at the assumed rates, with every attempt at its ceiling. */
 export function aiGenerationWorstCaseMs(input: AiGenerationTimeInput & { maxTokens: number }): number {
+  return aiGenerationWorstCaseOnTierMs({ ...input, tier: aiJobBudgetTier(input.model) })
+}
+
+/**
+ * The same worst case for any model of a tier: what a step registers as its
+ * least time from the tier its step kind is served from, before a job has
+ * resolved a model.
+ */
+export function aiGenerationWorstCaseOnTierMs(input: {
+  tier: AiCatalogEntry['tier']
+  maxTokens: number
+  attempts?: number
+}): number {
   const attempts = input.attempts ?? AI_GENERATION_MAX_ATTEMPTS
-  const rate = AI_JOB_ASSUMED_OUTPUT_TOKENS_PER_SECOND[aiJobBudgetTier(input.model)]
+  const rate = AI_JOB_ASSUMED_OUTPUT_TOKENS_PER_SECOND[input.tier]
   const answerMs = Math.ceil((input.maxTokens / rate) * 1_000)
   return attempts * (AI_JOB_ASSUMED_FIRST_TOKEN_MS + answerMs) + AI_JOB_STEP_OVERHEAD_MS
 }

@@ -37,6 +37,7 @@ import {
   AI_JOB_STEP_OVERHEAD_MS,
   aiGenerationMaxTokensWithin,
   aiGenerationWorstCaseMs,
+  aiGenerationWorstCaseOnTierMs,
   aiJobBudgetTier,
 } from './ai-job-budget'
 
@@ -79,6 +80,18 @@ describe('aiGenerationWorstCaseMs', () => {
     )
     expect(aiGenerationWorstCaseMs({ maxTokens: 1_000, model: balanced, attempts: 1 })).toBe(
       AI_JOB_ASSUMED_FIRST_TOKEN_MS + answerMs + AI_JOB_STEP_OVERHEAD_MS,
+    )
+  })
+
+  it('is the same on a tier as for every model of it, and an unknown model is the slowest tier’s (AGL-3026)', () => {
+    for (const entry of AI_MODEL_CATALOG) {
+      expect([entry.id, aiGenerationWorstCaseOnTierMs({ tier: entry.tier, maxTokens: 8_000 })]).toEqual([
+        entry.id,
+        aiGenerationWorstCaseMs({ model: entry.id, maxTokens: 8_000 }),
+      ])
+    }
+    expect(aiGenerationWorstCaseMs({ model: 'a-model-nobody-listed', maxTokens: 8_000 })).toBe(
+      aiGenerationWorstCaseOnTierMs({ tier: 'deep', maxTokens: 8_000 }),
     )
   })
 })

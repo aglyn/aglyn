@@ -1501,7 +1501,7 @@ describe('a step that says how long it needs (AGL-2907)', () => {
     )
   const jobOf = async (jobId: string) => (await getAiJob(firestore, ORG, jobId)) as never
 
-  it('records the least time a kind’s own step needs, never for the plan step, and clears it on re-registration', async () => {
+  it('records the least time a kind’s own step needs, not for the plan step, and clears it on re-registration', async () => {
     expect(aiJobStepMinimumMs('insight', 'generate')).toBe(20_000)
     expect(aiJobStepMinimumMs('insight', AI_JOB_PLAN_STEP)).toBe(0)
     expect(aiJobStepMinimumMs('text', 'draft')).toBe(0)
@@ -1510,6 +1510,37 @@ describe('a step that says how long it needs (AGL-2907)', () => {
     registerAiJobStep('insight', (context) => timedRunner(context))
     expect(aiJobStepMinimumMs('insight', 'generate')).toBe(0)
     registerAiJobStep('insight', (context) => timedRunner(context), { minimumMs: 20_000 })
+  })
+
+  it('keeps the plan step’s least time by the step, for every kind that plans, and clears it with the runner (AGL-3026)', () => {
+    const planRunner = jest.fn()
+    const planned = (kind: string, next: string) =>
+      ({
+        kind,
+        steps: [
+          { name: AI_JOB_PLAN_STEP, status: next === AI_JOB_PLAN_STEP ? 'pending' : 'done' },
+          { name: 'generate', status: 'pending' },
+        ],
+      }) as never
+    try {
+      registerAiJobPlanStep((context) => planRunner(context), { minimumMs: 30_000 })
+      // One step every planned kind shares, so one minimum, whatever the kind.
+      expect(aiJobStepMinimumMs('page', AI_JOB_PLAN_STEP)).toBe(30_000)
+      expect(aiJobStepMinimumMs('form', AI_JOB_PLAN_STEP)).toBe(30_000)
+      expect(aiJobNextStepMinimumMs(planned('form', AI_JOB_PLAN_STEP))).toBe(30_000)
+      // A kind's own step keeps its own, and the plan's reaches no other step.
+      expect(aiJobStepMinimumMs('insight', 'generate')).toBe(20_000)
+      expect(aiJobNextStepMinimumMs(planned('form', 'generate'))).toBe(0)
+      expect(aiJobStepMinimumMs('text', 'draft')).toBe(0)
+      // Registering again without one clears it, and so does unregistering.
+      registerAiJobPlanStep((context) => planRunner(context))
+      expect(aiJobStepMinimumMs('page', AI_JOB_PLAN_STEP)).toBe(0)
+      registerAiJobPlanStep((context) => planRunner(context), { minimumMs: 30_000 })
+      registerAiJobPlanStep(null, { minimumMs: 30_000 })
+      expect(aiJobStepMinimumMs('page', AI_JOB_PLAN_STEP)).toBe(0)
+    } finally {
+      registerAiJobPlanStep(null)
+    }
   })
 
   it('leaves a step with less time left than it needs untouched, so it keeps its place for the next beat', async () => {

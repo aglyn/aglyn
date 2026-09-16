@@ -715,7 +715,9 @@ Registered under `/api/ai/jobs` by the plugin's console API surface:
   aborted, re-queued, and answers `queued` for the beat. A step that says it
   needs more than that budget (`minimumMs`, below) is never started here at
   all: the door hands the reservation back and answers `queued`, so the beat
-  runs it with a budget of its own. A `theme` job must name its site.
+  runs it with a budget of its own. Every plan is such a step (AGL-3026), so a
+  planned kind's job always answers `queued` here and plans on the beat. A
+  `theme` job must name its site.
 - `POST /api/ai/jobs/batch` `{ orgId, brief, businessType, pages, welcomeEmail?,
   sites: [{ hostId, businessName?, city?, brand? }], model? }` is the agency
   batch (AGL-2911): it climbs the same ladder on the ORG axis, holds the plan
@@ -1050,7 +1052,8 @@ billed upstream while the meter records nothing. So a step says how long it
 needs, and the machine does not start it with less.
 
 - `registerAiJobStep(kind, runner, { minimumMs })` records the least time a
-  kind's generation step needs (`aiJobStepMinimumMs`; the plan step has none).
+  kind's generation step needs, and `registerAiJobPlanStep(runner, { minimumMs })`
+  the plan step's, which every planned kind shares (`aiJobStepMinimumMs`).
   The sweep leaves a step whose minimum is more than its time left queued and
   untouched, so it keeps its place at the front of the next beat's queue. An
   inline door whose budget (`AI_JOB_INLINE_BUDGET_MS`, 25 s) is less than the
@@ -1066,6 +1069,20 @@ needs, and the machine does not start it with less.
   and deep tiers, an unknown model at the slowest, and 3 s before a provider
   starts answering, with 3 s for the step's own reads and writes. No recorded
   run has measured them; a measured run replaces them.
+- A plan needs `AI_JOB_PLAN_STEP_MINIMUM_MS` (AGL-3026): its answer and its
+  re-ask at the routing table's `job.plan` ceiling on the tier that step is
+  served from — 8,000 tokens on the balanced tier, 2 × (3 s + 133,334 ms) +
+  3 s = 275,668 ms. That is past an inline door's 25 s, so neither door ever
+  starts a plan (live plans have run 23 to 42 s, and a cut-off one is billed
+  and unmetered), and it is inside the beat's 280 s, which is sized to hold it.
+  On a slower tier the plan's ceiling is lowered to the largest whose worst
+  case fits the minimum (`aiJobPlanMaxTokens`): 8,000 tokens on the fast tier
+  and 5,333 on the deep tier. `ai-job-plan-step.spec.ts` runs a plan on a fake
+  clock on every tier, answer and re-ask at the ceiling, and holds it inside
+  the minimum, and the minimum between the two budgets.
+- The worst case counts answers, not lookups. A generation offered the site
+  inventory may also spend up to `AI_INVENTORY_LOOKUP_MAX_ROUNDS` model calls
+  looking records up before it answers, and the budget plans none of them.
 - A page pass needs `AI_JOB_PAGE_STEP_MINIMUM_MS` (44 s). Its answer ceiling
   is the largest whose worst case fits that on the model the job runs, and at
   most `AI_JOB_PAGE_SECTION_MAX_TOKENS` (2,000): 1,750 tokens on the fast

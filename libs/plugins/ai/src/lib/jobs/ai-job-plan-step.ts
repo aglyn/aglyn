@@ -24,10 +24,12 @@ import {
 import type { AiJob, AiJobPlan, AiJobStatus } from '../model/ai-jobs.types'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import { aiDoctrineSystemBlocks, runValidatedGeneration } from '../runtime/ai-doctrine'
+import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
 import { AI_JOB_BRIEF_MAX_CHARS, type AiJobStepRunner } from './ai-job-text-step'
+import { aiGenerationMaxTokensWithin, aiGenerationWorstCaseOnTierMs } from './ai-job-budget'
 import { aiUnspentOutcome } from './ai-job-generation'
 import { AI_JOBS_COLLECTION, registerAiJobPlanStep } from './ai-jobs'
 
@@ -55,6 +57,36 @@ export const AI_JOB_PLAN_INSTRUCTIONS: readonly AiSystemBlock[] = [
       'Refer to inventory records by id and to what the plan creates as new:<name>. Plan only what the brief asks for: a component, layout, template, form or email job plans no screens unless the brief asks for pages.',
   },
 ]
+
+/**
+ * The least time a plan needs before it starts (AGL-3026): its answer and its
+ * re-ask at the routing table's ceiling for `job.plan`, on the tier that step
+ * kind is served from, with the step's reads and writes, at the rates
+ * `ai-job-budget.ts` assumes.
+ *
+ * Registered with the step, so an inline door never starts a plan. A plan
+ * thinks before it answers and routinely runs past an inline door's budget,
+ * and a provider call that budget cuts off is still generated and billed
+ * upstream while the meter records nothing. The beat starts a plan only with
+ * this much of its own budget left, and a spec holds it inside that budget.
+ */
+export const AI_JOB_PLAN_STEP_MINIMUM_MS = aiGenerationWorstCaseOnTierMs({
+  tier: AI_STEP_TIERS['job.plan'],
+  maxTokens: AI_ROUTING_TABLE['job.plan'].maxTokens,
+})
+
+/**
+ * The plan's answer ceiling on the model a job runs: the routing table's, or
+ * less on a slower tier, so that its worst case fits the least time the step
+ * registered. A model the catalog does not know is planned at the slowest.
+ */
+export function aiJobPlanMaxTokens(model: string): number {
+  return aiGenerationMaxTokensWithin({
+    budgetMs: AI_JOB_PLAN_STEP_MINIMUM_MS,
+    model,
+    cap: AI_ROUTING_TABLE['job.plan'].maxTokens,
+  })
+}
 
 /** What the member reads while a plan waits for them. */
 export const AI_JOB_PLAN_REVIEW_COPY =
@@ -320,7 +352,9 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       inventory,
       messages: [{ role: 'user', content: prompt }],
       tool: AI_BUILD_PLAN_TOOL,
-      maxTokens: route.maxTokens,
+      // The routing ceiling, lowered on a tier too slow to answer it and ask
+      // again inside the least time the step registered.
+      maxTokens: aiJobPlanMaxTokens(resolved),
       ...(route.thinking ? { thinking: route.thinking } : {}),
       ...(route.effort ? { effort: route.effort } : {}),
       ...(signal ? { signal } : {}),
@@ -364,7 +398,10 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
 
 export const runAiJobPlanStep = createAiJobPlanStep()
 
-/** Registers the plan step every planned kind runs first; the plugin's surfaces call it. */
+/**
+ * Registers the plan step every planned kind runs first, with the least time
+ * a plan needs; the plugin's console surface calls it.
+ */
 export function registerAiJobPlan(): void {
-  registerAiJobPlanStep(runAiJobPlanStep)
+  registerAiJobPlanStep(runAiJobPlanStep, { minimumMs: AI_JOB_PLAN_STEP_MINIMUM_MS })
 }

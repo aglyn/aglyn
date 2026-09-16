@@ -62,6 +62,7 @@ export {
   AI_PLANNED_JOB_KINDS,
   aiJobRunnerForStep,
   aiJobStepMaxPasses,
+  aiJobStepMinimumMs,
   aiJobStepNames,
 } from ${JSON.stringify(join(LIB, 'jobs', 'ai-jobs'))}
 export { aiJobAdmissionFor } from ${JSON.stringify(join(LIB, 'jobs', 'ai-job-admission'))}
@@ -163,7 +164,7 @@ function load(file: string): Loaded {
 }
 
 interface Registered {
-  steps: Record<string, Array<{ step: string; runner: boolean }>>
+  steps: Record<string, Array<{ step: string; runner: boolean; minimumMs: number }>>
   admissions: string[]
   passes: Record<string, number>
   /** Every platform job the plugin put on a job runner: none since AGL-3026. */
@@ -186,6 +187,7 @@ function registered(plugin: Loaded): Registered {
     steps[kind] = (plugin.aiJobStepNames(kind) as string[]).map((step) => ({
       step,
       runner: plugin.aiJobRunnerForStep(kind, step) !== null,
+      minimumMs: plugin.aiJobStepMinimumMs(kind, step),
     }))
     passes[kind] = plugin.aiJobStepMaxPasses(kind)
     if (plugin.aiJobAdmissionFor(kind)) admissions.push(kind)
@@ -248,12 +250,26 @@ describe('the AI plugin, loaded through a bundler that honors sideEffects', () =
       return { kinds: plugin.AI_PLANNED_JOB_KINDS as string[], registered: registered(plugin) }
     })
     const both = [
-      { step: 'plan', runner: true },
-      { step: 'generate', runner: true },
+      { step: 'plan', runner: true, minimumMs: expect.any(Number) },
+      { step: 'generate', runner: true, minimumMs: expect.any(Number) },
     ]
     expect(Object.fromEntries(bundled.kinds.map((kind) => [kind, bundled.registered.steps[kind]])))
       .toEqual(Object.fromEntries(bundled.kinds.map((kind) => [kind, both])))
     expect(bundled.registered.admissions).toEqual(expect.arrayContaining(bundled.kinds))
+  })
+
+  it('keeps the least time a plan needs, so a bundled door leaves every plan to the beat', () => {
+    // AGL-3026: a plan registered without its minimum starts inline, where
+    // the door's budget cuts it off billed and unmetered.
+    const bundled = isolated(() => {
+      const plugin = load(serverBundle)
+      return { kinds: plugin.AI_PLANNED_JOB_KINDS as string[], registered: registered(plugin) }
+    })
+    const { AI_JOB_INLINE_BUDGET_MS } = require('./jobs/ai-jobs')
+    for (const kind of bundled.kinds) {
+      const plan = bundled.registered.steps[kind].find(({ step }) => step === 'plan')
+      expect([kind, (plan?.minimumMs ?? 0) > AI_JOB_INLINE_BUDGET_MS]).toEqual([kind, true])
+    }
   })
 
   it('registers a runner for the kind of every step module beside the machine', () => {

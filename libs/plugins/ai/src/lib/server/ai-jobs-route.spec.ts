@@ -286,6 +286,7 @@ import {
   assistUsageMonth,
 } from '../usage/assist-usage'
 import {
+  AI_JOB_INLINE_BUDGET_MS,
   AI_JOB_NOT_AVAILABLE_COPY,
   registerAiJobPlanStep,
   registerAiJobStep,
@@ -899,6 +900,22 @@ describe('POST /api/ai/jobs/[jobId]/resume (AGL-2935)', () => {
     })
     return job
   }
+
+  it('leaves a plan that needs more time than the request has for the beat, handing the message back (AGL-3026)', async () => {
+    // The plan step registers the least time a plan needs, which no inline
+    // budget holds: the create door starts no plan and spends nothing.
+    registerAiJobPlanStep((context) => planRunner(context), { minimumMs: AI_JOB_INLINE_BUDGET_MS + 1 })
+    const response = await createJob(post({ ...VALID, kind: 'site' }))
+    expect(response.status).toBe(200)
+    const { job } = await response.json()
+    expect(job).toMatchObject({ kind: 'site', status: 'queued' })
+    expect(job.steps).toEqual([
+      expect.objectContaining({ name: 'plan', status: 'pending' }),
+      expect.objectContaining({ name: 'generate', status: 'pending' }),
+    ])
+    expect(planRunner).not.toHaveBeenCalled()
+    expect(messages()).toBe(0)
+  })
 
   it('confirms the plan and runs the next step inline on its own reservation, audited', async () => {
     const job = await proposed()
