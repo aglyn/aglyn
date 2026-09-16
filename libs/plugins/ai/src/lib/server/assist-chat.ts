@@ -26,6 +26,7 @@ import {
   assistOwnControlRefusalText,
 } from '@aglyn/aglyn/app-utils/assist-credits'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { aiOverageReservationRefusal } from '../billing/ai-overage-gate'
 import { aiAllotmentRefusalText } from '../model/ai-allotments'
 import { AI_MODEL_AUTO, resolveAiModelChoice } from '../providers/model-choice'
 import { aiUsageMeter } from '../usage/ai-usage-meter'
@@ -1211,6 +1212,22 @@ async function handler(request: Request): Promise<Response> {
             meter,
           },
           { status: 429 },
+        )
+      }
+      // AGLYN'S OWN OVERAGE GUARDS (AGL-3011): the card, the pause, this
+      // month's ceiling, the settling balance. Before the workspace's own
+      // controls, which answer only for the controls it set itself — and
+      // each carries the status that says whether the workspace can act.
+      const overage = aiOverageReservationRefusal(quota)
+      if (overage) {
+        return Response.json(
+          {
+            error: overage.text,
+            reason: 'quota',
+            quota: publicAssistQuota(quota),
+            meter,
+          },
+          { status: overage.status },
         )
       }
       const ownControl = assistOwnControlRefusalText(org, refusedBy)

@@ -101,6 +101,12 @@ const PLATFORM_EVENTS = [
   'charge.refunded',
   'charge.dispute.created',
   'charge.dispute.closed',
+  // AI overage charged as it accrues (AGL-3011).
+  'invoice.voided',
+  'invoice.marked_uncollectible',
+  'customer.updated',
+  'payment_method.attached',
+  'payment_method.detached',
 ]
 
 /** A completely healthy Stripe side, so only the Firestore marker varies. */

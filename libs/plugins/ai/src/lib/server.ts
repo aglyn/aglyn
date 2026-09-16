@@ -59,6 +59,7 @@ import { GET as aiAdminOrg } from './server/ai-admin-org'
 import { GET as aiAdminOrgsSpend } from './server/ai-admin-orgs-spend'
 import { GET as aiAdminSignals } from './server/ai-admin-signals'
 import { GET as aiAdminUser } from './server/ai-admin-user'
+import { POST as aiAdminOverage } from './server/ai-admin-overage'
 import { GET as aiUsage } from './server/ai-usage'
 import { GET as aiAllotments } from './server/ai-allotments'
 import { GET as aiModels } from './server/ai-models'
@@ -137,6 +138,10 @@ export function registerAiConsoleApi(): void {
   registerPluginApiRoute('ai/admin/orgs-spend', { web: aiAdminOrgsSpend })
   registerPluginApiRoute('ai/admin/user', { web: aiAdminUser })
   registerPluginApiRoute('ai/admin/signals', { web: aiAdminSignals })
+  // One workspace's overage standing and the four acts staff have over it
+  // (AGL-3011): the ceiling override, lifting a pause — the only way a
+  // dispute pause comes off — and resetting the step. Every act audited.
+  registerPluginApiRoute('ai/admin/overage', { web: aiAdminOverage })
 }
 
 /**

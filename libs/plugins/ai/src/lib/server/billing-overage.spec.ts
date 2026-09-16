@@ -271,6 +271,20 @@ describe('get — what the card reads', () => {
       capLabel: 'Stop AI when this month’s overage reaches',
       minCapUsd: 1,
       maxCapUsd: 100_000,
+      // Aglyn's own limit beside the workspace's (AGL-3011), and every
+      // figure of it absent until `AI_OVERAGE_INVOICED_FROM` names a month.
+      // That is not a missing value: while overage still bills on the
+      // monthly invoice, a ceiling and a "next charge" figure would describe
+      // a mechanism that is not running.
+      overageBillsByInvoice: false,
+      aglynCeilingUsd: null,
+      overageStep: null,
+      overageThresholdUsd: null,
+      overageChargedUsd: null,
+      overageChargeCount: null,
+      overageNextChargeUsd: null,
+      overagePaused: null,
+      overageCardOnFile: null,
     })
   })
 

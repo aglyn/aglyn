@@ -234,6 +234,35 @@ after, never a reference to the plugin.
 | --- | --- | --- |
 | `org.seatAddons.changed` | the add-on checkout and the billing webhook | `{ orgId, actor, before, after }` — the `org.seatAddons` maps |
 | `org.permissions.changed` | the member, role and host-member routes | `{ orgId, actor, subject: { type, id?, name? }, permission, granted }` |
+| `billing.invoice.paid` | the billing webhook, once the invoice resolves to a workspace | `{ orgId, invoiceId, amountPaidCents, currency, paidOutOfBand, metadata }` |
+| `billing.invoice.failed` | the billing webhook | `{ orgId, invoiceId, amountDueCents, metadata }` |
+| `billing.invoice.closed` | the billing webhook, on `voided` and on `marked_uncollectible` | `{ orgId, invoiceId, reason: 'voided' \| 'uncollectible', metadata }` |
+| `billing.dispute.opened` | the billing webhook, on a dispute that matched a workspace | `{ orgId, chargeId, invoiceId, amountCents }` |
+| `billing.paymentMethod.changed` | the billing webhook, after reading the customer's default | `{ orgId, defaultType }` |
+
+The five billing events carry the Stripe object's own `metadata`, which core
+does not read. A plugin that stamped its own id on an invoice it created
+recognizes its own by it; every other handler ignores the event. They are
+awaited in the route rather than deferred, because a plugin's decision about
+whether a workspace may keep spending must not lag the payment that settled it.
+
+## A meter line a plugin bills itself — `plugin-metered-lines` (`/server`)
+
+The monthly usage sweep prices several lines into one figure and posts it as a
+single Stripe meter event. A plugin that bills one of those lines its own way
+claims it, and the sweep leaves it out of the metered figure from the month the
+claim names — so one month's usage reaches exactly one invoice.
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginMeteredLine({ lineId, billsFrom, closeMonth?, pluginId? })` | Claims a line. `billsFrom()` answers the first `YYYY-MM` the plugin bills, or `null` while it is registered and not yet switched on; it is called per question, so a deployment change takes effect without a restart. One plugin per line — a second claimant throws. |
+| `pluginBillsMeteredLine(lineId, month)` | What the sweep asks. `false` for an unclaimed line, a month before the claim, an unparseable start month, and a claim that throws — so every failure bills through the sweep, which already works. |
+| `runPluginMeteredLineClose(lineId, context)` | Run by the sweep once a month has CLOSED, per workspace, with `{ orgId, month, org, stripeCustomerId }` — the remainder of a line charged as it accrues is owed whether or not the meter reported. Errors are logged, never the sweep's. |
+| `pluginMeteredLineOwner(lineId)` | The claiming plugin, for diagnostics. |
+
+Only the BILLING moves. A claimed line is still measured, still priced and
+still written to the month's audit fields, so a month's usage history reads the
+same either way and the handover is countable from the rows.
 
 | API | Semantics |
 | --- | --- |

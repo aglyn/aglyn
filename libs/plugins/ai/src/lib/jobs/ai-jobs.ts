@@ -44,6 +44,7 @@ import {
 } from '../model/ai-jobs.types'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { aiOverageReservationRefusal } from '../billing/ai-overage-gate'
 import { aiAllotmentRefusalText } from '../model/ai-allotments'
 import { resolveAiModelChoice } from '../providers/model-choice'
 import { aiOutputTargetType } from '../activity/ai-activity-actions'
@@ -1009,9 +1010,22 @@ export async function writeAiJobAudit(
  */
 export function aiJobRefusalText(
   org: Partial<AglynOrgBilling> | null,
-  reservation: Pick<AssistReservation, 'refusedBy' | 'budgetUsd' | 'allotment'>,
+  reservation: Pick<
+    AssistReservation,
+    | 'refusedBy'
+    | 'budgetUsd'
+    | 'allotment'
+    | 'capReason'
+    | 'overageLimitUsd'
+    | 'overageUnpaidUsd'
+  >,
 ): string {
   const refusedBy = reservation.refusedBy
+  // AGLYN'S OWN OVERAGE GUARDS (AGL-3011). First, because a `cap` refusal
+  // that carries a reason knows exactly which limit stopped the job, where
+  // the `case 'cap'` below can only name the workspace's own.
+  const overage = aiOverageReservationRefusal(reservation)
+  if (overage) return overage.text
   // A hard allotment (AGL-2942) — the creator's, theirs on the job's site,
   // or the site's — in the sentence every door gives, naming who can raise
   // it. A member can change that, so the job parks rather than fails.

@@ -39,6 +39,7 @@ import {
   memberHasPermissionOnHost,
   rateLimitHeaders,
 } from '@aglyn/tenant-data-admin'
+import { aiOverageReservationRefusal } from '../billing/ai-overage-gate'
 import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
 import {
   estimateAssistCostUsd,
@@ -383,6 +384,19 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
       // names the control that refused — the same sentence the console
       // assistant gives, from the same helper. Every other refusal keeps
       // the 429.
+      // AGLYN'S OWN OVERAGE GUARDS (AGL-3011): a card, a pause, this
+      // month's ceiling or a settling balance, each with the status that
+      // says whether the workspace can act on it. Before the workspace's
+      // own controls, which answer only for the controls it set itself.
+      const overage = aiOverageReservationRefusal(reservation)
+      if (overage) {
+        return res.status(overage.status).json({
+          error: overage.text,
+          reason: 'quota',
+          quota: publicAssistQuota(reservation),
+          meter: aiUsageMeter(reservation),
+        })
+      }
       const ownControl = assistOwnControlRefusalText(org, refusedBy)
       return res.status(ownControl ? 402 : 429).json({
         error:

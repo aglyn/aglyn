@@ -79,7 +79,7 @@ const ORIGINAL_FETCH = global.fetch
 
 const WEBHOOK_URL = 'https://app.aglyn.com/api/billing/webhook'
 
-/** The ten events the platform destination carries, as setup-stripe writes them. */
+/** Every event the platform destination carries, as setup-stripe writes them. */
 const PLATFORM_EVENTS = [
   'customer.subscription.created',
   'customer.subscription.updated',
@@ -91,6 +91,12 @@ const PLATFORM_EVENTS = [
   'charge.refunded',
   'charge.dispute.created',
   'charge.dispute.closed',
+  // AI overage charged as it accrues (AGL-3011).
+  'invoice.voided',
+  'invoice.marked_uncollectible',
+  'customer.updated',
+  'payment_method.attached',
+  'payment_method.detached',
 ]
 
 const platformEndpoint = {

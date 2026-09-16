@@ -520,3 +520,78 @@ subscription product, Stripe records them and charges no one.
    It remains **unset**, and unset still fails closed: measured, recorded,
    charged to nobody.
 
+
+---
+
+## 7. AI overage charged as it accrues (AGL-3011)
+
+AI credits past a plan's included band are metered onto the renewal invoice
+like every other line. This section is the handover to charging them on a
+one-off invoice as they accrue, and the guards that bound what a workspace can
+owe while that is running.
+
+**None of it is live.** The code ships with `AI_OVERAGE_INVOICED_FROM` unset,
+which is the single switch: unset, overage bills through the monthly meter
+exactly as it does today and nothing new refuses anybody.
+
+### What the switch turns on, together
+
+- A one-off invoice when unbilled overage reaches the threshold, charged to
+  the card on file, `charge_automatically` with automatic tax.
+- A close-out invoice for the remainder, issued by the closed-month usage
+  sweep through the metered-line seam.
+- AI overage leaving the meter figure from that month, so one month's overage
+  reaches exactly one invoice.
+- The gate's four refusals: no card, paused, the month's ceiling, and accrued
+  overage that has not been paid for.
+
+The guards ride the same switch on purpose. A workspace refused for unpaid
+overage needs an invoice it can pay, and before the cutover there is none.
+
+### Steps, in order
+
+1. **Test mode — the product.** `setup-stripe.mjs` creates "Aglyn AI overage"
+   with the platform tax code and prints `STRIPE_PRODUCT_AI_OVERAGE`. It has
+   no price: the amount is whatever the workspace accrued, and the product is
+   there to carry the tax code.
+2. **Test mode — the five events.** `WEBHOOK_EVENTS` now carries
+   `invoice.voided`, `invoice.marked_uncollectible`, `customer.updated`,
+   `payment_method.attached` and `payment_method.detached`. `setup-stripe.mjs
+   --reconcile-events` adds any the endpoint is missing.
+3. **Test mode — the drill.**
+
+   ```bash
+   node tools/scripts/ai-overage-test-clock-drill.mjs
+   STRIPE_SECRET_KEY=sk_test_… STRIPE_PRODUCT_AI_OVERAGE=prod_… \
+     node tools/scripts/ai-overage-test-clock-drill.mjs --run
+   ```
+
+   Without `--run` it prints the plan and calls nothing. It refuses an
+   `sk_live` key outright, because its method is creating charges and failing
+   them. It takes one invoice through paid, declined, retried, paid by hand,
+   voided, written off and disputed, and records what Stripe answered at each
+   step — the account's API version, whether automatic tax computed on a
+   `price_data` line, which payment method a one-off invoice actually charged,
+   whether the account's retries apply to it, what happens under the minimum
+   charge, and how long invoice search takes to index a new invoice. Those are
+   the questions a unit test cannot answer, and the reconcile sweep depends on
+   the last one.
+
+4. **Live, read only.** Record the account's default API version, the
+   endpoint's version, and the retry, receipt and past-due settings for
+   one-off invoices, the way `stripe-dunning-schedule.ts` records settings.
+5. **Live — the product**, and **live — the five events**. Both are writes to
+   the live account.
+6. **Backfill the standing** for existing paid workspaces before the cutover:
+   their first paid month and qualifying months from the `platformRevenue`
+   ledger, and their default payment method from a read-only Stripe audit.
+   Until a workspace's payment method has been observed the card rule
+   ABSTAINS for it — deliberately, so a paying customer is never refused over
+   a document we never wrote. The unpaid bound does not depend on the card
+   rule and binds either way.
+7. **`AI_OVERAGE_INVOICED_FROM`**, on the 1st of a month, after the legal
+   wording and the customer notice are out. This is what starts mid-period
+   charging; nothing before it does.
+
+Nothing in this section changes live subscriptions, prices, the meter or
+`billing_thresholds`.
