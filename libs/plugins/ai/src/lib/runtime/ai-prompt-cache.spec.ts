@@ -44,6 +44,7 @@ import {
   aiDoctrineTreeTool,
 } from './ai-doctrine'
 import { detectPublishIntent } from './ai-doctrine-validators'
+import { AI_JOB_COMPONENT_INSTRUCTIONS } from '../jobs/ai-job-component-step'
 import { AI_JOB_FORM_INSTRUCTIONS } from '../jobs/ai-job-form-step'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
 import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
@@ -52,6 +53,7 @@ import { AI_JOB_TEXT_SYSTEM } from '../jobs/ai-job-text-step'
 import { AI_JOB_THEME_INSTRUCTIONS } from '../jobs/ai-job-theme-step'
 import { AI_SEO_FIXES_INSTRUCTIONS, AI_SEO_SITE_INSTRUCTIONS } from '../jobs/ai-job-seo-step'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
+import { aiComponentTool } from '../tools/ai-component-tool'
 import { AI_SEO_FIELDS_INSTRUCTIONS, aiSeoFieldsInstructions } from './seo-fields'
 import {
   aiSeoFieldsTool,
@@ -161,6 +163,16 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     caches: true,
     why: 'the doctrine, the form rules and the form palette',
   },
+  'jobs/ai-job-component-step.ts': {
+    step: 'job.component',
+    caches: true,
+    why: 'the doctrine, the component rules and the component palette',
+  },
+  'server/ai-generate-component.ts': {
+    step: 'job.component',
+    caches: false,
+    why: 'one instruction block over a selected subtree, under the balanced tier’s minimum',
+  },
   'jobs/ai-job-theme-step.ts': {
     step: 'job.theme',
     caches: true,
@@ -249,6 +261,16 @@ const REQUESTS: Record<string, Composed> = {
         surface: 'screen',
       }),
     tools: () => [aiDoctrineTreeTool('template')],
+  },
+  component: {
+    door: 'jobs/ai-job-component-step.ts',
+    step: 'job.component',
+    blocks: (site) =>
+      aiDoctrineSystemBlocks(site, {
+        instructions: AI_JOB_COMPONENT_INSTRUCTIONS,
+        surface: 'component',
+      }),
+    tools: () => [aiComponentTool()],
   },
   form: {
     door: 'jobs/ai-job-form-step.ts',
@@ -428,6 +450,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       plan: { prefixTokens: 2_543, minimum: 1_024, caches: true, toolsStable: true },
       layout: { prefixTokens: 4_078, minimum: 1_024, caches: true, toolsStable: true },
       template: { prefixTokens: 4_651, minimum: 1_024, caches: true, toolsStable: true },
+      component: { prefixTokens: 4_606, minimum: 1_024, caches: true, toolsStable: true },
       form: { prefixTokens: 2_194, minimum: 1_024, caches: true, toolsStable: true },
       theme: { prefixTokens: 3_186, minimum: 1_024, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 759, minimum: 4_096, caches: false, toolsStable: true },
