@@ -60,6 +60,7 @@ import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.componen
 import AiSeoAuditCard from './components/ai-seo-audit-card.component'
 import AiSiteBatchCard from './components/ai-site-batch-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
+import AiDescribeAutomationButton from './components/ai-describe-automation.component'
 import AiDescribePageButton from './components/ai-describe-page.component'
 import {
   AiDescribeComponentButton,
@@ -67,6 +68,10 @@ import {
   AiDescribeLayoutButton,
   AiDescribeTemplateButton,
 } from './components/ai-describe-button.component'
+import {
+  AiExplainAutomation,
+  AiExplainRunFailure,
+} from './components/ai-explain-automation.component'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
 
@@ -367,6 +372,36 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiDescribeComponentButton,
+      },
+      // Automations by AI (AGL-2919), in the zones the workflows plugin hosts
+      // on its Automation page: "Describe it" beside Add action and Recipes,
+      // "Explain it" in the editor of a saved automation, and "Why did this
+      // fail?" on a failed run. Gated as the other generative widgets are;
+      // each asks the jobs route about the release flag before it shows
+      // anything, and none of them changes an automation.
+      {
+        slot: 'hostAutomations',
+        widgetId: 'ai-describe-automation',
+        title: 'Describe an automation',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeAutomationButton,
+      },
+      {
+        slot: 'automationEditor',
+        widgetId: 'ai-explain-automation',
+        title: 'Explain this automation',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiExplainAutomation,
+      },
+      {
+        slot: 'automationRun',
+        widgetId: 'ai-explain-run-failure',
+        title: 'Why did this run fail?',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiExplainRunFailure,
       },
       // The agency batch (AGL-2911): one brief across many of the org's
       // sites, from the page that lists them. The card asks the jobs route

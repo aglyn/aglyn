@@ -1873,6 +1873,19 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   the writer registered and the owner's `refusal` for the member; an
   explanation needs the automation to exist, and a run's explanation a FAILED
   run of that automation.
+- **Where a member starts one.** Three widgets the AI plugin registers in the
+  zones the workflows plugin hosts on the Automation page
+  (`src/lib/components/ai-describe-automation.component.tsx` and
+  `ai-explain-automation.component.tsx`): Describe it beside Add action and
+  Recipes (`hostAutomations`), whose dialog follows the job and opens the draft
+  in the Actions editor; Explain it at the top of the editor of a saved action
+  or workflow (`automationEditor`); and Why did this fail? on each failed run
+  in a run history (`automationRun`). Each is gated by `aiGenerative` and
+  `ai.generate`, asks the jobs route once per member and workspace before it
+  shows anything (`use-ai-job-run.ts`), and sits in a site zone, so a site
+  that switched AI off draws none. An explanation's question is a fixed
+  sentence naming the automation. In AI jobs, a drafted automation opens the
+  Automation page's Actions, where it is listed switched off.
 - **Spend.** Each step is metered like any other. Running the drafted
   automation, once a member switches it on, counts against the site's action
   runs and never against AI credits.

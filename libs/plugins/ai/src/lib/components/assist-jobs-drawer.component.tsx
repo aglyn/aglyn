@@ -124,7 +124,9 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
     return `/${orgSlug}/hosts/${host}/products`
   }
   if (output.resource === 'workflow') {
-    return `/${orgSlug}/hosts/${host}/automation?tab=workflows`
+    // A drafted automation is an action (AGL-2919), listed switched off on
+    // the Automation page's Actions.
+    return `${buildRoute(Route.HOST_AUTOMATION, { orgSlug, host })}/actions`
   }
   if (output.resource === 'theme') {
     return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })

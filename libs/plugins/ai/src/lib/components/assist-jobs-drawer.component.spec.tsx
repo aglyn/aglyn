@@ -374,15 +374,16 @@ describe('aiJobOutputHref', () => {
     )
   })
 
-  it('has no page for text, no page without a host or a slug, and a list for products and workflows', () => {
+  it('has no page for text, no page without a host or a slug, and a list for products and automations', () => {
     expect(aiJobOutputHref(output({ resource: 'text' }) as never, 'acme')).toBeNull()
     expect(aiJobOutputHref(output({ hostId: null, hostSubdomain: null }) as never, 'acme')).toBeNull()
     expect(aiJobOutputHref(output({}) as never, '')).toBeNull()
     expect(aiJobOutputHref(output({ resource: 'product' }) as never, 'acme')).toBe(
       '/acme/hosts/shop/products',
     )
+    // A drafted automation is an action, on the Automation page's Actions (AGL-2919).
     expect(aiJobOutputHref(output({ resource: 'workflow' }) as never, 'acme')).toBe(
-      '/acme/hosts/shop/automation?tab=workflows',
+      '/acme/hosts/shop/automation/actions',
     )
   })
 

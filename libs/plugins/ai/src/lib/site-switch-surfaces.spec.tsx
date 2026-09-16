@@ -22,10 +22,10 @@
  * a site's pages, and against the workspace's everywhere else. So which zone
  * an AI widget is registered into decides whether a site's switch hides it:
  * the dock, every Describe it, the SEO and theme cards, the collaborator
- * columns and the editor's AI controls all sit in SITE zones and go; the
- * billing cards, the member usage and the agency batch sit in WORKSPACE zones
- * and stay, because they carry no site; the staff zones name no workspace at
- * all.
+ * columns, the editor's AI controls and the automation controls all sit in
+ * SITE zones and go; the billing cards, the member usage and the agency batch
+ * sit in WORKSPACE zones and stay, because they carry no site; the staff zones
+ * name no workspace at all.
  *
  * Every zone the plugin registers into is classified below, and a widget
  * added to an unclassified zone fails the first test — it has to say which
@@ -79,6 +79,10 @@ const SITE_ZONES: readonly string[] = [
   CONSOLE_WIDGET_SLOTS.hostMembers,
   CONSOLE_WIDGET_SLOTS.besignerToolbar,
   CONSOLE_WIDGET_SLOTS.besignerInspector,
+  // The Automation page's zones, hosted by the workflows plugin on a site's page.
+  CONSOLE_WIDGET_SLOTS.hostAutomations,
+  CONSOLE_WIDGET_SLOTS.automationEditor,
+  CONSOLE_WIDGET_SLOTS.automationRun,
 ]
 
 /** Zones drawn on the WORKSPACE's pages, where no site's switch reaches. */
