@@ -37,6 +37,36 @@ export const PLUGIN_DOCS = {
     title: 'Actions builder',
     excerpt: 'Map a single event to a single action without building a full workflow.',
   },
+  aglynAssist: {
+    path: '/getting-started/aglyn-assist',
+    title: 'Aglyn Assist',
+    excerpt: 'Ask the built-in AI helper how to do anything in Aglyn — it answers from these docs and links you straight to the right page.',
+  },
+  aiMonitoring: {
+    path: '/staff-console/ai-monitoring',
+    title: 'AI monitoring',
+    excerpt: 'How staff watch one organization\'s AI usage — the add-on, the credit pool, overage and refusals, generation jobs, the top spenders, the margin — and where those figures appear across the staff console.',
+  },
+  aiSeo: {
+    path: '/building-sites/seo/seo-by-ai',
+    title: 'SEO by AI',
+    excerpt: 'Have AI write a page\'s or a product\'s search listing, audit every published page with a proposed fix for each finding, and draft your structured data and /llms.txt guidance — as drafts you review and save.',
+  },
+  aiThemes: {
+    path: '/marketing-and-automation/ai-assist/theme-assist',
+    title: 'Themes with AI',
+    excerpt: 'Describe a change to your site\'s theme and get a proposal for the theme editor\'s own controls, previewed before and after, that you save in the editor. Rolling out.',
+  },
+  assistSignals: {
+    path: '/staff-console/assist-signals',
+    title: 'Assist Signal',
+    excerpt: 'The docs-gap and cost board behind Assist — how the ranking is ordered, why ungrounded questions are counted separately, and what the cache-read rate says about margin.',
+  },
+  billing: {
+    path: '/workspace-and-billing/billing-and-plans/overview',
+    title: 'Billing & Plans',
+    excerpt: 'How Aglyn\'s tiers, entitlements, quotas, usage meters, and seat add-ons work.',
+  },
   bindings: {
     path: '/building-sites/bindings/overview',
     title: 'Bindings, Variables & Functions',
@@ -162,6 +192,11 @@ export const PLUGIN_DOCS = {
     title: 'Install your first marketplace item',
     excerpt: 'A click-by-click walkthrough of the Marketplace — find something, choose which sites get it, install it, and turn it off again.',
   },
+  inviteTeammates: {
+    path: '/workspace-and-billing/teams-and-roles/invite-teammates',
+    title: 'Invite teammates',
+    excerpt: 'Add people to your site and understand how team members act within your organization.',
+  },
   marketingOverlays: {
     path: '/marketing-and-automation/marketing-overlays/overview',
     title: 'Marketing Overlays',
@@ -203,6 +238,12 @@ export type PluginDocsKey = keyof typeof PLUGIN_DOCS
 
 export const PLUGIN_DOCS_ANCHORS = {
   actionsBuilder: ['#create-an-action', '#recipes', '#triggers', '#crm-events', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#crm-steps', '#step-conditions', '#sequences', '#run-history', '#what-is-and-isnt-recorded', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
+  aglynAssist: ['#what-it-can-do', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#edits-in-the-besigner', '#where-an-answer-came-from', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
+  aiMonitoring: ['#the-ai-card', '#where-else', '#one-account', '#the-spend-leaderboard', '#alerts', '#related'],
+  aiSeo: ['#write-a-pages-listing', '#write-a-products-listing', '#audit-the-whole-site', '#target-keywords', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],
+  aiThemes: ['#change-what-you-describe-or-design-a-new-theme', '#match-your-brand', '#review-the-proposal', '#save-it-or-dont', '#who-can-use-it', '#related'],
+  assistSignals: ['#the-workflow-this-board-exists-for', '#fleet', '#the-cache-read-rate-and-what-a-bad-number-looks-like', '#where-the-money-goes', '#docs-gaps', '#questions-the-docs-could-not-answer', '#what-people-actually-asked', '#what-assist-costs-by-workspace', '#reading-the-sample-honestly', '#related'],
+  billing: ['#tiers--entitlements', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#who-is-generating-what', '#ai-allotments', '#storage-overage', '#if-you-would-rather-uploads-stopped', '#assist-overage', '#stop-ai-assist-at-the-included-band', '#ai-overage-ceiling', '#free-ai-credits', '#ai-credit-alerts', '#usage-budget', '#seats', '#crm-records', '#the-crm-suite', '#one-to-one-email', '#organization-data', '#api-access', '#payments', '#outstanding', '#plan-total', '#billing-email', '#payment-methods', '#billing-address', '#tax-ids', '#sales-tax', '#platform-fees', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#site-details', '#typed-variables', '#no-code-functions', '#where-used--safety', '#workflows', '#related'],
   bookings: ['#set-up-bookings', '#taking-bookings', '#reminders', '#payments-and-fees', '#service-tax', '#manage', '#booking-from-the-crm', '#canceling-and-refunding', '#related'],
   buildAWorkflow: ['#1-open-the-workflows-page', '#2-choose-a-trigger', '#3-add-steps', '#4-save-and-test', '#duplicate-a-workflow', '#tips', '#related'],
@@ -218,7 +259,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   crmEmailTemplates: ['#templates-and-snippets', '#merge-fields', '#saving', '#managing-templates', '#duplicate-a-template', '#shared-or-personal', '#over-the-rest-api', '#related'],
   crmLeads: ['#what-makes-a-lead', '#the-leads-list', '#working-a-lead-from-the-row', '#several-leads-at-once', '#export-csv', '#import-from-csv', '#who-owns-a-lead', '#a-leads-page', '#converting-a-lead', '#unqualifying-a-lead', '#erasing-the-person', '#who-can-do-this', '#related'],
   crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#conversion-by-source', '#lead-funnel', '#pipeline', '#forecast-by-close-month', '#won-and-lost', '#won-and-lost-by-owner', '#activity-by-teammate', '#tasks', '#exporting-a-table', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
-  crmSettings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#email-templates', '#email-capture', '#recipes', '#related'],
+  crmSettings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#email-templates', '#email-capture', '#your-sending-addresses', '#recipes', '#related'],
   crmTasks: ['#the-tasks-page', '#the-calendar-view', '#snoozing-a-task', '#selecting-exporting-and-acting-on-many', '#import-from-csv', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#organization-tasks', '#tasks-on-a-contact-company-or-deal', '#reminders', '#turning-reminders-off', '#next-activity', '#the-daily-digest', '#turning-it-off', '#the-dashboard-card', '#who-can-do-what', '#related'],
   crmViews: ['#the-views-control', '#a-view-is-a-link', '#filters-on-the-contacts-list', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
@@ -228,6 +269,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   events: ['#manage-events', '#show-events-on-a-screen', '#search-engines', '#related'],
   forms: ['#reading-submissions-from-code', '#build-a-form', '#monthly-allowance-per-plan', '#spam-and-abuse-protection', '#the-per-site-monthly-ceiling', '#field-types', '#labels-and-placeholders', '#example-a-quick-survey', '#after-submit', '#example-grow-an-email-list-from-a-signup-form', '#where-submissions-go', '#the-inbox', '#who-a-submission-is-from', '#where-this-one-went', '#replying-to-a-submission', '#one-forms-own-page', '#duplicate-a-form', '#related'],
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#what-to-do-next', '#related'],
+  inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#an-invitation-never-changes-who-owns-the-workspace', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#ai-actions', '#ai-usage', '#ai-allotment', '#tips', '#related'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#variables-in-copy', '#engagement-stats', '#related'],
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
   plugins: ['#install--upgrade', '#browse-card', '#whats-included', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#when-one-plugin-depends-on-another', '#a-dependency-that-is-off-for-one-site', '#configure', '#configure-site', '#publish-your-own', '#related'],

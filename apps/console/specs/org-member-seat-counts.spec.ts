@@ -110,7 +110,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   memberHasOrgPermission: jest.fn(async () => true),
   notifyUsers: jest.fn(),
   removeOrgMember: jest.fn(),
-  resolveMemberAiPermissionsOnOrg: jest.fn(async () => null),
+  resolveMemberPluginPermissionsOnOrg: jest.fn(async () => null),
   resolveOrgMembership: (...a: unknown[]) => mockResolveOrgMembership(...a),
   upsertOrgMember: jest.fn(),
 }))

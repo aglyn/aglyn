@@ -15,11 +15,13 @@
  * limitations under the License.
  */
 
+// The service registry by its own module: this file is on the server entry,
+// and the full `@aglyn/aglyn` barrel carries client-only contexts (AGL-405).
 import {
   definePluginServiceContract,
   registerPluginService,
   resolvePluginServices,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { AI_PLUGIN_ID } from '../constants'
 import { anthropicProvider } from './anthropic'
 import type { AiProvider } from './contract'

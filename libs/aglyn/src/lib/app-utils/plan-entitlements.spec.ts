@@ -87,9 +87,22 @@ import {
   hasAiAddon,
 } from './plan-entitlements'
 import { ASSIST_CREDIT_COST_USD, assistBandRefuses } from './assist-credits'
-// The add-on is declared through the entitlement seam (AGL-2940); the
-// resolver reads the declaration, so the spec loads it as the barrel does.
-import './ai-entitlements'
+import { registerPluginEntitlements } from '../plugin-manager/plugin-entitlements'
+
+// The AI add-on as its plugin declares it (AGL-2939, AGL-2940): the resolver
+// folds whatever is declared, and this spec is about the fold.
+registerPluginEntitlements({
+  pluginId: 'ai',
+  seatAddons: [
+    {
+      key: 'aiAddon',
+      label: 'AI add-on',
+      maxUnits: 1,
+      quota: { key: 'assistCreditsPerMonth', perUnitByPlan: AI_ADDON_CREDITS_PER_MONTH },
+      features: ['aiGenerative', 'aiAssist'],
+    },
+  ],
+})
 import type { OrgPlan } from '../foundation'
 
 describe('plan entitlements', () => {

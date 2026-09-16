@@ -298,6 +298,47 @@ service cloud.firestore {
         get(/databases/$(database)/documents/hosts/$(hostId)).data.get('orgId', null));
     }
 
+    /**
+     * Whether an org carries OUTREACH (AGL-2974): the rules' restatement of
+     * `checkEntitlement(org, 'outreach')`.
+     *
+     * One fact, where the CRM suite's twin above needs three: the per-org
+     * `entitlements.features.outreach` override, and only a `true` grants.
+     * There is no plan list because no plan grants Outreach —
+     * `PLAN_ENTITLEMENTS` carries `outreach: false` on every row, Enterprise
+     * included — and the resolver spreads the override over the plan row
+     * whatever the subscription's state, so while every row says `false` the
+     * override IS the resolver's whole answer. A plan list here would be a
+     * list of nothing, and a status check would refuse a grant the resolver
+     * honors. `outreach-rules-drift.spec.ts` fails the day a plan gains the
+     * feature, which is the day this function has to grow `crmSuiteCarried`'s
+     * plan half. A seat add-on that switched it on would need the same:
+     * `resolveOrgEntitlements` folds a purchased add-on's features in after
+     * the override, and nothing here reads `seatAddons`.
+     *
+     * `outreachOverride` is typed as defensively as `crmSuiteOverride`, and
+     * answers the same three ways — `true`, `false`, or `null` for absent or
+     * malformed — so a non-map `entitlements` reads as no grant instead of
+     * erroring, and the plan half can be added beside it without re-reading
+     * the override.
+     *
+     * A missing org document carries nothing. The get() is one document read
+     * per evaluated request, and `canReadOutreach` asks it LAST, so a reader
+     * refused for their reach, their role or their permission never pays for
+     * it.
+     */
+    function orgCarriesOutreach(orgId) {
+      return orgId != null &&
+        exists(/databases/$(database)/documents/orgs/$(orgId)) &&
+        outreachOverride(get(/databases/$(database)/documents/orgs/$(orgId)).data) == true;
+    }
+    function outreachOverride(org) {
+      return org.get('entitlements', {}) is map &&
+          org.get('entitlements', {}).get('features', {}) is map
+        ? org.get('entitlements', {}).get('features', {}).get('outreach', null)
+        : null;
+    }
+
     // ------------------------------------------------------------------
     // Organizations (AGL-233/235, docs/MULTI_TENANT_FIRESTORE.md): the
     // org is the tenant boundary. Authorization resolves from the single
@@ -699,6 +740,23 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // A member's own addresses in this workspace (AGL-2975): one document
+      // per member, keyed by uid, listing the addresses they added and which
+      // of them they have confirmed. The capture webhook reads a confirmed
+      // address as the member's, so `verifiedAtMs` decides whose timeline a
+      // stranger's mail lands on — a client that could write it would mark
+      // any address it liked as its own. Every write, and the confirmation
+      // itself, runs through /api/orgs/members/email-aliases behind the
+      // member's session.
+      //
+      // Reads are closed too: an address a member has not confirmed is not
+      // the team's business, and the member reads their own list through
+      // the same route. Staff are denied like everyone else; nothing here
+      // is consulted client-side.
+      match /memberEmailAliases/{memberUid} {
+        allow read, write: if false;
+      }
+
       // Custom roles (AGL-243): named permission sets members resolve
       // their own access from — member-readable, API-written only.
       match /roles/{roleId} {
@@ -715,6 +773,69 @@ service cloud.firestore {
       // could write them could re-run a step for free or clear its spend.
       match /aiJobs/{jobId} {
         allow read: if isStaff() || isOrgMember();
+        allow write: if false;
+      }
+
+      /**
+       * WHO MAY READ OUTREACH (AGL-2974): the reach, the permission and the
+       * entitlement. All three.
+       *
+       * THE PERMISSION is `outreach.use`, the Outreach plugin's own key —
+       * declared through `registerPluginPermissions`, not in the built-in
+       * dotted catalog — whose tier defaults grant it to admins alone, the
+       * tier the owner role resolves onto. Read the way `canReadScopedPeople`
+       * reads `data.manage`, and for the same reasons:
+       *
+       *  - `memberStamps('outreach.use')` admits anyone a custom role or a
+       *    per-member override explicitly GRANTED it, whatever their role;
+       *  - `memberResolves('outreach.use')` refuses an owner or admin whose
+       *    grant was explicitly REVOKED, because the stamped `false` is read
+       *    before the role list gets a say;
+       *  - an absent key falls through to that role list, which is the
+       *    plugin's tier default: owners and admins in, editors and viewers
+       *    out. Tier defaults are not stamped, so every member no custom role
+       *    or override has touched lands here — and the role list is the only
+       *    reading of that absence that neither locks every workspace's
+       *    managers out nor admits every editor.
+       *
+       * THE REACH is org-wide only. A scoped site collaborator is refused even
+       * holding the stamp, because these documents describe the org's selling
+       * activity as a whole — prospects from every site enrolled in its
+       * sequences, and the reps' own mailboxes — none of which is a fact
+       * about the one site they were invited to.
+       *
+       * THE ENTITLEMENT comes last. `orgCarriesOutreach` is the only conjunct
+       * that reads the org document, so a reader refused on reach, role or
+       * permission never pays for that get().
+       */
+      function canReadOutreach() {
+        return isOrgWideMember() &&
+          (memberStamps('outreach.use') ||
+           (orgMember().role in ['owner', 'admin'] &&
+            memberResolves('outreach.use'))) &&
+          orgCarriesOutreach(orgId);
+      }
+
+      // Outreach (AGL-2974): the mailboxes reps connect, the sequences they
+      // send and each prospect's enrollment in one. Read through
+      // `canReadOutreach()` above.
+      //
+      // Server-written only. The routes write every one of these through the
+      // Admin SDK, because each document is the sending engine's own state: a
+      // mailbox's health counters and send caps, a sequence's steps, an
+      // enrollment's next-due time and stop reason. A client that could write
+      // them could lift a mailbox's daily cap, or clear an enrollment's stop
+      // and have a step sent again.
+      match /outreachMailboxes/{mailboxId} {
+        allow read: if canReadOutreach();
+        allow write: if false;
+      }
+      match /outreachSequences/{sequenceId} {
+        allow read: if canReadOutreach();
+        allow write: if false;
+      }
+      match /outreachEnrollments/{enrollmentId} {
+        allow read: if canReadOutreach();
         allow write: if false;
       }
 
@@ -742,6 +863,49 @@ service cloud.firestore {
               (memberResolves('billing.view') || memberResolves('org.auditLog'))) ||
              memberStamps('billing.view') ||
              memberStamps('org.auditLog')));
+        allow write: if false;
+      }
+
+      /**
+       * AI allotments (AGL-2942): a monthly share of the workspace's AI
+       * credits, keyed by subject — `member:{uid}`, `collab:{hostId}:{uid}`,
+       * `host:{hostId}` — plus `org`, the org-wide model restriction.
+       *
+       * READ by the people the figure is about and the people who manage it:
+       *
+       *  - `org` by any member: it names models, not anyone's spend, and
+       *    every member's model switch is bounded by it;
+       *  - the subject reads their own — `member:` with their uid, or a
+       *    `collab:` whose third segment is their uid;
+       *  - an org-wide manager with `billing.view` or `billing.manage`, read
+       *    the way the per-user usage months are (`memberResolves` for an
+       *    owner or admin, `memberStamps` for anyone a custom role granted);
+       *  - a collaborator holding the ADMIN role on the site the subject
+       *    names reads that site's collaborator and site allotments — the
+       *    collaborators card is theirs. Nothing about another site, and
+       *    nobody's `member:` allotment.
+       *
+       * The subject is matched with a full-string regex BEFORE it is split,
+       * so a malformed id never reaches an index that does not exist.
+       *
+       * Server-written only: an allotment is a spend control, and a subject
+       * who could write their own could lift it.
+       */
+      match /aiAllotments/{subject} {
+        allow read: if isStaff() ||
+          (subject == 'org' && isOrgMember()) ||
+          (isOrgMember() &&
+            (subject == 'member:' + request.auth.uid ||
+             (subject.matches('collab:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+') &&
+              subject.split(':')[2] == request.auth.uid))) ||
+          (isOrgWideMember() &&
+            ((canManageOrg() &&
+              (memberResolves('billing.view') || memberResolves('billing.manage'))) ||
+             memberStamps('billing.view') ||
+             memberStamps('billing.manage'))) ||
+          (isOrgMember() &&
+            subject.matches('(collab|host):[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?') &&
+            orgMember().get('hostAccess', {}).get(subject.split(':')[1], '') == 'admin');
         allow write: if false;
       }
 
@@ -1805,6 +1969,25 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Outreach mailbox credentials (AGL-2974): the OAuth grant behind a rep's
+    // connected mailbox, one document per mailbox. The document id is the
+    // mailbox id and `orgId` and `mailboxId` ride as fields — none of that is
+    // secret; the tokens in the body are, because holding them is holding the
+    // power to send as that rep.
+    //
+    // Deny ALL client access, staff included. The Admin SDK mints a credential
+    // when a rep connects a mailbox, refreshes it for the sending engine and
+    // revokes it on disconnect; nothing in a browser reads one, so a rule that
+    // let a staff session read it would put a live mailbox grant in any
+    // session holding a staff token, outside every route that meters and
+    // audits a send. Org erasure destroys them by the `orgId` field, since a
+    // top-level collection is invisible to the org-tree delete.
+    //
+    // Unmatched paths deny anyway; this match exists to carry the record.
+    match /outreachMailboxCredentials/{credentialId} {
+      allow read, write: if false;
+    }
+
     // REST API idempotency records (AGL-618): dedupe POSTs by Idempotency-Key.
     // Written and read by the Admin SDK only.
     match /apiIdempotency/{keyHash} {
@@ -1873,7 +2056,7 @@ service cloud.firestore {
     // `AI_FREE_DAILY_PLATFORM_CEILING_USD`. Deny ALL client access, staff
     // included: a client that could write it could un-pause the day or
     // pause it for everyone, and the figure is our provider bill. The staff
-    // readout goes through `/api/admin/assist-signals` on the Admin SDK.
+    // readout goes through `/api/ai/admin/signals` on the Admin SDK.
     //
     // Unmatched paths deny anyway; this match exists to carry the record.
     match /platformAiFreeSpend/{day} {

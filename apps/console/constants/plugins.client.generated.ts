@@ -47,6 +47,12 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-crm'),
   },
   {
+    id: 'outreach',
+    apiPrefixes: ["outreach"],
+    register: {"console":"registerOutreachConsole"},
+    load: () => import('@aglyn/plugins-outreach'),
+  },
+  {
     id: 'data',
     register: {"console":"registerDataConsole"},
     load: () => import('@aglyn/plugins-data'),
@@ -90,5 +96,11 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     apiPrefixes: ["hooks"],
     register: {"console":"registerWorkflowsConsole"},
     load: () => import('@aglyn/plugins-workflows'),
+  },
+  {
+    id: 'ai',
+    apiPrefixes: ["ai","assist"],
+    register: {"console":"registerAiConsole","staff":"registerAiConsole"},
+    load: () => import('@aglyn/plugins-ai'),
   },
 ]

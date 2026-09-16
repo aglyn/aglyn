@@ -214,6 +214,20 @@ describeEmulated(
         .collection('members')
         .doc(memberUid)
         .set({ role: 'owner' })
+      // The addresses that member confirmed in the workspace (AGL-2975),
+      // beside the roster row rather than under it.
+      await db
+        .collection('orgs')
+        .doc(orgId)
+        .collection('memberEmailAliases')
+        .doc(memberUid)
+        .set({
+          uid: memberUid,
+          aliases: [
+            { address: 'owner@outbound.invalid', addedAtMs: 1, verifiedAtMs: 2 },
+          ],
+          updatedAtMs: 2,
+        })
 
       // A DEAD-LETTERED delivery: `failed`, attempts exhausted, and carrying
       // the buyer's name, email and shipping address in `body` — the shape
@@ -363,6 +377,26 @@ describeEmulated(
         expect(doc.get('displayName')).toBe('Fixture Site')
         expect(doc.get('role')).toBe('owner')
       }
+    }, 60_000)
+
+    it("takes the members' own addresses with the org, and leaves another org's (AGL-2975)", async () => {
+      const erased = await db
+        .collection('orgs')
+        .doc(ORG)
+        .collection('memberEmailAliases')
+        .doc(UID_MEMBER)
+        .get()
+      expect(erased.exists).toBe(false)
+      const bystander = await db
+        .collection('orgs')
+        .doc(OTHER_ORG)
+        .collection('memberEmailAliases')
+        .doc(OTHER_UID_MEMBER)
+        .get()
+      expect(bystander.exists).toBe(true)
+      expect(bystander.get('aliases')).toEqual([
+        { address: 'owner@outbound.invalid', addedAtMs: 1, verifiedAtMs: 2 },
+      ])
     }, 60_000)
 
     it('THE DEFECT: no DEAD-LETTERED supplier delivery survives the site', async () => {

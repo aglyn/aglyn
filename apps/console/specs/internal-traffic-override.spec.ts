@@ -162,14 +162,16 @@ describe('the internal-traffic override (AGL-2065)', () => {
     )
   })
 
-  it('stamps from the override alone, before the token is read', () => {
+  it('stamps from the override before the token is read', () => {
     const body = trafficEffect()
-    const firstWrite = body.indexOf('stamp(override)')
+    // Matched as a prefix: the pre-token write also ORs in the remembered
+    // actor (AGL-3007, pinned by `internal-traffic-actor-memory.spec.ts`).
+    const firstWrite = body.search(/\bstamp\(\s*override\b/)
     const tokenRead = body.indexOf('getIdTokenResult')
     expect(firstWrite).toBeGreaterThan(-1)
     expect(tokenRead).toBeGreaterThan(-1)
-    // A token read cannot be made synchronous, so the claims path keeps
-    // AGL-1582's accepted first-hit race. The override path need not.
+    // A token read cannot be made synchronous, so only the synchronous
+    // answers can reach the boot burst — and they have to be written first.
     expect(firstWrite).toBeLessThan(tokenRead)
   })
 

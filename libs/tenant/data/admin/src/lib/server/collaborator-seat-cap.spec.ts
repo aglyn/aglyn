@@ -76,6 +76,32 @@ type Doc = Record<string, unknown>
 
 let store = new Map<string, Doc>()
 
+/**
+ * What `set(…, options)` stores. `mergeFields` replaces each listed field
+ * whole and keeps every other field — the auth projections are written that
+ * way (AGL-2985), and reading it as a plain overwrite would wipe the member
+ * document the projection leaves standing. Anything else is `mockMerge`.
+ */
+function mockSetData(
+  existing: Doc | undefined,
+  data: Doc,
+  options?: { merge?: boolean; mergeFields?: string[] },
+): Doc {
+  if (!options?.mergeFields) {
+    return mockMerge(existing, data, Boolean(options?.merge))
+  }
+  const base: Doc = { ...(existing ?? {}) }
+  for (const field of options.mergeFields) {
+    if (!(field in data)) {
+      throw new Error(
+        `Field "${field}" is specified in your field mask but not in your input data`,
+      )
+    }
+    base[field] = data[field]
+  }
+  return base
+}
+
 /** Deep-merges maps the way Firestore's `set(…, {merge:true})` does. */
 function mockMerge(existing: Doc | undefined, data: Doc, merge: boolean): Doc {
   const base: Doc = merge ? { ...(existing ?? {}) } : {}
@@ -154,8 +180,11 @@ function mockMakeDoc(path: string): any {
     id: path.split('/').pop(),
     collection: (name: string) => mockMakeCollection(`${path}/${name}`),
     get: async () => mockSnapshot(path),
-    set: async (data: Doc, options?: { merge?: boolean }) => {
-      store.set(path, mockMerge(store.get(path), data, Boolean(options?.merge)))
+    set: async (
+      data: Doc,
+      options?: { merge?: boolean; mergeFields?: string[] },
+    ) => {
+      store.set(path, mockSetData(store.get(path), data, options))
     },
     update: async (data: Doc) => {
       // The real `update()` throws NOT_FOUND on a missing document; a double
@@ -190,12 +219,13 @@ function mockFirestore(): any {
     batch: () => {
       const writes: Array<() => void> = []
       return {
-        set: (ref: { path: string }, data: Doc, options?: { merge?: boolean }) => {
+        set: (
+          ref: { path: string },
+          data: Doc,
+          options?: { merge?: boolean; mergeFields?: string[] },
+        ) => {
           writes.push(() => {
-            store.set(
-              ref.path,
-              mockMerge(store.get(ref.path), data, Boolean(options?.merge)),
-            )
+            store.set(ref.path, mockSetData(store.get(ref.path), data, options))
           })
         },
         delete: (ref: { path: string }) => {

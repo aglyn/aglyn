@@ -42,6 +42,8 @@
 
 export {}
 
+import { addonMaxForPlan } from '@aglyn/tenant-data-admin/server/billing-addons'
+
 const ORG_ID = 'org-1'
 
 /** `subscription.schedule` on the subscription Stripe returns. */
@@ -334,10 +336,7 @@ describe('buying an add-on refreshes a pending downgrade (AGL-2150)', () => {
       // From the resolver rather than a literal: a plan table edit that
       // changes Starter's cap must move this expectation with it, not leave a
       // number here quietly asserting the old shape.
-      require('../utils/server/billing-addons').addonMaxForPlan(
-        'managers',
-        'starter',
-      ),
+      addonMaxForPlan('managers', 'starter'),
     )
     expect(ceiling).toBe('3')
     expect(quantityOf(1, 'price_starter_seat')).toBe(ceiling)

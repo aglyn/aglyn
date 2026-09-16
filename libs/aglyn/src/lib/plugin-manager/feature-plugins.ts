@@ -40,6 +40,7 @@
 
 import { runInAction } from 'mobx'
 import type { OrgPermissions } from '../app-utils/org-permissions'
+import type { SeoListingFieldKey } from '../app-utils/seo-listing-fields'
 import type { AglynOrgBilling, OrgFeatureFlags } from '../foundation'
 import type {
   ComponentSchema,
@@ -47,6 +48,8 @@ import type {
   PresetSchema,
 } from '../types/nodes'
 import type { Plugin, PluginId } from './plugin-manager'
+import type { HostThemeSource } from '../app-utils/marketplace-theme'
+import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import type { ComponentType } from 'react'
 
 /** The mui bundle id every UI feature bundle depends on. */
@@ -177,8 +180,10 @@ export interface ConsolePluginPageProps {
   /**
    * The site this surface is mounted under — or `null` when it is mounted at
    * the ORGANIZATION level, where there is no site and {@link orgMount} says
-   * which org (AGL-2630). Only the CRM mounts there today; every other
-   * surface is reached through a site route and always receives a string.
+   * which org (AGL-2630). Two things mount there: the CRM's own org route,
+   * and every {@link ConsoleExtension.orgNavItems} surface through the
+   * generic org route (AGL-2974). A surface reached through a site route
+   * always receives a string.
    */
   hostId: string | null
   /** Present only at an org-level mount — see {@link ConsolePluginOrgMount}. */
@@ -530,7 +535,24 @@ export const CONSOLE_WIDGET_SLOTS = {
   orgSettings: 'orgSettings',
   /** Host setup page, below the built-in cards. Props: hostId, org. */
   hostSettings: 'hostSettings',
-  /** Staff admin org detail (staff-only surfaces). Props: orgId. */
+  /**
+   * The host setup Theme section, between the "What you have changed" card
+   * and the editor (AGL-2938). Props: {@link ConsoleHostThemeZoneProps} — the
+   * site, the theme the editor shows, where that theme came from, the
+   * editor's own preview, and `proposeDraft`, which puts a theme in the
+   * editor as unsaved changes.
+   *
+   * A widget here proposes and never writes. The person saves what it
+   * proposed through the editor's own Save — the guarded write that stores
+   * an installed theme's edits as its override patch — or discards it. A
+   * palette importer, a brand kit and a generator are the same shape of
+   * widget.
+   */
+  hostTheme: 'hostTheme',
+  /**
+   * Staff admin org detail (staff-only surfaces). Props: orgId. A staff
+   * zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
+   */
   adminOrgDetail: 'adminOrgDetail',
   /**
    * Billing → Usage, below the meters (AGL-2940). Props: `orgId`, `org` (the
@@ -547,15 +569,40 @@ export const CONSOLE_WIDGET_SLOTS = {
   /**
    * The staff org page, among its cards (AGL-2940). Props: `orgId`. Staff
    * only — the page is behind `StaffOnly`, and a widget here may read the
-   * staff-only routes.
+   * staff-only routes. A staff zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
    */
   staffOrg: 'staffOrg',
-  /** The staff user page, below the account's activity. Props: `uid`. */
+  /**
+   * The staff user page, below the account's activity. Props: `uid`. A
+   * staff zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
+   */
   staffUser: 'staffUser',
   /**
+   * A COLUMN of the staff Organizations list (AGL-2984) — see
+   * {@link ConsoleWidget.column}. The list renders the widget's component
+   * once per row with `{ row, orgId, orgIds }`: the row as the list route
+   * serves it, that row's org id, and every org id on the page, so a column
+   * that reads figures of its own asks once for the page rather than once
+   * per row. Its `Header` receives `{ orgIds }` beside the sort props. A
+   * staff zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
+   */
+  staffOrgsListColumn: 'staffOrgsListColumn',
+  /**
+   * The staff org usage table (AGL-2984): the monthly rollups on the staff
+   * org page and in the Organizations list's usage dialog. A widget with a
+   * `column` is a column of the table, between Forms and Cost, rendered once
+   * per month with `{ month, orgId }` — `month` is the rollup row as
+   * `/api/admin/org-usage` serves it. A widget without one renders above
+   * the table with `{ orgId, org }`, where `org` is the org document when the
+   * surface holds one and `undefined` when it does not. A staff zone — see
+   * {@link CONSOLE_STAFF_WIDGET_SLOTS}.
+   */
+  staffOrgUsageColumn: 'staffOrgUsageColumn',
+  /**
    * The org's team member detail page, below the member's activity
-   * (AGL-2940). Props: `orgId`, `uid`, `member` (the org member document as
-   * the page loaded it), `canManage` (the reader may manage the org).
+   * (AGL-2940). Props: `orgId`, `orgSlug`, `uid`, `member` (the org member
+   * document as the page loaded it), `hosts` (the org's sites, for naming
+   * them), `canManage` (the reader may manage the org).
    */
   orgMember: 'orgMember',
   /**
@@ -567,9 +614,10 @@ export const CONSOLE_WIDGET_SLOTS = {
   orgMembersListColumn: 'orgMembersListColumn',
   /**
    * The site collaborators card (AGL-2940). A widget with a `column` is a
-   * column of its table, rendered per row with `{ member, hostId, canManage
-   * }`; a widget without one renders beneath the table with `{ hostId,
-   * canManage }`.
+   * column of its table, rendered per row with `{ member, orgId, hostId,
+   * canManage }` — the owner's row too, with `member` carrying the owner's
+   * `uid` and `role: 'owner'`; a widget without one renders beneath the
+   * table with `{ hostId, canManage }`.
    */
   hostMembers: 'hostMembers',
   /**
@@ -581,13 +629,165 @@ export const CONSOLE_WIDGET_SLOTS = {
   assistPanel: 'assistPanel',
   /**
    * A section at the bottom of the besigner's Attributes panel (AGL-2940),
-   * under the selected element's own fields. Props: `hostId`.
+   * under the selected element's own fields. Props: `hostId` (`null` on an
+   * editor that names no site), and `node`, the selected element (AGL-2984)
+   * — present wherever the designer draws the panel for a selection.
    */
   besignerInspector: 'besignerInspector',
+  /**
+   * Inside a SEARCH LISTING editor (AGL-2910), under its fields. Props:
+   * {@link ConsoleSeoFieldsZoneProps} — what the listing describes, the
+   * fields the editor edits and what they hold, and `proposeValues`, which
+   * stages values in those fields as unsaved edits.
+   *
+   * Two editors host it: the screen detail page's SEO card, and the commerce
+   * product editor's search engine listing, which draws it through
+   * `useConsoleWidgetSlot` because a plugin's dialog cannot mount the shell's
+   * slot itself. A widget here proposes and never writes: the editor's own
+   * Save is the write, with the guards that write carries. A keyword checker,
+   * a translation memory and a generator are the same shape of widget.
+   */
+  seoFields: 'seoFields',
+  /**
+   * The host setup SEO section, above the site SEO form (AGL-2910). Props:
+   * {@link ConsoleHostSeoZoneProps} — the site, its stored SEO settings, and
+   * `proposeDraft`, which puts values in the form as unsaved edits. The
+   * form's Update stores them; nothing a widget proposes reaches the
+   * published site before that.
+   */
+  hostSeo: 'hostSeo',
+  /**
+   * The besigner's secondary toolbar, after the undo and redo controls
+   * (AGL-2984), on every editor the designer opens: screens, layouts,
+   * components, forms, templates and email designs. A control here acts on
+   * the document in the editor. Props: `hostId` (`null` on an editor that
+   * names no site).
+   */
+  besignerToolbar: 'besignerToolbar',
 } as const
 
 export type ConsoleWidgetSlot =
   (typeof CONSOLE_WIDGET_SLOTS)[keyof typeof CONSOLE_WIDGET_SLOTS]
+
+/** What the `hostTheme` zone hands each widget (AGL-2938). */
+export interface ConsoleHostThemeZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** The site's subdomain, which is what a console URL names a site by. */
+  host: string | null
+  /** The theme the editor shows: the site's theme with its overrides resolved. */
+  theme: HostTheme | undefined
+  /** Where that theme came from, which decides how an edit to it is stored. */
+  themeSource: HostThemeSource
+  /** The editor's own preview, which renders a theme over the brand base. */
+  ThemePreview: ComponentType<{ theme: HostTheme; scheme: HostThemeScheme }>
+  /**
+   * Puts `theme` in the editor as unsaved changes under `key`. A new key
+   * replaces the previous draft; the same key again changes nothing until
+   * the editor has saved or discarded it.
+   */
+  proposeDraft: (theme: HostTheme, key: string) => void
+}
+
+/**
+ * The zones on the STAFF pages (AGL-2939): the staff org page, its detail
+ * zone, and the staff user page.
+ *
+ * No workspace names the plugin set there. A staff page is ABOUT an org or
+ * an account, and the reader's own memberships have nothing to do with what
+ * it shows, so the console reads these zones from the plugins it loads for
+ * the staff area — every plugin that declares a `staff` register surface —
+ * and consults neither a widget's entitlement nor its permission: both are
+ * answers about a workspace, and the staff area's guard is what admits the
+ * reader.
+ */
+export const CONSOLE_STAFF_WIDGET_SLOTS: readonly ConsoleWidgetSlot[] = [
+  CONSOLE_WIDGET_SLOTS.adminOrgDetail,
+  CONSOLE_WIDGET_SLOTS.staffOrg,
+  CONSOLE_WIDGET_SLOTS.staffUser,
+  CONSOLE_WIDGET_SLOTS.staffOrgsListColumn,
+  CONSOLE_WIDGET_SLOTS.staffOrgUsageColumn,
+]
+
+/** Whether a slot is one of the {@link CONSOLE_STAFF_WIDGET_SLOTS}. */
+export function isConsoleStaffWidgetSlot(slot: string): boolean {
+  return (CONSOLE_STAFF_WIDGET_SLOTS as readonly string[]).includes(slot)
+}
+
+/** Search listing values by field; a field the editor does not hold is absent. */
+export type ConsoleSeoFieldValues = Partial<Record<SeoListingFieldKey, string>>
+
+/**
+ * What a search listing describes (AGL-2910). A screen is read from its own
+ * documents by whoever needs more than its name; a product travels with its
+ * name and description, because the product document is the commerce
+ * plugin's and nothing else reads it.
+ */
+export type ConsoleSeoFieldsSubject =
+  | {
+      kind: 'screen'
+      /** The screen document id. */
+      id: string
+      /** The version the page is showing, whose content the listing is about. */
+      versionId: string | null
+      name: string
+    }
+  | {
+      kind: 'product'
+      /** `null` for a product that has not been saved yet. */
+      id: string | null
+      name: string
+      description: string
+    }
+
+/** What the `seoFields` zone hands each widget (AGL-2910). */
+export interface ConsoleSeoFieldsZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  subject: ConsoleSeoFieldsSubject
+  /**
+   * The fields this editor edits, in its order — the only ones a widget may
+   * propose. Keys of the `seo-listing-fields` catalog, which carries each
+   * field's label and length.
+   */
+  fields: readonly SeoListingFieldKey[]
+  /** What each field holds as the editor shows it: saved, or staged and unsaved. */
+  values: ConsoleSeoFieldValues
+  /** Whether the listing has a social image — an image description needs one. */
+  hasImage: boolean
+  /**
+   * Stages `values` in the editor as unsaved edits under `key`. Fields the
+   * editor does not edit are ignored. The editor's own Save is what stores
+   * them; a widget never writes the listing itself.
+   */
+  proposeValues: (values: ConsoleSeoFieldValues, key: string) => void
+}
+
+/** What the `hostSeo` zone hands each widget (AGL-2910). */
+export interface ConsoleHostSeoZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** The site's subdomain, which is what a console URL names a site by. */
+  host: string | null
+  /** The site's stored `seo` settings, as the form was seeded with them. */
+  seo: Record<string, unknown> | undefined
+  /**
+   * Puts `values` in the site SEO form as unsaved edits, keyed by the form's
+   * field names (`seo.entity.description`, `seo.agent.whenToUse`). Proposals
+   * land in the form's draft beside what was typed, the same `key` twice
+   * applies once, and the form's Update is what stores them.
+   */
+  proposeDraft: (values: Record<string, string>, key: string) => void
+}
 
 /**
  * A column a widget contributes to a shell-owned table (AGL-2940) — the org
@@ -597,7 +797,7 @@ export type ConsoleWidgetSlot =
  * table's to draw.
  */
 export interface ConsoleWidgetColumn {
-  /** The header cell's text. */
+  /** The header cell's text, and the column's name wherever it is listed. */
   header: string
   /**
    * The row field a table that sorts orders this column by. Carried for
@@ -606,6 +806,30 @@ export interface ConsoleWidgetColumn {
    */
   sortKey?: string
   align?: 'left' | 'right' | 'center'
+  /**
+   * The header cell's content when a plain `header` is not enough
+   * (AGL-2939): a hint, or a sort over values only the plugin can read.
+   * Mounted once per table with the slot's props beside
+   * {@link ConsoleWidgetColumnHeaderProps}; without it the table draws
+   * `header` as text.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  Header?: ComponentType<any>
+}
+
+/**
+ * What a column's own header receives beside the slot's props (AGL-2939).
+ * The table keeps one sort at a time, so a column that sorts replaces
+ * another's order.
+ */
+export interface ConsoleWidgetColumnHeaderProps {
+  /**
+   * Hands the table a row comparator, or `null` to put the rows back in the
+   * table's own order. Stable for the life of the table.
+   */
+  onSort: (compare: ((a: never, b: never) => number) | null) => void
+  /** Whether the rows are in this column's order. */
+  sorted: boolean
 }
 
 /**
@@ -739,6 +963,42 @@ export interface ConsoleUpgradeNotice {
   billingAnchor?: string
 }
 
+/** What the console's generic staff route hands a staff page. */
+export interface ConsoleStaffPageProps {
+  /** The page's own console path, `/admin/{id}`. */
+  basePath: string
+}
+
+/**
+ * A page a plugin adds to the STAFF area (AGL-2939): a tab in the staff
+ * strip and a page at `/admin/{id}`, rendered by the console's generic staff
+ * route. The shell owns the layout, the header, the breadcrumbs, the staff
+ * guard and the tab; the plugin owns the body.
+ *
+ * Staff pages load with the staff area's plugins — those declaring a `staff`
+ * register surface — not with a workspace's, because no org names the plugin
+ * set on `/admin`. They are admitted by the staff claim alone, so the
+ * extension's `featureFlag` and `permission` do not apply, and every read a
+ * staff page makes is refused server-side to a caller without the claim.
+ */
+export interface ConsoleStaffPage {
+  /**
+   * The URL segment under `/admin`, and the page's identity. The console's
+   * own staff routes win a segment they use, so pick one they do not. It is
+   * in links staff keep — treat it as persisted.
+   */
+  id: string
+  /** The tab's label in the staff strip. */
+  label: string
+  /**
+   * The page header (title and icon), and the docs topic its help `?`
+   * explains — a plain string for the reason {@link ConsoleNavItem.header}
+   * gives, validated by the console.
+   */
+  header?: { title: string; icon?: MdiIconProps; docsTopic?: string }
+  Component: ComponentType<ConsoleStaffPageProps>
+}
+
 export interface ConsoleExtension {
   pluginId: PluginId
   displayName: string
@@ -777,10 +1037,39 @@ export interface ConsoleExtension {
    */
   upgradeNotice?: ConsoleUpgradeNotice
   navItems?: ConsoleNavItem[]
+  /**
+   * Surfaces mounted at the ORGANIZATION level rather than under a site
+   * (AGL-2974): each is served at `/[orgSlug]{href}` by the console's generic
+   * org route and listed on the organization's tab strip.
+   *
+   * A separate list rather than a flag on {@link ConsoleNavItem}, because the
+   * two levels are read by different consumers. The site strip, the site
+   * route and every title and section lookup iterate `navItems`, and a scope
+   * field on one of those entries would reach each of them as a site surface
+   * until every one of them learned to skip it. Nothing that reads `navItems`
+   * sees these.
+   *
+   * The same contract a site nav item has, with the site taken away: the
+   * page receives `hostId: null` and an `orgMount` naming the organization
+   * and its sites, sections resolve and gate the same way, and the
+   * extension's `featureFlag` and `permission` apply unchanged. The shell
+   * admits only a reader whose reach is the whole organization, because a
+   * surface with no site has no scope to narrow a site collaborator to.
+   *
+   * The href must not name one of the console's own organization routes
+   * (`/hosts`, `/team`, `/settings`, `/crm` and the rest): a named route
+   * always wins over the generic one, so such a surface would never render.
+   */
+  orgNavItems?: ConsoleNavItem[]
   dashboardCards?: ConsoleDashboardCard[]
   settingsSections?: ConsoleSettingsSection[]
   /** Slot-addressed components the shell renders in place (AGL-419). */
   widgets?: ConsoleWidget[]
+  /**
+   * Pages in the STAFF area (AGL-2939) — see {@link ConsoleStaffPage}.
+   * Neither `featureFlag` nor `permission` applies to them.
+   */
+  staffPages?: readonly ConsoleStaffPage[]
   /**
    * App-level providers the shell mounts around every console page
    * (AGL-419) — e.g. the marketplace plugin's AI-assist provider.
@@ -941,11 +1230,66 @@ export function resolveConsolePluginPage(
   href: string,
   enabledPluginIds?: readonly PluginId[],
 ): ResolvedConsolePluginPage | undefined {
+  return resolvePluginPageAmong(
+    href,
+    enabledPluginIds,
+    (extension) => extension.navItems,
+  )
+}
+
+/** One organization-level nav item with the extension that declared it. */
+export interface ConsoleOrgNavEntry {
+  extension: ConsoleExtension
+  navItem: ConsoleNavItem
+}
+
+/**
+ * Every registered {@link ConsoleExtension.orgNavItems} entry, in
+ * registration order, for the organization's tab strip (AGL-2974).
+ *
+ * Carries the extension whole rather than a flattened copy of two of its
+ * fields: a tab for a surface the reader cannot open is hidden, and deciding
+ * that takes the extension's `permission`, `featureFlag` and
+ * `upgradeNotice`, which is the same set the org route reads.
+ */
+export function listConsoleOrgNavItems(
+  enabledPluginIds?: readonly PluginId[],
+): ConsoleOrgNavEntry[] {
+  return listConsoleExtensions(enabledPluginIds).flatMap((extension) =>
+    (extension.orgNavItems ?? []).map((navItem) => ({ extension, navItem })),
+  )
+}
+
+/**
+ * {@link resolveConsolePluginPage} for the ORGANIZATION level (AGL-2974): an
+ * org-relative href (`/outreach/sequences`) against every enabled
+ * extension's `orgNavItems`, with the same matching, the same longest-href
+ * rule and the same refusal of a tie between two plugins. Site nav items are
+ * never candidates, so a surface registered under a site cannot be opened
+ * without one.
+ */
+export function resolveConsoleOrgPluginPage(
+  href: string,
+  enabledPluginIds?: readonly PluginId[],
+): ResolvedConsolePluginPage | undefined {
+  return resolvePluginPageAmong(
+    href,
+    enabledPluginIds,
+    (extension) => extension.orgNavItems,
+  )
+}
+
+/** The resolver both levels share; `navItemsOf` picks which list is read. */
+function resolvePluginPageAmong(
+  href: string,
+  enabledPluginIds: readonly PluginId[] | undefined,
+  navItemsOf: (extension: ConsoleExtension) => ConsoleNavItem[] | undefined,
+): ResolvedConsolePluginPage | undefined {
   let best: ResolvedConsolePluginPage | undefined
   /** Extensions matching at `best`'s length — more than one is the tie. */
   let contenders: PluginId[] = []
   for (const extension of listConsoleExtensions(enabledPluginIds)) {
-    for (const navItem of extension.navItems ?? []) {
+    for (const navItem of navItemsOf(extension) ?? []) {
       if (!navItem.Component) continue
       const match = matchNavItem(navItem, href)
       if (!match) continue
@@ -977,6 +1321,53 @@ export function resolveConsolePluginPage(
     return undefined
   }
   return best
+}
+
+/** A staff page flattened with its owning extension's id. */
+export interface ConsoleStaffPageEntry extends ConsoleStaffPage {
+  pluginId: PluginId
+}
+
+/**
+ * Every registered staff page, in registration order — the staff strip's
+ * plugin tabs, after the console's own.
+ */
+export function listConsoleStaffPages(
+  enabledPluginIds?: readonly PluginId[],
+): ConsoleStaffPageEntry[] {
+  return listConsoleExtensions(enabledPluginIds).flatMap((extension) =>
+    (extension.staffPages ?? []).map((page) => ({
+      ...page,
+      pluginId: extension.pluginId,
+    })),
+  )
+}
+
+/**
+ * The staff page at `/admin/{id}` (AGL-2939), or `undefined`.
+ *
+ * Two plugins claiming one id resolve to nothing, and say so: registry order
+ * is an accident of which chunk loaded first, and a staff page that is one
+ * plugin's on one load and another's on the next cannot be debugged from the
+ * symptom — the same rule {@link resolveConsolePluginPage} applies to paths.
+ */
+export function resolveConsoleStaffPage(
+  id: string,
+  enabledPluginIds?: readonly PluginId[],
+): ConsoleStaffPageEntry | undefined {
+  const matches = listConsoleStaffPages(enabledPluginIds).filter(
+    (page) => page.id === id,
+  )
+  const owners = [...new Set(matches.map((page) => page.pluginId))]
+  if (owners.length > 1) {
+    console.error(
+      `[aglyn] staff page "/admin/${id}" is claimed by more than one plugin ` +
+        `(${owners.join(', ')}); refusing to guess which one owns it. ` +
+        "Change one plugin's staff page id.",
+    )
+    return undefined
+  }
+  return matches[0]
 }
 
 /** Widgets registered for a slot, across every extension (AGL-419). */

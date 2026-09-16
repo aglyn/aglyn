@@ -105,6 +105,7 @@ changes, because every rule is by tag.
 | `plugins-marketing` | `@aglyn/plugins-marketing` | `libs/plugins/marketing` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-marketplace` | `@aglyn/plugins-marketplace` | `libs/plugins/marketplace` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-mui` | `@aglyn/plugins-mui` | `libs/plugins/mui` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
+| `plugins-outreach` | `@aglyn/plugins-outreach` | `libs/plugins/outreach` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-redirects` | `@aglyn/plugins-redirects` | `libs/plugins/redirects` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-workflows` | `@aglyn/plugins-workflows` | `libs/plugins/workflows` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 
@@ -180,7 +181,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 25 edges the allowlist carries, and what removes each. An edge leaves the
+The 19 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together.
 
@@ -190,13 +191,12 @@ import and no production file may repeat it; the fix is a fixture that reads
 the table from the core's server entry, or the spec moving to a project that
 may import the core.
 
-**Plugin → plugin** (22). What two plugins share moves down a layer or behind
+**Plugin → plugin** (17). What two plugins share moves down a layer or behind
 a core seam, never sideways:
 
-- `plugins-marketplace` → `bookings`, `commerce`, `email`, `events-calendar`,
-  `forms`, `mui`: the marketplace lists plugins by importing their entries.
-  Fix: read them from the plugin-manager registry the loader manifests
-  already fill.
+- `plugins-marketplace` → `mui`: a spec imports the MUI block presets to prove
+  each one composes only publishable components. Fix: read them from the
+  plugin-manager registry the loader manifests already fill.
 - `plugins-forms` → `bookings`, `events-calendar`, `mui`: the placement menu
   and the form controls import plugin entries and components. Fix: the same
   registry, plus a form-control registration seam in the core.
@@ -212,9 +212,9 @@ a core seam, never sideways:
 - `plugins-email` → `mui`: bundle constants. Fix: move them to the core's
   bundle constants.
 
-**Plugin → designer UI** (2). `plugins-mui` and `plugins-marketplace` render
-nested children and previews through the designer's node leaf and contexts. A
-plugin that needs the designer UI cannot be used without it, which is exactly
+**Plugin → designer UI** (1). `plugins-mui` renders nested children through
+the designer's node leaf and contexts. A plugin that needs the designer UI
+cannot be used without it, which is exactly
 what the map forbids. Fix: the element-control seam moves into `@aglyn/besigner`
 (the logic package) and the designer UI supplies its implementation at
 registration time.

@@ -34,7 +34,6 @@ import {
   type CrmRecordKind,
 } from './console-record-links'
 import { hostEventLabel } from './workflows'
-import { aiActivityActionLabel, isAiActivityAction } from './ai-activity-actions'
 import { duplicateActivityActionLabel } from './duplicate-resource'
 import {
   pluginActivityActionLabel,
@@ -166,7 +165,6 @@ export function activityActionLabel(action: string | undefined): string {
   const stored = action?.trim() ?? ''
   return (
     pluginActivityActionLabel(stored) ??
-    aiActivityActionLabel(stored) ??
     duplicateActivityActionLabel(stored) ??
     stored
   )
@@ -263,7 +261,7 @@ export function activityHref(
           ? buildRoute(Route.LAYOUT_DETAILS, { orgSlug, host, layoutId: id })
           : buildRoute(Route.HOST_LAYOUTS, { orgSlug, host })
       case 'theme':
-        return buildRoute(Route.HOST_THEME, { orgSlug, host })
+        return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
       case 'media':
         return buildRoute(Route.HOST_MEDIA, { orgSlug, host })
       case 'content':

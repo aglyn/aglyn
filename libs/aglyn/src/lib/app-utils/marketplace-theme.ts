@@ -525,6 +525,30 @@ export function resolveSiteTheme(
 }
 
 /**
+ * Where a site's theme came from (AGL-2938).
+ *
+ * - `installed` — a marketplace theme. The site's edits are its override
+ *   patch over the publisher's version, which stays untouched and can still
+ *   take an update.
+ * - `custom` — the site's own theme, edited in place.
+ * - `default` — the platform default. The site stores nothing until it
+ *   changes something, and then only what it changed.
+ *
+ * One reading for every surface that needs it — the page that lays out the
+ * Theme section, a widget proposing a change there, and a generator deciding
+ * what its change will be stored as — so none of them can file a site under
+ * a different source than the save path does.
+ */
+export type HostThemeSource = 'installed' | 'custom' | 'default'
+
+export function hostThemeSource(
+  host: ThemeHostDocument | null | undefined,
+): HostThemeSource {
+  if (host?.themeInstalledFrom?.listingId) return 'installed'
+  return host?.theme && Object.keys(host.theme).length ? 'custom' : 'default'
+}
+
+/**
  * Was this override authored against the theme currently installed?
  *
  * False after a theme swap, which is the whole reason `baseSha256` is recorded.

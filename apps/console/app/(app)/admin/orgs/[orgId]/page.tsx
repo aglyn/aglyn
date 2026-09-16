@@ -17,7 +17,6 @@
 'use client'
 
 import {
-  AI_ADDON_CREDITS_PER_MONTH,
   aiAddonName,
   checkDiscountMargin,
   hasAiAddon,
@@ -32,7 +31,6 @@ import {
   orgSiteCount,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
-  resolveEffectivePlan,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
@@ -78,6 +76,7 @@ import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import PluginWidgetSlot, {
   useSlotWidgets,
 } from '../../../../../components/plugin-widget-slot.component'
+import { usePluginListColumns } from '../../../../../components/plugin-list-columns.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../../constants/docs-links'
 import MediaUrlField from '../../../../../components/media-url-field.component'
@@ -85,7 +84,6 @@ import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import StaffHostFormCountersChips from '../../../../../components/staff-host-form-counters.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
-import StaffOrgAiCard from '../../../../../components/staff-org-ai-card.component'
 import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import StaffOrgUsageTable, {
@@ -764,6 +762,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   // the route requires a reason and this page must not be able to reach it
   // around the dialog that collects one.
   const { widgets: staffOrgWidgets } = useSlotWidgets(['staffOrg'])
+  // Columns a plugin contributes to the metered usage table (AGL-2984).
+  const { columns: usageColumns } = usePluginListColumns('staffOrgUsageColumn')
   const impersonation = useImpersonationReason({ auth, user })
 
   // Per-org discount (AGL-1105): staff attaches a Stripe coupon to this org's
@@ -1040,24 +1040,12 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     ? PLAN_ENTITLEMENTS[org.plan as keyof typeof PLAN_ENTITLEMENTS]
     : null
   /*
-   * The AI credit pool as the meter resolves it (AGL-2899): the plan's band
-   * plus the AI add-on's, folded by `resolveOrgEntitlements`. Read off
-   * the EFFECTIVE plan through `hasAiAddon`, so a dead subscription's add-on
-   * reads as off here exactly as it does on the customer's own meter.
+   * Whether the org's AI add-on is on (AGL-2899), read off the EFFECTIVE plan
+   * through `hasAiAddon`, so a dead subscription's add-on reads as off here
+   * exactly as it does on the customer's own meter. The add-on widens the
+   * credit band, and the entitlements table names it beside that key.
    */
   const aiAddon = hasAiAddon(org)
-  const assistPool = resolved
-    ? {
-        aiAddon,
-        addonCredits: aiAddon
-          ? AI_ADDON_CREDITS_PER_MONTH[resolveEffectivePlan(org)]
-          : 0,
-        creditsPerMonth:
-          resolved.assistCreditsPerMonth > 0
-            ? resolved.assistCreditsPerMonth
-            : null,
-      }
-    : undefined
   const formatLimit = (value: number) =>
     value === UNLIMITED ? '∞' : value.toLocaleString()
 
@@ -1546,12 +1534,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     </CardDisplay>
                   ),
                 },
-                {
-                  // The org's AI usage in full (AGL-2930): the add-on, the
-                  // pool and its parts, overage, refusals, jobs, top users
-                  // and margin. The card fetches its own read.
-                  children: <StaffOrgAiCard orgId={orgId} />,
-                },
                 // Plugin cards among the staff cards (AGL-2940), where a
                 // plugin's own staff view of the org sits beside the
                 // platform's. No column at all when nothing registered.
@@ -1589,10 +1571,16 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             'read, not zero usage.'}
                         </Alert>
                       ) : (
-                        <StaffOrgUsageTable
-                          months={usageMonths}
-                          assistPool={assistPool}
-                        />
+                        <>
+                          {/* A plugin's line about the table (AGL-2984),
+                              above the rows and the empty state alike. */}
+                          <PluginWidgetSlot slot="staffOrgUsageColumn" orgId={orgId} org={org ?? undefined} />
+                          <StaffOrgUsageTable
+                            months={usageMonths}
+                            columns={usageColumns}
+                            orgId={orgId}
+                          />
+                        </>
                       )}
                     </CardDisplay>
                   ),

@@ -55,7 +55,7 @@ import {
   type OverLimitCounts,
   type OverLimitRow,
 } from '../over-limit'
-import type { AddonKind } from './billing-addons'
+import type { AddonKind } from '@aglyn/tenant-data-admin/server/billing-addons'
 
 /**
  * The add-on kinds this gate covers: org-wide capacity whose limit is checked

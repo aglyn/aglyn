@@ -170,9 +170,10 @@ describe('org Plugins page reads the stored set (AGL-2486)', () => {
     const on = Object.entries(allSwitches())
       .filter(([, checked]) => checked)
       .map(([label]) => label)
-    // Two, not one: `forms` is always-on like the component library, so it is
-    // unioned into every org's resolved set and its switch is on and inert.
-    expect(on).toEqual(['Toggle Components', 'Toggle Forms'])
+    // Three, not one: `forms` and `ai` are always-on like the component
+    // library, so they are unioned into every org's resolved set and their
+    // switches are on and inert.
+    expect(on).toEqual(['Toggle Components', 'Toggle Forms', 'Toggle AI'])
   })
 
   it('an absent field still means the full default set', async () => {

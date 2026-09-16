@@ -29,8 +29,6 @@ import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useMemo } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import BillingAiTopUsersComponent from '../../../../../../components/billing/billing-ai-top-users.component'
-import BillingAssistOverageCardComponent from '../../../../../../components/billing/billing-assist-overage-card.component'
 import BillingMeteredEstimateComponent from '../../../../../../components/billing/billing-metered-estimate.component'
 import BillingStorageOverageCardComponent from '../../../../../../components/billing/billing-storage-overage-card.component'
 import BillingUsageBudgetCardComponent from '../../../../../../components/billing/billing-usage-budget-card.component'
@@ -164,36 +162,6 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
         {
           size: { xs: 12 },
           children: (
-            /*
-             * Who drew the credits the meter above counts (AGL-2928). Its own
-             * band beneath the meters, full width, because it is a table of
-             * people rather than a gauge — and it mounts only for a reader
-             * the route would admit, so a manager without `billing.view`
-             * sees no card rather than a refusal.
-             */
-            can('billing.view') ? (
-              <div id="ai-usage-by-member">
-                <CardDisplay
-                  header={'Who is generating what'}
-                  help={docsHelp('billing', {
-                    anchor: '#who-is-generating-what',
-                    excerpt:
-                      'Each member’s AI credits for a month, their share of ' +
-                      'the workspace’s spend, requests and refusals — with a ' +
-                      'month picker and a CSV export.',
-                  })}
-                  contentGutterX
-                  contentGutterY
-                >
-                  <BillingAiTopUsersComponent orgId={orgId} orgSlug={orgSlug} />
-                </CardDisplay>
-              </div>
-            ) : null
-          ),
-        },
-        {
-          size: { xs: 12 },
-          children: (
             // `CardColumns`, not another masonry band: within a band
             // `GridItems masonry` groups items by their `size`, so three cards
             // declaring one width would share ONE column and leave half the
@@ -249,37 +217,6 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  key: 'assist-overage',
-                  children: (
-                    <div id="assist-overage">
-                      <CardDisplay
-                        header={'AI credits overage'}
-                        subheader={
-                          'Extra AI credits past your included band are ' +
-                          'billed on your monthly invoice. Stop at the band, ' +
-                          'or stop once the overage reaches an amount you ' +
-                          'choose.'
-                        }
-                        help={docsHelp('billing', {
-                          anchor: '#assist-overage',
-                          excerpt:
-                            'On a paid plan the assistant keeps answering past ' +
-                            'your included credits and the extra is billed at ' +
-                            "your plan's per-1,000 rate, unless you switch on " +
-                            'the stop at the included band.',
-                        })}
-                        contentGutterX
-                        contentGutterY
-                      >
-                        <BillingAssistOverageCardComponent
-                          orgId={orgId}
-                          canManage={can('billing.manage')}
-                        />
-                      </CardDisplay>
-                    </div>
-                  ),
-                },
-                {
                   key: 'usage-budget',
                   children: (
                     <div id="usage-budget">
@@ -322,6 +259,7 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
                     orgId={orgId}
                     org={org}
                     canManage={can('billing.manage')}
+                    billingHref={billingHref}
                   />
                 ),
               },

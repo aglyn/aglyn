@@ -197,6 +197,13 @@ email** dialog and under [CRM → Settings](./settings.md#email-capture).
 The message is filed on the timeline of the contact or lead it was with, as
 [Captured email](./activities.md#captured-email) describes.
 
+If you send from an address other than the one you sign in with, such as a
+Gmail send-as alias on an outbound domain, add it under
+[Your sending addresses](./settings.md#your-sending-addresses) and open the
+verification link it is sent. Until you do, a BCC from that address is read
+as a stranger writing in and filed under the alias, not under the person you
+wrote to.
+
 ## At the organization level
 
 The **CRM** tab under **Organization** opens the same hub over **every site in

@@ -41,7 +41,7 @@ import {
   findOrgByCrmInboundToken,
   firebaseAdmin,
   getServerReleaseFlagValues,
-  listOrgMembers,
+  loadCrmInboundRoster,
   logOrgActivity,
 } from '@aglyn/tenant-data-admin'
 
@@ -201,8 +201,11 @@ async function handler(request: Request): Promise<Response> {
     const message = await readerFactory(apiKey)(emailId)
     if (!message) return acknowledge(202, { filed: false, reason: 'message-gone' })
 
+    // The roster carries each member's confirmed aliases beside the address
+    // they sign in with (AGL-2975), so a send from an outbound-domain alias
+    // is read as the member's and filed on the person it was written to.
     const [members, hostIds] = await Promise.all([
-      listOrgMembers(orgId),
+      loadCrmInboundRoster(firestore, orgId),
       crmInboundHostIds(firestore, orgId),
     ])
     const result = await fileCrmInboundEmail(firestore, {
@@ -210,13 +213,7 @@ async function handler(request: Request): Promise<Response> {
       org,
       message,
       domain,
-      members: members
-        .filter((member) => member.orgSuspended !== true && member.email)
-        .map((member) => ({
-          uid: member.$id,
-          email: String(member.email),
-          name: member.displayName ?? null,
-        })),
+      members,
       hostIds,
     })
 

@@ -79,7 +79,7 @@
  * stops them being false 5xx in the runtime log a drain would grade by status.
  *==========================================*/
 
-import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /**
  * The 401 a refused credential deserves, or null when the failure is ours and
@@ -88,9 +88,4 @@ import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refus
  * Mirrors `freeWorkspaceCapRefusalResponse` so a route's catch stays one line
  * and cannot accidentally mask a real fault.
  */
-export function invalidIdTokenResponse(error: unknown): Response | null {
-  if (!isRefusedIdToken(error)) return null
-  // Byte-identical to the body a missing Authorization header already gets.
-  // Never say WHICH code matched.
-  return Response.json({ error: 'Unauthenticated' }, { status: 401 })
-}
+export { invalidIdTokenResponse }

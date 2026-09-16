@@ -257,6 +257,7 @@ jest.mock('../hooks/use-is-staff', () => ({ useIsStaff: () => true }))
 jest.mock('../constants/app-setup', () => ({}))
 jest.mock('../constants/console-plugin-loader', () => ({
   consolePluginLoader: { ensure: () => Promise.resolve() },
+  pluginDeclarationsReady: Promise.resolve(),
 }))
 jest.mock('../constants/route-links', () => ({
   buildRoute: () => '/x',

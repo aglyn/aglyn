@@ -80,6 +80,24 @@ placeholder: it stays in the content, bound to its property.
 Nothing you create is linked back to the template afterwards. Editing a page will never
 change the template, and updating a template will never change pages you already made.
 
+## Generate a page template with Aglyn AI
+
+An AI build job can make a page template for the pages your site builds from records it
+already keeps: each entry of a content collection (a blog post, an event, a case study), each
+product, or each author. Everything that changes from one record to the next is bound with the
+tokens the Besigner's insert picker offers for that page, such as `{{entry.title}}` in the
+heading and `{{entry.coverImage}}` in the cover image, and the blocks that fill themselves on
+that page, such as **Entry Meta** and **Entry Body**, are placed where they belong. The job
+proposes a plan first and builds once you confirm it, following
+[the building rules](../../ai/how-aglyn-ai-builds.md).
+
+The template lands in your library as **Saved here**, like one you saved yourself. It is bound
+to no collection, changes nothing on your site, and counts against your template allowance.
+To put it to work, **Use** it to create the page, then pick that page right away as the
+collection's **Entry template screen** in Content, the product page template in Store settings,
+or the author page screen on the Authors tab. Until you pick it, the new page shows its tokens
+at its own address; once picked, it stops serving there and renders each record instead.
+
 ## Where a template came from
 
 Every template shows a badge:

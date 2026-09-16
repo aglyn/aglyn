@@ -79,7 +79,11 @@ const deniedOnReadFailure = (): OrgPermissions & Record<string, boolean> => {
   } as OrgPermissions & Record<string, boolean>
 }
 
-const ALL_GRANTED = resolveOrgPermissions({ role: 'owner' })
+/**
+ * An owner's map, resolved per use: the catalog grows when a plugin's
+ * declarations register, which can be after this module loads.
+ */
+const ALL_GRANTED = () => resolveOrgPermissions({ role: 'owner' })
 
 /** Every dotted permission false. `resolveOrgPermissions(null)` is the catalog's own. */
 const ALL_DENIED = resolveOrgPermissions(null)
@@ -204,7 +208,7 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
     overrides: Record<string, boolean> | undefined
     status: OrgPermissionsStatus
   }>({
-    granted: ALL_GRANTED,
+    granted: ALL_GRANTED(),
     isOwner: true,
     orgId: undefined,
     role: undefined,
@@ -221,7 +225,7 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
     if (!orgId) {
       // No org yet — fresh account, full access (owner of its future org).
       setState({
-        granted: ALL_GRANTED,
+        granted: ALL_GRANTED(),
         isOwner: true,
         orgId: undefined,
         role: undefined,

@@ -154,7 +154,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
     '../../../libs/aglyn/src/lib/app-utils/plugin-api-cross-origin',
   ),
   pluginIdForRegisteredApiPath: jest.fn(() => 'commerce'),
-  resolvePluginApiRoute: jest.fn(() => ({ path: mockPath })),
+  resolvePluginApiMatch: jest.fn(() => ({ route: { path: mockPath }, params: {} })),
+  // The dispatcher runs a matched (req, res) route through the adapter it
+  // is handed, which is the mocked `runLegacyHandler` below.
+  runPluginApiMatch: jest.requireActual('@aglyn/aglyn/app-utils/api-plugins').runPluginApiMatch,
   runLegacyHandler: jest.fn(async () => {
     mockHandlerCalls += 1
     return Response.json({ ok: true }, { status: 200 })
@@ -345,8 +348,8 @@ describe('tenant plugin API dispatcher — visitor-write rate limit', () => {
   })
 
   it('spends no transaction on a path that does not resolve to a handler', async () => {
-    const { resolvePluginApiRoute } = jest.requireMock('@aglyn/aglyn/server')
-    resolvePluginApiRoute.mockReturnValueOnce(undefined)
+    const { resolvePluginApiMatch } = jest.requireMock('@aglyn/aglyn/server')
+    resolvePluginApiMatch.mockReturnValueOnce(undefined)
 
     const response = await POST(cartPost('9.9.9.9'), { params })
 

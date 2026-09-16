@@ -130,6 +130,15 @@ const mockInboundApi = jest.fn(async () => ({
 jest.mock('./use-crm-api', () => ({
   useCrmApi: () => mockInboundApi,
 }))
+// Your sending addresses (AGL-2975) has a spec of its own, and asks its
+// route once the scope resolves; here the section is mounted with its slot
+// named, so the mount itself is asserted without a request.
+jest.mock('./sending-addresses-card', () => ({
+  __esModule: true,
+  default: ({ orgId, ready }: { orgId: string | null; ready: boolean }) => (
+    <section aria-label="Your sending addresses" data-org={orgId ?? ''} data-ready={String(ready)} />
+  ),
+}))
 
 const LABEL = 'Create companies from work email domains'
 
@@ -373,5 +382,17 @@ describe('the email templates card (AGL-2658)', () => {
       </CrmOrgMountProvider>,
     )
     expect(screen.getByRole('region', { name: 'Email templates' })).toBeTruthy()
+  })
+})
+
+describe('your sending addresses (AGL-2975)', () => {
+  it('mounts directly under Email capture, for any member, with the org the scope resolved', () => {
+    memberRole = 'viewer'
+    render(<CrmSettingsSection hostId="host-1" org={{}} />)
+    const regions = screen.getAllByRole('region').map((region) => region.getAttribute('aria-label'))
+    expect(regions.indexOf('Your sending addresses')).toBe(regions.indexOf('Email capture') + 1)
+    const card = screen.getByRole('region', { name: 'Your sending addresses' })
+    expect(card.getAttribute('data-org')).toBe('org-1')
+    expect(card.getAttribute('data-ready')).toBe('true')
   })
 })

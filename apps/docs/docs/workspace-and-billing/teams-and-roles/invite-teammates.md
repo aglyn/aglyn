@@ -174,6 +174,17 @@ The card is visible to the member themselves and to members whose role carries *
 billing** or **Activity & audit log**; a manager without either sees the page without
 the card. It describes who drew what, on which site — nothing more.
 
+### AI allotment {#ai-allotment}
+
+The same page carries an **AI allotment** card: the share of the workspace's AI credits
+the member may draw each month — across every site for a team member, one per site for a
+site collaborator — hard or soft, with any list of models. Members with **Manage
+billing** set it there or on
+[Billing → Usage](../billing-and-plans/overview.md#ai-allotments); a site's admin can set
+a collaborator's on that site. The member sees their own allotment, and the assistant
+shows it beside their usage as they work — see
+[AI allotments, usage and model choice](../../marketing-and-automation/ai-assist/ai-allotments.md).
+
 ## Tips
 
 - Start people on a least-privilege [role](custom-roles.md) and widen it with per-member

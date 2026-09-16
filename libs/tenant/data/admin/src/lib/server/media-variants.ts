@@ -114,7 +114,7 @@ export function mediaVariantWidthsFor(options: {
  * function, throws something that NAMES the problem instead of a bare
  * `is not a function` from three frames away.
  */
-async function loadSharp(): Promise<SharpFactory> {
+export async function loadSharp(): Promise<SharpFactory> {
   const imported: unknown = await import('sharp')
   const candidate =
     typeof imported === 'function'

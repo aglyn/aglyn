@@ -45,7 +45,6 @@ import AuthenticatedLayout from '../../../../../components/layouts/authenticated
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import MemberAvatar from '../../../../../components/member-avatar.component'
-import MemberAiUsageCard from '../../../../../components/member-ai-usage-card.component'
 import ActorActivityTable from '../../../../../components/actor-activity-table.component'
 import OrgActivityCard from '../../../../../components/org-activity-card.component'
 import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
@@ -511,21 +510,6 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
               </Stack>
             </CardDisplay>
           ) : null}
-          {currentOrg?.$id && member ? (
-            /*
-             * What this member has drawn from the AI pool, this month and
-             * last, with the split by site (AGL-2928). The card reads through
-             * the org route, which admits the member themselves and holders
-             * of `billing.view` or `org.auditLog`, and renders nothing for
-             * anyone else.
-             */
-            <MemberAiUsageCard
-              orgId={currentOrg.$id}
-              uid={uid}
-              orgSlug={orgSlug}
-              hosts={hosts as never}
-            />
-          ) : null}
           {currentOrg?.$id ? (
             // Changes made TO this member (role/access edits), AGL-389.
             <OrgActivityCard
@@ -573,7 +557,9 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
             <PluginWidgetSlot
               slot="orgMember"
               orgId={currentOrg.$id}
+              orgSlug={orgSlug}
               uid={uid}
+              hosts={hosts}
               member={member}
               canManage={canManage}
             />

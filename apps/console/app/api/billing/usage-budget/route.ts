@@ -40,7 +40,7 @@ import {
   orgMonthlySpend,
   publicOrgMonthlySpend,
   resolveUsageBudget,
-} from '../../../../utils/usage-budget'
+} from '@aglyn/aglyn/app-utils/usage-budget'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — self-serve billing surface, same posture as

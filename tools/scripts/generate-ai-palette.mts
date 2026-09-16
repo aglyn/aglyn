@@ -20,7 +20,7 @@
  * truth: the component bundles every plugin registers. Emits one GENERATED
  * file:
  *
- *   libs/aglyn/src/lib/app-utils/ai-palette.generated.ts
+ *   libs/plugins/ai/src/lib/runtime/ai-palette.generated.ts
  *
  * It walks the REAL registry — the `*_BUNDLE` arrays the plugin loaders
  * register at runtime — rather than a hand list, so a component added to a
@@ -45,7 +45,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
-const OUT = join(ROOT, 'libs/aglyn/src/lib/app-utils/ai-palette.generated.ts')
+const OUT = join(ROOT, 'libs/plugins/ai/src/lib/runtime/ai-palette.generated.ts')
 
 const require = createRequire(join(ROOT, 'package.json'))
 const { createJiti } = require('jiti')
@@ -440,12 +440,12 @@ async function main(): Promise<void> {
     'libs/aglyn/src/lib/app-utils/child-contract.ts',
   )
   const { AI_TEXT_LIMITS } = await load(
-    'libs/aglyn/src/lib/app-utils/ai-palette.ts',
+    'libs/plugins/ai/src/lib/runtime/ai-palette.ts',
   )
   const {
     MARKETPLACE_COMPONENT_ID_ALLOWLIST,
     MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST,
-  } = await load('libs/plugins/marketplace/src/lib/model/marketplace.ts')
+  } = await load('libs/aglyn/src/lib/app-utils/node-definition-sanitizer.ts')
   const { SPAN_BREAKPOINTS } = await load(
     'libs/shared/data/enums/src/lib/breakpoint-span.ts',
   )

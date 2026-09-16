@@ -345,7 +345,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       try {
         const response = await authorizedFetch(
           userRef.current,
-          `/api/billing/assist-credits?orgId=${encodeURIComponent(orgId)}`,
+          `/api/ai/billing/credits?orgId=${encodeURIComponent(orgId)}`,
         )
         if (!response.ok || !active) return
         const payload = await response.json().catch(() => null)

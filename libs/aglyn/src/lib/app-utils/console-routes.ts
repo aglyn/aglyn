@@ -61,7 +61,6 @@ export enum Route {
   // The Texas sales tax return (AGL-1900). The figures AGL-1811 computes had
   // only a curl to reach them; filing happens on a fixed quarterly calendar
   // from 2026-09-01, so the return needs a URL a person can bookmark.
-  ADMIN_ASSIST_SIGNALS = '/admin/assist-signals',
   ADMIN_REVENUE = '/admin/revenue',
   // Realised band utilization and the margin that follows from it. Beside
   // Revenue because the two are the halves of one question: that page reports
@@ -83,6 +82,10 @@ export enum Route {
   // for scanning, this is where a reviewer reads the manifest, weighs the
   // verifier findings and acts.
   ADMIN_PLUGIN_REVIEW = '/admin/plugin-reviews/[listingId]',
+  // A page a plugin adds to the staff area (AGL-2939), rendered by the
+  // console's generic staff route. The console's own staff routes win the
+  // segments they use.
+  ADMIN_STAFF_PAGE = '/admin/[staffPage]',
   // Staff support-ticket queue (AGL-849): the operator side of the
   // subscriber `MANAGE_SUPPORT_TICKETS` page — every org's tickets in one place.
   ADMIN_SUPPORT = '/admin/support',
@@ -131,6 +134,15 @@ export enum Route {
    * captured BY a site.
    */
   ORG_CRM = '/[orgSlug]/crm',
+  /*
+   * The generic ORGANIZATION-level plugin route (AGL-2974): every surface an
+   * extension declares in `orgNavItems` is served here, at
+   * `/[orgSlug]/<href>[/<section>…]`, by
+   * `app/(app)/[orgSlug]/[...pluginSlug]/page.tsx`. The org twin of
+   * `HOST_PLUGIN`, and like it the one org route whose leaf segment is data:
+   * every named org route in this enum wins over it.
+   */
+  ORG_PLUGIN = '/[orgSlug]/[pluginSlug]',
   ORG_PLUGINS = '/[orgSlug]/plugins',
   // One plugin, as installed in this workspace (AGL-1007): scope, settings
   // and permissions in one place. The segment takes EITHER identifier
@@ -507,7 +519,6 @@ export interface RoutePayload {
   [Route.ADMIN_MARKETPLACE_REPORTS]: undefined
   [Route.ADMIN_HEALTH]: undefined
   [Route.ADMIN_MAINTENANCE]: undefined
-  [Route.ADMIN_ASSIST_SIGNALS]: undefined
   [Route.ADMIN_REVENUE]: undefined
   [Route.ADMIN_MARGIN_UTILIZATION]: undefined
   [Route.ADMIN_TAX_RETURN]: undefined
@@ -518,6 +529,7 @@ export interface RoutePayload {
   [Route.ADMIN_SETTINGS]: undefined
   [Route.ADMIN_PLUGIN_REVIEWS]: undefined
   [Route.ADMIN_PLUGIN_REVIEW]: { listingId: string }
+  [Route.ADMIN_STAFF_PAGE]: { staffPage: string }
   [Route.ADMIN_SUPPORT]: undefined
   [Route.ADMIN_CONTACT_SUPPRESSIONS]: undefined
   [Route.ADMIN_EMAILS]: undefined
@@ -532,6 +544,7 @@ export interface RoutePayload {
   [Route.ORG_DATA]: { orgSlug: string }
   [Route.ORG_CONTACTS]: { orgSlug: string }
   [Route.ORG_CRM]: { orgSlug: string }
+  [Route.ORG_PLUGIN]: { orgSlug: string; pluginSlug: string }
   [Route.ORG_PLUGINS]: { orgSlug: string }
   [Route.ORG_PLUGIN_INSTALLATION]: { orgSlug: string; pluginRef: string }
   [Route.ORG_MARKETPLACE]: { orgSlug: string }

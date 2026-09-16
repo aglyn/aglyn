@@ -1,0 +1,173 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+'use client'
+
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { useUser } from '@aglyn/tenant-feature-instance'
+import { useEffect, useRef, useState } from 'react'
+import {
+  staffOrgsAiSpendQuery,
+  type StaffOrgsAiSpendWire,
+} from '../usage/staff-orgs-ai-spend'
+
+/** Loading, answered, or failed. A failure reads as a dash in every cell. */
+export type StaffOrgsAiSpendStatus = 'loading' | 'ready' | 'error'
+
+export interface StaffOrgsAiSpendState {
+  status: StaffOrgsAiSpendStatus
+  /** The month the figures describe, once the route has answered. */
+  month: string | null
+  /** Spend by org id as the route answered it; empty until it has. */
+  spendUsd: Readonly<Record<string, number | null>>
+}
+
+interface SpendRead {
+  status: StaffOrgsAiSpendStatus
+  data: StaffOrgsAiSpendWire | null
+}
+
+/**
+ * One read of one page of orgs, shared by every mount that asks for it.
+ *
+ * The column is mounted once per ROW and once more for its header, so a read
+ * per mount would send a request per org for the same page. Mounts for the
+ * same reader and the same set of orgs subscribe to one entry instead: the
+ * first subscriber reads, the rest take its answer. An answer that arrives
+ * after a newer read of the same entry has started is dropped.
+ */
+interface SharedRead {
+  read: SpendRead
+  listeners: Set<(read: SpendRead) => void>
+  generation: number
+}
+
+const LOADING: SpendRead = { status: 'loading', data: null }
+
+const NO_SPEND: Readonly<Record<string, number | null>> = Object.freeze({})
+
+const sharedReads = new Map<string, SharedRead>()
+
+/** Forget every shared read; specs start each case from nothing. */
+export function resetStaffOrgsAiSpendReadsForTests(): void {
+  sharedReads.clear()
+}
+
+function publish(entry: SharedRead, read: SpendRead): void {
+  entry.read = read
+  for (const listener of entry.listeners) listener(read)
+}
+
+async function readInto(
+  entry: SharedRead,
+  user: Parameters<typeof authorizedFetch>[0],
+  orgIds: readonly string[],
+): Promise<void> {
+  entry.generation += 1
+  const generation = entry.generation
+  publish(entry, LOADING)
+  try {
+    const response = await authorizedFetch(
+      user,
+      `/api/ai/admin/orgs-spend?${staffOrgsAiSpendQuery(orgIds)}`,
+    )
+    const payload = response.ok
+      ? await response.json().catch(() => null)
+      : null
+    if (generation !== entry.generation) return
+    const answered =
+      payload !== null &&
+      typeof payload === 'object' &&
+      typeof payload.spendUsd === 'object' &&
+      payload.spendUsd !== null
+    publish(
+      entry,
+      answered
+        ? { status: 'ready', data: payload as StaffOrgsAiSpendWire }
+        : { status: 'error', data: null },
+    )
+  } catch {
+    if (generation === entry.generation) {
+      publish(entry, { status: 'error', data: null })
+    }
+  }
+}
+
+/** The ids as one key: distinct and sorted, so the rows' order is not in it. */
+function idsKeyOf(orgIds: readonly string[] | null | undefined): string {
+  const distinct = [
+    ...new Set(
+      (orgIds ?? []).filter(
+        (orgId) => typeof orgId === 'string' && orgId.length > 0,
+      ),
+    ),
+  ].sort()
+  return distinct.length ? JSON.stringify(distinct) : ''
+}
+
+/**
+ * This month's AI spend for a page of orgs, through
+ * `/api/ai/admin/orgs-spend` — one request per reader and set of orgs,
+ * however many cells and headers ask.
+ */
+export function useStaffOrgsAiSpend(
+  orgIds: readonly string[] | null | undefined,
+): StaffOrgsAiSpendState {
+  const { data: user } = useUser()
+  // The read is keyed on WHO is signed in and WHICH orgs, never on an
+  // object's identity: a provider or a table that hands back a fresh object
+  // per render would otherwise re-run the effect on every paint.
+  const uid = user?.uid ?? null
+  const userRef = useRef(user)
+  userRef.current = user
+  const idsKey = idsKeyOf(orgIds)
+  const key = uid && idsKey ? `${uid}\x00${idsKey}` : null
+  const [held, setHeld] = useState<{ key: string | null; read: SpendRead }>(
+    () => ({
+      key,
+      read: (key ? sharedReads.get(key)?.read : undefined) ?? LOADING,
+    }),
+  )
+
+  useEffect(() => {
+    const signedIn = userRef.current
+    if (!key || !signedIn) return undefined
+    let entry = sharedReads.get(key)
+    if (!entry) {
+      entry = { read: LOADING, listeners: new Set(), generation: 0 }
+      sharedReads.set(key, entry)
+    }
+    const shared = entry
+    const listener = (read: SpendRead) => setHeld({ key, read })
+    const first = shared.listeners.size === 0
+    shared.listeners.add(listener)
+    listener(shared.read)
+    if (first) void readInto(shared, signedIn, JSON.parse(idsKey) as string[])
+    return () => {
+      shared.listeners.delete(listener)
+    }
+  }, [key, idsKey])
+
+  // A read held for another set of orgs says nothing about this one.
+  const read = held.key === key ? held.read : LOADING
+  return {
+    status: key ? read.status : 'loading',
+    month: read.data?.month ?? null,
+    spendUsd: read.data?.spendUsd ?? NO_SPEND,
+  }
+}
+
+export default useStaffOrgsAiSpend

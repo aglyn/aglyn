@@ -21,10 +21,19 @@ import type {
   ComponentsLinealOrder,
   PluginId,
 } from '../foundation/definitions/components.types'
-import type { AiLinealOrder } from './ai-palette'
 
 /** A directive as a schema declares it, or as the generated palette carries it. */
-export type LinealOrderLike = ComponentsLinealOrder | AiLinealOrder
+/**
+ * A lineal order as a JSON emitter writes it (AGL-2905): the directive as
+ * the enum's string value rather than the enum, so a generated catalog can
+ * carry it and a validator can read it back without the enum in scope.
+ */
+export type JsonLinealOrder = [
+  directiveType: `${LinealDirectiveFlag}`,
+  directiveDefinition: string[] | { plugins?: string[]; components?: string[] },
+]
+
+export type LinealOrderLike = ComponentsLinealOrder | JsonLinealOrder
 
 /**
  * Which half of a lineal directive a candidate fails, or `null` when the

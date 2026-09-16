@@ -7,6 +7,13 @@
       "description": "The CRM: contacts, leads, companies, deals, tasks, reports and fields.",
       "valueType": "JSON"
     },
+    "release_outreach": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "Outreach: one-to-one, multi-step email sequences sent from a rep's own connected mailbox and logged in the CRM (AGL-2974). OFF by default and staff preview only; the plugin's console surface and API routes are subtracted for everyone else. An organization also needs the outreach entitlement, which no plan carries, so a customer reaches it only through a per-org entitlement override.",
+      "valueType": "JSON"
+    },
     "release_bookings": {
       "defaultValue": {
         "value": "{\"enabled\":true,\"rolloutPercent\":0}"

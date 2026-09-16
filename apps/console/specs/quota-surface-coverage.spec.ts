@@ -89,6 +89,9 @@ const USAGE_SURFACES = [
   'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
   'libs/plugins/crm/src/lib/components/contacts-section.tsx',
   'libs/plugins/email/src/lib/components/campaign-composer.tsx',
+  // The AI credits meter: the AI plugin's card in the Billing → Usage zone
+  // (AGL-2939), the readout `assistCreditsPerMonth` is metered against.
+  'libs/plugins/ai/src/lib/components/ai-credits-card.component.tsx',
 ]
 
 /**

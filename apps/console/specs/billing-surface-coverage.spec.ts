@@ -133,6 +133,10 @@ function clientCallers(route: string): string[] {
     if (!/\.tsx?$/.test(file)) continue
     if (file.includes('/app/api/')) continue
     if (/\.spec\.tsx?$/.test(file)) continue
+    // A generated registry is docs prose copied out of `apps/docs` — the
+    // docs index quotes the webhook's path in a page about billing — and
+    // no browser call originates from it.
+    if (/\.generated\.ts$/.test(file)) continue
     if (isNonCallReference(content, route)) continue
     files.add(file)
   }

@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.123",
+  "version": "1.0.0-beta.124",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -217,6 +217,8 @@
     "generate:plugin-manifests:check": "node tools/scripts/generate-plugin-manifests.mjs --check",
     "generate:ai-palette": "node tools/scripts/generate-ai-palette.mts",
     "check:ai-palette": "node tools/scripts/generate-ai-palette.mts --check",
+    "check:ai-in-core": "node tools/scripts/check-ai-in-core.mjs",
+    "test:ai-in-core": "node tools/scripts/check-ai-in-core.mjs --fixture",
     "sync:next-tsconfigs": "node tools/scripts/sync-next-tsconfigs.mjs",
     "sync:next-tsconfigs:check": "node tools/scripts/sync-next-tsconfigs.mjs --check",
     "check:app-router-graph": "node tools/scripts/check-app-router-graph.mjs",

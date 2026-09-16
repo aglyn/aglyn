@@ -1,0 +1,477 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * THE ASSIST COST SPLIT REACHES A SCREEN (AGL-2340).
+ *
+ * `mineAssistSignals` computed `totals.byTier`, `totals.byModel` and
+ * `totals.cacheWriteTokens` on every staff page load, the route serialized
+ * all three, and the browser threw them away. They are the two axes any
+ * decision about Assist pricing runs along — `byTier` says whether to move
+ * the free cap or the paid price, `byModel` says whether a cheaper model on
+ * the common path would do — and `cacheWriteTokens` is the dearest token
+ * class, sitting invisible beside its cheaper twin `cacheReadRate`, which
+ * was displayed.
+ *
+ * WHAT THIS FILE HAS TO CATCH, and how each assertion is shaped against a
+ * false green:
+ *
+ *  - **Presence is not correctness.** Asserting the string "By model" appears
+ *    is satisfied by the heading alone with an empty table under it. So every
+ *    figure below is asserted as its OWN row: the response gives each tier
+ *    and each model a distinct cost, and each is looked up within its own
+ *    `<tr>`. A card that rendered the first bucket's cost on every line — the
+ *    single likeliest rendering bug here — looks entirely plausible and dies.
+ *  - **Turns and dollars are made to DISAGREE.** `free` is the majority of
+ *    turns and a twentieth of the spend. A panel that rendered counts under a
+ *    "Cost" header, or that summed the wrong field, reports the opposite of
+ *    the truth and cannot pass.
+ *  - **A constant must go red.** `does not render a constant` re-renders the
+ *    same page against a second response where only the per-bucket costs
+ *    moved, and demands the screen move with them. A component ignoring the
+ *    payload and printing a fixed figure survives every other assertion here.
+ */
+
+import { render, screen, waitFor, within } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+jest.mock('@aglyn/aglyn', () => ({
+  // The leaderboard heads a column with the add-on's name (AGL-2930).
+  aiAddonName: () => 'Aglyn AI',
+  __esModule: true,
+}))
+
+jest.mock('@aglyn/shared-ui-jsx', () => ({
+  __esModule: true,
+  CardDisplay: ({
+    header,
+    children,
+  }: {
+    header: React.ReactNode
+    children: React.ReactNode
+  }) => (
+    <section>
+      <h2>{header}</h2>
+      {children}
+    </section>
+  ),
+}))
+
+/**
+ * The signed-in staff reader: ONE held object, because the page keys its
+ * read on the uid and a double minted per render is a different reader
+ * every time.
+ */
+const mockUser = { uid: 'staff-1', getIdToken: async () => 'staff-token' }
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  __esModule: true,
+  useUser: () => ({ data: mockUser }),
+}))
+
+import AssistSignalsPage from './assist-signals-page.component'
+
+/**
+ * A report the way the route serves it.
+ *
+ * Deliberately built so **turns and dollars point in opposite directions**:
+ * `free` is 60% of the traffic and 4.7% of the bill, and the cheap model is
+ * the common one. Every rendering mistake worth catching — counts under the
+ * cost header, one bucket's figure repeated down the column, the two splits
+ * transposed — produces a table that is visibly wrong against this fixture
+ * rather than one that happens to look right.
+ */
+const report = (over: Record<string, unknown> = {}) => ({
+  scanned: 5,
+  truncated: false,
+  totals: {
+    messages: 5,
+    inputTokens: 500,
+    outputTokens: 200,
+    cacheReadTokens: 4_500,
+    cacheWriteTokens: 8_192,
+    estCostUsd: 4.24,
+    // Two of the five turns were answered with no model call (AGL-2486).
+    deflected: 2,
+    deflectionRate: 0.4,
+    cacheReadRate: 0.9,
+    byTier: {
+      entitled: { messages: 2, estCostUsd: 4.04 },
+      free: { messages: 3, estCostUsd: 0.2 },
+    },
+    byModel: {
+      'claude-sonnet-5': { messages: 2, estCostUsd: 4.04 },
+      'claude-haiku-4-5': { messages: 3, estCostUsd: 0.2 },
+    },
+    stopReasons: { end_turn: 5 },
+    feedback: { up: 1, down: 1, none: 3 },
+    ...((over['totals'] as Record<string, unknown>) ?? {}),
+  },
+  docsGaps: [],
+  proseCandidates: [],
+  prose: [],
+  ungrounded: { questions: 0, down: 0, routes: [] },
+  orgs: [],
+})
+
+function serve(body: unknown) {
+  global.fetch = jest.fn(async () => ({
+    ok: true,
+    json: async () => body,
+  })) as unknown as typeof fetch
+}
+
+/**
+ * The breakdown labels in the order the DOM has them, across both tables.
+ *
+ * Filtered to the four keys the fixture uses so the header rows and the
+ * fleet card's chips cannot contribute — the order under test is the order
+ * of the data rows and nothing else.
+ */
+function labelOrder(): string[] {
+  const keys = new Set([
+    'entitled',
+    'free',
+    'claude-sonnet-5',
+    'claude-haiku-4-5',
+  ])
+  return screen
+    .getAllByRole('row')
+    .map((row) => row.querySelector('td')?.textContent?.trim() ?? '')
+    .filter((label) => keys.has(label))
+}
+
+/** The `<tr>` whose first cell is `label` — so a figure is read in its own row. */
+async function rowFor(label: string) {
+  const cell = await screen.findByRole('cell', { name: label })
+  const row = cell.closest('tr')
+  if (!row) throw new Error(`no row for ${label}`)
+  return within(row)
+}
+
+describe('the Assist cost breakdown reaches the screen (AGL-2340)', () => {
+  afterEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('renders each tier and model with its OWN cost, not the first bucket everywhere', async () => {
+    serve(report())
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
+
+    // Each figure asserted INSIDE its own row. `entitled` and
+    // `claude-sonnet-5` share a cost by construction — they are the same
+    // turns seen down two axes — so `free` and `claude-haiku-4-5` carrying
+    // $0.2000 is what proves the column is not one repeated value.
+    expect(await (await rowFor('entitled')).findByText('$4.04')).toBeTruthy()
+    expect((await rowFor('free')).getByText('$0.2000')).toBeTruthy()
+    expect(
+      (await rowFor('claude-sonnet-5')).getByText('$4.04'),
+    ).toBeTruthy()
+    expect(
+      (await rowFor('claude-haiku-4-5')).getByText('$0.2000'),
+    ).toBeTruthy()
+
+    // Turns and cost are BOTH present and disagree: free is the majority of
+    // the traffic and a rounding error of the bill. A panel showing counts
+    // under the cost header cannot satisfy both cells of this row.
+    const free = await rowFor('free')
+    expect(free.getByText('3')).toBeTruthy()
+    expect(free.getByText('5%')).toBeTruthy()
+    const entitled = await rowFor('entitled')
+    expect(entitled.getByText('2')).toBeTruthy()
+    expect(entitled.getByText('95%')).toBeTruthy()
+    // Read once, from the plugin's own staff door.
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe('/api/ai/admin/signals')
+  })
+
+  it('puts the dearest line at the top of each breakdown', async () => {
+    serve(report())
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
+    await screen.findByText('entitled')
+
+    // Read the order out of the TABLE ROWS, not out of the page text. The
+    // surrounding prose contains the word "free" — a `textContent.indexOf`
+    // check finds that sentence and reports an ordering the table does not
+    // have, which is the false red that first ran here.
+    //
+    // The two axes disagree with alphabetical order: on tier it happens to
+    // match ('entitled' < 'free'), on model it is the reverse — the cheap
+    // 'claude-haiku-4-5' sorts before the dear 'claude-sonnet-5'. So a table
+    // left in alphabetical or insertion order passes the first line here and
+    // fails the second, which is why both are asserted.
+    expect(labelOrder()).toEqual([
+      'entitled',
+      'free',
+      'claude-sonnet-5',
+      'claude-haiku-4-5',
+    ])
+  })
+
+  it('shows cache writes beside cache reads, the premium class beside the cheap one', async () => {
+    serve(report())
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
+    expect(await screen.findByText('cache reads 90%')).toBeTruthy()
+    expect(await screen.findByText('cache writes 8,192')).toBeTruthy()
+  })
+
+  /*==========================================
+   * THE CONSTANT TEST.
+   *
+   * Serves a SECOND response in which only the per-bucket costs moved, and
+   * requires the screen to move with them. This is the assertion a card that
+   * ignores the payload — or an aggregator that records a fixed figure
+   * instead of the measured sum — cannot survive, and the one every
+   * "does the label appear" check above would happily pass without.
+   *=========================================*/
+  it('moves when the measured cost moves, so a constant cannot pass', async () => {
+    serve(report())
+    const first = render(<AssistSignalsPage basePath="/admin/assist-signals" />)
+    expect(await (await rowFor('entitled')).findByText('$4.04')).toBeTruthy()
+    first.unmount()
+
+    serve(
+      report({
+        totals: {
+          estCostUsd: 12.5,
+          byTier: {
+            entitled: { messages: 2, estCostUsd: 1.5 },
+            free: { messages: 3, estCostUsd: 11.0 },
+          },
+          byModel: {
+            'claude-sonnet-5': { messages: 2, estCostUsd: 1.5 },
+            'claude-haiku-4-5': { messages: 3, estCostUsd: 11.0 },
+          },
+        },
+      }),
+    )
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
+
+    // The tiers have swapped which one is expensive. Both the figures and
+    // the ORDER must follow the data.
+    const free = await rowFor('free')
+    expect(free.getByText('$11.00')).toBeTruthy()
+    expect(free.getByText('88%')).toBeTruthy()
+    await waitFor(() => {
+      expect(labelOrder()).toEqual([
+        'free',
+        'entitled',
+        'claude-haiku-4-5',
+        'claude-sonnet-5',
+      ])
+    })
+    expect(screen.queryByText('$4.04')).toBeNull()
+  })
+})
+
+/**
+ * A CARD THAT READS AS BROKEN OVER DATA THAT IS FINE (AGL-2501).
+ *
+ * "Where the money goes" rendered two tables of `$0.0000` with an em dash in
+ * every Share cell whenever nothing had been spent. A share is a proportion
+ * of a total, and there is no proportion of nothing — so the grid could only
+ * ever print dashes, and a reader cannot tell that from a card that failed
+ * to load.
+ *
+ * The two zeros mean OPPOSITE things, which is why both are asserted here. A
+ * fully deflected sample cost nothing because nothing was bought; a turn that
+ * reached a model and still priced at zero is a model missing from the rate
+ * table, and reporting that as thrift is the more expensive mistake.
+ */
+describe('zero spend is a finding, not an empty grid (AGL-2501)', () => {
+  afterEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('reads a fully deflected sample as nothing bought', async () => {
+    serve(
+      report({
+        totals: {
+          estCostUsd: 0,
+          messages: 8,
+          deflected: 8,
+          deflectionRate: 1,
+          byTier: { entitled: { messages: 8, estCostUsd: 0 } },
+          byModel: { 'docs-retrieval': { messages: 8, estCostUsd: 0 } },
+        },
+      }),
+    )
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
+
+    expect(
+      await screen.findByText(/Nothing spent on these 8 turns/),
+    ).toBeTruthy()
+    // And the grid of zeros is GONE, not merely joined by a sentence. A
+    // card that says "nothing was spent" above two tables of $0.0000 has
+    // explained nothing.
+    expect(screen.queryByText('$0.0000')).toBeNull()
+  })
+
+  it('calls a model turn priced at zero a hole in the rate table', async () => {
+    serve(
+      report({
+        totals: {
+          estCostUsd: 0,
+          messages: 8,
+          deflected: 5,
+          deflectionRate: 0.625,
+          byTier: { entitled: { messages: 8, estCostUsd: 0 } },
+          byModel: { 'claude-sonnet-5': { messages: 8, estCostUsd: 0 } },
+        },
+      }),
+    )
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
+
+    // THE ASSERTION that separates the two zeros. Three turns reached a
+    // provider and priced at nothing, which is spend landing nowhere — the
+    // opposite conclusion from the test above, off the same `estCostUsd`.
+    expect(
+      await screen.findByText(/3 of 8 turns reached a model/),
+    ).toBeTruthy()
+    expect(screen.getByText(/gap in the rate table, not a saving/)).toBeTruthy()
+  })
+})
+
+/**
+ * THE WORKSPACE, BY NAME, AND THE RANKING'S OWN EDGE (AGL-2501).
+ *
+ * The cost table's header said "Workspace" over a column of generated
+ * document ids, which is the defect `/api/admin/overview` was fixed for. And
+ * every ranking on this page is sliced to `limit` with nothing saying so — a
+ * table showing 25 of 137 cited pages looks exactly like one showing all 25
+ * there are.
+ */
+describe('the workspace is named and the ranking states its cut (AGL-2501)', () => {
+  afterEach(() => {
+    jest.clearAllMocks()
+  })
+
+  const costed = (over: Record<string, unknown>) => ({
+    ...report(),
+    ...over,
+  })
+
+  it('renders the workspace name, and falls back to the id when there is none', async () => {
+    serve(
+      costed({
+        orgs: [
+          {
+            orgId: 'jWmGooWE3L',
+            orgLabel: 'Northwind Traders',
+            messages: 8,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            estCostUsd: 0,
+            down: 0,
+          },
+          {
+            orgId: 'deleted-org-id',
+            orgLabel: null,
+            messages: 1,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            estCostUsd: 0,
+            down: 0,
+          },
+        ],
+        ranked: { docsGaps: 0, ungroundedRoutes: 0, orgs: 2 },
+      }),
+    )
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
+
+    expect(await screen.findByText('Northwind Traders')).toBeTruthy()
+    // The id it replaced is not also on screen — a name printed BESIDE the
+    // id is the same column of hex with a label bolted on.
+    expect(screen.queryByText('jWmGooWE3L')).toBeNull()
+    // And a workspace the route could not name keeps its id rather than
+    // going blank: an unfamiliar id is a lead, an empty cell is not.
+    expect(screen.getByText('deleted-org-id')).toBeTruthy()
+  })
+
+  it('says how much of the ranking is on screen — cut or whole', async () => {
+    const gap = (path: string) => ({
+      path,
+      questions: 1,
+      up: 0,
+      down: 0,
+      orgs: 1,
+      estCostUsd: 0,
+      downRate: null,
+    })
+    serve(
+      costed({
+        docsGaps: [gap('/a'), gap('/b')],
+        ranked: { docsGaps: 137, ungroundedRoutes: 0, orgs: 0 },
+      }),
+    )
+    const cut = render(<AssistSignalsPage basePath="/admin/assist-signals" />)
+    expect(
+      await screen.findByText(/Showing the top 2 of 137 cited pages/),
+    ).toBeTruthy()
+    cut.unmount()
+
+    // The other direction, and it matters as much: a disclosure that only
+    // appears on truncation is one a reader has never seen before the day it
+    // means something.
+    serve(
+      costed({
+        docsGaps: [gap('/a'), gap('/b')],
+        ranked: { docsGaps: 2, ungroundedRoutes: 0, orgs: 0 },
+      }),
+    )
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
+    expect(
+      await screen.findByText('Showing all 2 cited pages.'),
+    ).toBeTruthy()
+
+    // And a fleet of one reads as one. "Showing all 1 workspaces" is what a
+    // count line written for the plural case prints on a young install,
+    // which is every install for a while.
+    serve(
+      costed({
+        docsGaps: [gap('/a')],
+        ranked: { docsGaps: 1, ungroundedRoutes: 0, orgs: 0 },
+      }),
+    )
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
+    expect(await screen.findByText('Showing all 1 cited page.')).toBeTruthy()
+  })
+})
+
+/**
+ * THE BOARD KEEPS ITS ADDRESS (AGL-2939).
+ *
+ * The page moved out of the console into the AI plugin, and staff reach it
+ * by the URL and the tab it always had: the plugin registers it as a staff
+ * page with the old segment, and serves its read under its own prefix.
+ */
+describe('the board is the AI plugin\'s staff page, at the address it had (AGL-2939)', () => {
+  const source = (path: string) => readFileSync(resolve(__dirname, path), 'utf8')
+
+  it('is registered at /admin/assist-signals, and reads the plugin\'s staff door', () => {
+    expect(source('../plugin.ts')).toMatch(
+      /staffPages: \[\s*\{\s*id: 'assist-signals',\s*label: 'Assist signal',[\s\S]{0,400}Component: AssistSignalsPage,/,
+    )
+    expect(source('../server.ts')).toContain(
+      "registerPluginApiRoute('ai/admin/signals', { web: aiAdminSignals })",
+    )
+  })
+})

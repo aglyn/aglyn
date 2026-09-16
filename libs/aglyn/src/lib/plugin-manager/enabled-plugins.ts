@@ -130,6 +130,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<
   commerce: 'elements',
   marketplace: 'console-only',
   crm: 'console-only',
+  outreach: 'console-only',
   data: 'console-only',
   email: 'elements',
   'events-calendar': 'elements',
@@ -138,6 +139,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<
   marketing: 'elements',
   redirects: 'routes',
   workflows: 'routes',
+  ai: 'console-only',
 }
 
 /**
@@ -171,6 +173,19 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       'switch here would remove only the half that draws the form.',
   },
   {
+    id: 'ai',
+    label: 'AI',
+    alwaysOn: true,
+    description: 'The assistant, generative building and automation, and the AI add-on.',
+    // Always on, and no catalog flag (AGL-2939): the assistant was a console
+    // fixture before it was a plugin, so it stays on every workspace's set
+    // whether or not the switchboard was ever touched, and its doors gate
+    // themselves one by one — the assistant by `release_assist`, the
+    // generative doors by `release_ai_generative` inside their gate ladder,
+    // the copy assistant by the provider key. A flag on the bundle would
+    // switch off the released doors with the unreleased ones.
+  },
+  {
     id: ACCOUNTS_PLUGIN_ID,
     label: 'User Accounts',
     description:
@@ -189,6 +204,10 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   // `crm` was `contacts` until AGL-2595 widened one list into the hub; the
   // release flag kept its key because it is persisted in Remote Config.
   { id: 'crm', label: 'CRM', description: 'Leads, contacts, companies, deals, tasks and reports.', releaseFlag: 'release_crm' },
+  // Outreach (AGL-2974) works the CRM's records but is released and entitled
+  // on its own: sending sequences from a rep's mailbox is a capability a
+  // workspace can hold the CRM without.
+  { id: 'outreach', label: 'Outreach', description: 'One-to-one email sequences sent from connected mailboxes.', releaseFlag: 'release_outreach' },
   { id: 'data', label: 'Data', description: 'Datasets, records, and CSV import/export.', releaseFlag: 'release_data_store' },
   { id: 'email', label: 'Email', description: 'Designed emails and campaign sending.', releaseFlag: 'release_email' },
   { id: 'events-calendar', label: 'Events Calendar', description: 'Event lists and calendars.', releaseFlag: 'release_events' },

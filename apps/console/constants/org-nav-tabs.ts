@@ -20,8 +20,16 @@ import { buildRoute, Route } from './route-links'
 /**
  * The organization area's tab strip (AGL-236): org-scoped surfaces that
  * need no host context, mirroring hostNavTabItems/adminNavTabItems.
+ *
+ * `pluginTabs` are the organization-level surfaces extensions declare in
+ * `orgNavItems` (AGL-2974), already narrowed to the ones this reader may
+ * open by `orgPluginNavTabItems`. They sit after the CRM, the org's other
+ * plugin-served surface, and before the administration tabs.
  */
-export function orgNavTabItems(orgSlug: string) {
+export function orgNavTabItems(
+  orgSlug: string,
+  pluginTabs: readonly { id: string; label: string; href: string }[] = [],
+) {
   return [
     {
       id: 'nav-tab-org-sites',
@@ -76,6 +84,7 @@ export function orgNavTabItems(orgSlug: string) {
       label: 'CRM',
       href: `${buildRoute(Route.ORG_CRM, { orgSlug })}/contacts`,
     },
+    ...pluginTabs,
     // Plugins is its own section again (AGL-1011). It was folded into
     // Marketplace by AGL-797, which conflated shopping for code with
     // administering the code you already run — and left the installation

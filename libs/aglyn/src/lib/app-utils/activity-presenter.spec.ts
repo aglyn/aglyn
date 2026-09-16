@@ -24,7 +24,20 @@ import {
   activityTypeLabel,
   activityEntryGroupId,
 } from './activity-presenter'
-import './ai-activity-actions'
+import { registerPluginActivityActions } from '../plugin-manager/plugin-activity-actions'
+
+// The AI codes the feed shows, as the AI plugin declares them (AGL-2940):
+// the presenter reads the registry, and this is the registration.
+registerPluginActivityActions({
+  pluginId: 'ai',
+  group: { id: 'ai', label: 'AI' },
+  actions: [
+    { key: 'ai.job.output', label: 'AI generated', scope: ['org', 'host'] },
+    { key: 'ai.edit.applied', label: 'Applied AI edits', scope: ['org', 'host'] },
+    { key: 'ai.overage.cap', label: 'AI overage ceiling', scope: 'org' },
+    { key: 'ai.addon.purchased', label: 'Added the AI add-on', scope: 'org' },
+  ],
+})
 
 describe('activityTypeLabel', () => {
   it('maps known types to human nouns', () => {
@@ -184,9 +197,11 @@ describe('activityHref', () => {
   })
 
   it('links type-level host targets to their section', () => {
+    // The Theme section lives under Setup; `/hosts/{host}/theme` is caught
+    // by the plugin page route and names no page.
     expect(
       activityHref({ target: { type: 'theme' } }, { orgSlug, host }),
-    ).toBe('/acme/hosts/shop/theme')
+    ).toBe('/acme/hosts/shop/setup/theme')
     expect(
       activityHref({ target: { type: 'media' } }, { orgSlug, host }),
     ).toBe('/acme/hosts/shop/media')

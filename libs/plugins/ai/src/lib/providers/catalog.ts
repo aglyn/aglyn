@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { PluginSubprocessorDeclaration } from '@aglyn/aglyn/plugin-manager/plugin-subprocessors'
 import type { AiModelDescriptor, AiUsage } from './contract'
 
 /**
@@ -79,12 +80,50 @@ const ANTHROPIC = 'anthropic'
 const OPENAI_COMPATIBLE = 'openai-compatible'
 
 /**
+ * A provider's row on the published subprocessor list: every field but the
+ * host, which the registered adapter reports as its `endpointHost`.
+ * `{apiKeyEnv}` anywhere in the wording stands for the adapter's
+ * `apiKeyEnv`, so a credential's name is written in its adapter alone and
+ * never in this module, which the browser bundle carries.
+ */
+export type AiProviderSubprocessorWording = Omit<PluginSubprocessorDeclaration, 'host'>
+
+/** A provider the catalog carries models for. */
+export interface AiCatalogProvider {
+  id: string
+  /** The name a settings form shows. */
+  label: string
+  /**
+   * The vendor's row on the published subprocessor list, written here and
+   * nowhere else: `aiSubprocessors` derives the plugin's declarations from
+   * it. Absent for a provider whose endpoint an operator names, which has
+   * no fixed recipient to publish.
+   */
+  subprocessor?: AiProviderSubprocessorWording
+}
+
+/**
  * The providers the catalog carries models for, with the name a settings
  * form shows. A form offers providers from here for the reason it offers
- * models from here: nothing outside this folder names a vendor.
+ * models from here: nothing outside this folder names a vendor. For the
+ * same reason a vendor's subprocessor row is written here too.
  */
-export const AI_CATALOG_PROVIDERS: readonly { id: string; label: string }[] = [
-  { id: ANTHROPIC, label: 'Anthropic' },
+export const AI_CATALOG_PROVIDERS: readonly AiCatalogProvider[] = [
+  {
+    id: ANTHROPIC,
+    label: 'Anthropic',
+    subprocessor: {
+      entity: 'Anthropic, PBC',
+      region: 'United States',
+      purpose:
+        "AI-assisted features in the console and the site editor: the Aglyn Assist helper, including changes it proposes to a page, component, or layout open in the editor; editor assistance (rewriting element copy, drafting blog bodies, generating a section layout); and AI generation, which creates drafts and proposals for a customer's site from a brief, such as copy, layouts, templates, search titles and descriptions, and theme changes",
+      publishedOn: '2026-09-15',
+      reason:
+        "Reached through the AI plugin's Anthropic adapter (`libs/plugins/ai/src/lib/providers/anthropic.ts`) by the doors that call the AI runtime. `libs/plugins/ai/src/lib/server/assist-chat.ts` is gated by `release_assist` AND the key, and a generation job's text step by `release_ai_generative`; `libs/plugins/ai/src/lib/server/ai-assist.ts` carries NO release flag, so setting `{apiKeyEnv}` in production is by itself what starts this flow. `assist-anthropic-subprocessor-gate.spec.ts` holds the per-door detail and is the deeper guard for this one vendor.",
+      dataReceived:
+        "What the user submits — a question, instruction or brief, with the earlier messages of the same Assist conversation — and the content of the element, post, section or page being worked on, with the generated response. On Pro and above, the organization's name and the console route and host travel with an Assist question. For an edit the assistant proposes in the besigner, an outline of the open page, component or layout: element and component ids, layer names, shortened setting values and the selected element's styles. For a generation job, the site inventory: the names and addresses of its screens and collections, the names of its components, layouts, templates, forms and datasets with their prop and field names, and the theme's summary, colors and fonts. For a theme change, the site's current theme settings and brand colors as hex values, from the organization's brand settings, the site logo in the media library or a public page the brief links to. For features that review or write search information, the text and structure of the pages concerned. No account identifiers, email addresses or authentication tokens.",
+    },
+  },
   { id: OPENAI_COMPATIBLE, label: 'OpenAI-compatible endpoint' },
 ]
 
@@ -195,10 +234,7 @@ export function estimateAiCostUsd(usage: AiUsage, modelId: string): number {
   return Math.round(raw * 1_000_000) / 1_000_000
 }
 
-/**
- * The rate table in the shape the usage meter has always read
- * (`ASSIST_MODEL_RATES_USD`): model id → rates, sentinels at zero.
- */
+/** The rate table as one record: model id → rates, sentinels at zero. */
 export function aiModelRatesTable(): Record<string, AiTokenRates> {
   const table: Record<string, AiTokenRates> = {}
   for (const sentinel of Object.values(AI_METER_SENTINELS)) table[sentinel] = ZERO_RATES
@@ -225,7 +261,12 @@ export type AiStepKind =
   | 'copy.section'
   | 'copy.blog'
   | 'generate.section'
+  | 'job.layout'
+  | 'job.template'
+  | 'job.seo'
   | 'job.text'
+  | 'job.theme'
+  | 'job.plan'
 
 /** The tier each step kind is served from when no setting overrides it. */
 export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
@@ -234,7 +275,18 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   'copy.section': 'balanced',
   'copy.blog': 'balanced',
   'generate.section': 'balanced',
+  // A layout or a page template is one structured tree held to every
+  // building rule; the fast tier re-asks more than it saves.
+  'job.layout': 'balanced',
+  'job.template': 'balanced',
+  // SEO fields, alt text and an audit's fixes (AGL-2910): short answers
+  // through a strict tool, held to a length and to the page's own text.
+  'job.seo': 'fast',
   'job.text': 'balanced',
+  // A theme is one structured answer over a small, fixed control set; the
+  // judgment is in the color choices, which the fast tier makes worse.
+  'job.theme': 'balanced',
+  'job.plan': 'balanced',
 }
 
 /** The first catalog model of a tier on a provider, or the provider's first model. */

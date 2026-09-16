@@ -18,6 +18,7 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { segmentTitle } from '../../page-title'
 import StaffGuard from '../../../components/staff-guard.component'
+import StaffPluginsGate from '../../../components/staff-plugins-gate.component'
 
 // Fallback title for the staff area (AGL-1059); each page below names itself.
 export const metadata: Metadata = {
@@ -28,7 +29,15 @@ export const metadata: Metadata = {
  * Staff console layout (AGL-847). One gate for every `/admin/*` page: non-staff
  * get a 404 for the whole area instead of the per-page "staff only" alert that
  * used to leak the grant-script name.
+ *
+ * Inside the guard, the staff area's plugins load before a page renders
+ * (AGL-2939): the staff zones read the registry as they render, and no
+ * workspace route loads plugins for a page that names no workspace.
  */
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  return <StaffGuard>{children}</StaffGuard>
+  return (
+    <StaffGuard>
+      <StaffPluginsGate>{children}</StaffPluginsGate>
+    </StaffGuard>
+  )
 }

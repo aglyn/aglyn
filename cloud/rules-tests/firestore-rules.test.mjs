@@ -926,6 +926,63 @@ describe('org docs', () => {
     await assertSucceeds(getDoc(doc(authed(OWNER), 'orgs', ORG, 'invites', 'invite-1')))
     await assertFails(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'invites', 'invite-1')))
   })
+
+  it("a member cannot confirm, add or read an address of their own — the server does (AGL-2975)", async () => {
+    const aliasesOf = (db, uid) => doc(db, 'orgs', ORG, 'memberEmailAliases', uid)
+    const pending = {
+      uid: OWNER,
+      aliases: [{ address: 'owner@outbound.example', addedAtMs: 1 }],
+      updatedAtMs: 1,
+    }
+    // The CONTROL: the server's own write lands and reads back, so every
+    // refusal below is the rules speaking, not a path that cannot exist.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(aliasesOf(context.firestore(), OWNER), pending)
+      const stored = await getDoc(aliasesOf(context.firestore(), OWNER))
+      assert.equal(stored.exists(), true)
+    })
+    // Marking their own pending address confirmed — the forgery the whole
+    // collection exists to refuse — by update, by overwrite, and by batch.
+    const owner = authed(OWNER)
+    await assertFails(
+      updateDoc(aliasesOf(owner, OWNER), {
+        aliases: [{ address: 'owner@outbound.example', addedAtMs: 1, verifiedAtMs: 2 }],
+      }),
+    )
+    await assertFails(
+      setDoc(aliasesOf(owner, OWNER), {
+        ...pending,
+        aliases: [{ address: 'owner@outbound.example', addedAtMs: 1, verifiedAtMs: 2 }],
+      }),
+    )
+    const batch = writeBatch(owner)
+    batch.set(aliasesOf(owner, OWNER), {
+      uid: OWNER,
+      aliases: [{ address: 'prospect@customer.example', addedAtMs: 3, verifiedAtMs: 4 }],
+      updatedAtMs: 4,
+    })
+    await assertFails(batch.commit())
+    // Creating a confirmed address from nothing, and deleting the list.
+    await assertFails(
+      setDoc(aliasesOf(authed(EDITOR), EDITOR), {
+        uid: EDITOR,
+        aliases: [{ address: 'editor@outbound.example', addedAtMs: 1, verifiedAtMs: 1 }],
+        updatedAtMs: 1,
+      }),
+    )
+    await assertFails(deleteDoc(aliasesOf(authed(OWNER), OWNER)))
+    // Reads are the route's too: not their own, not a manager's, not staff's.
+    await assertFails(getDoc(aliasesOf(authed(OWNER), OWNER)))
+    await assertFails(getDoc(aliasesOf(authed(VIEWER), OWNER)))
+    await assertFails(getDocs(collection(authed(OWNER), 'orgs', ORG, 'memberEmailAliases')))
+    await assertFails(getDoc(aliasesOf(authed(STAFF, { staff: true }), OWNER)))
+    await assertFails(getDoc(aliasesOf(authed(OUTSIDER), OWNER)))
+    // Nothing above moved the stored document.
+    await env.withSecurityRulesDisabled(async (context) => {
+      const stored = await getDoc(aliasesOf(context.firestore(), OWNER))
+      assert.deepEqual(stored.data(), pending)
+    })
+  })
 })
 
 describe('resolution collections', () => {

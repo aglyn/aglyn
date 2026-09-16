@@ -659,15 +659,27 @@ own Firebase project. See [Firebase client config](#firebase-client).
 
 ---
 
-## AI assist {#assist}
+## AI {#assist}
 
-**Where to get the key:** [console.anthropic.com](https://console.anthropic.com)
-→ **API keys**. Bring your own; nothing is compiled in.
+The AI plugin is provider-generic: a provider adapter registers against the
+plugin's provider contract, and every AI door — the console Assist panel, the
+besigner's "Rewrite with AI", the generative doors and the jobs — routes
+through the model catalog rather than naming a vendor. Two adapters ship:
+`anthropic` and `openai-compatible` (any endpoint that speaks the OpenAI chat
+completions shape). Bring your own key; nothing is compiled in. Without a
+provider key each door answers `501` and says no AI provider is configured.
+The console panel is additionally behind the `release_assist` flag and
+generation behind `release_ai_generative`, both **off** by default in Remote
+Config.
 
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | Feature | Runtime | `sk-ant-…`. Powers the console Assist panel, the besigner's "Rewrite with AI" and the generative doors — one key for every AI surface. Without it each answers `501` and says it is not configured. The console panel is additionally behind the `release_assist` flag and generation behind `release_ai_generative`, both **off** by default in Remote Config. |
-| `ASSIST_MODEL` | Optional | Runtime | The model id Assist calls. Default `claude-sonnet-5`. An id absent from the built-in rate table falls back to approximate rates, so cost telemetry and the margin alarm become estimates — and the prompt-cache minimum moves with the model, so a swap can silently stop caching. |
+| `ANTHROPIC_API_KEY` | Feature | Runtime | `sk-ant-…`, from the vendor's console under **API keys**. The key of the `anthropic` adapter. |
+| `AI_OPENAI_COMPAT_BASE_URL` | Feature | Runtime | The base URL of an OpenAI-compatible endpoint (`https://host/v1`; a trailing `/chat/completions` is stripped). The `openai-compatible` adapter is ready only when this AND its key are set. |
+| `AI_OPENAI_COMPAT_API_KEY` | Feature | Runtime | The bearer token for that endpoint. |
+| `AI_PROVIDER` | Optional | Runtime | Which registered adapter is the platform default: `anthropic` or `openai-compatible`, or the id of a provider another plugin registers. Unset, the first ready adapter is the default. A workspace's `pluginSettings/ai` may pick its own. |
+| `AI_DEFAULT_MODEL` | Optional | Runtime | A model id, served by the default provider, for every step kind. Unset, each step kind takes its catalog tier on that provider. An id absent from the built-in rate table falls back to approximate rates, so cost telemetry and the margin alarm become estimates — and the prompt-cache minimum moves with the model, so a swap can silently stop caching. |
+| `ASSIST_MODEL` | Optional | Runtime | The assistant's own override, above `AI_DEFAULT_MODEL` for the chat door alone — the incident-response lever the assistant has always honored. |
 | `ASSIST_FREE_DAILY_LIMIT` | Optional | Runtime | Messages per free workspace per UTC day. Default **10**. |
 | `ASSIST_ENTITLED_MONTHLY_LIMIT` | Optional | Runtime | Messages per entitled workspace per month. Default **1000**. |
 | `AI_FREE_DAILY_REQUESTS` | Optional | Runtime | AI requests one account may make per UTC day across all the Free workspaces it owns, counted at every AI door. Default **30**. `0` means no free requests; junk and empty values take the default. |
@@ -675,6 +687,9 @@ own Firebase project. See [Firebase client config](#firebase-client).
 | `AI_FREE_MIN_ACCOUNT_AGE_HOURS` | Optional | Runtime | Hours an account must exist before a Free workspace it belongs to may generate with AI. Paid workspaces never check it. Default **24**. `0` turns the check off, for example on an invite-only deployment; junk and empty values take the default. |
 | `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD` | Optional | Runtime | Dollar ceiling per workspace per month, measured against metered cost rather than an assumed cost per message. Default **40**. The literal word `off` removes the ceiling. Junk, empty, zero and negative values all read as unconfigured and take the default, so a typo can neither open the ceiling nor close it to `$0`. |
 | `ASSIST_ORG_MONTHLY_COGS_ALERT_USD` | Optional | Runtime | Dollar figure at which a workspace's spend raises a **staff** margin alarm, below the hard ceiling. Default **25**. Delivery needs `STAFF_ALERT_EMAIL` and `USAGE_EMAIL_FROM`. |
+| `AI_FREE_MIN_ACCOUNT_AGE_HOURS` | Optional | Runtime | How old an account must be, read off its Auth record, before a Free workspace it belongs to may generate. Default **24**. Junk and an empty value take the default. |
+| `AI_FREE_DAILY_REQUESTS` | Optional | Runtime | Free requests one account may make per UTC day across its workspaces, counted at every reservation at either door. Default **30**. |
+| `AI_FREE_DAILY_PLATFORM_CEILING_USD` | Optional | Runtime | The platform-wide ceiling on one UTC day of Free-tier provider spend. Default **25**. At 80% staff are mailed (`STAFF_ALERT_EMAIL`); at the ceiling every Free workspace is refused generation until the UTC day rolls, and paid workspaces are unaffected. There is no `off`: a deployment that wants no ceiling sets a figure it is content to spend. |
 
 Message counting happens in a transaction **before** the model is called, so a
 refused request spends nothing. A workspace at the ceiling is refused rather than

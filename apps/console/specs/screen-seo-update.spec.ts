@@ -59,6 +59,20 @@ describe('buildScreenSeoUpdate', () => {
     ).toEqual({ title: 'Jobs', description: 'Open roles' })
   })
 
+  it('edits the breadcrumb label like the other text fields (AGL-2910)', () => {
+    // Staged, it is written trimmed; emptied, it is removed rather than
+    // stored blank; untouched, it is carried as it was.
+    expect(
+      buildScreenSeoUpdate({ title: 'Jobs' }, { breadcrumb: '  Careers ' }),
+    ).toEqual({ title: 'Jobs', breadcrumb: 'Careers' })
+    expect(
+      buildScreenSeoUpdate({ title: 'Jobs', breadcrumb: 'Careers' }, { breadcrumb: '' }),
+    ).toEqual({ title: 'Jobs' })
+    expect(
+      buildScreenSeoUpdate({ breadcrumb: 'Careers' }, { title: 'Jobs', breadcrumb: null }),
+    ).toEqual({ breadcrumb: 'Careers', title: 'Jobs' })
+  })
+
   describe('the image group moves together', () => {
     it('writes the reference, its size and its description as one', () => {
       expect(

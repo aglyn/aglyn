@@ -24,10 +24,18 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { aiAddonName } from '@aglyn/aglyn'
 import { Fragment } from 'react'
+import {
+  PluginListColumnCells,
+  PluginListColumnHeaders,
+  type PluginListColumn,
+} from './plugin-list-columns.component'
 
-/** One monthly org usage rollup as `/api/admin/org-usage` serves it. */
+/**
+ * One monthly org usage rollup as `/api/admin/org-usage` serves it. The row
+ * carries more fields than the core columns draw; a plugin column reads the
+ * ones that are its own off the same row.
+ */
 export interface StaffOrgUsageMonth {
   month: string
   storageGb: number
@@ -35,36 +43,12 @@ export interface StaffOrgUsageMonth {
   formSubmissions: number
   costUsd: number
   /**
-   * Aglyn Assist provider spend for the month, in dollars (AGL-2280).
-   *
-   * A separate column rather than folded into `costUsd`, because they are not
-   * the same kind of number: `costUsd` is the metering estimate over storage,
-   * page views and form submissions, and this is a real provider bill. It is
-   * also the only line here that can plausibly clear the $2/site COGS floor
-   * on its own, which is why it needs to be visible next to the others rather
-   * than summed into one of them.
-   */
-  assistCostUsd?: number
-  /**
-   * The credit view of the same spend (AGL-2930): what `report-usage` drew
-   * against the band, and the part past it that entered `billedCents`.
-   *
-   * `null` rather than 0 on a rollup written before the credit fields
-   * existed — a month that predates the meter drew nothing it can be
-   * measured by, and a `0` there would state that the org used no AI.
-   * Assist overage has no withheld twin: unlike form and contact overage it
-   * was billed from the day it was sold, so the dollar figure alone is the
-   * whole answer.
-   */
-  assistCredits?: number | null
-  assistOverageUsd?: number | null
-  /**
    * What the rollup recorded and nothing priced (AGL-2321).
    *
    * A detail LINE under the row rather than sixteen more columns: these are
    * the history a future rate gets derived from, not figures a reader scans
    * across months, and a table wide enough to hold them all would stop being
-   * readable for the six that are.
+   * readable for the figures that are.
    *
    * Every field is optional and every one distinguishes null from zero,
    * because the route does — a rollup written before a meter existed recorded
@@ -196,59 +180,26 @@ export function recordedUsageLines(
 }
 
 /**
- * The org's AI credit pool as the caller resolved it (AGL-2899): whether the
- * AI add-on is on, the credits the add-on contributes, and the whole
- * band the Assist column above is drawn against. Resolved by the caller from
- * the org document — this table only has months — so the org detail page,
- * which holds the document, passes it and the list's dialog, which holds an
- * id, does not.
+ * The core columns of every rollup row, in order — the spec pins them.
+ * Columns a plugin contributes through the `staffOrgUsageColumn` zone sit
+ * between Forms and Cost.
  */
-export interface StaffAssistPool {
-  aiAddon: boolean
-  /** The add-on's band alone; 0 without the add-on. */
-  addonCredits: number
-  /** Plan band plus add-on band, or null where the plan sells no band. */
-  creditsPerMonth: number | null
-}
-
-/**
- * The pool as one line: the reader of the Assist column needs to know what
- * fraction of what band the dollars above represent, and whether an add-on
- * is part of the band.
- */
-export function assistPoolSentence(pool: StaffAssistPool): string {
-  const band =
-    pool.creditsPerMonth === null
-      ? 'no AI credit band'
-      : `${pool.creditsPerMonth.toLocaleString()} AI credits/mo`
-  const name = aiAddonName()
-  return pool.aiAddon
-    ? `${name} add-on on — ${band}, ${pool.addonCredits.toLocaleString()} ` +
-        'of them from the add-on.'
-    : `${name} add-on off — ${band}.`
-}
-
-/** A recorded count, or the dash that says the rollup predates it. */
-export function aiCreditsCell(value: number | null | undefined): string {
-  return value == null ? '—' : Math.round(value).toLocaleString()
-}
-
-/** A billed dollar figure, or the dash that says the rollup predates it. */
-export function aiOverageCell(value: number | null | undefined): string {
-  return value == null ? '—' : `$${Number(value).toFixed(2)}`
-}
-
-/** The columns every rollup row renders, in order — the spec pins them. */
 export const STAFF_ORG_USAGE_COLUMNS = [
   'Month',
   'Page views',
   'Storage GB',
   'Forms',
-  'Assist',
-  'AI credits used',
-  'AI overage billed ($)',
   'Cost',
 ] as const
+
+/** The core headers drawn before the plugin columns. */
+const LEADING_COLUMNS = STAFF_ORG_USAGE_COLUMNS.slice(0, -1)
+
+/** The core header drawn after them. */
+const TRAILING_COLUMN =
+  STAFF_ORG_USAGE_COLUMNS[STAFF_ORG_USAGE_COLUMNS.length - 1]
+
+const NO_PLUGIN_COLUMNS: readonly PluginListColumn[] = []
 
 /**
  * The monthly usage rollup table (AGL-205), shared between the Organizations
@@ -257,49 +208,43 @@ export const STAFF_ORG_USAGE_COLUMNS = [
  */
 const StaffOrgUsageTable = ({
   months,
-  assistPool,
+  columns = NO_PLUGIN_COLUMNS,
+  orgId,
 }: {
   months: StaffOrgUsageMonth[]
-  assistPool?: StaffAssistPool
+  /**
+   * The columns plugins contribute through the `staffOrgUsageColumn` zone
+   * (AGL-2984), each drawn once per month with `{ month, orgId }`.
+   */
+  columns?: readonly PluginListColumn[]
+  /** The org the rollups belong to, handed to every plugin column. */
+  orgId?: string
 }) => {
-  const pool = assistPool ? (
-    <Typography
-      variant="caption"
-      color="text.secondary"
-      component="div"
-      sx={{ mb: 1 }}
-    >
-      {assistPoolSentence(assistPool)}
-    </Typography>
-  ) : null
   if (months.length === 0) {
     return (
-      <>
-        {pool}
-        <Typography variant="body2" color="text.secondary">
-          {'No usage rollups recorded for this organization yet.'}
-        </Typography>
-      </>
+      <Typography variant="body2" color="text.secondary">
+        {'No usage rollups recorded for this organization yet.'}
+      </Typography>
     )
   }
   return (
-    <>
-    {pool}
     <Table size="small">
       <TableHead>
         <TableRow>
-          {STAFF_ORG_USAGE_COLUMNS.map((column, index) => (
+          {LEADING_COLUMNS.map((column, index) => (
             <TableCell key={column} align={index === 0 ? 'left' : 'right'}>
               {column}
             </TableCell>
           ))}
+          <PluginListColumnHeaders columns={columns} orgId={orgId} />
+          <TableCell align="right">{TRAILING_COLUMN}</TableCell>
         </TableRow>
       </TableHead>
       <TableBody>
         {months.map((row) => (
           <Fragment key={row.month}>
             {/*
-            Two rows per month, hairline-joined: the six scanned figures, then
+            Two rows per month, hairline-joined: the scanned figures, then
             the recorded-not-priced detail (AGL-2321). The month's own bottom
             border is dropped so the pair reads as one row rather than as two
             months, and the detail row carries it instead.
@@ -329,20 +274,11 @@ const StaffOrgUsageTable = ({
               <TableCell align="right">
                 {row.formSubmissions.toLocaleString()}
               </TableCell>
-              {/*
-              Rendered to FOUR decimals, not two (AGL-2280). Assist spend
-              arrives in thousandths of a dollar per exchange, and `$0.00` for
-              a month that really cost eight cents is the same silence this
-              column exists to end.
-            */}
-              <TableCell align="right">
-                {`$${Number(row.assistCostUsd ?? 0).toFixed(4)}`}
-              </TableCell>
-              {/* The credit view and the billed overage (AGL-2930) — the
-                  two figures a staff reader compares against the pool
-                  sentence above the table. */}
-              <TableCell align="right">{aiCreditsCell(row.assistCredits)}</TableCell>
-              <TableCell align="right">{aiOverageCell(row.assistOverageUsd)}</TableCell>
+              <PluginListColumnCells
+                columns={columns}
+                month={row}
+                orgId={orgId}
+              />
               <TableCell align="right">
                 {`$${row.costUsd.toFixed(2)}`}
                 {row.deltas?.costUsd != null ? (
@@ -362,7 +298,10 @@ const StaffOrgUsageTable = ({
               </TableCell>
             </TableRow>
             <TableRow>
-              <TableCell colSpan={STAFF_ORG_USAGE_COLUMNS.length} sx={{ pt: 0 }}>
+              <TableCell
+                colSpan={STAFF_ORG_USAGE_COLUMNS.length + columns.length}
+                sx={{ pt: 0 }}
+              >
                 {recordedUsageLines(row.recorded).length ? (
                   recordedUsageLines(row.recorded).map((line) => (
                     <Typography
@@ -395,7 +334,6 @@ const StaffOrgUsageTable = ({
         ))}
       </TableBody>
     </Table>
-    </>
   )
 }
 StaffOrgUsageTable.displayName = 'StaffOrgUsageTable'

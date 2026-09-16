@@ -42,6 +42,14 @@ previewing its light and dark resolutions. Elements colored by reference re-colo
 automatically when you adjust the theme — or when the visitor's scheme flips. See
 [scheme-scoped colors](../besigner/responsive-styling.md#scheme-scoped-colors).
 
+## Change it with AI
+
+**Rolling out.** The **Theme assistant** above the editor proposes changes to these same
+controls from a description — "warmer", "match our brand", "bigger headings on mobile" —
+with a before and after preview. A proposal goes into the editor as unsaved changes, and
+nothing is saved until you save it. See
+[Themes with AI](../../marketing-and-automation/ai-assist/theme-assist.md).
+
 ## Tips
 
 - Set both schemes — a site that only looks right in light mode breaks for dark-mode

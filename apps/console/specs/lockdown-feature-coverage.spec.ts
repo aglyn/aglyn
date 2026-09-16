@@ -16,6 +16,9 @@
  */
 
 import { listLockdownFeatureKeys } from '@aglyn/aglyn'
+// The plugins' declarations (AGL-2939), as the console loads them: the AI
+// plugin's levers and activity codes come from its declaration, not core.
+import { registerPluginDeclarations } from '../constants/plugins.declarations.generated'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
@@ -59,7 +62,11 @@ const read = (repoPath: string) =>
  * `@aglyn/aglyn` client barrel carries the catalog and the first-party
  * declarations, and it is the barrel every console page already imports.
  */
-const FEATURE_KEYS = listLockdownFeatureKeys()
+let FEATURE_KEYS: string[] = []
+beforeAll(async () => {
+  await registerPluginDeclarations()
+  FEATURE_KEYS = listLockdownFeatureKeys()
+})
 
 interface Chokepoint {
   feature: string
@@ -139,7 +146,7 @@ const CHOKEPOINTS: Chokepoint[] = [
   },
   {
     feature: 'ai-generate',
-    file: 'libs/tenant/data/admin/src/lib/server/ai-gate.ts',
+    file: 'libs/plugins/ai/src/lib/runtime/ai-gate.ts',
     wiring: ['featureLockdownRefusal({', 'feature: config.lockdownFeature,'],
     why:
       'the gate ladder every generative door composes (AGL-2903) carries ' +
@@ -148,7 +155,7 @@ const CHOKEPOINTS: Chokepoint[] = [
   },
   {
     feature: 'ai-generate',
-    file: 'apps/tenant/utils/ai-jobs-beat.ts',
+    file: 'libs/plugins/ai/src/lib/jobs/ai-jobs-beat.ts',
     wiring: [`featureLockdownRefusal({ feature: 'ai-generate' })`],
     why:
       'the AI jobs beat (AGL-2904) is the one generative caller with no ' +

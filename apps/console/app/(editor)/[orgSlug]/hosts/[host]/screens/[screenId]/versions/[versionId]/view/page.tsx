@@ -31,9 +31,18 @@ import {
   screenRoutePathToUrl,
   SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
   screenSlugHasPathSeparator,
+  type ConsoleSeoFieldValues,
   type ScreenRouteNode,
   type ScreenUid,
 } from '@aglyn/aglyn'
+import {
+  SCREEN_SEO_LISTING_FIELDS,
+  SCREEN_SEO_CARD_TEXT_FIELDS,
+  SEO_LISTING_FIELDS,
+  seoListingFieldCount,
+  seoListingFieldTooLong,
+  type ScreenSeoCardTextField,
+} from '@aglyn/aglyn/app-utils/seo-listing-fields'
 import {
   ICON_VARIANT_BESIGNER,
   ICON_VARIANT_DATE_TIME,
@@ -231,7 +240,7 @@ function ScreenDetails() {
   const { queueLoading, loading } = useLoading()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { org, ready: orgReady } = useCurrentOrg()
+  const { org, orgId, ready: orgReady } = useCurrentOrg()
   const logActivity = useHostActivityLogger(hostId)
   /**
    * The `author` host role edits content and may NOT publish it (AGL-2334).
@@ -975,15 +984,16 @@ function ScreenDetails() {
   }, [password, screenRef, enqueueSnackbar, user, hostId, screenId, publishedPath])
 
   // --- SEO (AGL-117): screen fields override host defaults on the org --
-  const [seoDraft, setSeoDraft] = useState<{
-    title: string
-    description: string
-  } | null>(null)
-  const seoValue = {
+  const [seoDraft, setSeoDraft] = useState<Record<
+    ScreenSeoCardTextField,
+    string
+  > | null>(null)
+  const seoValue: Record<ScreenSeoCardTextField, string> = {
     title: seoDraft?.title ?? screen?.seo?.title ?? '',
     description: seoDraft?.description ?? screen?.seo?.description ?? '',
+    breadcrumb: seoDraft?.breadcrumb ?? screen?.seo?.breadcrumb ?? '',
   }
-  const setSeoField = (field: 'title' | 'description') =>
+  const setSeoField = (field: ScreenSeoCardTextField) =>
     (event: { target: { value: string } }) =>
       setSeoDraft({ ...seoValue, [field]: event.target.value })
   /**
@@ -992,6 +1002,45 @@ function ScreenDetails() {
    * description as edits, and so either can be saved on its own.
    */
   const [seoImage, setSeoImage] = useState<ScreenSocialImageDraft | null>(null)
+  /** The social image the card shows: the staged pick, else the stored one. */
+  const seoImageRef = seoImage != null ? seoImage.image : (screen?.seo?.image ?? '')
+
+  /**
+   * Values a `seoFields` widget proposes (AGL-2910), staged exactly as typing
+   * would stage them: the text fields into the draft, the image description
+   * into the image group — which moves as one, so it is staged beside the
+   * reference and size the card already shows, and only when there is an
+   * image to describe. Nothing is written; Save SEO is still the write.
+   */
+  const proposeSeoValues = useCallback(
+    (values: ConsoleSeoFieldValues) => {
+      const text: Partial<Record<ScreenSeoCardTextField, string>> = {}
+      for (const field of SCREEN_SEO_CARD_TEXT_FIELDS) {
+        if (typeof values[field] === 'string') text[field] = values[field]
+      }
+      if (Object.keys(text).length) {
+        setSeoDraft((prior) => ({
+          title: prior?.title ?? screen?.seo?.title ?? '',
+          description: prior?.description ?? screen?.seo?.description ?? '',
+          breadcrumb: prior?.breadcrumb ?? screen?.seo?.breadcrumb ?? '',
+          ...text,
+        }))
+      }
+      if (typeof values.imageAlt === 'string') {
+        setSeoImage((prior) => {
+          const image = prior != null ? prior.image : (screen?.seo?.image ?? '')
+          if (!image) return prior
+          return {
+            image,
+            imageWidth: prior != null ? prior.imageWidth : (screen?.seo?.imageWidth ?? 0),
+            imageHeight: prior != null ? prior.imageHeight : (screen?.seo?.imageHeight ?? 0),
+            imageAlt: values.imageAlt,
+          }
+        })
+      }
+    },
+    [screen],
+  )
 
   /**
    * View of the stored document — useful, but it was several hundred pixels of
@@ -1023,6 +1072,7 @@ function ScreenDetails() {
     const seo = buildScreenSeoUpdate(screen?.seo as Record<string, unknown>, {
       title: seoDraft?.title,
       description: seoDraft?.description,
+      breadcrumb: seoDraft?.breadcrumb,
       image: seoImage,
     })
     /**
@@ -1624,24 +1674,28 @@ function ScreenDetails() {
                     contentBordered="all"
                   >
                     <Stack spacing={1.5}>
-                      <TextField
-                        size="small"
-                        label="Title"
-                        value={seoValue.title}
-                        onChange={setSeoField('title')}
-                        helperText={`${seoValue.title.length}/60 — published verbatim; the site title is not appended`}
-                        error={seoValue.title.length > 60}
-                      />
-                      <TextField
-                        size="small"
-                        label="Description"
-                        value={seoValue.description}
-                        onChange={setSeoField('description')}
-                        multiline
-                        minRows={2}
-                        helperText={`${seoValue.description.length}/155`}
-                        error={seoValue.description.length > 155}
-                      />
+                      {/* The inputs and their lengths come from the one SEO
+                          field catalog (AGL-2910), which the besigner's panel
+                          and every proposer read too. */}
+                      {SCREEN_SEO_CARD_TEXT_FIELDS.map((field) => (
+                        <TextField
+                          key={field}
+                          size="small"
+                          label={SEO_LISTING_FIELDS[field].label}
+                          value={seoValue[field]}
+                          onChange={setSeoField(field)}
+                          multiline={SEO_LISTING_FIELDS[field].multiline}
+                          minRows={SEO_LISTING_FIELDS[field].multiline ? 2 : undefined}
+                          helperText={
+                            field === 'title'
+                              ? `${seoListingFieldCount(field, seoValue[field])} — published verbatim; the site title is not appended`
+                              : field === 'breadcrumb'
+                                ? `${seoListingFieldCount(field, seoValue[field])} — the page’s name in a breadcrumb trail`
+                                : seoListingFieldCount(field, seoValue[field])
+                          }
+                          error={seoListingFieldTooLong(field, seoValue[field])}
+                        />
+                      ))}
                       {/* The same field the besigner's Screen Properties ▸
                           SEO panel uses (AGL-1368), not a second one: the
                           docs have always sent people here for all three
@@ -1662,6 +1716,32 @@ function ScreenDetails() {
                         savedHeight={screen?.seo?.imageHeight}
                         value={seoImage}
                         onChange={setSeoImage}
+                      />
+                      {/* Plugin zone (AGL-2910): a widget here proposes values
+                          for the fields above and never writes them — what it
+                          proposes is staged like typing, and Save SEO below is
+                          still the only write. */}
+                      <PluginWidgetSlot
+                        slot="seoFields"
+                        hostId={hostId}
+                        orgId={orgId}
+                        orgSlug={orgSlug}
+                        subject={{
+                          kind: 'screen',
+                          id: screenId,
+                          versionId: versionId ?? null,
+                          name: String(screen?.displayName ?? ''),
+                        }}
+                        fields={SCREEN_SEO_LISTING_FIELDS}
+                        values={{
+                          ...seoValue,
+                          imageAlt:
+                            seoImage != null
+                              ? (seoImage.imageAlt ?? '')
+                              : (screen?.seo?.imageAlt ?? ''),
+                        }}
+                        hasImage={Boolean(seoImageRef)}
+                        proposeValues={proposeSeoValues}
                       />
                       <Button
                         size="small"

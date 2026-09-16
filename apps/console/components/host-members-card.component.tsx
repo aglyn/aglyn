@@ -25,15 +25,8 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
-  HOST_ROLE_AI_PERMISSIONS,
-  type AiPermission,
-  type HostAccessRole,
-} from '@aglyn/aglyn'
-import {
   Button,
-  Checkbox,
   Chip,
-  FormControlLabel,
   MenuItem,
   Stack,
   Table,
@@ -42,7 +35,6 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -76,9 +68,7 @@ import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
-import { useOrgAiUsage } from '../hooks/use-org-ai-usage'
 import useOrgPermissions from '../hooks/use-org-permissions'
-import { aiUsageMonthLabel } from '../utils/ai-usage-wire'
 
 /**
  * Site-collaborator roles, weakest first.
@@ -267,13 +257,6 @@ export function HostMembersCard(props: HostMembersCardProps) {
     (ownerMember?.displayName as string | undefined) ??
     'Account owner'
 
-  /**
-   * What each collaborator drew ON THIS SITE this month (AGL-2928), from
-   * the per-member rollup's split by host — so an agency sees which client
-   * site's people spend. One read per mount; a reader the route refuses
-   * sees a dash, for the roster's reason.
-   */
-  const aiUsage = useOrgAiUsage(orgId, { hostId })
 
   // A member's photo lives on their ORG member doc, not here (AGL-1126).
   //
@@ -400,35 +383,6 @@ export function HostMembersCard(props: HostMembersCardProps) {
         persist: false,
       })
     },
-    [request, enqueueSnackbar],
-  )
-
-  /**
-   * A collaborator's AI verdict on this site (AGL-2927), as the row shows
-   * it: the roster copy the route wrote, else the host role's default —
-   * which is what the doors resolve for a document the toggle has never
-   * touched, so a row never shows a state the server does not hold.
-   */
-  const aiPermissionsFor = (member: any): Record<AiPermission, boolean> => {
-    const role = (member.role ?? 'editor') as HostAccessRole
-    const base = HOST_ROLE_AI_PERMISSIONS[role] ?? HOST_ROLE_AI_PERMISSIONS.viewer
-    const stored = member.aiPermissions as Partial<Record<AiPermission, boolean>> | undefined
-    return {
-      'ai.use': stored?.['ai.use'] ?? base['ai.use'],
-      'ai.generate': stored?.['ai.generate'] ?? base['ai.generate'],
-    }
-  }
-
-  const handleAiChange = useCallback(
-    (member: any, key: AiPermission) =>
-      async (_event: unknown, checked: boolean) => {
-        const payload = await request('PATCH', {
-          memberId: member.$id,
-          aiPermissions: { [key]: checked },
-        })
-        if (!payload) return
-        enqueueSnackbar('AI access updated', { variant: 'success', persist: false })
-      },
     [request, enqueueSnackbar],
   )
 
@@ -584,23 +538,12 @@ export function HostMembersCard(props: HostMembersCardProps) {
                   was the same confusion AGL-1125 fixed within the Team
                   table, one page over. */}
               <TableCell>{'Site access'}</TableCell>
-              {/* Per-collaborator AI toggles (AGL-2927): whether this person
-                  may open the AI doors ON THIS SITE. The host role sets the
-                  default; the boxes refine it, and the doors read the same
-                  answer, so an unticked box is a closed door rather than a
-                  hidden button. */}
-              <TableCell>{'AI'}</TableCell>
-              {/* Credits this collaborator drew on THIS site this month
-                  (AGL-2928) — not across the workspace, which is the org
-                  Team page's column. */}
-              <TableCell align="right">
-                <Tooltip
-                  title={`AI credits drawn on this site in ${aiUsageMonthLabel(aiUsage.month)}, per collaborator.`}
-                >
-                  <span>{'AI credits (site, month)'}</span>
-                </Tooltip>
-              </TableCell>
-              <PluginListColumnHeaders columns={pluginColumns} />
+              <PluginListColumnHeaders
+                columns={pluginColumns}
+                orgId={orgId}
+                hostId={hostId}
+                canManage={canManage}
+              />
               <TableCell align="right">{'Actions'}</TableCell>
             </TableRow>
           </TableHead>
@@ -631,15 +574,19 @@ export function HostMembersCard(props: HostMembersCardProps) {
                 </Stack>
               </TableCell>
               <TableCell>{'Admin'}</TableCell>
-              <TableCell>{'By org role'}</TableCell>
-              <TableCell align="right">
-                {aiUsage.status === 'ready' && ownerUid
-                  ? (aiUsage.hostCreditsByUid.get(ownerUid) ?? 0).toLocaleString()
-                  : '—'}
-              </TableCell>
-              {pluginColumns.map((column) => (
-                <TableCell key={column.widgetId} align={column.align} />
-              ))}
+              {ownerUid ? (
+                <PluginListColumnCells
+                  columns={pluginColumns}
+                  member={{ $id: ownerUid, uid: ownerUid, role: 'owner' }}
+                  orgId={orgId}
+                  hostId={hostId}
+                  canManage={canManage}
+                />
+              ) : (
+                pluginColumns.map((column) => (
+                  <TableCell key={column.widgetId} align={column.align} />
+                ))
+              )}
               <TableCell align="right">{'--'}</TableCell>
             </TableRow>
             {members.map((member) => (
@@ -702,54 +649,13 @@ export function HostMembersCard(props: HostMembersCardProps) {
                     ))}
                   </TextField>
                 </TableCell>
-                <TableCell>
-                  {/* An invited row has no member document to carry the
-                      toggle yet; it becomes settable once the invite is
-                      accepted, which is when the person gains the role the
-                      default derives from. */}
-                  <Stack direction="row" spacing={0}>
-                    {(
-                      [
-                        ['ai.use', 'Assist'],
-                        ['ai.generate', 'Generate'],
-                      ] as Array<[AiPermission, string]>
-                    ).map(([key, label]) => (
-                      <FormControlLabel
-                        key={key}
-                        label={label}
-                        slotProps={{ typography: { variant: 'caption' } }}
-                        control={
-                          <Checkbox
-                            size="small"
-                            checked={aiPermissionsFor(member)[key]}
-                            onChange={handleAiChange(member, key)}
-                            disabled={
-                              busy || !canManage || member.status === 'invited'
-                            }
-                            slotProps={{
-                              input: { 'aria-label': `${label} with AI` },
-                            }}
-                          />
-                        }
-                      />
-                    ))}
-                  </Stack>
-                </TableCell>
                 <PluginListColumnCells
                   columns={pluginColumns}
                   member={member}
+                  orgId={orgId}
                   hostId={hostId}
                   canManage={canManage}
                 />
-                <TableCell align="right">
-                  {aiUsage.status === 'ready' && member.status !== 'invited'
-                    ? (
-                        aiUsage.hostCreditsByUid.get(
-                          (member.uid as string | undefined) ?? (member.$id as string),
-                        ) ?? 0
-                      ).toLocaleString()
-                    : '—'}
-                </TableCell>
                 <TableCell align="right">
                   <Button
                     size="small"

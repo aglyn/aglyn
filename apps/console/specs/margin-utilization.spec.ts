@@ -67,7 +67,7 @@ import {
   orgMarginRow,
   percentile,
   type OrgMarginRow,
-} from '../utils/margin-utilization'
+} from '@aglyn/aglyn/app-utils/margin-utilization'
 
 /** The paid tiers — the only ones with both a band set and a price. */
 const PAID: OrgPlan[] = ['starter', 'pro', 'business', 'scale', 'advanced', 'agency']

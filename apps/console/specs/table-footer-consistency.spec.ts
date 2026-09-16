@@ -1338,18 +1338,29 @@ const NOT_A_LIST: Array<[string, string]> = [
       'A pager under a search box pages what the box already filters.',
   ],
   [
-    'apps/console/components/member-ai-usage-card.component.tsx',
+    'libs/plugins/ai/src/lib/components/member-ai-usage-card.component.tsx',
     'One member’s AI usage (AGL-2928): exactly two month rows, this ' +
       'month and last, requested at `limit: 2`, and beneath them one row ' +
       'per site that member generated on in those months, bounded by the ' +
       'workspace’s sites.',
   ],
   [
-    'apps/console/components/staff-org-ai-card.component.tsx',
+    'libs/plugins/ai/src/lib/components/staff-org-ai-card.component.tsx',
     'Staff previews, each capped by the route (AGL-2930): the ' +
       '`JOBS_RECENT` (10) most recent generation jobs, and the ' +
       '`TOP_USERS` (10) dearest members this month. The counts beside the ' +
       'jobs table are the whole population; the rows are a sample of it.',
+  ],
+  [
+    'libs/plugins/ai/src/lib/components/ai-theme-proposal-card.component.tsx',
+    'One theme PROPOSAL, read back as the change it would make (AGL-2938): ' +
+      'a row per control it sets — the editor’s color controls in each ' +
+      'scheme and its few type, shape, spacing and navigation controls — ' +
+      'and at most `AI_THEME_TOOL_MAX_COMPONENT_LEAVES` (40) component ' +
+      'leaves, the ceilings the theme tool holds an answer to before it ' +
+      'becomes a proposal. The count is bounded by the editor’s controls, ' +
+      'not by anything a site accumulates, and the recent proposals above ' +
+      'it are the last `RECENT_PROPOSALS_SHOWN` (3).',
   ],
 ]
 
@@ -1404,7 +1415,7 @@ const OWES_A_FOOTER: Array<[string, string]> = [
     'The same version history, the same block.',
   ],
   [
-    'apps/console/app/(app)/admin/assist-signals/page.tsx',
+    'libs/plugins/ai/src/lib/components/assist-signals-page.component.tsx',
     'Mined signal rows, which grow with usage. Another agent owns this file.',
   ],
   [
@@ -1671,7 +1682,11 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // member's two months with the sites beneath them, and the staff org
     // card's ten most recent jobs and ten dearest members, each capped by a
     // constant at the route.
-    expect(NOT_A_LIST).toHaveLength(57)
+    //
+    // 58 since themes by AI (AGL-2938): one proposal read back as the change
+    // it would make, a row per control it sets under the theme tool's own
+    // ceilings — a readout of one act, bounded by the editor's controls.
+    expect(NOT_A_LIST).toHaveLength(58)
   })
 })
 

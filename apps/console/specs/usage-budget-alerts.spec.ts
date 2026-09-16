@@ -296,18 +296,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // reads as a broken suite rather than as a missing recipient.
   findUserByUidAcrossPools: async (uid: string) =>
     mockPooledEmails[uid] ? { record: { email: mockPooledEmails[uid] } } : null,
-  // The REAL spend ceiling (AGL-2264), not a stand-in. This sweep announces
-  // that an org's assistant has been refused, and the figure it announces has
-  // to be the one the reservation transaction actually enforces — a fake here
-  // would let the alert and the refusal disagree about the number, which is
-  // the whole defect the alert exists to make visible. Required through the
-  // implementation module rather than the barrel because the barrel's other
-  // half drags the default Firebase app in.
-  assistOrgMonthlyCostLimitUsd: (
-    jest.requireActual(
-      '../../../libs/tenant/data/admin/src/lib/server/assist-usage',
-    ) as typeof import('../../../libs/tenant/data/admin/src/lib/server/assist-usage')
-  ).assistOrgMonthlyCostLimitUsd,
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({

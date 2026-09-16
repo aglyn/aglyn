@@ -40,7 +40,7 @@ export * from './lib/hooks/use-leaf-drag'
 export * from './lib/hooks/use-leaf-drop'
 export * from './lib/hooks/use-media-asset-facts-overlay'
 
-export * from './lib/contexts/ai-assist-context'
+export * from './lib/contexts/toolbar-extras-context'
 export * from './lib/contexts/binding-picker-context'
 export * from './lib/contexts/component-promotion-context'
 export * from './lib/contexts/components-drawer-context.provider'

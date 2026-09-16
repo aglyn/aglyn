@@ -40,7 +40,12 @@ export const AI_STEP_MODEL_SETTING: Record<AiStepKind, string> = {
   'copy.section': 'copySectionModel',
   'copy.blog': 'copyBlogModel',
   'generate.section': 'generateModel',
+  'job.layout': 'jobLayoutModel',
+  'job.template': 'jobTemplateModel',
+  'job.seo': 'jobSeoModel',
   'job.text': 'jobTextModel',
+  'job.theme': 'jobThemeModel',
+  'job.plan': 'jobPlanModel',
 }
 
 const MODEL_OPTIONS = [
@@ -80,7 +85,12 @@ export const AI_CONFIG_SCHEMA: PluginConfigSchema = {
     modelField('copy.section', 'Copy assistant (section) model', 'Writing a section’s copy.'),
     modelField('copy.blog', 'Copy assistant (blog) model', 'Drafting a blog post.'),
     modelField('generate.section', 'Section generation model', 'Generating a section’s structure.'),
+    modelField('job.layout', 'Generation job (layout) model', 'Generating a shared layout from a confirmed plan.'),
+    modelField('job.template', 'Generation job (template) model', 'Generating a page template from a confirmed plan.'),
+    modelField('job.seo', 'Generation job (SEO) model', 'Search listings, image descriptions and a site audit’s fixes.'),
     modelField('job.text', 'Generation job (text) model', 'The text step of a generation job.'),
+    modelField('job.theme', 'Generation job (theme) model', 'Proposing a change to a site’s theme.'),
+    modelField('job.plan', 'Generation job (plan) model', 'The plan step of a generation job.'),
   ],
   defaults: {
     provider: AI_SETTING_PLATFORM,

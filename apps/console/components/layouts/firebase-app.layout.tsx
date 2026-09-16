@@ -44,7 +44,9 @@ import {
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import { currentOriginPersistenceClass } from '../../constants/workspace-domain'
+import { ConsoleWidgetSlotContext } from '@aglyn/aglyn'
 import { OrgPermissionsProvider } from '../../hooks/use-org-permissions'
+import PluginWidgetSlot from '../plugin-widget-slot.component'
 import { OrgScopeProvider } from '../../hooks/use-org-scope'
 import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
 import { useOrgPlans } from '../../hooks/use-org-plans'
@@ -69,6 +71,8 @@ import {
   INTERNAL_TRAFFIC_VALUE,
   isInternalTrafficSession,
   readInternalTrafficOverride,
+  readRememberedInternalActor,
+  rememberInternalActor,
 } from '../../utils/internal-traffic'
 
 /**
@@ -367,6 +371,11 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
     // beside.
     const override =
       readInternalTrafficOverride() || analyticsEnvironmentForcesInternal()
+    // Whether the last account whose token this browser read was ours — the
+    // only claims-derived answer available before this session's own token
+    // resolves. See `readRememberedInternalActor` for why it is a separate
+    // memory rather than a write to the override above.
+    const rememberedActor = readRememberedInternalActor()
 
     // ONE call site for this parameter, and it is a shared invariant rather
     // than a tidiness preference. `@firebase/analytics`:
@@ -397,10 +406,13 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
 
     // Applied on the best answer available RIGHT NOW, before the token read.
     // This effect is declared above the `page_view` effect and React runs
-    // effects in declaration order, so an overridden browser stamps its own
-    // cold-load pageview. The claims half keeps AGL-1582's accepted first-hit
-    // race — a token read cannot be made synchronous.
-    stamp(override)
+    // effects in declaration order, so an overridden browser — or one whose
+    // last signed-in account was ours — stamps its own cold-load pageview and
+    // the `session_start` riding it. A token read cannot be made synchronous;
+    // without the remembered actor, every staff load on a browser nobody
+    // opted in reported one user and one session, and a phone always is that
+    // browser.
+    stamp(override || rememberedActor)
 
     const account = user?.data as
       | {
@@ -415,6 +427,11 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
     void Promise.resolve(account.getIdTokenResult())
       .then((result) => {
         if (!active) return
+        // Rewritten on every token, in both directions, so the memory follows
+        // whoever signed in last: a customer signing in after staff on the
+        // same browser clears it rather than inheriting it. Not written on the
+        // signed-out or rejected paths, which say nothing about who is here.
+        rememberInternalActor(isInternalTrafficSession(result?.claims))
         stamp(override || isInternalTrafficSession(result?.claims))
       })
       .catch(() => {
@@ -642,7 +659,12 @@ function FirebaseAppLayout(props: FirebaseAppLayoutProps) {
               dashboard alone has five consumers. */}
           <OrgPermissionsProvider>
             <ReleaseFlagsProvider>
-              <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
+              {/* The shell's zone renderer, for a zone a plugin surface hosts
+                  (AGL-2910): the same gated slot the pages mount, handed down
+                  so a plugin's dialog never lists widgets past the gates. */}
+              <ConsoleWidgetSlotContext.Provider value={PluginWidgetSlot}>
+                <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
+              </ConsoleWidgetSlotContext.Provider>
             </ReleaseFlagsProvider>
           </OrgPermissionsProvider>
         </OrgScopeProvider>

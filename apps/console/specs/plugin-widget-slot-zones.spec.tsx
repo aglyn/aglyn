@@ -44,10 +44,22 @@ const REPO_ROOT = resolve(__dirname, '../../..')
 /** The slot the registry is asked for, and what it answers. */
 let mockSlot: string
 let lastWidgetProps: Record<string, unknown> | undefined
+/** The SEO zones' proposal doors (AGL-2910), passed through by identity. */
+const mockProposeValues = jest.fn()
+const mockProposeDraft = jest.fn()
+/**
+ * Registrations the registry answers for `mockSlot` beside the demo card: a
+ * table column widget on a zone that also mounts cards (AGL-3008).
+ */
+let mockExtraRegistrations: Array<Record<string, unknown>> = []
 
 function MockWidget(props: Record<string, unknown>) {
   lastWidgetProps = props
   return <div>{`widget-for-${mockSlot}`}</div>
+}
+
+function MockColumnCell() {
+  return <div>{`column-cell-for-${mockSlot}`}</div>
 }
 
 jest.mock('@aglyn/aglyn', () => ({
@@ -59,6 +71,7 @@ jest.mock('@aglyn/aglyn', () => ({
             extension: { pluginId: 'demo', displayName: 'Demo' },
             widget: { slot, widgetId: `demo-${slot}`, Component: MockWidget },
           },
+          ...mockExtraRegistrations,
         ]
       : [],
 }))
@@ -128,7 +141,7 @@ const MOUNTS: Record<
     props: { hostId: 'host-1', canManage: true },
   },
   assistPanel: {
-    file: 'apps/console/app/(app)/layout.tsx',
+    file: 'apps/console/components/assist-dock-slot.component.tsx',
     how: 'slot',
     props: {},
   },
@@ -137,6 +150,49 @@ const MOUNTS: Record<
       'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner/page.tsx',
     how: 'slot',
     props: { hostId: 'host-1' },
+  },
+  // AGL-2910: the screen detail page's SEO card, and the site SEO section.
+  seoFields: {
+    file:
+      'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view/page.tsx',
+    how: 'slot',
+    props: {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      orgSlug: 'acme',
+      subject: { kind: 'screen', id: 'screen-1', versionId: 'v1', name: 'Pricing' },
+      fields: ['title', 'description', 'breadcrumb', 'imageAlt'],
+      values: { title: 'Pricing' },
+      hasImage: false,
+      proposeValues: mockProposeValues,
+    },
+  },
+  hostSeo: {
+    file: 'apps/console/app/(app)/[orgSlug]/hosts/[host]/setup/(sections)/seo/page.tsx',
+    how: 'slot',
+    props: {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      orgSlug: 'acme',
+      host: 'shop',
+      seo: { title: 'Acme Widgets' },
+      proposeDraft: mockProposeDraft,
+    },
+  },
+  besignerToolbar: {
+    file: 'apps/console/components/besigner-plugin-zones.component.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1' },
+  },
+  staffOrgsListColumn: {
+    file: 'apps/console/app/(app)/admin/orgs/page.tsx',
+    how: 'columns',
+    props: {},
+  },
+  staffOrgUsageColumn: {
+    file: 'apps/console/app/(app)/admin/orgs/[orgId]/page.tsx',
+    how: 'both',
+    props: { orgId: 'org-1', org: {} },
   },
 }
 
@@ -151,6 +207,7 @@ function mountedZones(): Set<string> {
     'git',
     [
       'grep',
+      '--untracked',
       '-h',
       '-o',
       '-E',
@@ -206,8 +263,9 @@ describe('AGL-2940 · the new zones are in the catalog and mounted', () => {
     }
   })
 
-  it('the editor shell mounts the assistant dock zone as the app shell does', () => {
-    expect(read('apps/console/app/(editor)/layout.tsx')).toContain('slot="assistPanel"')
+  it('both shells mount the assistant dock above every route boundary', () => {
+    expect(read('apps/console/app/(app)/layout.tsx')).toContain('<AssistDockSlot />')
+    expect(read('apps/console/app/(editor)/layout.tsx')).toContain('<AssistDockSlot />')
   })
 })
 
@@ -229,5 +287,31 @@ describe('AGL-2940 · a registered widget renders through each new zone', () => 
     mockSlot = 'somewhereElse'
     const { container } = render(<PluginWidgetSlot slot="staffOrg" orgId="org-1" />)
     expect(container.textContent).toBe('')
+  })
+})
+
+describe('AGL-3008 · a column widget belongs to its table, never to the slot', () => {
+  afterEach(() => {
+    mockExtraRegistrations = []
+  })
+
+  it('hostMembers: draws the card, and leaves the column widget to the collaborators table', async () => {
+    mockSlot = 'hostMembers'
+    mockExtraRegistrations = [
+      {
+        extension: { pluginId: 'demo', displayName: 'Demo' },
+        widget: {
+          slot: 'hostMembers',
+          widgetId: 'demo-hostMembers-column',
+          column: { header: 'AI' },
+          Component: MockColumnCell,
+        },
+      },
+    ]
+    render(<PluginWidgetSlot slot="hostMembers" {...MOUNTS.hostMembers.props} />)
+    await waitFor(() => expect(screen.getByText('widget-for-hostMembers')).toBeTruthy())
+    // The column's cell belongs to a row of the collaborators table. Drawn by
+    // the slot it would be a cell with no row, loose beneath the table.
+    expect(screen.queryByText('column-cell-for-hostMembers')).toBeNull()
   })
 })

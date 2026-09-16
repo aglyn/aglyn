@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { foldPluginSubprocessors } from '@aglyn/aglyn/plugin-manager/plugin-subprocessors'
+import { PLUGIN_SUBPROCESSORS } from './plugins.subprocessors.generated'
+
 /**
  * Every third-party host this repo's own code names, and what it receives
  * (AGL-1648).
@@ -62,6 +65,13 @@
  * decoration: writing it is the moment someone has to go and look at the page.
  * `derivePublishedRows()` turns this file into the row set the page must
  * carry, so the comparison is mechanical for whoever next edits it.
+ *
+ * A recipient only a plugin's code reaches is declared by that plugin rather
+ * than written here. `plugins.subprocessors.generated.ts` carries every
+ * plugin's declarations as data, and `EGRESS_HOSTS` folds them in beside the
+ * entries below through `foldPluginSubprocessors`, which refuses a host
+ * declared twice. The plugin's declaration is the one place that row's
+ * wording lives, and it owes the same `publishedOn` date as every entry here.
  *
  * ## ⚠️ NO NOTICE-PERIOD ARITHMETIC LIVES HERE, AND THAT IS DELIBERATE
  *
@@ -236,13 +246,14 @@ const SUPERVISORY_AUTHORITY_ENTRY: EgressHost = {
 }
 
 /**
- * Every third-party host named in `apps/`, `libs/` and `tools/`, keyed by
- * host, checked in both directions by `subprocessor-inventory.spec.ts`.
+ * The third-party hosts this registry declares itself: every host named in
+ * `apps/`, `libs/` and `tools/` but those a plugin declares, which
+ * `EGRESS_HOSTS` below folds in.
  *
  * Adding an entry with `disposition: 'subprocessor'` is the point at which
  * someone must publish the row. Do not add one to make the suite pass.
  */
-export const EGRESS_HOSTS: Record<string, EgressHost> = {
+const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
   // MARK – Stripe
 
   'api.stripe.com': {
@@ -305,21 +316,6 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       'The GraphQL endpoint the console files issue reports into, live on `LINEAR_API_KEY` in production. Undisclosed until 2026-08-24 while four separate green checks ran over it — see the header of this file.',
     dataReceived:
       "The report text the reporter writes, their email address and account identifier, their organization's name, identifier, plan and their role in it, the site the report was filed from, a correlation id, the application build identifiers, and the browser viewport and user-agent.",
-  },
-
-  // MARK – Anthropic
-
-  'api.anthropic.com': {
-    disposition: 'subprocessor',
-    entity: 'Anthropic PBC',
-    region: 'United States',
-    purpose:
-      'Generating the responses of the in-product assistant and the besigner copy assistant',
-    publishedOn: '2026-08-18',
-    reason:
-      "Two model endpoints. `apps/console/app/api/assist/chat/route.ts` is gated by `release_assist` AND the key; `libs/plugins/marketplace/src/lib/server/ai-assist.ts` carries NO release flag, so setting `ANTHROPIC_API_KEY` in production is by itself what starts this flow. `assist-anthropic-subprocessor-gate.spec.ts` holds the per-reader detail and is the deeper guard for this one vendor.",
-    dataReceived:
-      "The customer's question and a trailing window of the thread, and — for the besigner assistant — the site copy, blog bodies and section briefs being written. On Pro and above the current route, host and organization name travel with the question.",
   },
 
   // MARK – Google LLC
@@ -551,12 +547,12 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
     entity: 'Wistia, Inc.',
     region: 'United States',
     purpose:
-      "Hosting and streaming the platform's own films on its marketing site, loaded only when a visitor presses play",
-    publishedOn: '2026-09-13',
+      'Hosting and streaming Aglyn’s own films on its marketing site, aglyn.com. The player loads when a visitor presses play on a film. On a page built to show a single film, it loads with the page for a visitor whose privacy choices on aglyn.com permit analytics. For every other visitor and page, nothing is requested from Wistia before a press',
+    publishedOn: '2026-09-15',
     reason:
-      "The Wistia player frame the Video element (`libs/plugins/mui/src/lib/components/video.tsx`) loads when a visitor presses play, at an address `libs/aglyn/src/lib/app-utils/wistia-embed.ts` rebuilds from the media id alone. Declared a subprocessor because the platform plays its own films on its marketing site through it. A Wistia link a customer's author pastes on their own site is still that customer's choice, as a YouTube or Vimeo link is, and gets no row of its own.",
+      "The Wistia player frame the Video element (`libs/plugins/mui/src/lib/components/video.tsx`) loads when a visitor presses play, or with the page when the element's `loadPlayer` switch is on and the visitor's stored consent grants analytics, at an address `libs/aglyn/src/lib/app-utils/wistia-embed.ts` rebuilds from the media id alone. Declared a subprocessor because the platform plays its own films on its marketing site through it. A Wistia link a customer's author pastes on their own site is still that customer's choice, as a YouTube or Vimeo link is, and gets no row of its own.",
     dataReceived:
-      "From a visitor who presses play: the browser's requests for the player and the film, carrying the visitor's IP address and user-agent, and the viewing data Wistia's player reports. `video.tsx` adds Wistia's `doNotTrack` option unless the visitor's stored consent grants analytics, so a visitor still deciding, refused, opted out or sending GPC gets a player that does not record a viewing session; the player still keeps its own local storage inside its frame. A visitor who never presses play sends nothing.",
+      "From a visitor who presses play, or whose stored consent grants analytics on a page that loads the player with the page: the browser's requests for the player and, once it plays, the film, carrying the visitor's IP address and user-agent, and the viewing data Wistia's player reports. `video.tsx` adds Wistia's `doNotTrack` option to a pressed player unless the visitor's stored consent grants analytics, so a visitor still deciding, refused, opted out or sending GPC gets a player that does not record a viewing session; a player loaded with the page is loaded only for a visitor whose consent grants analytics. Either way the player keeps its own local storage inside its frame from the moment it loads. A visitor who neither presses play nor opens such a page with that consent sends nothing.",
   },
 
   // MARK – Requests that are made, and are still not Annex III rows
@@ -805,8 +801,31 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
 }
 
 for (const host of SUPERVISORY_AUTHORITY_HOSTS) {
-  EGRESS_HOSTS[host] = SUPERVISORY_AUTHORITY_ENTRY
+  DECLARED_EGRESS_HOSTS[host] = SUPERVISORY_AUTHORITY_ENTRY
 }
+
+/**
+ * Every third-party host named in `apps/`, `libs/` and `tools/`, keyed by
+ * host, checked in both directions by `subprocessor-inventory.spec.ts`: the
+ * declarations above, and every recipient a plugin declares. A plugin
+ * declares only what the published list carries, so each of its hosts is a
+ * `subprocessor`, and `foldPluginSubprocessors` throws when this module
+ * loads if a plugin claims a host this registry or another plugin already
+ * declares.
+ */
+export const EGRESS_HOSTS: Record<string, EgressHost> = foldPluginSubprocessors<EgressHost>(
+  DECLARED_EGRESS_HOSTS,
+  PLUGIN_SUBPROCESSORS,
+  (declaration) => ({
+    disposition: 'subprocessor',
+    entity: declaration.entity,
+    region: declaration.region,
+    purpose: declaration.purpose,
+    publishedOn: declaration.publishedOn,
+    reason: declaration.reason,
+    dataReceived: declaration.dataReceived,
+  }),
+)
 
 /**
  * Recipients reached through an SDK that builds its own host, which the URL

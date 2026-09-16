@@ -327,7 +327,7 @@ describe('the registry is the source for the published list (AGL-1648)', () => {
     expect(entities).toContain('Stripe, Inc.')
     expect(entities).toContain('Vercel Inc.')
     expect(entities).toContain('Resend (Plus Five Five, Inc.)')
-    expect(entities).toContain('Anthropic PBC')
+    expect(entities).toContain('Anthropic, PBC')
     expect(entities).toContain('Google LLC (Firebase / Google Cloud)')
   })
 

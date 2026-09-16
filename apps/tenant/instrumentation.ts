@@ -54,6 +54,17 @@
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return
 
+  // The plugins' declarations (AGL-2939) — the light registrations core
+  // reads before any plugin surface loads — once per server instance.
+  try {
+    const { registerPluginServerDeclarations } = await import(
+      './utils/plugins.declarations.server.generated'
+    )
+    await registerPluginServerDeclarations()
+  } catch (error) {
+    console.error('[instrumentation] plugin declarations failed', error)
+  }
+
   try {
     const { warmFirestoreAtBoot } = await import('./utils/boot-warmup')
     warmFirestoreAtBoot()

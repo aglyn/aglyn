@@ -16,9 +16,12 @@
  */
 'use client'
 
-import type { OrgPermission } from '@aglyn/aglyn'
+import { listConsoleOrgNavItems, type OrgPermission } from '@aglyn/aglyn'
 import { useMemo } from 'react'
+import { useEnabledPluginIds } from '../components/console-plugins-gate.component'
 import orgNavTabItems from '../constants/org-nav-tabs'
+import { orgPluginNavTabItems } from '../utils/org-plugin-surfaces'
+import useCurrentOrg from './use-current-org'
 import useOrgPermissions from './use-org-permissions'
 import { useOrgSlug } from './use-org-scope'
 
@@ -33,20 +36,33 @@ const TAB_PERMISSIONS: Record<string, OrgPermission> = {
  * settings permissions don't see those tabs (the pages themselves guard
  * against direct URLs). Everything shows until permissions load so the
  * strip doesn't flash narrower for admins.
+ *
+ * Plugin-declared org surfaces (AGL-2974) join from the registry, scoped to
+ * this workspace's enabled plugins and narrowed by `orgPluginNavTabItems`,
+ * which holds each one back until its own verdicts settle.
  */
 export function useOrgNavTabItems() {
-  const { can, loaded } = useOrgPermissions()
+  const { can, permissions, loaded } = useOrgPermissions()
   const orgSlug = useOrgSlug()
+  const enabledPluginIds = useEnabledPluginIds()
+  const { org, ready: orgReady } = useCurrentOrg()
   return useMemo(
     () =>
-      orgNavTabItems(orgSlug).filter((item) => {
+      orgNavTabItems(
+        orgSlug,
+        orgPluginNavTabItems(orgSlug, listConsoleOrgNavItems(enabledPluginIds), {
+          can,
+          permissions,
+          permissionsLoaded: loaded,
+          org,
+          orgReady,
+        }),
+      ).filter((item) => {
         if (!loaded) return true
         const permission = TAB_PERMISSIONS[item.id]
         return !permission || can(permission)
       }),
-    // `can` is stable per granted-map; loaded flips once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loaded, can, orgSlug],
+    [loaded, can, permissions, orgSlug, enabledPluginIds, org, orgReady],
   )
 }
 

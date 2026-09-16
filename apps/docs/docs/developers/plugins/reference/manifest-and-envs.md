@@ -114,11 +114,45 @@ publish ──▶ submitted ──▶ in_review ──▶ listed ──▶ verif
 ## `plugins.config.json` (first-party contributors)
 
 The single source mapping plugin ids to packages, register entry points
-per surface (`site`, `console`, `tenantApi`, `consoleApi`), and
-`apiPrefixes`. `node tools/scripts/generate-plugin-manifests.mjs` turns it
-into the four generated loader manifests — the only files allowed to
-reference `@aglyn/plugins-*` outside `libs/plugins` (an nx boundary rule
-enforces this). The scaffolder (`tools/scripts/create-plugin.mjs`)
+per surface (`site`, `console`, `staff`, `tenantApi`, `consoleApi`, the
+two declaration surfaces `declarations` and `serverDeclarations`, and
+`subprocessors`), and `apiPrefixes`.
+`node tools/scripts/generate-plugin-manifests.mjs` turns it into the four
+generated loader manifests, the three declarations manifests and the
+subprocessors manifest — the only files allowed to reference
+`@aglyn/plugins-*` outside `libs/plugins` (an nx boundary rule enforces
+this), and every reference is an `import()` so the apps never depend on a
+plugin statically.
+
+A **declarations** entry (`@aglyn/plugins-x/declarations`, client and
+server) is a light module that registers what core must know before any
+surface of the plugin has loaded — billing and access keys, activity
+actions, a config schema — and a **serverDeclarations** entry
+(`/declarations.server`, server only) adds platform-event subscriptions.
+The apps run them once per process: at boot from `instrumentation.ts`, and
+with the console's plugin loader module, whose plugins gate holds the first
+paint on them. Anything heavy stays behind a lazy import inside a handler.
+
+A **subprocessors** entry names a function in
+`@aglyn/plugins-x/subprocessors` that returns the third parties the plugin's
+code reaches — each a host with the entity, region, purpose, publication
+date, reason and data received the published subprocessor list carries. The
+generator calls it when it runs and writes the answer into
+`apps/console/constants/plugins.subprocessors.generated.ts` as data, with no
+import of the plugin, because the console's subprocessor inventory is read
+synchronously. `foldPluginSubprocessors` folds that manifest into the
+inventory and refuses a host declared twice, by the inventory or by another
+plugin. Regenerate after changing a declaration; `--check` refuses a stale
+manifest.
+
+A **staff** entry names the registrar the console's staff area loads,
+usually the same function as `console`. The org routes load each
+workspace's enabled plugins and a staff page names no workspace, so the
+staff area loads exactly the plugins with a `staff` entry, before a staff
+page renders: the [staff zones](./injection-zones.md#staff-zones) read their
+widgets, and the staff strip and the generic staff route read their
+`staffPages`.
+ The scaffolder (`tools/scripts/create-plugin.mjs`)
 maintains it for you; the manual follow-ups are the
 `FIRST_PARTY_PLUGINS` catalog entry and the release flag
 (registry + Remote Config template).

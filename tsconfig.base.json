@@ -75,6 +75,8 @@
       "@aglyn/plugins-marketplace/*": ["./libs/plugins/marketplace/src/lib/*"],
       "@aglyn/plugins-crm": ["./libs/plugins/crm/src/index.ts"],
       "@aglyn/plugins-crm/*": ["./libs/plugins/crm/src/lib/*"],
+      "@aglyn/plugins-outreach": ["./libs/plugins/outreach/src/index.ts"],
+      "@aglyn/plugins-outreach/*": ["./libs/plugins/outreach/src/lib/*"],
       "@aglyn/plugins-data": ["./libs/plugins/data/src/index.ts"],
       "@aglyn/plugins-data/*": ["./libs/plugins/data/src/lib/*"],
       "@aglyn/plugins-mui": ["./libs/plugins/mui/src/index.ts"],

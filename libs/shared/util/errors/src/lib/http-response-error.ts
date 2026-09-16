@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {HttpStatusCode} from '@aglyn/shared-data-enums'
+import {HttpStatusCode} from '@aglyn/shared-data-enums/http'
 
 
 export class HttpResponseError extends Error {

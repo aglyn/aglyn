@@ -47,7 +47,7 @@ const REPO_ROOT = resolve(__dirname, '../../..')
  * Where a lockable client fetch can live. `apps/console/app/api` is the
  * SERVER side — its own coverage spec owns it — and is excluded below.
  */
-const SEARCH_ROOTS = ['apps/console', 'libs/plugins/marketplace/src']
+const SEARCH_ROOTS = ['apps/console', 'libs/plugins/marketplace/src', 'libs/plugins/ai/src']
 
 const SKIP_DIRS = new Set([
   'node_modules',
@@ -143,7 +143,7 @@ const NAMED_SURFACES = {
   'marketplace install + purchase':
     'libs/plugins/marketplace/src/lib/hooks/use-marketplace-actions.ts',
   'AI-assist drawer':
-    'libs/plugins/marketplace/src/lib/components/ai-assist-provider.component.tsx',
+    'libs/plugins/ai/src/lib/components/ai-assist-provider.component.tsx',
 } as const
 
 describe('AGL-1532 · client surfaces read the 423 feature body', () => {

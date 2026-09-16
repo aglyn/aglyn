@@ -117,6 +117,7 @@ function mockCollectionRef(path: string): any {
     doc: (id?: string) => mockDocRef(`${path}/${id ?? `auto-${(mockAutoId += 1)}`}`),
     where: (field: string, _op: string, value: unknown) => mockQuery(path, [[field, value]], null),
     limit: (n: number) => mockQuery(path, [], n),
+    get: async () => ({ docs: mockChildren(path).map((key) => mockSnapshot(key)) }),
   }
 }
 
@@ -146,11 +147,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getServerReleaseFlagValues: async () => ({
     release_crm: mockFlagOn ? { enabled: true } : { enabled: false },
   }),
-  listOrgMembers: async (orgId: string) =>
-    mockChildren(`orgs/${orgId}/members`).map((path) => ({
-      $id: mockLast(path),
-      ...mockStore.get(path),
-    })),
   logOrgActivity: async (...args: unknown[]) => {
     mockOrgActivity.push(args)
   },
@@ -399,5 +395,47 @@ describe('POST /api/crm/inbound', () => {
     const response = await deliver(event('em-gone'))
     expect(response.status).toBe(202)
     expect(await response.json()).toEqual({ filed: false, reason: 'message-gone' })
+  })
+
+  describe("a member's send-as alias (AGL-2975)", () => {
+    // Sam signs in as sam@acme.com and sends from sam@acme-outbound.example,
+    // copying the capture address in BCC, to a prospect who is a contact.
+    const outreach = () =>
+      received('em-9', {
+        from: 'Sam Rep <sam@acme-outbound.example>',
+        to: ['Ada Lovelace <ada@example.com>'],
+        bcc: [CAPTURE],
+        subject: 'Renewal',
+        text: 'Tuesday?',
+      })
+
+    it('files a send from a confirmed alias on the prospect in To, as outbound, stamped with the member', async () => {
+      mockStore.set(`orgs/${ORG}/memberEmailAliases/u-sam`, {
+        uid: 'u-sam',
+        aliases: [{ address: 'sam@acme-outbound.example', addedAtMs: 1, verifiedAtMs: 2 }],
+      })
+      messages.set('em-9', outreach())
+      const response = await deliver(event('em-9', ['ada@example.com', CAPTURE]))
+      expect(await response.json()).toMatchObject({ filed: true, direction: 'outbound', kind: 'contact' })
+      expect(rows()[0]).toMatchObject({
+        direction: 'outbound',
+        from: 'sam@acme-outbound.example',
+        to: 'ada@example.com',
+        byUid: 'u-sam',
+        byName: 'Sam Rep',
+        contactId: 'con-1',
+      })
+    })
+
+    it('reads an unconfirmed alias as a stranger writing in', async () => {
+      mockStore.set(`orgs/${ORG}/memberEmailAliases/u-sam`, {
+        uid: 'u-sam',
+        aliases: [{ address: 'sam@acme-outbound.example', addedAtMs: 1 }],
+      })
+      messages.set('em-9', outreach())
+      const response = await deliver(event('em-9', ['ada@example.com', CAPTURE]))
+      expect(await response.json()).toMatchObject({ filed: true, direction: 'inbound' })
+      expect(rows()[0]).toMatchObject({ direction: 'inbound', byUid: '' })
+    })
   })
 })

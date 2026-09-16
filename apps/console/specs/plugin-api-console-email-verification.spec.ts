@@ -102,7 +102,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   lockdownFeaturesForPluginApiPath: jest.fn(() => []),
   pluginIdForRegisteredApiPath: jest.fn(() => 'email'),
   resolveHostEnabledPlugins: jest.fn(() => ['email', 'marketing']),
-  resolvePluginApiRoute: jest.fn(() => ({ path: 'email/list-members-add' })),
+  resolvePluginApiMatch: jest.fn(() => ({ route: { path: 'email/list-members-add' }, params: {} })),
+  // The dispatcher runs a matched (req, res) route through the adapter it
+  // is handed, which is the mocked `runLegacyHandler` below.
+  runPluginApiMatch: jest.requireActual('@aglyn/aglyn/app-utils/api-plugins').runPluginApiMatch,
   runLegacyHandler: jest.fn(async () => {
     mockHandlerCalls += 1
     return Response.json({ ok: true }, { status: 200 })

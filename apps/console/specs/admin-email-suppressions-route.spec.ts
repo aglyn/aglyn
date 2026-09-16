@@ -87,17 +87,17 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
 }))
 
-jest.mock('../app/api/_lib/admin-audit', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/admin-audit', () => ({
   recordAdminAudit: async (entry: Record<string, unknown>) => {
     mockAudits.push(entry)
   },
   // The REAL masking, not a stub: whether the address reaches the audit row
   // readable is the property under test, and a double returning the input
   // would certify the leak.
-  maskEmailAddresses: jest.requireActual('../app/api/_lib/admin-audit')
+  maskEmailAddresses: jest.requireActual('@aglyn/tenant-data-admin/server/admin-audit')
     .maskEmailAddresses,
   subjectAddressKeyForRecipients: jest.requireActual(
-    '../app/api/_lib/admin-audit',
+    '@aglyn/tenant-data-admin/server/admin-audit',
   ).subjectAddressKeyForRecipients,
 }))
 

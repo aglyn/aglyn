@@ -177,6 +177,14 @@ describeEmulated('lockdown panic-button drill (emulator)', () => {
     superToken = await mintIdToken(SUPER_EMAIL)
     supportToken = await mintIdToken(SUPPORT_EMAIL)
     plainToken = await mintIdToken(PLAIN_EMAIL)
+    // The server registers every plugin's declarations once per instance,
+    // before the first request, from `instrumentation.ts` (AGL-2939). The
+    // levers a plugin declares — `ai-assist` and `ai-generate` — are known
+    // to the route only after that has run, so a drill that imports the
+    // route without it is driving a console no deployment ever serves.
+    await (
+      await import('../../../../constants/plugins.declarations.server.generated')
+    ).registerPluginServerDeclarations()
     route = (await import('./route')) as typeof route
     await clearAllDrillState(db)
     await createDrillTargets(db)
@@ -722,17 +730,23 @@ describeEmulated('lockdown panic-button drill (emulator)', () => {
     const before = (
       await db.collection('adminAudit').where('scope', '==', 'feature').get()
     ).size
-    await post(route, superToken, {
+    // Both presses are asserted, because a REFUSED press also writes no row:
+    // when `ai-assist` stopped being a known lever the route 400'd and this
+    // test reported "0 audit rows", which reads as a broken audit writer and
+    // is not what had broken (AGL-3013).
+    const locked = await post(route, superToken, {
       action: 'lock',
       scope: 'feature',
       targetId: 'ai-assist',
       reason: 'security',
     })
-    await post(route, superToken, {
+    expect(locked).toMatchObject({ status: 200 })
+    const lifted = await post(route, superToken, {
       action: 'unlock',
       scope: 'feature',
       targetId: 'ai-assist',
     })
+    expect(lifted).toMatchObject({ status: 200 })
     const after = (
       await db.collection('adminAudit').where('scope', '==', 'feature').get()
     ).size

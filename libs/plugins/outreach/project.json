@@ -1,0 +1,30 @@
+{
+  "name": "plugins-outreach",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/plugins/outreach/src",
+  "projectType": "library",
+  "tags": ["aglyn:addons", "scope:plugin", "type:feature"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/plugins/outreach",
+        "main": "libs/plugins/outreach/src/index.ts",
+        "tsConfig": "libs/plugins/outreach/tsconfig.lib.json",
+        "assets": ["libs/plugins/outreach/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/outreach"],
+      "options": {
+        "jestConfig": "libs/plugins/outreach/jest.config.ts"
+      }
+    }
+  }
+}

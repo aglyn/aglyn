@@ -28,6 +28,7 @@ import {
   removeAccountEmail,
   setPrimaryAccountEmail,
 } from '@aglyn/tenant-data-admin'
+import { resolveAuthActionOrigin } from '../../_lib/auth-action-url'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -200,8 +201,14 @@ async function handler(request: Request): Promise<Response> {
 
   try {
     const caller = await verifyCaller(idToken)
-    const requestOrigin =
-      headers.origin ?? (headers.host ? `https://${headers.host}` : '')
+    // The host a confirmation link points at is not the caller's to choose.
+    // `Origin` is a request header, and the secret in the link is a bearer
+    // credential that `confirm` redeems for whoever holds it — so a link
+    // built on an attacker's host would hand them the address. Server
+    // configuration decides, as it does for password resets (AGL-2983).
+    const requestOrigin = resolveAuthActionOrigin(
+      headers.origin ?? (headers.host ? `https://${headers.host}` : ''),
+    )
 
     if (method === 'GET') {
       const emails = await listAccountEmails(

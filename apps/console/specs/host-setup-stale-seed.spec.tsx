@@ -123,6 +123,8 @@ jest.mock('@aglyn/aglyn', () => ({
 jest.mock('@aglyn/aglyn/app-utils/marketplace-theme', () => ({
   resolveSiteTheme: (host: { theme?: unknown }) => host?.theme ?? {},
   themeOverridePatch: () => ({ palette: { primary: '#222222' } }),
+  // What the Theme section tells its plugin zone the theme is built from.
+  hostThemeSource: () => 'custom',
 }))
 jest.mock('@aglyn/aglyn/app-utils/marketplace-overrides', () => ({
   overrideWriteValue: (patch: unknown) => ({ patch }),
@@ -257,6 +259,18 @@ jest.mock('../components/host-id-provider', () => ({
   useIsHostAdmin: () => true,
 }))
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
+// The Theme section hands its plugin zone the org the site belongs to
+// (AGL-2938). The zone is stubbed above, so an org id is all the page reads
+// here; the real hook opens an org listener these specs do not drive.
+jest.mock('../hooks/use-current-org', () => {
+  const useCurrentOrg = () => ({
+    org: undefined,
+    orgId: 'org-1',
+    ready: true,
+    entitlementsFromCache: false,
+  })
+  return { __esModule: true, useCurrentOrg, default: useCurrentOrg }
+})
 jest.mock('../hooks/use-host-activity-logger', () => ({
   __esModule: true,
   default: () => () => undefined,

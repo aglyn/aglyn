@@ -15,14 +15,53 @@
  * limitations under the License.
  */
 
+import type { ConsoleStaffPage } from '@aglyn/aglyn'
 import { buildRoute, Route } from './route-links'
 
 /**
  * The staff admin area's tab strip, previously copy-pasted into every
  * admin page (extracted with the Feature flags tab, AGL-230), mirroring
  * `hostNavTabItems`.
+ *
+ * The pages plugins add to the staff area (AGL-2939) follow the console's
+ * own tabs, in registration order, each linking to the generic staff route.
  */
-export function adminNavTabItems() {
+export function adminNavTabItems(
+  staffPages: readonly Pick<ConsoleStaffPage, 'id' | 'label'>[] = [],
+) {
+  return [
+    ...consoleAdminNavTabItems(),
+    ...staffPages.filter(ownsItsSegment).map((page) => ({
+      id: `nav-tab-admin-${page.id}`,
+      label: page.label,
+      href: buildRoute(Route.ADMIN_STAFF_PAGE, { staffPage: page.id }),
+    })),
+  ]
+}
+
+/** The first segment under `/admin` of every route the console itself serves. */
+const CONSOLE_STAFF_SEGMENTS = new Set(
+  Object.values(Route)
+    .filter((template) => template.startsWith('/admin/'))
+    .map((template) => template.split('/')[2] ?? '')
+    .filter((segment) => segment && !segment.startsWith('[')),
+)
+
+/**
+ * A staff page whose id is one of the console's own staff segments gets no
+ * tab: the console's static route wins that URL, so the tab would open the
+ * console's page under the plugin's label.
+ */
+function ownsItsSegment(page: Pick<ConsoleStaffPage, 'id'>): boolean {
+  if (!CONSOLE_STAFF_SEGMENTS.has(page.id)) return true
+  console.error(
+    `[console] the staff page "${page.id}" is a console staff route; ` +
+      'it gets no tab. Change the plugin\'s staff page id.',
+  )
+  return false
+}
+
+function consoleAdminNavTabItems() {
   return [
     {
       id: 'nav-tab-admin-overview',
@@ -114,11 +153,6 @@ export function adminNavTabItems() {
       id: 'nav-tab-admin-maintenance',
       label: 'Maintenance',
       href: buildRoute(Route.ADMIN_MAINTENANCE),
-    },
-    {
-      id: 'nav-tab-admin-assist-signals',
-      label: 'Assist signal',
-      href: buildRoute(Route.ADMIN_ASSIST_SIGNALS),
     },
     // Directly before Sales tax, because the two read the same
     // `platformRevenue` rows for different questions: this one asks what Aglyn

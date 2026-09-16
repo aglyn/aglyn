@@ -39,6 +39,29 @@
  * real answer; `docs/UPTIME_AND_SLA.md` carries the blind spots in writing
  * and the runbook for buying it.
  */
+/**
+ * Boot (AGL-2939): the plugins' declarations — billing and access keys,
+ * activity codes, settings schemas, platform-event subscriptions — are
+ * registered once per server instance, before the first request, so a core
+ * route that never loads a plugin's API surface still folds its add-on and
+ * raises its events into a subscribed handler. The manifest is generated
+ * and loads each plugin's light declarations module; nothing heavy runs
+ * here.
+ */
+export async function register(): Promise<void> {
+  if (process.env.NEXT_RUNTIME !== 'nodejs') return
+  // Logged, not thrown: a declaration that fails to load costs its plugin's
+  // keys and events, and a boot that throws costs every route.
+  try {
+    const { registerPluginServerDeclarations } = await import(
+      './constants/plugins.declarations.server.generated'
+    )
+    await registerPluginServerDeclarations()
+  } catch (error) {
+    console.error('[instrumentation] plugin declarations failed', error)
+  }
+}
+
 export async function onRequestError(
   error: unknown,
   request: { path: string; method: string },

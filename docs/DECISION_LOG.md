@@ -92,6 +92,43 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-15 — Manual AI model picks by plan, the org-wide model restriction, and who may set AI allotments are confirmed as built
+
+- **Decided by:** the account owner on 2026-09-15. Asked in the engineering session to confirm or change the defaults AGL-2942 had chosen, they confirmed all three as built.
+- **Scope:** packaging
+- **Evidence:** `AI_PLAN_MODEL_TIERS` and `AI_MODEL_RESTRICTION_PLANS` in `libs/plugins/ai/src/lib/providers/model-choice.ts`; the write rules in `libs/plugins/ai/src/lib/server/ai-allotments.ts`; merged in `c62c9c574`, with follow-ups `db4517be3`, `ef6f789a4`, `26c0b981f` and `6da9fe350`; `match /aiAllotments/{subject}` in `cloud/firebase-firestore.rules`; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2942.
+
+**No locked price moves.** No price, band, credit rate or overage figure changes.
+
+1. **Manual model picks:**
+   - Free runs on Auto only.
+   - Starter, Pro and Business may pick the fast and balanced tiers.
+   - Scale, Advanced, Agency and Enterprise add the deep tier.
+
+   Auto, the routing table's choice, stays the default on every plan. A plan limits only a manual pick.
+2. **Org-wide model restriction:** Agency and Enterprise only. Clearing a restriction is always allowed.
+3. **Allotment writes:**
+   - `billing.manage` sets a member's allotment, a site's allotment and the org-wide restriction.
+   - A site's admin collaborator may also set another collaborator's allotment on that site, but never their own.
+   - Allotments sit inside the org's band and never grant credits beyond it.
+
+---
+
+## 2026-09-14 — Outreach is on no plan: `features.outreach` is false on every tier, Enterprise included, until packaging is decided
+
+- **Decided by:** the scope of AGL-2974, filed in the account owner's Linear workspace on 2026-09-14: the Outreach entitlement is false on every plan including Enterprise, because which plans carry sequences and connected mailboxes, and at what caps, is an owner decision that has not been made. That decision is AGL-2976, still open. This entry records that no packaging is decided; it is not a packaging decision.
+- **Scope:** packaging
+- **Evidence:** `features.outreach: false` on all eight rows of `PLAN_ENTITLEMENTS` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `OrgFeatureFlags.outreach` in `libs/aglyn/src/lib/foundation/definitions/org-billing.types.ts`; `orgCarriesOutreach` in `cloud/firebase-firestore.rules`, which reads only the per-org `entitlements.features.outreach` override and is held to the plan table by `libs/aglyn/src/lib/foundation/definitions/outreach-rules-drift.spec.ts`; the `outreach` row of `docs/feature-matrix.md` and its Drive copy; AGL-2974, AGL-2976.
+
+**No price moves and no plan gains anything.** A workspace reaches Outreach
+only through a per-organization entitlement override, and the release flag
+`release_outreach` ships off besides. There is no `/pricing` row, no Stripe
+price and no add-on line for it. When packaging is decided, the plan rows, the
+Firestore rules' entitlement helper (which then needs a plan list) and the
+drift spec move together, under a new entry here.
+
+---
+
 ## 2026-09-14 — The Free AI taste: 300 credits a month behind a hard wall, per account, shipped with its abuse precautions
 
 - **Decided by:** the account owner on 2026-09-14 (AGL-2895), as the one addition to the add-on decision below: Free gets a taste of AI generation only together with the precautions that stop it multiplying, which is AGL-2925.

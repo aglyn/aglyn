@@ -23,12 +23,16 @@ import {
   crmCapturedEmailKey,
   crmInboundCandidates,
   crmInboundExcerpt,
+  crmInboundRoster,
   type CrmActivityLink,
   type CrmEmailDirection,
   type CrmInboundCandidate,
+  type CrmInboundMember,
+  type CrmInboundRosterRow,
   crmScopeTokens,
   emailAddressOf,
   emailDomainOf,
+  findMemberByEmailAddress,
   forwardedSection,
   htmlToPlainText,
   isCrmInboundAddress,
@@ -37,6 +41,7 @@ import {
   personKey,
   readContactFacet,
 } from '@aglyn/aglyn/server'
+import { MEMBER_EMAIL_ALIASES_COLLECTION } from '@aglyn/aglyn/app-utils/member-email-aliases'
 import type { OrgCrmInbound } from '@aglyn/aglyn/foundation'
 import type { ReceivedEmail } from '@aglyn/shared-util-email'
 import { findContactByEmail } from './contact-email-index'
@@ -59,8 +64,8 @@ import { countCrmActivitiesForRecord } from './crm-records'
  * Firestore is a parameter throughout, as in `crm-records.ts` and
  * `crm-email-activity.ts`: the routes hold one, and a module that reached
  * for the Admin app itself would drag it into every spec that only wants
- * the matching. Nothing here reads the roster or the org's feed — the
- * caller hands in the member addresses and writes the feed line — so a
+ * the matching. The roster is read through that same store by
+ * `loadCrmInboundRoster`, and the caller writes the org's feed line, so a
  * spec of this module needs a store and nothing else.
  */
 
@@ -245,11 +250,29 @@ export async function matchCrmInboundCorrespondent(
   return null
 }
 
-/** One member of the roster, as the filer needs them. */
-export interface CrmInboundMember {
-  uid: string
-  email: string
-  name?: string | null
+/**
+ * The workspace's roster as the filer matches against it: the member
+ * documents and every member's stored alias document, two reads under the
+ * org, reduced by `crmInboundRoster` to each member's sign-in address and
+ * the aliases they have confirmed (AGL-2975).
+ */
+export async function loadCrmInboundRoster(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+): Promise<CrmInboundMember[]> {
+  const orgRef = firestore.collection('orgs').doc(orgId)
+  const [members, aliases] = await Promise.all([
+    orgRef.collection('members').get(),
+    orgRef.collection(MEMBER_EMAIL_ALIASES_COLLECTION).get(),
+  ])
+  const rows: CrmInboundRosterRow[] = members.docs.map((doc) => ({
+    ...((doc.data() ?? {}) as Omit<CrmInboundRosterRow, '$id'>),
+    $id: doc.id,
+  }))
+  const aliasDocuments = new Map<string, unknown>(
+    aliases.docs.map((doc) => [String(doc.id), doc.data()]),
+  )
+  return crmInboundRoster(rows, aliasDocuments)
 }
 
 export type CrmInboundFileOutcome =
@@ -281,6 +304,7 @@ export async function fileCrmInboundEmail(
     message: ReceivedEmail
     /** The capture domain, so the capture address is never the correspondent. */
     domain: string
+    /** The roster, from `loadCrmInboundRoster`: sign-in addresses and confirmed aliases. */
     members: readonly CrmInboundMember[]
     hostIds: readonly string[]
   },
@@ -297,7 +321,7 @@ export async function fileCrmInboundEmail(
     cc: [...message.cc, ...message.bcc],
     forwardedFrom: forwarded?.from ?? undefined,
     domain,
-    memberEmails: input.members.map((member) => member.email),
+    members: input.members,
   })
   const senderDomain = emailDomainOf(message.from)
   if (!candidates.length) return { outcome: 'unmatched', senderDomain }
@@ -324,9 +348,9 @@ export async function fileCrmInboundEmail(
     return { outcome: 'ceiling', match }
   }
 
-  const author = senderIsMember
-    ? input.members.find((member) => emailAddressOf(member.email) === sender)
-    : undefined
+  // The member the From is — by sign-in address, or by an alias exactly one
+  // member confirmed. A shared alias names the team and no one person.
+  const author = senderIsMember ? findMemberByEmailAddress(input.members, sender) : null
   // The address the message was written to, when it is worth showing: the
   // correspondent for a copied send, else the first recipient that is not
   // the capture address.

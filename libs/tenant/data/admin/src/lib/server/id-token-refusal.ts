@@ -104,3 +104,13 @@ export function isRefusedIdToken(error: unknown): boolean {
   }
   return true
 }
+
+/**
+ * The 401 a refused credential earns, or `null` for anything else so the
+ * caller's own 500 stands (AGL-1993). Byte-identical to the body a missing
+ * Authorization header already gets, and it never says WHICH code matched.
+ */
+export function invalidIdTokenResponse(error: unknown): Response | null {
+  if (!isRefusedIdToken(error)) return null
+  return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+}

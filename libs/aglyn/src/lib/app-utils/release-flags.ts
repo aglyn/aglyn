@@ -31,6 +31,7 @@ import { PLATFORM_BRAND_NAME } from './platform-brand'
 
 export type ReleaseFlagKey =
   | 'release_crm'
+  | 'release_outreach'
   | 'release_bookings'
   | 'release_events'
   | 'release_data_store'
@@ -79,6 +80,23 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'The CRM: contacts, leads, companies, deals, tasks, reports and fields.',
     defaultEnabled: true,
     navTabId: 'nav-tab-contacts',
+  },
+  // Outreach (AGL-2974): the plugin's kill switch as well as its launch
+  // gate, like every first-party plugin's flag since AGL-422 — off, it is
+  // subtracted from the console loader and the API dispatcher for everyone
+  // but staff. OFF by default, because nothing behind it sends mail yet and
+  // no plan carries the `outreach` entitlement it also needs.
+  {
+    key: 'release_outreach',
+    label: 'Outreach',
+    description:
+      'One-to-one, multi-step email sequences sent from a rep’s own ' +
+      'connected mailbox and logged in the CRM (AGL-2974). OFF by default ' +
+      'and staff preview only. An organization also needs the `outreach` ' +
+      'entitlement, which no plan carries, so a customer reaches it only ' +
+      'through a per-org entitlement override.',
+    defaultEnabled: false,
+    navTabId: 'nav-tab-org-outreach',
   },
   {
     key: 'release_bookings',

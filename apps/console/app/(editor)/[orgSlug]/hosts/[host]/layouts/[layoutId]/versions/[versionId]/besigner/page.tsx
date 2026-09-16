@@ -80,7 +80,9 @@ import InteractionsProvider from '../../../../../../../../../../components/inter
 import BesignerMediaPickerProvider from '../../../../../../../../../../components/besigner-media-picker-provider.component'
 import BesignerAppBarComponent from '../../../../../../../../../../components/besigner-app-bar.component'
 import BesignerDocumentSwitcherComponent from '../../../../../../../../../../components/besigner-document-switcher.component'
-import BesignerVersionsComponent from '../../../../../../../../../../components/besigner-versions.component'
+import BesignerVersionsComponent, {
+  type BesignerVersionsActions,
+} from '../../../../../../../../../../components/besigner-versions.component'
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
@@ -109,6 +111,7 @@ import PresenceAvatars from '../../../../../../../../../../components/presence-a
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 import ComponentPropsDialog from '../../../../../../../../../../components/component-props-dialog.component'
+import { useEditorSession } from '../../../../../../../../../../hooks/use-editor-session'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
   () =>
@@ -185,6 +188,19 @@ function LayoutBesignerPage(props) {
   const editingLiveVersion = Boolean(
     versionId && versionId === layoutPublishedVersionId,
   )
+  // The versions panel's own actions, for the editor session below.
+  const versionsActions = useRef<BesignerVersionsActions>(null)
+  // The open layout as an editor session (AGL-2906) — see the screen editor:
+  // the selection and the live pointer read when asked, and New version's
+  // own flow.
+  useEditorSession({
+    documentKind: 'layout',
+    documentId: layoutId,
+    versionId,
+    live: editingLiveVersion,
+    selectedNodeId: () => Besigner.focus.getLastSelected()?.$id ?? null,
+    versionsActions,
+  })
   const [draftPending, setDraftPending] = useState(false)
   const { data: screenDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
@@ -677,6 +693,7 @@ function LayoutBesignerPage(props) {
                           parent={{ kind: 'layout', id: layoutId }}
                           versionId={versionId}
                           publishedVersionId={layoutPublishedVersionId}
+                          actionsRef={versionsActions}
                         />
                       </>
                     }

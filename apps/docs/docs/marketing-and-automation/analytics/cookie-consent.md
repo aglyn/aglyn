@@ -67,6 +67,8 @@ Built-in Aglyn analytics are unaffected by all of this: the pageview beacon is
   visits.
 - **Remembering the campaign a visitor first arrived from.** Reading the
   campaign on the click itself needs no grant; keeping it across visits does.
+- **A Wistia player loaded with the page** — see
+  [Videos that load with the page](#videos-that-load-with-the-page).
 - **Advertising storage** (`ad_storage`, `ad_user_data`, `ad_personalization`),
   on sites that have turned the advertising question on. **Where it starts
   depends on the visitor's region**, and it is the same split analytics uses:
@@ -99,6 +101,16 @@ because the site cannot function without them:
 - Popup and announcement "don't show this again" stamps (stored locally, never
   transmitted).
 - The stored consent state itself.
+
+## Videos that load with the page {#videos-that-load-with-the-page}
+
+A Video element with **Load the player with the page** on is consent-gated like
+the list above: it puts Wistia's player in place of its poster only for a
+visitor whose recorded state grants analytics, and everyone else gets the
+poster. The player keeps its own storage inside its frame (`wistia` and
+`wistia-video-progress-{media id}`) as soon as it loads, before anyone presses
+play. A press loads the player for any visitor, with Wistia's do-not-track
+option unless analytics is granted, and the player keeps the same storage then.
 
 ## Your Privacy Choices — the persistent control {#privacy-choices--the-persistent-control}
 

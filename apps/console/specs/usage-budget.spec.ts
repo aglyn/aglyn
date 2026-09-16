@@ -38,7 +38,7 @@ import {
   orgMonthlySpend,
   publicOrgMonthlySpend,
   resolveUsageBudget,
-} from '../utils/usage-budget'
+} from '@aglyn/aglyn/app-utils/usage-budget'
 import {
   assistOverageCapReached,
   resolveAssistOverageCapUsd,

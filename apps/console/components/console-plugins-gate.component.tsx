@@ -28,13 +28,16 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import type React from 'react'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import BootSplash from './boot-splash.component'
-import { consolePluginLoader } from '../constants/console-plugin-loader'
+import {
+  consolePluginLoader,
+  pluginDeclarationsReady,
+} from '../constants/console-plugin-loader'
 import {
   useHostDisabledPlugins,
   useHostEnabledPlugins,
   useHostId,
 } from './host-id-provider'
-import useAiPermissions from '../hooks/use-ai-permissions'
+import usePermissionsOnHost from '../hooks/use-permissions-on-host'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useReleaseFlags } from '../hooks/use-release-flags'
 import { useUrlNamedOrg, useUrlNamesOrg } from '../hooks/use-url-names-org'
@@ -151,16 +154,34 @@ export default function ConsolePluginsGate({
   const [readyForOrg, setReadyForOrg] = useState<string | null>(null)
   const { flagsReady, enabledKey } = useEffectiveEnabledPlugins()
   const enabledPluginIds = useEnabledPluginIds()
-  // The reader's AI permissions on the site in view (AGL-2927), resolved
-  // ONCE here for every provider rather than by each — a plugin package
-  // cannot reach the console's permission context, and the provider that
-  // opens the AI doors needs the answer to hold them closed.
+  // The reader's plugin permissions on the site in view (AGL-2927,
+  // AGL-2984), resolved ONCE here for every provider rather than by each — a
+  // plugin package cannot reach the console's permission context, and a
+  // provider whose doors spend needs the answer to hold them closed.
   const hostId = useHostId()
-  const aiPermissions = useAiPermissions(hostId)
+  const permissionsOnHost = usePermissionsOnHost(hostId)
   // Latches on the first completed load; from then on a workspace switch
   // renders through instead of blanking the tree (AGL-758).
   const hasLoadedOnce = useRef(false)
   if (readyForOrg) hasLoadedOnce.current = true
+  // The plugins' declarations (AGL-2939) load with the shell, and every
+  // route reads them at render — the staff lockdown page lists a plugin's
+  // levers, a billing page folds its add-on — so the first paint of ANY
+  // route waits for them, org-less ones included. Settled, not succeeded: a
+  // declarations chunk that fails to load is logged and the console renders
+  // without it rather than never.
+  const [declarationsSettled, setDeclarationsSettled] = useState(false)
+  useEffect(() => {
+    let active = true
+    void pluginDeclarationsReady
+      .catch((error) => console.error('plugin declarations failed to load', error))
+      .then(() => {
+        if (active) setDeclarationsSettled(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     // Nothing loads until the URL names a workspace (AGL-1937).
@@ -225,7 +246,10 @@ export default function ConsolePluginsGate({
   // An org-less route holds for nothing (AGL-1937): the load never starts
   // there, so without `namesOrg` the picker would sit behind this splash
   // waiting on a `readyForOrg` that can never arrive.
-  if (namesOrg && orgId && !hasLoadedOnce.current && readyForOrg !== orgId) {
+  if (
+    !declarationsSettled ||
+    (namesOrg && orgId && !hasLoadedOnce.current && readyForOrg !== orgId)
+  ) {
     return <BootSplash />
   }
   // Plugin-registered app providers (AGL-419) wrap every console page —
@@ -246,7 +270,7 @@ export default function ConsolePluginsGate({
         orgReady={orgReady}
         orgId={orgId}
         hostId={hostId}
-        aiPermissions={aiPermissions}
+        permissionsOnHost={permissionsOnHost}
       >
         {inner}
       </Provider>

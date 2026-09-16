@@ -35,7 +35,7 @@ import dynamic from 'next/dynamic'
  * "button". Those stay in `docs-help.generated.ts`, synchronous.
  *
  * Every call site imports THIS module rather than calling `dynamic()` itself,
- * so one chunk serves them all — the reason `assist-panel-mount.component.tsx`
+ * so one chunk serves them all — the reason the assistant dock's own chunk
  * gives beside it.
  */
 const DocsHelpExcerpt = dynamic(

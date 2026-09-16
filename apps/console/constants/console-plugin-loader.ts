@@ -17,6 +17,16 @@
 
 import { createPluginLoader } from '@aglyn/aglyn'
 import { CONSOLE_PLUGIN_MANIFEST } from './plugins.client.generated'
+import { registerPluginDeclarations } from './plugins.declarations.generated'
+
+/**
+ * The plugins' declarations (AGL-2939) ride with the loader module, which
+ * every console shell imports: the staff lockdown page lists a plugin's
+ * levers and the billing pages fold its add-on before any org's plugins
+ * have been activated. They load like the plugins do, so the plugins gate
+ * holds the first paint on this rather than reading an empty catalog.
+ */
+export const pluginDeclarationsReady: Promise<void> = registerPluginDeclarations()
 
 /**
  * The console's plugin loader (AGL-417): activates the org-enabled plugins

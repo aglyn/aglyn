@@ -122,6 +122,12 @@
       "@aglyn/plugins-crm/*": [
         "../../libs/plugins/crm/src/lib/*"
       ],
+      "@aglyn/plugins-outreach": [
+        "../../libs/plugins/outreach/src/index.ts"
+      ],
+      "@aglyn/plugins-outreach/*": [
+        "../../libs/plugins/outreach/src/lib/*"
+      ],
       "@aglyn/plugins-data": [
         "../../libs/plugins/data/src/index.ts"
       ],

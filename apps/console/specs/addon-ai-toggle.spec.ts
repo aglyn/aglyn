@@ -50,7 +50,7 @@ let orgDoc: any
 let aiItem: any
 let stripeCalls: Array<{ href: string; method: string; body: string }> = []
 let orgMirrorWrites: any[] = []
-/** Every org activity row the AI add-on writer handed `logOrgActivity` (AGL-2929). */
+/** Every `org.seatAddons.changed` event the route raised (AGL-2929, AGL-2939). */
 let mockActivityRows: unknown[][] = []
 
 jest.mock('../../../libs/tenant/data/admin/src/lib/server/organizations', () => ({
@@ -78,8 +78,6 @@ const orgRef = {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  // The REAL feed writer, over the recording `logOrgActivity` above.
-  ...jest.requireActual('../../../libs/tenant/data/admin/src/lib/server/ai-activity'),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
@@ -104,6 +102,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The event the route raises (AGL-2939); the AI plugin's handler — proven
+  // in its own spec — is what writes the row.
+  runPluginEventHandlers: async (_event: string, payload: unknown) => {
+    mockActivityRows.push([payload])
+    return { handled: 1, failed: [] }
+  },
   isLiveSubscriptionStatus: jest.requireActual(
     '@aglyn/aglyn/app-utils/org-billing-doc',
   ).isLiveSubscriptionStatus,
@@ -310,14 +314,18 @@ describe('buying the AI add-on is immediate (AGL-2897)', () => {
     expect(orgMirrorWrites[0].seatAddons.aiAddon).toBe(1)
   })
 
-  it('writes ai.addon.purchased to the org feed, attributed to the buyer (AGL-2929)', async () => {
+  it("raises the add-on change for the plugin's feed writer, attributed to the buyer (AGL-2929)", async () => {
     await call({ action: 'set', kind: 'aiAddon', quantity: 1 })
     expect(mockActivityRows).toEqual([
       [
-        ORG_ID,
-        { uid: 'user-1', email: 'owner@example.test' },
-        'ai.addon.purchased',
-        { type: 'subscription', name: expect.stringMatching(/ AI$/) },
+        {
+          orgId: ORG_ID,
+          actor: { uid: 'user-1', email: 'owner@example.test' },
+          // The mirror read before the write: the plugin's handler compares it
+          // with `after` and writes a row only when the AI add-on moved.
+          before: {},
+          after: expect.objectContaining({ aiAddon: 1 }),
+        },
       ],
     ])
   })

@@ -52,7 +52,7 @@ import {
   meteredPriceId,
   PAID_PLANS,
   planFromPriceId,
-} from '../utils/server/billing-addons'
+} from '@aglyn/tenant-data-admin/server/billing-addons'
 
 /**
  * Fake, obviously-not-real price ids. Set on `process.env` here rather than
