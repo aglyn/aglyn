@@ -42,6 +42,9 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `hostLayouts` | A site's Layouts page, beside Templates and Create New Layout: another way to start a layout | `hostId`, `orgId` |
 | `hostForms` | A site's Forms page, beside Create Form: another way to start a form. The Forms page is the forms plugin's, which hosts the zone — see [Zones a plugin hosts](#zones-a-plugin-hosts) | `hostId`, `orgId` |
 | `hostComponents` | A site's Components page, beside Templates and Create Component: another way to start a reusable component | `hostId`, `orgId` |
+| `hostAutomations` | The Automation page's Actions, beside **Add action** and **Recipes**: another way to start an automation. Hosted by the workflows plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `openAction(actionId)` — opens a listed action in the Actions editor, and answers `false` for one the list has not read yet |
+| `automationEditor` | Inside the editor of one saved automation, an action or a workflow, on the Automation page. Hosted by the workflows plugin | `hostId`, `orgId`, `target` (`{ type: 'action' \| 'workflow', id, name }`, the automation as it is stored) |
+| `automationRun` | On each failed run in an automation's run history. Hosted by the workflows plugin | `hostId`, `orgId`, `target` (as above), `runId` (the run's entry in the site's activity log) |
 
 Rules of thumb: widgets receive shell-resolved context as props and must
 not reach for console-app hooks; data access goes through
@@ -53,7 +56,8 @@ unloaded plugins.
 ## Zones a plugin hosts
 
 A zone can sit on a plugin's own surface rather than on a console page, such as `hostForms`
-on the forms plugin's Forms page. A plugin cannot import the console's `PluginWidgetSlot`,
+on the forms plugin's Forms page, or `hostAutomations`, `automationEditor` and `automationRun`
+on the workflows plugin's Automation page. A plugin cannot import the console's `PluginWidgetSlot`,
 so the shell hands its renderer down: read it with `useConsoleWidgetSlot()` from
 `@aglyn/aglyn` and draw the zone through it.
 

@@ -48,6 +48,8 @@ let lastWidgetProps: Record<string, unknown> | undefined
 /** The SEO zones' proposal doors (AGL-2910), passed through by identity. */
 const mockProposeValues = jest.fn()
 const mockProposeDraft = jest.fn()
+/** The Actions editor's door (AGL-2919), passed through by identity. */
+const mockOpenAction = jest.fn()
 /**
  * Registrations the registry answers for `mockSlot` beside the demo card: a
  * table column widget on a zone that also mounts cards (AGL-3008).
@@ -238,6 +240,33 @@ const MOUNTS: Record<
     file: 'apps/console/app/(app)/[orgSlug]/hosts/[host]/components/page.tsx',
     how: 'slot',
     props: { hostId: 'host-1', orgId: 'org-1' },
+  },
+  // AGL-2919: the Automation page, which is the workflows plugin's own
+  // surface — beside Add action and Recipes, in the editor of a saved
+  // automation, and on a failed run in its history.
+  hostAutomations: {
+    file: 'libs/plugins/workflows/src/lib/components/host-actions-card.component.tsx',
+    how: 'hosted',
+    props: { hostId: 'host-1', orgId: 'org-1', openAction: mockOpenAction },
+  },
+  automationEditor: {
+    file: 'libs/plugins/workflows/src/lib/components/host-actions-card.component.tsx',
+    how: 'hosted',
+    props: {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      target: { type: 'action', id: 'act-1', name: 'Welcome new leads' },
+    },
+  },
+  automationRun: {
+    file: 'libs/plugins/workflows/src/lib/components/host-run-history-card.component.tsx',
+    how: 'hosted',
+    props: {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      target: { type: 'action', id: 'act-1', name: 'Welcome new leads' },
+      runId: 'run-1',
+    },
   },
   // AGL-2911: beside the sites on the organization's Sites page, for an
   // action taken across many of them at once.

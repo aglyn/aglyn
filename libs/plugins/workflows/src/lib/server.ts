@@ -270,3 +270,11 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
 export function registerWorkflowsApi(): void {
   registerPluginApiRoute('hooks/[hostId]/[hookId]', inboundHookHandler)
 }
+
+/**
+ * The console half (AGL-2919), re-exported so one entry point serves both
+ * surfaces: the manifest generator resolves every server surface through
+ * `@aglyn/plugins-workflows/server`, and a second entry point would be a second
+ * thing to keep in step with plugins.config.json.
+ */
+export { registerWorkflowsConsoleApi } from './server-console'

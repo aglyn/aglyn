@@ -57,6 +57,13 @@ import {
   type TriggerConditionOp,
   validateHostAction,
 } from '@aglyn/aglyn'
+import {
+  automationPlaceholderIn,
+  automationPlaceholders,
+  describeAutomationPlaceholder,
+} from '@aglyn/aglyn/app-utils/automation-placeholders'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import type { ConsoleAutomationTarget } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
@@ -89,7 +96,7 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { useCallback, useState, useMemo } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   ceilingedWindow,
   collectionCeiling,
@@ -200,6 +207,34 @@ function memberRefFields(
   return text.includes('@')
     ? { [emailKey]: value, [uidKey]: undefined }
     : { [emailKey]: undefined, [uidKey]: text }
+}
+
+/**
+ * What a field holding a placeholder shows: an error state and what to do
+ * about it. A placeholder is a value a person still has to supply, written in
+ * square brackets where it belongs — an automation drafted for review carries
+ * one wherever it could not name a real record or did not know a fact.
+ */
+function placeholderState(
+  value: unknown,
+  help: string,
+): { error?: boolean; helperText?: string } {
+  return automationPlaceholderIn(value) ? { error: true, helperText: help } : {}
+}
+
+/**
+ * A picker whose stored reference is a placeholder name and no id: the record
+ * the draft asked for, which the site did not have when it was written.
+ */
+function placeholderReference(
+  name: unknown,
+  id: unknown,
+  noun: string,
+): { error?: boolean; helperText?: string } {
+  const words = String(id ?? '').trim() ? null : automationPlaceholderIn(name)
+  return words
+    ? { error: true, helperText: `Pick the ${noun} — the draft asked for “${words}”` }
+    : {}
 }
 
 function defaultStep(type: HostActionStepType): HostActionStep {
@@ -368,6 +403,12 @@ export function HostActionsCard(props: {
   const createResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  /**
+   * The shell's zone renderer, for what other plugins add to automations
+   * (AGL-2919); `null` outside the console shell, where there is no workspace
+   * to gate on.
+   */
+  const ExtensionZone = useConsoleWidgetSlot()
 
   const {
     data: actionDocs,
@@ -558,6 +599,20 @@ export function HostActionsCard(props: {
   const { rows: webhookDocs, truncated: webhooksTruncated } =
     ceilingedWindow<any>(webhookRead, EDITOR_OPTION_CEILING)
   const liveActions = readActions.filter((action: any) => !action.deletedAt)
+  /*
+   * Opens a listed action in the editor, for a widget in the `hostAutomations`
+   * zone — one that drafted an action and offers to open it. Read through a
+   * ref so the callback keeps one identity while the list changes beneath it,
+   * and answers `false` for an id the list has not read yet.
+   */
+  const listedRef = useRef<any[]>(liveActions)
+  listedRef.current = liveActions
+  const openAction = useCallback((actionId: string) => {
+    const action = listedRef.current.find((row: any) => row.$id === actionId)
+    if (!action) return false
+    setDraft(draftFromAction(action, action.$id))
+    return true
+  }, [])
   /**
    * Element interactions are not listed here.
    *
@@ -658,6 +713,17 @@ export function HostActionsCard(props: {
     (updater: (previous: ActionDraft) => ActionDraft) =>
       setDraft((previous) => (previous ? updater(previous) : previous)),
     [],
+  )
+
+  /** The saved action the editor has open, as the `automationEditor` zone names it. */
+  const draftId = draft?.id ?? null
+  const draftName = draft?.name ?? ''
+  const editorTarget = useMemo<ConsoleAutomationTarget | null>(
+    () => (draftId ? { type: 'action', id: draftId, name: draftName } : null),
+    // The name the editor opened with: the zone reads the automation as it is
+    // stored, so a rename being typed does not make it a different one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [draftId],
   )
 
   /**
@@ -975,11 +1041,33 @@ export function HostActionsCard(props: {
 
   const handleToggle = useCallback(
     (action: any) => async (event: { target: { checked: boolean } }) => {
+      const enabled = event.target.checked
+      /*
+       * A placeholder is a value nobody has supplied yet. Switched on, the
+       * step holding it fails every run and a condition holding one never
+       * matches, so turning such an automation on is confirmed, naming what
+       * is still missing.
+       */
+      const missing = enabled ? automationPlaceholders(action) : []
+      if (missing.length) {
+        const confirmed = await confirm({
+          title: 'Switch on with placeholders?',
+          description:
+            `"${action.name}" still has ${missing.length === 1 ? 'a placeholder' : `${missing.length} placeholders`} ` +
+            `to fill in: ${missing.slice(0, 3).map(describeAutomationPlaceholder).join('; ')}` +
+            `${missing.length > 3 ? '; …' : ''}. Open it with Edit to fill ` +
+            `${missing.length === 1 ? 'it' : 'them'} in first.`,
+          confirmationText: 'Switch on anyway',
+        })
+          .then(() => true)
+          .catch(() => false)
+        if (!confirmed) return
+      }
       await updateDoc(doc(firestore, 'hosts', hostId, 'actions', action.$id), {
-        enabled: event.target.checked,
+        enabled,
       })
     },
-    [firestore, hostId],
+    [confirm, firestore, hostId],
   )
 
   return (
@@ -995,7 +1083,9 @@ export function HostActionsCard(props: {
             'workflow, show the visitor an alert, chain a custom event, or ' +
             'write to a dataset. Pro plans and up.'}
         </Typography>
-        {visibleActions.map((action: any) => (
+        {visibleActions.map((action: any) => {
+          const missing = automationPlaceholders(action).length
+          return (
           <Stack
             key={action.$id}
             direction="row"
@@ -1022,6 +1112,13 @@ export function HostActionsCard(props: {
                     )
                     .join(' → ')}`}
               </Typography>
+              {missing ? (
+                <Typography variant="caption" color="warning.main" noWrap>
+                  {missing === 1
+                    ? '1 placeholder to fill in'
+                    : `${missing} placeholders to fill in`}
+                </Typography>
+              ) : null}
             </Stack>
             <Button
               size="small"
@@ -1042,7 +1139,8 @@ export function HostActionsCard(props: {
               {'Delete'}
             </Button>
           </Stack>
-        ))}
+          )
+        })}
         {actions.length === 0 ? null : (
           <ListPagination
             page={page}
@@ -1078,6 +1176,20 @@ export function HostActionsCard(props: {
           >
             {'Recipes'}
           </Button>
+          {/*
+            Other ways to start an automation, from plugins (AGL-2919): the
+            `hostAutomations` zone, drawn through the shell's own gated slot. A
+            plugin page cannot mount that slot itself, so the shell hands it
+            down, and a widget here passes the gates a console page's would.
+          */}
+          {ExtensionZone ? (
+            <ExtensionZone
+              slot="hostAutomations"
+              hostId={hostId}
+              orgId={org?.$id}
+              openAction={openAction}
+            />
+          ) : null}
         </Stack>
         <Menu
           id="host-action-recipes"
@@ -1120,6 +1232,14 @@ export function HostActionsCard(props: {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
         >
+          {ExtensionZone && editorTarget ? (
+            <ExtensionZone
+              slot="automationEditor"
+              hostId={hostId}
+              orgId={org?.$id}
+              target={editorTarget}
+            />
+          ) : null}
           {draft?.recipe ? (
             <Typography variant="body2" color="text.secondary">
               {`Started from the “${
@@ -1281,6 +1401,7 @@ export function HostActionsCard(props: {
                 <TextField
                   label="Value"
                   placeholder="Yes"
+                  {...placeholderState(row.value, 'Replace the placeholder with the value to match')}
                   value={row.value}
                   onChange={(event) =>
                     patch((previous) => ({
@@ -1534,6 +1655,11 @@ export function HostActionsCard(props: {
                   <TextField
                     select
                     label="Workflow"
+                    {...placeholderReference(
+                      step.workflowName,
+                      (step as any).workflowId,
+                      'workflow',
+                    )}
                     value={
                       (step as any).workflowId ??
                       workflowOptions.find(
@@ -1572,6 +1698,7 @@ export function HostActionsCard(props: {
                   <>
                     <TextField
                       label="Message"
+                      {...placeholderState(step.message, 'Fill in the placeholder')}
                       value={step.message}
                       onChange={(event) =>
                         patch((previous) => ({
@@ -1631,6 +1758,11 @@ export function HostActionsCard(props: {
                   <TextField
                     select
                     label="Webhook"
+                    {...placeholderReference(
+                      step.webhookName,
+                      (step as any).webhookId,
+                      'webhook',
+                    )}
                     value={
                       (step as any).webhookId ??
                       webhookOptions.find(
@@ -1670,6 +1802,11 @@ export function HostActionsCard(props: {
                   <TextField
                     select
                     label="Dataset"
+                    {...placeholderReference(
+                      step.datasetName,
+                      (step as any).datasetId,
+                      'dataset',
+                    )}
                     value={
                       (step as any).datasetId ??
                       datasetOptions.find(
@@ -2068,6 +2205,7 @@ export function HostActionsCard(props: {
                   <>
                     <TextField
                       label="Subject"
+                      {...placeholderState((step as any).subject, 'Fill in the placeholder')}
                       value={(step as any).subject ?? ''}
                       onChange={(event) =>
                         patch((previous) => ({
@@ -2084,6 +2222,7 @@ export function HostActionsCard(props: {
                     />
                     <TextField
                       label="Body"
+                      {...placeholderState((step as any).body, 'Fill in the placeholders')}
                       value={(step as any).body ?? ''}
                       onChange={(event) =>
                         patch((previous) => ({
@@ -2104,6 +2243,7 @@ export function HostActionsCard(props: {
                 ) : step.type === 'notifyAdmins' ? (
                   <TextField
                     label="Notification title"
+                    {...placeholderState((step as any).title, 'Fill in the placeholder')}
                     value={(step as any).title ?? ''}
                     onChange={(event) =>
                       patch((previous) => ({
@@ -2122,6 +2262,11 @@ export function HostActionsCard(props: {
                   <TextField
                     select
                     label="List"
+                    {...placeholderReference(
+                      (step as any).listName,
+                      (step as any).listId,
+                      'list',
+                    )}
                     value={(step as any).listId ?? ''}
                     onChange={(event) =>
                       patch((previous) => ({
@@ -2159,6 +2304,11 @@ export function HostActionsCard(props: {
                   <TextField
                     select
                     label="Campaign"
+                    {...placeholderReference(
+                      (step as any).campaignName,
+                      (step as any).campaignId,
+                      'campaign',
+                    )}
                     value={(step as any).campaignId ?? ''}
                     onChange={(event) =>
                       patch((previous) => ({
@@ -2226,6 +2376,7 @@ export function HostActionsCard(props: {
                 ) : step.type === 'addContactTag' ? (
                   <TextField
                     label="Tag"
+                    {...placeholderState((step as any).tag, 'Fill in the placeholder')}
                     value={(step as any).tag ?? ''}
                     onChange={(event) =>
                       patch((previous) => ({
@@ -2318,6 +2469,7 @@ export function HostActionsCard(props: {
                   <>
                     <TextField
                       label="Title"
+                      {...placeholderState((step as any).title, 'Fill in the placeholder')}
                       value={(step as any).title ?? ''}
                       onChange={(event) =>
                         patch((previous) => ({
@@ -2426,6 +2578,7 @@ export function HostActionsCard(props: {
                     </TextField>
                     <TextField
                       label="What happened"
+                      {...placeholderState((step as any).body, 'Fill in the placeholders')}
                       value={(step as any).body ?? ''}
                       onChange={(event) =>
                         patch((previous) => ({
@@ -2625,6 +2778,10 @@ export function HostActionsCard(props: {
                 step.when?.conditions?.[0]?.op === 'contains' ? (
                   <TextField
                     label="Value"
+                    {...placeholderState(
+                      step.when.conditions[0].value,
+                      'Replace the placeholder with the value to match',
+                    )}
                     value={step.when.conditions[0].value ?? ''}
                     onChange={(event) =>
                       patch((previous) => ({
@@ -2744,7 +2901,10 @@ export function HostActionsCard(props: {
           {runsFor ? (
             <HostRunHistoryCard
               hostId={hostId}
+              orgId={org?.$id}
               targetId={runsFor.$id}
+              targetType="action"
+              targetName={runsFor.name ?? ''}
               header="Recent runs"
             />
           ) : null}

@@ -39,6 +39,8 @@ import {
   ceilingedWindow,
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import type { ConsoleAutomationTarget } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
@@ -133,6 +135,11 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   })
   const { confirm } = useConfirmationContext()
   const { org } = props
+  /**
+   * The shell's zone renderer, for what other plugins add to a saved workflow's
+   * editor (AGL-2919); `null` outside the console shell.
+   */
+  const ExtensionZone = useConsoleWidgetSlot()
 
   const {
     data: workflowDocs,
@@ -351,6 +358,17 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
     (updater: (previous: WorkflowDraft) => WorkflowDraft) =>
       setDraft((previous) => (previous ? updater(previous) : previous)),
     [],
+  )
+
+  /** The saved workflow the editor has open, as the `automationEditor` zone names it. */
+  const draftId = draft?.id ?? null
+  const draftName = draft?.name ?? ''
+  const editorTarget = useMemo<ConsoleAutomationTarget | null>(
+    () => (draftId ? { type: 'workflow', id: draftId, name: draftName } : null),
+    // The name the editor opened with: the zone reads the workflow as it is
+    // stored, so a rename being typed does not make it a different one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [draftId],
   )
 
   const handleAdd = useCallback(() => {
@@ -647,6 +665,14 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
         >
+          {ExtensionZone && editorTarget ? (
+            <ExtensionZone
+              slot="automationEditor"
+              hostId={hostId}
+              orgId={org?.$id}
+              target={editorTarget}
+            />
+          ) : null}
           <TextField
             label="Name"
             helperText={
@@ -936,7 +962,10 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
           {runsFor ? (
             <HostRunHistoryCard
               hostId={hostId}
+              orgId={org?.$id}
               targetId={runsFor.$id}
+              targetType="workflow"
+              targetName={runsFor.name ?? ''}
               header="Recent runs"
             />
           ) : null}
