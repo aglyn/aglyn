@@ -95,7 +95,7 @@ introduce a price or an entitlement the account owner has not chosen.
 ## 2026-09-15 — An AI credit carries a markup: the catalog's billed rate and the provider's rate are two figures, and cost is measured at the provider's
 
 - **Decided by:** the account owner on 2026-09-15 (AGL-3015). Asked whether to correct the balanced tier's catalog rate down to the vendor's published list, they kept the higher figure and named it deliberate: the platform is upcharging on AI, and the answer to cost is to spend fewer tokens rather than to charge less for them.
-- **Scope:** packaging, policy
+- **Scope:** pricing, packaging, policy
 - **Evidence:** `AiCatalogRates`, `aiRatesAtList`, `aiProviderRatesForModel`, `aiBilledRatesForModel`, `estimateAiProviderCostUsd` and `estimateAiBilledUsd` in `libs/plugins/ai/src/lib/providers/catalog.ts`; `ASSIST_PROVIDER_COST_FIELD` and `assistProviderCostUsd` in `libs/aglyn/src/lib/app-utils/assist-credits.ts`; the second increment in `writeSignalAndRollup` (`libs/plugins/ai/src/lib/usage/assist-usage.ts`); the readers switched in `usage/staff-org-ai.ts`, `usage/assist-signal-mining.ts`, `server/ai-admin-orgs-spend.ts`, `apps/console/app/api/_lib/org-cogs.ts`, `apps/console/app/api/admin/margin-utilization/route.ts` and the COGS line of `apps/console/app/api/billing/report-usage/route.ts`; `libs/plugins/ai/src/lib/providers/billed-rate-is-not-provider-cost.spec.ts`; AGL-3015, AGL-3011, AGL-2937.
 
 **No locked price moves.** No price, band, credit rate or overage figure
