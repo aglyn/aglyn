@@ -22,6 +22,7 @@ import {
   decodeStoredNodes,
   formContractIsSatisfied,
   formFieldDeclsFromNodes,
+  FORMS_OFF_FOR_SITE_VIOLATION,
   type FormContractViolation,
   type FormFieldDecl,
   type NodeId,
@@ -91,13 +92,26 @@ export function isFormPromotionRefusal(
  *                      carried across by field name (AGL-2601).
  * @param options.storedNodes the version document's `nodes` in any stored
  *                      form — a besigner save writes them compressed.
+ * @param options.formsOnForSite whether Forms runs on the site (AGL-3029):
+ *                      `false` refuses the promotion with the contract's own
+ *                      sentence, whatever the design.
  */
 export function resolveFormPromotion(options: {
   formId: string
   form: Record<string, unknown> | null | undefined
   storedNodes: unknown
+  formsOnForSite?: boolean
 }): FormPromotionWrite | FormPromotionRefusal {
   const { formId, form, storedNodes } = options
+  if (options.formsOnForSite === false) {
+    return {
+      status: 422,
+      body: {
+        error: FORMS_OFF_FOR_SITE_VIOLATION.message,
+        violations: [FORMS_OFF_FOR_SITE_VIOLATION],
+      },
+    }
+  }
   const decoded = decodeStoredNodes<Record<string, any>>(storedNodes)
   if (!decoded || !Object.keys(decoded).length) {
     return {

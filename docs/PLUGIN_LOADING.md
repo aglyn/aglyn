@@ -33,7 +33,9 @@ by the nx boundary rule (`scope:app` may not depend on `aglyn:addons`,
 
 `org.enabledPlugins: string[]` (AGL-416) is the switchboard; absent means
 `DEFAULT_ENABLED_PLUGINS` (all first-party), and always-on plugins (`mui`)
-are unioned in via `resolveEnabledPlugins(org)`. Managed on the console's
+are unioned in via `resolveEnabledPlugins(org)`, as are the plugins on for
+every workspace and switchable only per site (`alwaysOnForWorkspace`: `forms`,
+`ai`). Managed on the console's
 **Plugins & add-ons** page (org section, AGL-423) — first-party toggles
 with release-flag state chips plus the marketplace installs (upgrade /
 uninstall / share-with-org via the marketplace plugin's `orgAddons` widget);

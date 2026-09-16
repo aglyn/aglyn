@@ -222,6 +222,17 @@ async function probeIntake(
     ).length
     if (paused) return funnelIntakeHealth({ kind: 'paused' }, recipients, elapsed())
     const orgBilling = owningOrg?.org
+    // The site's Forms switch (AGL-3029), asked the way the route asks it: a
+    // form's door, against the org's set minus this host's deny-list.
+    if (
+      !Aglyn.isHostPluginEnabled(
+        orgBilling as never,
+        hostSnapshot.data() as never,
+        Aglyn.formSubmissionDoorPlugin({}),
+      )
+    ) {
+      return funnelIntakeHealth({ kind: 'forms-off' }, recipients, elapsed())
+    }
     const used = Number(counterSnapshot.get(Aglyn.submissionMonthKey()) ?? 0)
     if (!Aglyn.checkFormSubmissionQuota(orgBilling as never, used).allowed) {
       return funnelIntakeHealth({ kind: 'quota-exhausted' }, recipients, elapsed())

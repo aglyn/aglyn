@@ -29,16 +29,19 @@
  *     at insertion, and `requiredSitePlugins` reads it to decide which bundles
  *     load before first paint. A preset still naming the old bundle keeps
  *     minting nodes that render a beat late.
- *  3. **The catalog entry.** This bundle registers site components, so a
- *     workspace that could switch it off would blank live pages; it is
- *     `alwaysOn` for that reason, and always-on is what excuses it from
- *     carrying a release flag.
+ *  3. **The catalog entry.** The catalog and the submissions already stored
+ *     belong to the workspace, so the bundle is on for every workspace and
+ *     carries no release flag; a site switches it off for itself, and core's
+ *     submit route, publish check and published render all honor that switch
+ *     through `FORMS_PLUGIN_ID` (AGL-3029).
  */
 
 import {
   FIRST_PARTY_PLUGINS,
+  FORMS_PLUGIN_ID,
   PUBLISHED_SITE_IMPACT,
   resolveEnabledPlugins,
+  resolveHostEnabledPlugins,
   subtractDisabledPlugins,
 } from '@aglyn/aglyn'
 import { formBlockPresets, formPresets } from './components/form'
@@ -143,40 +146,49 @@ describe('every node a forms preset places names the bundle that registers it', 
   })
 })
 
-describe('forms is in the catalog as an always-on bundle', () => {
+describe('forms is in the catalog, on for every workspace and switchable per site (AGL-3029)', () => {
   const entry = FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === BUNDLE_ID)
 
-  it('is listed at all', () => {
+  it('is listed at all, under the id core names it by', () => {
     expect(entry).toBeDefined()
+    expect(BUNDLE_ID).toBe(FORMS_PLUGIN_ID)
   })
 
-  it('is always-on, and therefore carries no release flag', () => {
+  it('is on for every workspace, and therefore carries no release flag', () => {
     expect({
       alwaysOn: entry?.alwaysOn,
+      alwaysOnForWorkspace: entry?.alwaysOnForWorkspace,
       releaseFlag: entry?.releaseFlag,
-    }).toEqual({ alwaysOn: true, releaseFlag: undefined })
+    }).toEqual({ alwaysOn: undefined, alwaysOnForWorkspace: true, releaseFlag: undefined })
   })
 
-  it('declares that switching it off would break published pages', () => {
-    // It registers site components, so this is the honest verdict — and it is
-    // the reason the switch is not offered.
+  it('declares that switching it off reaches published pages, and asks first', () => {
     expect(PUBLISHED_SITE_IMPACT[BUNDLE_ID]).toBe('elements')
+    expect(entry?.siteOff?.confirm).toBe(true)
+    expect(entry?.siteOff?.pages?.heading).toMatch(/stop rendering and stop accepting submissions/)
   })
 
   it('survives an org that has enumerated its plugins without it', () => {
-    // The switchboard writes an explicit list. An always-on id is unioned back
-    // in, so a workspace saved before this bundle existed still gets it.
+    // The switchboard writes an explicit list. A workspace-locked id is
+    // unioned back in, so a workspace saved before this bundle existed still
+    // gets it.
     expect(resolveEnabledPlugins({ enabledPlugins: ['mui'] })).toContain(
       BUNDLE_ID,
     )
   })
 
-  it('survives a SITE that names it in its deny-list', () => {
-    // The per-site list is where a form would actually be lost: a site with
-    // `disabledPlugins: ['forms']` would render a hole on the page holding its
-    // contact form while `/api/forms/submit` kept answering.
+  it('is on for a site whose document never switched it off', () => {
+    for (const host of [undefined, {}, { disabledPlugins: ['commerce'] }]) {
+      expect(resolveHostEnabledPlugins({ enabledPlugins: ['mui'] }, host)).toContain(BUNDLE_ID)
+    }
+  })
+
+  it('is off for a SITE that names it in its deny-list', () => {
+    // No hole behind the switch: the tenant stops drawing the form, the submit
+    // route refuses it and publishing refuses to put one live, all from this
+    // same answer.
     expect(
-      subtractDisabledPlugins([BUNDLE_ID, 'commerce'], [BUNDLE_ID, 'commerce']),
-    ).toEqual([BUNDLE_ID])
+      subtractDisabledPlugins([BUNDLE_ID, 'commerce'], [BUNDLE_ID]),
+    ).toEqual(['commerce'])
   })
 })

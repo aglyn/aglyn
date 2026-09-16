@@ -176,13 +176,13 @@ describe('resolveHostEnabledPlugins (AGL-1014)', () => {
  * makes "on by default" free: every host document written before the switch
  * existed has no such entry, so nothing needs migrating and nothing turns off.
  */
-describe('a plugin on for every workspace is switchable per site (AGL-3028)', () => {
+describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-3029)', () => {
   const WORKSPACE_LOCKED = FIRST_PARTY_PLUGINS.filter(
     (plugin) => plugin.alwaysOnForWorkspace,
   ).map((plugin) => plugin.id)
 
   it('is exactly the plugins whose workspace half carries no site', () => {
-    expect(WORKSPACE_LOCKED).toEqual(['ai'])
+    expect(WORKSPACE_LOCKED).toEqual(['forms', 'ai'])
   })
 
   it('never also claims `alwaysOn`, which would make the site switch inert', () => {

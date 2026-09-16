@@ -85,6 +85,7 @@ import type {
 } from '../foundation/definitions/components.types'
 import {
   collectFormFieldNodeIds,
+  FORM_COMPONENT_ID,
   type FormDocument,
   isMarketingConsentFieldName,
 } from './forms'
@@ -97,6 +98,7 @@ import {
  * a 422 body — without either one parsing prose.
  */
 export type FormContractViolationCode =
+  | 'forms-off-for-site'
   | 'form-node-missing'
   | 'form-id-unbound'
   | 'field-unnamed'
@@ -205,6 +207,65 @@ export function formFieldsCaptureConsent(
 }
 
 /**
+ * A site that switched Forms off (AGL-3029) publishes no form — neither a form
+ * design nor a page, layout or component that carries one.
+ *
+ * Not one of the six silent failures above, and checked ahead of all of them:
+ * on such a site the published page does not draw a form and `/api/forms/submit`
+ * refuses every submission, so publishing one would put a hole on a live page
+ * while the author believed they had shipped a form. Refusing it is what makes
+ * the empty space on a page published BEFORE the switch the only kind there is.
+ */
+export const FORMS_OFF_FOR_SITE_VIOLATION: FormContractViolation = {
+  code: 'forms-off-for-site',
+  message:
+    'Forms is switched off for this site, so a form published here would not ' +
+    'show on its pages or accept submissions. Switch Forms back on for this ' +
+    'site in Admin › Plugins to publish it.',
+}
+
+/**
+ * Whether a node map carries a form: a `form` node anywhere in it, bound to
+ * an entity or drawn inline. Read by `componentId`, which every form node has
+ * carried from the start, rather than by the `pluginId` a node was stamped
+ * with when it was placed.
+ */
+export function nodesCarryForm(
+  nodes: Record<NodeId, AglynNodeSchema | undefined> | undefined | null,
+): boolean {
+  return Object.values(nodes ?? {}).some(
+    (node) => node?.componentId === FORM_COMPONENT_ID,
+  )
+}
+
+/**
+ * The same refusal, for a page, layout or component that CARRIES a form: the
+ * sentence names the two ways forward, because removing the form publishes
+ * the rest of the page.
+ */
+export const FORMS_OFF_FOR_SITE_PAGE_VIOLATION: FormContractViolation = {
+  code: 'forms-off-for-site',
+  message:
+    'Forms is switched off for this site, so the form on this page would not ' +
+    'show or accept submissions. Remove the form, or switch Forms back on for ' +
+    'this site in Admin › Plugins, to publish it.',
+}
+
+/**
+ * The refusal for publishing a page, layout or component that carries a form
+ * on a site that switched Forms off, or `null` (AGL-3029). `formsOnForSite`
+ * absent means the caller could not tell, which refuses nothing.
+ */
+export function formsOffPublishViolation(
+  nodes: Record<NodeId, AglynNodeSchema | undefined> | undefined | null,
+  formsOnForSite: boolean | undefined,
+): FormContractViolation | null {
+  return formsOnForSite === false && nodesCarryForm(nodes)
+    ? FORMS_OFF_FOR_SITE_PAGE_VIOLATION
+    : null
+}
+
+/**
  * Everything this design would break, or an empty array.
  *
  * @param options.form      the stored document, for what it ROUTES and what it
@@ -215,6 +276,10 @@ export function formFieldsCaptureConsent(
  * @param options.formId    the id this design is the design OF.
  * @param options.nodes     the flat node map, canvas or published.
  * @param options.formNodeId the `form` node inside it.
+ * @param options.formsOnForSite whether Forms runs on the site the form is
+ *                      published to; `false` refuses the design outright.
+ *                      Absent, the caller could not tell, and nothing is
+ *                      refused for it.
  */
 export function checkFormContract(options: {
   form: Pick<FormDocument, 'routing' | 'consentFieldName'> | null | undefined
@@ -223,8 +288,11 @@ export function checkFormContract(options: {
   formNodeId: NodeId | undefined | null
   /** Overridable for a host whose plugin registers these under other ids. */
   componentIds?: { form?: string; formField?: string }
+  formsOnForSite?: boolean
 }): FormContractViolation[] {
   const { form, formId, nodes, formNodeId } = options
+  // Nothing about the design matters on a site that will not draw it.
+  if (options.formsOnForSite === false) return [FORMS_OFF_FOR_SITE_VIOLATION]
   const formComponentId = options.componentIds?.form ?? 'form'
   const formFieldComponentId = options.componentIds?.formField ?? 'formField'
   const violations: FormContractViolation[] = []

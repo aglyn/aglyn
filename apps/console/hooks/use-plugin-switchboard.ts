@@ -103,6 +103,13 @@ const catalogLabel = (pluginId: string): string =>
   FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === pluginId)?.label ??
   pluginId
 
+/** Whether switching this plugin off for a site asks first (AGL-3029). */
+const confirmsSiteDisable = (pluginId: string): boolean =>
+  Boolean(
+    FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === pluginId)?.siteOff
+      ?.confirm,
+  )
+
 export interface SwitchboardOptions {
   /**
    * How a plugin id reads to an operator. Defaults to the first-party
@@ -432,7 +439,12 @@ export function useSitePluginSwitchboard(
       // Only a DISABLE can strand a dependent. Turning one on cannot.
       if (on) return void commit([pluginId], true)
       const cascade = resolveDisableCascade(pluginId, enabledNow)
-      if (!cascade.length) return void commit([pluginId], false)
+      // A plugin whose switch-off reaches the site's published pages asks
+      // first even with nothing depending on it (AGL-3029): Forms off stops
+      // every form on them, and the dialog names those pages before it does.
+      if (!cascade.length && !confirmsSiteDisable(pluginId)) {
+        return void commit([pluginId], false)
+      }
       setPending({
         id: pluginId,
         on,

@@ -406,6 +406,31 @@ you type another name. It is a form of its own: submissions stay with the
 original, the copy starts collecting only once you place it on a page and
 publish, and it counts against your form allowance like a new form.
 
+## Switch Forms off for one site {#switch-forms-off-for-one-site}
+
+Forms is **on for every site** in a workspace. A site admin can switch it off for one site
+on that site's **Admin → Plugins → Forms** page. The switch asks first: it lists the
+published pages on the site that carry a form, because those forms stop rendering and
+stop accepting submissions the moment Forms is off.
+
+With Forms off for a site:
+
+- a form on its published pages is not drawn. The rest of the page stays; where the form
+  was, there is empty space and no error;
+- every submission sent to the site is refused with **This site is not accepting form
+  submissions**, including one from a page a visitor opened before the switch;
+- publishing a form, or a page, layout or component that carries one, is refused until
+  Forms is back on for the site. Remove the form to publish the rest of the page;
+- the Forms page leaves the site's navigation.
+
+What it keeps: the submissions already received, the workspace's form catalog and the CRM
+leads its forms created are untouched, and forms keep working on the workspace's other
+sites. A **Marketing** popup that collects an email address is a Marketing element rather
+than a form, so it keeps collecting while Marketing is on for the site.
+
+Switch Forms back on and the forms on the site's published pages render and accept
+submissions again.
+
 ## Related
 
 - [Datasets & dynamic content](../datasets/overview.md)

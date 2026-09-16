@@ -79,6 +79,12 @@ export interface FirstPartyPlugin {
     keeps: string
     /** Ask before applying. */
     confirm?: boolean
+    /**
+     * How the confirmation names the site's published pages the switch
+     * reaches (AGL-3029): the sentence above the list, and the one that
+     * stands in for an empty list when the scan read everything.
+     */
+    pages?: { heading: string; none: string }
   }
   /** One-line description for the org-settings toggle list. */
   description?: string
@@ -192,6 +198,16 @@ export const PUBLISHED_SITE_IMPACT: Readonly<
  */
 export const ACCOUNTS_PLUGIN_ID = 'accounts'
 
+/**
+ * The Forms capability's id, named in core (AGL-3029).
+ *
+ * A form's server half is core — `/api/forms/submit`, the publish-time
+ * contract check, the published page's render — and core may not import a
+ * plugin, so each asks the site's plugin set about this id rather than asking
+ * the Forms plugin anything.
+ */
+export const FORMS_PLUGIN_ID = 'forms'
+
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
     id: 'mui',
@@ -200,13 +216,33 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     description: 'The base component and theme library every site builds on.',
   },
   {
-    id: 'forms',
+    id: FORMS_PLUGIN_ID,
     label: 'Forms',
-    alwaysOn: true,
-    description:
-      'Forms on the site and the catalog that owns them. Always on: the ' +
-      'submit endpoint and the publish-time contract check are core, so a ' +
-      'switch here would remove only the half that draws the form.',
+    alwaysOnForWorkspace: true,
+    description: 'Forms on the site and the catalog that owns them.',
+    siteOff: {
+      stops:
+        'Switching Forms off for this site stops forms rendering on its ' +
+        'published pages, refuses every submission sent to it, and blocks ' +
+        'publishing a form, or a page that carries one, until Forms is back on.',
+      keeps:
+        'Submissions already received, the workspace’s form catalog and the ' +
+        'CRM leads its forms created are kept, and forms keep working on the ' +
+        'workspace’s other sites.',
+      confirm: true,
+      pages: {
+        heading:
+          'These published pages carry a form. Their forms stop rendering and ' +
+          'stop accepting submissions:',
+        none: 'No published page on this site carries a form.',
+      },
+    },
+    // On for every workspace and switchable per site (AGL-3029): the catalog
+    // and the submissions already stored belong to the workspace. A site's
+    // switch reaches every half of a form through this id — the tenant stops
+    // drawing it, `/api/forms/submit` refuses it, and the publish-time
+    // contract check refuses to put one live — so no half keeps running
+    // behind a page that no longer shows it.
   },
   {
     id: 'ai',

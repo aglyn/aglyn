@@ -180,6 +180,14 @@ installing.
   that hides AI on the site, refuses every AI request made for it and stops its queued
   jobs without spending credits, while the workspace's AI keeps running. See
   [Switch AI off for one site](../../marketing-and-automation/ai-assist/overview.md#switch-ai-off-for-one-site).
+- **Forms** works the same way: no workspace switch, because the form catalog and the
+  submissions already stored belong to the workspace, and a site switch that asks first.
+  With Forms off for a site, its published pages draw no form, the submit endpoint refuses
+  every submission for it, and publishing a form or a page carrying one is refused. See
+  [Switch Forms off for one site](../../content-and-data/forms/overview.md#switch-forms-off-for-one-site).
+- A switched-off plugin's elements are not drawn on the site's published pages — not by
+  the browser, and not in the page the server sends either, even when the server has the
+  plugin loaded for another site.
 
 ## When one plugin depends on another
 

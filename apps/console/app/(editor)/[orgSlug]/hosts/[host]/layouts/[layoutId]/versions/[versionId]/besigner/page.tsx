@@ -104,6 +104,7 @@ import {
 } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
+import useFormsPublishBlock from '../../../../../../../../../../hooks/use-forms-publish-block'
 import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use-plugin-drawer-registration'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
@@ -521,12 +522,16 @@ function LayoutBesignerPage(props) {
    */
   const livePublished =
     layoutPublishedVersionId === versionId && !draftPending && !draft.available
+  const { refuse: refuseFormsOff } = useFormsPublishBlock()
 
   const handleSaveAndPublish = useCallback(async () => {
     // Publishing a canvas that never took in the saved draft on offer would
     // push the stored layout live and then clear the draft as published
     // (AGL-2874).
     if (refuseOverUnopenedDraft('publish')) return
+    // A layout carrying a form does not go live on a site that switched Forms
+    // off (AGL-3029): every page under it would draw an empty space instead.
+    if (refuseFormsOff(canvas.toJSON().nodes)) return
     savedLandedRef.current = false
     saveRefusedRef.current = false
     await handleSave()
@@ -610,6 +615,7 @@ function LayoutBesignerPage(props) {
   }, [
     firestore,
     refuseOverUnopenedDraft,
+    refuseFormsOff,
     draft.sharedDraftUnopened,
     handleSave,
     livePublished,

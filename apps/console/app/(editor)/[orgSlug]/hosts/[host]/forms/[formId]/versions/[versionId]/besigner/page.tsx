@@ -107,6 +107,7 @@ import usePresence from '../../../../../../../../../../hooks/use-presence'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import useHostRole from '../../../../../../../../../../hooks/use-host-role'
+import useFormsPublishBlock from '../../../../../../../../../../hooks/use-forms-publish-block'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -405,6 +406,9 @@ function FormBesignerPage() {
   })
 
   const [publishing, setPublishing] = useState(false)
+  // Whether Forms runs on this site (AGL-3029): the contract refuses every
+  // design on a site that switched it off.
+  const { formsOnForSite } = useFormsPublishBlock()
 
   /**
    * Publish: copy this version's tree onto the form document — AND refuse to,
@@ -450,6 +454,7 @@ function FormBesignerPage() {
         formId,
         nodes: definition.nodes,
         formNodeId,
+        formsOnForSite,
       })
       if (!formContractIsSatisfied(violations)) {
         // `persist` because this is a refusal an author has to act on: an
@@ -522,7 +527,7 @@ function FormBesignerPage() {
     } finally {
       setPublishing(false)
     }
-  }, [firestore, hostId, formId, versionId, formDoc, enqueueSnackbar])
+  }, [firestore, hostId, formId, versionId, formDoc, formsOnForSite, enqueueSnackbar])
 
   /**
    * Saves the working draft rather than the form the sites are serving.

@@ -93,6 +93,8 @@ export type IntakeOutcome =
   | { kind: 'host-unresolved' }
   /** A platform, org or host lockdown is refusing visitor writes (423). */
   | { kind: 'paused' }
+  /** The site switched Forms off, so every form submission is refused (404). */
+  | { kind: 'forms-off' }
   /** The plan's monthly submission wall is reached (429). */
   | { kind: 'quota-exhausted' }
   /** The abuse ceiling has tripped and the site is refusing (429). */
@@ -130,6 +132,10 @@ export function funnelIntakeHealth(
       return { ...base, ok: false, code: 'host-unresolved' }
     case 'paused':
       return { ...base, ok: false, code: 'submissions-paused' }
+    case 'forms-off':
+      // Switched off on purpose for this site (AGL-3029) — still red: the
+      // funnel this probe watches collects nothing while it stays off.
+      return { ...base, ok: false, code: 'forms-switched-off' }
     case 'quota-exhausted':
       return { ...base, ok: false, code: 'quota-exhausted' }
     case 'ceiling-tripped':

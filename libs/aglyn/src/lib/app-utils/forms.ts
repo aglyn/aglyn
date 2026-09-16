@@ -32,6 +32,7 @@
  */
 
 import type { AglynNodeSchema, NodeId } from '../foundation/definitions/components.types'
+import { FORMS_PLUGIN_ID } from '../plugin-manager/enabled-plugins'
 import type { PlacementKind } from './compose-reusable-components'
 import { submissionMonthKey } from './form-abuse-ceiling'
 
@@ -53,6 +54,39 @@ export const FORM_FIELD_COMPONENT_ID = 'formField'
  * Persisted in screen documents — never rename.
  */
 export const FORM_ID_PROP = 'formId'
+
+/**
+ * What `/api/forms/submit` answers a submission to a site that switched Forms
+ * off (AGL-3029). A visitor reads it, so it names no plugin and no setting.
+ */
+export const FORMS_OFF_FOR_SITE_REFUSAL = 'This site is not accepting form submissions'
+
+/**
+ * The marketing plugin's id, as the submission door below names it. Core
+ * holds no import of the plugin; the catalog is where the string is defined.
+ */
+const MARKETING_PLUGIN_ID = 'marketing'
+
+/**
+ * The plugin whose door a submission to `/api/forms/submit` came through
+ * (AGL-3029) — the plugin that must run on the site for it to be accepted.
+ *
+ * The endpoint is shared. A form element posts to it, and so does a Marketing
+ * popup's email capture, which is a Marketing element rather than a form: a
+ * site that switched Forms off and still shows its popup must not silently
+ * lose every address the popup collects. The popup names its door in the
+ * body; everything else is a form's.
+ *
+ * A body that names a form ENTITY or a dataset binding is a form's, whatever
+ * door it claims. Those are what a form element sends and a popup never does,
+ * so the popup door cannot be used to file rows under a form, or into a
+ * dataset, on a site that switched Forms off.
+ */
+export function formSubmissionDoorPlugin(body: Record<string, unknown> | null | undefined): string {
+  const namesFormData =
+    Boolean(String(body?.['formId'] ?? '').trim()) || Boolean(body?.['datasetBinding'])
+  return body?.['door'] === 'popup' && !namesFormData ? MARKETING_PLUGIN_ID : FORMS_PLUGIN_ID
+}
 
 /**
  * How many forms one query for a site's catalog reads.

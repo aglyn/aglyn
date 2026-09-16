@@ -17,13 +17,16 @@
 
 /**
  * A plugin on for every workspace and switchable per site, on the two Plugins
- * pages (AGL-3028).
+ * pages (AGL-3028, AGL-3029).
  *
  * The site's Admin › Plugins page offers the switch — the plugin is no longer
  * "Always on" there — and says, beside it, what switching it off stops on
  * this site and what it leaves running. The workspace page keeps the switch
  * on and inert, and says where the real one is: a workspace switch would stop
  * the half of the plugin that carries no site.
+ *
+ * Forms asks before it applies: switching it off stops every form on the
+ * site's published pages, so the warning names those pages first.
  */
 
 import { fireEvent, render, waitFor } from '@testing-library/react'
@@ -123,6 +126,20 @@ const switchLabelled = (label: string): HTMLInputElement | null =>
   document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)
 
 const AI = FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === 'ai')
+const FORMS = FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === 'forms')
+
+const buttonNamed = (name: string) =>
+  Array.from(document.querySelectorAll('button')).find(
+    (button) => button.textContent?.trim() === name,
+  )
+
+/** What `/api/hosts/plugin-impact` answers for this site. */
+function answerImpact(body: Record<string, unknown>) {
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => body,
+  }) as unknown as typeof fetch
+}
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -193,5 +210,111 @@ describe('AI on the WORKSPACE’s Plugins page', () => {
     expect(document.body.textContent).toContain(
       'a site switches it off for itself, on that site’s Admin › Plugins page',
     )
+  })
+})
+
+describe('Forms on the SITE’s Admin › Plugins page (AGL-3029)', () => {
+  beforeEach(() => {
+    mockPluginRef = 'forms'
+  })
+
+  it('offers the switch, on by default, with what switching it off stops and keeps', () => {
+    render(<SitePluginInstallation />)
+    const toggle = switchLabelled('Toggle Forms on this site')
+    expect(toggle?.checked).toBe(true)
+    expect(toggle?.disabled).toBe(false)
+    expect(document.body.textContent).not.toContain('Always on')
+    expect(document.body.textContent).toContain(FORMS?.siteOff?.stops)
+    expect(document.body.textContent).toContain(FORMS?.siteOff?.keeps)
+  })
+
+  it('warns before applying, naming the published pages that carry a form', async () => {
+    answerImpact({
+      placements: 3,
+      affectedScreens: 2,
+      truncated: false,
+      pages: [
+        { id: 's-contact', name: 'Contact', path: '/contact' },
+        { id: 's-quote', name: 'Get a quote', path: '/services/quote' },
+      ],
+    })
+    render(<SitePluginInstallation />)
+    fireEvent.click(switchLabelled('Toggle Forms on this site') as HTMLInputElement)
+    await waitFor(() => expect(buttonNamed('Switch Forms off')).toBeTruthy())
+    await waitFor(() => expect(document.body.textContent).toContain('Get a quote'))
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('Switch Forms off for this site?')
+    expect(text).toContain(
+      'These published pages carry a form. Their forms stop rendering and stop accepting submissions:',
+    )
+    expect(text).toContain('Contact')
+    expect(text).toContain('/contact')
+    expect(text).toContain('/services/quote')
+    expect(text).toContain(FORMS?.siteOff?.keeps)
+    // The scan asked about THIS site and the Forms plugin.
+    const [url, init] = (global.fetch as jest.Mock).mock.calls.find(
+      ([called]) => called === '/api/hosts/plugin-impact',
+    ) as [string, { body: string }]
+    expect(url).toBe('/api/hosts/plugin-impact')
+    expect(JSON.parse(init.body)).toEqual({ pluginId: 'forms', hostIds: [HOST_ID] })
+    // Nothing is written while the warning is open.
+    expect(mockSetDoc).not.toHaveBeenCalled()
+  })
+
+  it('says so when no published page carries a form', async () => {
+    answerImpact({ placements: 0, affectedScreens: 0, truncated: false, pages: [] })
+    render(<SitePluginInstallation />)
+    fireEvent.click(switchLabelled('Toggle Forms on this site') as HTMLInputElement)
+    await waitFor(() =>
+      expect(document.body.textContent).toContain(
+        'No published page on this site carries a form.',
+      ),
+    )
+  })
+
+  it('never claims "none" for a scan that stopped early', async () => {
+    answerImpact({ placements: 0, affectedScreens: 0, truncated: true, pages: [] })
+    render(<SitePluginInstallation />)
+    fireEvent.click(switchLabelled('Toggle Forms on this site') as HTMLInputElement)
+    await waitFor(() => expect(buttonNamed('Switch Forms off')).toBeTruthy())
+    await waitFor(() => expect((global.fetch as jest.Mock).mock.calls.length).toBeGreaterThan(0))
+    expect(document.body.textContent).not.toContain('No published page on this site carries a form.')
+  })
+
+  it('Cancel writes nothing', async () => {
+    render(<SitePluginInstallation />)
+    fireEvent.click(switchLabelled('Toggle Forms on this site') as HTMLInputElement)
+    await waitFor(() => expect(buttonNamed('Cancel')).toBeTruthy())
+    fireEvent.click(buttonNamed('Cancel') as HTMLElement)
+    await waitFor(() => expect(buttonNamed('Switch Forms off')).toBeFalsy())
+    expect(mockSetDoc).not.toHaveBeenCalled()
+  })
+
+  it('confirming writes the site’s deny-list, and only Forms', async () => {
+    render(<SitePluginInstallation />)
+    fireEvent.click(switchLabelled('Toggle Forms on this site') as HTMLInputElement)
+    await waitFor(() => expect(buttonNamed('Switch Forms off')).toBeTruthy())
+    fireEvent.click(buttonNamed('Switch Forms off') as HTMLElement)
+    await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
+    expect(mockSetDoc.mock.calls[0][0].disabledPlugins).toEqual(['forms'])
+  })
+
+  it('turning it back on asks nothing', async () => {
+    mockHostDoc = { $id: HOST_ID, disabledPlugins: ['forms'] }
+    render(<SitePluginInstallation />)
+    fireEvent.click(switchLabelled('Toggle Forms on this site') as HTMLInputElement)
+    await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
+    expect(mockSetDoc.mock.calls[0][0].disabledPlugins).toEqual([])
+    expect(buttonNamed('Switch Forms off')).toBeFalsy()
+  })
+})
+
+describe('Forms on the WORKSPACE’s Plugins page (AGL-3029)', () => {
+  it('holds the workspace switch on and inert', () => {
+    mockPluginRef = 'forms'
+    render(<OrgPluginInstallation />)
+    const toggle = switchLabelled('Toggle Forms for this workspace')
+    expect(toggle?.checked).toBe(true)
+    expect(toggle?.disabled).toBe(true)
   })
 })
