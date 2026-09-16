@@ -42,7 +42,10 @@ generated until you confirm.
    page sits in your layout and never carries its own copy of them.
 3. **Forms are built on the Forms page, then placed.** A form is created with its
    fields, validation, consent and routing on the Forms page, and a page places it
-   by reference, so you edit it in one place.
+   by reference, so you edit it in one place. A search is never built as a form,
+   because a form collects submissions: the AI places a
+   [Search Box](../building-sites/site-search/overview.md) for your site search, or a
+   Collection Search for the entries of one collection.
 4. **Similar pages share one template.** Pages that share a structure and differ by
    content, such as products, locations, team members or services, are built from
    one template or bound to a collection.

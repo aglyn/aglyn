@@ -38,6 +38,7 @@ jest.mock('./ai-runtime', () => ({
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
 import { AI_THEME_TOOL_NAME } from '../tools/ai-theme-tool'
 import { readAiEvalCase, scoreAiEvalCandidate, type AiEvalCase } from './ai-eval'
@@ -49,6 +50,7 @@ import {
   readAiEvalGrade,
   recordAiEvalLive,
 } from './ai-eval-live'
+import { AI_PALETTE } from './ai-palette.generated'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
 const fixture = (path: string): AiEvalCase =>
@@ -174,6 +176,28 @@ describe('aiEvalGraderPrompt', () => {
     const prompt = aiEvalGraderPrompt(text, { ...answer, scope: 'full', plan: null, answer: 'Fresh bread.' })
     expect(prompt).not.toContain(AI_EVAL_PLAN_GRADER_NOTE)
     expect(prompt).toContain('Fresh bread.')
+  })
+
+  it('excuses an empty screens list for exactly the kinds the plan step tells to plan none (AGL-3022)', () => {
+    // A grader that does not know this marks a template plan down for
+    // planning no screens, which is what the plan step told it to do.
+    const kinds = 'a component, layout, template, form or email job'
+    expect(AI_JOB_PLAN_INSTRUCTIONS.map((block) => block.text).join('\n')).toContain(
+      `${kinds} plans no screens`,
+    )
+    expect(AI_EVAL_PLAN_GRADER_NOTE).toContain(`${kinds} has an empty screens list by design`)
+  })
+
+  it('tells a plan’s grader that a search is an element the palette has, never a new form (AGL-3022)', () => {
+    // A grader that does not know the platform's search elements rewards a
+    // plan for creating a form to search with.
+    for (const id of ['searchBox', 'collectionSearch']) {
+      expect([id, AI_EVAL_PLAN_GRADER_NOTE.includes(`${AI_PALETTE[id].displayName} element`)]).toEqual([
+        id,
+        true,
+      ])
+    }
+    expect(AI_EVAL_PLAN_GRADER_NOTE).toContain('never a new form')
   })
 })
 

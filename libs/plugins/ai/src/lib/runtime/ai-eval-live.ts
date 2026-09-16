@@ -288,16 +288,29 @@ export const AI_EVAL_GRADER_INSTRUCTIONS: readonly AiSystemBlock[] = [
  * and on copy alike, and the grade then measures the schema rather than the
  * answer. So the grader is told the shape it is reading, and that the only
  * words a plan writes are the ones `aiPlanCopy` collects.
+ *
+ * Two facts it cannot read off the schema are stated as well. Only a page or
+ * site job plans screens: the plan step tells a component, layout, template,
+ * form or email job to plan none, so an empty `screens` on one of those is the
+ * answer working, and a grader that does not know it marks the plan down for
+ * doing what it was told. And a search is an element, never a form: a form
+ * collects submissions, and a grader that does not know the platform has
+ * search elements rewards a plan for creating a form to search with.
  */
 export const AI_EVAL_PLAN_GRADER_NOTE =
   'A build plan is not the finished output: it is the proposal a member confirms before anything is generated. ' +
   'It holds only what it reuses by inventory id, what it creates and why, and its screens — each with a title, ' +
   'slug, layout, template, nav flag, search title and description, and sections named with what they place and ' +
-  'how many items they hold. A plan has no node tree, no heading order, no landmarks, no theme tokens, no field ' +
+  'how many items they hold. Only a page or site job plans screens: the plan of a component, layout, template, ' +
+  'form or email job has an empty screens list by design, and is never marked down for it. ' +
+  'A plan has no node tree, no heading order, no landmarks, no theme tokens, no field ' +
   'labels or validation, and no body copy; all of those belong to the generation step that runs once the plan is ' +
   'confirmed. Grade structure on whether the plan proposes the right screens, sections, fields and creations for ' +
-  'the brief, and copy on the only words a plan writes: screen titles, search titles and descriptions, and the ' +
-  'names and rationales of what it creates. Do not mark a plan down for anything a plan cannot hold.'
+  'the brief. A search box is a Search Box element, or a Collection Search element over a collection\'s entries, ' +
+  'and never a new form, because a form collects submissions: a plan that creates a form to search with has ' +
+  'proposed the wrong creation. Grade copy on the only words a plan writes: screen titles, search titles and ' +
+  'descriptions, and the names and rationales of what it creates. Do not mark a plan down for anything a plan ' +
+  'cannot hold.'
 
 /** The grader's user turn: the brief, its site, and the answer — copy as written, anything else as JSON. */
 export function aiEvalGraderPrompt(evalCase: AiEvalCase, answer: AiEvalRecordedAnswer): string {

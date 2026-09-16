@@ -24,7 +24,7 @@ import { createHash } from 'node:crypto'
 import { formatMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
 import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import { AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
+import { AI_BUILD_PLAN_LIMITS, AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
 import {
   AI_SITE_INVENTORY_LISTED_PER_KIND,
   AI_SITE_INVENTORY_MAX_CHARS,
@@ -59,9 +59,15 @@ import {
   AI_INVENTORY_LOOKUP_TOOL_NAME,
   aiInventoryLookupTool,
 } from '../tools/ai-inventory-lookup-tool'
-import { AI_DOCTRINE_RULES, AI_REPEAT_MIN_COUNT, AI_SIMILAR_PAGES_MIN } from './ai-doctrine-validators'
+import {
+  AI_DOCTRINE_RULES,
+  AI_REPEAT_MIN_COUNT,
+  AI_SEO_DESCRIPTION_MAX,
+  AI_SEO_TITLE_MAX,
+  AI_SIMILAR_PAGES_MIN,
+} from './ai-doctrine-validators'
 import { AI_SURFACE_NAMES } from './ai-palette'
-import { AI_PALETTE_CATALOG } from './ai-palette.generated'
+import { AI_PALETTE, AI_PALETTE_CATALOG, AI_SURFACES } from './ai-palette.generated'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
   AI_MAX_CACHE_BREAKPOINTS,
@@ -139,11 +145,34 @@ describe('the doctrine block', () => {
     // not told is a threshold it cannot hold to.
     expect(AI_BUILDING_DOCTRINE).toContain(`When ${AI_SIMILAR_PAGES_MIN} or more pages share one structure`)
     expect(AI_BUILDING_DOCTRINE).toContain(`appearing ${AI_REPEAT_MIN_COUNT} or more times`)
+    // Rule 10 refuses a plan's search title and description well inside the
+    // ceilings `parseAiBuildPlan` cuts them at, so the rule's numbers are the
+    // ones a generator is told, and the plan tool's schema leaves them to it.
+    expect(AI_BUILDING_DOCTRINE).toContain(
+      `a search title of at most ${AI_SEO_TITLE_MAX} characters, a search description of at most ${AI_SEO_DESCRIPTION_MAX}`,
+    )
+    expect(AI_SEO_TITLE_MAX).toBeLessThan(AI_BUILD_PLAN_LIMITS.text)
+    expect(AI_SEO_DESCRIPTION_MAX).toBeLessThan(AI_BUILD_PLAN_LIMITS.seoDescription)
+  })
+
+  it('says, beside the forms rule, that a search is an element a generator can place and never a form (AGL-3022)', () => {
+    // A generator told nothing about search plans a form with one query field
+    // for "a menu search across the top". A form collects submissions; the
+    // platform's searches are elements, and naming them is worth its bytes
+    // only while every surface a search is built on can place them.
+    const rule3 = AI_BUILDING_DOCTRINE.split('\n').find((line) => line.startsWith('3. ')) ?? ''
+    expect(rule3).toContain('never a form')
+    for (const id of ['searchBox', 'collectionSearch']) {
+      expect([id, rule3.includes(`"${id}"`), AI_PALETTE[id]?.kind]).toEqual([id, true, 'element'])
+      for (const surface of ['screen', 'layout', 'component'] as const) {
+        expect([id, surface, AI_SURFACES[surface].allow.includes(id)]).toEqual([id, surface, true])
+      }
+    }
   })
 
   it('pins the doctrine’s bytes, so changing what every generator is told is a deliberate cache break', () => {
     expect(createHash('sha256').update(AI_DOCTRINE_SYSTEM_BLOCK.text).digest('hex')).toBe(
-      '006843cc161def19bb532bcd499ce0e3b2360f05a12e5d4319c9e18d443eecc2',
+      '10c9a09f67f1efe7fca1087724ff2e3ba1027568dc8ee18ef1da096c71979fbd',
     )
   })
 

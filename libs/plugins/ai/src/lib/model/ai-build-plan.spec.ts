@@ -220,6 +220,74 @@ describe('AI_BUILD_PLAN_TOOL — strict structured output', () => {
     }
   })
 
+  /** Every property that holds text, nullable text or a list of text, with where it sits. */
+  function textFields(
+    schema: unknown,
+    path = 'input',
+  ): Array<{ path: string; description: string }> {
+    if (!schema || typeof schema !== 'object') return []
+    const found: Array<{ path: string; description: string }> = []
+    for (const [name, inner] of Object.entries(
+      ((schema as Record<string, unknown>)['properties'] as Record<string, unknown>) ?? {},
+    )) {
+      const field = inner as Record<string, unknown>
+      const branches = (field['anyOf'] as Array<Record<string, unknown>> | undefined) ?? [field]
+      const items = field['items'] as Record<string, unknown> | undefined
+      const text = branches.some((branch) => branch['type'] === 'string') || items?.['type'] === 'string'
+      if (text && !field['enum']) {
+        found.push({ path: `${path}.${name}`, description: String(field['description']) })
+      }
+      if (items) found.push(...textFields(items, `${path}.${name}[]`))
+    }
+    return found
+  }
+
+  it('tells the model the ceiling the reader cuts each field it writes at (AGL-3022)', () => {
+    // A ceiling the model is not shown is one it writes past, and the reader
+    // then ends a rationale mid-sentence, on the last word break inside it.
+    const fields = textFields(AI_BUILD_PLAN_TOOL.inputSchema)
+    // Copied from the inventory or from a creation's name, so the length is
+    // not the model's to choose.
+    const references = [
+      'input.reuse[].id',
+      'input.create[].duplicateOf',
+      'input.screens[].layout',
+      'input.screens[].template',
+      'input.screens[].duplicateOf',
+      'input.screens[].sections[].uses',
+    ]
+    // Refused by rule 10 far inside the reader's ceilings, and told as the
+    // rule's own numbers; the reader's here would contradict the rule.
+    const heldByRule10 = ['input.screens[].seoTitle', 'input.screens[].seoDescription']
+    expect(fields.map((field) => field.path)).toEqual(
+      expect.arrayContaining([...references, ...heldByRule10]),
+    )
+    const written = fields.filter(
+      (field) => !references.includes(field.path) && !heldByRule10.includes(field.path),
+    )
+    // A text field added to the schema lands here until it is placed in a group.
+    expect(written.map((field) => field.path)).toEqual([
+      'input.reuse[].purpose',
+      'input.create[].name',
+      'input.create[].why',
+      'input.create[].fields',
+      'input.screens[].title',
+      'input.screens[].slug',
+      'input.screens[].sections[].name',
+    ])
+    for (const { path, description } of written) {
+      expect([path, description]).toEqual([
+        path,
+        expect.stringContaining(`at most ${AI_BUILD_PLAN_LIMITS.text} characters`),
+      ])
+    }
+    for (const { path, description } of fields.filter((field) => heldByRule10.includes(field.path))) {
+      for (const ceiling of [AI_BUILD_PLAN_LIMITS.text, AI_BUILD_PLAN_LIMITS.seoDescription]) {
+        expect([path, description.includes(`at most ${ceiling}`)]).toEqual([path, false])
+      }
+    }
+  })
+
   it('offers exactly the kinds the reader admits', () => {
     const schema = AI_BUILD_PLAN_TOOL.inputSchema as {
       properties: Record<string, { items: { properties: { kind: { enum: string[] } } } }>
