@@ -17,6 +17,7 @@ import noDynamicFirstPartyImport from './tools/lint-rules/no-dynamic-first-party
 import noLinkElementSwitch from './tools/lint-rules/no-link-element-switch.mjs'
 import noListenerRowSpreadIntoWrite from './tools/lint-rules/no-listener-row-spread-into-write.mjs'
 import noPlanGatedEntitlement from './tools/lint-rules/no-plan-gated-entitlement.mjs'
+import noRawMuiTable from './tools/lint-rules/no-raw-mui-table.mjs'
 import noRemoteImageService from './tools/lint-rules/no-remote-image-service.mjs'
 import noSxAfterSpread from './tools/lint-rules/no-sx-after-spread.mjs'
 import noUnguardedLoadingHook from './tools/lint-rules/no-unguarded-loading-hook.mjs'
@@ -57,6 +58,7 @@ const aglynPlugin = {
     'no-link-element-switch': noLinkElementSwitch,
     'no-listener-row-spread-into-write': noListenerRowSpreadIntoWrite,
     'no-plan-gated-entitlement': noPlanGatedEntitlement,
+    'no-raw-mui-table': noRawMuiTable,
     'no-remote-image-service': noRemoteImageService,
     'no-sx-after-spread': noSxAfterSpread,
     'no-unguarded-loading-hook': noUnguardedLoadingHook,
@@ -228,6 +230,15 @@ export default [
       // (AGL-1671). ERROR from the start: today's tree is clean, and the
       // one instance it exists for is the one this rule was written from.
       'aglyn/no-remote-image-service': 'error',
+      // A MUI `Card` clips what leaves it, and a bare `Table` is as wide as
+      // its widest unbreakable cell — so a table outgrowing its card is cut
+      // off at the edge with no way to scroll to the rest (AGL-3045). A record
+      // list goes through `ListTable`; every other table through
+      // `ScrollTable`. ERROR, with its backlog pinned file by file in
+      // `tools/lint-rules/no-raw-mui-table-allowlist.json`: a new raw table
+      // is refused, and a row whose file no longer draws one is itself
+      // reported, so the list only shrinks.
+      'aglyn/no-raw-mui-table': 'error',
       'mobx/exhaustive-make-observable': 'off',
       'mobx/unconditional-make-observable': 'off',
       'mobx/missing-make-observable': 'off',

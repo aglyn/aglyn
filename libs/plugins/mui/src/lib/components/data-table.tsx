@@ -22,8 +22,12 @@ import {
   readDataTableAlignments,
 } from '@aglyn/shared-data-enums'
 import { mdiTable } from '@aglyn/shared-data-mdi'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import {
+  scrollRegionProps,
+  scrollableTableSx,
+} from '@aglyn/shared-ui-jsx/utils/scroll-overflow'
 import Box from '@mui/material/Box'
-import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
@@ -31,11 +35,6 @@ import TableRow from '@mui/material/TableRow'
 import { forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
-import {
-  scrollRegionProps,
-  scrollableTableSx,
-  scrollableTableWrapperSx,
-} from '../utils/scroll-overflow'
 
 // Component ids are persisted in screen documents; never rename.
 export const DATA_TABLE_ID: Aglyn.ComponentId = 'dataTable'
@@ -121,51 +120,54 @@ const DataTable = forwardRef<HTMLDivElement, DataTableProps>((props, ref) => {
       : undefined
 
   return (
-    <Box
+    <ScrollTable
       ref={ref}
-      {...rest}
-      {...scrollRegionProps(TABLE_REGION_LABEL)}
-      // The wrapper scrolls the grid, and the grid is sized so that it can
-      // (AGL-2568). `overflowX` here is half of it: it does nothing at all
-      // while the table inside is `width: 100%`, because a table that cannot
-      // exceed this box never overflows it — it crushes its columns instead.
-      // The pair is what makes a wide matrix scrollable, and the fade is what
-      // makes an overlay-scrollbar platform admit that it did.
-      sx={[{ width: '100%', ...scrollableTableWrapperSx }, ...nodeSx]}
+      size="small"
+      // The box scrolls the grid, and the grid is sized so that it can
+      // (AGL-2568). The box's `overflow-x` is half of it: it does nothing at
+      // all while the table inside is `width: 100%`, because a table of prose
+      // cells that cannot exceed its box never overflows it — it crushes its
+      // columns instead. `max-content` is the other half, and the box's fade
+      // is what makes an overlay-scrollbar platform admit that it scrolled.
+      sx={scrollableTableSx}
+      ContainerProps={{
+        ...rest,
+        ...scrollRegionProps(TABLE_REGION_LABEL),
+        // The node's styles merge after the box's own, never instead of them.
+        sx: nodeSx,
+      }}
     >
-      <Table size="small" sx={scrollableTableSx}>
-        {headerRow ? (
-          <TableHead>
-            <TableRow>
-              {first.map((cell, columnIndex) => (
-                <TableCell
-                  key={columnIndex}
-                  align={alignments[columnIndex]}
-                  sx={{ fontWeight: 700, ...cellSx(columnIndex) }}
-                >
-                  {cell}
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-        ) : null}
-        <TableBody>
-          {dataRows.map((row, rowIndex) => (
-            <TableRow key={rowIndex}>
-              {row.map((cell, columnIndex) => (
-                <TableCell
-                  key={columnIndex}
-                  align={alignments[columnIndex]}
-                  sx={cellSx(columnIndex)}
-                >
-                  {cell}
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </Box>
+      {headerRow ? (
+        <TableHead>
+          <TableRow>
+            {first.map((cell, columnIndex) => (
+              <TableCell
+                key={columnIndex}
+                align={alignments[columnIndex]}
+                sx={{ fontWeight: 700, ...cellSx(columnIndex) }}
+              >
+                {cell}
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+      ) : null}
+      <TableBody>
+        {dataRows.map((row, rowIndex) => (
+          <TableRow key={rowIndex}>
+            {row.map((cell, columnIndex) => (
+              <TableCell
+                key={columnIndex}
+                align={alignments[columnIndex]}
+                sx={cellSx(columnIndex)}
+              >
+                {cell}
+              </TableCell>
+            ))}
+          </TableRow>
+        ))}
+      </TableBody>
+    </ScrollTable>
   )
 })
 DataTable.displayName = 'AglynDataTable'

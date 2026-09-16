@@ -18,6 +18,13 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiLanguageMarkdown, mdiTableOfContents } from '@aglyn/shared-data-mdi'
 import { AppLink } from '@aglyn/shared-ui-jsx'
+import {
+  scrollOverflowFadeKeyframes,
+  scrollOverflowFadeTimeline,
+  scrollRegionProps,
+  scrollableTableSx,
+  scrollableTableWrapperSx,
+} from '@aglyn/shared-ui-jsx/utils/scroll-overflow'
 import Box, { type BoxProps } from '@mui/material/Box'
 import MuiLink from '@mui/material/Link'
 import type { Theme } from '@mui/material/styles'
@@ -28,13 +35,6 @@ import { forwardRef, useContext, useMemo } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
-import {
-  scrollOverflowFadeKeyframes,
-  scrollOverflowFadeTimeline,
-  scrollRegionProps,
-  scrollableTableSx,
-  scrollableTableWrapperSx,
-} from '../utils/scroll-overflow'
 
 // Component ids are persisted in screen documents; never rename.
 export const MARKDOWN_ID: Aglyn.ComponentId = 'markdown'
