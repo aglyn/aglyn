@@ -1,8 +1,8 @@
 {
   "team": "AGL",
-  "highest": 3025,
+  "highest": 3031,
   "verifiedAt": "2026-09-16",
-  "verifiedBy": "Read from Linear on 2026-09-16, the team's issues newest-first by createdAt with archived included: AGL-3024 (09:28:07Z, no AI-generated document has been measured live) and AGL-3025 (10:11:00Z, every generative job fails in a real build) were returned above AGL-3023, and nothing above them. The number is what the workspace returned, never what a failing check reported.",
+  "verifiedBy": "Read from Linear on 2026-09-16, the team's issues newest-first by createdAt with archived included: AGL-3026 (11:40:47Z, the AI beat moves to the console), AGL-3027 (11:49:41Z, the Firestore rules are over 256 KiB), AGL-3028 (12:04:33Z, AI switchable per site), AGL-3029 (12:04:40Z, Forms switchable per site), AGL-3030 (12:12:07Z, a Free workspace builds its first page) and AGL-3031 (12:12:13Z, a page job builds what its plan creates), and nothing above them. The number is what the workspace returned, never what a failing check reported.",
   "note": "The highest issue identifier that EXISTS, and a FLOOR rather than the answer. Any citation above it was never assigned, because Linear numbers issues sequentially per team. check-linear-ids.mjs asks Linear for the real highest on every run and can only ever RAISE this number with the answer, so with LINEAR_API_KEY set there is nothing to maintain here; this value is what the check falls back to when the query cannot be made. Raise it only after reading the workspace — never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
   "historicalCitations": {
     "note": "Commits already on `main` whose messages cite a fabricated id. History is NOT rewritten (see docs/DECISION_LOG.md, 2026-08-28), so the commit sweep would otherwise be permanently red and the guard would never be wirable into CI. Listed by sha rather than exempted by date: a FIFTEENTH such commit still fails. This list may shrink and must never grow.",
