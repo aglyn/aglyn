@@ -194,6 +194,16 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       "tighter than the doctrine's default for a template, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
     eval: { kinds: ['template'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
   },
+  'job.form': {
+    // A form's two halves in one answer: the field declaration and the design
+    // that renders it, as JSON, with no extended thinking (AGL-2913).
+    thinking: 'off',
+    effort: null,
+    maxTokens: 3000,
+    maxTokensBasis:
+      "a form's fields, its consent and routing declaration and the design that renders them, written as JSON",
+    eval: { kinds: ['form'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+  },
   'job.seo': {
     thinking: null,
     effort: null,
