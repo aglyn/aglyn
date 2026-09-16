@@ -306,7 +306,6 @@ export function AiThemeProposalCard(props: ConsoleHostThemeZoneProps) {
   const running = Boolean(job && !isTerminal(job))
 
   return (
-    <Box sx={{ mb: 3 }}>
       <CardDisplay
         contentGutterX
         contentGutterY
@@ -518,7 +517,6 @@ export function AiThemeProposalCard(props: ConsoleHostThemeZoneProps) {
           ) : null}
         </Stack>
       </CardDisplay>
-    </Box>
   )
 }
 AiThemeProposalCard.displayName = 'AiThemeProposalCard'

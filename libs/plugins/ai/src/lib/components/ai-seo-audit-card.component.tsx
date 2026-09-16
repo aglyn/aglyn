@@ -302,7 +302,6 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
       : null
 
   return (
-    <Box sx={{ mb: 3 }}>
       <CardDisplay
         contentGutterX
         contentGutterY
@@ -536,7 +535,6 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
           ) : null}
         </Stack>
       </CardDisplay>
-    </Box>
   )
 }
 AiSeoAuditCard.displayName = 'AiSeoAuditCard'

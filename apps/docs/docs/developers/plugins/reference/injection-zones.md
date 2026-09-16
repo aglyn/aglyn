@@ -66,6 +66,29 @@ The renderer is the same gated slot a console page mounts, so a widget there pas
 same enablement, entitlement and permission gates. Outside the console shell it is `null`,
 and the zone draws nothing.
 
+## How a zone spaces your widget
+
+Most zones are a **stack**. The shell draws their widgets one under another,
+with the same gap the page puts between its own cards, and keeps that gap
+between the zone and the page's cards beside it. Render your card with no
+outer margin: the zone spaces it, and a margin on your widget's root is
+reset.
+
+The other zones hand each widget to a layout the page draws itself, and the
+page spaces it there:
+
+- `hostDashboard`, `commerceGlance` and `orgDashboard`: a tile of a dashboard
+  grid.
+- `hostScreens` and `besignerToolbar`: a control in a row.
+- `besignerInspector` and `seoFields`: a section among a panel's own fields.
+- `besignerFunctions`, `orgData`, `orgMarketplace`, `orgAddons` and
+  `marketplaceListing`: the body of a dialog or a page.
+- `assistPanel`: a floating dock.
+- `orgMembersListColumn`, `staffOrgsListColumn` and `staffOrgUsageColumn`: a
+  column of a table, or, on `staffOrgUsageColumn`, a line above it.
+
+A widget that renders nothing leaves no gap in either kind of zone.
+
 ## Staff zones
 
 `adminOrgDetail`, `staffOrg`, `staffUser`, `staffOrgsListColumn` and
