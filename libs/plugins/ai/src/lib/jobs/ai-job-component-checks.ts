@@ -42,6 +42,7 @@ import {
 } from '../runtime/ai-component-bindings'
 import type { AiValidatedTree } from '../runtime/ai-doctrine'
 import {
+  aiHeadingLevel,
   detectOffVoiceCopy,
   walkTree,
   type AiDoctrineNode,
@@ -70,6 +71,9 @@ import {
  *   (AGL-2871), an icon picker an Icon;
  * - an icon is an Icon the site owner picks, never words (AGL-3054): a copy
  *   property named or labeled as an icon, shown as copy, is refused;
+ * - its headings start at h3 (AGL-3057): a component is placed inside a page
+ *   section, which opens with its own h2, and a page's outline check sees an
+ *   instance as one node, never the headings it grafts in;
  * - an optional part is switched off by a Yes / no labeled `Hide …` that
  *   defaults to No, bound to `hideIf` on that part and never on the whole
  *   component;
@@ -87,6 +91,12 @@ const HIDE_LABEL = /^Hide\b/
 
 /** The kinds of a placed component's property that copy fills as text. */
 const COPY_FIELD_KINDS: ReadonlySet<string> = new Set(['text', 'richText'])
+
+/**
+ * The highest heading a component may carry (AGL-3057): a page section opens
+ * with its own h2, and whatever the section places sits under it.
+ */
+export const AI_COMPONENT_TOP_HEADING_LEVEL = 3
 
 /** A word naming an icon, in a label or in a name split at its capitals and underscores. */
 const ICON_WORD = /\bicons?\b/i
@@ -394,6 +404,36 @@ export function aiPlannedPropViolations(
   return violations
 }
 
+/**
+ * Rule 11 on a component's own outline (AGL-3057). A page's outline check
+ * reads an instance as one node, and the site inventory carries no component
+ * tree to read in its place, so a component's h2 renders beside the h2 that
+ * opens the section placing it, and the page reads h2, h2, h2. The component
+ * is held to headings a section can hold instead: h3 or below. A component
+ * that would be a whole section, its own h2 and all, is refused the same way:
+ * that section is built on the page.
+ */
+export function aiComponentHeadingViolations(
+  tree: Pick<AiValidatedTree, 'rootId' | 'nodes' | 'sourceIds'>,
+): AiDoctrineViolation[] {
+  const nodes = tree.nodes as unknown as Record<string, AiDoctrineNode>
+  const high = walkTree({ rootId: tree.rootId, nodes })
+    .filter(({ node }) => {
+      const level = aiHeadingLevel(node)
+      return level !== null && level < AI_COMPONENT_TOP_HEADING_LEVEL
+    })
+    .map((visit) => visit.id)
+  if (!high.length) return []
+  return [
+    {
+      rule: 11,
+      code: 'component-heading-level',
+      message: `A component sits inside a page section that opens with its own h2, so its headings start at h${AI_COMPONENT_TOP_HEADING_LEVEL}. Set each heading’s Typography "component" to "h${AI_COMPONENT_TOP_HEADING_LEVEL}" or lower.`,
+      nodeIds: aiModelNodeIds(high, tree.sourceIds),
+    },
+  ]
+}
+
 /** Rule 14 on the copy a component shows until a page sets it. */
 export function aiComponentDefaultCopyViolations(props: readonly ReusableComponentProp[]): AiDoctrineViolation[] {
   return detectOffVoiceCopy(
@@ -423,6 +463,7 @@ export function aiComponentCheck(input: {
     return [
       ...reading.violations,
       ...aiComponentBindingViolations(tree, reading.props, input.inventory, reading.refused),
+      ...aiComponentHeadingViolations(tree),
       ...aiComponentDefaultCopyViolations(reading.props),
       ...aiPlanReuseViolations(input.inventory, input.plan, aiPlacedComponentIds(tree), 'component'),
       ...aiPlannedPropViolations(input.plan, [

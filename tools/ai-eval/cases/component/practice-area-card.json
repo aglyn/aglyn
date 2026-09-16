@@ -87,6 +87,28 @@
       "fails": ["rules"]
     },
     {
+      "why": "The area's name an h2, beside the h2 that opens the section placing the card, so the page's outline reads h2, h2, h2 (AGL-3057).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["card"] },
+            "card": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["content"] },
+            "content": { "componentId": "muiCardContent", "nodes": ["icon", "title", "summary"] },
+            "icon": { "componentId": "icon", "props": { "iconId": "{{prop.icon}}" } },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h5", "component": "h2", "children": "{{prop.title}}" } },
+            "summary": { "componentId": "muiTypography", "props": { "variant": "body2", "children": "{{prop.summary}}" } }
+          }
+        },
+        "props": [
+          { "name": "icon", "type": "icon", "label": "Icon", "description": "", "defaultValue": "", "options": [] },
+          { "name": "title", "type": "text", "label": "Practice area", "description": "", "defaultValue": "[Practice area]", "options": [] },
+          { "name": "summary", "type": "richText", "label": "Summary", "description": "", "defaultValue": "[What the firm handles in this area]", "options": [] }
+        ]
+      },
+      "fails": ["rules"]
+    },
+    {
       "why": "An icon property whose default names an icon, which only the site owner's pick can draw (AGL-3054).",
       "answer": {
         "tree": {

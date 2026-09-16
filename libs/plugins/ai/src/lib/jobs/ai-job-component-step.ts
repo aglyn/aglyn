@@ -104,7 +104,7 @@ export const AI_JOB_COMPONENT_INSTRUCTIONS: readonly AiSystemBlock[] = [
   {
     text: [
       `You build one reusable component for a website: a block the site places on many pages, each placement filling in its own values. Answer with ${AI_COMPONENT_TOOL_NAME}: the component’s tree as one flat node map, and the properties it declares.`,
-      'The root is the document wrapper holding the component. A component is placed inside pages: it carries no main landmark and at most one h1, and its colors, spacing and type come from the theme.',
+      'The root is the document wrapper holding the component. A component is placed inside a page section, which opens with its own h2: it carries no main landmark, its headings are h3 or below, and its colors, spacing and type come from the theme.',
       'Every value that should differ from one placement to the next is a property, bound in the tree with its token {{prop.<name>}}. Declare every property the tree binds, and bind every property you declare.',
       `Property kinds, as type (the name a page reads): ${aiComponentPropKindWords()}.`,
       'A property binds only to a field that holds its kind of value:',

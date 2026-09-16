@@ -851,8 +851,12 @@ export function detectImageSources(
   return violations
 }
 
-/** A heading's level: the element it renders as, else the variant's own. */
-function headingLevel(node: AiDoctrineNode): number | null {
+/**
+ * A heading's level: the element it renders as, else the variant's own.
+ * Exported for a door's own checks, which read an outline the way rule 11
+ * reads a page's.
+ */
+export function aiHeadingLevel(node: AiDoctrineNode): number | null {
   if (node.componentId !== 'muiTypography') return null
   const element =
     typeof node.props?.['component'] === 'string' ? String(node.props['component']) : ''
@@ -916,7 +920,7 @@ export function detectDocumentStructure(
   if (outputKind === 'email' || outputKind === 'form') return violations
 
   const headings = visits
-    .map((visit) => ({ id: visit.id, level: headingLevel(visit.node) }))
+    .map((visit) => ({ id: visit.id, level: aiHeadingLevel(visit.node) }))
     .filter((entry): entry is { id: string; level: number } => entry.level !== null)
   const h1s = headings.filter((heading) => heading.level === 1).map((heading) => heading.id)
   const page = outputKind === 'page' || outputKind === 'template'

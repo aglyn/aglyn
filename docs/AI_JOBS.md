@@ -788,7 +788,9 @@ draft.
   element's iconId"); each sits on a field its kind fits; a copy property named
   or labeled as an icon and shown as words is refused as `icon-as-text`, with a
   re-ask to make it an Icon property bound whole to an Icon's `iconId` with the
-  default `""` (AGL-3054); an optional part is hidden by a Yes / no labeled
+  default `""` (AGL-3054); its headings are h3 or below, and an h1 or h2 is
+  refused as `component-heading-level` (rule 11, AGL-3057); an optional part is
+  hidden by a Yes / no labeled
   `Hide …` whose default is false, bound to `hideIf` on that part and never on
   the whole component; a default fits the field it fills and reads in the site's
   voice (rule 14); an Image default is empty or a library picture (rule 9); the
@@ -796,6 +798,20 @@ draft.
   declared, and a field it lists as `name:icon` is an Icon property
   (`plan-prop-kind`, rule 7). A property handed on to a placed component fits the
   kind that component declares.
+- **A component's outline sits under its section's (AGL-3057).** A component is
+  placed inside a page section, and every section opens with its own h2. A page's
+  outline check reads an instance as one node, never the headings the graft puts in
+  its place, so a live About page's practice-area card, whose title was an h2, read
+  h2, h2, h2, h2 under the section's h2 and nothing refused it. Two fixes were open:
+  read each instance's headings in place during the page check, or hold the
+  component to headings a section can hold. The second is the smaller: the site
+  inventory carries no component tree by construction (a component is its name and
+  its props' kinds), so an in-place read would add every placed component's tree to
+  every page pass, while the component check reads the one tree its step already
+  holds, where the headings are written. Every existing golden holds it: the
+  testimonial card has no heading and the eval team member card's name is an h3. A
+  component that would be a whole section, its own h2 and all, is refused the same
+  way; that section is built on the page.
 - **Drafts.** `writeAiDraft` writes the component as the host resources
   route's `reusableComponent` entry does: that entry's allow-list
   (`displayName`, `description`, `rootId`, `nodes`, `props`), msgpack nodes

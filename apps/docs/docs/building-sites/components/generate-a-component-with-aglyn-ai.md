@@ -44,7 +44,11 @@ Each property is one of the kinds the **File ▸ Properties…** dialog offers:
 | Choice | A dropdown, such as a button's **Variant**, with answers that dropdown lists. |
 
 A property is bound only where its value can show: an Image never lands in a heading, an icon is
-never shown as words, and a Choice never offers an answer its dropdown does not list. These are the pairings the `{}` beside
+never shown as words, and a Choice never offers an answer its dropdown does not list.
+
+A component's headings start one level below the heading of the section that places it, such as
+a card's title as a heading 3 under the section's heading 2, so the page's outline stays in order
+wherever the component goes. These are the pairings the `{}` beside
 a field offers when you bind one yourself.
 
 ### Optional parts

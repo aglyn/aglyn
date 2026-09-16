@@ -91,7 +91,11 @@ import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import { validateAiSystemBlocks } from '../runtime/ai-runtime'
 import { aiComponentTool } from '../tools/ai-component-tool'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
-import { aiComponentBindingViolations, aiPlannedPropViolations } from './ai-job-component-checks'
+import {
+  aiComponentBindingViolations,
+  aiComponentHeadingViolations,
+  aiPlannedPropViolations,
+} from './ai-job-component-checks'
 import {
   AI_JOB_COMPONENT_INSTRUCTIONS,
   AI_JOB_COMPONENT_MAX_TOKENS,
@@ -477,6 +481,26 @@ describe('the component step', () => {
     })
   })
 
+  it('re-asks a component that opens with an h2, which the section placing it already has, and keeps its h3 (AGL-3057)', async () => {
+    const tree = clone(TESTIMONIAL.answer.tree)
+    tree.nodes['content'].nodes = ['heading', ...(tree.nodes['content'].nodes ?? [])]
+    tree.nodes['heading'] = { componentId: 'muiTypography', props: { variant: 'h3', component: 'h2', children: '{{prop.name}}' } }
+    const fixed = clone(tree)
+    fixed.nodes['heading'].props = { ...fixed.nodes['heading'].props, component: 'h3' }
+    mockRunAiRequest
+      .mockResolvedValueOnce(componentAnswer(tree, TESTIMONIAL.answer.props))
+      .mockResolvedValueOnce(componentAnswer(fixed, TESTIMONIAL.answer.props))
+    const outcome = await createAiJobComponentStep()(context())
+    const reask = mockRunAiRequest.mock.calls[1][0].messages[2].content as string
+    expect(reask).toContain(
+      'Rule 11 (One main landmark and an ordered outline): A component sits inside a page section that opens with its own h2, so its headings start at h3. Set each heading’s Typography "component" to "h3" or lower. (nodes heading)',
+    )
+    expect(outcome.review).toBeUndefined()
+    expect(
+      storedNodes('hosts/host-1/components/job-1').find((node) => node.props?.['children'] === '{{prop.name}}' && node.props?.['component'] === 'h3'),
+    ).toBeDefined()
+  })
+
   it('refuses filler for a default and a picture linked from another website', async () => {
     const props = clone(TESTIMONIAL.answer.props).map((prop) =>
       prop['name'] === 'quote'
@@ -758,6 +782,34 @@ describe('the component’s bindings (AGL-2871)', () => {
     ])
     // A property refused on its reading has no kind here, and is reported where it was refused.
     expect(aiPlannedPropViolations(plan, [{ name: 'title' }, { name: 'icon' }, { name: 'badge' }])).toEqual([])
+  })
+
+  it('holds a component’s headings to h3 and below, by the element each renders as, else its variant (AGL-3057)', () => {
+    const outline = (headings: Array<Record<string, unknown>>): TreeInput => ({
+      rootId: 'root',
+      nodes: {
+        root: { componentId: 'div', nodes: ['card'] },
+        card: { componentId: 'muiCard', nodes: headings.map((_, index) => `t${index}`) },
+        ...Object.fromEntries(
+          headings.map((props, index) => [`t${index}`, { componentId: 'muiTypography', props: { children: 'Words', ...props } }]),
+        ),
+      },
+    })
+    expect(
+      aiComponentHeadingViolations(
+        admitted(outline([{ variant: 'h2', component: 'h3' }, { variant: 'h4' }, { variant: 'h1', component: 'p' }, { variant: 'body1' }])),
+      ),
+    ).toEqual([])
+    const [finding] = aiComponentHeadingViolations(
+      admitted(outline([{ variant: 'h5', component: 'h2' }, { variant: 'h1' }, { variant: 'h3', component: 'h3' }, { variant: 'h6', component: 'span' }])),
+    )
+    expect(finding).toEqual({
+      rule: 11,
+      code: 'component-heading-level',
+      message:
+        'A component sits inside a page section that opens with its own h2, so its headings start at h3. Set each heading’s Typography "component" to "h3" or lower.',
+      nodeIds: ['t0', 't1'],
+    })
   })
 
   it('refuses a default longer than the field it fills whole', () => {
