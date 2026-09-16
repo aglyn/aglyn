@@ -148,6 +148,21 @@ What generation costs in tokens is measured beside what it costs in credits
   times the runner and hands the outcome's usage to `recordStep`; a runner
   reports the `effort` it asked for, which `runValidatedGeneration` returns
   on its spend. A step that failed before the provider records none.
+- **Why each run stopped (AGL-3042).** `steps[].tokens.lastRuns` lists the
+  step's latest runs, oldest first and the last run last: each run's
+  `stopReason` — its last model call's, `max_tokens` for one cut off at its
+  ceiling — and the `output` tokens it generated. A page pass whose answer and
+  re-ask were both cut off reads `{ stopReason: 'max_tokens', output: 2100 }` on
+  the job, where before it could only be worked out from the sums. The list
+  keeps `AI_JOB_STEP_LAST_RUNS` (12) runs: a page job that builds a layout, a
+  form and a component, five sections and its last pass runs nine. An entry is
+  at most 67 bytes as Firestore sizes it (field names of 11 and 7 bytes, a stop
+  reason cut to `AI_JOB_STEP_STOP_REASON_MAX_CHARS` (40) characters and so 41
+  bytes, an 8-byte integer), so a step's list is at most 813 bytes and a job's
+  two steps at most 1,626 of the 1,048,576 a document may hold. The machine writes
+  it through the Admin SDK in the transaction that records the step, and the
+  rules deny every client write to `aiJobs`, so the rules are unchanged. The
+  wire summary carries no tokens, so members are shown nothing new.
 - **On the org month.** `assistUsage/{month}.kinds.{kind}` holds `requests`,
   `estCostUsd`, `providerCostUsd` and `tokens.{input,cached,cacheWrite,output}`
   for every metered model request, keyed by its `AiUsageKind` — a job step by

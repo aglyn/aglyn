@@ -176,6 +176,25 @@ export interface AiJobStepTokens {
   latencyMs: number
   /** Runs that reached the provider. */
   runs: number
+  /**
+   * Why the step's latest runs stopped (AGL-3042), oldest first and the last
+   * run last: each run's stop reason and the tokens it generated, so a pass
+   * cut off at its ceiling reads off the job rather than out of the sums. At
+   * most `AI_JOB_STEP_LAST_RUNS` are kept; absent on a step measured before.
+   */
+  lastRuns?: AiJobStepRunStop[]
+}
+
+/** One run of a step, by why it stopped (AGL-3042). */
+export interface AiJobStepRunStop {
+  /**
+   * The stop reason of the run's last model call — `tool_use` or `end_turn`
+   * for an answer, `max_tokens` for one cut off at its ceiling, `refusal` —
+   * and `null` when the provider named none.
+   */
+  stopReason: string | null
+  /** Tokens the run generated, over every model call it made. */
+  output: number
 }
 
 export type AiJobOutputResource =

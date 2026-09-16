@@ -217,9 +217,11 @@ import {
   AI_JOB_NOT_AVAILABLE_COPY,
   AI_JOB_PLAN_STEP,
   AI_JOB_REFUSED_COPY,
+  AI_JOB_STEP_LAST_RUNS,
   AI_JOB_STEP_MAX_ATTEMPTS,
   AI_JOB_STEP_MAX_PASSES,
   AI_JOB_STEP_RESERVE_CREDITS,
+  AI_JOB_STEP_STOP_REASON_MAX_CHARS,
   addAiJobStepTokens,
   aiJobRefusalText,
   AI_JOB_SWEEP_MAX_JOBS,
@@ -1485,7 +1487,7 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
 })
 
 describe('a step’s tokens (AGL-2937)', () => {
-  it('records the four counts, the model, the effort and the runner’s time on the step it ran', async () => {
+  it('records the four counts, the model, the effort, the runner’s time and why the run stopped on the step it ran', async () => {
     armCompletion()
     const job = await newTextJob()
     await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
@@ -1499,6 +1501,8 @@ describe('a step’s tokens (AGL-2937)', () => {
       // The text step names no thinking effort.
       effort: null,
       runs: 1,
+      // The run's stop reason and what it generated (AGL-3042).
+      lastRuns: [{ stopReason: 'end_turn', output: 200 }],
     })
     expect(tokens?.latencyMs).toEqual(expect.any(Number))
     expect(tokens?.latencyMs).toBeGreaterThanOrEqual(0)
@@ -1518,6 +1522,7 @@ describe('a step’s tokens (AGL-2937)', () => {
       model: 'model-a',
       effort: 'high',
       latencyMs: 4_200,
+      stopReason: 'tool_use',
     })
     expect(
       addAiJobStepTokens(first, {
@@ -1525,6 +1530,7 @@ describe('a step’s tokens (AGL-2937)', () => {
         model: 'model-b',
         effort: null,
         latencyMs: 3_800,
+        stopReason: 'max_tokens',
       }),
     ).toEqual({
       input: 1_900,
@@ -1535,7 +1541,41 @@ describe('a step’s tokens (AGL-2937)', () => {
       effort: null,
       latencyMs: 8_000,
       runs: 2,
+      lastRuns: [
+        { stopReason: 'tool_use', output: 400 },
+        { stopReason: 'max_tokens', output: 350 },
+      ],
     })
+  })
+
+  it('keeps why the latest runs stopped, at most AI_JOB_STEP_LAST_RUNS of them, and starts the list on a step measured before it (AGL-3042)', () => {
+    const run = (output: number, stopReason: string | null = 'tool_use') => ({
+      usage: { inputTokens: 1_000, outputTokens: output, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      model: 'claude-sonnet-5',
+      effort: null,
+      latencyMs: 1_000,
+      stopReason,
+    })
+    // A step measured before the list existed gains it with its next run.
+    const before = { input: 5_000, cachedRead: 0, cacheWrite: 0, output: 900, model: 'claude-sonnet-5', effort: null, latencyMs: 9_000, runs: 3 }
+    expect(addAiJobStepTokens(before, run(2_100, 'max_tokens'))).toMatchObject({
+      output: 3_000,
+      runs: 4,
+      lastRuns: [{ stopReason: 'max_tokens', output: 2_100 }],
+    })
+
+    let tokens = addAiJobStepTokens(undefined, run(1))
+    for (let output = 2; output <= AI_JOB_STEP_LAST_RUNS + 3; output += 1) tokens = addAiJobStepTokens(tokens, run(output))
+    expect(tokens.runs).toBe(AI_JOB_STEP_LAST_RUNS + 3)
+    expect(tokens.lastRuns?.map((entry) => entry.output)).toEqual(
+      Array.from({ length: AI_JOB_STEP_LAST_RUNS }, (_, index) => index + 4),
+    )
+
+    // A provider that names no reason is recorded as naming none, and a word past the bound is cut to it.
+    const unnamed = addAiJobStepTokens(undefined, run(10, null))
+    expect(unnamed.lastRuns).toEqual([{ stopReason: null, output: 10 }])
+    const long = addAiJobStepTokens(undefined, run(10, 'x'.repeat(AI_JOB_STEP_STOP_REASON_MAX_CHARS + 20)))
+    expect(long.lastRuns?.[0].stopReason).toHaveLength(AI_JOB_STEP_STOP_REASON_MAX_CHARS)
   })
 })
 
