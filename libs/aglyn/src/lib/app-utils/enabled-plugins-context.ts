@@ -20,6 +20,7 @@ import { ComponentCategory } from '../foundation/constants/components'
 import {
   ACCOUNTS_PLUGIN_ID,
   isFirstPartyPlugin,
+  isLockedOnForSite,
 } from '../plugin-manager/enabled-plugins'
 
 /**
@@ -119,14 +120,21 @@ export function isFromEnabledPlugin(
  *
  * Only a FIRST-PARTY id is asked about. A marketplace bundle's components name
  * the id in its manifest, which is not the listing id the site's set carries,
- * and a component naming no plugin belongs to none. Both, and everything when
- * no set was supplied, render as registered.
+ * and a component naming no plugin belongs to none. Both render as registered,
+ * as does the base library, which no site can switch off.
+ *
+ * An EMPTY set is no answer. Every set a site resolves carries the base
+ * library, so an empty one is a surface saying it has no site to answer for —
+ * the console's editor gate publishes `[]` while the URL names no workspace it
+ * has resolved — and drawing every element there as unregistered would blank
+ * the canvas. It renders as though no set was supplied.
  */
 export function isSwitchedOffForRenderedSite(
   pluginId: string | undefined,
   enabledPluginIds: readonly string[] | undefined,
 ): boolean {
-  if (!enabledPluginIds || !pluginId) return false
+  if (!pluginId || !enabledPluginIds?.length) return false
+  if (isLockedOnForSite(pluginId)) return false
   return isFirstPartyPlugin(pluginId) && !enabledPluginIds.includes(pluginId)
 }
 

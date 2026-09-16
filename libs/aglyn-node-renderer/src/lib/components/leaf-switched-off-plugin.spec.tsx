@@ -172,4 +172,17 @@ describe('what the gate does not reach', () => {
     registerForms()
     expect(markup(CONTACT(), ['mui'])).toMatch(/<h2>.*Get in touch.*<\/h2>/)
   })
+
+  it('never draws the base library as unregistered, even from a set that omits it', () => {
+    expect(markup(CONTACT(), ['commerce'])).toMatch(/<h2>.*Get in touch.*<\/h2>/)
+  })
+
+  it('reads an EMPTY set as no site at all, rather than switching everything off', () => {
+    // The console's editor gate publishes [] while the URL names no workspace
+    // it has resolved. Every real site set carries the base library.
+    registerForms()
+    const html = markup(CONTACT(), [])
+    expect(html).toContain('data-testid="form-element"')
+    expect(html).toMatch(/<h2>.*Get in touch.*<\/h2>/)
+  })
 })
