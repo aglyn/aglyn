@@ -64,6 +64,24 @@ export const WEBHOOK_EVENTS = [
   // that moves money, and only when `status` is `lost`.
   'charge.dispute.created',
   'charge.dispute.closed',
+  // AI overage charged as it accrues (AGL-3011). The plugin bills usage on
+  // its own one-off invoice, and the platform webhook raises the outcome to
+  // it: apps/console/app/api/billing/webhook/route.ts reads all five.
+  //
+  // NOTE: no apostrophes in this block. webhook-delivery.spec.ts extracts
+  // the list with a single-quote regex, and a comment containing one swallows
+  // every entry up to the next quote.
+  //
+  // Without voided and marked_uncollectible an unpaid AI invoice never ends,
+  // so the pause it set on further usage never lifts. The three customer
+  // events answer whether a CARD is the default payment method, which is what
+  // the unpaid bound rests on — a bank debit settles in days, so the bound
+  // cannot hold against one.
+  'invoice.voided',
+  'invoice.marked_uncollectible',
+  'customer.updated',
+  'payment_method.attached',
+  'payment_method.detached',
 ]
 
 /**

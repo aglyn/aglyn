@@ -16,6 +16,7 @@
  */
 
 import type { ScreenSeoTextField } from '@aglyn/aglyn/app-utils/screen-seo-fields'
+import type { ReusableComponentProp } from '@aglyn/aglyn/foundation/definitions/platform.types'
 
 /**
  * Assist level 3, the edit contract (AGL-2906): what the chat door proposes
@@ -35,7 +36,7 @@ import type { ScreenSeoTextField } from '@aglyn/aglyn/app-utils/screen-seo-field
  * version the live site serves, the editor's own new-version flow runs first.
  */
 
-/** The seven operations a proposal may carry. */
+/** The eight operations a proposal may carry. */
 export const ASSIST_EDIT_OP_KINDS = [
   'insertSubtree',
   'updateProps',
@@ -44,6 +45,7 @@ export const ASSIST_EDIT_OP_KINDS = [
   'remove',
   'setSeo',
   'rename',
+  'saveAsComponent',
 ] as const
 
 export type AssistEditOpKind = (typeof ASSIST_EDIT_OP_KINDS)[number]
@@ -203,6 +205,47 @@ export interface AssistEditSetSeoOp {
   fields: Partial<Record<ScreenSeoTextField, string>>
 }
 
+/**
+ * A property the promoted subtree declares (AGL-2908), in the shape the
+ * Properties dialog stores one — without a default.
+ *
+ * The server never sees a full value: the outline it read the selection from
+ * shortens every string. So the default is read off the live canvas at apply
+ * time, from the very field the token is about to replace, which is what
+ * makes the instance render what was there a moment before.
+ */
+export type AssistEditComponentProp = Omit<ReusableComponentProp, 'defaultValue'>
+
+/** Where one property's token goes: an element of the selection, and a field of it. */
+export interface AssistEditPropBinding {
+  nodeId: string
+  /** The component the element was validated as, so a changed one is refused. */
+  componentId: string
+  /** A prop of that element, or `hideIf` for a part a Yes / no hides. */
+  field: string
+  /** The property whose `{{prop.<name>}}` token the field takes. */
+  prop: string
+}
+
+/**
+ * Save the selection as a reusable component (AGL-2908), with the properties
+ * the model proposed and the tokens bound into the tree.
+ *
+ * The only op that creates a document. It creates exactly the one the manual
+ * Save as reusable component creates, through the same host resources route,
+ * where the plan's entitlement and the route's allow-list are enforced — and
+ * it changes the open canvas the same way that action does, by swapping the
+ * promoted subtree for an instance. Nothing is published and nothing is
+ * saved: the swap is an unsaved edit on the version the editor has open.
+ */
+export interface AssistEditSaveAsComponentOp extends AssistEditNodeOpBase {
+  op: 'saveAsComponent'
+  /** The name the component is created under. */
+  name: string
+  props: AssistEditComponentProp[]
+  bindings: AssistEditPropBinding[]
+}
+
 export type AssistEditOp =
   | AssistEditInsertOp
   | AssistEditUpdatePropsOp
@@ -211,6 +254,7 @@ export type AssistEditOp =
   | AssistEditRemoveOp
   | AssistEditRenameOp
   | AssistEditSetSeoOp
+  | AssistEditSaveAsComponentOp
 
 /** Where a proposal applies, as the server read it off the request. */
 export interface AssistEditTarget extends AssistEditDocument {
@@ -229,6 +273,10 @@ export interface AssistEditDiff {
   renamed: number
   /** Search fields filled in. */
   seoFields: number
+  /** Properties the selection declares once it is saved as a component. */
+  componentProps: number
+  /** Selections saved as a reusable component — at most one per proposal. */
+  componentsSaved: number
 }
 
 /** The most reasons a proposal carries for the changes validation left out. */
@@ -255,6 +303,8 @@ export function summarizeAssistEditOps(ops: readonly AssistEditOp[]): AssistEdit
     moved: 0,
     renamed: 0,
     seoFields: 0,
+    componentProps: 0,
+    componentsSaved: 0,
   }
   for (const op of ops) {
     switch (op.op) {
@@ -278,6 +328,10 @@ export function summarizeAssistEditOps(ops: readonly AssistEditOp[]): AssistEdit
         break
       case 'setSeo':
         diff.seoFields += Object.keys(op.fields).length
+        break
+      case 'saveAsComponent':
+        diff.componentsSaved += 1
+        diff.componentProps += op.props.length
         break
     }
   }
@@ -303,6 +357,11 @@ export function describeAssistEditDiff(diff: AssistEditDiff): string[] {
   if (diff.seoFields) {
     lines.push(`${plural(diff.seoFields, 'search field', 'search fields')} filled in`)
   }
+  if (diff.componentsSaved) {
+    lines.push(
+      `saved as a reusable component with ${plural(diff.componentProps, 'property', 'properties')}`,
+    )
+  }
   return lines
 }
 
@@ -315,6 +374,7 @@ const OP_COUNT_WORDS: Readonly<Record<AssistEditOpKind, string>> = {
   remove: 'remove',
   rename: 'rename',
   setSeo: 'seo',
+  saveAsComponent: 'component',
 }
 
 /** The applied ops counted by kind, as the activity row names them (`{ set: 3, insert: 1 }`). */

@@ -22,6 +22,19 @@ import { createContext, useContext, type ReactNode } from 'react'
 export interface BesignerInspected {
   /** The selected element, as the panel resolved it. */
   node: NodeSchema<any>
+  /**
+   * Whether this document's editor may change the element in place
+   * (AGL-2908): the panel's own rule for the actions it offers under the
+   * element's fields — Save as reusable component, Detach from component —
+   * which the canvas root and locked layout chrome fail.
+   *
+   * The panel answers it because only the panel can. A host section is
+   * handed a node, not the editor: it has no canvas, no drag manager and no
+   * business importing either to work the rule out for itself. A section
+   * that would change the element reads this; one that only reports on it
+   * ignores it.
+   */
+  editable: boolean
 }
 
 /**

@@ -59,6 +59,14 @@ import {
  * archived, a component never published) are filtered after the read, so a
  * site with many retired rows can list fewer than the cap; the kind is still
  * marked truncated when the read was cut, which is the honest answer.
+ *
+ * The window is WIDER than the prompt lists (AGL-2937). The prompt block
+ * lists `AI_SITE_INVENTORY_LISTED_PER_KIND` records of a kind because every
+ * character of it is billed on every attempt; the rest of the window is what
+ * the lookup tool searches, and a record never read cannot be found. The
+ * difference is paid in document reads rather than tokens — a projection of
+ * a few fields, once per job step — which is the cheaper of the two by some
+ * orders of magnitude.
  */
 
 type Firestore = FirebaseFirestore.Firestore

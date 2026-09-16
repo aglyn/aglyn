@@ -27,7 +27,7 @@
  */
 
 import type { OrgPlan } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
-import { AI_MODEL_CATALOG, estimateAiCostUsd, type AiCatalogEntry } from './catalog'
+import { AI_MODEL_CATALOG, estimateAiBilledUsd, type AiCatalogEntry } from './catalog'
 import {
   AI_MODEL_AUTO,
   AI_PLAN_MODEL_TIERS,
@@ -154,11 +154,11 @@ describe('the price beside each option', () => {
       model: aiModelForStep('copy.section'),
     })
     const typical = AI_STEP_NOMINAL_USAGE['copy.section']
-    const autoCost = estimateAiCostUsd(typical, listed.auto.model)
+    const autoCost = estimateAiBilledUsd(typical, listed.auto.model)
     expect(listed.options.length).toBeGreaterThan(1)
     for (const option of listed.options) {
       expect(option.multiplier).toBe(
-        Math.round((estimateAiCostUsd(typical, option.id) / autoCost) * 10) / 10,
+        Math.round((estimateAiBilledUsd(typical, option.id) / autoCost) * 10) / 10,
       )
     }
     const credits = listed.options.map((option) => option.creditsPerRequest)

@@ -29,7 +29,7 @@ import type {
 } from '../model/ai-seo'
 import type { AiTool } from '../providers/contract'
 import { AI_TEXT_LIMITS } from '../runtime/ai-palette'
-import type { AiDoctrineViolation } from '../runtime/seo-fields'
+import type { AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
 import type { AiSeoPageFacts } from '../runtime/seo-page-facts'
 
 /**

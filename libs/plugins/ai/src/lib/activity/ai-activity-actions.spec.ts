@@ -32,6 +32,7 @@ import {
   isAiActivityAction,
   staffAuditActionGroup,
   staffAuditActionGroupLabel,
+  registerAiActivityActions,
 } from './ai-activity-actions'
 
 describe('the catalog', () => {
@@ -95,6 +96,8 @@ describe('where the feed files a job output', () => {
 })
 
 describe('the staff audit facet groups AI', () => {
+  beforeAll(registerAiActivityActions)
+
   it('files every ai.* code, the overage controls and the free-spend pause under one group', () => {
     expect(staffAuditActionGroup('ai.overage.cap')).toBe('ai')
     expect(staffAuditActionGroup('billing.assistOverage.setHardCap')).toBe('ai')

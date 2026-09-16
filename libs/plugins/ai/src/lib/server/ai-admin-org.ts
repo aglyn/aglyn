@@ -44,6 +44,7 @@ import {
   composeStaffOrgAiMargin,
   composeStaffOrgAiOverage,
   composeStaffOrgAiPool,
+  composeStaffOrgAiTokens,
   emptyJobCounts,
   STAFF_ORG_AI_JOB_STATUSES,
   type StaffOrgAiAddon,
@@ -355,7 +356,10 @@ async function handler(request: Request): Promise<Response> {
     ])
 
     const pool = composeStaffOrgAiPool(org as never, monthDoc, now)
-    const overage = composeStaffOrgAiOverage(org as never, pool.providerUsd)
+    // The overage line is an invoice, so it is priced off what the month
+    // DREW; everything below it is our bill, so it reads what the month
+    // COST (AGL-3015).
+    const overage = composeStaffOrgAiOverage(org as never, pool.billedUsd)
     const addon = composeStaffOrgAiAddon(org as never, {
       since: since.since,
       sinceSource: since.sinceSource,
@@ -402,6 +406,7 @@ async function handler(request: Request): Promise<Response> {
       jobs,
       users,
       margin,
+      tokens: composeStaffOrgAiTokens(monthDoc),
     }
     return Response.json(body, { status: 200 })
   } catch (error) {

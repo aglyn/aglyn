@@ -17,6 +17,7 @@
 
 import { PLATFORM_BRAND_NAME, registerConsoleExtension } from '@aglyn/aglyn'
 import { AiCollaboratorPermissionsCell } from './components/ai-collaborator-permissions-column.component'
+import { AiSaveAsComponent } from './components/ai-save-as-component.component'
 import {
   AiGenerateSectionControl,
   AiRewriteControl,
@@ -57,7 +58,9 @@ import {
 } from './components/staff-orgs-ai-spend-column.component'
 import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.component'
 import AiSeoAuditCard from './components/ai-seo-audit-card.component'
+import AiSiteBatchCard from './components/ai-site-batch-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
+import AiDescribePageButton from './components/ai-describe-page.component'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
 
@@ -151,6 +154,16 @@ export function registerAiConsole(): void {
         widgetId: 'ai-rewrite-copy',
         title: 'Rewrite with AI',
         Component: AiRewriteControl,
+      },
+      // Save the selection as a reusable component (AGL-2908): the component
+      // job's second entry point, which proposes the properties a section
+      // should declare and applies them as the manual promote does.
+      {
+        slot: 'besignerInspector',
+        widgetId: 'ai-save-as-component',
+        title: 'Make a reusable component with AI',
+        permission: 'ai.generate',
+        Component: AiSaveAsComponent,
       },
       {
         slot: 'orgMember',
@@ -298,6 +311,30 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiSeoAuditCard,
+      },
+      // A page from a brief (AGL-2907): "Describe it" beside Templates and
+      // Create New Screen. Gated as the other generative widgets are, and it
+      // asks the jobs route about the release flag before it shows anything.
+      {
+        slot: 'hostScreens',
+        widgetId: 'ai-describe-page',
+        title: 'Describe a page',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribePageButton,
+      },
+      // The agency batch (AGL-2911): one brief across many of the org's
+      // sites, from the page that lists them. The card asks the jobs route
+      // about the release flag before it shows anything, and its own door
+      // holds the plan band and the caller's permission on every site it is
+      // pointed at.
+      {
+        slot: 'orgSites',
+        widgetId: 'ai-site-batch',
+        title: 'Generate sites with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiSiteBatchCard,
       },
     ],
   })

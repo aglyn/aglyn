@@ -16,6 +16,7 @@
  */
 
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
+import type { AiEffort } from '../providers/contract'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import type { AiBuildPlan } from './ai-build-plan'
 
@@ -145,6 +146,36 @@ export interface AiJobStep {
    * from zero after a pass; this count is what bounds the step.
    */
   passes?: number
+  /**
+   * What the step's model calls cost in tokens and time (AGL-2937), summed
+   * over every run that reached the provider. Absent on a step none has.
+   */
+  tokens?: AiJobStepTokens
+}
+
+/**
+ * A step's measure (AGL-2937): the four token counts the meter prices, the
+ * time spent in the runner, and the model and thinking effort of the last
+ * run. The machine writes it beside `creditsSpent`, so what a kind of step
+ * costs in tokens is read off the job rather than inferred from the month.
+ */
+export interface AiJobStepTokens {
+  /** Prompt tokens sent uncached. */
+  input: number
+  /** Prompt tokens read from the prompt cache. */
+  cachedRead: number
+  /** Prompt tokens written to the prompt cache. */
+  cacheWrite: number
+  /** Tokens generated, thinking included. */
+  output: number
+  /** The model the last run was served by. */
+  model: string | null
+  /** The thinking effort the last run asked for; `null` when it named none. */
+  effort: AiEffort | null
+  /** Milliseconds spent in the runner, summed over runs. */
+  latencyMs: number
+  /** Runs that reached the provider. */
+  runs: number
 }
 
 export type AiJobOutputResource =
@@ -202,6 +233,12 @@ export interface AiJobOutput {
    */
   proposal?: Record<string, unknown>
   /**
+   * What the person decides next about this output, in customer-safe words:
+   * a routing the draft could not store, or part of the brief it could not
+   * build. Absent when there is nothing to decide.
+   */
+  note?: string | null
+  /**
    * What a first visit is estimated to transfer, as the doctrine measured
    * the generated document (AGL-2935) — the weight the proposal shows before
    * anything is applied. Absent where the output is not a page's document.
@@ -256,6 +293,17 @@ export interface AiJobPlan extends AiBuildPlan {
   confirmedAt: ITimestamp | null
   /** The member who confirmed it. */
   confirmedBy: string | null
+  /**
+   * A digest of the whole request that produced this plan (AGL-2937): the
+   * job's kind, site, brief and scalar inputs, the model that answered, and
+   * the prompt as it was rendered — the site inventory included. A later job
+   * whose request hashes the same reuses this plan rather than paying for the
+   * same answer again. A hash of the request, never of the answer, and no
+   * part of the brief is recoverable from it.
+   */
+  key?: string
+  /** The job this plan was reused from, when it was not asked for again. */
+  reusedFrom?: string
 }
 
 export interface AiJob {
@@ -324,6 +372,8 @@ export interface AiJobPlanSummary extends AiBuildPlan {
   proposedAt: string | null
   confirmedAt: string | null
   confirmedBy: string | null
+  key?: string
+  reusedFrom?: string
 }
 
 /**
@@ -338,6 +388,14 @@ export interface AiJobSummary {
   kind: AiJobKind
   status: AiJobStatus
   brief: string
+  /**
+   * The batch a door created this job as one of (AGL-2911), read off the
+   * job's inputs; `null` for a job created on its own. The console groups a
+   * run of jobs by it, which is the one thing it cannot do from a list whose
+   * rows carry no inputs — and the only input the wire form carries, because
+   * a batch id names nothing the member wrote.
+   */
+  batch: string | null
   steps: Array<{
     name: string
     status: AiJobStepStatus

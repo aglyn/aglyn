@@ -21,8 +21,8 @@ import {
   AI_MODEL_CATALOG,
   AI_STEP_TIERS,
   aiCatalogEntry,
-  aiRatesForModel,
-  estimateAiCostUsd,
+  aiBilledRatesForModel,
+  estimateAiBilledUsd,
   type AiCatalogEntry,
   type AiStepKind,
 } from './catalog'
@@ -98,7 +98,10 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   'copy.section': { inputTokens: 700, outputTokens: 1_400, cacheReadTokens: 0, cacheWriteTokens: 0 },
   'copy.blog': { inputTokens: 600, outputTokens: 1_100, cacheReadTokens: 0, cacheWriteTokens: 0 },
   'generate.section': { inputTokens: 700, outputTokens: 1_400, cacheReadTokens: 0, cacheWriteTokens: 0 },
-  'job.text': { inputTokens: 300, outputTokens: 500, cacheReadTokens: 150, cacheWriteTokens: 0 },
+  // The text step's rules are about 500 characters — far under the balanced
+  // tier's cacheable minimum, so they are billed as input every time rather
+  // than read from a cache (`runtime/ai-prompt-cache.spec.ts` measures it).
+  'job.text': { inputTokens: 450, outputTokens: 500, cacheReadTokens: 0, cacheWriteTokens: 0 },
   // The theme step: the tool's schema and both system blocks (about 7,500
   // characters) are the cached prefix, the site's inventory and the brief ride
   // uncached, and a full-palette answer is about 1,300 characters of JSON with
@@ -108,18 +111,46 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // (about 10,000 characters) are the cached prefix, the site inventory and the
   // brief ride uncached, and a plan answer is about 600 characters of JSON with
   // as much again to think in.
-  'job.plan': { inputTokens: 500, outputTokens: 400, cacheReadTokens: 3_400, cacheWriteTokens: 0 },
-  'job.layout': { inputTokens: 700, outputTokens: 1_000, cacheReadTokens: 5_400, cacheWriteTokens: 0 },
-  'job.template': { inputTokens: 1_200, outputTokens: 700, cacheReadTokens: 6_200, cacheWriteTokens: 0 },
+  'job.plan': { inputTokens: 500, outputTokens: 400, cacheReadTokens: 3_600, cacheWriteTokens: 0 },
+  // The component step: the doctrine, the component instructions, the
+  // component surface's catalog and the tool are the cached prefix, the site
+  // inventory, the brief and the confirmed plan ride uncached, and a card-sized
+  // answer — its tree and declared props as JSON — is about 1,700 characters.
+  // The component step's spec measures the prefix and the answer against this.
+  'job.component': { inputTokens: 700, outputTokens: 600, cacheReadTokens: 5_800, cacheWriteTokens: 0 },
+  'job.layout': { inputTokens: 700, outputTokens: 1_000, cacheReadTokens: 5_600, cacheWriteTokens: 0 },
+  'job.template': { inputTokens: 1_200, outputTokens: 700, cacheReadTokens: 6_400, cacheWriteTokens: 0 },
+  // One page section's exchange (AGL-2907), from the modules' own text: the
+  // doctrine (6,281 characters), the page instructions (1,524), the screen
+  // palette catalog (8,353) and the section tool (484) are the cached prefix;
+  // the site inventory (711 on the median golden site), the brief, the plan
+  // and the section line ride uncached; and a golden section answer is 901
+  // characters at the median, asked for with no thinking.
+  'job.page': { inputTokens: 600, outputTokens: 300, cacheReadTokens: 4_400, cacheWriteTokens: 0 },
   // The SEO step's listing exchange, which a page's or a product's listing is
-  // exactly one of: the acceptable-use block, the listing rules and the tool's
-  // schema (about 3,600 characters) are the cached prefix; the page text,
-  // capped at 2,000 characters, rides uncached with the current listing and a
-  // dozen other titles (about 3,000); the largest answer the tool accepts is
-  // about 600 characters of JSON, and the request asks for no thinking. An
-  // audit pass is heavier: eight pages' findings and text, about 9,000
-  // characters, with up to about 8,000 back.
-  'job.seo': { inputTokens: 1_100, outputTokens: 250, cacheReadTokens: 1_200, cacheWriteTokens: 0 },
+  // exactly one of. NOTHING is cached here, whatever the breakpoints say: the
+  // step runs on the fast tier, whose cacheable minimum is four times what
+  // this prompt reaches, so every static byte is billed as input on every
+  // attempt — the doctrine's block in its field scope, the listing rules and
+  // the tool's schema, about 760 tokens together. The page text, capped at
+  // 2,000 characters, rides with the current listing and a dozen other titles
+  // for about another 750. The largest answer the tool accepts is about 600
+  // characters of JSON, and the request asks for no thinking. An audit pass
+  // is heavier: eight pages' findings and text, about 9,000 characters, with
+  // up to about 8,000 back.
+  'job.seo': { inputTokens: 1_500, outputTokens: 250, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  // The form step: the doctrine, the form instructions, the form surface's
+  // catalog (about 150 tokens) and the tool's schema are the cached prefix, the
+  // site inventory and the brief ride uncached, and a form's answer is 200 to
+  // 400 tokens of JSON with no extended thinking.
+  'job.form': { inputTokens: 700, outputTokens: 450, cacheReadTokens: 3_900, cacheWriteTokens: 0 },
+  // The email step, and the campaign step that shares its generation: the
+  // doctrine, the email instructions, the email palette catalog and the
+  // tool's schema (about 10,300 characters) are the cached prefix, the site
+  // inventory and the brief ride uncached, and the answer is one email's
+  // node map with three subject lines and three preheaders.
+  'job.email': { inputTokens: 600, outputTokens: 1_500, cacheReadTokens: 3_600, cacheWriteTokens: 0 },
+  'job.campaign': { inputTokens: 600, outputTokens: 1_500, cacheReadTokens: 3_600, cacheWriteTokens: 0 },
 }
 
 /** The fewest measured exchanges a median is taken over. */
@@ -151,9 +182,18 @@ export function aiModelsSelectable(
   )
 }
 
-/** A model's blended list rate, for "the cheapest allowed" and nothing else. */
+/**
+ * A model's blended BILLED rate, for "the cheapest allowed" and nothing
+ * else.
+ *
+ * Billed and not provider (AGL-3015): the substitution below happens when a
+ * workspace asked for a model its bounds do not allow, and the party it
+ * falls back for is the one whose credits are drawn. "Cheapest" has to mean
+ * the same thing here as in the selector this substitution stands in for,
+ * which sorts on `creditsPerRequest`.
+ */
 const blendedRate = (id: string): number => {
-  const rates = aiRatesForModel(id)
+  const rates = aiBilledRatesForModel(id)
   return rates.inputPerToken + rates.outputPerToken
 }
 
@@ -254,9 +294,13 @@ export function aiModelOptions(
   const auto = resolveAiModelChoice(kind, null, bounds, settings)
   if (!route || !auto) return null
   const typical = measured ?? AI_STEP_NOMINAL_USAGE[kind]
-  const autoCost = estimateAiCostUsd(typical, auto.model)
+  // Billed rates throughout (AGL-3015): every figure below is what the
+  // workspace will be charged for picking this model — credits per request
+  // and the multiple of Auto those credits come to. Our own cost for the
+  // same request is not this selector's subject and would misstate both.
+  const autoCost = estimateAiBilledUsd(typical, auto.model)
   const priced = (entry: AiCatalogEntry): AiModelOption => {
-    const cost = estimateAiCostUsd(typical, entry.id)
+    const cost = estimateAiBilledUsd(typical, entry.id)
     return {
       id: entry.id,
       label: entry.label,

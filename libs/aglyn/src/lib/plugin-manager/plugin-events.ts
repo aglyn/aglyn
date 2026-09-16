@@ -49,6 +49,69 @@ export interface PluginEventPayloads {
     before: OrgSeatAddons | null | undefined
     after: OrgSeatAddons | null | undefined
   }
+  /**
+   * The workspace's Stripe invoice was paid, in full, by a real charge.
+   *
+   * Raised from the platform billing webhook once the invoice has resolved
+   * to a workspace, so a plugin that bills its own usage learns the outcome
+   * of the invoice it asked for without subscribing to Stripe itself. The
+   * invoice's own `metadata` travels with it, unread by core: a plugin that
+   * stamped `pluginId` on the invoice it created recognizes its own by it,
+   * and every other handler ignores the event.
+   *
+   * `paidOutOfBand` is Stripe's own flag for an invoice marked paid without
+   * a charge. A plugin counting payment history must not count one: it is a
+   * staff action, not evidence that money moved.
+   */
+  'billing.invoice.paid': {
+    orgId: string
+    invoiceId: string
+    amountPaidCents: number
+    currency: string
+    paidOutOfBand: boolean
+    metadata: Readonly<Record<string, string>>
+  }
+  /** A charge attempt on the workspace's invoice failed or needs action. */
+  'billing.invoice.failed': {
+    orgId: string
+    invoiceId: string
+    amountDueCents: number
+    metadata: Readonly<Record<string, string>>
+  }
+  /**
+   * An invoice was closed without being paid — voided, or written off as
+   * uncollectible.
+   *
+   * ONE event for both Stripe events because they are one fact to a plugin:
+   * this invoice will never be paid and nothing more is owed on it. A
+   * handler that must tell them apart reads `reason`; one that only needs
+   * to stop waiting does not.
+   */
+  'billing.invoice.closed': {
+    orgId: string
+    invoiceId: string
+    reason: 'voided' | 'uncollectible'
+    metadata: Readonly<Record<string, string>>
+  }
+  /** A cardholder disputed a charge of the workspace's. */
+  'billing.dispute.opened': {
+    orgId: string
+    chargeId: string
+    invoiceId: string | null
+    amountCents: number
+  }
+  /**
+   * The workspace's default payment method changed, or its type did.
+   *
+   * `defaultType` is Stripe's own type string (`card`, `us_bank_account`,
+   * `link`, …), or `null` when the customer has no default. Core states the
+   * fact and takes no view: which types a plugin will extend credit against
+   * is the plugin's decision, not the platform's.
+   */
+  'billing.paymentMethod.changed': {
+    orgId: string
+    defaultType: string | null
+  }
   /** One permission key moved on a subject of the org. */
   'org.permissions.changed': {
     orgId: string

@@ -286,6 +286,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 const { aiAssistHandler } = require('./ai-assist') as typeof import('./ai-assist')
+const { ASSIST_SECTION_TOOL_NAME } =
+  require('./ai-assist-prompts') as typeof import('./ai-assist-prompts')
 
 // ── Harness ─────────────────────────────────────────────────────────────────
 
@@ -793,6 +795,78 @@ describe('every answered call is metered per org (AGL-2073)', () => {
       },
     ])
     expect(JSON.stringify(mockActivityRows)).not.toContain('Acme')
+  })
+
+  it('asks for a section through the strict tool, and reads the call back (AGL-2937)', async () => {
+    // A section used to be asked for as bare JSON and parsed. When the parse
+    // failed, the request had already been paid for and bought nothing; the
+    // tool is the cheaper shape because the answer arrives validated.
+    mockVerifyIdToken = async () => ({ uid: 'uid-ada', email: 'ada@example.test' })
+    let sent: any = null
+    mockFetch.mockImplementation(async (_url: string, init: { body: string }) => {
+      sent = JSON.parse(init.body)
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_1',
+              name: ASSIST_SECTION_TOOL_NAME,
+              input: {
+                nodes: [
+                  {
+                    id: 'n1',
+                    componentId: 'muiStack',
+                    parentId: '',
+                    children: ['n2'],
+                    props: [{ name: 'direction', value: 'column' }],
+                  },
+                  {
+                    id: 'n2',
+                    componentId: 'muiTypography',
+                    parentId: 'n1',
+                    children: [],
+                    props: [{ name: 'children', value: 'Welcome to Acme' }],
+                  },
+                ],
+              },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 700, output_tokens: 300 },
+        }),
+      }
+    })
+    const result = await call({
+      ...BODY,
+      mode: 'section',
+      hostId: 'host-1',
+      instruction: 'A hero section for Acme',
+    })
+    expect(result.status).toBe(200)
+    expect(result.body.section.rootId).toBe('n1')
+    expect(result.body.section.nodes.n2.props.children).toBe('Welcome to Acme')
+    // On the wire: the strict tool, and the mode's block with its breakpoint.
+    expect(sent.tools.map((tool: { name: string }) => tool.name)).toEqual([
+      ASSIST_SECTION_TOOL_NAME,
+    ])
+    expect(sent.tools[0].input_schema.additionalProperties).toBe(false)
+    expect(sent.system[0].cache_control).toEqual({ type: 'ephemeral' })
+    expect(JSON.stringify(sent.system)).not.toContain(ORG)
+  })
+
+  it('sends no tool on the element and blog modes, which answer as text', async () => {
+    let sent: any = null
+    mockFetch.mockImplementation(async (_url: string, init: { body: string }) => {
+      sent = JSON.parse(init.body)
+      return anthropicOk('Snappier hello')
+    })
+    expect((await call({ ...BODY, mode: 'element' })).status).toBe(200)
+    expect(sent.tools).toBeUndefined()
+    expect((await call({ ...BODY, mode: 'blog', instruction: 'Write a post' })).status).toBe(200)
+    expect(sent.tools).toBeUndefined()
   })
 
   it('an element rewrite writes no feed row — the rollup carries the count', async () => {

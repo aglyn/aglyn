@@ -1,0 +1,41 @@
+{
+  "id": "seo-roof-repair-search-fields",
+  "kind": "seo",
+  "brief": "Write the search title and description for our roof repair page. We are Harbor Roofing, a local crew in Harbor County, and most repairs are booked within a week.",
+  "framing": null,
+  "inventory": null,
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand, inside both search field ceilings.",
+      "plan": null,
+      "answer": {
+        "title": "Roof repair in Harbor County | Harbor Roofing",
+        "description": "Leaks, storm damage and worn flashing repaired by a local Harbor County crew, most jobs booked within a week. Request a free quote."
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 5, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A search title far past the 70 characters a result shows.",
+      "answer": {
+        "title": "Harbor Roofing: roof repair, leak repair, storm damage repair and flashing replacement for every home in Harbor County",
+        "description": "Local roof repairs, most booked within a week."
+      },
+      "fails": ["budget"]
+    },
+    {
+      "why": "Filler copy in place of a description.",
+      "answer": {
+        "title": "Roof repair in Harbor County",
+        "description": "Lorem ipsum dolor sit amet, your text here."
+      },
+      "fails": ["rules"]
+    }
+  ]
+}

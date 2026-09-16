@@ -909,6 +909,42 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      /*
+       * AI OVERAGE BILLING (AGL-3011) — server-written, billing-readable.
+       *
+       * `aiBilling/standing` holds what bounds the overage a workspace may
+       * accrue: whether a card is on file, whether accrual is paused and
+       * why, the months of payment history behind its ceiling, and any staff
+       * override. `aiOverageCharges/{chargeId}` is one row per mid-period
+       * charge, with its Stripe invoice and status.
+       *
+       * Readable by the same people who may read `aiAllotments` and see a
+       * bill — this is the workspace's own billing standing, and a workspace
+       * refused for unpaid overage must be able to see that it was. Writable
+       * by NOBODY: every field here is a spend control, and a workspace that
+       * could write its own would lift its own ceiling, clear its own pause
+       * and mark its own charges paid.
+       */
+      match /aiBilling/{document} {
+        allow read: if isStaff() ||
+          (isOrgWideMember() &&
+            ((canManageOrg() &&
+              (memberResolves('billing.view') || memberResolves('billing.manage'))) ||
+             memberStamps('billing.view') ||
+             memberStamps('billing.manage')));
+        allow write: if false;
+      }
+
+      match /aiOverageCharges/{chargeId} {
+        allow read: if isStaff() ||
+          (isOrgWideMember() &&
+            ((canManageOrg() &&
+              (memberResolves('billing.view') || memberResolves('billing.manage'))) ||
+             memberStamps('billing.view') ||
+             memberStamps('billing.manage')));
+        allow write: if false;
+      }
+
       // Monthly usage rollups (AGL-41) + the live API-request meter
       // (AGL-635): readable by the org so the Billing page usage meters show
       // real numbers — and org-wide only (AGL-1026), because how much the

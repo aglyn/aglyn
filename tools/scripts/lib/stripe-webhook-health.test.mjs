@@ -383,17 +383,25 @@ test('a catch-all `*` subscription satisfies the required set', () => {
   assert.equal(result.ok, true)
 })
 
-test('the required event list carries the ten the platform destination needs', () => {
+test('the required event list carries the fifteen the platform destination needs', () => {
   // A guard on the list itself: AGL-1798 was a MISSING entry, so a silent
   // shrink here would quietly narrow every assertion above.
-  assert.equal(WEBHOOK_EVENTS.length, 10)
-  assert.equal(new Set(WEBHOOK_EVENTS).size, 10)
+  assert.equal(WEBHOOK_EVENTS.length, 15)
+  assert.equal(new Set(WEBHOOK_EVENTS).size, 15)
   for (const required of [
     'charge.refunded',
     'charge.dispute.created',
     'charge.dispute.closed',
     'invoice.payment_failed',
     'checkout.session.completed',
+    // AGL-3011. Without the first two an unpaid AI overage invoice never
+    // ends and the pause it set never lifts; without the last three the
+    // card-on-file condition the unpaid bound rests on never moves.
+    'invoice.voided',
+    'invoice.marked_uncollectible',
+    'customer.updated',
+    'payment_method.attached',
+    'payment_method.detached',
   ]) {
     assert.ok(WEBHOOK_EVENTS.includes(required), `${required} missing`)
   }

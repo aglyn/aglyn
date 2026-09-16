@@ -88,8 +88,10 @@ import {
   aiJobLayoutPrompt,
   createAiJobLayoutStep,
   runAiJobLayoutStep,
+  registerAiLayoutJob,
 } from './ai-job-layout-step'
 import { registerAiJobStep } from './ai-jobs'
+import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 
 const NOW = new Date('2026-09-15T20:00:00.000Z')
 const FREE_ORG = {}
@@ -281,7 +283,8 @@ beforeEach(() => {
 })
 
 describe('the layout step', () => {
-  it('registers itself as the layout runner, with the admission the create and resume doors ask', async () => {
+  it('registers the layout runner, with the admission the create and resume doors ask', async () => {
+    registerAiLayoutJob()
     expect(registerAiJobStep).toHaveBeenCalledWith('layout', runAiJobLayoutStep)
     const ask = (hostId: string | null, org: object) =>
       aiJobAdmissionRefusal('layout', { firestore, orgId: 'org-1', hostId, inputs: {}, org })
@@ -319,7 +322,7 @@ describe('the layout step', () => {
     const [request] = mockRunAiRequest.mock.calls[0]
     expect(request).toMatchObject({
       model: 'routed-model',
-      tools: [aiDoctrineTreeTool('layout')],
+      tools: [aiDoctrineTreeTool('layout'), aiInventoryLookupTool()],
       maxTokens: AI_JOB_LAYOUT_MAX_TOKENS,
       thinking: 'off',
       stream: false,

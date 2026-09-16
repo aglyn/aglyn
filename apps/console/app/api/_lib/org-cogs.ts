@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import {
+  ASSIST_PROVIDER_COST_FIELD,
+  assistProviderCostUsd,
+} from '@aglyn/aglyn/app-utils/assist-credits'
 import { orgCogsInputFrom, orgMonthlyCogsUsd } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
@@ -33,7 +37,8 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  * document itself covers only storage, page views and form submissions.
  *
  * PLUS Aglyn Assist provider spend for that same month (AGL-2280), read live
- * from `orgs/{id}/assistUsage/{month}.estCostUsd`. Assist cost had five
+ * from `orgs/{id}/assistUsage/{month}` — its provider figure, which is what
+ * the tokens cost us rather than what they drew (AGL-3015). Assist cost had five
  * writers and two readers — the budget alert and the billing card — and
  * neither of them is the margin model, so the one cost line that can actually
  * clear the $2/site floor never reached the discount guardrail at all. the * standing constraint is that Assist must not eat margins; a guardrail that
@@ -78,7 +83,13 @@ export async function latestMeasuredCogsUsd(
     // string and is the fallback for a document written before it was.
     const month = String(rollup.get('month') ?? rollup.id)
     const assist = await orgRef.collection('assistUsage').doc(month).get()
-    const assistCostUsd = Number(assist.get('estCostUsd') ?? 0)
+    // What we PAID, not what the org drew (AGL-3015). A cost of goods priced
+    // at the billed rate would count our own markup as a cost and refuse a
+    // discount the margin actually supports.
+    const assistCostUsd = assistProviderCostUsd(
+      assist.get('estCostUsd'),
+      assist.get(ASSIST_PROVIDER_COST_FIELD),
+    )
     const { measuredUsd } = orgMonthlyCogsUsd(
       {
         // One shared list of priced fields (AGL-1134) rather than a copy per

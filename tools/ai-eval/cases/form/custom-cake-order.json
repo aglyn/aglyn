@@ -1,0 +1,73 @@
+{
+  "id": "form-custom-cake-order",
+  "kind": "form",
+  "brief": "A form for custom cake orders: who is ordering, how to reach them, the pickup date, and what the cake should be.",
+  "framing": null,
+  "inventory": {
+    "hostId": "host-tidewater",
+    "components": [],
+    "layouts": [{ "id": "lay-bakery", "name": "Tidewater Bakery site", "parentId": null }],
+    "templates": [],
+    "forms": [{ "id": "frm-contact", "name": "Contact", "fields": ["name", "email", "message"] }],
+    "datasets": [],
+    "collections": [],
+    "screens": [{ "id": "scr-home", "name": "Home", "slug": "/", "layoutId": "lay-bakery", "template": false }],
+    "theme": { "summary": ["Light scheme only"], "colors": { "primary.main": "#8c3b2e", "secondary.main": "#f4e3c1" }, "fonts": ["Lora"] },
+    "truncated": []
+  },
+  "expected": {
+    "plan": { "screens": [0, 0], "createKinds": ["form"], "maxCreate": 1 }
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: the form's own fields, since the contact form takes neither a date nor a cake's details.",
+      "plan": {
+        "reuse": [],
+        "create": [
+          {
+            "kind": "form",
+            "name": "Custom cake order",
+            "why": "The contact form takes a message, not a pickup date or the details of a cake.",
+            "duplicateOf": null,
+            "fields": ["name", "email", "pickup date", "cake details"]
+          }
+        ],
+        "screens": []
+      },
+      "answer": {
+        "tree": {
+          "rootId": "order-form",
+          "nodes": {
+            "order-form": { "componentId": "form", "props": { "formName": "Custom cake order", "afterSubmit": "message" }, "nodes": ["f-name", "f-email", "f-date", "f-details"] },
+            "f-name": { "componentId": "formField", "props": { "fieldName": "name", "label": "Your name", "fieldType": "text" } },
+            "f-email": { "componentId": "formField", "props": { "fieldName": "email", "label": "Email", "fieldType": "email" } },
+            "f-date": { "componentId": "formField", "props": { "fieldName": "pickupDate", "label": "Pickup date", "placeholder": "Friday, June 6", "fieldType": "text" } },
+            "f-details": { "componentId": "formField", "props": { "fieldName": "details", "label": "What should the cake be?", "placeholder": "Flavor, size, and any writing on top", "fieldType": "textarea" } }
+          }
+        }
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": 5, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A field label left as filler copy (rule 14).",
+      "answer": {
+        "tree": {
+          "rootId": "order-form",
+          "nodes": {
+            "order-form": { "componentId": "form", "props": { "formName": "Custom cake order" }, "nodes": ["f-name", "f-details"] },
+            "f-name": { "componentId": "formField", "props": { "fieldName": "name", "label": "Your name", "fieldType": "text" } },
+            "f-details": { "componentId": "formField", "props": { "fieldName": "details", "label": "Your text here", "fieldType": "textarea" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    }
+  ]
+}

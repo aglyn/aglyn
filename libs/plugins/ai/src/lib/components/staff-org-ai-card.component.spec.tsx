@@ -34,7 +34,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { StaffOrgAiResponse } from '../usage/staff-org-ai'
 
@@ -87,7 +87,10 @@ function body(overrides: Partial<StaffOrgAiResponse> = {}): StaffOrgAiResponse {
       addonCredits: 9_000,
       totalCredits: 21_000,
       usedCredits: 2_500,
-      providerUsd: 2.5,
+      billedUsd: 2.5,
+      // Below what the month drew: the balanced tier is billed above its
+      // provider rate (AGL-3015).
+      providerUsd: 1.8,
       remainingCredits: 18_500,
       projectedCredits: 7_500,
       projectedUsd: 7.5,
@@ -196,7 +199,9 @@ describe('StaffOrgAiCard (AGL-2930)', () => {
         screen.getByText('21,000 credits = 12,000 staff override + 9,000 Acme AI add-on'),
       ).toBeTruthy(),
     )
-    expect(screen.getByText(/Used 2,500 credits \(\$2\.50 provider spend\) · 18,500 remaining/)).toBeTruthy()
+    // The credits are what the workspace DREW and the dollars are what it
+    // COST US, which on the balanced tier is the smaller figure (AGL-3015).
+    expect(screen.getByText(/Used 2,500 credits \(\$1\.80 provider spend\) · 18,500 remaining/)).toBeTruthy()
   })
 
   it('reads as off, with the plan band alone, when the add-on is not bought', async () => {
@@ -286,5 +291,53 @@ describe('StaffOrgAiCard (AGL-2930)', () => {
     await waitFor(() =>
       expect(screen.getByText(/Could not read this organization’s AI usage/)).toBeTruthy(),
     )
+  })
+
+  it('lists tokens by kind with the cost per request and the cache hit rate (AGL-2937)', async () => {
+    mockAnswer.payload = body({
+      tokens: {
+        total: { input: 3_000, cached: 9_000, cacheWrite: 3_000, output: 1_500 },
+        cacheHitRate: 0.6,
+        kinds: [
+          {
+            kind: 'page',
+            requests: 4,
+            estCostUsd: 2.2,
+            providerCostUsd: 1.6,
+            costPerRequestUsd: 0.4,
+            tokens: { input: 2_000, cached: 0, cacheWrite: 3_000, output: 1_000 },
+            cacheHitRate: 0,
+          },
+          {
+            kind: 'assist',
+            requests: 30,
+            estCostUsd: 0.3,
+            providerCostUsd: 0.24,
+            costPerRequestUsd: 0.008,
+            tokens: { input: 1_000, cached: 9_000, cacheWrite: 0, output: 500 },
+            cacheHitRate: 0.9,
+          },
+        ],
+      },
+    })
+    render(<StaffOrgAiCard orgId="org-1" />)
+    await waitFor(() => expect(screen.getByText('cache hit rate 60%')).toBeTruthy())
+    expect(
+      screen.getByText('3,000 sent · 9,000 read from cache · 3,000 written to cache · 1,500 generated'),
+    ).toBeTruthy()
+    // Each figure read inside its own row, so one kind's cost repeated down
+    // the column cannot pass.
+    const page = within(screen.getByRole('cell', { name: 'page' }).closest('tr') as HTMLElement)
+    expect(page.getByText('$0.4000')).toBeTruthy()
+    expect(page.getByText('0%')).toBeTruthy()
+    const assist = within(screen.getByRole('cell', { name: 'assist' }).closest('tr') as HTMLElement)
+    expect(assist.getByText('$0.0080')).toBeTruthy()
+    expect(assist.getByText('90%')).toBeTruthy()
+  })
+
+  it('draws no token section for a route that sends none', async () => {
+    render(<StaffOrgAiCard orgId="org-1" />)
+    await waitFor(() => expect(screen.getByText('Acme AI on')).toBeTruthy())
+    expect(screen.queryByText(/cache hit rate/)).toBeNull()
   })
 })

@@ -50,9 +50,12 @@ const FORMS_PER_RENDER = 200
  * The host's form entities keyed by id, in the shape the placed-form graft
  * consumes (`Aglyn.placedFormPlacement`).
  *
- * Only forms with a PUBLISHED design are returned. A form that has never been
- * published carries no `rootId`/`nodes` at all, and one whose root is missing
- * from its own nodes has no tree to graft — both are "this entity contributes
+ * Only forms with a design are returned: a `rootId` that is in the form's own
+ * `nodes`. That is not the same as a PUBLISHED design. The Forms page creates a
+ * form with its design seeded, so a form nobody has published yet still
+ * renders wherever a page places it; placing it on a published page is what
+ * puts it live. A form with no `rootId`/`nodes`, or whose root is missing from
+ * its own nodes, has no tree to graft — both are "this entity contributes
  * nothing", and the graft leaves such a placement rendering the fields drawn on
  * the page itself. Filtering here rather than in the graft keeps the payload
  * to what can actually be rendered.

@@ -176,6 +176,11 @@ function healthyTenantConfig() {
             '/openapi.json',
             '/api/llms',
             '/api/openapi',
+            // The RFC 9727 API catalog and its rewrite target, live since
+            // 2026-09-10 (AGL-2750). Both spellings, for the reason the feed
+            // below states: a WAF matches the path the CLIENT asked for.
+            '/.well-known/api-catalog',
+            '/api/api-catalog',
           ].map((value) => ({ conditions: [{ type: 'path', op: 'eq', value }] })),
           // The sixth mouth, added live 2026-09-03: `/sitemap.xml` is an index
           // now, and the children it names live under this prefix (AGL-2520).
@@ -184,6 +189,21 @@ function healthyTenantConfig() {
           // the rewrite target, and a WAF matches the path the client asked
           // for, so the only address anyone can link to needs its own mouth.
           { conditions: [{ type: 'path', op: 're', value: '/rss\\.xml$' }] },
+          // The `.md` spelling of any page, live since 2026-09-15 (AGL-3018).
+          // `/llms.txt` above tells an unnamed agent to append `.md` to any
+          // path; until this group existed, everything it invited the reader
+          // to answered 429. The lookahead keeps `/api/`, `/_next/` and
+          // `/_static/` challenged — without it `\\.md$` admits
+          // `/api/<anything>.md`, measured.
+          {
+            conditions: [
+              {
+                type: 'path',
+                op: 're',
+                value: '^/(?!api/|_next/|_static/).*\\.md$',
+              },
+            ],
+          },
         ],
       },
       {
@@ -204,6 +224,22 @@ function healthyTenantConfig() {
         action: bypass(),
         conditionGroup: [
           { conditions: [{ type: 'user_agent', op: 're', value: AI_AGENT_UA_PATTERN }] },
+        ],
+      },
+      // Live since 2026-09-10 (AGL-2748): the two endpoints `/openapi.json`
+      // ADVERTISES. The document was on the crawler allowlist and the
+      // endpoints it names were not, so the contract was readable and
+      // unusable. Absent from this fixture until AGL-3018, which is why the
+      // drift workflow read red every day from 2026-09-10 on.
+      {
+        name: 'Public read API bypass',
+        id: 'rule_public_read_api_bypass_0R1Wk2',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          { conditions: [{ type: 'path', op: 'eq', value: '/api/host' }] },
+          { conditions: [{ type: 'path', op: 'eq', value: '/api/screen' }] },
         ],
       },
     ],

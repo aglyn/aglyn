@@ -43,16 +43,18 @@ import {
 } from '../model/assist-edit'
 import type { AiTool } from '../providers/contract'
 import {
+  aiDoctrineCatalog,
+  validateStreamedGeneration,
+  type AiGenerationCheckResult,
+} from '../runtime/ai-doctrine'
+import type { AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
+import {
   AI_SX_ALLOWED_KEYS,
   validateAiNodePatch,
   validateAiNodeTree,
 } from '../runtime/ai-node-tree'
 import type { AiPaletteEntry } from '../runtime/ai-palette'
-import {
-  AI_PALETTE,
-  AI_PALETTE_CATALOG,
-  AI_SX_TOKENS,
-} from '../runtime/ai-palette.generated'
+import { AI_PALETTE, AI_SX_TOKENS } from '../runtime/ai-palette.generated'
 
 /**
  * The chat door's edit rung, server half (AGL-2906): what the model is told
@@ -150,7 +152,13 @@ const strictObject = (properties: Record<string, unknown>) => ({
  * own list, so the tool and the Screen Properties form cannot drift.
  */
 export function assistEditTool(kind: AssistEditDocumentKind): AiTool {
-  const ops = ASSIST_EDIT_OP_KINDS.filter((op) => op !== 'setSeo' || kind === 'screen')
+  // A component save (AGL-2908) is proposed by its own door, from a selection
+  // the person made, and is not on offer in a chat turn: the tool has no shape
+  // for the properties and bindings it carries, and the resolver below drops
+  // any op it is not offered.
+  const ops = ASSIST_EDIT_OP_KINDS.filter(
+    (op) => op !== 'saveAsComponent' && (op !== 'setSeo' || kind === 'screen'),
+  )
   const pair = strictObject({ name: STRING, value: STRING })
   const style = strictObject({
     key: STRING,
@@ -207,7 +215,9 @@ const DOCUMENT_NOUNS: Readonly<Record<AssistEditDocumentKind, string>> = {
 /**
  * The edit protocol and the element catalog for one kind of document — a
  * pure function of the kind, so it sits inside the cached prefix and every
- * workspace editing that kind of document reads one copy of it.
+ * workspace editing that kind of document reads one copy of it. The catalog
+ * is the doctrine's for the document's surface, the one a generation on that
+ * surface is shown, carried in this block rather than one of its own.
  */
 export function editCanvasBlock(kind: AssistEditDocumentKind): string {
   const lines = [
@@ -233,7 +243,7 @@ export function editCanvasBlock(kind: AssistEditDocumentKind): string {
       ).join(', ')}.`,
     )
   }
-  lines.push(AI_PALETTE_CATALOG[kind])
+  lines.push(aiDoctrineCatalog(kind))
   return lines.join('\n')
 }
 
@@ -855,38 +865,16 @@ function validatePendingEdit(output: {
 }
 
 /**
- * A finding in the shape the doctrine runtime reports its violations
- * (`AiDoctrineViolation`, AGL-2935), so the edit's check moves under
- * `runValidatedGeneration` without translating what it found. `rule` is null:
- * these are the edit's own closed-world and palette checks, not one of the
- * doctrine's numbered rules.
- */
-export interface AssistEditViolation {
-  rule: null
-  code: 'edit'
-  message: string
-}
-
-/** What a check answers, in the doctrine runtime's custom-kind shape. */
-export interface AssistEditCheckResult<T> {
-  value: T | null
-  violations: AssistEditViolation[]
-}
-
-export type AssistEditValidated<T> =
-  | { status: 'ok'; value: T; violations: AssistEditViolation[] }
-  | { status: 'needs_input'; violations: AssistEditViolation[]; message: string }
-
-/**
  * The edit's check: the model's tool call held to the canvas the request
- * described and to the palette validators, resolved into a proposal. This is
- * the function `runValidatedGeneration('edit', { …, check })` takes as its
- * `check`.
+ * described and to the palette validators, resolved into a proposal. Its
+ * findings are doctrine violations with `rule: null` — the edit's own
+ * closed-world and palette checks, not one of the numbered rules — and each
+ * names a change the proposal leaves out.
  */
 export function checkAssistEditAnswer(
   answer: Record<string, unknown>,
   scope: { context: AssistEditCanvasContext; target: AssistEditTarget },
-): AssistEditCheckResult<AssistEditProposal> {
+): AiGenerationCheckResult<AssistEditProposal> {
   const parsed = parseEditInput(answer, scope.context, scope.target.kind)
   const validated = validatePendingEdit({
     surface: scope.target.kind,
@@ -895,7 +883,7 @@ export function checkAssistEditAnswer(
   })
   const reasons = [...parsed.dropped, ...validated.violations]
   const violations = reasons.map(
-    (message): AssistEditViolation => ({ rule: null, code: 'edit', message }),
+    (message): AiDoctrineViolation => ({ rule: null, code: 'edit', message }),
   )
   if (!validated.ops.length) return { value: null, violations }
   return {
@@ -914,42 +902,21 @@ export function checkAssistEditAnswer(
 }
 
 /**
- * Stand-in for `runValidatedGeneration('edit', { …, check })` — the call it
- * becomes once AGL-2935's doctrine runtime merges, whose custom-kind overload
- * takes exactly this `check`.
- *
- * It takes the ANSWER rather than making the model call: the chat door streams
- * the reply to the reader as it arrives, so by the time the tool call can be
- * checked the answer is already on screen and there is nothing to re-ask
- * inside the turn. A value with violations is still `ok` — the card applies
- * the ops that survived and lists the rest under "Left out" — and no value at
- * all is `needs_input`, with the reasons.
- */
-export function runValidatedGenerationStandIn<T>(
-  kind: 'edit',
-  input: {
-    answer: Record<string, unknown>
-    check: (answer: Record<string, unknown>) => AssistEditCheckResult<T>
-  },
-): AssistEditValidated<T> {
-  const { value, violations } = input.check(input.answer)
-  if (value !== null) return { status: 'ok', value, violations }
-  return {
-    status: 'needs_input',
-    violations,
-    message: `The ${kind} could not be matched to this canvas.`,
-  }
-}
-
-/**
  * The model's tool call, resolved into a proposal — or a null proposal, with
  * the reasons, when nothing survived.
+ *
+ * The chat door streams the reply to the reader as it arrives, so by the time
+ * the tool call can be checked the answer is already on screen and there is
+ * no turn left to re-ask in. The doctrine holds it as a streamed answer: a
+ * proposal with findings is still a proposal — the card applies the changes
+ * that survived and lists the rest under "Left out" — and no proposal comes
+ * back as the reasons.
  */
 export function resolveAssistEdit(
   input: Record<string, unknown>,
   scope: { context: AssistEditCanvasContext; target: AssistEditTarget },
 ): { proposal: AssistEditProposal | null; dropped: string[] } {
-  const validated = runValidatedGenerationStandIn('edit', {
+  const validated = validateStreamedGeneration('edit', {
     answer: input,
     check: (answer) => checkAssistEditAnswer(answer, scope),
   })

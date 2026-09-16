@@ -152,6 +152,27 @@ describe('the gate', () => {
   })
 })
 
+/**
+ * A page is described FOR a site (AGL-2907), so the entry point is here only
+ * while the console page the panel is docked to names one — and opening the
+ * brief dialog still asks the route for nothing until a brief is sent.
+ */
+describe('describing a page', () => {
+  it('offers it only on a site’s own routes', () => {
+    expect(screen.queryByRole('button', { name: 'Describe a page' })).toBeNull()
+    renderDrawer({ hostId: 'host-1' })
+    expect(screen.getByRole('button', { name: 'Describe a page' })).toBeTruthy()
+  })
+
+  it('opens the brief dialog, which sends nothing of its own until a brief is written', () => {
+    renderDrawer({ hostId: 'host-1' })
+    fireEvent.click(screen.getByRole('button', { name: 'Describe a page' }))
+    expect(screen.getByLabelText('What is the page for?')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Plan the page' }).hasAttribute('disabled')).toBe(true)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+})
+
 describe('the list', () => {
   it('loads the org’s jobs on expand, with steps, the copy of a text output and an open-draft link', async () => {
     mockFetch.mockImplementation(async (url: string) => {
@@ -192,6 +213,42 @@ describe('the list', () => {
     )
     // A job that arrived finished is not this session's outcome to count.
     expect(mockTrackEvent).not.toHaveBeenCalled()
+  })
+
+  it('links a generated form to its page, and shows what the job says to decide next (AGL-2913)', async () => {
+    const note = 'Forms cannot collect photo upload yet, so this form leaves it out.'
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.startsWith('/api/ai/jobs?orgId=org-1')) {
+        return jsonResponse({
+          jobs: [
+            job({
+              id: 'job-form',
+              kind: 'form',
+              status: 'done',
+              running: false,
+              steps: [{ name: 'generate', status: 'done', startedAt: null, endedAt: null, creditsSpent: 4, error: null }],
+              outputs: [
+                {
+                  resource: 'form',
+                  id: 'job-form',
+                  versionId: null,
+                  hostId: 'host-1',
+                  hostSubdomain: 'shop',
+                  label: 'Roof quote request',
+                  note,
+                },
+              ],
+            }),
+          ],
+        })
+      }
+      throw new Error(`unarmed request to ${url}`)
+    })
+    renderDrawer()
+    fireEvent.click(screen.getByLabelText('Show AI jobs'))
+    const link = (await screen.findByText('Open draft — Roof quote request')) as HTMLAnchorElement
+    expect(link.getAttribute('href')).toBe('/acme/hosts/shop/forms/job-form')
+    expect(screen.getByText(note)).toBeTruthy()
   })
 
   it('shows the route’s refusal rather than an empty list', async () => {
@@ -303,8 +360,17 @@ describe('aiJobOutputHref', () => {
     expect(aiJobOutputHref(output({ resource: 'reusableComponent' }) as never, 'acme')).toBe(
       '/acme/hosts/shop/components/scr-1',
     )
+    // An email design IS a screen (AGL-2912): the Emails page's own Edit
+    // design opens it in the screen besigner, and `/emails/{id}` is the
+    // transactional template route, which opens nothing for a design.
     expect(aiJobOutputHref(output({ resource: 'emailScreen', versionId: 'v-2' }) as never, 'acme')).toBe(
-      '/acme/hosts/shop/emails/scr-1/versions/v-2/besigner',
+      '/acme/hosts/shop/screens/scr-1/versions/v-2/besigner',
+    )
+  })
+
+  it('opens a drafted campaign on its page in the site’s Marketing console (AGL-2912)', () => {
+    expect(aiJobOutputHref(output({ resource: 'campaign', id: 'cmp-1' }) as never, 'acme')).toBe(
+      '/acme/hosts/shop/marketing/campaigns/cmp-1',
     )
   })
 
@@ -331,6 +397,15 @@ describe('aiJobOutputHref', () => {
     expect(aiJobOutputHref(output({ resource: 'theme', id: 'proposal' }) as never, 'acme')).toBe(
       '/acme/hosts/shop/setup/theme',
     )
+  })
+
+  it('opens a generated form on its own page, which mints its first version (AGL-2913)', () => {
+    expect(aiJobOutputHref(output({ resource: 'form', id: 'form-1' }) as never, 'acme')).toBe(
+      '/acme/hosts/shop/forms/form-1',
+    )
+    expect(
+      aiJobOutputHref(output({ resource: 'form', id: 'form-1', versionId: 'v-3' }) as never, 'acme'),
+    ).toBe('/acme/hosts/shop/forms/form-1')
   })
 })
 

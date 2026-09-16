@@ -26,6 +26,7 @@ import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entit
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import { AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
 import {
+  AI_SITE_INVENTORY_LISTED_PER_KIND,
   AI_SITE_INVENTORY_MAX_CHARS,
   emptyAiSiteInventory,
   type AiSiteInventory,
@@ -42,13 +43,24 @@ import {
   AI_BUILDING_DOCTRINE,
   AI_DOCTRINE_SYSTEM_BLOCK,
   AI_GENERATION_MAX_TOKENS,
+  aiDoctrineCatalog,
+  aiDoctrineScopeFor,
+  aiDoctrineSystemBlock,
   aiDoctrineSystemBlocks,
   aiDoctrineTreeTool,
   aiNodeTreeContextFromInventory,
   aiSiteInventoryBlock,
   runValidatedGeneration,
+  validateStreamedGeneration,
+  type AiGenerationCheck,
 } from './ai-doctrine'
-import { AI_DOCTRINE_RULES } from './ai-doctrine-validators'
+import {
+  AI_INVENTORY_LOOKUP_MAX_ROUNDS,
+  AI_INVENTORY_LOOKUP_TOOL_NAME,
+  aiInventoryLookupTool,
+} from '../tools/ai-inventory-lookup-tool'
+import { AI_DOCTRINE_RULES, AI_REPEAT_MIN_COUNT, AI_SIMILAR_PAGES_MIN } from './ai-doctrine-validators'
+import { AI_SURFACE_NAMES } from './ai-palette'
 import { AI_PALETTE_CATALOG } from './ai-palette.generated'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
@@ -120,10 +132,61 @@ describe('the doctrine block', () => {
     )
   })
 
+  it('states the counts its validators enforce, so a rule cannot ask for what it then refuses (AGL-3022)', () => {
+    // The first live run planned a template for two similar pages and cited
+    // rule 4 for it, because rule 4's text named no count while
+    // `detectUntemplatedSimilarPages` wants three. A threshold a generator is
+    // not told is a threshold it cannot hold to.
+    expect(AI_BUILDING_DOCTRINE).toContain(`When ${AI_SIMILAR_PAGES_MIN} or more pages share one structure`)
+    expect(AI_BUILDING_DOCTRINE).toContain(`appearing ${AI_REPEAT_MIN_COUNT} or more times`)
+  })
+
   it('pins the doctrine’s bytes, so changing what every generator is told is a deliberate cache break', () => {
     expect(createHash('sha256').update(AI_DOCTRINE_SYSTEM_BLOCK.text).digest('hex')).toBe(
-      'cfd26bc7239183ff2a43029e0a69c381bbcf77a744b3a14d149bb397856b1158',
+      '006843cc161def19bb532bcd499ce0e3b2360f05a12e5d4319c9e18d443eecc2',
     )
+  })
+
+  it('tells a kind that writes values only the rules it can break, with the abuse rules whole', () => {
+    const fields = aiDoctrineSystemBlock('fields')
+    // Rule 13 is the one the loop holds every custom kind to, through
+    // `detectPublishIntent`, so it is the one rule that has to be stated: an
+    // answer may not be refused for a rule it was never told.
+    expect(fields.text).toContain('13. Drafts only.')
+    for (const rule of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17]) {
+      expect([rule, fields.text.includes(`\n${rule}. `)]).toEqual([rule, false])
+    }
+    // The acceptable-use rules are an abuse guard, not a building rule: a
+    // published title can carry a scam claim as easily as a page can, so
+    // every scope carries them whole.
+    expect(fields.text).toContain(AI_ACCEPTABLE_USE_BLOCK)
+    expect(fields.cacheBreakpoint).toBe(true)
+    expect(fields.text.length).toBeLessThan(AI_DOCTRINE_SYSTEM_BLOCK.text.length / 3)
+    // Built once, so two requests share one cache entry rather than two
+    // equal-looking objects.
+    expect(aiDoctrineSystemBlock('fields')).toBe(fields)
+    expect(aiDoctrineSystemBlock('documents')).toBe(AI_DOCTRINE_SYSTEM_BLOCK)
+  })
+
+  it('sends the field scope to the kinds that write values, and the document scope to the rest', () => {
+    expect(['seo-fields', 'seo-site', 'seo-fixes'].map(aiDoctrineScopeFor)).toEqual([
+      'fields',
+      'fields',
+      'fields',
+    ])
+    expect(['plan', 'page', 'theme', 'eval-grade', 'edit'].map(aiDoctrineScopeFor)).toEqual([
+      'documents',
+      'documents',
+      'documents',
+      'documents',
+      'documents',
+    ])
+    expect(
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: [{ text: 'Write the listing.' }],
+        scope: 'fields',
+      })[0],
+    ).toBe(aiDoctrineSystemBlock('fields'))
   })
 
   it('caches a door’s instructions behind the palette catalog, or on their own last block', () => {
@@ -181,6 +244,24 @@ describe('the inventory block', () => {
     expect(block.length).toBeLessThanOrEqual(AI_SITE_INVENTORY_MAX_CHARS)
     const cut = /More exist than are listed for: (.*)\. Do not assume/.exec(block)?.[1] ?? ''
     expect(cut.split(', ')).toEqual(expect.arrayContaining(['components', 'layouts']))
+  })
+
+  it('lists only the first records of a kind, and points the rest at the lookup', () => {
+    // The window the reader holds is wider than the block lists (AGL-2937):
+    // the block is billed on every attempt, and the rest are found by asking.
+    const wide: AiSiteInventory = {
+      ...emptyAiSiteInventory('host-wide'),
+      components: Array.from({ length: AI_SITE_INVENTORY_LISTED_PER_KIND + 12 }, (_, index) => ({
+        id: `cmp-${index}`,
+        name: `Block ${index}`,
+        props: {},
+      })),
+    }
+    const block = aiSiteInventoryBlock(wide)
+    expect(block).toContain(`- cmp-${AI_SITE_INVENTORY_LISTED_PER_KIND - 1} ·`)
+    expect(block).not.toContain(`- cmp-${AI_SITE_INVENTORY_LISTED_PER_KIND} ·`)
+    expect(block).toContain('More exist than are listed for: components')
+    expect(block).toContain(AI_INVENTORY_LOOKUP_TOOL_NAME)
   })
 
   it('tells the model when no inventory was read, so it reuses nothing by id', () => {
@@ -289,13 +370,78 @@ describe('runValidatedGeneration — a plan', () => {
     expect(requests).toHaveLength(1)
     expect(requests[0]).toMatchObject({
       model: 'test-model',
-      tools: [AI_BUILD_PLAN_TOOL],
+      // The lookup tool rides beside the door's own on every request that
+      // carries an inventory (AGL-2937), so the tool list is one shape.
+      tools: [AI_BUILD_PLAN_TOOL, aiInventoryLookupTool()],
       maxTokens: AI_GENERATION_MAX_TOKENS.plan,
       messages: [{ role: 'user', content: 'Brief: a roof repair page' }],
     })
     expect(requests[0].system).toEqual(
       aiDoctrineSystemBlocks(SITE_A, { instructions: [{ text: 'Plan the job.' }] }),
     )
+  })
+
+  it('answers a lookup from memory, asks again, and does not spend an answer attempt on it', async () => {
+    // The site the prompt was built for lists one component; the window holds
+    // a second the block never listed, which is the whole point of the tool.
+    const wide: AiSiteInventory = {
+      ...SITE_A,
+      components: [
+        ...SITE_A.components,
+        { id: 'cmp-price', name: 'Pricing card', props: { plan: 'text' } },
+      ],
+      truncated: ['components'],
+    }
+    const { fake, requests } = provider([
+      toolAnswer(AI_INVENTORY_LOOKUP_TOOL_NAME, { kind: 'components', query: 'pricing' }, 200),
+      toolAnswer(AI_BUILD_PLAN_TOOL.name, CLEAN_PLAN),
+    ])
+    const result = await runValidatedGeneration('plan', { ...planInput(fake), inventory: wide })
+    expect(result).toMatchObject({ status: 'ok', value: CLEAN_PLAN })
+    // Two model calls, both billed; one answer attempt, so the re-ask is
+    // still there to be spent on a broken rule.
+    expect(result.attempts).toBe(2)
+    expect(result.usage.inputTokens).toBe(1_200)
+    expect(requests).toHaveLength(2)
+    // The rows came back in the turn, in the same shape the block lists them,
+    // and the request the model saw was never rebuilt around them.
+    expect(requests[1].messages.map((message) => message.role)).toEqual([
+      'user',
+      'assistant',
+      'user',
+    ])
+    expect(requests[1].messages[2].content).toContain('cmp-price · Pricing card · plan:text')
+    expect(requests[1].system).toEqual(requests[0].system)
+  })
+
+  it('stops answering lookups after its bound, and says so before it does', async () => {
+    const { fake, requests } = provider([
+      toolAnswer(AI_INVENTORY_LOOKUP_TOOL_NAME, { kind: 'components', query: 'a' }, 200),
+      toolAnswer(AI_INVENTORY_LOOKUP_TOOL_NAME, { kind: 'forms', query: 'b' }, 200),
+      toolAnswer(AI_INVENTORY_LOOKUP_TOOL_NAME, { kind: 'screens', query: 'c' }, 200),
+      toolAnswer(AI_BUILD_PLAN_TOOL.name, CLEAN_PLAN),
+    ])
+    const result = await runValidatedGeneration('plan', planInput(fake))
+    // The bound is two, so the second answer tells the model it is the last;
+    // the third lookup is read as no answer at all and costs the re-ask.
+    expect(AI_INVENTORY_LOOKUP_MAX_ROUNDS).toBe(2)
+    expect(requests[2].messages[4].content).toContain('That was the last lookup')
+    expect(requests).toHaveLength(4)
+    expect(result).toMatchObject({ status: 'ok', attempts: 4 })
+    expect(requests[3].messages.at(-1)?.content).toContain('did not come through')
+  })
+
+  it('offers no lookup to a kind that builds from no site at all', async () => {
+    const { fake, requests } = provider([toolAnswer('submit_theme', { ok: true })])
+    await runValidatedGeneration('theme-ish', {
+      model: 'test-model',
+      provider: fake,
+      instructions: [{ text: 'Change the theme.' }],
+      messages: [{ role: 'user' as const, content: 'Brief' }],
+      tool: { name: 'submit_theme', description: 'x', strict: true, inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false } },
+      check: (answer: Record<string, unknown>) => ({ value: answer, violations: [] }),
+    })
+    expect(requests[0].tools?.map((tool) => tool.name)).toEqual(['submit_theme'])
   })
 
   it('re-asks once with the broken rule named and only the offending part quoted, and keeps the fix', async () => {
@@ -477,5 +623,80 @@ describe('runValidatedGeneration — a kind the doctrine has no reader for', () 
       } as never),
     ).rejects.toThrow('pass check')
     expect(requests).toHaveLength(0)
+  })
+})
+
+describe('a kind built from no site structure, and an answer that streamed', () => {
+  const proposeTool: AiTool = {
+    name: 'propose_change',
+    description: 'Propose the change.',
+    strict: true,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['change'],
+      properties: { change: { type: 'string' } },
+    },
+  }
+  const keepChange: AiGenerationCheck<string> = (answer) =>
+    typeof answer['change'] === 'string' && answer['change']
+      ? { value: answer['change'], violations: [] }
+      : { value: null, violations: [{ rule: null, code: 'door-empty', message: 'Nothing to change.' }] }
+
+  it('sends no inventory block for a kind that leaves the inventory out', async () => {
+    expect(aiDoctrineSystemBlocks(undefined, { instructions: [{ text: 'Change the theme.' }] })).toEqual([
+      AI_DOCTRINE_SYSTEM_BLOCK,
+      { text: 'Change the theme.', cacheBreakpoint: true },
+    ])
+    const { fake, requests } = provider([toolAnswer(proposeTool.name, { change: 'warmer' })])
+    const result = await runValidatedGeneration('theme', {
+      step: 'job.theme',
+      model: 'test-model',
+      provider: fake,
+      instructions: [{ text: 'Change the theme.' }],
+      messages: [{ role: 'user', content: 'Make it warmer.' }],
+      tool: proposeTool,
+      check: keepChange,
+    })
+    expect(result).toMatchObject({ status: 'ok', value: 'warmer', attempts: 1 })
+    expect(requests[0].system.some((block) => block.volatile)).toBe(false)
+    expect(requests[0].system[requests[0].system.length - 1].cacheBreakpoint).toBe(true)
+  })
+
+  it('shows a door that composes its own prompt the catalog the loop shows the surface', () => {
+    for (const surface of AI_SURFACE_NAMES) {
+      expect(aiDoctrineCatalog(surface)).toBe(AI_PALETTE_CATALOG[surface])
+    }
+  })
+
+  it('keeps a streamed value with the door’s findings beside it, and needs input without one', () => {
+    const leftOut = { rule: null, code: 'door-left-out', message: 'The font was left out.' }
+    expect(
+      validateStreamedGeneration('edit', {
+        answer: { change: 'warmer' },
+        check: (answer) => ({ value: String(answer['change']), violations: [leftOut] }),
+      }),
+    ).toEqual({ status: 'ok', value: 'warmer', violations: [leftOut] })
+    expect(validateStreamedGeneration('edit', { answer: { change: '' }, check: keepChange })).toMatchObject({
+      status: 'needs_input',
+      violations: [{ code: 'door-empty' }],
+    })
+  })
+
+  it('holds rule 13 on a streamed answer, whatever its value', () => {
+    const result = validateStreamedGeneration('edit', {
+      answer: { change: 'warmer', publish: true },
+      check: keepChange,
+    })
+    expect(result.status).toBe('needs_input')
+    expect(result.violations.map((violation) => violation.rule)).toEqual([13])
+  })
+
+  it('refuses a plan or a palette kind, which the loop reads and re-asks', () => {
+    for (const kind of ['plan', 'page', 'email']) {
+      expect(() => validateStreamedGeneration(kind, { answer: {}, check: keepChange })).toThrow(
+        'runValidatedGeneration',
+      )
+    }
   })
 })

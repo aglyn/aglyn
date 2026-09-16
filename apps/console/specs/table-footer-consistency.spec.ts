@@ -1338,6 +1338,15 @@ const NOT_A_LIST: Array<[string, string]> = [
       'A pager under a search box pages what the box already filters.',
   ],
   [
+    'libs/plugins/ai/src/lib/components/ai-site-batch-card.component.tsx',
+    'The agency batch\u2019s picker (AGL-2911): one row per site the ' +
+      'organization\u2019s Sites page already resolved for this reader, ' +
+      'held as that list moves. It mirrors the page\u2019s own list rather ' +
+      'than reading a collection of its own, so the footer belongs to the ' +
+      'page beneath it; a site the reader cannot use never reaches the ' +
+      'card, and the batch door refuses it again in any case.',
+  ],
+  [
     'libs/plugins/ai/src/lib/components/member-ai-usage-card.component.tsx',
     'One member’s AI usage (AGL-2928): exactly two month rows, this ' +
       'month and last, requested at `limit: 2`, and beneath them one row ' +
@@ -1686,7 +1695,13 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // 58 since themes by AI (AGL-2938): one proposal read back as the change
     // it would make, a row per control it sets under the theme tool's own
     // ceilings — a readout of one act, bounded by the editor's controls.
-    expect(NOT_A_LIST).toHaveLength(58)
+    //
+    // 59 since an agency can brief many sites at once (AGL-2911): the batch
+    // picker's rows are the sites the organization's Sites page already
+    // resolved for this reader, mirrored and kept as that list moves. It
+    // opens no read of its own, so the footer it would need is the one the
+    // page beneath it already has.
+    expect(NOT_A_LIST).toHaveLength(59)
   })
 })
 

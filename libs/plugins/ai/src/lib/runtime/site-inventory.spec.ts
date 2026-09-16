@@ -53,6 +53,7 @@ jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
 
 import { describeTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import {
+  AI_SITE_INVENTORY_LISTED_PER_KIND,
   AI_SITE_INVENTORY_MAX_PER_KIND,
   AiInventoryScopeError,
 } from '../model/ai-site-inventory'
@@ -175,6 +176,23 @@ describe('readSiteInventory — the cap', () => {
     expect(new Set(reads.map((read) => read.limit))).toEqual(
       new Set([AI_SITE_INVENTORY_MAX_PER_KIND + 1]),
     )
+  })
+
+  it('holds a wider window than the prompt lists, so a lookup has rows to find', async () => {
+    // The two caps answer different questions (AGL-2937): what a prompt can
+    // afford to carry on every attempt, and what a lookup can search. A window
+    // no wider than the listing would make the lookup tool a formality.
+    expect(AI_SITE_INVENTORY_MAX_PER_KIND).toBeGreaterThan(AI_SITE_INVENTORY_LISTED_PER_KIND)
+    for (let index = 0; index < AI_SITE_INVENTORY_LISTED_PER_KIND + 5; index += 1) {
+      docs.set(`hosts/${HOST}/components/cmp-${index}`, {
+        displayName: `Card ${index}`,
+        rootId: 'root',
+        props: [],
+      })
+    }
+    const inventory = await readSiteInventory(ORG, HOST, { firestore })
+    expect(inventory.components).toHaveLength(AI_SITE_INVENTORY_LISTED_PER_KIND + 5)
+    expect(inventory.truncated).toEqual([])
   })
 })
 

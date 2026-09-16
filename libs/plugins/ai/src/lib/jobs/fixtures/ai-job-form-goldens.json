@@ -1,0 +1,160 @@
+{
+  "roofingQuote": {
+    "brief": "A quote request form for a roofing company with a photo upload",
+    "name": "Roof quote request",
+    "answer": {
+      "tree": {
+        "rootId": "quote",
+        "nodes": {
+          "quote": {
+            "componentId": "form",
+            "props": {
+              "formName": "Roof quote request",
+              "submitLabel": "Request my quote",
+              "successMessage": "Thanks. We have your details and will be in touch about your quote."
+            },
+            "nodes": ["fullName", "email", "phone", "address", "roofType", "service", "damage"]
+          },
+          "fullName": {
+            "componentId": "formField",
+            "props": { "fieldName": "fullName", "label": "Full name", "required": true }
+          },
+          "email": {
+            "componentId": "formField",
+            "props": { "fieldName": "email", "label": "Email", "fieldType": "email", "required": true }
+          },
+          "phone": {
+            "componentId": "formField",
+            "props": { "fieldName": "phone", "label": "Phone", "required": true }
+          },
+          "address": {
+            "componentId": "formField",
+            "props": { "fieldName": "propertyAddress", "label": "Property address", "required": true }
+          },
+          "roofType": {
+            "componentId": "formField",
+            "props": {
+              "fieldName": "roofType",
+              "label": "Roof type",
+              "fieldType": "select",
+              "options": "Asphalt shingle\nMetal\nTile\nFlat or low slope\nNot sure"
+            }
+          },
+          "service": {
+            "componentId": "formField",
+            "props": {
+              "fieldName": "service",
+              "label": "What do you need?",
+              "fieldType": "radio",
+              "options": "Repair\nFull replacement\nInspection",
+              "required": true
+            }
+          },
+          "damage": {
+            "componentId": "formField",
+            "props": {
+              "fieldName": "damageDescription",
+              "label": "Describe the damage",
+              "fieldType": "textarea",
+              "placeholder": "Where is the leak or damage, and when did you first notice it?"
+            }
+          }
+        }
+      },
+      "routing": { "kind": "lead", "list": null },
+      "cannotCollect": ["photo upload"]
+    }
+  },
+  "newsletterSignup": {
+    "brief": "A newsletter signup form that adds people to our Monthly Roundup list",
+    "name": "Newsletter signup",
+    "answer": {
+      "tree": {
+        "rootId": "signup",
+        "nodes": {
+          "signup": {
+            "componentId": "form",
+            "props": {
+              "formName": "Newsletter signup",
+              "submitLabel": "Sign up",
+              "successMessage": "Thanks for signing up."
+            },
+            "nodes": ["firstName", "email", "subscribe"]
+          },
+          "firstName": {
+            "componentId": "formField",
+            "props": { "fieldName": "firstName", "label": "First name" }
+          },
+          "email": {
+            "componentId": "formField",
+            "props": { "fieldName": "email", "label": "Email", "fieldType": "email", "required": true }
+          },
+          "subscribe": {
+            "componentId": "formField",
+            "props": {
+              "fieldName": "subscribe",
+              "label": "Newsletter",
+              "fieldType": "checkbox",
+              "options": "Yes, keep me posted"
+            }
+          }
+        }
+      },
+      "routing": { "kind": "list", "list": "Monthly Roundup" },
+      "cannotCollect": []
+    }
+  },
+  "clinicSurvey": {
+    "brief": "An anonymous satisfaction survey for our dental clinic, with no contact details",
+    "name": "Visit feedback",
+    "answer": {
+      "tree": {
+        "rootId": "survey",
+        "nodes": {
+          "survey": {
+            "componentId": "form",
+            "props": {
+              "formName": "Visit feedback",
+              "submitLabel": "Send feedback",
+              "successMessage": "Thank you for telling us about your visit."
+            },
+            "nodes": ["satisfaction", "frequency", "improve", "comments"]
+          },
+          "satisfaction": {
+            "componentId": "formField",
+            "props": {
+              "fieldName": "satisfaction",
+              "label": "How satisfied were you with your visit?",
+              "fieldType": "rating",
+              "required": true
+            }
+          },
+          "frequency": {
+            "componentId": "formField",
+            "props": {
+              "fieldName": "visitFrequency",
+              "label": "How often do you visit us?",
+              "fieldType": "radio",
+              "options": "First visit\nEvery six months\nMore often"
+            }
+          },
+          "improve": {
+            "componentId": "formField",
+            "props": {
+              "fieldName": "improvements",
+              "label": "What could we do better?",
+              "fieldType": "checkbox",
+              "options": "Wait times\nBooking\nComfort\nExplaining treatment"
+            }
+          },
+          "comments": {
+            "componentId": "formField",
+            "props": { "fieldName": "comments", "label": "Anything else?", "fieldType": "textarea" }
+          }
+        }
+      },
+      "routing": { "kind": "inbox", "list": null },
+      "cannotCollect": []
+    }
+  }
+}

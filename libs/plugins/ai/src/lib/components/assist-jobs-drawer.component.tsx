@@ -40,6 +40,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AiPageBriefDialog } from './ai-page-brief-dialog.component'
 import { AiJobPlan } from './ai-job-plan.component'
 
 /**
@@ -94,7 +95,9 @@ const BESIGNER_SEGMENT: Partial<Record<AiJobOutput['resource'], string>> = {
   reusableComponent: 'components',
   layout: 'layouts',
   template: 'templates',
-  emailScreen: 'emails',
+  // An email design is a screen: it opens in the screen besigner, as the
+  // Emails page's own Edit design does.
+  emailScreen: 'screens',
 }
 
 /**
@@ -126,7 +129,29 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
   if (output.resource === 'theme') {
     return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
   }
+  if (output.resource === 'form') {
+    // A new form has no version for the besigner to open: its own page mints
+    // the first one, and holds the routing and consent it declares.
+    return buildRoute(Route.FORM_DETAILS, { orgSlug, host, formId: output.id })
+  }
+  if (output.resource === 'campaign') {
+    // A campaign's page belongs to the Marketing console, under the site.
+    return `${buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'marketing' })}/campaigns/${output.id}`
+  }
   return null
+}
+
+/**
+ * The navigation entry a page job proposes for the page it built (AGL-2907),
+ * or `null`. The job writes no menu: the member adds the entry once the page
+ * is live.
+ */
+export function aiJobNavigationProposal(output: AiJobOutput): string | null {
+  if (output.resource !== 'screen') return null
+  const navigation = output.proposal?.['navigation']
+  if (!navigation || typeof navigation !== 'object') return null
+  const label = (navigation as Record<string, unknown>)['label']
+  return typeof label === 'string' && label.trim() ? label.trim() : null
 }
 
 /**
@@ -167,6 +192,8 @@ export interface AssistJobsDrawerProps {
   user: Parameters<typeof authorizedFetch>[0]
   /** The `release_ai_generative` verdict, staff bypass applied (the shell's). */
   visible: boolean
+  /** The site the console page is on, when it is on one: a page is described for a site. */
+  hostId?: string | null
 }
 
 export function AssistJobsDrawer({
@@ -176,12 +203,15 @@ export function AssistJobsDrawer({
   orgSlug,
   user,
   visible,
+  hostId,
 }: AssistJobsDrawerProps): JSX.Element | null {
   const entitled = orgReady && checkEntitlement(org as never, 'aiGenerative')
   const [expanded, setExpanded] = useState(false)
   const [jobs, setJobs] = useState<AiJobSummary[]>([])
   const [loading, setLoading] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  /** Whether the page brief dialog is open (AGL-2907). */
+  const [describing, setDescribing] = useState(false)
   /** Job ids whose terminal event has been tracked, so a re-read does not count twice. */
   const trackedRef = useRef(new Set<string>())
   /** The job whose stream is open, so a re-render does not open a second. */
@@ -367,6 +397,12 @@ export function AssistJobsDrawer({
             <Chip size="small" color="primary" label={`${active} running`} sx={{ ml: 1 }} />
           )}
         </Typography>
+        {/* A page from a brief (AGL-2907), on a site's own routes. */}
+        {hostId && (
+          <Button size="small" onClick={() => setDescribing(true)}>
+            Describe a page
+          </Button>
+        )}
         <IconButton
           size="small"
           aria-label={expanded ? 'Hide AI jobs' : 'Show AI jobs'}
@@ -430,6 +466,7 @@ export function AssistJobsDrawer({
                 )}
                 {job.outputs.map((output, index) => {
                   const href = aiJobOutputHref(output, orgSlug)
+                  const navigation = aiJobNavigationProposal(output)
                   return (
                     <Box key={`${output.resource}:${output.id}:${index}`} sx={{ mt: 0.5 }}>
                       {href ? (
@@ -454,6 +491,16 @@ export function AssistJobsDrawer({
                           About {formatBytes(output.load.totalBytes)} on a first visit
                         </Typography>
                       ) : null}
+                      {output.note ? (
+                        <Typography variant="caption" color="text.secondary" component="div">
+                          {output.note}
+                        </Typography>
+                      ) : null}
+                      {navigation ? (
+                        <Typography variant="caption" color="text.secondary" component="div">
+                          Add “{navigation}” to your navigation once the page is live.
+                        </Typography>
+                      ) : null}
                     </Box>
                   )
                 })}
@@ -467,6 +514,23 @@ export function AssistJobsDrawer({
           })}
         </Stack>
       </Collapse>
+      {/*
+        The brief dialog (AGL-2907). It starts a job and closes; the list
+        below it is the only place the job is watched, so an open list reads
+        the new job back as soon as the dialog hands it over.
+      */}
+      {hostId && (
+        <AiPageBriefDialog
+          open={describing}
+          onClose={() => {
+            setDescribing(false)
+            if (expanded) void load()
+          }}
+          orgId={orgId}
+          hostId={hostId}
+          user={user}
+        />
+      )}
     </Box>
   )
 }

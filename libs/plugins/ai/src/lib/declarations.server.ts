@@ -31,8 +31,13 @@ import {
   listUsageAlertContributors,
   registerUsageAlertContributor,
 } from '@aglyn/aglyn/plugin-manager/usage-alert-contributors'
+import { pluginMeteredLineOwner } from '@aglyn/aglyn/plugin-manager/plugin-metered-lines'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
+import {
+  AI_OVERAGE_METER_LINE_ID,
+  registerAiOverageMeteredLine,
+} from './billing/ai-overage-cutover'
 
 /** The provider-spend staff alerts' contributor id under the plugin. */
 const AI_USAGE_ALERTS_ID = 'provider-spend'
@@ -77,6 +82,64 @@ export function registerAiServerDeclarations(): void {
       },
       { pluginId: AI_PLUGIN_ID },
     )
+  }
+  // THE PLATFORM'S BILLING EVENTS (AGL-3011). Subscribed at boot for the
+  // same reason as the two above: they are raised by the billing webhook,
+  // which never loads an AI door, and a workspace's overage standing moving
+  // late is a workspace charged or refused against a fact we already had.
+  //
+  // The handler modules are imported when the first event arrives, so a
+  // process that never receives one pays only for the registration.
+  if (!listPluginEventHandlers('billing.invoice.paid').includes(AI_PLUGIN_ID)) {
+    registerPluginEventHandler(
+      'billing.invoice.paid',
+      async (payload) => {
+        const { onAiBillingInvoicePaid } = await import('./billing/ai-overage-events')
+        await onAiBillingInvoicePaid(payload)
+      },
+      { pluginId: AI_PLUGIN_ID },
+    )
+    registerPluginEventHandler(
+      'billing.invoice.failed',
+      async (payload) => {
+        const { onAiBillingInvoiceFailed } = await import('./billing/ai-overage-events')
+        await onAiBillingInvoiceFailed(payload)
+      },
+      { pluginId: AI_PLUGIN_ID },
+    )
+    registerPluginEventHandler(
+      'billing.invoice.closed',
+      async (payload) => {
+        const { onAiBillingInvoiceClosed } = await import('./billing/ai-overage-events')
+        await onAiBillingInvoiceClosed(payload)
+      },
+      { pluginId: AI_PLUGIN_ID },
+    )
+    registerPluginEventHandler(
+      'billing.dispute.opened',
+      async (payload) => {
+        const { onAiBillingDisputeOpened } = await import('./billing/ai-overage-events')
+        await onAiBillingDisputeOpened(payload)
+      },
+      { pluginId: AI_PLUGIN_ID },
+    )
+    registerPluginEventHandler(
+      'billing.paymentMethod.changed',
+      async (payload) => {
+        const { onAiBillingPaymentMethodChanged } = await import(
+          './billing/ai-overage-events'
+        )
+        await onAiBillingPaymentMethodChanged(payload)
+      },
+      { pluginId: AI_PLUGIN_ID },
+    )
+  }
+  // The meter line the plugin bills for itself from the cutover month
+  // (AGL-3011). Registered at boot because the monthly usage sweep is a core
+  // cron; the claim reads its own cutover month on every call, so it is
+  // inert until the month is configured.
+  if (pluginMeteredLineOwner(AI_OVERAGE_METER_LINE_ID) !== AI_PLUGIN_ID) {
+    registerAiOverageMeteredLine()
   }
   if (!listPluginUserErasers().includes(AI_PLUGIN_ID)) {
     registerPluginUserEraser(

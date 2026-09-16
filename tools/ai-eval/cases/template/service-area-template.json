@@ -1,0 +1,83 @@
+{
+  "id": "template-service-area",
+  "kind": "template",
+  "brief": "We serve twelve towns. Make one template for a town page — what we repair there and a quote request — so each town page only needs its own name and intro.",
+  "framing": null,
+  "inventory": {
+    "hostId": "host-harbor",
+    "components": [
+      { "id": "cmp-service-card", "name": "Service card", "props": { "title": "text", "body": "text", "image": "image" } }
+    ],
+    "layouts": [{ "id": "lay-site", "name": "Harbor Roofing site", "parentId": null }],
+    "templates": [],
+    "forms": [{ "id": "frm-quote", "name": "Request a quote", "fields": ["name", "email", "phone", "address", "message"] }],
+    "datasets": [],
+    "collections": [],
+    "screens": [{ "id": "scr-home", "name": "Home", "slug": "/", "layoutId": "lay-site", "template": false }],
+    "theme": { "summary": ["Light scheme only"], "colors": { "primary.main": "#1d4e89" }, "fonts": ["Inter"] },
+    "truncated": []
+  },
+  "expected": {
+    "plan": { "screens": [0, 0], "createKinds": ["template"], "maxCreate": 1 }
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: one template, its town-specific copy marked in brackets for each page to fill.",
+      "plan": {
+        "reuse": [{ "kind": "layout", "id": "lay-site", "purpose": "the site chrome around every town page" }],
+        "create": [
+          {
+            "kind": "template",
+            "name": "Service area",
+            "why": "The site has no template for a town page, and the twelve town pages share one structure.",
+            "duplicateOf": null,
+            "fields": ["town", "county", "intro"]
+          }
+        ],
+        "screens": []
+      },
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro", "services", "quote"] },
+            "intro": { "componentId": "section", "props": { "element": "section", "ariaLabel": "Roof repair in [town]" }, "nodes": ["title", "lede"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Roof repair in [town]" } },
+            "lede": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Harbor Roofing crews work across [county], and most repairs in [town] are booked within a week." } },
+            "services": { "componentId": "section", "props": { "element": "section", "ariaLabel": "Repairs we make in [town]" }, "nodes": ["services-title", "services-grid"] },
+            "services-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "Repairs we make in [town]" } },
+            "services-grid": { "componentId": "muiStack", "props": { "direction": "row", "flexWrap": "wrap" }, "sx": { "gap": 3 }, "nodes": ["card-leaks", "card-storm"] },
+            "card-leaks": { "componentId": "reusableInstance", "props": { "refId": "cmp-service-card", "propValues": { "title": "Leak repair", "body": "We trace the water to where it gets in and seal it for good." } } },
+            "card-storm": { "componentId": "reusableInstance", "props": { "refId": "cmp-service-card", "propValues": { "title": "Storm damage", "body": "Missing and lifted shingles replaced to match the roof you have." } } },
+            "quote": { "componentId": "section", "props": { "element": "section", "ariaLabel": "Request a quote" }, "nodes": ["quote-title", "quote-form"] },
+            "quote-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "Request a quote in [town]" } },
+            "quote-form": { "componentId": "form", "props": { "formId": "frm-quote" } }
+          }
+        }
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": 5, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "Two top-level headings on one template (rule 11).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "subtitle"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Roof repair in [town]" } },
+            "subtitle": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Serving [county]" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    }
+  ]
+}

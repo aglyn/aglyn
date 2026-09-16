@@ -9,6 +9,88 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.125 — 2026-09-16
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.124...v1.0.0-beta.125)
+
+### Added
+
+- **admin:** list the screens that were published by the act of creating them ([AGL-3021](https://linear.app/aglyn/issue/AGL-3021))
+- **ai:** overage charges as it accrues, bounded by what a workspace has paid ([AGL-3011](https://linear.app/aglyn/issue/AGL-3011))
+- **ai:** an identical brief within the window keeps the plan it was already answered ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** a site larger than its prompt block is found by asking, not by listing ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937), [AGL-2907](https://linear.app/aglyn/issue/AGL-2907))
+- **ai:** a site job scaffolds a whole site through the steps that build each part ([AGL-2911](https://linear.app/aglyn/issue/AGL-2911))
+- **ai:** the routing table carries the email and campaign steps ([AGL-2912](https://linear.app/aglyn/issue/AGL-2912))
+- **ai:** a brief becomes a draft email design, or a draft campaign and its email ([AGL-2912](https://linear.app/aglyn/issue/AGL-2912))
+- **ai:** the routing table carries the page step, and the merge's three tails ([AGL-2907](https://linear.app/aglyn/issue/AGL-2907), [AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** a page job builds a screen from a brief, one section a pass, as a draft ([AGL-2907](https://linear.app/aglyn/issue/AGL-2907))
+- **ai:** a reusable component from a brief, or from the section already on the page ([AGL-2908](https://linear.app/aglyn/issue/AGL-2908))
+- **ai:** the assistant keeps its last turns whole and digests the ones behind them ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** the copy assistant's section answers through a strict tool, not a guessed parse ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** each model states the shortest prefix it caches, and a ledger holds every door ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** the routing table carries the form step the table predates ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937), [AGL-2913](https://linear.app/aglyn/issue/AGL-2913))
+- **ai:** the routing table covers the layout, template and SEO steps ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937), [AGL-2909](https://linear.app/aglyn/issue/AGL-2909), [AGL-2910](https://linear.app/aglyn/issue/AGL-2910))
+- **ai:** one routing table holds each step's thinking, effort, ceiling and eval score ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** live eval recording and grading, refused unless AI_EVAL_LIVE=1 names the run ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** an offline eval harness of golden briefs per output kind, held to floors ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** record tokens per job step and per kind, and show staff the cache hit rate ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** a form job builds a draft form whose design and declaration agree ([AGL-2913](https://linear.app/aglyn/issue/AGL-2913))
+
+### Fixed
+
+- **billing:** a sub-minimum invoice is never raised, and nothing retries a failed one ([AGL-3023](https://linear.app/aglyn/issue/AGL-3023))
+- **billing:** the usage invoice carries its line, so an overage charge is not $0 ([AGL-3023](https://linear.app/aglyn/issue/AGL-3023))
+- **ai:** rule 4 names the count its validator enforces ([AGL-3022](https://linear.app/aglyn/issue/AGL-3022))
+- **ai:** a routing row's provenance is the provenance of the scores it holds ([AGL-3022](https://linear.app/aglyn/issue/AGL-3022))
+- **ai:** the about-page brief may create the crew card its own kind creates ([AGL-3022](https://linear.app/aglyn/issue/AGL-3022))
+- **ai:** a plan's copy is cut on a word break, not through a word ([AGL-3022](https://linear.app/aglyn/issue/AGL-3022))
+- **ai:** the grader of a build plan is told what a plan can hold ([AGL-3022](https://linear.app/aglyn/issue/AGL-3022))
+- **console:** a new screen is a draft until somebody chooses to publish it ([AGL-3021](https://linear.app/aglyn/issue/AGL-3021), [AGL-2334](https://linear.app/aglyn/issue/AGL-2334))
+- **ai:** every job kind registers by a call, so no bundler can delete it ([AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
+- **tools:** an archived product has no tax position to report ([AGL-3023](https://linear.app/aglyn/issue/AGL-3023))
+- **marketing:** the campaign draft names its roles where its refusal is read ([AGL-2912](https://linear.app/aglyn/issue/AGL-2912))
+- **ai:** the billed credit rate and the provider's cost are two figures ([AGL-3015](https://linear.app/aglyn/issue/AGL-3015))
+- **ai:** a kind that writes values is told the rules it can break, not all seventeen ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937), [AGL-3009](https://linear.app/aglyn/issue/AGL-3009))
+- **billing:** every reader of the assist overage rate goes through the resolver ([AGL-3014](https://linear.app/aglyn/issue/AGL-3014))
+- **firewall:** an unnamed agent can read the .md spelling of every page ([AGL-3018](https://linear.app/aglyn/issue/AGL-3018), [AGL-2748](https://linear.app/aglyn/issue/AGL-2748), [AGL-2750](https://linear.app/aglyn/issue/AGL-2750))
+- **console:** the reserved /.well-known namespace 404s, not the console shell ([AGL-3016](https://linear.app/aglyn/issue/AGL-3016))
+- **ai:** the SEO step runs under the real doctrine ([AGL-3009](https://linear.app/aglyn/issue/AGL-3009), [AGL-2910](https://linear.app/aglyn/issue/AGL-2910))
+- **ai:** the theme step and the Assist edit rung run under the real doctrine ([AGL-3009](https://linear.app/aglyn/issue/AGL-3009), [AGL-2938](https://linear.app/aglyn/issue/AGL-2938), [AGL-2906](https://linear.app/aglyn/issue/AGL-2906), [AGL-2935](https://linear.app/aglyn/issue/AGL-2935), [AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **forms:** a one-option consent checkbox records the opt-in its option text posts ([AGL-3010](https://linear.app/aglyn/issue/AGL-3010))
+
+### Performance
+
+- **ai:** rule 4's count costs ten tokens on every cached prefix ([AGL-3022](https://linear.app/aglyn/issue/AGL-3022))
+- **admin:** the published-on-create sweep reads hosts a few at a time ([AGL-3021](https://linear.app/aglyn/issue/AGL-3021))
+- **ai:** a listing rule says only what its tool's schema does not already say ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+
+### Changed
+
+- **ai:** one creation-nouns table, beside the union it is total over ([AGL-2911](https://linear.app/aglyn/issue/AGL-2911), [AGL-2912](https://linear.app/aglyn/issue/AGL-2912))
+
+### Documentation
+
+- **ai:** a registration is a call, and a new step module is held to it ([AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
+- the AI markup entry is scoped pricing, now the Drive log carries it ([AGL-3015](https://linear.app/aglyn/issue/AGL-3015))
+- **ai:** one kind row, naming every kind that has a runner ([AGL-2907](https://linear.app/aglyn/issue/AGL-2907))
+- **ai:** what a prompt caches, which rules a kind is told, and the assistant's doors ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+
+<details>
+<summary>Also in this release: 7 test, 3 chore</summary>
+
+- **tools:** the Linear ceiling is 3025, read from the workspace ([AGL-3025](https://linear.app/aglyn/issue/AGL-3025), [AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+- **tools:** the Linear ceiling is 3023, read from the workspace ([AGL-3023](https://linear.app/aglyn/issue/AGL-3023), [AGL-3019](https://linear.app/aglyn/issue/AGL-3019))
+- **console:** the batch picker mirrors a list it does not read ([AGL-2911](https://linear.app/aglyn/issue/AGL-2911))
+- **ai:** the page evals read the billed figure, which is what credits ride ([AGL-3015](https://linear.app/aglyn/issue/AGL-3015), [AGL-2907](https://linear.app/aglyn/issue/AGL-2907))
+- **ai:** the prompt-cache ledger measures the email door, not just names it ([AGL-2912](https://linear.app/aglyn/issue/AGL-2912))
+- **console:** the subprocessor gate keeps only the doors that call runAiRequest ([AGL-2907](https://linear.app/aglyn/issue/AGL-2907))
+- **console:** hold the org double the besigner's zones reach ([AGL-2908](https://linear.app/aglyn/issue/AGL-2908), [AGL-2910](https://linear.app/aglyn/issue/AGL-2910), [AGL-2928](https://linear.app/aglyn/issue/AGL-2928))
+- **tenant:** declare the component step and the assistant's mode prompts off-tenant ([AGL-2908](https://linear.app/aglyn/issue/AGL-2908), [AGL-1725](https://linear.app/aglyn/issue/AGL-1725), [AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** the component door declares and measures what its prompt caches ([AGL-2908](https://linear.app/aglyn/issue/AGL-2908), [AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **tools:** raise the Linear issue ceiling to 3018, read from the workspace ([AGL-3014](https://linear.app/aglyn/issue/AGL-3014))
+
+</details>
+
 ## v1.0.0-beta.124 — 2026-09-16
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.123...v1.0.0-beta.124)

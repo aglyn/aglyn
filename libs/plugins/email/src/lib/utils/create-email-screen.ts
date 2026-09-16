@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { CANVAS_ROOT_ELEMENT_ID, createResourceUid } from '@aglyn/aglyn'
+import { createResourceUid } from '@aglyn/aglyn'
+import {
+  emailDesignDocuments,
+  emailDesignStarterNodes,
+} from '../model/email-design-document'
 
 /**
  * Creates the quota-governed screen doc — the caller passes
@@ -48,10 +52,11 @@ export type CreateScreenVersion = (options: {
  * Creates a besigner email document (AGL-347/349): a screen with kind
  * 'email' plus a first version seeded with an email section + a greeting
  * text block. Shared by the campaigns composer and the email-screens list
- * so both scaffold identical documents. The screen doc goes through the
- * quota-enforcing resources API (AGL-473) and the first version through
- * /api/hosts/versions (AGL-1369), which allows a resource's FIRST version on
- * every plan. Returns the ids for navigation.
+ * so both scaffold identical documents, and built by `emailDesignDocuments`,
+ * which the server's draft writer builds from too. The screen doc goes
+ * through the quota-enforcing resources API (AGL-473) and the first version
+ * through /api/hosts/versions (AGL-1369), which allows a resource's FIRST
+ * version on every plan. Returns the ids for navigation.
  */
 export async function createEmailScreen(
   hostId: string,
@@ -61,46 +66,27 @@ export async function createEmailScreen(
 ): Promise<{ screenId: string; versionId: string }> {
   const screenId = createResourceUid()
   const versionId = createResourceUid()
-  const sectionId = createResourceUid()
-  const textId = createResourceUid()
+  const { screen, version } = emailDesignDocuments({
+    screenId,
+    versionId,
+    displayName,
+    nodes: emailDesignStarterNodes({
+      sectionId: createResourceUid(),
+      textId: createResourceUid(),
+    }),
+  })
   await createScreen({
     hostId,
     resource: 'screen',
     id: screenId,
-    data: { displayName, kind: 'email', versionId },
+    data: { ...screen },
   })
   await createVersion({
     hostId,
     kind: 'screen',
     parentId: screenId,
     id: versionId,
-    data: {
-      screenId,
-      nodes: {
-        [CANVAS_ROOT_ELEMENT_ID]: {
-          $id: CANVAS_ROOT_ELEMENT_ID,
-          componentId: 'div',
-          nodes: [sectionId],
-        },
-        [sectionId]: {
-          $id: sectionId,
-          componentId: 'emailSection',
-          pluginId: 'email',
-          parentId: CANVAS_ROOT_ELEMENT_ID,
-          nodes: [textId],
-        },
-        [textId]: {
-          $id: textId,
-          componentId: 'emailText',
-          pluginId: 'email',
-          parentId: sectionId,
-          props: {
-            children: 'Hello {{contact.firstName}},',
-            variant: 'body',
-          },
-        },
-      },
-    },
+    data: { ...version },
   })
   return { screenId, versionId }
 }

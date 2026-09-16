@@ -37,6 +37,7 @@ import {
   rateLimitHeaders,
   type RateLimitResult,
 } from '@aglyn/tenant-data-admin/server/api-http'
+import { aiOverageReservationRefusal } from '../billing/ai-overage-gate'
 import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
 import { authForPool } from '@aglyn/tenant-data-admin/server/auth-pools'
 import {
@@ -359,6 +360,23 @@ export async function aiGateLadder(
           meter,
         },
         { status: 429 },
+      )
+    }
+    // AGLYN'S OWN OVERAGE GUARDS (AGL-3011), before the workspace's own
+    // controls because they are the narrower answer: a refusal here already
+    // knows WHICH limit stopped the request and whether the workspace can do
+    // anything about it. Everything else falls through unchanged.
+    const overage = aiOverageReservationRefusal(reservation)
+    if (overage) {
+      return Response.json(
+        {
+          error: overage.text,
+          reason: 'quota',
+          refusedBy,
+          quota: publicAssistQuota(reservation),
+          meter,
+        },
+        { status: overage.status },
       )
     }
     // The org's own wall is a 402 (AGL-2653): credits past the band are for

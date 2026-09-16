@@ -56,6 +56,8 @@ const mockDocHandle = (path: string): any => ({
   get: async () => {
     const data = mockStore[path]
     return {
+      id: path.split('/').pop(),
+      ref: mockDocHandle(path),
       exists: data !== undefined,
       data: () => data,
       get: (field: string) => data?.[field],
@@ -63,6 +65,9 @@ const mockDocHandle = (path: string): any => ({
   },
   set: async (patch: Record<string, any>, options?: { merge?: boolean }) => {
     mockStore[path] = { ...(options?.merge ? (mockStore[path] ?? {}) : {}), ...patch }
+  },
+  update: async (patch: Record<string, any>) => {
+    mockStore[path] = { ...(mockStore[path] ?? {}), ...patch }
   },
   collection: (name: string) => mockCollectionHandle(`${path}/${name}`),
 })
@@ -191,6 +196,74 @@ describe('a declared opt-in on a form reaches the contact', () => {
   it('accepts a first-class body field', async () => {
     await submit({ marketingConsent: true })
     expect(mockContactUpserts[0]).toMatchObject({ marketingConsent: true })
+  })
+})
+
+describe('a Checkboxes consent field posts the text of the option ticked', () => {
+  const OPTION = 'Email me news and offers'
+  const declared = (options: string[]) => [
+    { fieldName: 'email', fieldType: 'email' },
+    { fieldName: 'marketingConsent', fieldType: 'checkbox', options },
+  ]
+  /**
+   * The two ways a bound form reads the box: named as its consent field on
+   * the form's page, or, naming none, by the closed name list, where the
+   * stored declaration still says what the box is.
+   */
+  const PATHS: Array<[string, (options: string[]) => Record<string, unknown>]> = [
+    [
+      'its declared consent field',
+      (options) => ({ consentFieldName: 'marketingConsent', fields: declared(options) }),
+    ],
+    ['the closed name list', (options) => ({ fields: declared(options) })],
+  ]
+
+  describe.each(PATHS)('on a bound form, read through %s', (_path, formOf) => {
+    /** Submits to form-1 with the box's value, or without the box, and returns what reached the contact. */
+    const consentFor = async (value: unknown, options = [OPTION]) => {
+      mockStore[`hosts/${HOST_ID}/forms/form-1`] = { displayName: 'Contact', ...formOf(options) }
+      mockContactUpserts = []
+      const response = await submit({
+        formId: 'form-1',
+        fields: {
+          email: 'visitor@example.com',
+          ...(value === undefined ? {} : { marketingConsent: value }),
+        },
+      })
+      expect(response.status).toBe(200)
+      expect(mockContactUpserts).toHaveLength(1)
+      return mockContactUpserts[0]?.['marketingConsent']
+    }
+
+    it('forwards the opt-in when the text of its one option arrives, alone or as a list of one', async () => {
+      expect(await consentFor(OPTION)).toBe(true)
+      expect(await consentFor([OPTION])).toBe(true)
+    })
+
+    it('forwards nothing when that box was left unticked', async () => {
+      expect(await consentFor(undefined)).toBeUndefined()
+      expect(await consentFor('')).toBeUndefined()
+    })
+
+    it('forwards nothing for words that are not its option', async () => {
+      expect(await consentFor('Email me news')).toBeUndefined()
+    })
+
+    it('forwards nothing for one answer of a field with several options', async () => {
+      expect(await consentFor('Email', ['Email', 'Text message'])).toBeUndefined()
+    })
+
+    it('still forwards the values a box with no text of its own posts', async () => {
+      for (const value of ['true', 'on', 'yes', '1', 'checked']) {
+        expect(await consentFor(value)).toBe(true)
+      }
+    })
+  })
+
+  it('forwards nothing when an unbound form posts the option text, which only a stored declaration makes a tick', async () => {
+    await submit({ fields: { email: 'visitor@example.com', marketingConsent: OPTION } })
+    expect(mockContactUpserts).toHaveLength(1)
+    expect(mockContactUpserts[0]).not.toHaveProperty('marketingConsent')
   })
 })
 

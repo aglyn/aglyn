@@ -19,24 +19,15 @@ import type { SeoListingFieldKey } from '@aglyn/aglyn/app-utils/seo-listing-fiel
 import type { AiSeoFieldValues } from '../model/ai-seo'
 import type { AiStepKind } from '../providers/catalog'
 import type { AiProvider } from '../providers/contract'
-import { aiModelForStep, type AiPluginSettings } from '../providers/routing'
+import { AI_ROUTING_TABLE, type AiPluginSettings } from '../providers/routing'
 import {
   AI_SEO_FIELDS_TOOL_NAME,
   aiSeoFieldsTool,
   checkAiSeoFields,
   orderedSeoListingFields,
 } from '../tools/ai-seo-tool'
-import {
-  AI_ACCEPTABLE_USE_BLOCK,
-  runAiRequest,
-  type AiCompletion,
-  type AiEffort,
-  type AiMessage,
-  type AiSystemBlock,
-  type AiThinking,
-  type AiTool,
-  type AiUsage,
-} from './ai-runtime'
+import { runValidatedGeneration, type AiValidatedGeneration } from './ai-doctrine'
+import type { AiSystemBlock } from './ai-runtime'
 
 /**
  * SEO fields by AI (AGL-2910): a search listing — title, description,
@@ -55,271 +46,112 @@ import {
  * ## The request
  *
  * The fast tier through the routing table (`job.seo`), never a model
- * literal. The rules are one static block, cached; the page's text, its
- * current listing, the site's name and the target keywords ride in the user
- * turn, so no byte of a site sits inside the cached prefix.
+ * literal, and the building doctrine's generation call
+ * (`runValidatedGeneration`, AGL-3009): the doctrine's cached block, which
+ * carries the acceptable-use rules, then these rules, cached after it. The
+ * page's text, its current listing, the site's name and the target keywords
+ * ride in the user turn, so no byte of a site sits inside the cached prefix,
+ * and no site inventory is sent: a listing is written from its page.
  */
-
-/* ------------------------------------------------------------------------ *
- * The generation call, in the building doctrine's shape (AGL-2935)
- * ------------------------------------------------------------------------ */
-
-/** A building doctrine rule number (AGL-2935). */
-export type AiDoctrineRuleNumber =
-  | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17
-
-/** What rule 17 weighs a generated document by. */
-type AiBudgetMetric =
-  | 'nodes' | 'bytes' | 'imageBytes' | 'embeds' | 'fontFamilies' | 'emailHtmlBytes'
-
-/** One broken rule or refused value, as the doctrine names it. */
-export interface AiDoctrineViolation {
-  rule: AiDoctrineRuleNumber | null
-  code: string
-  /** One customer-safe sentence: what was refused and what to do instead. */
-  message: string
-  detail?: string
-  nodeIds?: string[]
-  paths?: string[]
-  /**
-   * Rule 17 only: a document's measured weight against its budget. A length
-   * a listing's check refuses is said in `message`, never here.
-   */
-  figure?: { metric: AiBudgetMetric; value: number; budget: number }
-}
-
-/**
- * Stands for the doctrine's `AiSiteInventory` (AGL-2935). An SEO generation
- * reads the page it writes about and passes `null`.
- */
-type AiSiteInventory = Readonly<Record<string, unknown>>
-
-export interface AiGenerationInputBase {
-  /** The routing table's step kind, never a model literal. */
-  step: AiStepKind
-  settings?: AiPluginSettings
-  /** An already-resolved route (specs); else `aiModelForStep(step, settings)`. */
-  model?: string
-  /** The door's static text, cached after the shared block. */
-  instructions: readonly AiSystemBlock[]
-  inventory: AiSiteInventory | null
-  messages: readonly AiMessage[]
-  /** Strict. */
-  tool: AiTool
-  maxTokens?: number
-  thinking?: AiThinking
-  effort?: AiEffort
-  signal?: AbortSignal
-  provider?: AiProvider
-}
-
-export interface AiCustomGenerationInput<T> extends AiGenerationInputBase {
-  check: (answer: Record<string, unknown>) => {
-    value: T | null
-    violations: AiDoctrineViolation[]
-    offending?: Record<string, unknown>
-  }
-}
-
-export interface AiGenerationSpend {
-  attempts: number
-  /** Summed over every call. */
-  usage: AiUsage
-  estCostUsd: number
-  model: string
-  stopReason: string | null
-}
-
-export type AiValidatedGeneration<T> =
-  | (AiGenerationSpend & { status: 'ok'; value: T })
-  | (AiGenerationSpend & {
-      status: 'needs_input'
-      violations: AiDoctrineViolation[]
-      /** Customer-safe. */
-      message: string
-    })
-  | (AiGenerationSpend & { status: 'refused' })
-
-const ZERO_USAGE: AiUsage = {
-  inputTokens: 0,
-  outputTokens: 0,
-  cacheReadTokens: 0,
-  cacheWriteTokens: 0,
-}
-
-function addUsage(a: AiUsage, b: AiUsage): AiUsage {
-  return {
-    inputTokens: a.inputTokens + b.inputTokens,
-    outputTokens: a.outputTokens + b.outputTokens,
-    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
-    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
-  }
-}
-
-/** A custom kind's output budget when the door names none, as the doctrine sets it. */
-const AI_CUSTOM_GENERATION_MAX_TOKENS = 8_000
-
-/** How much of the offending part of an answer a re-ask quotes. */
-const REASK_OFFENDING_MAX_CHARS = 2_000
-
-/** The sentence a generation that could not be held to its checks ends with. */
-export const AI_SEO_NEEDS_INPUT_COPY =
-  'The AI could not propose values that fit. Try again, or write them yourself.'
-
-/** The answer a completion carries: its call to the tool, else a JSON text answer. */
-export function aiGenerationAnswer(
-  result: Pick<AiCompletion, 'text' | 'toolUse'>,
-  toolName: string,
-): Record<string, unknown> | null {
-  const call = result.toolUse.find((use) => use.name === toolName)
-  if (call) return call.input
-  const text = result.text
-    .trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/, '')
-  if (!text.startsWith('{')) return null
-  try {
-    const parsed = JSON.parse(text) as unknown
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null
-  } catch {
-    return null
-  }
-}
-
-/**
- * STAND-IN: becomes `runValidatedGeneration(kind, …)` — the third, custom
- * overload the building doctrine (AGL-2935) posted — once that lands. The
- * input and the result are that function's, so the swap is an import and
- * the removal of this function and the types above it; every check stays in
- * its caller's `check`, and the acceptable-use block below becomes the
- * doctrine's block, which already carries it.
- *
- * Until then it behaves as the doctrine does: one call through the strict
- * tool, the answer read off the tool call or, failing that, a JSON text
- * answer; one re-ask naming only what was wrong and quoting only the parts
- * at fault; then `needs_input` with a customer-safe sentence. Usage from
- * every call is summed, because every call was spent. Rule 13 is held on the
- * answer: a generation proposes and never publishes. It throws only what
- * `runAiRequest` throws, so a job step's retry and failure paths stay the
- * machine's.
- */
-export async function runValidatedGenerationStandIn<T>(
-  _kind: string,
-  input: AiCustomGenerationInput<T>,
-): Promise<AiValidatedGeneration<T>> {
-  const model = input.model ?? aiModelForStep(input.step, input.settings)
-  const system: AiSystemBlock[] = [{ text: AI_ACCEPTABLE_USE_BLOCK }, ...input.instructions]
-  let spend: AiGenerationSpend = {
-    attempts: 0,
-    usage: ZERO_USAGE,
-    estCostUsd: 0,
-    model,
-    stopReason: null,
-  }
-  let violations: AiDoctrineViolation[] = []
-  let reask: string | null = null
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const last = input.messages.length - 1
-    const messages = input.messages.map((message, index) =>
-      reask && index === last ? { ...message, content: `${message.content}\n\n${reask}` } : message,
-    )
-    const result = await runAiRequest({
-      model,
-      system,
-      messages,
-      tools: [input.tool],
-      maxTokens: input.maxTokens ?? AI_CUSTOM_GENERATION_MAX_TOKENS,
-      ...(input.thinking ? { thinking: input.thinking } : {}),
-      ...(input.effort ? { effort: input.effort } : {}),
-      ...(input.settings ? { settings: input.settings } : {}),
-      ...(input.provider ? { provider: input.provider } : {}),
-      stream: false,
-      ...(input.signal ? { signal: input.signal } : {}),
-    })
-    spend = {
-      attempts: attempt + 1,
-      usage: addUsage(spend.usage, result.usage),
-      estCostUsd: Math.round((spend.estCostUsd + result.estCostUsd) * 1_000_000) / 1_000_000,
-      model,
-      stopReason: result.stopReason,
-    }
-    if (result.kind === 'refusal') return { ...spend, status: 'refused' }
-    const answer = aiGenerationAnswer(result, input.tool.name)
-    if (!answer) {
-      violations = [
-        { rule: null, code: 'no-answer', message: `The last reply did not call ${input.tool.name}.` },
-      ]
-      reask = `Your last reply did not call ${input.tool.name}. Answer by calling it.`
-      continue
-    }
-    if (Object.prototype.hasOwnProperty.call(answer, 'publish')) {
-      violations = [
-        { rule: 13, code: 'publish', message: 'A proposal is a draft; it never asks to publish anything.' },
-      ]
-      reask = `${violations[0].message} Call ${input.tool.name} again with the proposal alone.`
-      continue
-    }
-    const checked = input.check(answer)
-    if (checked.value !== null) return { ...spend, status: 'ok', value: checked.value }
-    violations = checked.violations.length
-      ? checked.violations
-      : [{ rule: null, code: 'unusable', message: 'Nothing in the last answer could be used.' }]
-    const offending = checked.offending
-      ? JSON.stringify(checked.offending).slice(0, REASK_OFFENDING_MAX_CHARS)
-      : ''
-    reask = [
-      `Your last call to ${input.tool.name} broke these rules:`,
-      ...violations.map((violation) => `- ${violation.message}`),
-      ...(offending ? ['The parts at fault:', offending] : []),
-      `Call ${input.tool.name} again with values that keep every rule.`,
-    ].join('\n')
-  }
-  return { ...spend, status: 'needs_input', violations, message: AI_SEO_NEEDS_INPUT_COPY }
-}
 
 /* ------------------------------------------------------------------------ *
  * The request
  * ------------------------------------------------------------------------ */
 
 /**
- * The output budget. The largest answer the tool accepts — every field at
- * its limit — is under 300 tokens of JSON (`seo-fields.spec.ts` measures
- * it); the rest is headroom, and the fast tier thinks in none of it.
+ * The output budget, from the routing table. The largest answer the tool
+ * accepts — every field at its limit — is under 300 tokens of JSON
+ * (`ai-job-seo-step.spec.ts` measures it); the rest is headroom, and the fast
+ * tier thinks in none of it.
  */
-export const AI_SEO_FIELDS_MAX_TOKENS = 1_024
+export const AI_SEO_FIELDS_MAX_TOKENS = AI_ROUTING_TABLE['job.seo'].maxTokens
 
 /** How many other pages' titles a prompt lists for the model to avoid. */
 const OTHER_TITLES_LISTED = 40
 
-/** The rules, byte-identical on every request so they cache. */
-export const AI_SEO_FIELDS_INSTRUCTIONS: AiSystemBlock[] = [
-  {
-    text:
-      'You write the search listing for one page or one product of a website: the title and ' +
-      'the summary a search result shows, the short name a breadcrumb trail uses, and a ' +
-      'description of the share image.\n\n' +
-      `Answer by calling ${AI_SEO_FIELDS_TOOL_NAME} exactly once. A reply in prose cannot be used.\n\n` +
-      'Rules:\n' +
-      '- Write only from the text you are given. Never invent a fact, a price, a name, a place, ' +
-      'an offer or a claim the text does not state.\n' +
-      '- The title says what this page is, specifically and in plain words. It is published ' +
-      'exactly as written, so add the site name only where it fits and helps. Keep every length ' +
-      'the tool states.\n' +
-      '- The description is one or two sentences telling a searcher what they will find. No ' +
-      'quotation marks, no emoji, no capitals for emphasis.\n' +
-      '- The breadcrumb label is the page’s short name, one to three words.\n' +
-      '- The image description says what the picture shows, never what the page is about. ' +
-      'Answer null when nothing you were given says what the picture shows.\n' +
-      '- A target keyword goes in only where the page is about it and it reads naturally: at ' +
-      'most once in the title and once in the description. Never list keywords, never repeat a ' +
-      'word to rank, and leave out a keyword the page is not about.\n' +
-      '- Do not reuse a title another page of the site already uses.\n' +
-      '- Write in the language of the page text.',
-    cacheBreakpoint: true,
-  },
-]
+/**
+ * What one listing field's rule ADDS to the tool's own description of that
+ * field (AGL-2937), stated only when the field is asked for.
+ *
+ * The schema the answer arrives through is built from the editor's field
+ * catalog, and it already names each field, says what the value is for and
+ * states its length. It rides in the same request, ahead of these blocks, so
+ * a rule that restated it would be the same sentence billed twice on a door
+ * whose prompt no model will cache. Each rule here is therefore only what
+ * the schema does not say: how to write the field rather than what it is.
+ * The image description has no rule at all, because its description already
+ * carries both halves of one — what it describes, and when to answer null.
+ *
+ * `runtime/ai-prompt-cache.spec.ts` holds the pair together: whatever
+ * `checkAiSeoFields` can refuse an answer for, the request has to state
+ * somewhere, in a block or in the schema.
+ */
+const AI_SEO_FIELD_RULES: Readonly<Partial<Record<SeoListingFieldKey, string>>> = {
+  title:
+    'The title says what the page is, specifically and in plain words; add the site name only where it helps.',
+  description:
+    'The description is one or two sentences: no quotation marks, no emoji, no capitals for emphasis.',
+  breadcrumb: 'The breadcrumb label is one to three words.',
+}
+
+/** What a listing request carries, and therefore which rules it is sent. */
+export interface AiSeoFieldsInstructionShape {
+  fields: readonly SeoListingFieldKey[]
+  keywords: boolean
+  otherTitles: boolean
+}
+
+/**
+ * The rules for one listing request.
+ *
+ * Byte-identical for every request of the same SHAPE, and identical across
+ * workspaces at every shape: no site's name, text or listing is in here, so
+ * two tenants writing the same kind of listing send the same rules. That is
+ * the invariant `runtime/ai-prompt-cache.spec.ts` holds, and it is weaker
+ * than "one block for everything" on purpose — a rule about target keywords
+ * is worth nothing to a request that carries none, and `job.seo` runs on a
+ * model that caches no prompt this short, so an unread rule is simply paid
+ * for at full input rate on every attempt and every re-ask.
+ */
+export function aiSeoFieldsInstructions(
+  shape: AiSeoFieldsInstructionShape,
+): AiSystemBlock[] {
+  const fields = orderedSeoListingFields(shape.fields)
+  const rules = [
+    'Write only from the text you are given. Never invent a fact, a price, a name, a place, an offer or a claim the text does not state.',
+    ...fields.map((key) => AI_SEO_FIELD_RULES[key]).filter((rule): rule is string => Boolean(rule)),
+    // Every field a person reads is held to this, keywords or none, so it is
+    // stated on every shape rather than inside the keyword rule it used to
+    // ride in: `checkAiSeoFields` refuses a repeat in a listing that named
+    // no keywords too.
+    'Never repeat the same word three times in one field.',
+    ...(shape.keywords
+      ? [
+          'A target keyword goes in only where the page is about it and it reads naturally: at most once in the title and once in the description. Never list keywords, and leave out a keyword the page is not about.',
+        ]
+      : []),
+    ...(shape.otherTitles
+      ? ['Do not reuse a title another page of the site already uses.']
+      : []),
+    'Write in the language of the page text.',
+  ]
+  return [
+    {
+      text:
+        'You write the search listing for one page or one product of a website: what a search result shows.\n\n' +
+        `Answer by calling ${AI_SEO_FIELDS_TOOL_NAME} exactly once. A reply in prose cannot be used.\n\n` +
+        `Rules:\n${rules.map((rule) => `- ${rule}`).join('\n')}`,
+      cacheBreakpoint: true,
+    },
+  ]
+}
+
+/** The rules for a listing of the default shape, for a door that names no other. */
+export const AI_SEO_FIELDS_INSTRUCTIONS: AiSystemBlock[] = aiSeoFieldsInstructions({
+  fields: ['title', 'description', 'breadcrumb'],
+  keywords: false,
+  otherTitles: false,
+})
 
 export interface AiSeoFieldsPromptInput {
   subject: { kind: 'screen' | 'product'; name: string; path?: string | null }
@@ -412,12 +244,15 @@ export async function generateSeoFields(
     (key) => key !== 'imageAlt' || hasImage,
   )
   const keywords = input.keywords ?? []
-  return runValidatedGenerationStandIn('seo-fields', {
+  return runValidatedGeneration('seo-fields', {
     step: input.step ?? 'job.seo',
     ...(input.settings ? { settings: input.settings } : {}),
     ...(input.model ? { model: input.model } : {}),
-    instructions: AI_SEO_FIELDS_INSTRUCTIONS,
-    inventory: null,
+    instructions: aiSeoFieldsInstructions({
+      fields,
+      keywords: keywords.length > 0,
+      otherTitles: Boolean(input.otherTitles?.length),
+    }),
     messages: [{ role: 'user', content: aiSeoFieldsPrompt({ ...input, fields, keywords }) }],
     tool: aiSeoFieldsTool(fields),
     maxTokens: AI_SEO_FIELDS_MAX_TOKENS,

@@ -32,6 +32,10 @@ start from [Your first API call](../../guides/your-first-api-call.md).
 2. Configure the fields and the submit behavior.
 3. Publish — the form posts to Aglyn's submit API.
 
+You can also describe the form you need and have Aglyn AI build it as a draft on the
+**Forms** page, with its fields, marketing consent and routing agreeing with each other.
+See [Generate a form from a brief](../../ai/generate-a-form.md).
+
 :::note Per-visitor rate limit
 Submissions are capped at **10 per minute per site, per visitor address**. A
 visitor over the limit gets a short retry delay, not a permanent block. It's per
@@ -195,10 +199,15 @@ screen was deleted, the URL was rejected), the form falls back to the success me
 
 Combine an outcome with a [conditional automation](../../marketing-and-automation/workflows-and-actions/actions-builder.md#only-run-when-a-field-matches):
 
-1. Add a **Checkboxes** field named `subscribe` with one option, `Yes, keep me posted`.
-2. Set **After submit** to *Redirect the visitor* and pick your `/thanks` screen.
-3. On **Automation → Actions**, add an action on **formSubmission** with the condition
-   *"A field is not empty" → `subscribe`* and the step **Enroll in a list**,
+1. Add the **Marketing consent** field from **Forms** in the Besigner's element picker: a
+   **Checkboxes** field named `marketingConsent`, labeled `Marketing emails`, with one
+   option, `Email me news and offers`. If you reword the option, keep it free of commas:
+   the Options setting starts a new box at every comma.
+2. On the form's own page, pick `marketingConsent` as the **Marketing consent field**, so a
+   tick is recorded as the person's consent.
+3. Set **After submit** to *Redirect the visitor* and pick your `/thanks` screen.
+4. On **Automation → Actions**, add an action on **formSubmission** with the condition
+   *"A field is not empty" → `marketingConsent`* and the step **Enroll in a list**,
    picking your email audience.
 
 Visitors who tick the box are added to the list (and can be targeted by
@@ -207,7 +216,7 @@ everyone lands on the thank-you page.
 
 Need a finer net? Conditions
 [chain with AND/OR](../../marketing-and-automation/workflows-and-actions/actions-builder.md#chain-multiple-conditions-andor)
-— e.g. enroll only when `subscribe` is ticked **and** `plan` equals `Pro`, or when
+— e.g. enroll only when `marketingConsent` is ticked **and** `plan` equals `Pro`, or when
 either of two topic boxes is ticked.
 
 ## Where submissions go

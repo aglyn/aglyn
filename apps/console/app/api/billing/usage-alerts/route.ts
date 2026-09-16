@@ -27,9 +27,7 @@ import {
   bandwidthCapShouldEngage,
   type OrgBandwidthCap,
   checkDatasetQuota,
-  PLAN_PRICING,
   planMetersInfraOverage,
-  resolveEffectivePlan,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn/server'
@@ -48,6 +46,7 @@ import {
   assistCreditsFromUsd,
   resolveAssistCreditBudget,
   resolveAssistHardCap,
+  resolveAssistOverageRateUsdPer1k,
 } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
   measureScreenCaps,
@@ -656,9 +655,15 @@ async function handler(request: Request): Promise<Response> {
       // behavior cannot drift: a band that refuses — the org's own switch,
       // or a plan with no rate — is a wall, and everything else is sold past.
       const assistBandIsWall = assistBandRefuses(orgData as never)
-      const assistRateUsdPer1k =
-        PLAN_PRICING[resolveEffectivePlan(orgData as never)]
-          .extraAssistCreditsUsdPer1k
+      // Through the same resolver `assistBandRefuses` asks, so the alert's
+      // rate and its wall/sold verdict cannot disagree about one org. Read
+      // straight off `PLAN_PRICING` they did: Starter's listed rate is null
+      // and the add-on's is added by the resolver, so a Starter workspace
+      // with the add-on was told "sold past the band" at "$0.00 per 1,000"
+      // in the same sentence (AGL-3014).
+      const assistRateUsdPer1k = resolveAssistOverageRateUsdPer1k(
+        orgData as never,
+      )
 
       const checks: Array<{
         key: string

@@ -37,6 +37,7 @@
  */
 
 import '../declarations'
+import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 export {}
 
 let mockDocs = new Map<string, Record<string, unknown>>()
@@ -347,6 +348,10 @@ describe('on the edit rung', () => {
     const canvasBlock = system.findIndex((block) => block.text.includes('Selected element: "hero"'))
     expect(editBlock).toBeGreaterThan(0)
     expect(system[editBlock].cache_control).toEqual({ type: 'ephemeral' })
+    // The catalog rides once, inside the edit block.
+    expect(system.filter((block) => block.text.includes(AI_PALETTE_CATALOG.screen))).toEqual([
+      system[editBlock],
+    ])
     expect(canvasBlock).toBeGreaterThan(editBlock)
     expect(system[canvasBlock].cache_control).toBeUndefined()
     expect(system[canvasBlock].text).toContain('Build faster')

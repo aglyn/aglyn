@@ -39,10 +39,12 @@ import {
   type AiJobReview,
   type AiJobStatus,
   type AiJobStep,
+  type AiJobStepTokens,
   type AiJobSummary,
 } from '../model/ai-jobs.types'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { aiOverageReservationRefusal } from '../billing/ai-overage-gate'
 import { aiAllotmentRefusalText } from '../model/ai-allotments'
 import { resolveAiModelChoice } from '../providers/model-choice'
 import { aiOutputTargetType } from '../activity/ai-activity-actions'
@@ -53,7 +55,12 @@ import {
   logAiJobOutput,
   type AiActivityActor,
 } from '../activity/ai-activity'
-import { AI_UPSTREAM_FAILURE_COPY, AiUpstreamError } from '../runtime/ai-runtime'
+import {
+  AI_UPSTREAM_FAILURE_COPY,
+  AiUpstreamError,
+  type AiEffort,
+  type AiUsage,
+} from '../runtime/ai-runtime'
 import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
 import {
   runAiJobTextStep,
@@ -116,9 +123,10 @@ export const AI_JOB_LEASE_MS = 90_000
 export const AI_JOB_STEP_MAX_ATTEMPTS = 3
 
 /**
- * The most passes one step may take by asking to continue (AGL-2910). A site
- * audit's passes are its units of generated work; this bounds a runner that
- * never finishes, not a real site.
+ * The most passes one step may take by asking to continue (AGL-2910), for a
+ * kind that registers no bound of its own. A site audit's passes are its
+ * units of generated work; this bounds a runner that never finishes, not a
+ * real site.
  */
 export const AI_JOB_STEP_MAX_PASSES = 40
 
@@ -201,15 +209,71 @@ export const AI_PLANNED_JOB_KINDS: readonly AiJobKind[] = [
 ]
 
 const stepRunners = new Map<AiJobKind, AiJobStepRunner>()
+const stepMinimums = new Map<AiJobKind, number>()
 let planStepRunner: AiJobStepRunner | null = null
+const stepPassCaps = new Map<AiJobKind, number>()
+
+export interface AiJobStepRegistration {
+  /**
+   * The least time, in milliseconds, one run of the kind's step needs before
+   * it starts (AGL-2907): its generation's worst case at the rates
+   * `ai-job-budget.ts` assumes, with the step's own reads and writes. The
+   * beat leaves the step queued rather than start it with less time left, and
+   * an inline door leaves it for the beat, because a provider call the
+   * caller's budget cuts off is still generated and billed upstream while the
+   * meter records nothing. Absent, the step starts whenever it is claimed.
+   */
+  minimumMs?: number
+}
 
 /** Idempotent per kind; last registration wins. */
-export function registerAiJobStep(kind: AiJobKind, runner: AiJobStepRunner): void {
+export function registerAiJobStep(
+  kind: AiJobKind,
+  runner: AiJobStepRunner,
+  registration: AiJobStepRegistration = {},
+): void {
   stepRunners.set(kind, runner)
+  if (registration.minimumMs && registration.minimumMs > 0) {
+    stepMinimums.set(kind, registration.minimumMs)
+  } else {
+    stepMinimums.delete(kind)
+  }
+}
+
+/**
+ * The least time a step needs before it starts: the kind's registered
+ * minimum for its own step, and none for the plan step, which a door runs
+ * inline before any kind's generation.
+ */
+export function aiJobStepMinimumMs(kind: AiJobKind, stepName: string): number {
+  return stepName === AI_JOB_PLAN_STEP ? 0 : (stepMinimums.get(kind) ?? 0)
+}
+
+/** The least time the job's next step needs; 0 when no step is left to run. */
+export function aiJobNextStepMinimumMs(job: AiJob): number {
+  const index = nextStepIndex(job)
+  return index === -1 ? 0 : aiJobStepMinimumMs(job.kind, job.steps[index].name)
 }
 
 export function aiJobStepRunnerFor(kind: AiJobKind): AiJobStepRunner | null {
   return stepRunners.get(kind) ?? null
+}
+
+/**
+ * A kind whose step works through more units than the default bounds
+ * (AGL-2911). A scaffold's unit is a whole page and its site is eight of
+ * them, where an audit's is one page's listing, so the runaway bound the
+ * default gives an audit would cut a real site short. The kind registers its
+ * own beside its runner, so the machine keeps no list of kinds and the bound
+ * sits with the plan that explains it.
+ */
+export function registerAiJobStepPasses(kind: AiJobKind, maxPasses: number): void {
+  stepPassCaps.set(kind, Math.max(1, Math.floor(maxPasses)))
+}
+
+/** The passes a kind's step may take; the default where it registered none. */
+export function aiJobStepMaxPasses(kind: AiJobKind): number {
+  return stepPassCaps.get(kind) ?? AI_JOB_STEP_MAX_PASSES
 }
 
 /**
@@ -388,6 +452,7 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
     kind: job.kind,
     status: job.status,
     brief: job.brief,
+    batch: typeof job.inputs?.['batchId'] === 'string' ? job.inputs['batchId'] : null,
     steps: (job.steps ?? []).map((step) => ({
       name: step.name,
       status: step.status,
@@ -550,6 +615,40 @@ export interface RecordStepInput {
    * attempts count again from zero and its passes by one.
    */
   continued?: boolean
+  /** What the run cost in tokens and time (AGL-2937), added to the step's totals. */
+  tokens?: AiJobStepTokenRun
+}
+
+/** One run of a step's runner, as the machine measured it (AGL-2937). */
+export interface AiJobStepTokenRun {
+  usage: AiUsage
+  model: string
+  effort: AiEffort | null
+  latencyMs: number
+}
+
+/**
+ * A step's measure with one more run added: the four counts and the time
+ * summed, the model and effort taken from the run.
+ */
+export function addAiJobStepTokens(
+  current: AiJobStepTokens | null | undefined,
+  run: AiJobStepTokenRun,
+): AiJobStepTokens {
+  const count = (value: unknown): number => {
+    const parsed = Number(value ?? 0)
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0
+  }
+  return {
+    input: count(current?.input) + count(run.usage.inputTokens),
+    cachedRead: count(current?.cachedRead) + count(run.usage.cacheReadTokens),
+    cacheWrite: count(current?.cacheWrite) + count(run.usage.cacheWriteTokens),
+    output: count(current?.output) + count(run.usage.outputTokens),
+    model: run.model || current?.model || null,
+    effort: run.effort ?? null,
+    latencyMs: count(current?.latencyMs) + count(run.latencyMs),
+    runs: count(current?.runs) + 1,
+  }
 }
 
 export interface RecordedStep {
@@ -594,6 +693,7 @@ export async function recordStep(
             ...(input.continued && input.status === 'pending'
               ? { attempts: 0, passes: (step.passes ?? 0) + 1 }
               : {}),
+            ...(input.tokens ? { tokens: addAiJobStepTokens(step.tokens, input.tokens) } : {}),
           }
         : step,
     )
@@ -910,9 +1010,22 @@ export async function writeAiJobAudit(
  */
 export function aiJobRefusalText(
   org: Partial<AglynOrgBilling> | null,
-  reservation: Pick<AssistReservation, 'refusedBy' | 'budgetUsd' | 'allotment'>,
+  reservation: Pick<
+    AssistReservation,
+    | 'refusedBy'
+    | 'budgetUsd'
+    | 'allotment'
+    | 'capReason'
+    | 'overageLimitUsd'
+    | 'overageUnpaidUsd'
+  >,
 ): string {
   const refusedBy = reservation.refusedBy
+  // AGLYN'S OWN OVERAGE GUARDS (AGL-3011). First, because a `cap` refusal
+  // that carries a reason knows exactly which limit stopped the job, where
+  // the `case 'cap'` below can only name the workspace's own.
+  const overage = aiOverageReservationRefusal(reservation)
+  if (overage) return overage.text
   // A hard allotment (AGL-2942) — the creator's, theirs on the job's site,
   // or the site's — in the sentence every door gives, naming who can raise
   // it. A member can change that, so the job parks rather than fails.
@@ -1122,6 +1235,9 @@ export async function runAiJobStep(
     resolveAiModelChoice(kind, job.model ?? null, bounds)?.model
 
   let outcome: AiJobStepOutcome
+  // The runner's wall-clock time, recorded on the step beside its tokens
+  // (AGL-2937): measured here, around the call, rather than asked of it.
+  const runStarted = Date.now()
   try {
     outcome = await runner({
       job, stepIndex, now, signal: options.signal, firestore, org, modelFor,
@@ -1153,6 +1269,8 @@ export async function runAiJobStep(
     }
   }
 
+  const latencyMs = Math.max(0, Date.now() - runStarted)
+
   // A step that failed before it reached the provider — the site it builds
   // from could not be read, say (AGL-2938) — spent nothing: its message goes
   // back and nothing is metered, exactly as for a request the provider
@@ -1173,6 +1291,13 @@ export async function runAiJobStep(
         error: `step failure before the provider: ${outcome.failure}`,
       }, now),
     }
+  }
+
+  const tokens: AiJobStepTokenRun = {
+    usage: outcome.usage,
+    model: outcome.model,
+    effort: outcome.effort ?? null,
+    latencyMs,
   }
 
   // A step that stopped before the provider without failing — a site with no
@@ -1223,7 +1348,7 @@ export async function runAiJobStep(
     const message = outcome.refused ? AI_JOB_REFUSED_COPY : (outcome.failure as string)
     await recordStep(
       firestore, orgId, jobId, options.owner, stepIndex,
-      { status: 'failed', creditsSpent: credits, error: message },
+      { status: 'failed', creditsSpent: credits, error: message, tokens },
       now,
     )
     return {
@@ -1248,7 +1373,9 @@ export async function runAiJobStep(
   // recorded as the step's last, and what it produced stands.
   const review = outcome.review
   const continuing =
-    !review && Boolean(outcome.continue) && (step.passes ?? 0) + 1 < AI_JOB_STEP_MAX_PASSES
+    !review &&
+    Boolean(outcome.continue) &&
+    (step.passes ?? 0) + 1 < aiJobStepMaxPasses(job.kind)
   if (!review && outcome.continue && !continuing) {
     console.warn('ai job step reached its pass cap', { orgId, jobId, stepIndex })
   }
@@ -1258,6 +1385,8 @@ export async function runAiJobStep(
       status: continuing || (review && review.reason !== 'plan') ? 'pending' : 'done',
       ...(continuing ? { continued: true } : {}),
       creditsSpent: credits,
+      // A step that spent nothing ran no model, so it adds no run to the measure.
+      ...(spentNothing ? {} : { tokens }),
       outputs: outcome.outputs,
       ...(outcome.plan ? { plan: outcome.plan } : {}),
       ...(review ? { review } : {}),
@@ -1423,22 +1552,24 @@ export async function sweepAiJobs(
     remaining: 0,
     budgetExhausted: false,
   }
-  for (let index = 0; index < due.length; index += 1) {
-    const elapsed = now() - startedAt
-    if (index > 0 && elapsed >= budgetMs) {
-      result.budgetExhausted = true
-      result.remaining = due.length - index
-      break
-    }
-    const { orgId, jobId } = due[index]
-    const left = Math.max(1_000, budgetMs - elapsed)
+  // Jobs a run left with more of a timed step to do, in the order they ran.
+  const again: DueAiJob[] = []
+  const attempt = async (candidate: DueAiJob, left: number, first: boolean): Promise<void> => {
+    const { orgId, jobId } = candidate
     try {
-      const parked = await getAiJob(options.firestore, orgId, jobId)
-      if (parked?.status === 'needs_input') {
-        await transition(options.firestore, orgId, jobId, (current) =>
-          current.status === 'needs_input'
-            ? { status: 'queued', updatedAt: new Date(now()) }
-            : null,
+      const current = await getAiJob(options.firestore, orgId, jobId)
+      // A step that needs more time than is left is not started (AGL-2907): a
+      // provider call the abort cuts off is billed upstream and metered
+      // nowhere. The job is left as it is, so it keeps its place at the front
+      // of the next beat's queue.
+      const minimumMs = current ? aiJobNextStepMinimumMs(current) : 0
+      if (minimumMs > left) {
+        if (first) result.remaining += 1
+        return
+      }
+      if (current?.status === 'needs_input') {
+        await transition(options.firestore, orgId, jobId, (job) =>
+          job.status === 'needs_input' ? { status: 'queued', updatedAt: new Date(now()) } : null,
         )
       }
       const run = await runStep(orgId, jobId, {
@@ -1446,13 +1577,47 @@ export async function sweepAiJobs(
         now: new Date(now()),
         signal: AbortSignal.timeout(left),
       })
-      if (run.outcome === 'not-claimable') result.skipped += 1
-      else result.ran += 1
+      if (run.outcome === 'not-claimable') {
+        if (first) result.skipped += 1
+        return
+      }
+      result.ran += 1
+      // Only a step that says how long it needs is run again in this sweep:
+      // one that does not could start with too little time left.
+      if (
+        run.outcome === 'done' &&
+        run.job.status === 'queued' &&
+        aiJobNextStepMinimumMs(run.job) > 0
+      ) {
+        again.push(candidate)
+      }
     } catch (error) {
       // One job's fault is isolated, as the runner isolates one job's.
       console.error('ai job sweep step failed', { orgId, jobId, error })
-      result.skipped += 1
+      if (first) result.skipped += 1
     }
+  }
+
+  for (let index = 0; index < due.length; index += 1) {
+    const elapsed = now() - startedAt
+    if (index > 0 && elapsed >= budgetMs) {
+      result.budgetExhausted = true
+      result.remaining += due.length - index
+      return result
+    }
+    await attempt(due[index], Math.max(1_000, budgetMs - elapsed), true)
+  }
+  // Once every due job has had its turn, a job whose timed step has more to
+  // do runs again while the time it needs is left (AGL-2907): a page built a
+  // section a pass otherwise waits a beat between sections. Bounded by the
+  // budget, and by the sweep's candidate count so no clock is trusted alone.
+  for (let round = 0; again.length && round < AI_JOB_SWEEP_MAX_JOBS; round += 1) {
+    const elapsed = now() - startedAt
+    if (elapsed >= budgetMs) {
+      result.budgetExhausted = true
+      break
+    }
+    await attempt(again.shift() as DueAiJob, budgetMs - elapsed, false)
   }
   return result
 }

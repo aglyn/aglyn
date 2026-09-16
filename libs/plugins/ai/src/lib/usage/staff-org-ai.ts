@@ -21,8 +21,10 @@
 import type { AiJobStatus } from '../model/ai-jobs.types'
 import type { AglynOrgBilling, OrgPlan } from '@aglyn/aglyn/foundation'
 import {
+  ASSIST_PROVIDER_COST_FIELD,
   assistBandRefuses,
   assistCreditsFromUsd,
+  assistProviderCostUsd,
   assistMonthOverage,
   assistOverageCapReached,
   assistUsdFromCredits,
@@ -39,6 +41,13 @@ import {
   type DiscountMarginRating,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AssistRefusalCounts } from './assist-refusals'
+import {
+  AI_USAGE_MONTH_KINDS_FIELD,
+  aiCacheHitRate,
+  readAiKindMonths,
+  type AiKindMonth,
+  type AiTokenTotals,
+} from '../model/ai-tokens'
 
 /**
  * THE STAFF AI CARD'S FIGURES (AGL-2930), composed from the same helpers the
@@ -80,12 +89,22 @@ export interface StaffOrgAiPool {
   totalCredits: number | null
   /** Credits drawn this month, rounded up from the measured spend. */
   usedCredits: number
-  /** The measured provider spend behind `usedCredits`. */
+  /**
+   * What the month DREW, at the catalog's billed rates — the dollars
+   * `usedCredits` is rounded up from, and the figure the overage line is
+   * priced off. Not a cost (AGL-3015).
+   */
+  billedUsd: number
+  /**
+   * What the month COST US, at the provider's own rates: the one figure a
+   * margin or a spend alert may be taken against.
+   */
   providerUsd: number
   /** Left in the pool, clamped at zero, or null where no band applies. */
   remainingCredits: number | null
   /** Where `usedCredits` lands at month end at the pace so far. */
   projectedCredits: number
+  /** `projectedCredits` back in dollars — billed, as the credits were. */
   projectedUsd: number
   /** Model turns and docs-deflected turns, off the month document. */
   messages: number
@@ -111,17 +130,17 @@ export interface StaffOrgAiMargin {
   /** The add-on's list price when it is on, else 0. */
   addonRevenueUsd: number
   /**
-   * The provider-spend value of the plan's own band — what the plan price
-   * sets aside for assist. Each plan band is sized as a cost figure (a
-   * thousand credits are a dollar), so this is the share of the subscription
-   * that was sold as AI, in the unit the spend is measured in.
+   * The dollar value of the plan's own band — what the plan price sets aside
+   * for assist. Each plan band is sized against the billed rate (a thousand
+   * credits are a dollar), so this is the share of the subscription that was
+   * sold as AI, and it belongs on the REVENUE side beside the add-on's price.
    */
   planAssistShareUsd: number
   /** Overage priced at the plan's rate, which the invoice will bill. */
   overageRevenueUsd: number
   /** The three above, summed. */
   revenueUsd: number
-  /** Measured provider spend this month. */
+  /** What the month cost us: measured provider spend, never what it drew. */
   spendUsd: number
   /**
    * Spend past what the add-on and the plan's assist share bring in — the
@@ -177,6 +196,28 @@ export interface StaffOrgAiUser {
   byHost: Record<string, number>
 }
 
+/** One kind of model request this month, as the card lists it (AGL-2937). */
+export interface StaffOrgAiKindTokens extends AiKindMonth {
+  /**
+   * What one request of this kind COST US on average; `null` with none. The
+   * provider figure, not what the kind drew — the reader is sizing a step
+   * against a bill, and a marked-up model would otherwise make the step look
+   * dearer to run than it is (AGL-3015).
+   */
+  costPerRequestUsd: number | null
+  /** The share of this kind's prompt tokens the cache served — `aiCacheHitRate`. */
+  cacheHitRate: number | null
+}
+
+/** The month's tokens (AGL-2937): its totals, its cache hit rate, and each kind. */
+export interface StaffOrgAiTokens {
+  /** The month document's own four totals. */
+  total: AiTokenTotals
+  cacheHitRate: number | null
+  /** Dearest first; empty for a month written before kinds were kept. */
+  kinds: StaffOrgAiKindTokens[]
+}
+
 export interface StaffOrgAiResponse {
   month: string
   addon: StaffOrgAiAddon
@@ -188,6 +229,8 @@ export interface StaffOrgAiResponse {
   /** The dearest people this month; empty when nobody's month is written. */
   users: StaffOrgAiUser[]
   margin: StaffOrgAiMargin
+  /** Tokens by kind (AGL-2937); absent from a route older than the card. */
+  tokens?: StaffOrgAiTokens
 }
 
 const finite = (value: unknown): number => {
@@ -238,8 +281,16 @@ export function composeStaffOrgAiPool(
 ): StaffOrgAiPool {
   const plan = resolveEffectivePlan(org) as OrgPlan
   const addon = hasAiAddon(org)
-  const providerUsd = finite(monthDoc?.['estCostUsd'])
-  const usedCredits = assistCreditsFromUsd(providerUsd)
+  // Two questions, two figures (AGL-3015). What the workspace DREW is the
+  // billed figure, because that is what its credits came out of and what its
+  // band is measured in. What the month COST US is the provider figure, and
+  // it is the only one a margin below may be taken against.
+  const billedUsd = finite(monthDoc?.['estCostUsd'])
+  const providerUsd = assistProviderCostUsd(
+    billedUsd,
+    monthDoc?.[ASSIST_PROVIDER_COST_FIELD],
+  )
+  const usedCredits = assistCreditsFromUsd(billedUsd)
   const totalCredits = resolveAssistCreditBudget(org)
   const projectedCredits = projectMonthEnd(usedCredits, now)
   return {
@@ -248,6 +299,7 @@ export function composeStaffOrgAiPool(
     addonCredits: addon ? AI_ADDON_CREDITS_PER_MONTH[plan] : 0,
     totalCredits,
     usedCredits,
+    billedUsd,
     providerUsd,
     remainingCredits:
       totalCredits === null ? null : Math.max(0, totalCredits - usedCredits),
@@ -258,11 +310,46 @@ export function composeStaffOrgAiPool(
   }
 }
 
+/**
+ * The month's tokens as the card reads them: the totals the month document
+ * has always kept, and its `kinds` map (`model/ai-tokens.ts`) with the cost
+ * per request and the cache hit rate worked out per kind.
+ */
+export function composeStaffOrgAiTokens(
+  monthDoc: Record<string, unknown> | null | undefined,
+): StaffOrgAiTokens {
+  const total: AiTokenTotals = {
+    input: Math.floor(finite(monthDoc?.['inputTokens'])),
+    cached: Math.floor(finite(monthDoc?.['cacheReadTokens'])),
+    cacheWrite: Math.floor(finite(monthDoc?.['cacheWriteTokens'])),
+    output: Math.floor(finite(monthDoc?.['outputTokens'])),
+  }
+  return {
+    total,
+    cacheHitRate: aiCacheHitRate(total),
+    kinds: readAiKindMonths(monthDoc?.[AI_USAGE_MONTH_KINDS_FIELD]).map((row) => ({
+      ...row,
+      costPerRequestUsd:
+        row.requests > 0
+          ? Math.round((row.providerCostUsd / row.requests) * 1_000_000) / 1_000_000
+          : null,
+      cacheHitRate: aiCacheHitRate(row.tokens),
+    })),
+  }
+}
+
+/**
+ * Takes the BILLED figure, never the provider one (AGL-3015): every line
+ * here is what the customer owes — credits past the band, the rate they sell
+ * at, the dollars accrued, whether the org's own cap is reached — and an
+ * invoice priced off our cost would bill a different month than the meter
+ * the customer reads.
+ */
 export function composeStaffOrgAiOverage(
   org: Partial<AglynOrgBilling> | null | undefined,
-  providerUsd: number,
+  billedUsd: number,
 ): StaffOrgAiOverage {
-  const overage = assistMonthOverage(org, providerUsd)
+  const overage = assistMonthOverage(org, billedUsd)
   return {
     overageCredits: overage.overageCredits,
     rateUsdPer1k: overage.overageRateUsd,
@@ -270,7 +357,7 @@ export function composeStaffOrgAiOverage(
     sellsOverage: overage.bandCredits !== null && overage.overageRateUsd !== null,
     hardCap: resolveAssistHardCap(org),
     capUsd: resolveAssistOverageCapUsd(org),
-    capReached: assistOverageCapReached(org, providerUsd),
+    capReached: assistOverageCapReached(org, billedUsd),
     bandRefuses: assistBandRefuses(org),
   }
 }
@@ -304,6 +391,11 @@ export function composeStaffOrgAiMargin(input: {
     pool.overrideCredits ?? pool.planCredits,
   )
   const overageRevenueUsd = overage.accruedUsd
+  // THE ONE PLACE THE TWO RATES MEET (AGL-3015). Revenue is what the
+  // customer pays — an add-on price, a band sized in credits, overage at the
+  // retail rate — and spend is what the provider charges us. Taking both
+  // sides off one figure was what made a fully-drawn band read as exactly
+  // break-even no matter what the tokens actually cost.
   const revenueUsd =
     Math.round((addonRevenueUsd + planAssistShareUsd + overageRevenueUsd) * 100) /
     100

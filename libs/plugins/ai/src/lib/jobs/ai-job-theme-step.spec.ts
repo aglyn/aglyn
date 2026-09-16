@@ -164,9 +164,13 @@ describe('the request', () => {
       [AI_THEME_TOOL_NAME, true],
     ])
     const system = request.system as Array<{ text: string; cacheBreakpoint?: true }>
-    // The shared acceptable-use block, then the theme's own rules, cached as one prefix.
+    // The doctrine's block, which carries the acceptable-use rules, then the
+    // theme's own rules, cached as one prefix.
     expect(system[0].text).toContain('Acceptable use')
     expect(system[system.length - 1].cacheBreakpoint).toBe(true)
+    // The acceptable-use rules ride once, and a theme sends no site inventory.
+    expect(system.map((block) => block.text).join('\n').split('Acceptable use')).toHaveLength(2)
+    expect(system.some((block) => block.text.startsWith('Site inventory'))).toBe(false)
     // No byte of this site sits inside the cached prefix.
     for (const block of system) {
       for (const siteByte of ['warmer', '#0f766e', 'shop', '#1565c0']) {
@@ -294,8 +298,13 @@ describe('the one re-ask', () => {
     mockRunAiRequest.mockResolvedValueOnce(answer(warmer))
     const outcome = await run()
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
-    expect(mockRunAiRequest.mock.calls[1][0].messages[0].content).toContain(
-      `Your last reply did not call ${AI_THEME_TOOL_NAME}.`,
+    // The doctrine's re-ask is a turn of its own after the brief, which stays
+    // byte-identical, and it quotes nothing the model wrote.
+    expect(mockRunAiRequest.mock.calls[1][0].messages[0]).toEqual(
+      mockRunAiRequest.mock.calls[0][0].messages[0],
+    )
+    expect(mockRunAiRequest.mock.calls[1][0].messages[2].content).toContain(
+      `The answer did not come through ${AI_THEME_TOOL_NAME}.`,
     )
     expect(outcome.outputs).toHaveLength(1)
     expect(outcome.usage).toEqual({
@@ -313,9 +322,9 @@ describe('the one re-ask', () => {
     )
     mockRunAiRequest.mockResolvedValueOnce(answer(warmer))
     const outcome = await run()
-    const reask = mockRunAiRequest.mock.calls[1][0].messages[0].content as string
+    const reask = mockRunAiRequest.mock.calls[1][0].messages[2].content as string
     expect(reask).toContain('- color.primary (light): "warm orange" is not a hex color')
-    expect(reask).not.toContain('Your last reply did not call')
+    expect(reask).not.toContain('did not come through')
     expect(outcome.outputs).toHaveLength(1)
   })
 

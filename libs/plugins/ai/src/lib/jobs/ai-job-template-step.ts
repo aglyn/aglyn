@@ -28,7 +28,7 @@ import {
   parseAiTemplateJobInputs,
   type AiTemplateSubjectDefinition,
 } from '../model/ai-template-subjects'
-import { aiModelForStep } from '../providers/routing'
+import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
   aiDoctrineTreeTool,
   runValidatedGeneration,
@@ -92,7 +92,7 @@ import { registerAiJobStep } from './ai-jobs'
  */
 
 /** The longest answer a template may run to; the tree is held to the template budget either way. */
-export const AI_JOB_TEMPLATE_MAX_TOKENS = 8_000
+export const AI_JOB_TEMPLATE_MAX_TOKENS = AI_ROUTING_TABLE['job.template'].maxTokens
 
 /** The template step's own instructions, cached after the doctrine and before the examples. */
 export const AI_JOB_TEMPLATE_INSTRUCTIONS: readonly AiSystemBlock[] = [
@@ -403,7 +403,8 @@ export function createAiJobTemplateStep(deps: AiJobTemplateStepDeps = {}): AiJob
       ],
       tool: aiDoctrineTreeTool('template'),
       maxTokens: AI_JOB_TEMPLATE_MAX_TOKENS,
-      thinking: 'off',
+      ...(AI_ROUTING_TABLE['job.template'].thinking ? { thinking: AI_ROUTING_TABLE['job.template'].thinking } : {}),
+      ...(AI_ROUTING_TABLE['job.template'].effort ? { effort: AI_ROUTING_TABLE['job.template'].effort } : {}),
       context: { bindingTokens: aiTemplateAddressTokens(definition) },
       extend: aiTemplateBindingCheck(definition),
       ...(signal ? { signal } : {}),
@@ -433,5 +434,8 @@ export function createAiJobTemplateStep(deps: AiJobTemplateStepDeps = {}): AiJob
 
 export const runAiJobTemplateStep = createAiJobTemplateStep()
 
-registerAiJobStep('template', runAiJobTemplateStep)
-registerAiJobAdmission('template', createAiTemplateJobAdmission())
+/** Registers the template step and the check a template job passes before it is created or resumed. */
+export function registerAiTemplateJob(): void {
+  registerAiJobStep('template', runAiJobTemplateStep)
+  registerAiJobAdmission('template', createAiTemplateJobAdmission())
+}

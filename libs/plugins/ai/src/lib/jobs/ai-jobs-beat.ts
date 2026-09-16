@@ -80,33 +80,39 @@ export async function runAiJobsBeat(): Promise<void> {
   }
 }
 
-registerPluginJob({
-  pluginId: AI_JOBS_PLUGIN_ID,
-  name: 'ai-jobs',
-  // The beat is the resolution: a step cut short by the route's budget
-  // should resume on the next minute, not the next quarter hour.
-  intervalMinutes: 1,
-  description:
-    'Run the queued steps of AI generation jobs across every workspace, ' +
-    'inside a wall-clock budget, and resume any the console route left.',
-  /*
-   * PLATFORM scope, and the reason is what this job spends rather than
-   * where it writes. It reads jobs by collection group across every org and
-   * writes only to `orgs/{orgId}/aiJobs` — drafts and new versions, never a
-   * publish — so a site lock has nothing here to withhold: nothing a job
-   * produces is visible to a visitor until a member publishes it through a
-   * door that IS gated. What a lock on this beat is for is the provider
-   * bill, and that is the `ai-generate` feature switch the handler asks
-   * before it claims a step.
-   */
-  lockdown: {
-    scope: 'platform',
-    reason:
-      'provider spend: writes only unpublished drafts under the org and ' +
-      'resolves no host; the ai-generate feature switch is the lock that ' +
-      'applies, and the handler asks it before claiming a step.',
-  },
-  handler: async () => {
-    await runAiJobsBeat()
-  },
-})
+/**
+ * Schedules the sweep on the platform job beat. The tenant surface calls it,
+ * because the tenant's runner is the only one that reads the beat.
+ */
+export function registerAiJobsBeat(): void {
+  registerPluginJob({
+    pluginId: AI_JOBS_PLUGIN_ID,
+    name: 'ai-jobs',
+    // The beat is the resolution: a step cut short by the route's budget
+    // should resume on the next minute, not the next quarter hour.
+    intervalMinutes: 1,
+    description:
+      'Run the queued steps of AI generation jobs across every workspace, ' +
+      'inside a wall-clock budget, and resume any the console route left.',
+    /*
+     * PLATFORM scope, and the reason is what this job spends rather than
+     * where it writes. It reads jobs by collection group across every org and
+     * writes only to `orgs/{orgId}/aiJobs` — drafts and new versions, never a
+     * publish — so a site lock has nothing here to withhold: nothing a job
+     * produces is visible to a visitor until a member publishes it through a
+     * door that IS gated. What a lock on this beat is for is the provider
+     * bill, and that is the `ai-generate` feature switch the handler asks
+     * before it claims a step.
+     */
+    lockdown: {
+      scope: 'platform',
+      reason:
+        'provider spend: writes only unpublished drafts under the org and ' +
+        'resolves no host; the ai-generate feature switch is the lock that ' +
+        'applies, and the handler asks it before claiming a step.',
+    },
+    handler: async () => {
+      await runAiJobsBeat()
+    },
+  })
+}

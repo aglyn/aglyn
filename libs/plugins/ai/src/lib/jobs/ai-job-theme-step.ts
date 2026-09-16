@@ -44,17 +44,13 @@ import {
   type AiThemeProposal,
   type AiThemeProposalMode,
 } from '../model/ai-theme-proposal'
-import type { AiStepKind } from '../providers/catalog'
-import { aiModelForStep } from '../providers/routing'
+import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
-  AI_ACCEPTABLE_USE_BLOCK,
-  runAiRequest,
-  type AiMessage,
-  type AiSystemBlock,
-  type AiThinking,
-  type AiTool,
-  type AiUsage,
-} from '../runtime/ai-runtime'
+  runValidatedGeneration,
+  type AiCustomGenerationInput,
+  type AiGenerationCheck,
+} from '../runtime/ai-doctrine'
+import type { AiSystemBlock, AiUsage } from '../runtime/ai-runtime'
 import {
   AI_THEME_TOOL_NAME,
   aiThemeTool,
@@ -98,12 +94,13 @@ export function aiJobThemeModel(): string {
 }
 
 /**
- * The output budget. The largest answer the tool accepts — every color in
- * both schemes, the full run of component leaves, the longest summary — is
- * about 2,500 tokens of JSON (`ai-job-theme-step.spec.ts` measures it), and
- * the rest is room for the model to think before it answers.
+ * The output budget, from the routing table. The largest answer the tool
+ * accepts — every color in both schemes, the full run of component leaves,
+ * the longest summary — is about 2,500 tokens of JSON
+ * (`ai-job-theme-step.spec.ts` measures it), and the rest is room for the
+ * model to think before it answers.
  */
-export const AI_JOB_THEME_MAX_TOKENS = 8_000
+export const AI_JOB_THEME_MAX_TOKENS = AI_ROUTING_TABLE['job.theme'].maxTokens
 
 /** How many of a site's own component override leaves the prompt lists. */
 export const AI_JOB_THEME_INVENTORY_LEAVES = 40
@@ -132,8 +129,9 @@ export const AI_JOB_THEME_INSTRUCTIONS: AiSystemBlock[] = [
       'out keeps its current value. "Warmer" is about color, not about fonts or corners.\n' +
       '- In create mode, design a complete theme: the primary, secondary and tertiary ' +
       'accents, the page background and paper, the text colors, and their dark values.\n' +
-      "- Colors are hex values on the theme's own tokens. A component style never carries a " +
-      'literal color; color belongs to the palette.\n' +
+      "- Colors are hex values on the theme's own tokens. A theme is where the building rules " +
+      'send every color, so this is the one answer that writes a color as a value. A component ' +
+      'style never carries a literal color; color belongs to the palette.\n' +
       '- Give every color you change a dark value beside its light value unless the dark ' +
       'scheme is off. A dark value keeps the hue and reads on a dark background.\n' +
       '- Keep text readable: body text needs 4.5:1 against the background and the paper, and ' +
@@ -258,140 +256,14 @@ export function aiJobThemePrompt(input: {
   return sections.join('\n\n')
 }
 
-/* ------------------------------------------------------------------------ *
- * The generation call, in the building doctrine's shape (AGL-2935)
- * ------------------------------------------------------------------------ */
-
-/** One refused rule or value, as the doctrine names it. */
-interface AiDoctrineViolation {
-  rule: number | null
-  code: string
-  message: string
-}
-
-interface AiGenerationSpend {
-  attempts: number
-  /** Summed over every call. */
-  usage: AiUsage
-  estCostUsd: number
-  model: string
-  stopReason: string | null
-}
-
-type AiValidatedGeneration<T> =
-  | (AiGenerationSpend & { status: 'ok'; value: T })
-  | (AiGenerationSpend & { status: 'needs_input'; violations: AiDoctrineViolation[]; message: string })
-  | (AiGenerationSpend & { status: 'refused' })
-
-interface AiCustomGenerationInput<T> {
-  step: AiStepKind
-  model?: string
-  /** This door's static text, cached after the shared block. */
-  instructions: readonly AiSystemBlock[]
-  /** A theme builds from the site's theme, not from the site's pages. */
-  inventory: null
-  messages: readonly AiMessage[]
-  tool: AiTool
-  maxTokens?: number
-  thinking?: AiThinking
-  signal?: AbortSignal
-  check: (answer: Record<string, unknown>) => {
-    value: T | null
-    violations: AiDoctrineViolation[]
-  }
-}
-
-function addUsage(a: AiUsage, b: AiUsage): AiUsage {
-  return {
-    inputTokens: a.inputTokens + b.inputTokens,
-    outputTokens: a.outputTokens + b.outputTokens,
-    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
-    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
-  }
-}
-
 /**
- * STAND-IN: becomes `runValidatedGeneration('theme', …)` — the third, custom
- * overload the building doctrine (AGL-2935) posted — once that lands. The
- * signature and the result are that function's, so the swap is the import
- * and the removal of this function; the theme's own validation stays in
- * `check`, and the shared acceptable-use block below becomes the doctrine's
- * block, which already carries it.
- *
- * Until then it behaves as the doctrine does: one call through the strict
- * tool; one re-ask that names only what was wrong — no tool call, or nothing
- * `check` could use; then `needs_input` with a customer-safe sentence. Usage
- * from every call is summed, because every call was spent. It throws only
- * what `runAiRequest` throws, so the machine's retry and failure paths stay
- * the machine's.
+ * The theme tool's answer held to the editor — the check the doctrine's loop
+ * runs on each answer (AGL-2935), which also holds rule 13 on it. Usable when
+ * anything in it survives; refused, naming what was refused, when nothing
+ * does. A call that proposes no change and refuses nothing is a real answer —
+ * the theme already does what the brief asks.
  */
-async function runValidatedGenerationStandIn<T>(
-  _kind: 'theme',
-  input: AiCustomGenerationInput<T>,
-): Promise<AiValidatedGeneration<T>> {
-  const model = input.model ?? aiModelForStep(input.step)
-  const system: AiSystemBlock[] = [{ text: AI_ACCEPTABLE_USE_BLOCK }, ...input.instructions]
-  let spend: AiGenerationSpend = {
-    attempts: 0,
-    usage: ZERO_USAGE,
-    estCostUsd: 0,
-    model,
-    stopReason: null,
-  }
-  let violations: AiDoctrineViolation[] = []
-  let reask: string | null = null
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const last = input.messages.length - 1
-    const messages = input.messages.map((message, index) =>
-      reask && index === last ? { ...message, content: `${message.content}\n\n${reask}` } : message,
-    )
-    const result = await runAiRequest({
-      model,
-      system,
-      messages,
-      tools: [input.tool],
-      maxTokens: input.maxTokens ?? AI_JOB_THEME_MAX_TOKENS,
-      ...(input.thinking ? { thinking: input.thinking } : {}),
-      stream: false,
-      ...(input.signal ? { signal: input.signal } : {}),
-    })
-    spend = {
-      attempts: attempt + 1,
-      usage: addUsage(spend.usage, result.usage),
-      estCostUsd: Math.round((spend.estCostUsd + result.estCostUsd) * 1_000_000) / 1_000_000,
-      model,
-      stopReason: result.stopReason,
-    }
-    if (result.kind === 'refusal') return { ...spend, status: 'refused' }
-    const call = result.toolUse.find((use) => use.name === input.tool.name)
-    if (!call) {
-      violations = [
-        { rule: null, code: 'no-tool-call', message: `Your last reply did not call ${input.tool.name}.` },
-      ]
-      reask = `${violations[0].message} Answer by calling it.`
-      continue
-    }
-    const checked = input.check(call.input)
-    if (checked.value !== null) return { ...spend, status: 'ok', value: checked.value }
-    violations = checked.violations
-    reask =
-      `Nothing in your last call to ${input.tool.name} could be used:\n` +
-      violations.map((violation) => `- ${violation.message}`).join('\n') +
-      '\nCall it again with values the tool accepts.'
-  }
-  return { ...spend, status: 'needs_input', violations, message: AI_JOB_THEME_NO_ANSWER_COPY }
-}
-
-/**
- * The theme tool's answer held to the editor. Usable when anything in it
- * survives; refused, naming what was refused, when nothing does. A call that
- * proposes no change and refuses nothing is a real answer — the theme
- * already does what the brief asks.
- */
-function checkThemeAnswer(answer: Record<string, unknown>): {
-  value: AiThemeToolParse | null
-  violations: AiDoctrineViolation[]
-} {
+export const aiJobThemeCheck: AiGenerationCheck<AiThemeToolParse> = (answer) => {
   const parse = parseAiThemeToolInput(answer)
   const nothingUsable =
     !parse.changes.length && !parse.components.length && !parse.resetComponents
@@ -399,6 +271,41 @@ function checkThemeAnswer(answer: Record<string, unknown>): {
   return {
     value: null,
     violations: parse.dropped.map((message) => ({ rule: null, code: 'theme-control', message })),
+  }
+}
+
+/** What a theme generation is asked from, once the site and its brand have been read. */
+export interface AiJobThemeRequest {
+  brief: string
+  mode: AiThemeProposalMode
+  theme: HostTheme | undefined
+  source: HostThemeSource
+  brand: readonly AiThemeBrandColor[]
+  model: string
+  signal?: AbortSignal
+}
+
+/**
+ * The theme step's generation as the doctrine's loop runs it: its cached
+ * block, which carries the acceptable-use rules, then this step's
+ * instructions; the site's theme in the user turn rather than a site
+ * inventory; the strict tool, the ceiling and the check. The eval harness
+ * records a theme answer through this same call.
+ */
+export function aiJobThemeGeneration(
+  request: AiJobThemeRequest,
+): AiCustomGenerationInput<AiThemeToolParse> {
+  return {
+    step: 'job.theme',
+    model: request.model,
+    instructions: AI_JOB_THEME_INSTRUCTIONS,
+    messages: [{ role: 'user', content: aiJobThemePrompt(request) }],
+    tool: aiThemeTool(),
+    maxTokens: AI_JOB_THEME_MAX_TOKENS,
+    ...(AI_ROUTING_TABLE['job.theme'].thinking ? { thinking: AI_ROUTING_TABLE['job.theme'].thinking } : {}),
+    ...(AI_ROUTING_TABLE['job.theme'].effort ? { effort: AI_ROUTING_TABLE['job.theme'].effort } : {}),
+    ...(request.signal ? { signal: request.signal } : {}),
+    check: aiJobThemeCheck,
   }
 }
 
@@ -464,38 +371,29 @@ export const runAiJobThemeStep: AiJobStepRunner = async ({
     brief: job.brief,
     signal,
   })
-  const generation = await runValidatedGenerationStandIn('theme', {
-    step: 'job.theme',
-    model,
-    instructions: AI_JOB_THEME_INSTRUCTIONS,
-    inventory: null,
-    messages: [
-      {
-        role: 'user',
-        content: aiJobThemePrompt({
-          brief: job.brief,
-          mode,
-          theme: site.theme,
-          source: site.source,
-          brand: brand.colors,
-        }),
-      },
-    ],
-    tool: aiThemeTool(),
-    maxTokens: AI_JOB_THEME_MAX_TOKENS,
-    thinking: 'adaptive',
-    signal,
-    check: checkThemeAnswer,
-  })
-  const spent: Pick<AiJobStepOutcome, 'usage' | 'estCostUsd' | 'model' | 'stopReason'> = {
+  // A second refused answer ends in this step's own sentence, below.
+  const generation = await runValidatedGeneration(
+    'theme',
+    aiJobThemeGeneration({
+      brief: job.brief,
+      mode,
+      theme: site.theme,
+      source: site.source,
+      brand: brand.colors,
+      model,
+      ...(signal ? { signal } : {}),
+    }),
+  )
+  const spent: Pick<AiJobStepOutcome, 'usage' | 'estCostUsd' | 'model' | 'stopReason' | 'effort'> = {
     usage: generation.usage,
     estCostUsd: generation.estCostUsd,
     model: generation.model,
     stopReason: generation.stopReason,
+    ...(generation.effort ? { effort: generation.effort } : {}),
   }
   if (generation.status === 'refused') return { outputs: [], ...spent, refused: true }
   if (generation.status === 'needs_input') {
-    return { outputs: [], ...spent, failure: generation.message }
+    return { outputs: [], ...spent, failure: AI_JOB_THEME_NO_ANSWER_COPY }
   }
 
   const answer = generation.value

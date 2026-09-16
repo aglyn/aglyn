@@ -376,4 +376,53 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
     expect(body.users).toEqual([])
     expect(body.overage.sellsOverage).toBe(false)
   })
+
+  it('reads tokens by kind and the cache hit rate off the month document (AGL-2937)', async () => {
+    staff()
+    mockDocsByPath['orgs/org-1/assistUsage/2026-09'] = {
+      ...mockDocsByPath['orgs/org-1/assistUsage/2026-09'],
+      inputTokens: 3_000,
+      cacheReadTokens: 9_000,
+      cacheWriteTokens: 3_000,
+      outputTokens: 1_500,
+      kinds: {
+        assist: {
+          requests: 30,
+          estCostUsd: 0.3,
+          tokens: { input: 1_000, cached: 9_000, cacheWrite: 0, output: 500 },
+        },
+        page: {
+          requests: 4,
+          estCostUsd: 2.2,
+          tokens: { input: 2_000, cached: 0, cacheWrite: 3_000, output: 1_000 },
+        },
+      },
+    }
+    const body = await (await get({ token: 'tok' })).json()
+    expect(body.tokens.total).toEqual({ input: 3_000, cached: 9_000, cacheWrite: 3_000, output: 1_500 })
+    expect(body.tokens.cacheHitRate).toBeCloseTo(9_000 / 15_000, 9)
+    expect(body.tokens.kinds.map((row: { kind: string }) => row.kind)).toEqual(['page', 'assist'])
+    expect(body.tokens.kinds[0]).toEqual({
+      kind: 'page',
+      requests: 4,
+      estCostUsd: 2.2,
+      // The bucket above carries no provider figure, so it answers with the
+      // billed one — over-reading our bill, never under (AGL-3015).
+      providerCostUsd: 2.2,
+      costPerRequestUsd: 0.55,
+      tokens: { input: 2_000, cached: 0, cacheWrite: 3_000, output: 1_000 },
+      cacheHitRate: 0,
+    })
+    expect(body.tokens.kinds[1]).toMatchObject({ costPerRequestUsd: 0.01, cacheHitRate: 0.9 })
+  })
+
+  it('reads a month written before kinds were kept as its totals and no kinds', async () => {
+    staff()
+    const body = await (await get({ token: 'tok' })).json()
+    expect(body.tokens).toEqual({
+      total: { input: 0, cached: 0, cacheWrite: 0, output: 0 },
+      cacheHitRate: null,
+      kinds: [],
+    })
+  })
 })

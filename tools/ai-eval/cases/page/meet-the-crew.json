@@ -1,0 +1,103 @@
+{
+  "id": "page-meet-the-crew",
+  "kind": "page",
+  "brief": "An about page introducing our crew, why people call us back, and a couple of things customers have said.",
+  "framing": null,
+  "inventory": {
+    "hostId": "host-harbor",
+    "components": [
+      { "id": "cmp-service-card", "name": "Service card", "props": { "title": "text", "body": "text", "image": "image" } },
+      { "id": "cmp-testimonial", "name": "Testimonial", "props": { "quote": "text", "name": "text" } }
+    ],
+    "layouts": [{ "id": "lay-site", "name": "Harbor Roofing site", "parentId": null }],
+    "templates": [],
+    "forms": [{ "id": "frm-quote", "name": "Request a quote", "fields": ["name", "email", "phone", "address", "message"] }],
+    "datasets": [],
+    "collections": [],
+    "screens": [
+      { "id": "scr-home", "name": "Home", "slug": "/", "layoutId": "lay-site", "template": false },
+      { "id": "scr-gutters", "name": "Gutter cleaning", "slug": "/services/gutter-cleaning", "layoutId": "lay-site", "template": false }
+    ],
+    "theme": { "summary": ["Light scheme only"], "colors": { "primary.main": "#1d4e89", "secondary.main": "#f2a93b" }, "fonts": ["Inter"] },
+    "truncated": []
+  },
+  "assets": { "asset-team": { "sizeBytes": 310000, "width": 1800, "height": 1200 } },
+  "expected": {
+    "plan": { "screens": [1, 1], "reuse": ["lay-site", "cmp-testimonial"], "layout": "lay-site", "maxCreate": 1, "createKinds": ["component"] }
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: prose where the brief asks for reasons, and the testimonial component placed twice.",
+      "plan": {
+        "reuse": [
+          { "kind": "layout", "id": "lay-site", "purpose": "the site header, navigation and footer" },
+          { "kind": "component", "id": "cmp-testimonial", "purpose": "what customers say about the crew" }
+        ],
+        "create": [],
+        "screens": [
+          {
+            "title": "Meet the crew",
+            "slug": "/about/crew",
+            "layout": "lay-site",
+            "template": null,
+            "duplicateOf": null,
+            "nav": true,
+            "seoTitle": "Meet the Harbor Roofing crew",
+            "seoDescription": "The roofers behind Harbor Roofing: who they are, how long they have worked in Harbor County, and what customers say.",
+            "sections": [
+              { "name": "introduction", "uses": [], "items": 0 },
+              { "name": "our promise", "uses": [], "items": 0 },
+              { "name": "customer words", "uses": ["cmp-testimonial"], "items": 2 }
+            ]
+          }
+        ]
+      },
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro", "promise", "words"] },
+            "intro": { "componentId": "section", "props": { "element": "section", "ariaLabel": "Meet the crew" }, "nodes": ["title", "intro-body", "crew-photo"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Meet the crew" } },
+            "intro-body": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Six roofers, most with more than ten years on Harbor County roofs. The people who quote the job are the people who do the work." } },
+            "crew-photo": { "componentId": "image", "props": { "src": "media:host-harbor/asset-team", "alt": "The Harbor Roofing crew standing in front of a work truck" } },
+            "promise": { "componentId": "section", "props": { "element": "section", "ariaLabel": "Why homeowners call us back" }, "nodes": ["promise-title", "promise-body"] },
+            "promise-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "Why homeowners call us back" } },
+            "promise-body": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "We answer the phone, we arrive when we said we would, and we photograph every repair so you can see the work without climbing a ladder." } },
+            "words": { "componentId": "section", "props": { "element": "section", "ariaLabel": "What customers say" }, "nodes": ["words-title", "words-row"] },
+            "words-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What customers say" } },
+            "words-row": { "componentId": "muiStack", "props": { "direction": "row", "flexWrap": "wrap" }, "sx": { "gap": 3 }, "nodes": ["quote-dana", "quote-luis"] },
+            "quote-dana": { "componentId": "reusableInstance", "props": { "refId": "cmp-testimonial", "propValues": { "quote": "They found the leak two other companies missed.", "name": "Dana, Harbor Point" } } },
+            "quote-luis": { "componentId": "reusableInstance", "props": { "refId": "cmp-testimonial", "propValues": { "quote": "On time, tidy, and the photos made the invoice easy to trust.", "name": "Luis, Old Mill Road" } } }
+          }
+        }
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": 5, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "The page carries its own app bar, a copy of the site header the layout already has (rule 2).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["bar", "intro"] },
+            "bar": { "componentId": "muiAppBar", "props": { "position": "static" }, "nodes": ["bar-row"] },
+            "bar-row": { "componentId": "muiToolbar", "nodes": ["brand"] },
+            "brand": { "componentId": "muiTypography", "props": { "variant": "h6", "component": "p", "children": "Harbor Roofing" } },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "intro-body"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Meet the crew" } },
+            "intro-body": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Six roofers who know Harbor County roofs." } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    }
+  ]
+}

@@ -69,6 +69,27 @@ export type AiBuildPlanCreateKind =
   | 'form'
   | 'theme-change'
   | 'dataset'
+  | 'email'
+
+/**
+ * What each creation is called in a sentence, and where a member makes one.
+ *
+ * Total over the union deliberately: a refusal that cannot name a creation is
+ * a refusal a member cannot act on, so widening `AiBuildPlanCreateKind`
+ * without saying where the new thing is made does not compile.
+ */
+export const AI_BUILD_PLAN_CREATION_NOUNS: Record<
+  AiBuildPlanCreateKind,
+  { noun: string; where: string }
+> = {
+  component: { noun: 'component', where: 'on the Components page' },
+  form: { noun: 'form', where: 'on the Forms page' },
+  layout: { noun: 'layout', where: 'on the Layouts page' },
+  template: { noun: 'template', where: 'in the Templates library' },
+  'theme-change': { noun: 'theme change', where: 'in the Theme section' },
+  dataset: { noun: 'dataset', where: 'on the Datasets page' },
+  email: { noun: 'email design', where: 'in Emails → Templates' },
+}
 
 export const AI_BUILD_PLAN_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = [
   'component',
@@ -77,6 +98,7 @@ export const AI_BUILD_PLAN_CREATE_KINDS: readonly AiBuildPlanCreateKind[] = [
   'form',
   'theme-change',
   'dataset',
+  'email',
 ]
 
 export interface AiBuildPlanReuse {
@@ -303,7 +325,14 @@ export function parseAiBuildPlan(input: unknown): AiBuildPlanParse {
     const trimmed = value.trim()
     if (trimmed.length > limit) {
       repairs.push(`${path} was over ${limit} characters; truncated`)
-      return trimmed.slice(0, limit).trimEnd()
+      // On the last word break inside the ceiling, not through a word: a
+      // rationale is read by the member confirming the plan, and half a word
+      // reads as a broken answer rather than a long one (AGL-3022). A run of
+      // `limit` characters with no break in it still has to be cut where the
+      // ceiling falls.
+      const cut = trimmed.slice(0, limit)
+      const brk = cut.search(/\s\S*$/)
+      return (brk > 0 ? cut.slice(0, brk) : cut).trimEnd()
     }
     return trimmed
   }

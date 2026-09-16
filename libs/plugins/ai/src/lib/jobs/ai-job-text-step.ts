@@ -23,8 +23,8 @@ import type {
   AiJobReview,
 } from '../model/ai-jobs.types'
 import type { AiStepKind } from '../providers/catalog'
-import { aiModelForStep } from '../providers/routing'
-import { runAiRequest, type AiSystemBlock } from '../runtime/ai-runtime'
+import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
+import { runAiRequest, type AiEffort, type AiSystemBlock } from '../runtime/ai-runtime'
 import type { AssistTokenUsage } from '../usage/assist-usage'
 
 /**
@@ -47,8 +47,8 @@ export function aiJobTextModel(): string {
   return aiModelForStep('job.text')
 }
 
-/** Enough for a few paragraphs; a brief asking for more gets a draft to extend. */
-export const AI_JOB_TEXT_MAX_TOKENS = 1024
+/** The text step's answer ceiling, from the routing table. */
+export const AI_JOB_TEXT_MAX_TOKENS = AI_ROUTING_TABLE['job.text'].maxTokens
 
 /** How much of a brief is sent. Past this a brief is a document, not a brief. */
 export const AI_JOB_BRIEF_MAX_CHARS = 4_000
@@ -72,6 +72,11 @@ export interface AiJobStepOutcome {
   estCostUsd: number
   model: string
   stopReason: string | null
+  /**
+   * The thinking effort the request asked for, recorded on the step
+   * (AGL-2937); absent or `null` when the request named none.
+   */
+  effort?: AiEffort | null
   /** The model declined the brief (`stop_reason: 'refusal'`). Tokens were spent. */
   refused?: boolean
   /**
@@ -156,7 +161,8 @@ export const runAiJobTextStep: AiJobStepRunner = async ({ job, signal, modelFor 
     system: AI_JOB_TEXT_SYSTEM,
     messages: [{ role: 'user', content: aiJobTextPrompt(job) }],
     maxTokens: AI_JOB_TEXT_MAX_TOKENS,
-    thinking: 'adaptive',
+    ...(AI_ROUTING_TABLE['job.text'].thinking ? { thinking: AI_ROUTING_TABLE['job.text'].thinking } : {}),
+    ...(AI_ROUTING_TABLE['job.text'].effort ? { effort: AI_ROUTING_TABLE['job.text'].effort } : {}),
     stream: false,
     ...(signal ? { signal } : {}),
   })

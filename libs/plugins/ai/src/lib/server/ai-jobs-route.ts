@@ -33,6 +33,7 @@ import { aiJobAdmissionRefusal } from '../jobs/ai-job-admission'
 import { AI_JOB_BRIEF_MAX_CHARS } from '../jobs/ai-job-text-step'
 import {
   AI_JOB_INLINE_BUDGET_MS,
+  aiJobNextStepMinimumMs,
   aiJobSummary,
   createAiJob,
   listAiJobs,
@@ -192,6 +193,7 @@ export async function POST(request: Request): Promise<Response> {
       hostId: parsed.hostId,
       inputs: parsed.inputs,
       org: gate.org,
+      uid: gate.uid,
     })
   } catch (error) {
     await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
@@ -208,9 +210,9 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const now = new Date()
-  let jobId: string
+  let created: Awaited<ReturnType<typeof createAiJob>>
   try {
-    const job = await createAiJob(
+    created = await createAiJob(
       gate.firestore,
       {
         orgId: gate.orgId,
@@ -224,13 +226,30 @@ export async function POST(request: Request): Promise<Response> {
       },
       now,
     )
-    jobId = job.$id
   } catch (error) {
     await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
       () => undefined,
     )
     console.error('ai job create failed', { orgId: gate.orgId, error })
     return Response.json({ error: 'The AI job could not be created' }, { status: 500 })
+  }
+  const jobId = created.$id
+
+  // A first step that needs more time than this request has (AGL-2907) is left
+  // queued for the beat, which starts it with a budget of its own: a provider
+  // call this request's timeout cut off would be billed upstream and metered
+  // nowhere. Nothing ran, so the reservation goes back.
+  if (aiJobNextStepMinimumMs(created) > AI_JOB_INLINE_BUDGET_MS) {
+    await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
+      () => undefined,
+    )
+    return Response.json(
+      {
+        job: aiJobSummary(created, now),
+        meter: aiUsageMeter(gate.reservation, { lastCredits: null }),
+      },
+      { status: 200 },
+    )
   }
 
   // The first step, inline, on the reservation the ladder already holds.

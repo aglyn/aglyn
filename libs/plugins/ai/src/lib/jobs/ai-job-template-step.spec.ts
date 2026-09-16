@@ -93,8 +93,10 @@ import {
   aiTemplateDraftSlug,
   createAiJobTemplateStep,
   runAiJobTemplateStep,
+  registerAiTemplateJob,
 } from './ai-job-template-step'
 import { registerAiJobStep } from './ai-jobs'
+import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 
 const NOW = new Date('2026-09-15T20:00:00.000Z')
 const FREE_ORG = {}
@@ -308,7 +310,8 @@ beforeEach(() => {
 })
 
 describe('the template step', () => {
-  it('registers itself as the template runner, with an admission that reads what the page is for', async () => {
+  it('registers the template runner, with an admission that reads what the page is for', async () => {
+    registerAiTemplateJob()
     expect(registerAiJobStep).toHaveBeenCalledWith('template', runAiJobTemplateStep)
     const ask = (inputs: Record<string, unknown>, org: object = STARTER_ORG, hostId: string | null = 'host-1') =>
       aiJobAdmissionRefusal('template', { firestore, orgId: 'org-1', hostId, inputs, org })
@@ -366,7 +369,7 @@ describe('the template step', () => {
     const collection = { id: 'col-blog', name: 'Blog', slug: 'blog' }
     expect(request).toMatchObject({
       model: 'routed-model',
-      tools: [aiDoctrineTreeTool('template')],
+      tools: [aiDoctrineTreeTool('template'), aiInventoryLookupTool()],
       maxTokens: AI_JOB_TEMPLATE_MAX_TOKENS,
       thinking: 'off',
       messages: [

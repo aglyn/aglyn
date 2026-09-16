@@ -49,6 +49,8 @@ export * from './email-record'
  */
 export * from './campaign-container'
 
+export * from './campaign-send-time'
+
 /**
  * What a campaign CAUSED: the four identify moments, kept apart because one
  * visitor action writes several of them. Separate from the revenue module

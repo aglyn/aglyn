@@ -98,7 +98,7 @@ that's the submitted field values. Pick an operator in the **"Only run when"** s
 
 When the condition isn't met the action is skipped, and the skip is **recorded**: the
 [run history](#run-history) gets a `Skipped` row naming the field or fields whose
-condition stopped it — *"Condition on subscribe, plan not met"*. That row is the answer
+condition stopped it — *"Condition on marketingConsent, plan not met"*. That row is the answer
 to "why didn't my automation fire?", and it sits in the same place as the runs that did
 fire. A skip still **doesn't count as a metered run**: nothing executed, so nothing is
 charged.
@@ -110,11 +110,13 @@ throws, which also stops the action — records nothing at all, so an automation
 never fires because of a broken filter has an empty run history rather than an
 explanation. Prefer a condition when you want the skip on the record.
 
-**Example — grow an email list from a signup form:** add a **Checkboxes** field named
-`subscribe` with a single option `Yes, keep me posted` to your form. Then create an
-action on **formSubmission** with the condition *"A field is not empty" → `subscribe`*
-and one step: **Enroll in a list**, picking your audience. Visitors who tick the box
-join the list; everyone else just submits the form.
+**Example — grow an email list from a signup form:** add the **Marketing consent** field
+to your form — a **Checkboxes** field named `marketingConsent`, labeled `Marketing emails`,
+with a single option `Email me news and offers` — and pick it as the
+**Marketing consent field** on the form's own page. If you reword the option, keep it free
+of commas: the Options setting starts a new box at every comma. Then create an action on **formSubmission** with the condition
+*"A field is not empty" → `marketingConsent`* and one step: **Enroll in a list**, picking
+your audience. Visitors who tick the box join the list; everyone else just submits the form.
 
 ### Chain multiple conditions (AND/OR)
 
@@ -123,7 +125,7 @@ One condition rarely tells the whole story, so a condition can be a **chain**: c
 button. With two or more rows a **Match** select appears:
 
 - **All conditions match (AND)** — the default; the action runs only when *every* row
-  passes. E.g. `subscribe` is not empty **and** `plan` equals `Pro`.
+  passes. E.g. `marketingConsent` is not empty **and** `plan` equals `Pro`.
 - **Any condition matches (OR)** — the action runs when *at least one* row passes.
   E.g. `topics` contains `Pricing` **or** `topics` contains `Billing`.
 

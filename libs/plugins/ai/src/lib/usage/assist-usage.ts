@@ -25,14 +25,31 @@
  */
 import { FieldValue } from 'firebase-admin/firestore'
 import {
+  ASSIST_PROVIDER_COST_FIELD,
   assistBandRefuses,
   assistCreditsFromUsd,
+  assistMonthOverage,
   assistOverageCapReached,
   publicAssistCredits,
   resolveAssistBudgetUsd,
   resolveAssistOverageCapUsd,
+  resolveAssistOverageRateUsdPer1k,
   type PublicAssistCredits,
 } from '@aglyn/aglyn/app-utils/assist-credits'
+import {
+  aiOverageRefusal,
+  type AiOverageCapReason,
+} from '../billing/ai-overage-gate'
+import {
+  aiOverageBillsByInvoice,
+  aiOverageGuardsApply,
+} from '../billing/ai-overage-cutover'
+import {
+  AI_BILLING_STANDING_DOC,
+  AI_BILLING_SUBCOLLECTION,
+  readAiOverageMonthLedger,
+} from '../billing/ai-overage-ledger'
+import { readAiOverageStanding } from '../billing/ai-overage-standing'
 import type { AiRefusedBy } from '../model/ai-allotments'
 import {
   AI_HOST_CREDITS_FIELD,
@@ -45,7 +62,7 @@ import {
   assistOrgMonthlyCostLimitUsd,
 } from '@aglyn/aglyn/app-utils/usage-budget'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
-import { estimateAiCostUsd } from '../providers/catalog'
+import { estimateAiBilledUsd, estimateAiProviderCostUsd } from '../providers/catalog'
 import { recordAssistRefusal } from './assist-refusals'
 import {
   announcePlatformFreeSpend,
@@ -59,7 +76,8 @@ import {
   type AssistMeteredOrg,
   type FreeAssistAccount,
 } from './assist-free-taste'
-import { recordUserAiUsage } from './ai-usage-by-user'
+import { aiTokenIncrements, recordUserAiUsage } from './ai-usage-by-user'
+import { AI_USAGE_MONTH_KINDS_FIELD, AI_USAGE_TOKENS_FIELD } from '../model/ai-tokens'
 import {
   aiUsageKindFromRoute,
   type AiUsageKind,
@@ -75,16 +93,17 @@ import {
  *   orgs/{orgId}/assistUsage/{YYYY-MM}     per-org monthly cost telemetry:
  *     { month, messages, inputTokens, outputTokens, cacheReadTokens,
  *       cacheWriteTokens, estCostUsd, byHost: { hostId: credits },
- *       updatedAt }
+ *       kinds: { kind: { requests, estCostUsd, tokens } }, updatedAt }
  *     (`byHost` is each site's credits, which a site's AI allotment is
- *     measured against — AGL-2942)
+ *     measured against — AGL-2942; `kinds` splits the tokens and the
+ *     measured spend by what each model request was for — AGL-2937)
  *   orgs/{orgId}/counters/assistMessagesDaily
  *     fields keyed YYYY-MM-DD → integer (the free-tier daily cap counter;
  *       same field-per-period shape as the other `counters/*` docs)
  *   orgs/{orgId}/assistExchanges/{id}      the VERBATIM half of one exchange:
  *     { uid, question, answer, hostId, createdAt, expiresAt }
  *   orgs/{orgId}/assistSignals/{id}        the DERIVED half, same id:
- *     { route, hostId, model, tier, inputTokens, outputTokens,
+ *     { route, hostId, model, tier, kind, inputTokens, outputTokens,
  *       cacheReadTokens, cacheWriteTokens, estCostUsd, docsPaths,
  *       stopReason, feedback: 'up'|'down'|null, createdAt }
  *
@@ -271,24 +290,46 @@ export interface AssistTokenUsage {
 }
 
 /**
- * Estimated cost in USD for one exchange, at the SERVING model's list
- * rates, rounded to 6dp — telemetry for margin tuning, not billing.
+ * What one exchange DRAWS FROM THE CUSTOMER, at the serving model's billed
+ * rates, rounded to 6dp — the figure `assistCreditsFromUsd` turns into
+ * credits and the one the band, the cap and the invoice are measured in.
  *
  * The rates are the model catalog's (AGL-2939), keyed by model rather than
  * fixed at one model's because `ASSIST_MODEL` is an env override: a
  * one-line incident swap to a dearer model would otherwise keep reporting
  * the cheaper money, and per-org cost would read as roughly right — the
  * failure mode this whole meter exists to prevent. An unknown id is priced
- * at the dearest known tier on purpose, because a cost estimate that errs
- * low is worse than one that errs high, and a docs-only answer is metered
- * under a zero-priced sentinel (`AI_METER_SENTINELS`) so it lands in the
- * same rollup as a served one.
+ * at the dearest known tier on purpose, because an estimate that errs low is
+ * worse than one that errs high, and a docs-only answer is metered under a
+ * zero-priced sentinel (`AI_METER_SENTINELS`) so it lands in the same rollup
+ * as a served one.
+ *
+ * NOT A COST (AGL-3015). A model may be billed above what its provider
+ * charges, so this overstates what the exchange cost us by exactly that
+ * markup. `estimateAssistProviderCostUsd` is the figure a margin or a spend
+ * meter takes.
  */
 export function estimateAssistCostUsd(
   usage: AssistTokenUsage,
   model: string,
 ): number {
-  return estimateAiCostUsd(usage, model)
+  return estimateAiBilledUsd(usage, model)
+}
+
+/**
+ * What one exchange COST US, at the serving model's provider rates, rounded
+ * to 6dp — real money, recorded beside the billed figure so a margin is
+ * taken against a bill we actually pay rather than against a price we
+ * charge.
+ *
+ * At or below `estimateAssistCostUsd` for the same tokens, and equal to it
+ * on every model billed at its provider's list.
+ */
+export function estimateAssistProviderCostUsd(
+  usage: AssistTokenUsage,
+  model: string,
+): number {
+  return estimateAiProviderCostUsd(usage, model)
 }
 
 export interface AssistQuotaVerdict {
@@ -332,6 +373,29 @@ export interface AssistReservation extends AssistQuotaVerdict {
    * the shared type would let a caller believe it had.
    */
   refusedBy: AiRefusedBy
+  /**
+   * WHICH dollar ceiling refused, when `refusedBy` is `'cap'` (AGL-3011).
+   *
+   * `'customer'` is the workspace's own ceiling (AGL-2898) and keeps the
+   * sentence and the 402 it has always had. The other four are Aglyn's own
+   * guards on the overage it extends between invoices: no card on file,
+   * accrual paused, this month's ceiling, and the unpaid balance at its
+   * limit. Absent on every other refusal and on an admitted request.
+   *
+   * The doors need it because the four answer differently: a missing card
+   * and a paused workspace are 402s a person can act on, and a ceiling or a
+   * settling balance are 429s they can only wait out.
+   */
+  capReason?: AiOverageCapReason | null
+  /**
+   * The figure the `cap` refusal was measured against — the month's ceiling
+   * for `'limit'`, the unpaid limit for `'settling'` — so the sentence the
+   * door renders quotes the number that actually refused rather than
+   * re-deriving one that could differ.
+   */
+  overageLimitUsd?: number | null
+  /** Overage accrued and not yet paid for, at the instant of the refusal. */
+  overageUnpaidUsd?: number | null
   /**
    * The allotments that applied to the person asking, measured (AGL-2942):
    * which one refused, which one binds the usage strip, the caller's own
@@ -526,6 +590,37 @@ function announceAllotmentAlerts(
     .catch((error) => console.error('[ai-allotments] alert failed', orgId, error))
 }
 
+/**
+ * The charge this turn may have earned (AGL-3011).
+ *
+ * Off the await path and never able to fail the turn: the tokens are already
+ * spent, and making the answer wait on a Stripe round trip — or losing it to
+ * one — would turn a billing problem into a product one. Loaded when the
+ * first chargeable turn arrives, so the modules that read org billing and
+ * call Stripe are not part of every metered request.
+ *
+ * Returns before loading anything at all while `AI_OVERAGE_INVOICED_FROM`
+ * names no month, which is how this ships: AI overage bills through the
+ * monthly meter exactly as it does today, and this costs one string compare.
+ *
+ * A turn whose process ends before this finishes is covered three ways: the
+ * next turn tries again, the reconcile sweep finishes a half-made charge,
+ * and the gate refuses at the unpaid limit regardless.
+ */
+function chargeAccruedOverage(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  month: string,
+  now: Date,
+): void {
+  if (!aiOverageBillsByInvoice(month)) return
+  void import('../billing/ai-overage-trigger')
+    .then(({ chargeAccruedAiOverage }) =>
+      chargeAccruedAiOverage(firestore, orgId, month, now),
+    )
+    .catch((error) => console.error('[ai-overage] charge failed', orgId, error))
+}
+
 async function reserveInTransaction(
   firestore: FirebaseFirestore.Firestore,
   orgId: string,
@@ -570,6 +665,21 @@ async function reserveInTransaction(
   // that is SOLD past has an overage to cap, so a band that refuses leaves
   // no ceiling to consult: past a wall there is nothing to be over.
   const overageCapUsd = bandRefuses ? null : resolveAssistOverageCapUsd(org)
+  // AGLYN'S OWN GUARDS ON THE OVERAGE IT EXTENDS (AGL-3011), resolved here
+  // for the same reason the ceilings above are: pure arithmetic over a
+  // document the caller already holds, and a transaction that retries must
+  // not re-derive them.
+  //
+  // They apply only where there IS overage to guard — a band that is sold
+  // past, at a rate — and only from the month the platform bills that
+  // overage by invoice. Before that month nothing charges, so nothing is
+  // ever paid for, so an unpaid-balance guard would refuse every workspace
+  // with no invoice to pay. See `ai-overage-cutover.ts`.
+  const guardsOverage =
+    !bandRefuses &&
+    budgetUsd !== null &&
+    resolveAssistOverageRateUsdPer1k(org) !== null &&
+    aiOverageGuardsApply(month)
 
   return firestore.runTransaction(async (tx) => {
     // Every read before any write — Firestore requires that ordering, and it
@@ -587,6 +697,16 @@ async function reserveInTransaction(
     // account month (when the org names an owner) and the platform's day.
     // Inside the transaction with everything else, so the rungs they feed
     // are decided against the same snapshot the counters move under.
+    // The workspace's overage standing (AGL-3011): one document, read only
+    // where the guards apply, beside the reads the gate already makes. The
+    // allotment gate reads a plugin document in this transaction the same
+    // way, and for the same reason — a guard decided against a snapshot the
+    // transaction did not take is a guard a concurrent burst walks past.
+    const standingSnapshot = guardsOverage
+      ? await tx.get(
+          orgRef.collection(AI_BILLING_SUBCOLLECTION).doc(AI_BILLING_STANDING_DOC),
+        )
+      : null
     const accountSnapshot = accountRef ? await tx.get(accountRef) : null
     const platformSnapshot = free
       ? await tx.get(platformFreeSpendRef(firestore, day))
@@ -650,6 +770,57 @@ async function reserveInTransaction(
       return {
         allowed: false,
         refusedBy: 'cap' as const,
+        // Whose ceiling, for the doors (AGL-3011). This one is the
+        // workspace's own, and it keeps the sentence and the 402 it has had
+        // since AGL-2898 — the four below are Aglyn's and have their own.
+        capReason: 'customer' as const,
+        period,
+        dayKey: day,
+        monthKey: month,
+        used,
+        limit,
+        remaining: Math.max(0, limit - used),
+        costUsd,
+        costLimitUsd,
+        budgetUsd,
+        free,
+      }
+    }
+    // AGLYN'S OWN OVERAGE GUARDS (AGL-3011), after the workspace's own
+    // ceiling so a workspace that set a limit is told about ITS limit.
+    //
+    // Four refusals, all `refusedBy: 'cap'` with a `capReason`: no card on
+    // file, accrual paused, this month's ceiling reached, and the unpaid
+    // balance at its limit. The last is the one that makes the bound a
+    // bound — it compares what the month accrued against what it PAID, so
+    // overage stops at the unpaid limit whether or not any charge ever ran.
+    //
+    // Inside the transaction, against the figures the transaction read,
+    // moving no counter: a burst of concurrent requests at the limit cannot
+    // each read "under" and all proceed.
+    const overageGuard =
+      guardsOverage && costUsd !== null && budgetUsd !== null && costUsd >= budgetUsd
+        ? aiOverageRefusal({
+            // Priced the way the invoice prices it, so the figure that
+            // stops here is the figure that would have been charged.
+            overageUsd: assistMonthOverage(org, costUsd).overageMonthlyUsd,
+            paidUsd: readAiOverageMonthLedger(
+              monthlySnapshot?.data() ?? null,
+            ).paidUsd,
+            standing: readAiOverageStanding(
+              standingSnapshot?.exists ? (standingSnapshot.data() ?? null) : null,
+            ),
+            now,
+          })
+        : null
+    if (overageGuard) {
+      recordAssistRefusal(firestore, orgId, month, 'cap')
+      return {
+        allowed: false,
+        refusedBy: 'cap' as const,
+        capReason: overageGuard.capReason,
+        overageLimitUsd: overageGuard.limitUsd,
+        overageUnpaidUsd: overageGuard.unpaidUsd,
         period,
         dayKey: day,
         monthKey: month,
@@ -1017,10 +1188,17 @@ function writeSignalAndRollup(
   signalRef: FirebaseFirestore.DocumentReference,
   record: AssistSignalRecord,
   now: Date,
+  /** What the request was for, as the caller's own rollup names it. */
+  kind: AiUsageKind,
 ): void {
   const increment = FieldValue.increment
   const serverTimestamp = FieldValue.serverTimestamp
   const estCostUsd = estimateAssistCostUsd(record.usage, record.model)
+  // What the same tokens COST US (AGL-3015). Recorded beside the billed
+  // figure rather than derived from it later: a month is a sum over models
+  // and a markup lives on the model, so once the exchanges are added up the
+  // mix is gone and the two can no longer be told apart.
+  const providerCostUsd = estimateAssistProviderCostUsd(record.usage, record.model)
   const deflected = record.deflected === true
   const free = record.free ?? null
   // On the Free taste a `refusal` stop draws no credits (AGL-2925): the
@@ -1044,11 +1222,13 @@ function writeSignalAndRollup(
     hostId: record.hostId,
     model: record.model,
     tier: record.tier,
+    kind,
     inputTokens: record.usage.inputTokens,
     outputTokens: record.usage.outputTokens,
     cacheReadTokens: record.usage.cacheReadTokens,
     cacheWriteTokens: record.usage.cacheWriteTokens,
     estCostUsd,
+    [ASSIST_PROVIDER_COST_FIELD]: providerCostUsd,
     docsPaths: record.docsPaths,
     stopReason: record.stopReason,
     deflected,
@@ -1082,6 +1262,11 @@ function writeSignalAndRollup(
       cacheReadTokens: increment(record.usage.cacheReadTokens),
       cacheWriteTokens: increment(record.usage.cacheWriteTokens),
       estCostUsd: increment(refusedFree ? 0 : estCostUsd),
+      // Our bill for the same turns, credited and refused alike on the same
+      // rule as `estCostUsd` above, so the month's two dollar figures always
+      // describe the same set of exchanges and a margin taken across them is
+      // a margin over one period.
+      [ASSIST_PROVIDER_COST_FIELD]: increment(refusedFree ? 0 : providerCostUsd),
       // The refused half of a Free month, kept beside the credited half so
       // the rollup still says what the month cost us in total. Its own field
       // name (AGL-2986): `refusals` on this document is the gate's map of
@@ -1089,6 +1274,25 @@ function writeSignalAndRollup(
       // over a map replaces the map with the operand.
       refusedTurns: increment(refusedFree ? 1 : 0),
       refusedCostUsd: increment(refusedFree ? estCostUsd : 0),
+      // What each model request was for, with its tokens (AGL-2937): cost
+      // per generation, tokens per kind and the cache hit rate are read off
+      // this map. A docs answer bought nothing and is left out. Both dollar
+      // figures are kept — what the kind drew and what it cost us — because
+      // the staff card reading this map is asking the second question and
+      // the credit meter beside it is asking the first.
+      // A declined Free turn is counted in both.
+      ...(deflected
+        ? {}
+        : {
+            [AI_USAGE_MONTH_KINDS_FIELD]: {
+              [kind]: {
+                requests: increment(1),
+                estCostUsd: increment(estCostUsd),
+                [ASSIST_PROVIDER_COST_FIELD]: increment(providerCostUsd),
+                [AI_USAGE_TOKENS_FIELD]: aiTokenIncrements(record.usage),
+              },
+            },
+          }),
       ...(hostCredits > 0
         ? { [AI_HOST_CREDITS_FIELD]: { [hostId]: increment(hostCredits) } }
         : {}),
@@ -1153,7 +1357,8 @@ export async function recordAssistCost(
   const orgRef = firestore.collection('orgs').doc(orgId)
   const signalRef = orgRef.collection('assistSignals').doc()
   const batch = firestore.batch()
-  writeSignalAndRollup(firestore, batch, orgRef, signalRef, record, now)
+  const kind = record.kind ?? aiUsageKindFromRoute(record.route)
+  writeSignalAndRollup(firestore, batch, orgRef, signalRef, record, now, kind)
   // The person's month, on the SAME batch as the org's (AGL-2928), so the
   // two rollups commit together or not at all.
   recordUserAiUsage(batch, orgRef, {
@@ -1161,9 +1366,11 @@ export async function recordAssistCost(
     month: assistUsageMonth(now),
     estCostUsd: estimateAssistCostUsd(record.usage, record.model),
     hostId: record.hostId,
-    kind: record.kind ?? aiUsageKindFromRoute(record.route),
+    kind,
+    usage: record.usage,
   })
   await batch.commit()
+  chargeAccruedOverage(firestore, orgId, assistUsageMonth(now), now)
   await announceFreeTurn(firestore, record, now)
   return signalRef.id
 }
@@ -1203,20 +1410,24 @@ export async function recordAssistExchange(
     createdAt: serverTimestamp(),
     expiresAt: assistExchangeExpiry(now),
   })
+  // A chat turn is an `assist` request whatever console route it was asked
+  // from — on the signal, the org's month and the asker's month alike.
+  const kind = record.kind ?? 'assist'
   // The analytic half plus the meters — the same writer `recordAssistCost`
   // uses, so the two assist entrypoints can never report different money for
   // the same tokens.
-  writeSignalAndRollup(firestore, batch, orgRef, signalRef, record, now)
-  // And the asker's month, on the same batch (AGL-2928). A chat turn is an
-  // `assist` request whatever console route it was asked from.
+  writeSignalAndRollup(firestore, batch, orgRef, signalRef, record, now, kind)
+  // And the asker's month, on the same batch (AGL-2928).
   recordUserAiUsage(batch, orgRef, {
     uid: record.uid,
     month: assistUsageMonth(now),
     estCostUsd: estimateAssistCostUsd(record.usage, record.model),
     hostId: record.hostId,
-    kind: record.kind ?? 'assist',
+    kind,
+    usage: record.usage,
   })
   await batch.commit()
+  chargeAccruedOverage(firestore, orgId, assistUsageMonth(now), now)
   await announceFreeTurn(firestore, record, now)
   return exchangeRef.id
 }
