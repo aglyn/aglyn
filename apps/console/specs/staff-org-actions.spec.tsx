@@ -591,12 +591,11 @@ describe('StaffOrgActions (AGL-939)', () => {
   })
 
   /**
-   * UNCAPPED OR CAPPED (AGL-3049). The internal workspace is comped through
-   * this dialog after the merge, so the first case walks that exact path:
-   * Enterprise stored directly, no subscription, an Enterprise comp chosen
-   * and its caps lifted. The rest pin what the dialog says about the bands a
-   * comp caps, and that the flag goes over the wire only as a boolean and
-   * only when it changes.
+   * UNCAPPED OR CAPPED (AGL-3049). The first case walks an internal
+   * workspace's path through this dialog: Enterprise stored directly, no
+   * subscription, an Enterprise comp chosen and its caps lifted. The rest pin
+   * what the dialog says about the bands a comp caps, and that the flag goes
+   * over the wire only as a boolean and only when it changes.
    */
   describe('a comp can be uncapped, or raised band by band (AGL-3049)', () => {
     const openOverride = async (orgDoc: Record<string, unknown>) => {

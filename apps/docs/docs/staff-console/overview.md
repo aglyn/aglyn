@@ -214,7 +214,8 @@ or a paused site clears without waiting for the cache.
 The organizations list and the organization's summary card show the effective
 plan, a **stored:** chip when it differs from the stored plan, and a **comp:**
 chip that says **uncapped** and **dormant** where they apply. The override
-dialog and the organization's AI card name an uncapped comp the same way.
+dialog's comp chip does the same, and the organization's AI card says when an
+uncapped comp is why the workspace has no AI credit band.
 
 ### Users admin {#users-admin}
 

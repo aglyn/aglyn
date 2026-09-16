@@ -3206,9 +3206,8 @@ export const RETIRED_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
  * plan's percentages, or whatever a per-org override sets them to.
  *
  * Named rather than derived from the `Pct` suffix, so a new numeric key is a
- * band unless someone decides here that it is a price —
- * `plan-comp.spec.ts` lists every key an uncapped comp lifts and fails on
- * one it did not expect.
+ * band unless someone decides here that it is a price. `plan-comp.spec.ts`
+ * pins these three by name and proves every other numeric key is lifted.
  */
 export const PRICE_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
   'transactionFeePhysicalPct',
