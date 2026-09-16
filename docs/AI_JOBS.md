@@ -432,6 +432,14 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   authored (only a form bound by `formId` is replaced by its entity's design), and
   `/api/forms/submit` collects a submission with no `formId` under its `formName`,
   within the plan's `formSubmissionsPerMonth`.
+- **A typed list is counted within its section (AGL-3061).** Rule 8's tree check
+  (`detectTypedData`) refuses `AI_TYPED_LIST_MIN_ITEMS` (8) or more same-shaped items
+  typed out by hand, counted within the Section they sit in: the unit the plan rule
+  counts a section's `items` in. So two short lists that happen to share a card — a
+  Free About page's four practice areas and its four steps — are not one long list,
+  and a plan the rules kept is never refused at its page for a list it never
+  planned. One section's list split across columns is still one list, a tree with no
+  Section is one group, and rule 1's repeat check still reads the whole page.
 - **Refused before a Confirm.** A plan that passes is asked the kind's admission with
   the plan, as the resume door asks it. A refusal fails the job with the door's
   sentence before any member is shown a Confirm: its plan is not kept, and it holds

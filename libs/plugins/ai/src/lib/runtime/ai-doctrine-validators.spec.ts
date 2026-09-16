@@ -541,6 +541,23 @@ describe('rule 8 — data is bound, not typed', () => {
     expect(detectTypedData(short)).toEqual([])
   })
 
+  it('counts a list within its own section, as a plan counts a section’s items (AGL-3061)', () => {
+    const cards = (count: number, name: string) => Array.from({ length: count }, (_, i) => card(`${name} ${i}`, 'What it covers.'))
+    const grid = (...children: Nested[]): Nested => ({ componentId: 'muiGrid', children })
+    // Two short lists that share a card are not one long one.
+    expect(detectTypedData(tree(page(section(grid(...cards(4, 'Area'))), section(grid(...cards(4, 'Step'))))))).toEqual([])
+    expect(detectTypedData(tree(page(section(grid(...cards(4, 'Area'))), section(grid(...cards(6, 'Service'))))))).toEqual([])
+    // One section's long list is one list, in one grid or split across two.
+    const one = tree(page(section(grid(...cards(AI_TYPED_LIST_MIN_ITEMS, 'Area')))))
+    expect(codes(detectTypedData(one))).toEqual(['typed-list'])
+    const split = tree(page(section(grid(...cards(4, 'Area')), grid(...cards(AI_TYPED_LIST_MIN_ITEMS - 4, 'More')))))
+    expect(detectTypedData(split)).toMatchObject([{ rule: 8, code: 'typed-list', nodeIds: expect.arrayContaining([]) }])
+    expect(detectTypedData(split)[0].nodeIds).toHaveLength(AI_TYPED_LIST_MIN_ITEMS)
+    // A tree with no Section is one list, wherever its items sit.
+    const loose = tree(page(grid(...cards(4, 'Area')), grid(...cards(AI_TYPED_LIST_MIN_ITEMS - 4, 'More'))))
+    expect(codes(detectTypedData(loose))).toEqual(['typed-list'])
+  })
+
   it('in a plan: a long list is bound, and a list the site already holds is bound to it', () => {
     const typed = planOf({ screens: [screen({ sections: [{ name: 'price list', uses: [], items: 12 }] })] })
     expect(codes(detectPlanTypedData(typed, INVENTORY))).toEqual(['plan-typed-list'])

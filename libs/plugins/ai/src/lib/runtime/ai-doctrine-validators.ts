@@ -330,20 +330,22 @@ function repeatedByData(tree: AiDoctrineTree, visit: Visit): boolean {
 /**
  * Shapes that repeat at least `minCount` times, reported only where they are
  * the outermost repeat: the header inside each of twelve cards repeats
- * because the card does, and the fix is the card.
+ * because the card does, and the fix is the card. `groupOf` counts each
+ * group's repeats apart; absent, the whole tree is one group.
  */
 function repeatedShapes(
   tree: AiDoctrineTree,
   index: ShapeIndex,
   minNodes: number,
   minCount: number,
+  groupOf: (visit: Visit) => string = () => tree.rootId,
 ): Array<{ shape: string; ids: string[] }> {
   const byShape = new Map<string, string[]>()
   for (const visit of index.visits) {
     if (visit.id === tree.rootId) continue
     if ((index.sizeOf.get(visit.id) ?? 0) < minNodes) continue
     if (repeatedByData(tree, visit)) continue
-    const shape = index.shapeOf.get(visit.id) as string
+    const shape = JSON.stringify([groupOf(visit), index.shapeOf.get(visit.id)])
     byShape.set(shape, [...(byShape.get(shape) ?? []), visit.id])
   }
   const repeated = [...byShape.entries()].filter(([, ids]) => ids.length >= minCount)
@@ -735,14 +737,24 @@ export function detectOffBrandEmail(
  * dataset or a content collection it stays current; typed, it is a copy that
  * goes stale. Instances of one component filled in side by side are the same
  * list in a component's clothes, and are counted the same way.
+ *
+ * A list is counted within the Section it sits in, the unit a plan counts a
+ * section's items in (AGL-3061): a page's four practice areas and its four
+ * steps are two short lists that happen to share a card, not one long one,
+ * and a plan that kept them must not build a page this refuses. The same
+ * list split across a section's columns is still one list. A tree with no
+ * Section is one group.
  */
 export function detectTypedData(tree: AiDoctrineTree): AiDoctrineViolation[] {
   const index = indexShapes(tree)
+  const sectionOf = (visit: Visit): string =>
+    [...visit.ancestors].reverse().find((id) => tree.nodes[id]?.componentId === 'section') ?? tree.rootId
   const violations: AiDoctrineViolation[] = repeatedShapes(
     tree,
     index,
     AI_REPEAT_MIN_NODES - 1,
     AI_TYPED_LIST_MIN_ITEMS,
+    sectionOf,
   ).map(({ ids }) => ({
     rule: 8,
     code: 'typed-list',
