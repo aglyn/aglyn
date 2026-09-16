@@ -15,10 +15,6 @@
  * limitations under the License.
  */
 
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
 /**
  * ESLint rule: a MUI `Table` drawn outside the shared table components.
  *
@@ -66,21 +62,16 @@ import { fileURLToPath } from 'node:url'
  *   - **A raw HTML `<table>`** is not a MUI `Table` and is not this rule's —
  *     an email template has to be built from them.
  *
- * ## The allowlist, and why it may only shrink
+ * ## No allowlist
  *
- * `no-raw-mui-table-allowlist.json` names files excused from the rule, each
- * with its reason. A file on it that no longer draws a raw table is reported
- * as a stale row, so the list cannot outlive what it excuses. A new raw table
- * is refused, not recorded.
+ * Nothing is excused. A table that must sit inside another table's cell (a
+ * tree's subtree) is `ScrollTable` with `nested`, which draws no box of its
+ * own; there is no table this rule refuses that has no place to go.
  */
-
-const RULE_DIR = dirname(fileURLToPath(import.meta.url))
 
 /** The one module that may render MUI's `Table`: the box goes around it there. */
 export const SCROLL_TABLE_MODULE =
   'libs/shared/ui/jsx/src/lib/components/scroll-table.component.tsx'
-
-const ALLOWLIST_FILE = join(RULE_DIR, 'no-raw-mui-table-allowlist.json')
 
 /** The components a raw table is drawn with. */
 const TABLE_COMPONENTS = new Set(['Table', 'TableContainer'])
@@ -89,16 +80,6 @@ const TABLE_COMPONENTS = new Set(['Table', 'TableContainer'])
 function subpathComponent(source) {
   const match = /^@mui\/material\/(Table|TableContainer)$/.exec(source ?? '')
   return match ? match[1] : null
-}
-
-/** The rows of the allowlist file, read once per lint run. */
-let defaultAllowlist
-function readDefaultAllowlist() {
-  if (!defaultAllowlist) {
-    const raw = JSON.parse(readFileSync(ALLOWLIST_FILE, 'utf8'))
-    defaultAllowlist = (raw.files ?? []).map((row) => row.path)
-  }
-  return defaultAllowlist
 }
 
 /**
@@ -129,16 +110,7 @@ export default {
         '— a raw MUI Table is cut off by its card with no way to scroll to ' +
         'the rest',
     },
-    schema: [
-      {
-        type: 'object',
-        properties: {
-          // Test seam: the RuleTester hands its own rows instead of the file.
-          allow: { type: 'array', items: { type: 'string' } },
-        },
-        additionalProperties: false,
-      },
-    ],
+    schema: [],
     messages: {
       rawTable:
         'A raw MUI `{{component}}` is cut off by the card around it once its ' +
@@ -147,12 +119,9 @@ export default {
         'jobs, people, orders, anything paged or sorted — is `ListTable` ' +
         "('@aglyn/shared-ui-jsx/components/list-table.component'). Any other " +
         "table is `ScrollTable` ('@aglyn/shared-ui-jsx/components/" +
-        "scroll-table.component'): same props as `Table`, and " +
-        '`ContainerProps` for its scroll box.',
-      staleAllowlist:
-        'This file no longer draws a raw MUI `Table`, so its row in ' +
-        '`tools/lint-rules/no-raw-mui-table-allowlist.json` excuses nothing. ' +
-        'Delete the row: the list only shrinks.',
+        "scroll-table.component'): same props as `Table`, plus " +
+        '`ContainerProps` for its scroll box and `nested` for a table ' +
+        "inside another table's cell.",
     },
   },
 
@@ -160,8 +129,6 @@ export default {
     const filename = context.filename ?? context.getFilename?.()
     if (isRepoPath(filename, SCROLL_TABLE_MODULE)) return {}
 
-    const allow = context.options[0]?.allow ?? readDefaultAllowlist()
-    const allowlisted = allow.some((path) => isRepoPath(filename, path))
     const sourceCode = context.sourceCode ?? context.getSourceCode()
 
     /** Import bindings of a table component: variable → component name. */
@@ -170,13 +137,10 @@ export default {
     const namespaces = new Set()
     const jsxOpenings = []
     const reported = new Set()
-    let violations = 0
 
     const report = (node, component) => {
       if (reported.has(node)) return
       reported.add(node)
-      violations += 1
-      if (allowlisted) return
       context.report({ node, messageId: 'rawTable', data: { component } })
     }
 
@@ -284,7 +248,7 @@ export default {
         if (component) report(node, component)
       },
 
-      'Program:exit'(program) {
+      'Program:exit'() {
         // JSX first, resolved by scope rather than read off the variable's
         // references: typescript-eslint records a JSX name as a reference
         // and espree does not, and the answer must not depend on the parser.
@@ -316,9 +280,6 @@ export default {
             if (parent?.type === 'TSTypeQuery') continue
             report(identifier, component)
           }
-        }
-        if (allowlisted && violations === 0) {
-          context.report({ node: program, messageId: 'staleAllowlist' })
         }
       },
     }

@@ -234,10 +234,8 @@ export default [
       // its widest unbreakable cell — so a table outgrowing its card is cut
       // off at the edge with no way to scroll to the rest (AGL-3045). A record
       // list goes through `ListTable`; every other table through
-      // `ScrollTable`. ERROR, with its backlog pinned file by file in
-      // `tools/lint-rules/no-raw-mui-table-allowlist.json`: a new raw table
-      // is refused, and a row whose file no longer draws one is itself
-      // reported, so the list only shrinks.
+      // `ScrollTable`. ERROR, with nothing excused: every table in the console
+      // and its plugins is drawn one of those two ways.
       'aglyn/no-raw-mui-table': 'error',
       'mobx/exhaustive-make-observable': 'off',
       'mobx/unconditional-make-observable': 'off',

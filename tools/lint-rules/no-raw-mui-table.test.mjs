@@ -31,7 +31,7 @@
 // will switch it off rather than argue with it.
 
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { RuleTester } from 'eslint'
@@ -51,9 +51,6 @@ const ruleTester = new RuleTester({
 
 const CARD = '/repo/libs/plugins/ai/src/lib/components/staff-org-ai-card.component.tsx'
 const WRAPPER = `/repo/${SCROLL_TABLE_MODULE}`
-const PENDING = 'apps/console/components/pending-table.component.tsx'
-/** Every case runs against an empty allowlist unless it says otherwise. */
-const NONE = [{ allow: [] }]
 
 const raw = (component) => ({ messageId: 'rawTable', data: { component } })
 
@@ -62,7 +59,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // THE FIX. Same rows and cells; the table is drawn through the wrapper.
     {
       filename: CARD,
-      options: NONE,
       code: `import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
          import { TableBody, TableCell, TableHead, TableRow } from '@mui/material'
          const Tokens = ({ kinds }: any) => (
@@ -78,7 +74,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // A record list, through the grid.
     {
       filename: CARD,
-      options: NONE,
       code: `import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
          const Jobs = ({ rows, columns }: any) => <ListTable rows={rows} columns={columns} hideFooter />`,
     },
@@ -87,7 +82,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // box goes around it.
     {
       filename: WRAPPER,
-      options: NONE,
       code: `import { Table, TableContainer } from '@mui/material'
          export const ScrollTable = (props: any) => (
            <TableContainer><Table {...props} /></TableContainer>
@@ -97,7 +91,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // An import nothing renders draws nothing.
     {
       filename: CARD,
-      options: NONE,
       code: `import { Alert, Table, Stack } from '@mui/material'
          const C = () => <Stack><Alert /></Stack>`,
     },
@@ -105,7 +98,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // Types draw nothing either.
     {
       filename: CARD,
-      options: NONE,
       code: `import type { TableProps } from '@mui/material'
          import { type TableContainerProps } from '@mui/material'
          import { Table } from '@mui/material'
@@ -115,7 +107,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // A component that happens to share the name, from somewhere else.
     {
       filename: CARD,
-      options: NONE,
       code: `import { Table } from './pricing-table'
          const C = () => <Table plans={[]} />`,
     },
@@ -123,7 +114,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // Shadowed: the JSX resolves to the local binding, not the import.
     {
       filename: CARD,
-      options: NONE,
       code: `import { Table } from '@mui/material'
          const C = ({ Custom }: any) => {
            const Table = Custom
@@ -134,7 +124,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // Other MUI table parts, and other components on the subpath shape.
     {
       filename: CARD,
-      options: NONE,
       code: `import TableBody from '@mui/material/TableBody'
          import { tableClasses } from '@mui/material/Table'
          import * as Mui from '@mui/material'
@@ -146,16 +135,7 @@ ruleTester.run('no-raw-mui-table', rule, {
     // A raw HTML table is not a MUI Table — an email template is built of them.
     {
       filename: CARD,
-      options: NONE,
       code: `const C = () => <table><tbody><tr><td>{'Hello'}</td></tr></tbody></table>`,
-    },
-
-    // An allowlisted file that still draws one is excused, and is not stale.
-    {
-      filename: `/repo/${PENDING}`,
-      options: [{ allow: [PENDING] }],
-      code: `import { Table } from '@mui/material'
-         const C = () => <Table />`,
     },
   ],
 
@@ -164,7 +144,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // bare table is the one child that does.
     {
       filename: CARD,
-      options: NONE,
       code: `import {
            Alert,
            Chip,
@@ -196,7 +175,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // An alias is the same component.
     {
       filename: CARD,
-      options: NONE,
       code: `import { Table as MuiTable } from '@mui/material'
          const C = () => <MuiTable size="small" />`,
       errors: [raw('Table')],
@@ -206,7 +184,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // it — and the `{ default as … }` spelling of the same thing.
     {
       filename: CARD,
-      options: NONE,
       code: `import Table from '@mui/material/Table'
          import { default as Container } from '@mui/material/TableContainer'
          const C = () => <Container><Table size="small" /></Container>`,
@@ -216,7 +193,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // A namespace import, in JSX and as a value.
     {
       filename: CARD,
-      options: NONE,
       code: `import * as Mui from '@mui/material'
          const Box = Mui.TableContainer
          const C = () => <Box><Mui.Table /></Box>`,
@@ -226,7 +202,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // A hand-rolled scroll box beside the shared one.
     {
       filename: CARD,
-      options: NONE,
       code: `import { Table, TableContainer } from '@mui/material'
          const C = () => (
            <TableContainer sx={{ overflowX: 'auto' }}>
@@ -239,7 +214,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // Every non-JSX way to use it still renders it somewhere.
     {
       filename: CARD,
-      options: NONE,
       code: `import { styled } from '@mui/material/styles'
          import { Box, Table } from '@mui/material'
          const Dense = styled(Table)({ tableLayout: 'fixed' })
@@ -250,7 +224,6 @@ ruleTester.run('no-raw-mui-table', rule, {
     // A re-export hands the raw component to a module that never imports MUI.
     {
       filename: CARD,
-      options: NONE,
       code: `export { Table, TableRow } from '@mui/material'
          export { default as Grid } from '@mui/material/Table'
          export * from '@mui/material/TableContainer'`,
@@ -260,40 +233,15 @@ ruleTester.run('no-raw-mui-table', rule, {
     // Deferred, it is still a raw table once it loads.
     {
       filename: CARD,
-      options: NONE,
       code: `const Lazy = lazy(() => import('@mui/material/Table'))
          const Required = require('@mui/material/TableContainer')`,
       errors: [raw('Table'), raw('TableContainer')],
     },
-
-    // A row for a file that no longer draws one excuses nothing.
-    {
-      filename: `/repo/${PENDING}`,
-      options: [{ allow: [PENDING] }],
-      code: `import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
-         const C = () => <ScrollTable />`,
-      errors: [{ messageId: 'staleAllowlist' }],
-    },
   ],
 })
 
-// The allowlist file itself: every row names a file that exists, once, with a
-// reason — a row for a deleted or renamed file cannot be caught by linting it.
-const allowlist = JSON.parse(
-  readFileSync(join(ROOT, 'tools/lint-rules/no-raw-mui-table-allowlist.json'), 'utf8'),
-)
-assert.ok(Array.isArray(allowlist.files), 'allowlist.files is an array')
-const seen = new Set()
-for (const row of allowlist.files) {
-  assert.equal(typeof row.path, 'string', 'every row names a path')
-  assert.ok(!seen.has(row.path), `${row.path} is listed once`)
-  seen.add(row.path)
-  assert.ok(existsSync(join(ROOT, row.path)), `${row.path} exists`)
-  assert.ok(
-    typeof row.reason === 'string' && row.reason.trim().length > 0,
-    `${row.path} carries a reason`,
-  )
-}
+// The one exempt module is named by path, so a rename must fail here rather
+// than leave the rule exempting a file that no longer exists.
 assert.ok(
   existsSync(join(ROOT, SCROLL_TABLE_MODULE)),
   `${SCROLL_TABLE_MODULE} exists — the one module the rule lets draw a table`,
