@@ -53,6 +53,11 @@ import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
 import { AI_JOB_TEMPLATE_INSTRUCTIONS } from '../jobs/ai-job-template-step'
 import { AI_JOB_TEXT_SYSTEM } from '../jobs/ai-job-text-step'
 import { AI_JOB_THEME_INSTRUCTIONS } from '../jobs/ai-job-theme-step'
+import {
+  AI_JOB_WORKFLOW_DRAFT_INSTRUCTIONS,
+  AI_JOB_WORKFLOW_EXPLAIN_INSTRUCTIONS,
+} from '../jobs/ai-job-workflow-step'
+import { aiAutomationTool, aiWorkflowExplanationTool } from '../tools/ai-workflow-tool'
 import { AI_SEO_FIXES_INSTRUCTIONS, AI_SEO_SITE_INSTRUCTIONS } from '../jobs/ai-job-seo-step'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
 import { aiComponentTool } from '../tools/ai-component-tool'
@@ -201,6 +206,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     caches: false,
     why: "the audit's site and fix passes, on the same fast tier as a listing",
   },
+  'jobs/ai-job-workflow-step.ts': {
+    step: 'job.workflow',
+    caches: true,
+    why: 'the doctrine and the automation vocabulary, or the explanation rules; no site inventory block',
+  },
   'jobs/ai-job-text-step.ts': {
     step: 'job.text',
     caches: false,
@@ -317,6 +327,20 @@ const REQUESTS: Record<string, Composed> = {
     step: 'job.theme',
     blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_JOB_THEME_INSTRUCTIONS }),
     tools: () => [aiThemeTool()],
+  },
+  // An automation drafted from a description (AGL-2919): the site's forms and
+  // datasets ride in the user turn, so the system blocks carry no inventory.
+  'workflow-draft': {
+    door: 'jobs/ai-job-workflow-step.ts',
+    step: 'job.workflow',
+    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_JOB_WORKFLOW_DRAFT_INSTRUCTIONS }),
+    tools: () => [aiAutomationTool()],
+  },
+  'workflow-explain': {
+    door: 'jobs/ai-job-workflow-step.ts',
+    step: 'job.workflow',
+    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_JOB_WORKFLOW_EXPLAIN_INSTRUCTIONS }),
+    tools: () => [aiWorkflowExplanationTool()],
   },
   // The default listing shape: the three fields a page's SEO card asks for,
   // with no share image, no target keywords and no other titles to avoid.
@@ -488,6 +512,8 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       form: { prefixTokens: 2_512, minimum: 1_024, caches: true, toolsStable: true },
       'page-section': { prefixTokens: 4_562, minimum: 1_024, caches: true, toolsStable: true },
       theme: { prefixTokens: 3_309, minimum: 1_024, caches: true, toolsStable: true },
+      'workflow-draft': { prefixTokens: 4_547, minimum: 1_024, caches: true, toolsStable: true },
+      'workflow-explain': { prefixTokens: 2_194, minimum: 1_024, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
       'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },
       'seo-site': { prefixTokens: 951, minimum: 4_096, caches: false, toolsStable: true },

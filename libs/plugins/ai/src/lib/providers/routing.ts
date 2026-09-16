@@ -251,6 +251,17 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       "an email's node map written as JSON, with three subject lines and three preheaders beside it",
     eval: { kinds: ['email'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
   },
+  'job.workflow': {
+    // An automation drafted from a description, or one explained (AGL-2919):
+    // which trigger and which steps a description means is the judgment the
+    // step sells, so it thinks before it answers.
+    thinking: 'adaptive',
+    effort: null,
+    maxTokens: 4000,
+    maxTokensBasis:
+      'the largest automation the tool accepts, 6,000 characters written out as JSON, at three characters a token with as much again to think in, as ai-job-workflow-step.spec.ts measures it',
+    eval: { kinds: ['workflow'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+  },
   'job.seo': {
     thinking: null,
     effort: null,

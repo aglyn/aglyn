@@ -16,7 +16,13 @@
  */
 
 import type { HostTheme } from '@aglyn/shared-data-types'
+import { validateHostAction } from '@aglyn/aglyn/app-utils/actions'
 import type { HostThemeSource } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import {
+  aiAutomationDraft,
+  emptyAiAutomationRecords,
+  type AiAutomationRecords,
+} from '../model/ai-automation-draft'
 import { AI_BUILD_PLAN_CREATE_KINDS, type AiBuildPlanCreateKind } from '../model/ai-build-plan'
 import {
   aiUnrestrictedPlanCapabilities,
@@ -24,9 +30,16 @@ import {
   type AiPlanCreation,
 } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
+import type { AiAutomationCapabilities } from '../model/ai-workflow-job'
 import type { AiStepKind } from '../providers/catalog'
 import type { AiEffort, AiUsage } from '../providers/contract'
 import { parseAiThemeToolInput } from '../tools/ai-theme-tool'
+import {
+  AI_AUTOMATION_OVERSIZE_CODES,
+  AI_AUTOMATION_UNREADABLE_CODES,
+  readAiAutomationAnswer,
+  readAiWorkflowExplanation,
+} from '../tools/ai-workflow-tool'
 import { aiAnswerTree, aiDoctrinePlanCheck, aiDoctrineTreeCheck, aiDoctrineTreeContext } from './ai-doctrine'
 import {
   AI_SEO_DESCRIPTION_MAX,
@@ -88,6 +101,7 @@ export type AiEvalKind =
   | 'blog'
   | 'text'
   | 'chat'
+  | 'workflow'
 
 export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'page',
@@ -103,6 +117,7 @@ export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'blog',
   'text',
   'chat',
+  'workflow',
 ]
 
 /** The document kind a tree kind is held to; a section rewrite is one reusable block. */
@@ -217,6 +232,13 @@ export interface AiEvalCase {
   siteTheme?: HostTheme
   themeSource?: HostThemeSource
   /**
+   * For an automation brief (AGL-2919): what the workspace can run, and the
+   * site's records the answer's words are looked up among. Absent, the
+   * workspace runs everything and the site holds nothing.
+   */
+  automationCapabilities?: AiAutomationCapabilities
+  automationRecords?: AiAutomationRecords
+  /**
    * What the workspace may create on the case's site (AGL-3030): a brief
    * for a workspace that keeps no reusable components is held to the inline
    * doctrine, and its plan to what the workspace may create. Absent, the
@@ -255,6 +277,7 @@ export const AI_EVAL_FLOORS: Readonly<Record<AiEvalKind, AiEvalFloor>> = {
   blog: { passRate: 1, meanScore: 0.9 },
   text: { passRate: 1, meanScore: 0.9 },
   chat: { passRate: 1, meanScore: 0.9 },
+  workflow: { passRate: 1, meanScore: 0.9 },
 }
 
 /** A rubric passes at this mean, with no criterion below three. */
@@ -451,6 +474,52 @@ function checkTheme(evalCase: AiEvalCase, answer: unknown): Checked {
   }
 }
 
+/**
+ * An automation (AGL-2919), or an explanation of one: read through the tool's
+ * own reader, and an automation also made into the document the workflows
+ * plugin stores and held to the Actions editor's validator.
+ */
+function checkWorkflow(evalCase: AiEvalCase, answer: unknown): Checked {
+  if (!isRecord(answer)) {
+    return { readable: false, rules: false, budget: false, findings: ['workflow-not-a-call'] }
+  }
+  const publish = codes(detectPublishIntent(answer))
+  if ('summary' in answer) {
+    const read = readAiWorkflowExplanation(answer)
+    const lines = [
+      String(answer['summary'] ?? ''),
+      ...(Array.isArray(answer['points']) ? answer['points'] : []),
+      ...(Array.isArray(answer['suggestions']) ? answer['suggestions'] : []),
+    ].map(String)
+    const offVoice = codes(
+      detectOffVoiceCopy(lines.map((text, index) => ({ at: `line[${index}]`, text })), evalCase.framing),
+    )
+    const found = codes(read.violations)
+    return {
+      readable: !found.includes('explanation-shape'),
+      rules: read.value !== null && publish.length === 0 && offVoice.length === 0,
+      budget: true,
+      findings: [...found, ...publish, ...offVoice],
+    }
+  }
+  const capabilities = evalCase.automationCapabilities ?? { crm: true, webhooks: true, bookings: true }
+  const read = readAiAutomationAnswer(answer, capabilities)
+  const found = codes(read.violations)
+  const unreadable = found.filter((code) => AI_AUTOMATION_UNREADABLE_CODES.includes(code))
+  const oversize = found.filter((code) => AI_AUTOMATION_OVERSIZE_CODES.includes(code))
+  const broken = found.filter((code) => !unreadable.includes(code) && !oversize.includes(code))
+  const invalid =
+    read.value && !read.value.unsupported
+      ? validateHostAction(aiAutomationDraft(read.value, evalCase.automationRecords ?? emptyAiAutomationRecords()).action)
+      : null
+  return {
+    readable: unreadable.length === 0,
+    rules: broken.length === 0 && publish.length === 0 && invalid === null,
+    budget: oversize.length === 0,
+    findings: [...found, ...publish, ...(invalid ? [`workflow-invalid:${invalid}`] : [])],
+  }
+}
+
 function checkAnswer(evalCase: AiEvalCase, answer: unknown): Checked {
   const outputKind = AI_EVAL_TREE_OUTPUT[evalCase.kind]
   if (outputKind) return checkTree(evalCase, outputKind, answer)
@@ -467,6 +536,8 @@ function checkAnswer(evalCase: AiEvalCase, answer: unknown): Checked {
       return checkCopy(evalCase, answer, { maxWords: AI_EVAL_TEXT_MAX_WORDS })
     case 'chat':
       return checkCopy(evalCase, answer, { maxChars: AI_EVAL_CHAT_MAX_CHARS }, chatLinks(evalCase))
+    case 'workflow':
+      return checkWorkflow(evalCase, answer)
     default:
       return { readable: false, rules: false, budget: false, findings: ['kind-unknown'] }
   }

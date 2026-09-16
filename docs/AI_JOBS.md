@@ -1799,3 +1799,105 @@ in three modes — but it shares the runtime, the meters and the rules above.
   (`assistHistoryDigest`). The digest leads the conversation as a user turn,
   so the thread still opens user-side. `messages` never caches, so this is the
   route's uncached spend: about 5,200 characters at worst rather than 8,000.
+
+## The workflow kind
+
+`workflow` (AGL-2919) drafts an automation from a description, explains a saved
+automation, or explains why one of its runs failed. It is one unplanned kind
+with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
+`diagnose`. An explanation names its automation by `inputs.targetType`
+(`action` or `workflow`) and `inputs.targetId`, and a run's explanation adds
+`inputs.runId`, the run's entry in the site's activity log.
+
+- **Code.** The runner, its budget, its instructions and its admission are
+  `src/lib/jobs/ai-job-workflow-step.ts`, registered by `registerAiWorkflowJob`
+  from `server.ts`; its reads are `ai-workflow-records.ts`. The modes, the
+  vocabulary and what a person reads are `src/lib/model/ai-workflow-job.ts`;
+  the two strict tools and their readers are `src/lib/tools/ai-workflow-tool.ts`;
+  an answer is made into the stored automation by
+  `src/lib/model/ai-automation-draft.ts`, and a saved automation and a run are
+  outlined for an explanation by `src/lib/model/ai-automation-outline.ts`.
+- **The vocabulary is the platform's.** A draft may start on any host event —
+  the on-page events, which watch one element of one page, are left out — and
+  take the server and flow steps: email, notify, enroll in a list, assign to a
+  campaign, run a workflow, write to a dataset, post a webhook, show a site
+  alert, wait, wait for an event, end the flow, and the five CRM steps. The
+  cached instructions list them from `HOST_EVENT_TYPES`,
+  `HOST_EVENT_PAYLOAD_KEYS` and `HOST_ACTION_STEP_LABELS`, so what the model is
+  shown is what its answer is held to. A trigger or step that needs the CRM,
+  webhooks or bookings is refused, with a re-ask, on a workspace whose plan
+  lacks it — the entitlements the executor reads before it runs one.
+- **What the model is shown to draft.** The doctrine's cached block, the
+  drafting instructions (cached) and `submit_automation`, a strict tool whose
+  every field a step does not use is `null`. The user turn carries whether the
+  workspace has the CRM, webhooks and bookings, the site's forms with their
+  field names, its datasets by name, and the brief. It carries no email list,
+  campaign, workflow, webhook, pipeline, contact or form submission.
+- **Words, then ids.** The answer names each list, campaign, workflow, webhook,
+  dataset, form and deal stage in the description's words. After the answer,
+  in code, each is looked up among the site's records — the Actions editor's
+  picker windows, and the pipelines the site may see — and becomes that
+  record's id when the words name exactly one. Words that name none, or more
+  than one, are kept as a placeholder: the words in square brackets where the
+  record belongs.
+- **Placeholders** are the core's convention
+  (`libs/aglyn/src/lib/app-utils/automation-placeholders.ts`): a value somebody
+  still has to supply, in square brackets, read only in the fields a person
+  types into. A bracketed list name matches no list, and a bracketed condition
+  value matches no event, so a placeholder can never act on the wrong record.
+  An email the description leaves a fact out of carries one too. The Actions
+  list counts them on a row, the editor highlights each field and picker
+  holding one, and switching such an automation on asks first, naming them.
+  The draft's output note lists them.
+- **The draft is written OFF, by its owner.** The workflows plugin registers
+  the `automation` writer on the resource-drafts seam
+  (`libs/plugins/workflows/src/lib/server-automation-drafts.ts`): the stored
+  shape the editor saves, each step's own fields, `validateHostAction`, the
+  site role, the `actions` entitlement and the live-action cap, inside one
+  transaction. The write is keyed by the job's id, so a step run again reports
+  its draft and spends nothing, and a refusal at the cap stops the job
+  `needs_review` with `reason: 'limit'`.
+- **What an explanation is shown.** An outline, never the stored document:
+  what starts the automation, its conditions, and each step by the label the
+  editor gives it, with whether each list, campaign, workflow, webhook or
+  dataset it names still exists on the site, looked up in code. Every email
+  address becomes `[email address]` and a teammate is "a named teammate"; an
+  on-page step's selector, HTML or script is not shown. A run's explanation
+  adds when the run happened, on what, what it did and the errors the run
+  history recorded — never the event's payload, which holds what a visitor
+  submitted. The answer arrives through `submit_explanation` (a summary, the
+  points in order, what to check or change) and becomes a `text` output. It
+  changes nothing.
+- **Admission.** Every mode needs a site of the job's own org with the
+  Automation plugin on for it and past its release flag. A draft also needs
+  the writer registered and the owner's `refusal` for the member; an
+  explanation needs the automation to exist, and a run's explanation a FAILED
+  run of that automation.
+- **Spend.** Each step is metered like any other. Running the drafted
+  automation, once a member switches it on, counts against the site's action
+  runs and never against AI credits.
+- **Routing and time.** `job.workflow` runs on the balanced tier with adaptive
+  thinking and a 4,000-token ceiling: the largest answer `submit_automation`
+  accepts, `AI_AUTOMATION_ANSWER_MAX_CHARS` (6,000 characters written out), at
+  three characters a token with as much again to think in. A longer answer is
+  refused and re-asked shorter. It sends no site inventory block and so makes
+  no lookup; its reads are the declared 4 s,
+  `AI_WORKFLOW_RECORDS_READ_MS`. Its cached prefixes are 4,547 tokens drafting
+  and 2,194 explaining, as the ledger spec measures them.
+
+| step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
+| --- | --- | --- | --- | --- |
+| `workflow` | balanced | 0 | 4,000 / 4,000 / 2,666 | 2 × 3 s + 2 × 66,667 ms + 3 s + 4 s = 146,334 ms |
+
+- **Evals.** `tools/ai-eval/cases/workflow` holds a drafted automation — the
+  description from the issue, with a placeholder where the welcome email lacks
+  a phone number — and an explanation, each with controls that fail: a trigger
+  that is not a host event, a step the plan lacks, a request to switch the
+  automation on, eleven steps, an explanation with no summary, and one that
+  names an address.
+- **The published disclosure.** Drafting sends the brief and the names and
+  field names of the site's forms and datasets, which the published Anthropic
+  row names for a generation job. Explaining sends an automation's settings
+  and a run's recorded errors, which it does not name, so the doors stay behind
+  `release_ai_generative` until wording that names them is published;
+  `assist-anthropic-subprocessor-gate.spec.ts` records both.

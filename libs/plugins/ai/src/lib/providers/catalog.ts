@@ -394,6 +394,7 @@ export type AiStepKind =
   | 'job.plan'
   | 'job.email'
   | 'job.campaign'
+  | 'job.workflow'
 
 /** The tier each step kind is served from when no setting overrides it. */
 export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
@@ -428,6 +429,10 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   // saves. A campaign is the same email, drafted into a campaign.
   'job.email': 'balanced',
   'job.campaign': 'balanced',
+  // An automation is a small structured answer whose judgment is choosing the
+  // trigger and steps a description means, and an explanation reads one
+  // closely; the fast tier re-asks more than it saves on both (AGL-2919).
+  'job.workflow': 'balanced',
 }
 
 /** The first catalog model of a tier on a provider, or the provider's first model. */

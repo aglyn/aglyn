@@ -28,6 +28,7 @@ import { registerAiPageJob } from './jobs/ai-job-page-step'
 import { registerAiEmailJob } from './jobs/ai-job-email-step'
 import { registerAiCampaignJob } from './jobs/ai-job-campaign-step'
 import { registerAiSiteJob } from './jobs/ai-job-site-step'
+import { registerAiWorkflowJob } from './jobs/ai-job-workflow-step'
 import { ensureFirstPartyAiProviders } from './providers/registry'
 import { aiAssistHandler } from './server/ai-assist'
 import { POST as runAiJobsBeat } from './server/ai-jobs-beat-route'
@@ -97,6 +98,9 @@ function registerAiJobKinds(): void {
   // plugins write on the resource-draft seam (AGL-2912).
   registerAiEmailJob()
   registerAiCampaignJob()
+  // Automations drafted from a description, and explained, whose drafts the
+  // workflows plugin writes on the resource-draft seam (AGL-2919).
+  registerAiWorkflowJob()
   // The site scaffold, which builds a whole site through the steps above
   // (AGL-2911).
   registerAiSiteJob()

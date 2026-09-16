@@ -51,6 +51,7 @@ export const AI_STEP_MODEL_SETTING: Record<AiStepKind, string> = {
   'job.plan': 'jobPlanModel',
   'job.email': 'jobEmailModel',
   'job.campaign': 'jobCampaignModel',
+  'job.workflow': 'jobWorkflowModel',
 }
 
 const MODEL_OPTIONS = [
@@ -101,6 +102,7 @@ export const AI_CONFIG_SCHEMA: PluginConfigSchema = {
     modelField('job.plan', 'Generation job (plan) model', 'The plan step of a generation job.'),
     modelField('job.email', 'Generation job (email) model', 'Generating an email design from a confirmed plan.'),
     modelField('job.campaign', 'Generation job (campaign) model', 'Drafting a campaign and its email from a brief.'),
+    modelField('job.workflow', 'Generation job (automation) model', 'Drafting an automation from a description, and explaining one.'),
   ],
   defaults: {
     provider: AI_SETTING_PLATFORM,
