@@ -134,6 +134,13 @@ const AUTH_PATH_SEGMENTS = new Set([
  */
 const WELL_KNOWN_PREFIX = '/.well-known'
 
+/**
+ * The admin bar's connect page (AGL-3046): the one console page a published
+ * site opens in a popup and expects an answer from. It keeps its opener, so
+ * it is the one page the COOP header in `applyCsp` does not isolate.
+ */
+const EDIT_ACCESS_PATH = '/edit-access'
+
 const CACHE_TTL_MS = 60_000
 type SlugVerdict = { known: boolean; movedTo: string | null; at: number }
 const slugCache = new Map<string, SlugVerdict>()
@@ -437,8 +444,24 @@ export async function middleware(request: NextRequest) {
      * sign-in would break as a popup that closes and signs nobody in. The
      * commerce console's `window.open('')` + `document.write` receipt and POS
      * windows are same-origin `about:blank` and unaffected either way.
+     *
+     * ⚠️ EXCEPT `/edit-access`, which answers `unsafe-none` (AGL-3046). A
+     * published site opens that page in a popup so it can hand the edit
+     * token back through `window.opener`, and ANY isolating value severs
+     * that: a popup whose response carries one is moved to a new browsing
+     * context group with its opener nulled, so the page reported "Connected"
+     * to a site that never heard, and a custom domain — where the popup is
+     * the only way in — could not show the admin bar at all. What the page
+     * gives up is small by construction: it holds no credential on screen,
+     * it posts the token only to an origin the server lists for that host,
+     * and it never closes itself (the site closes it on delivery), so a page
+     * that opens it for someone else's host learns nothing from
+     * `popup.closed`.
      */
-    res.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
+    res.headers.set(
+      'Cross-Origin-Opener-Policy',
+      pathname === EDIT_ACCESS_PATH ? 'unsafe-none' : 'same-origin-allow-popups',
+    )
     // ONE policy carrying script-src and the base directives together, so it is
     // self-consistent by construction: the nonce Next stamps on scripts is read
     // from this exact string. Splitting them is what shadowed the nonce — see

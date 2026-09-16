@@ -385,6 +385,11 @@ export default function AdminBar({
   const barRef = useRef<HTMLDivElement | null>(null)
   const tokenRef = useRef<StoredEditToken | null>(null)
   const pathRef = useRef<string>('')
+  // The connect popup, so THIS page can close it once the token arrives
+  // (AGL-3046). The console's page never closes itself: a popup that closed
+  // only on success would tell whoever opened it — any page, naming any
+  // host — whether this visitor can edit that host.
+  const popupRef = useRef<Window | null>(null)
   // What a failed/expired token falls back to: silence when auto-armed, the
   // pill when the editor asked for the bar themselves.
   const restingPhase = autoConnect ? 'silent' : 'idle'
@@ -518,6 +523,9 @@ export default function AdminBar({
         userEmail: data.userEmail,
       }
       writeStoredEditToken(hostId, stored)
+      // Delivered: the popup's work is done, and closing it is ours to do.
+      popupRef.current?.close()
+      popupRef.current = null
       void resolveContext(stored)
     }
     window.addEventListener('message', onMessage)
@@ -645,6 +653,7 @@ export default function AdminBar({
       'aglyn-edit-access',
       'popup,width=480,height=560',
     )
+    popupRef.current = popup
     if (!popup) setPhase('idle')
   }, [consoleOrigin, hostId])
 

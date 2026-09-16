@@ -33,9 +33,16 @@
  * - un-framed (`window.parent === window`), silent mode delivers nothing —
  *   there is no parent to talk to and no visible UI to fall back on;
  * - the visible popup flow is untouched: success still posts to the opener.
+ *
+ * And the popup's own half (AGL-3046):
+ *
+ * - a popup with no opener mints nothing and says there is nothing to
+ *   connect, instead of reporting "Connected" to nobody;
+ * - a delivered popup stays open — the SITE closes it — so whether it
+ *   closes can never tell an opener that this visitor may edit the host.
  */
 
-import { render, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import EditAccessPage from '../app/edit-access/page'
 
 let mockParams: URLSearchParams
@@ -187,5 +194,73 @@ describe('/edit-access silent mode (AGL-1829)', () => {
       ),
     )
     expect(parentPost).not.toHaveBeenCalled()
+  })
+})
+
+describe('/edit-access popup (AGL-3046)', () => {
+  beforeEach(() => {
+    mockParams = new URLSearchParams(
+      `hostId=host-1&origin=${encodeURIComponent(SITE_ORIGIN)}`,
+    )
+    mockUser = {
+      uid: 'user-1',
+      getIdToken: jest.fn(async () => 'id-token'),
+    }
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => TOKEN_RESPONSE,
+    })) as unknown as typeof fetch
+    // A top-level window: the popup is never framed.
+    unframeWindow()
+  })
+
+  afterEach(() => {
+    Object.defineProperty(window, 'parent', {
+      value: realParent,
+      configurable: true,
+    })
+    Object.defineProperty(window, 'opener', {
+      value: realOpener,
+      configurable: true,
+    })
+    jest.restoreAllMocks()
+  })
+
+  it('mints nothing with no opener, and says there is nothing to connect', async () => {
+    // A severed opener looks exactly like this from inside the popup. The
+    // page used to mint, post to `null`, and announce "Connected".
+    Object.defineProperty(window, 'opener', {
+      value: null,
+      configurable: true,
+    })
+    render(<EditAccessPage />)
+    expect(await screen.findByText('Nothing to connect')).toBeTruthy()
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(screen.queryByText('Connected')).toBeNull()
+  })
+
+  it('stays open after delivering — closing is the site’s job', async () => {
+    const close = jest
+      .spyOn(window, 'close')
+      .mockImplementation(() => undefined)
+    const opener = jest.fn()
+    Object.defineProperty(window, 'opener', {
+      value: { postMessage: opener },
+      configurable: true,
+    })
+    render(<EditAccessPage />)
+    await waitFor(() =>
+      expect(opener).toHaveBeenCalledWith(
+        expect.objectContaining({ token: TOKEN_RESPONSE.token }),
+        SITE_ORIGIN,
+      ),
+    )
+    expect(await screen.findByText('Connected')).toBeTruthy()
+    // Past the 1.2 s the page used to wait before closing on success.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+    })
+    expect(close).not.toHaveBeenCalled()
   })
 })
