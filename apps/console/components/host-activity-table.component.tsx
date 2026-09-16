@@ -19,18 +19,8 @@
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import type { GridColDef } from '@mui/x-data-grid'
-import {
-  Alert,
-  Button,
-  Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material'
+import { Alert, Button, Stack, Typography } from '@mui/material'
 import {
   collection,
   getDocs,
@@ -49,7 +39,7 @@ import {
   activityTargetLabel,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { docsHelp } from '../constants/docs-links'
-import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
+import { TABLE_PAGE_SIZE_DEFAULT, TABLE_ROW_HEIGHT } from '../constants/shared'
 import { formatStaffTimestamp } from '../utils/staff-timestamps'
 
 export interface HostActivityTableProps {
@@ -229,45 +219,24 @@ export function HostActivityTable(props: HostActivityTableProps) {
             {'No activity yet — changes made in the console appear here.'}
           </Typography>
         ) : (
-          <ScrollTable size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{'Action'}</TableCell>
-                <TableCell>{'Target'}</TableCell>
-                <TableCell>{'Who'}</TableCell>
-                <TableCell>{'When'}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((entry) => {
-                const href =
-                  orgSlug && host
-                    ? activityHref(entry, { orgSlug, host })
-                    : undefined
-                const label = activityTargetLabel(entry.target)
-                return (
-                <TableRow key={entry.$id}>
-                  <TableCell>{entry.action}</TableCell>
-                  <TableCell>
-                    {href ? (
-                      <AppLink href={href} color="primary" underline="hover">
-                        {label}
-                      </AppLink>
-                    ) : (
-                      label
-                    )}
-                  </TableCell>
-                  <TableCell>{activityActorLabel(entry)}</TableCell>
-                  <TableCell>
-                    {formatStaffTimestamp(
-                      entry.createdAt?.toDate?.() ?? null,
-                    )}
-                  </TableCell>
-                </TableRow>
-                )
-              })}
-            </TableBody>
-          </ScrollTable>
+          <ListTable
+            rows={rows}
+            columns={activityColumns}
+            /*
+             * NO `onOpen`. An audit row is not a record you open: what is worth
+             * reaching is its target, which is already a link in the row.
+             */
+            hideFooter
+            rowHeight={TABLE_ROW_HEIGHT}
+            /*
+             * The grid holds ONE page of a cursor feed, so its own filter panel
+             * and search box would narrow that page and call it the answer —
+             * "nothing happened" about every page but this one. They are off
+             * rather than left to say that.
+             */
+            disableColumnFilter
+            quickFilter={false}
+          />
         )}
         <ListPagination
           page={page}

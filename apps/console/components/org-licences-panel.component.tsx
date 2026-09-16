@@ -23,17 +23,9 @@ import {
   useFirestoreCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
-import {
-  Alert,
-  Chip,
-  Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-} from '@mui/material'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { Alert, Chip, Stack } from '@mui/material'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   documentId,
@@ -42,9 +34,9 @@ import {
   query,
   where,
 } from 'firebase/firestore'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
+import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgScope } from '../hooks/use-org-scope'
 import EmptyState from './empty-state.component'
@@ -201,13 +193,13 @@ export function OrgLicencesPanel({
   const mine = live(myPurchasesRead.data)
 
   /*==========================================
-   * BOTH PAGES ARE SLICES, and the counts are TOTALS.
+   * BOTH LISTS ARE WHOLE, so the grid pages them and its counts are TOTALS.
    *
    * Neither query is capped: each reads one workspace's purchases or one
    * person's, whole. So the card holds the entire list it is describing, the
-   * refund filter above has already run over all of it, and `count` is the
-   * collection's real size rather than a window's length — the one case where
-   * a client slice can state a total without qualifying it.
+   * refund filter above has already run over all of it, and the grid's
+   * footer counts the collection's real size rather than a window's length —
+   * the one case where a client page can state a total without qualifying it.
    *
    * Server-paging either one would break that. `refundedAt` is filtered after
    * reading, so a ten-document page arrives holding anywhere from zero to ten
@@ -215,19 +207,86 @@ export function OrgLicencesPanel({
    * exactly the reader who must not be shown a short page as a complete
    * answer.
    *=========================================*/
-  const [heldPage, setHeldPage] = useState(0)
-  const [heldPageSize, setHeldPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const visibleHeld = useMemo(
-    () =>
-      held.slice(heldPage * heldPageSize, heldPage * heldPageSize + heldPageSize),
-    [held, heldPage, heldPageSize],
+  const heldColumns = useMemo<GridColDef[]>(
+    () => [
+      {
+        field: 'listingId',
+        headerName: 'Listing',
+        flex: 1,
+        minWidth: 220,
+        valueGetter: (_value, row) =>
+          listingNames[String(row.listingId ?? '')] ?? String(row.listingId ?? ''),
+        renderCell: ({ row, value }) => (
+          <AppLink
+            href={buildRoute(Route.ORG_MARKETPLACE_LISTING, {
+              orgSlug,
+              listingId: String(row.listingId ?? ''),
+            })}
+          >
+            {value}
+          </AppLink>
+        ),
+      },
+      {
+        field: 'buyerUid',
+        headerName: 'Bought by',
+        width: 150,
+        valueGetter: (_value, row) => (row.buyerUid === uid ? 'You' : 'A colleague'),
+      },
+      {
+        field: 'amountCents',
+        headerName: 'Paid',
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+        width: 120,
+        // What the licence cost before tax, which is what a reader compares.
+        valueGetter: (_value, row) =>
+          (Number(row.amountCents ?? 0) - Number(row.taxCents ?? 0)) / 100,
+        valueFormatter: (value: number) => `$${value.toFixed(2)}`,
+      },
+    ],
+    [listingNames, orgSlug, uid],
   )
-  const [minePage, setMinePage] = useState(0)
-  const [minePageSize, setMinePageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const visibleMine = useMemo(
-    () =>
-      mine.slice(minePage * minePageSize, minePage * minePageSize + minePageSize),
-    [mine, minePage, minePageSize],
+  const mineColumns = useMemo<GridColDef[]>(
+    () => [
+      {
+        field: 'listingId',
+        headerName: 'Listing',
+        flex: 1,
+        minWidth: 220,
+        valueGetter: (_value, row) =>
+          listingNames[String(row.listingId ?? '')] ?? String(row.listingId ?? ''),
+      },
+      {
+        field: 'buyerOrgId',
+        headerName: 'Licensed to',
+        flex: 1,
+        minWidth: 220,
+        valueGetter: (_value, row) => {
+          const licensedOrg = String(row.buyerOrgId ?? '')
+          if (!licensedOrg) return 'Every workspace you belong to'
+          return licensedOrg === orgId
+            ? 'This workspace'
+            : (orgNames[licensedOrg] ?? licensedOrg)
+        },
+        renderCell: ({ row, value }) => {
+          const licensedOrg = String(row.buyerOrgId ?? '')
+          // A purchase made before AGL-2331 named no organization, so it is
+          // not reinterpreted as belonging to one — it keeps entitling this
+          // buyer everywhere, exactly as it did when they paid for it. Saying
+          // "every workspace" rather than guessing an org is the whole reason
+          // nobody loses access here.
+          if (!licensedOrg) return <Chip size="small" label={value} />
+          return licensedOrg === orgId ? (
+            <Chip size="small" color="primary" label={value} />
+          ) : (
+            <Chip size="small" variant="outlined" label={value} />
+          )
+        },
+      },
+    ],
+    [listingNames, orgId, orgNames],
   )
 
   /**
@@ -284,48 +343,11 @@ export function OrgLicencesPanel({
           contentGutterX
           contentGutterY
         >
-          <ScrollTable size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{'Listing'}</TableCell>
-                <TableCell>{'Bought by'}</TableCell>
-                <TableCell align="right">{'Paid'}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {visibleHeld.map((row) => (
-                <TableRow key={row.$id}>
-                  <TableCell>
-                    <AppLink
-                      href={buildRoute(Route.ORG_MARKETPLACE_LISTING, {
-                        orgSlug,
-                        listingId: String(row.listingId ?? ''),
-                      })}
-                    >
-                      {listingNames[String(row.listingId ?? '')] ??
-                        String(row.listingId ?? '')}
-                    </AppLink>
-                  </TableCell>
-                  <TableCell>
-                    {row.buyerUid === uid ? 'You' : 'A colleague'}
-                  </TableCell>
-                  <TableCell align="right">
-                    {`$${((Number(row.amountCents ?? 0) - Number(row.taxCents ?? 0)) / 100).toFixed(2)}`}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </ScrollTable>
-          <ListPagination
-            page={heldPage}
-            pageSize={heldPageSize}
-            rowCount={visibleHeld.length}
-            // The workspace's licences, in full: the query is uncapped and
-            // the refund filter has already run, so this is a total rather
-            // than the length of a window.
-            count={held.length}
-            onPageChange={setHeldPage}
-            onPageSizeChange={setHeldPageSize}
+          <ListTable
+            aria-label="Licenses this workspace holds"
+            rows={held}
+            columns={heldColumns}
+            rowHeight={TABLE_ROW_HEIGHT}
           />
         </CardDisplay>
       )}
@@ -356,55 +378,11 @@ export function OrgLicencesPanel({
           contentGutterX
           contentGutterY
         >
-          <ScrollTable size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{'Listing'}</TableCell>
-                <TableCell>{'Licensed to'}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {visibleMine.map((row) => {
-                const licensedOrg = String(row.buyerOrgId ?? '')
-                return (
-                  <TableRow key={row.$id}>
-                    <TableCell>
-                      {listingNames[String(row.listingId ?? '')] ??
-                        String(row.listingId ?? '')}
-                    </TableCell>
-                    <TableCell>
-                      {!licensedOrg ? (
-                        // A purchase made before AGL-2331 named no
-                        // organization, so it is not reinterpreted as
-                        // belonging to one — it keeps entitling this buyer
-                        // everywhere, exactly as it did when they paid for it.
-                        // Saying "every workspace" rather than guessing an org
-                        // is the whole reason nobody loses access here.
-                        <Chip size="small" label="Every workspace you belong to" />
-                      ) : licensedOrg === orgId ? (
-                        <Chip size="small" color="primary" label="This workspace" />
-                      ) : (
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          label={orgNames[licensedOrg] ?? licensedOrg}
-                        />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </ScrollTable>
-          <ListPagination
-            page={minePage}
-            pageSize={minePageSize}
-            rowCount={visibleMine.length}
-            // Every purchase this person has made, across every workspace —
-            // the same uncapped read, so the same exact total.
-            count={mine.length}
-            onPageChange={setMinePage}
-            onPageSizeChange={setMinePageSize}
+          <ListTable
+            aria-label="Licenses you bought"
+            rows={mine}
+            columns={mineColumns}
+            rowHeight={TABLE_ROW_HEIGHT}
           />
         </CardDisplay>
       )}

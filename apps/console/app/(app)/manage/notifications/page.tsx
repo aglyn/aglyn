@@ -20,26 +20,18 @@ import {
   crmDailyDigestEnabled,
   DIGEST_PREFS_FIELD,
   NOTIFICATION_CATEGORY_LABELS,
-  NOTIFICATION_TYPE_LABELS,
   type NotificationCategory,
   PLATFORM_BRAND_NAME,
 } from '@aglyn/aglyn'
 import { mdiBellOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Button,
-  Chip,
   FormControlLabel,
   Stack,
   Switch,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Typography,
 } from '@mui/material'
 import {
@@ -61,6 +53,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import NotificationsTable from '../../../../components/notifications-table.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -480,82 +473,18 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
                 </Typography>
               )}
             </Stack>
-            {rows.length === 0 && !loading ? (
-              <Typography variant="body2" color="text.secondary">
-                {"You're all caught up."}
-              </Typography>
-            ) : (
-              <ScrollTable size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>{'Notification'}</TableCell>
-                    <TableCell>{'Type'}</TableCell>
-                    <TableCell>{'When'}</TableCell>
-                    <TableCell align="right" />
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {rows.map((notification) => (
-                    <TableRow
-                      key={notification.$id}
-                      hover
-                      sx={{ cursor: 'pointer' }}
-                      onClick={() => handleOpen(notification)}
-                    >
-                      <TableCell>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            fontWeight: notification.readAt
-                              ? 'fontWeightRegular'
-                              : 'fontWeightMedium',
-                          }}
-                        >
-                          {notification.title}
-                        </Typography>
-                        {notification.body ? (
-                          <Typography variant="caption" color="text.secondary">
-                            {notification.body}
-                          </Typography>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          size="small"
-                          label={
-                            (NOTIFICATION_TYPE_LABELS as any)[
-                              notification.type
-                            ] ?? notification.type
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {notification.createdAt?.toDate?.().toLocaleString() ??
-                          ''}
-                      </TableCell>
-                      <TableCell align="right">
-                        {notification.readAt ? null : (
-                          <Chip size="small" color="primary" label="New" />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </ScrollTable>
-            )}
-            <ListPagination
+            <NotificationsTable
+              rows={rows}
+              onOpen={handleOpen}
               page={page}
               pageSize={pageSize}
-              rowCount={rows.length}
               hasMore={hasMore}
-              disabled={loading}
-              onPageChange={(next) => {
-                if (next === page) return
-                void loadPage(
-                  next,
-                  next > page ? cursors[page] : cursors[next - 1],
-                )
-              }}
+              loading={loading}
+              // `cursors[i]` is the LAST row of page i, so page i+1 resumes
+              // after `cursors[i]` and page i resumes after `cursors[i - 1]`.
+              onPageChange={(next) =>
+                void loadPage(next, next > page ? cursors[page] : cursors[next - 1])
+              }
               onPageSizeChange={setPageSize}
             />
           </Stack>

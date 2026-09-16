@@ -57,10 +57,6 @@ import {
   Divider,
   MenuItem,
   Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -90,11 +86,8 @@ import {
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import RowActionsMenu, {
-  type RowActionsMenuItem,
-} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { gridFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
@@ -116,7 +109,6 @@ import {
 } from './collection-create-requests'
 import {
   CONTENT_MAX_WIDTH,
-  TABLE_HEAD_HEIGHT,
   TABLE_ROW_HEIGHT,
 } from '../../constants/shared'
 import useBranding from '../../hooks/use-branding'
@@ -1219,6 +1211,89 @@ export function CollectionEntriesPage() {
     [selected?.slug, categories, entryActions],
   )
 
+  /*
+    The site's authors, in the entries grid's grammar: the row opens the
+    author, and editing or deleting it is in the row's menu.
+  */
+  const authorColumns = useMemo<GridColDef[]>(
+    () => [
+      {
+        field: 'name',
+        headerName: 'Author',
+        flex: 1,
+        minWidth: 220,
+        renderCell: ({ row }: { row: any }) => (
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: 'center', height: '100%', minWidth: 0 }}
+          >
+            <Avatar
+              src={Aglyn.resolveMediaSrc(row.image, { hostId }) || undefined}
+              sx={{ width: 28, height: 28 }}
+            >
+              {String(row.name ?? '?').slice(0, 1)}
+            </Avatar>
+            <Stack sx={{ minWidth: 0, lineHeight: 1.25 }}>
+              <Typography variant="body2" noWrap>
+                {row.name}
+              </Typography>
+              {row.jobTitle ? (
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  {row.jobTitle}
+                </Typography>
+              ) : null}
+            </Stack>
+          </Stack>
+        ),
+      },
+      {
+        field: 'type',
+        headerName: 'Type',
+        width: 150,
+        valueGetter: (_value, row: any) => Aglyn.contentAuthorSchemaType(row.type),
+        renderCell: ({ value }) => <Chip size="small" label={value} />,
+      },
+      {
+        field: 'entries',
+        headerName: 'Entries',
+        type: 'number',
+        width: 110,
+        /*
+          Counted off the entries ON THE PAGE the Entries tab is showing — one
+          page of one collection. A hint about where a byline is in use, not a
+          site-wide total it cannot know without reading for it.
+        */
+        valueGetter: (_value, row: any) =>
+          entries.filter((entry: any) => entry.authorId === row.$id).length,
+      },
+      listActionsColumn(
+        (row) => (
+          <ListRowActions
+            label={String(row.name ?? '')}
+            items={[
+              {
+                key: 'edit',
+                label: 'Edit',
+                icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
+                onClick: () => openAuthor(row),
+              },
+              {
+                key: 'delete',
+                label: 'Delete',
+                destructive: true,
+                icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
+                onClick: () => void handleDeleteAuthor(row)(),
+              },
+            ]}
+          />
+        ),
+        { width: 72 },
+      ),
+    ],
+    [hostId, entries, openAuthor, handleDeleteAuthor],
+  )
+
   const entrySortModel = useMemo<GridSortModel>(
     () => [{ field: entrySort.field, sort: entrySort.direction }],
     [entrySort],
@@ -2035,119 +2110,13 @@ export function CollectionEntriesPage() {
                             'Setup → SEO.'}
                         </Typography>
                       ) : (
-                        <ScrollTable size="small">
-                          <TableHead
-                            sx={{
-                              '& .MuiTableCell-head': {
-                                height: TABLE_HEAD_HEIGHT,
-                              },
-                            }}
-                          >
-                            <TableRow>
-                              <TableCell>{'Author'}</TableCell>
-                              <TableCell>{'Type'}</TableCell>
-                              <TableCell>{'Entries'}</TableCell>
-                              <TableCell align="right" sx={{ width: 56 }}>
-                                {'Actions'}
-                              </TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {authors.map((author) => (
-                              <TableRow
-                                key={author.$id}
-                                hover
-                                onClick={() => openAuthor(author)}
-                                sx={{ cursor: 'pointer' }}
-                              >
-                                <TableCell>
-                                  <Stack
-                                    direction="row"
-                                    spacing={1}
-                                    sx={{ alignItems: 'center' }}
-                                  >
-                                    <Avatar
-                                      src={
-                                        Aglyn.resolveMediaSrc(author.image, {
-                                          hostId,
-                                        }) || undefined
-                                      }
-                                      sx={{ width: 28, height: 28 }}
-                                    >
-                                      {String(author.name ?? '?').slice(0, 1)}
-                                    </Avatar>
-                                    <span>{author.name}</span>
-                                  </Stack>
-                                  {author.jobTitle ? (
-                                    <Typography
-                                      variant="caption"
-                                      color="text.secondary"
-                                      component="div"
-                                    >
-                                      {author.jobTitle}
-                                    </Typography>
-                                  ) : null}
-                                </TableCell>
-                                <TableCell>
-                                  <Chip
-                                    size="small"
-                                    label={Aglyn.contentAuthorSchemaType(
-                                      author.type,
-                                    )}
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  {/* Counted off the entries ON THE PAGE the
-                                      Entries tab is showing — one page of one
-                                      collection. A hint about where a byline
-                                      is in use, not a site-wide total it
-                                      cannot know without reading for it. */}
-                                  {
-                                    entries.filter(
-                                      (entry: any) =>
-                                        entry.authorId === author.$id,
-                                    ).length
-                                  }
-                                </TableCell>
-                                <TableCell
-                                  align="right"
-                                  sx={{ width: 56 }}
-                                  onClick={(event) => event.stopPropagation()}
-                                >
-                                  <RowActionsMenu
-                                    label={author.name}
-                                    items={[
-                                      {
-                                        key: 'edit',
-                                        label: 'Edit',
-                                        icon: (
-                                          <MdiIcon
-                                            path={mdiPencilOutline.path}
-                                            size={0.8}
-                                          />
-                                        ),
-                                        onClick: () => openAuthor(author),
-                                      },
-                                      {
-                                        key: 'delete',
-                                        label: 'Delete',
-                                        destructive: true,
-                                        icon: (
-                                          <MdiIcon
-                                            path={mdiDeleteOutline.path}
-                                            size={0.8}
-                                          />
-                                        ),
-                                        onClick: () =>
-                                          void handleDeleteAuthor(author)(),
-                                      },
-                                    ]}
-                                  />
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </ScrollTable>
+                        <ListTable
+                          aria-label="Authors"
+                          rows={authors}
+                          columns={authorColumns}
+                          rowHeight={TABLE_ROW_HEIGHT}
+                          onOpen={(_id, row) => openAuthor(row)}
+                        />
                       )}
                     </Stack>
                   </CardDisplay>

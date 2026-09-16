@@ -80,7 +80,9 @@ const SHARED_FOOTER: Array<[string, string]> = [
   // implementations, and adding a footer to the hand-rolled one would have
   // made them similar rather than the same.
   ['activity table', 'apps/console/components/activity-table.component.tsx'],
-  ['notifications', 'apps/console/app/(app)/manage/notifications/page.tsx'],
+  // The feed's grid and its pager are one component now (AGL-3045); the page
+  // hands it a page of rows and the cursor that turns it.
+  ['notifications', 'apps/console/components/notifications-table.component.tsx'],
   /*
    * The staff audit log, which kept a "Load older" of its own — a fifth
    * grammar that escaped both walks below, because it is a page rather than
