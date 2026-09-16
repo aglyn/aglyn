@@ -20,6 +20,11 @@ so before it starts, and spends nothing.
 
 ## From a brief
 
+Open **Components** for the site and choose **Describe it**, beside **Templates** and **Create
+Component**. Write what the component should show and which of its values change from one page
+to the next, then choose **Plan the component**, and open **AI jobs** in the Assist panel to
+read the plan and confirm it.
+
 ### What the job builds
 
 The job proposes a plan first and builds once you confirm it, following

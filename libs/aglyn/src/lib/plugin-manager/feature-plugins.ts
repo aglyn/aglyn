@@ -698,6 +698,12 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   hostForms: 'hostForms',
   /**
+   * A site's Components page, beside its Templates and Create Component
+   * actions (AGL-3051): another way to start a reusable component. Props:
+   * {@link ConsoleHostComponentsZoneProps}, on the `hostScreens` contract.
+   */
+  hostComponents: 'hostComponents',
+  /**
    * The organization's sites page, beside the sites themselves (AGL-2911):
    * an action a member takes across MANY of the org's sites at once, rather
    * than a card totaling them. Props: {@link ConsoleOrgSitesZoneProps}.
@@ -724,14 +730,17 @@ export interface ConsoleHostScreensZoneProps {
 }
 
 /**
- * What the `hostTemplates`, `hostLayouts` and `hostForms` zones hand each
- * widget (AGL-3043): the site and its org, as `hostScreens` hands them.
+ * What the `hostTemplates`, `hostLayouts` and `hostForms` zones (AGL-3043) and
+ * the `hostComponents` zone (AGL-3051) hand each widget: the site and its org,
+ * as `hostScreens` hands them.
  */
 export type ConsoleHostTemplatesZoneProps = ConsoleHostScreensZoneProps
 /** See {@link ConsoleHostTemplatesZoneProps}. */
 export type ConsoleHostLayoutsZoneProps = ConsoleHostScreensZoneProps
 /** See {@link ConsoleHostTemplatesZoneProps}. */
 export type ConsoleHostFormsZoneProps = ConsoleHostScreensZoneProps
+/** See {@link ConsoleHostTemplatesZoneProps}. */
+export type ConsoleHostComponentsZoneProps = ConsoleHostScreensZoneProps
 
 /** What the `orgSites` zone hands each widget (AGL-2911). */
 export interface ConsoleOrgSitesZoneProps {

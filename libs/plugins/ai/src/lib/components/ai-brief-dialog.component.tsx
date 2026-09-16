@@ -42,23 +42,27 @@ import {
 import { AiTemplateCollectionField } from './ai-template-collection-field.component'
 
 /**
- * The brief dialog every "Describe it" opens (AGL-2907, AGL-3043): a page
- * from the Screens page and from the Assist panel's AI jobs, a page template
- * from Templates, a layout from Layouts and a form from Forms.
+ * The brief dialog every "Describe it" opens (AGL-2907, AGL-3043, AGL-3051):
+ * a page from the Screens page and from the Assist panel's AI jobs, a page
+ * template from Templates, a layout from Layouts, a form from Forms and a
+ * reusable component from Components.
  *
  * One text box, and whatever the kind's door reads beside it, start one job of
  * that kind: a page's optional page type; a template's subject and, for a
- * collection entry's page, its collection. A layout and a form read nothing
- * but the brief and the site. The job plans first and waits in AI jobs, where
- * the member confirms the plan and opens the draft once it is built; nothing
- * here builds or writes anything.
+ * collection entry's page, its collection. A layout, a form and a component
+ * read nothing but the brief and the site. The job plans first and waits in
+ * AI jobs, where the member confirms the plan and opens the draft once it is
+ * built; nothing here builds or writes anything.
  */
 
 /** The longest brief a job admits. */
 const BRIEF_MAX_CHARS = 4_000
 
 /** The job kinds a member describes from a console page. */
-export type AiBriefKind = Extract<AiJobKind, 'page' | 'template' | 'layout' | 'form'>
+export type AiBriefKind = Extract<
+  AiJobKind,
+  'page' | 'template' | 'layout' | 'form' | 'component'
+>
 
 /** What the dialog says for one kind. */
 export interface AiBriefCopy {
@@ -139,6 +143,21 @@ export const AI_BRIEF_COPY: Readonly<Record<AiBriefKind, AiBriefCopy>> = {
       'on a screen.',
     failed: 'The form could not be started. Try again.',
   },
+  component: {
+    title: 'Describe a reusable component',
+    briefLabel: 'What should the component show?',
+    placeholder:
+      'A testimonial card with the customer’s name, their role, their quote and a photo',
+    next:
+      'A plan comes first, and nothing is built until you confirm it. What each page can ' +
+      'change, such as a name or a photo, becomes a property of the component.',
+    submit: 'Plan the component',
+    started:
+      'The component is being planned. Open AI jobs in the Assist panel to review the plan ' +
+      'and confirm it. The component is built as a draft, and no page shows it until you ' +
+      'insert it.',
+    failed: 'The component could not be started. Try again.',
+  },
 }
 
 /** Each template subject as its chip names it: what one page is drawn for. */
@@ -170,8 +189,8 @@ export const AI_BRIEF_NO_CHOICE: AiBriefChoice = {
  *
  * A template's are read by the parser its door reads, so the dialog cannot
  * send a subject the door does not know or an entry page with no collection.
- * A page's type is optional. A layout and a form read no inputs at all
- * (AGL-2909, AGL-2913), so theirs are empty.
+ * A page's type is optional. A layout, a form and a component read no inputs
+ * at all (AGL-2909, AGL-2913, AGL-2908), so theirs are empty.
  */
 export function aiBriefJobInputs(
   kind: AiBriefKind,

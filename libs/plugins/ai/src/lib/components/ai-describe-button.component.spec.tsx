@@ -16,7 +16,8 @@
  */
 
 /**
- * "Describe it" on the Templates, Layouts and Forms pages (AGL-3043).
+ * "Describe it" on the Templates, Layouts and Forms pages (AGL-3043), and on
+ * the Components page (AGL-3051).
  *
  * Every render here goes through the component the AI plugin REGISTERED on
  * the page's zone, so what is asserted is what that page's slot draws:
@@ -26,7 +27,8 @@
  *   workspace's;
  * - the brief starts a job of that page's kind for this site, with the inputs
  *   the kind's door reads: a template's subject and an entry template's
- *   content collection, and nothing at all for a layout or a form;
+ *   content collection, and nothing at all for a layout, a form or a
+ *   component;
  * - a refusal is said in the door's words, a lockdown in the lockdown's, and
  *   the brief stays to try again;
  * - what it promises after is a plan to confirm in AI jobs, never a built or a
@@ -87,7 +89,7 @@ const zoneProps = (
   patch: Partial<ConsoleHostTemplatesZoneProps> = {},
 ): ConsoleHostTemplatesZoneProps => ({ hostId: 'demo-legal', orgId: 'org-1', ...patch })
 
-/** The three new entries, with the page each is on and what it says. */
+/** The entries beside the page entry, with the page each is on and what it says. */
 const ENTRIES = [
   {
     zone: 'hostTemplates',
@@ -115,6 +117,15 @@ const ENTRIES = [
     label: 'What is the form for?',
     submit: 'Plan the form',
     noun: 'form',
+  },
+  {
+    zone: 'hostComponents',
+    widgetId: 'ai-describe-component',
+    kind: 'component',
+    title: 'Describe a reusable component',
+    label: 'What should the component show?',
+    submit: 'Plan the component',
+    noun: 'component',
   },
 ] as const
 
@@ -188,12 +199,14 @@ const planButton = (entry: Entry) =>
 const TEMPLATE = ENTRIES[0]
 const LAYOUT = ENTRIES[1]
 const FORM = ENTRIES[2]
+const COMPONENT = ENTRIES[3]
 
 describe('each entry is on its own page’s zone, gated as the page entry is', () => {
-  it('names the three zones in the catalog', () => {
+  it('names each zone in the catalog', () => {
     expect(CONSOLE_WIDGET_SLOTS.hostTemplates).toBe('hostTemplates')
     expect(CONSOLE_WIDGET_SLOTS.hostLayouts).toBe('hostLayouts')
     expect(CONSOLE_WIDGET_SLOTS.hostForms).toBe('hostForms')
+    expect(CONSOLE_WIDGET_SLOTS.hostComponents).toBe('hostComponents')
   })
 
   it.each(ENTRIES)('registers $widgetId on $zone, alone', (entry) => {
@@ -360,7 +373,7 @@ describe('a page template', () => {
   })
 })
 
-describe.each([LAYOUT, FORM])('a $kind', (entry) => {
+describe.each([LAYOUT, FORM, COMPONENT])('a $kind', (entry) => {
   it(`starts a ${entry.kind} job for this site with no inputs of its own`, async () => {
     await openDialog(entry)
     writeBrief(entry, '  Something for our law firm  ')
@@ -371,7 +384,7 @@ describe.each([LAYOUT, FORM])('a $kind', (entry) => {
       brief: 'Something for our law firm',
       inputs: {},
     })
-    // Neither kind reads anything but the brief, so nothing else was read.
+    // None of these kinds reads anything but the brief, so nothing else was read.
     expect([...mockCollectionPaths]).toEqual([])
   })
 })
@@ -474,7 +487,7 @@ describe('the inputs each kind sends', () => {
     })
   })
 
-  it('sends a page’s type only when one is picked, and nothing for a layout or a form', () => {
+  it('sends a page’s type only when one is picked, and nothing for a layout, a form or a component', () => {
     expect(aiBriefJobInputs('page', AI_BRIEF_NO_CHOICE)).toEqual({})
     expect(aiBriefJobInputs('page', { ...AI_BRIEF_NO_CHOICE, pageType: 'about' })).toEqual({
       pageType: 'about',
@@ -482,6 +495,7 @@ describe('the inputs each kind sends', () => {
     const everything = { pageType: 'about' as const, subject: 'author' as const, collectionId: 'c1' }
     expect(aiBriefJobInputs('layout', everything)).toEqual({})
     expect(aiBriefJobInputs('form', everything)).toEqual({})
+    expect(aiBriefJobInputs('component', everything)).toEqual({})
   })
 
   it('names a collection as the template step does, content collections only, by name', () => {

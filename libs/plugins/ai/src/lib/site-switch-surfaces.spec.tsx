@@ -71,6 +71,8 @@ const SITE_ZONES: readonly string[] = [
   CONSOLE_WIDGET_SLOTS.hostTemplates,
   CONSOLE_WIDGET_SLOTS.hostLayouts,
   CONSOLE_WIDGET_SLOTS.hostForms,
+  // And on its Components page (AGL-3051).
+  CONSOLE_WIDGET_SLOTS.hostComponents,
   CONSOLE_WIDGET_SLOTS.hostSeo,
   CONSOLE_WIDGET_SLOTS.seoFields,
   CONSOLE_WIDGET_SLOTS.hostTheme,

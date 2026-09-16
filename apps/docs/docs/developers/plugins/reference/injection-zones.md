@@ -41,6 +41,7 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `hostTemplates` | A site's Templates page, beside Create Template: another way to start a template | `hostId`, `orgId` |
 | `hostLayouts` | A site's Layouts page, beside Templates and Create New Layout: another way to start a layout | `hostId`, `orgId` |
 | `hostForms` | A site's Forms page, beside Create Form: another way to start a form. The Forms page is the forms plugin's, which hosts the zone — see [Zones a plugin hosts](#zones-a-plugin-hosts) | `hostId`, `orgId` |
+| `hostComponents` | A site's Components page, beside Templates and Create Component: another way to start a reusable component | `hostId`, `orgId` |
 
 Rules of thumb: widgets receive shell-resolved context as props and must
 not reach for console-app hooks; data access goes through

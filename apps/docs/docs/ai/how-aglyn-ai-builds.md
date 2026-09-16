@@ -28,7 +28,9 @@ choose **Describe it** beside its create button:
   [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai);
 - a layout on **Layouts**; see
   [Generate a layout](../building-sites/screens-and-layouts/layouts.md#generate-a-layout-with-aglyn-ai);
-- a form on **Forms**; see [Generate a form](./generate-a-form.md).
+- a form on **Forms**; see [Generate a form](./generate-a-form.md);
+- a reusable component on **Components**; see
+  [Generate a reusable component](../building-sites/components/generate-a-component-with-aglyn-ai.md#from-a-brief).
 
 **Describe it** is there when your workspace has AI build jobs, you have the **Generate
 with AI** permission, and AI is on for the site.

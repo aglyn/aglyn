@@ -62,6 +62,7 @@ import AiSiteBatchCard from './components/ai-site-batch-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
 import AiDescribePageButton from './components/ai-describe-page.component'
 import {
+  AiDescribeComponentButton,
   AiDescribeFormButton,
   AiDescribeLayoutButton,
   AiDescribeTemplateButton,
@@ -355,6 +356,17 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiDescribeFormButton,
+      },
+      // And a reusable component from a brief (AGL-3051), beside Templates
+      // and Create Component: the component job's first entry point, which
+      // had none in the console.
+      {
+        slot: 'hostComponents',
+        widgetId: 'ai-describe-component',
+        title: 'Describe a reusable component',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeComponentButton,
       },
       // The agency batch (AGL-2911): one brief across many of the org's
       // sites, from the page that lists them. The card asks the jobs route

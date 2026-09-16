@@ -18,6 +18,7 @@
  */
 
 import type {
+  ConsoleHostComponentsZoneProps,
   ConsoleHostFormsZoneProps,
   ConsoleHostLayoutsZoneProps,
   ConsoleHostScreensZoneProps,
@@ -30,11 +31,11 @@ import { useEffect, useRef, useState } from 'react'
 import { AiBriefDialog, type AiBriefKind } from './ai-brief-dialog.component'
 
 /**
- * "Describe it" (AGL-2907, AGL-3043): a job from a brief, beside the create
- * actions of the page that lists what the job makes — a page on Screens, a
- * page template on Templates, a layout on Layouts and a form on Forms — each
- * mounted through that page's zone. The Assist panel's AI jobs opens the same
- * dialog for a page.
+ * "Describe it" (AGL-2907, AGL-3043, AGL-3051): a job from a brief, beside the
+ * create actions of the page that lists what the job makes — a page on
+ * Screens, a page template on Templates, a layout on Layouts, a form on Forms
+ * and a reusable component on Components — each mounted through that page's
+ * zone. The Assist panel's AI jobs opens the same dialog for a page.
  */
 
 type Verdict = 'checking' | 'ready' | 'hidden'
@@ -113,6 +114,11 @@ export function AiDescribeLayoutButton(props: ConsoleHostLayoutsZoneProps) {
 /** A form from a brief, on the Forms page (`hostForms`). */
 export function AiDescribeFormButton(props: ConsoleHostFormsZoneProps) {
   return <AiDescribeButton {...props} kind="form" />
+}
+
+/** A reusable component from a brief, on the Components page (`hostComponents`). */
+export function AiDescribeComponentButton(props: ConsoleHostComponentsZoneProps) {
+  return <AiDescribeButton {...props} kind="component" />
 }
 
 export default AiDescribeButton
