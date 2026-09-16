@@ -25,17 +25,30 @@ import {
 import { forwardRef } from 'react'
 import { scrollableTableWrapperSx } from '../utils/scroll-overflow'
 
-export interface ScrollTableProps extends TableProps {
-  /**
-   * The scroll box around the table. Its `sx` is merged AFTER the box's own,
-   * so a caller can bound the box's height or space it out without taking
-   * the scroll away. `role`, `aria-label` and `tabIndex` belong here when a
-   * surface has to name the box (the customer-page Table element does).
-   */
-  ContainerProps?: TableContainerProps & {
-    [attribute: `data-${string}`]: unknown
-  }
-}
+export type ScrollTableProps = TableProps &
+  (
+    | {
+        /**
+         * The scroll box around the table. Its `sx` is merged AFTER the box's
+         * own, so a caller can bound the box's height or space it out without
+         * taking the scroll away. `role`, `aria-label` and `tabIndex` belong
+         * here when a surface has to name the box (the customer-page Table
+         * element does).
+         */
+        ContainerProps?: TableContainerProps & {
+          [attribute: `data-${string}`]: unknown
+        }
+        nested?: false
+      }
+    | {
+        ContainerProps?: never
+        /**
+         * The table sits in a cell of another `ScrollTable`, whose box
+         * already scrolls it: it is drawn with no box of its own.
+         */
+        nested: true
+      }
+  )
 
 /**
  * EVERY TABLE THAT IS NOT A RECORD LIST (AGL-3045).
@@ -83,16 +96,26 @@ export interface ScrollTableProps extends TableProps {
  * a screen reader announces — passes `role`, `aria-label` and `tabIndex`
  * through `ContainerProps` (see `scrollRegionProps`).
  *
+ * ## A table inside a table
+ *
+ * A tree draws a parent's children as a table nested in a full-width cell of
+ * the parent's table. That table is already inside the outer box, which
+ * scrolls the whole tree as one piece; a box of its own would make every
+ * subtree a scroll region and a clip of its own, for content that is exactly
+ * as wide as the table around it. `nested` draws it bare.
+ *
  * ## Shape
  *
  * Every `Table` prop goes to the table; `ContainerProps` go to the box; `ref`
- * is the box, the element that holds the table's place on the page.
+ * is the box, the element that holds the table's place on the page, so a
+ * `nested` table, which has no box, takes no ref.
  * `aglyn/no-raw-mui-table` refuses a MUI `Table` or `TableContainer` anywhere
  * but this file.
  */
 export const ScrollTable = forwardRef<HTMLDivElement, ScrollTableProps>(
   function ScrollTable(props, ref) {
-    const { ContainerProps, ...tableProps } = props
+    const { ContainerProps, nested, ...tableProps } = props
+    if (nested) return <Table {...tableProps} />
     const { sx: containerSx, ...container } = ContainerProps ?? {}
     return (
       <TableContainer

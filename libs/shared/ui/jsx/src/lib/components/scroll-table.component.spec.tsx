@@ -55,7 +55,7 @@ const ruleFor = (el: Element) => {
   return squash(allCss().find((rule) => rule.startsWith(`.${cls} {`)) ?? '')
 }
 
-function Jobs(props: Partial<Parameters<typeof ScrollTable>[0]>) {
+function Jobs(props: Partial<Omit<Parameters<typeof ScrollTable>[0], 'nested'>>) {
   return (
     <ScrollTable size="small" aria-label="Generation jobs" {...props}>
       <TableHead>
@@ -155,5 +155,42 @@ describe('ScrollTable (AGL-3045)', () => {
     const ref = createRef<HTMLDivElement>()
     const { container } = render(<Jobs ref={ref} />)
     expect(ref.current).toBe(container.firstElementChild)
+  })
+
+  it('draws a table nested in another one’s cell inside the outer box, with none of its own', () => {
+    const { container } = render(
+      <ScrollTable size="small" aria-label="Screens">
+        <TableBody>
+          <TableRow>
+            <TableCell>{'Home'}</TableCell>
+          </TableRow>
+          <TableRow>
+            <TableCell padding="none">
+              <ScrollTable nested size="small" aria-label="Under Home">
+                <TableBody>
+                  <TableRow>
+                    <TableCell>{'About'}</TableCell>
+                  </TableRow>
+                </TableBody>
+              </ScrollTable>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </ScrollTable>,
+    )
+    const box = container.firstElementChild as HTMLElement
+    const outer = screen.getByRole('table', { name: 'Screens' })
+    const inner = screen.getByRole('table', { name: 'Under Home' })
+    // Positive control: the outer table has its box.
+    expect(outer.parentElement).toBe(box)
+    expect(getComputedStyle(box).overflowX).toBe('auto')
+    // The nested table sits straight in its cell, so the one box scrolls both.
+    expect(inner.parentElement?.tagName).toBe('TD')
+    expect(inner.className).toContain('MuiTable-root')
+    expect(
+      [...box.querySelectorAll('*')].filter(
+        (element) => getComputedStyle(element).overflowX === 'auto',
+      ),
+    ).toHaveLength(0)
   })
 })
