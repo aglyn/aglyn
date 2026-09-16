@@ -953,6 +953,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
               orgSlug={billingSlug}
               user={user}
               visible={generativeVisible}
+              hostId={hostId}
             />
             {!messages.length && (
               <Alert severity="info" sx={{ mb: 2 }}>

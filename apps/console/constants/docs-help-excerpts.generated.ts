@@ -102,6 +102,7 @@ export const DOCS_HELP_EXCERPTS = {
   forms: 'Add forms to your site, collect submissions in an inbox, and write them into datasets.',
   generateAComponentWithAglynAi: 'Describe a block your site repeats, or point at one already on a page, and Aglyn AI makes it a reusable component with typed properties bound to the elements that show them.',
   generateAForm: 'Describe the form you need and an Aglyn AI build job makes it as a draft on the Forms page, with its fields, required answers, marketing consent and routing agreeing with each other.',
+  generateAPage: 'Describe a page and an AI build job plans it, then builds it section by section as an unpublished draft from your site\'s theme, layout, components and forms.',
   generateSection: 'Produce a whole section of components on the canvas from a prompt.',
   gettingStarted: 'Sign in, create your first site, and understand what a site contains.',
   glossary: 'What organization, workspace, tenant, host, and site each mean — and which word to use where.',

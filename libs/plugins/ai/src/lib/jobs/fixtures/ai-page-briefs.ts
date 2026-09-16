@@ -1,0 +1,763 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import type { AiBuildPlan, AiBuildPlanReuse, AiBuildPlanSection } from '../../model/ai-build-plan'
+import type { AiPageType } from '../../model/ai-page-job'
+import {
+  emptyAiSiteInventory,
+  type AiInventoryComponent,
+  type AiInventoryForm,
+  type AiInventoryLayout,
+  type AiInventoryScreen,
+  type AiSiteInventory,
+} from '../../model/ai-site-inventory'
+
+/**
+ * Ten page briefs across the ICPs, with golden answers (AGL-2907): four agency
+ * client sites, three multi-brand businesses and three single small
+ * businesses, over seven page types.
+ *
+ * GOLDEN, NOT RECORDED. Each answer is written by hand in the shape a model
+ * answers a section in — the tree a `submit_section` call carries — and no
+ * provider produced it. The evals replay them through the real page step,
+ * plan rules, doctrine and draft writer, so they prove the step and the
+ * rules, never a model's quality, and the credits they add up to are an
+ * estimate from their size, labeled as one wherever it is quoted.
+ *
+ * Every plan is one a page job can build: one screen that places what its
+ * site already has — components by id, forms by id, links to its screens —
+ * and creates nothing. Rows that repeat are a component the site keeps, as
+ * the plan rules require. Copy leaves every fact a brief would not give in
+ * square brackets, as the building rules ask a model to.
+ */
+
+/** One node as a model writes it: its own id is the key it sits under. */
+export interface AiGoldenNode {
+  componentId: string
+  props?: Record<string, unknown>
+  sx?: Record<string, unknown>
+  nodes?: string[]
+}
+
+/** A section as the model answers it: the document wrapper holding one Section. */
+export interface AiGoldenSection {
+  rootId: string
+  nodes: Record<string, AiGoldenNode>
+}
+
+export interface AiPageBriefFixture {
+  id: string
+  icp: 'agency' | 'multi-brand' | 'small-business'
+  pageType: AiPageType
+  brief: string
+  inventory: AiSiteInventory
+  /** The plan a member confirmed: one screen, reusing what the site has, creating nothing. */
+  plan: AiBuildPlan
+  /** The golden answer to each section pass, in the plan's order. */
+  answers: AiGoldenSection[]
+  /** The listing the golden SEO answer proposes. */
+  seo: { title: string; description: string }
+}
+
+interface Built {
+  answer: AiGoldenSection
+  section: AiBuildPlanSection
+}
+
+type Add = (node: AiGoldenNode, id?: string) => string
+
+function section(prefix: string, name: string, uses: string[], items: number, build: (add: Add) => AiGoldenNode): Built {
+  const nodes: Record<string, AiGoldenNode> = {}
+  let counter = 0
+  const add: Add = (node, id) => {
+    const key = id ?? `${prefix}${++counter}`
+    nodes[key] = node
+    return key
+  }
+  const root = add(build(add), `${prefix}section`)
+  nodes['root'] = { componentId: 'div', nodes: [root] }
+  return { answer: { rootId: 'root', nodes }, section: { name, uses, items } }
+}
+
+const typography = (variant: string, children: string, component?: string): AiGoldenNode => ({
+  componentId: 'muiTypography',
+  props: { variant, children, ...(component ? { component } : {}) },
+})
+
+/** A Section holding a Container holding a column Stack: the frame every golden section uses. */
+function framed(add: Add, children: string[], maxWidth: string, py: number, stack: Record<string, unknown> = {}): AiGoldenNode {
+  const column = add({ componentId: 'muiStack', props: { direction: 'column', ...stack }, sx: { gap: 2 }, nodes: children })
+  const container = add({ componentId: 'muiContainer', props: { maxWidth }, sx: { py }, nodes: [column] })
+  return { componentId: 'section', props: { element: 'section' }, nodes: [container] }
+}
+
+function hero(prefix: string, input: { name?: string; title: string; lead: string; cta?: { label: string; screenId: string }; image?: string }): Built {
+  return section(prefix, input.name ?? 'hero', input.cta ? [input.cta.screenId] : [], 0, (add) => {
+    const children = [add(typography('h1', input.title, 'h1')), add(typography('body1', input.lead))]
+    if (input.cta) {
+      children.push(add({ componentId: 'muiButton', props: { children: input.cta.label, variant: 'contained', screenId: input.cta.screenId } }))
+    }
+    if (input.image) children.push(add({ componentId: 'image', props: { alt: input.image } }))
+    return framed(add, children, 'md', 8, { alignItems: 'flex-start' })
+  })
+}
+
+function cards(prefix: string, input: { name: string; heading: string; intro?: string; componentId: string; items: Array<Record<string, string>> }): Built {
+  return section(prefix, input.name, [input.componentId], input.items.length, (add) => {
+    const instances = input.items.map((propValues) =>
+      add({ componentId: 'reusableInstance', props: { refId: input.componentId, propValues } }),
+    )
+    const children = [add(typography('h2', input.heading, 'h2'))]
+    if (input.intro) children.push(add(typography('body1', input.intro)))
+    children.push(add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: instances }))
+    return framed(add, children, 'lg', 8)
+  })
+}
+
+/** A short list: fewer rows than the plan rules count as repeated items. */
+function list(prefix: string, input: { name: string; heading: string; items: Array<{ primary: string; secondary?: string }> }): Built {
+  return section(prefix, input.name, [], input.items.length, (add) => {
+    const rows = input.items.map((item) =>
+      add({
+        componentId: 'muiListItem',
+        nodes: [add({ componentId: 'muiListItemText', props: { primary: item.primary, ...(item.secondary ? { secondary: item.secondary } : {}) } })],
+      }),
+    )
+    return framed(add, [add(typography('h2', input.heading, 'h2')), add({ componentId: 'muiList', props: { dense: false }, nodes: rows })], 'md', 6)
+  })
+}
+
+function prose(prefix: string, input: { name: string; heading: string; paragraphs: string[] }): Built {
+  return section(prefix, input.name, [], 0, (add) =>
+    framed(add, [add(typography('h2', input.heading, 'h2')), ...input.paragraphs.map((copy) => add(typography('body1', copy)))], 'md', 6),
+  )
+}
+
+function form(prefix: string, input: { name: string; heading: string; intro: string; formId: string }): Built {
+  return section(prefix, input.name, [input.formId], 0, (add) =>
+    framed(
+      add,
+      [add(typography('h2', input.heading, 'h2')), add(typography('body1', input.intro)), add({ componentId: 'form', props: { formId: input.formId } })],
+      'sm',
+      8,
+    ),
+  )
+}
+
+function callToAction(prefix: string, input: { name: string; heading: string; body: string; label: string; screenId: string }): Built {
+  return section(prefix, input.name, [input.screenId], 0, (add) =>
+    framed(
+      add,
+      [
+        add(typography('h2', input.heading, 'h2')),
+        add(typography('body1', input.body)),
+        add({ componentId: 'muiButton', props: { children: input.label, variant: 'contained', screenId: input.screenId } }),
+      ],
+      'md',
+      8,
+      { alignItems: 'center' },
+    ),
+  )
+}
+
+const THEME = { summary: ['Light scheme with the theme’s default type'], colors: { 'primary.main': '#1f5fa8', 'secondary.main': '#c2410c' }, fonts: ['Inter'] }
+const SITE_LAYOUT: AiInventoryLayout = { id: 'lay-site', name: 'Site layout', parentId: null }
+const HOME: AiInventoryScreen = { id: 'scr-home', name: 'Home', slug: '/', layoutId: 'lay-site', template: false }
+
+function site(
+  hostId: string,
+  parts: {
+    components?: AiInventoryComponent[]
+    forms?: AiInventoryForm[]
+    layouts?: AiInventoryLayout[]
+    screens?: AiInventoryScreen[]
+  },
+): AiSiteInventory {
+  return {
+    ...emptyAiSiteInventory(hostId),
+    components: parts.components ?? [],
+    forms: parts.forms ?? [],
+    layouts: parts.layouts ?? [SITE_LAYOUT],
+    screens: [HOME, ...(parts.screens ?? [])],
+    theme: THEME,
+  }
+}
+
+function brief(input: {
+  id: string
+  icp: AiPageBriefFixture['icp']
+  pageType: AiPageType
+  brief: string
+  inventory: AiSiteInventory
+  title: string
+  slug: string
+  layout: string
+  nav: boolean
+  seo: { title: string; description: string }
+  sections: Built[]
+}): AiPageBriefFixture {
+  const components = new Set(input.inventory.components.map((row) => row.id))
+  const forms = new Set(input.inventory.forms.map((row) => row.id))
+  const screens = new Set(input.inventory.screens.map((row) => row.id))
+  const reuse: AiBuildPlanReuse[] = [{ kind: 'layout', id: input.layout, purpose: 'the page renders inside it' }]
+  const seen = new Set<string>([input.layout])
+  for (const { section: planned } of input.sections) {
+    for (const ref of planned.uses) {
+      if (seen.has(ref)) continue
+      seen.add(ref)
+      if (components.has(ref)) reuse.push({ kind: 'component', id: ref, purpose: planned.name })
+      else if (forms.has(ref)) reuse.push({ kind: 'form', id: ref, purpose: planned.name })
+      else if (screens.has(ref)) reuse.push({ kind: 'screen', id: ref, purpose: `linked from ${planned.name}` })
+    }
+  }
+  return {
+    id: input.id,
+    icp: input.icp,
+    pageType: input.pageType,
+    brief: input.brief,
+    inventory: input.inventory,
+    plan: {
+      reuse,
+      create: [],
+      screens: [
+        {
+          title: input.title,
+          slug: input.slug,
+          layout: input.layout,
+          template: null,
+          duplicateOf: null,
+          nav: input.nav,
+          seoTitle: input.seo.title,
+          seoDescription: input.seo.description,
+          sections: input.sections.map((entry) => entry.section),
+        },
+      ],
+    },
+    answers: input.sections.map((entry) => entry.answer),
+    seo: input.seo,
+  }
+}
+
+export const AI_PAGE_BRIEF_FIXTURES: readonly AiPageBriefFixture[] = [
+  // ── Agency client sites ─────────────────────────────────────────────────
+  brief({
+    id: 'agency-roofing-landing',
+    icp: 'agency',
+    pageType: 'landing',
+    brief: 'A landing page for our spring roof inspection offer in Springfield: what the inspection covers, two customer quotes, and the quote request form.',
+    inventory: site('host-acme-roofing', {
+      components: [
+        { id: 'cmp-service-card', name: 'Service card', props: { title: 'text', summary: 'text' } },
+        { id: 'cmp-testimonial', name: 'Testimonial', props: { quote: 'text', name: 'text', role: 'text' } },
+      ],
+      forms: [{ id: 'frm-quote', name: 'Quote request', fields: ['name', 'email', 'phone', 'message'] }],
+      screens: [{ id: 'scr-contact', name: 'Contact', slug: 'contact', layoutId: 'lay-site', template: false }],
+    }),
+    title: 'Spring roof inspections',
+    slug: '/spring-roof-inspection',
+    layout: 'lay-site',
+    nav: false,
+    seo: {
+      title: 'Spring Roof Inspections in Springfield',
+      description: 'A licensed roofer checks shingles, flashing and gutters, then sends photos and a written report within two days.',
+    },
+    sections: [
+      hero('a', {
+        title: 'Spring roof inspections in Springfield',
+        lead: 'A licensed roofer checks shingles, flashing and gutters, and sends you photos and a written report within two days.',
+        cta: { label: 'Request a quote', screenId: 'scr-contact' },
+        image: 'A roofer inspecting shingles on a two-story house',
+      }),
+      cards('b', {
+        name: 'what the inspection covers',
+        heading: 'What the inspection covers',
+        componentId: 'cmp-service-card',
+        items: [
+          { title: 'Shingles and flashing', summary: 'Lifted, cracked or missing shingles, and the seals around chimneys and vents.' },
+          { title: 'Gutters and drainage', summary: 'Clogs, sagging runs and downspouts that send water toward the foundation.' },
+          { title: 'Attic and ventilation', summary: 'Signs of leaks, damp insulation and blocked soffit vents.' },
+        ],
+      }),
+      cards('c', {
+        name: 'customer quotes',
+        heading: 'What homeowners say',
+        componentId: 'cmp-testimonial',
+        items: [
+          { quote: 'They found a failed vent boot before it leaked into the bedroom.', name: '[customer name]', role: 'Homeowner, Springfield' },
+          { quote: 'The report had photos of every problem and a price for each fix.', name: '[customer name]', role: 'Homeowner, Riverton' },
+        ],
+      }),
+      form('d', {
+        name: 'quote request form',
+        heading: 'Book your inspection',
+        intro: 'Tell us about your roof and when you are home. We confirm a time within one business day.',
+        formId: 'frm-quote',
+      }),
+    ],
+  }),
+  brief({
+    id: 'agency-dental-implants-service',
+    icp: 'agency',
+    pageType: 'service',
+    brief: 'A service page for dental implants: how treatment works step by step, our two implant dentists, and the appointment request form.',
+    inventory: site('host-lakeside-dental', {
+      components: [
+        { id: 'cmp-dentist-card', name: 'Dentist card', props: { name: 'text', credentials: 'text', bio: 'text' } },
+        { id: 'cmp-treatment-step', name: 'Treatment step', props: { step: 'text', detail: 'text' } },
+      ],
+      forms: [{ id: 'frm-appointment', name: 'Appointment request', fields: ['name', 'email', 'phone', 'preferred time'] }],
+    }),
+    title: 'Dental implants',
+    slug: '/dental-implants',
+    layout: 'lay-site',
+    nav: true,
+    seo: {
+      title: 'Dental Implants at Lakeside Dental',
+      description: 'Permanent tooth replacement placed and restored in one office, from the first 3D scan to the final crown.',
+    },
+    sections: [
+      hero('a', {
+        title: 'Dental implants at Lakeside Dental',
+        lead: 'A permanent tooth replacement placed and restored in one office, from the first scan to the final crown.',
+        image: 'A dentist showing a patient an implant model',
+      }),
+      cards('b', {
+        name: 'how treatment works',
+        heading: 'How treatment works',
+        componentId: 'cmp-treatment-step',
+        items: [
+          { step: 'Consultation and 3D scan', detail: 'We check bone density and plan the implant position.' },
+          { step: 'Implant placement', detail: 'A short procedure under local anesthetic.' },
+          { step: 'Healing', detail: 'Usually three to six months while the implant bonds with the bone.' },
+          { step: 'Crown fitting', detail: 'A custom crown matched to your natural teeth.' },
+        ],
+      }),
+      cards('c', {
+        name: 'implant dentists',
+        heading: 'Your implant team',
+        componentId: 'cmp-dentist-card',
+        items: [
+          { name: '[dentist name]', credentials: 'DDS, implant fellowship', bio: 'Places and restores implants in the same office.' },
+          { name: '[dentist name]', credentials: 'DMD, prosthodontist', bio: 'Designs crowns, bridges and full-arch restorations.' },
+        ],
+      }),
+      form('d', {
+        name: 'appointment request form',
+        heading: 'Ask for a consultation',
+        intro: 'Send a few details and we call you to find a time. Bring any X-rays you already have.',
+        formId: 'frm-appointment',
+      }),
+    ],
+  }),
+  brief({
+    id: 'agency-law-firm-about',
+    icp: 'agency',
+    pageType: 'about',
+    brief: 'An about page for a family law firm: how the firm works with clients, the three attorneys and what each practices, and a link to book a consultation.',
+    inventory: site('host-hart-law', {
+      components: [{ id: 'cmp-attorney-card', name: 'Attorney card', props: { name: 'text', practice: 'text' } }],
+      screens: [{ id: 'scr-contact', name: 'Contact', slug: 'contact', layoutId: 'lay-site', template: false }],
+    }),
+    title: 'About the firm',
+    slug: '/about',
+    layout: 'lay-site',
+    nav: true,
+    seo: {
+      title: 'About Hart & Owens Family Law',
+      description: 'A family law practice in Marion County. One attorney from first meeting to final order, and a written estimate before filing.',
+    },
+    sections: [
+      hero('a', {
+        title: 'About Hart & Owens',
+        lead: 'A family law practice that has represented parents and spouses in Marion County since [founding year].',
+      }),
+      prose('b', {
+        name: 'how we work',
+        heading: 'How we work',
+        paragraphs: [
+          'Every client works with one attorney from the first meeting to the final order, and gets a written estimate before any filing.',
+          'We settle when settlement protects you, and we go to trial when it does not.',
+        ],
+      }),
+      cards('c', {
+        name: 'attorneys',
+        heading: 'Our attorneys',
+        componentId: 'cmp-attorney-card',
+        items: [
+          { name: '[attorney name]', practice: 'Divorce and property division' },
+          { name: '[attorney name]', practice: 'Custody and parenting plans' },
+          { name: '[attorney name]', practice: 'Adoption and guardianship' },
+        ],
+      }),
+      callToAction('d', {
+        name: 'book a consultation',
+        heading: 'Talk to an attorney',
+        body: 'The first consultation covers your situation, your options and what each would cost.',
+        label: 'Schedule a consultation',
+        screenId: 'scr-contact',
+      }),
+    ],
+  }),
+  brief({
+    id: 'agency-hvac-pricing',
+    icp: 'agency',
+    pageType: 'pricing',
+    brief: 'A pricing page for heating and cooling maintenance plans: the three plans, what every visit includes, and a button to schedule service.',
+    inventory: site('host-northside-hvac', {
+      components: [
+        { id: 'cmp-plan-card', name: 'Plan card', props: { name: 'text', price: 'text', summary: 'text' } },
+        { id: 'cmp-checklist-item', name: 'Checklist item', props: { item: 'text' } },
+      ],
+      screens: [{ id: 'scr-schedule', name: 'Schedule service', slug: 'schedule', layoutId: 'lay-site', template: false }],
+    }),
+    title: 'Maintenance plans',
+    slug: '/maintenance-plans',
+    layout: 'lay-site',
+    nav: true,
+    seo: {
+      title: 'Heating and Cooling Maintenance Plans',
+      description: 'Two tune-ups a year, priority scheduling and a repair discount for one yearly price. Plans for one system or the whole home.',
+    },
+    sections: [
+      hero('a', {
+        title: 'Heating and cooling maintenance plans',
+        lead: 'Two tune-ups a year, priority scheduling and a discount on repairs, for one flat yearly price.',
+      }),
+      cards('b', {
+        name: 'plans',
+        heading: 'Choose a plan',
+        componentId: 'cmp-plan-card',
+        items: [
+          { name: 'Single system', price: '[price] a year', summary: 'One furnace or one air conditioner.' },
+          { name: 'Whole home', price: '[price] a year', summary: 'A furnace and an air conditioner.' },
+          { name: 'Multi-zone', price: '[price] a year', summary: 'Up to three systems at one address.' },
+        ],
+      }),
+      cards('c', {
+        name: 'what every visit includes',
+        heading: 'Every visit includes',
+        componentId: 'cmp-checklist-item',
+        items: [
+          { item: 'Filter change and coil cleaning' },
+          { item: 'Refrigerant and pressure checks' },
+          { item: 'A written report on the system’s condition' },
+        ],
+      }),
+      callToAction('d', {
+        name: 'schedule service',
+        heading: 'Start with a tune-up',
+        body: 'Pick a time and we sign you up at the visit.',
+        label: 'Schedule service',
+        screenId: 'scr-schedule',
+      }),
+    ],
+  }),
+  // ── Multi-brand businesses ──────────────────────────────────────────────
+  brief({
+    id: 'multibrand-restaurant-group-event',
+    icp: 'multi-brand',
+    pageType: 'event',
+    brief: 'An event page for the Piedmont wine dinner at Osteria Lume, one of our group’s restaurants: the courses and pairings, a note about the winemaker, and the reservation form.',
+    inventory: site('host-harbor-group-osteria', {
+      components: [{ id: 'cmp-menu-item', name: 'Menu item', props: { dish: 'text', pairing: 'text' } }],
+      layouts: [
+        { id: 'lay-osteria', name: 'Osteria layout', parentId: null },
+        { id: 'lay-grill', name: 'Harbor Grill layout', parentId: null },
+      ],
+      forms: [{ id: 'frm-reservation', name: 'Event reservation', fields: ['name', 'email', 'party size'] }],
+      screens: [{ id: 'scr-menu', name: 'Menu', slug: 'menu', layoutId: 'lay-osteria', template: false }],
+    }),
+    title: 'Piedmont wine dinner',
+    slug: '/events/piedmont-wine-dinner',
+    layout: 'lay-osteria',
+    nav: false,
+    seo: {
+      title: 'Piedmont Wine Dinner at Osteria Lume',
+      description: 'Five courses paired with wines from one family vineyard, with a tasting led by the winemaker. Reserve seats online.',
+    },
+    sections: [
+      hero('a', {
+        title: 'Piedmont wine dinner at Osteria Lume',
+        lead: 'Five courses paired with wines from one family vineyard, on [event date] at 7 p.m.',
+        image: 'A long table set for dinner with wine glasses',
+      }),
+      cards('b', {
+        name: 'courses and pairings',
+        heading: 'The menu',
+        componentId: 'cmp-menu-item',
+        items: [
+          { dish: 'Vitello tonnato', pairing: 'Paired with Arneis' },
+          { dish: 'Agnolotti del plin', pairing: 'Paired with Dolcetto' },
+          { dish: 'Braised short rib', pairing: 'Paired with Barbaresco' },
+          { dish: 'Hazelnut torte', pairing: 'Paired with Moscato d’Asti' },
+        ],
+      }),
+      prose('c', {
+        name: 'about the winemaker',
+        heading: 'About the winemaker',
+        paragraphs: ['The vineyard’s third-generation winemaker leads a short tasting before the first course and answers questions at each table.'],
+      }),
+      form('d', {
+        name: 'reservation form',
+        heading: 'Reserve seats',
+        intro: 'Seats are limited to [number of seats]. We confirm by email and hold your table until 7:15 p.m.',
+        formId: 'frm-reservation',
+      }),
+    ],
+  }),
+  brief({
+    id: 'multibrand-home-goods-product',
+    icp: 'multi-brand',
+    pageType: 'product',
+    brief: 'A product page for the Hearth cast iron skillet on the Hearth brand site: three features, two reviews from home cooks, and a link to where to buy.',
+    inventory: site('host-hearth-and-grain', {
+      components: [
+        { id: 'cmp-feature', name: 'Feature', props: { title: 'text', body: 'text' } },
+        { id: 'cmp-review', name: 'Review', props: { quote: 'text', name: 'text' } },
+      ],
+      layouts: [
+        { id: 'lay-hearth', name: 'Hearth layout', parentId: null },
+        { id: 'lay-grain', name: 'Grain layout', parentId: null },
+      ],
+      screens: [{ id: 'scr-stores', name: 'Where to buy', slug: 'where-to-buy', layoutId: 'lay-hearth', template: false }],
+    }),
+    title: 'Cast iron skillet',
+    slug: '/cast-iron-skillet',
+    layout: 'lay-hearth',
+    nav: false,
+    seo: {
+      title: 'Hearth 12-Inch Cast Iron Skillet',
+      description: 'A seasoned 12-inch skillet with a milled cooking surface, a thick base that holds heat and a helper handle.',
+    },
+    sections: [
+      hero('a', {
+        title: 'The Hearth cast iron skillet',
+        lead: 'A 12-inch skillet with a smooth-milled cooking surface, seasoned and ready to use.',
+        image: 'A cast iron skillet searing vegetables on a stovetop',
+      }),
+      cards('b', {
+        name: 'features',
+        heading: 'Why it cooks evenly',
+        componentId: 'cmp-feature',
+        items: [
+          { title: 'Milled surface', body: 'Food releases without a thick coat of oil.' },
+          { title: 'Thick base', body: 'Holds heat when cold food hits the pan.' },
+          { title: 'Helper handle', body: 'A second grip for lifting a full pan.' },
+        ],
+      }),
+      cards('c', {
+        name: 'reviews',
+        heading: 'From home cooks',
+        componentId: 'cmp-review',
+        items: [
+          { quote: 'Eggs slide right off after a week of use.', name: '[reviewer name]' },
+          { quote: 'Heavy, but it holds a sear better than anything I own.', name: '[reviewer name]' },
+        ],
+      }),
+      callToAction('d', {
+        name: 'where to buy',
+        heading: 'Find it near you',
+        body: 'Hearth skillets are sold in kitchen stores and online.',
+        label: 'Where to buy',
+        screenId: 'scr-stores',
+      }),
+    ],
+  }),
+  brief({
+    id: 'multibrand-fitness-studios-pricing',
+    icp: 'multi-brand',
+    pageType: 'pricing',
+    brief: 'A pricing page for Pulse Cycle memberships across all Pulse Cycle studios: the three memberships, the questions riders ask most, and the free class form.',
+    inventory: site('host-pulse-studios-cycle', {
+      components: [
+        { id: 'cmp-plan-card', name: 'Membership card', props: { name: 'text', price: 'text', summary: 'text' } },
+        { id: 'cmp-faq-item', name: 'FAQ item', props: { question: 'text', answer: 'text' } },
+      ],
+      layouts: [
+        { id: 'lay-cycle', name: 'Pulse Cycle layout', parentId: null },
+        { id: 'lay-yoga', name: 'Pulse Yoga layout', parentId: null },
+      ],
+      forms: [{ id: 'frm-trial', name: 'Free class', fields: ['name', 'email', 'studio'] }],
+    }),
+    title: 'Memberships',
+    slug: '/memberships',
+    layout: 'lay-cycle',
+    nav: true,
+    seo: {
+      title: 'Pulse Cycle Memberships',
+      description: 'Ride at any Pulse Cycle studio with a monthly membership or a class pack. Every membership starts with a free class.',
+    },
+    sections: [
+      hero('a', {
+        title: 'Pulse Cycle memberships',
+        lead: 'Ride at any Pulse Cycle studio. Every membership starts with a free class.',
+      }),
+      cards('b', {
+        name: 'memberships',
+        heading: 'Memberships',
+        componentId: 'cmp-plan-card',
+        items: [
+          { name: 'Four classes', price: '[price] a month', summary: 'Four rides a month, booked up to a week ahead.' },
+          { name: 'Unlimited', price: '[price] a month', summary: 'Ride as often as you like, booked two weeks ahead.' },
+          { name: 'Class pack', price: '[price] for ten', summary: 'Ten rides to use within three months.' },
+        ],
+      }),
+      cards('c', {
+        name: 'questions riders ask',
+        heading: 'Questions riders ask',
+        componentId: 'cmp-faq-item',
+        items: [
+          { question: 'Can I pause my membership?', answer: 'Yes, for up to two months a year.' },
+          { question: 'Do I need cycling shoes?', answer: 'No. Every studio lends shoes at no charge.' },
+          { question: 'Can I ride at another studio?', answer: 'Yes, at every Pulse Cycle location.' },
+        ],
+      }),
+      form('d', {
+        name: 'free class form',
+        heading: 'Book a free class',
+        intro: 'Choose your studio and we send the schedule for the week.',
+        formId: 'frm-trial',
+      }),
+    ],
+  }),
+  // ── Single small businesses ─────────────────────────────────────────────
+  brief({
+    id: 'smallbiz-bakery-contact',
+    icp: 'small-business',
+    pageType: 'contact',
+    brief: 'A contact page for our bakery with the opening hours and the contact form for custom cake and wholesale questions.',
+    inventory: site('host-corner-bakery', {
+      forms: [{ id: 'frm-contact', name: 'Contact', fields: ['name', 'email', 'message'] }],
+    }),
+    title: 'Contact',
+    slug: '/contact',
+    layout: 'lay-site',
+    nav: true,
+    seo: {
+      title: 'Visit or Contact the Bakery',
+      description: 'Opening hours for the bakery, and a form for custom cake and wholesale questions. We answer within a day.',
+    },
+    sections: [
+      hero('a', { title: 'Visit or call the bakery', lead: 'Fresh bread from 7 a.m., six days a week, at [street address].' }),
+      prose('b', {
+        name: 'opening hours',
+        heading: 'Opening hours',
+        paragraphs: [
+          'Open Tuesday to Friday from 7 a.m. to 3 p.m., and Saturday and Sunday from 8 a.m. to 2 p.m. Closed on Mondays.',
+        ],
+      }),
+      form('c', {
+        name: 'contact form',
+        heading: 'Send us a message',
+        intro: 'Ask about custom cakes and wholesale orders. We answer within a day.',
+        formId: 'frm-contact',
+      }),
+    ],
+  }),
+  brief({
+    id: 'smallbiz-yoga-teacher-about',
+    icp: 'small-business',
+    pageType: 'about',
+    brief: 'An about page for my yoga teaching: why I teach, my training, and a link to the class schedule.',
+    inventory: site('host-maya-yoga', {
+      screens: [{ id: 'scr-classes', name: 'Classes', slug: 'classes', layoutId: 'lay-site', template: false }],
+    }),
+    title: 'About',
+    slug: '/about',
+    layout: 'lay-site',
+    nav: true,
+    seo: {
+      title: 'About Maya: Slow Flow and Restorative Yoga',
+      description: 'Small-group slow flow and restorative yoga classes under twelve students, with room for questions in every class.',
+    },
+    sections: [
+      hero('a', {
+        title: 'About Maya',
+        lead: 'I teach slow flow and restorative yoga in small groups, with room for questions in every class.',
+        image: 'A yoga teacher guiding a small class in a sunlit studio',
+      }),
+      prose('b', {
+        name: 'why I teach',
+        heading: 'Why I teach',
+        paragraphs: [
+          'I started yoga to recover from a running injury, and kept practicing because it made the rest of my week calmer.',
+          'My classes stay under twelve students, so I can offer a change for each body in the room.',
+        ],
+      }),
+      list('c', {
+        name: 'training',
+        heading: 'Training',
+        items: [
+          { primary: '500-hour yoga teacher training', secondary: '[school name]' },
+          { primary: 'Restorative yoga certificate', secondary: '[school name]' },
+        ],
+      }),
+      callToAction('d', {
+        name: 'class schedule',
+        heading: 'Come to a class',
+        body: 'New students can try any class at the drop-in rate.',
+        label: 'See the schedule',
+        screenId: 'scr-classes',
+      }),
+    ],
+  }),
+  brief({
+    id: 'smallbiz-bike-repair-service',
+    icp: 'small-business',
+    pageType: 'service',
+    brief: 'A service page for bike tune-ups and repairs: the three tune-up levels, how long repairs take, and the drop-off booking form.',
+    inventory: site('host-spoke-bike-repair', {
+      components: [{ id: 'cmp-service-item', name: 'Service item', props: { name: 'text', detail: 'text' } }],
+      forms: [{ id: 'frm-booking', name: 'Repair booking', fields: ['name', 'email', 'bike type', 'drop-off day'] }],
+    }),
+    title: 'Tune-ups and repairs',
+    slug: '/repairs',
+    layout: 'lay-site',
+    nav: true,
+    seo: {
+      title: 'Bike Tune-Ups and Repairs',
+      description: 'Drop off your bike any weekday morning. Three tune-up levels, most ready the next day, with a call before any extra cost.',
+    },
+    sections: [
+      hero('a', {
+        title: 'Bike tune-ups and repairs',
+        lead: 'Drop off your bike any weekday morning and pick it up ready to ride, most often the next day.',
+      }),
+      cards('b', {
+        name: 'tune-up levels',
+        heading: 'Tune-up levels',
+        componentId: 'cmp-service-item',
+        items: [
+          { name: 'Safety check', detail: 'Brakes, tires and a full bolt check. [price]' },
+          { name: 'Standard tune-up', detail: 'Adds gear and brake adjustment and wheel truing. [price]' },
+          { name: 'Overhaul', detail: 'Adds a full strip-down, cleaning and new cables. [price]' },
+        ],
+      }),
+      prose('c', {
+        name: 'how long repairs take',
+        heading: 'How long it takes',
+        paragraphs: ['Most tune-ups are ready the next day. We call before any repair that costs more than the estimate.'],
+      }),
+      form('d', {
+        name: 'drop-off booking form',
+        heading: 'Book a drop-off',
+        intro: 'Tell us about the bike and the day you can bring it in.',
+        formId: 'frm-booking',
+      }),
+    ],
+  }),
+]

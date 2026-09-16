@@ -201,6 +201,11 @@ const MOUNTS: Record<
     file: 'apps/console/app/(app)/admin/orgs/[orgId]/page.tsx',
     how: 'both',
     props: { orgId: 'org-1', org: {} },
+  // AGL-2907: beside Templates and Create New Screen on a site's Screens page.
+  hostScreens: {
+    file: 'apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', orgId: 'org-1' },
   },
 }
 

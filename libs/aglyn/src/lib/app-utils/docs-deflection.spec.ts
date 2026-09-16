@@ -459,14 +459,21 @@ describe('the gates, each forced on its own', () => {
   })
 
   it('a follow-up standing alone but retrieving weakly ALSO escalates', () => {
-    // the second question, and the reason the follow-up bar is raised
-    // rather than removed. It stands on its own words, and retrieval still
-    // does not know the answer: the page that wins is a coming-soon LAUNCH
-    // GUIDE, ahead of an animations page by well under 2x, because the guide
-    // says "add", "element" and "page". Answered as a first question (the bar
-    // there is 5 and 1.3x); escalated mid-thread, where a weak match is also
-    // evidence that the missing half is in the transcript.
-    const question = 'how do I add an element to my page'
+    // The second question, and the reason the follow-up bar is raised rather
+    // than removed. It stands on its own words, and retrieval knows the
+    // answer only modestly: the bookings overview wins, but at a score under
+    // the follow-up bar of 8 and by a lead under 2x. Answered as a first
+    // question (the bar there is 5 and 1.3x); escalated mid-thread, where a
+    // weak match is also evidence that the missing half is in the transcript.
+    //
+    // The vehicle is RE-DERIVED whenever the corpus moves under it, the way
+    // the coverage test below says to. It was "how do I add an element to my
+    // page", chosen when a coming-soon launch guide beat an animations page
+    // by well under 2x; a page about generating one (AGL-2907) then took a
+    // share of the same words, and the question's first-turn margin fell
+    // under 1.3 — refused as `ambiguous`, never reaching the gate this test
+    // is about.
+    const question = 'how do I take bookings from my site'
     expect(questionStandsAlone(question)).toBe(true)
     const first = verdictFor(question, false)
     expect(first.answered).toBe(true)

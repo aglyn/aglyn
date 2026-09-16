@@ -303,6 +303,7 @@ export type AiStepKind =
   | 'job.form'
   | 'job.layout'
   | 'job.template'
+  | 'job.page'
   | 'job.seo'
   | 'job.text'
   | 'job.theme'
@@ -325,6 +326,9 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   // building rule; the fast tier re-asks more than it saves.
   'job.layout': 'balanced',
   'job.template': 'balanced',
+  // A page section (AGL-2907) is held to the whole page's building rules on
+  // every pass, for the same reason.
+  'job.page': 'balanced',
   // SEO fields, alt text and an audit's fixes (AGL-2910): short answers
   // through a strict tool, held to a length and to the page's own text.
   'job.seo': 'fast',

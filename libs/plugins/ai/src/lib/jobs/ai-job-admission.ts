@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AiJobKind } from '../model/ai-jobs.types'
+import type { AiJobKind, AiJobPlan } from '../model/ai-jobs.types'
 
 /**
  * What a job kind checks before a job of it runs (AGL-2909).
@@ -28,8 +28,13 @@ import type { AiJobKind } from '../model/ai-jobs.types'
  * on its plan before it writes anything. So a kind registers one check, the
  * create door asks it after the gate ladder admitted the request and before
  * the job exists, and the resume door asks it again before a confirmed plan
- * runs, since an allowance free at creation may be used by then. Either way
+ * runs, since an allowance free at creation may be used by now. Either way
  * a refusal hands the reservation back and spends nothing.
+ *
+ * The resume door also hands the check the plan being confirmed (AGL-2907),
+ * so a kind that can build only some plans — a page job builds one screen
+ * from what the site has — refuses the others when a member confirms them,
+ * not a beat later from inside the step.
  *
  * The registry lives apart from the machine so the doors read it without the
  * generators, and a generator registers here beside its runner.
@@ -44,6 +49,11 @@ export interface AiJobAdmissionContext {
   inputs: Readonly<Record<string, unknown>>
   /** The org document the gate ladder read; a check narrows it to the fields it reads. */
   org: object | null
+  /**
+   * The job's plan when the door is resuming a job that has one; absent at
+   * creation, when no plan exists yet.
+   */
+  plan?: AiJobPlan | null
 }
 
 export interface AiJobAdmissionRefusal {
