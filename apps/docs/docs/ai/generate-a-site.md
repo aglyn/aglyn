@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Generate a whole site from a brief
-description: Describe a business and an Aglyn AI build job plans a small site — its pages, navigation, layout, contact form and palette — then builds each page as a draft, and an agency can run the same brief across many sites at once.
+description: Describe a business and an Aglyn AI build job plans a small site — its pages, navigation, layout, contact form and palette — then builds each page as a draft. An agency can run one brief across many sites at once.
 ---
 
 # Generate a whole site from a brief
