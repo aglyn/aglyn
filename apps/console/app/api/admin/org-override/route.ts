@@ -103,7 +103,8 @@
  *
  * ## A plan with no live subscription behind it is a COMP (AGL-3034)
  *
- *   POST { …, comp?: { plan } | null }
+ * The body gains `comp`, which is `{ plan }` or `null`, beside everything
+ * above.
  *
  * `plan` is the STORED plan, and it only decides anything where a live
  * subscription does (or, for a workspace that never subscribed, where staff

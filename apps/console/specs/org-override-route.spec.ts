@@ -895,8 +895,8 @@ describe('a percentage quota has a ceiling (AGL-2293)', () => {
 /**
  * A PLAN WITH NO LIVE SUBSCRIPTION BEHIND IT IS A COMP (AGL-3034).
  *
- * On 2026-09-16 this route set test-org — `plan: 'pro'`, `billingStatus:
- * 'canceled'` — to Pro, answered 200, and changed nothing: the resolver reads
+ * On 2026-09-16 this route set test-org — a stored Pro plan on a canceled
+ * subscription — to Pro, answered 200, and changed nothing: the resolver reads
  * a paid plan on a dead subscription as Free, and nothing said so. The cases
  * below pin the replacement from the route's side: the comp is written, it
  * takes effect, the response says so, a live subscription still governs, and

@@ -231,7 +231,8 @@ describe('a live subscription beats a comp (AGL-3034)', () => {
 describe('clearing a comp returns Free (AGL-3034)', () => {
   it('on a dead subscription', () => {
     const comped = withComp(TEST_ORG, comp('pro'))
-    const { planComp: _removed, ...entitlements } = comped.entitlements
+    const entitlements = { ...comped.entitlements }
+    delete entitlements.planComp
     const cleared = { ...comped, entitlements }
     expect(resolveEffectivePlan(comped)).toBe('pro')
     expect(resolveEffectivePlan(cleared)).toBe('free')
