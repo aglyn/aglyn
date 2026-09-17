@@ -97,7 +97,8 @@ generated until you confirm.
     address, a search title and description, and a navigation entry when the brief
     calls for one. A link goes only to a page that does what its words say: when your
     site has no such page yet, the link is left out rather than sent to your home
-    page.
+    page. Every button and link goes somewhere, to a page of your site or to an
+    address the brief gives, and one with nowhere to go is left out.
 11. **One main landmark and an ordered outline.** Every page has one main content
     area, one top-level heading, and headings that step down in order, so it reads
     well to screen readers and search engines.
@@ -108,7 +109,8 @@ generated until you confirm.
 13. **Drafts only.** Everything the AI builds is a new draft. It never publishes,
     and never changes a live page in place.
 14. **Your voice, with no filler.** Copy follows your site's tone and the brief,
-    with no lorem ipsum. Where the brief leaves out a fact, such as a phone number
+    with no lorem ipsum, and every heading, subhead and paragraph is finished rather
+    than cut off mid-sentence. Where the brief leaves out a fact, such as a phone number
     or a price, the AI marks the gap in square brackets instead of inventing it, and
     **AI jobs** lists those gaps beside the draft so you can fill them before you
     publish.
@@ -116,8 +118,9 @@ generated until you confirm.
     screen, template or email, the job starts from a copy of it, which keeps its
     bindings and SEO.
 16. **The smallest document that does the job.** Generated pages use the fewest
-    elements that render the design: no empty or doubled-up containers, text as
-    text, images that load as they are reached, video that plays on click, and no
+    elements that render the design: no empty or doubled-up containers, no list item
+    or card with nothing in it, text as text, images that load as they are reached,
+    video that plays on click, and no
     fonts or third-party embeds you did not ask for.
 17. **A measured size for every output.** Each page, component, layout, form and
     email is measured (elements, stored size, image weight, embeds and fonts)

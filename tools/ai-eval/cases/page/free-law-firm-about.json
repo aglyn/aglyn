@@ -483,6 +483,59 @@
         }
       },
       "fails": ["plan"]
+    },
+    {
+      "why": "A hero whose subhead ends mid-sentence, as a live About page's did: \"…that matter most, with\" (AGL-3072).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "h5", "component": "p", "children": "A small firm that helps families and small businesses in [city] plan ahead, with" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A list of practice areas whose last item has no words, as a live About page's estate planning list did (AGL-3072).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro", "areas"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } },
+            "areas": { "componentId": "section", "props": { "element": "section" }, "nodes": ["areas-title", "areas-list"] },
+            "areas-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What we help with" } },
+            "areas-list": { "componentId": "muiList", "nodes": ["area-1", "area-2"] },
+            "area-1": { "componentId": "muiListItem", "nodes": ["area-1-text"] },
+            "area-1-text": { "componentId": "muiListItemText", "props": { "primary": "Estate planning", "secondary": "Wills, trusts and powers of attorney, written so your family knows what you wanted." } },
+            "area-2": { "componentId": "muiListItem", "nodes": ["area-2-text"] },
+            "area-2-text": { "componentId": "muiListItemText", "props": {} }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A hero call to action that goes nowhere, as a live About page's \"Request a Consultation\" did (AGL-3072).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead", "cta"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } },
+            "cta": { "componentId": "muiButton", "props": { "variant": "contained", "children": "Request a consultation" } }
+          }
+        }
+      },
+      "fails": ["rules"]
     }
   ]
 }

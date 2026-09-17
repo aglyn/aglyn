@@ -197,6 +197,34 @@ describe('a section that breaks the page’s rules', () => {
     )
   })
 
+  it('is refused for a subhead cut short, an empty list item and a button that goes nowhere, each named by the model’s own id with what to write instead (AGL-3072)', () => {
+    // The live Free About hero's three defects, written into this brief's hero.
+    const answer = structuredClone(fixture.answers[0])
+    answer.nodes['a2'].props = { variant: 'h5', component: 'p', children: 'A licensed roofer checks shingles, flashing and gutters, with' }
+    answer.nodes['a3'].props = { children: 'Request a quote', variant: 'contained' }
+    answer.nodes['a7'] = { componentId: 'muiList', nodes: ['a8', 'a10'] }
+    answer.nodes['a8'] = { componentId: 'muiListItem', nodes: ['a9'] }
+    answer.nodes['a9'] = { componentId: 'muiListItemText', props: { primary: 'Shingles and flashing' } }
+    answer.nodes['a10'] = { componentId: 'muiListItem', nodes: ['a11'] }
+    answer.nodes['a11'] = { componentId: 'muiListItemText', props: {} }
+    answer.nodes['a5'].nodes = [...(answer.nodes['a5'].nodes ?? []), 'a7']
+    const result = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, uses: [], inventory: fixture.inventory })({
+      tree: JSON.stringify(answer),
+    })
+    expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
+      { rule: 10, code: 'link-without-destination', nodeIds: ['a3'] },
+      { rule: 14, code: 'dangling-word', nodeIds: ['a2'] },
+      { rule: 16, code: 'empty-item', nodeIds: ['a10'] },
+    ])
+    expect(Object.keys(result.offending ?? {}).sort()).toEqual(['a10', 'a2', 'a3'])
+    const reask = aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)
+    expect(reask).toContain(
+      '"Request a quote" goes nowhere. Give it the "screenId" of a screen the site has, or an "href" that is a path on this site or an https: address the brief gives.',
+    )
+    expect(reask).toContain('its last word, "with", leaves the sentence unfinished. Finish the sentence, or end the line before "with". (nodes a2)')
+    expect(reask).toContain('Write the words of its List Item Text, or take the item out. (nodes a10)')
+  })
+
   it('is unreadable unless it is exactly one Section inside the document wrapper', () => {
     const two = {
       rootId: 'root',

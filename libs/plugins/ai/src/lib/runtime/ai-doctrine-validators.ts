@@ -1282,6 +1282,53 @@ export function detectUnrelatedScreenLinks(
   ]
 }
 
+/** A prop value with something in it: a destination, or words. */
+function isFilled(value: unknown): boolean {
+  return typeof value === 'string' && value.trim() !== ''
+}
+
+/**
+ * Rule 10, for a link that goes nowhere (AGL-3072). A Button or a Screen Link
+ * goes where its `screenId` or its `href` says, and those are the only
+ * destinations either element carries: the palette validator keeps a
+ * `screenId` the site has, and an `href` that is a path on the site, an
+ * `https:` address or a binding the caller admitted. Nothing else can stand
+ * in for one. A form is sent by the button the Form draws from its own
+ * `submitLabel`, the elements a page places carry no id an anchor could name
+ * (AGL-2867), and a generated node sets no interaction. So a link with
+ * neither is a dead control: a live About page's hero carried a "Request a
+ * Consultation" button with no destination. It is refused, with a re-ask
+ * naming its words and what it may link.
+ */
+export function detectLinksWithoutDestination(tree: AiDoctrineTree, outputKind: AiOutputKind): AiDoctrineViolation[] {
+  if (outputKind === 'email' || outputKind === 'form') return []
+  const dead: Array<{ id: string; label: string; inForm: boolean }> = []
+  for (const visit of walkTree(tree)) {
+    const { node } = visit
+    if (!LINK_COMPONENTS.has(node.componentId)) continue
+    if (isFilled(node.props?.['screenId']) || isFilled(node.props?.['href'])) continue
+    dead.push({
+      id: visit.id,
+      label: typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : '',
+      inForm: hasAncestor(tree, visit, (ancestor) => ancestor.componentId === 'form'),
+    })
+  }
+  if (!dead.length) return []
+  const [first] = dead
+  const words = first.label ? `"${first.label}"` : `A ${displayName(tree.nodes[first.id].componentId)}`
+  const instead = dead.some((entry) => entry.inForm)
+    ? ' A Form draws its own send button from its "submitLabel", so take out a button drawn inside one and set that label instead.'
+    : ' When the site has no page for it, take it out: a form on this page is sent by its own button, and no element can be reached by an anchor.'
+  return [
+    {
+      rule: 10,
+      code: 'link-without-destination',
+      message: `${words} goes nowhere. Give it the "screenId" of a screen the site has, or an "href" that is a path on this site or an https: address the brief gives.${instead}`,
+      nodeIds: unique(dead.map((entry) => entry.id)),
+    },
+  ]
+}
+
 /** Answer fields that say "publish", wherever the answer put them. */
 const PUBLISH_KEYS = /^(?:publish|published|publishNow|publishAt|goLive|isLive|live|makeLive)$/i
 
@@ -1443,6 +1490,139 @@ export function aiTreeCopy(
   return samples
 }
 
+/**
+ * The props a heading, a subhead or a body text shows as a line a reader
+ * reads, by element. A button's or a link's label, a form field's label, a
+ * run of inline text inside a sentence and every accessible name are not
+ * lines, and how they end is not held.
+ */
+const LINE_PROPS: Readonly<Record<string, readonly string[]>> = {
+  muiTypography: ['children'],
+  muiListItemText: ['primary', 'secondary'],
+  muiCardHeader: ['title', 'subheader'],
+  muiAccordionSummary: ['children'],
+  emailText: ['children'],
+}
+
+/** Text styles that label rather than say: a caption, an overline, a micro label. */
+const LABEL_VARIANTS = new Set(['caption', 'overline', 'micro'])
+
+/**
+ * Words no finished line ends on: an article, or a conjunction that joins two
+ * parts. "a" counts only in lowercase, since "Plan A" ends on a name.
+ */
+const DANGLING_WORDS = new Set(['an', 'the', 'and', 'or', 'but', 'nor', '&'])
+
+/**
+ * Words that open a phrase. A title may end on one it strands, as "What we
+ * help with" does, but a line that ends on one right after a comma or a dash
+ * opened a phrase it never wrote: "…that matter most, with".
+ */
+const OPENING_WORDS = new Set([
+  'about',
+  'across',
+  'after',
+  'against',
+  'along',
+  'among',
+  'as',
+  'at',
+  'because',
+  'before',
+  'between',
+  'by',
+  'for',
+  'from',
+  'if',
+  'in',
+  'into',
+  'like',
+  'of',
+  'on',
+  'onto',
+  'since',
+  'so',
+  'than',
+  'that',
+  'through',
+  'to',
+  'toward',
+  'towards',
+  'unless',
+  'until',
+  'upon',
+  'via',
+  'when',
+  'where',
+  'whereas',
+  'while',
+  'with',
+  'within',
+  'without',
+])
+
+/** A line that closes itself: a sentence's end, a closing quote or bracket, or a colon that introduces what follows. */
+const CLOSED_LINE = /[.!?…:;"'”’»)\]]$/
+
+/**
+ * The word a line ends on when that word leaves it unfinished (AGL-3072), or
+ * `null`. A line that closes itself, ends on a binding or a bracketed fact the
+ * member fills, or ends on any other word, is finished as far as a check can
+ * tell. Exported for the specs that hold the closed list.
+ */
+export function aiDanglingWord(line: string): string | null {
+  const text = line.trim()
+  if (!text || CLOSED_LINE.test(text)) return null
+  const word = /(?:^|[^A-Za-z&'’])([A-Za-z]+|&)$/.exec(text)?.[1]
+  if (!word) return null
+  const lower = word.toLowerCase()
+  if (word === 'a' || DANGLING_WORDS.has(lower)) return word
+  // A comma, a semicolon or a dash breaks the line before the word; the hyphen
+  // of "Drop-in" or "Add-on" joins one word and breaks nothing.
+  const before = text.slice(0, text.length - word.length)
+  return OPENING_WORDS.has(lower) && /(?:[,;—–]|\s-)\s*$/.test(before) ? word : null
+}
+
+/** The last words of a line, as a re-ask quotes them. */
+function lineTail(line: string): string {
+  const words = line.trim().split(/\s+/)
+  return words.length > 6 ? `…${words.slice(-6).join(' ')}` : words.join(' ')
+}
+
+/**
+ * Rule 14, for a line cut short (AGL-3072). Copy in the site's voice is
+ * finished copy: a heading, a subhead or a body text that ends on an article
+ * or a joining conjunction, or on a word that opens a phrase right after a
+ * comma, with no closing punctuation, reads as a sentence cut off mid-thought.
+ * A live About page's hero subhead ended "…that matter most, with". A closed
+ * list of words, on the lines a reader reads, keeps it deterministic: a
+ * label, a button, a caption and a bracketed fact are never held to it.
+ */
+export function detectDanglingWords(tree: AiDoctrineTree): AiDoctrineViolation[] {
+  const found: Array<{ id: string; line: string; word: string }> = []
+  for (const { id, node } of walkTree(tree)) {
+    const props = LINE_PROPS[node.componentId]
+    if (!props) continue
+    if (node.componentId === 'muiTypography' && LABEL_VARIANTS.has(String(node.props?.['variant'] ?? ''))) continue
+    if (node.componentId === 'emailText' && node.props?.['variant'] === 'caption') continue
+    for (const name of props) {
+      const line = node.props?.[name]
+      const word = typeof line === 'string' ? aiDanglingWord(line) : null
+      if (word) found.push({ id, line: line as string, word })
+    }
+  }
+  if (!found.length) return []
+  const [first] = found
+  return [
+    {
+      rule: 14,
+      code: 'dangling-word',
+      message: `"${lineTail(first.line)}" has no closing punctuation, and its last word, "${first.word}", leaves the sentence unfinished. Finish the sentence, or end the line before "${first.word}".`,
+      nodeIds: unique(found.map((entry) => entry.id)),
+    },
+  ]
+}
+
 const PURE_CONTAINERS = new Set(['muiBox', 'muiStack', 'muiContainer', 'muiGrid', 'section'])
 const EMBED_COMPONENTS = new Set(['videoEmbed', 'custom-html', 'functionWidget'])
 const DUPLICATE_SX_MIN_KEYS = 2
@@ -1542,6 +1722,70 @@ export function detectHeavyDocument(
     'This embeds a third-party player or script, which loads its own code on every visit. Use a Video from the media library, or name the embed and its cost in the plan.',
   )
   return violations
+}
+
+/** The items a list or a row of cards repeats, as a re-ask names them. */
+const ITEM_NOUNS: Readonly<Record<string, string>> = { muiListItem: 'list item', muiCard: 'card' }
+
+/** Elements that frame or space what they hold and show nothing of their own. */
+const FRAME_COMPONENTS = new Set([
+  'div',
+  'section',
+  'muiBox',
+  'muiStack',
+  'muiContainer',
+  'muiGrid',
+  'muiPaper',
+  'muiCard',
+  'muiCardContent',
+  'muiCardActions',
+  'muiListItem',
+  'muiAccordion',
+  'muiAccordionDetails',
+])
+
+/** Elements that show only their words, by the props that hold them. */
+const WORD_PROPS: Readonly<Record<string, readonly string[]>> = {
+  ...LINE_PROPS,
+  muiList: ['subheader'],
+  muiInlineText: ['children'],
+  muiButton: ['children'],
+  muiScreenLink: ['children'],
+}
+
+/** Whether a node shows anything of its own: its words, or whatever an element that is neither a frame nor words draws. */
+function showsOwn(node: AiDoctrineNode): boolean {
+  const words = WORD_PROPS[node.componentId]
+  if (words) return words.some((name) => isFilled(node.props?.[name]))
+  return !FRAME_COMPONENTS.has(node.componentId)
+}
+
+/**
+ * Rule 16, for an item with nothing in it (AGL-3072). A list item or a card
+ * that holds elements, none of which shows a word, a picture or anything
+ * else, is an empty row or an empty box on the page: a live About page's list
+ * of estate planning services ended on a List Item whose List Item Text had
+ * no words. An item that holds no element at all is `empty-container`'s, and
+ * is not reported twice.
+ */
+export function detectEmptyItems(tree: AiDoctrineTree): AiDoctrineViolation[] {
+  const empty: Array<{ id: string; noun: string }> = []
+  for (const { id, node } of walkTree(tree)) {
+    const noun = ITEM_NOUNS[node.componentId]
+    if (!noun || !(node.nodes ?? []).some((child) => tree.nodes[child])) continue
+    if (!walkTree({ rootId: id, nodes: tree.nodes }).some((inner) => showsOwn(inner.node))) {
+      empty.push({ id, noun })
+    }
+  }
+  if (!empty.length) return []
+  const nouns = unique(empty.map((entry) => entry.noun))
+  const message =
+    nouns.length > 1
+      ? 'A list item and a card hold nothing to read or see. Give each its words, or take it out.'
+      : nouns[0] === 'list item'
+        ? 'A list item holds no words, so its row shows empty. Write the words of its List Item Text, or take the item out.'
+        : 'A card holds nothing to read or see. Give it its words, or take the card out.'
+  return [{ rule: 16, code: 'empty-item', message, nodeIds: empty.map((entry) => entry.id) }]
 }
 
 // ── Rule 17: the budget, measured ────────────────────────────────────────
@@ -1820,11 +2064,14 @@ export function validateAiDoctrineTree(
     ...detectTypedData(tree),
     ...detectImageSources(tree, context),
     ...detectUnrelatedScreenLinks(tree, outputKind, context),
+    ...detectLinksWithoutDestination(tree, outputKind),
     ...detectDocumentStructure(tree, outputKind),
     ...detectAdHocWidths(tree, outputKind),
     ...detectUnresponsiveGrids(tree, outputKind),
     ...detectOffVoiceCopy(aiTreeCopy(tree, context), context.framing),
+    ...detectDanglingWords(tree),
     ...detectHeavyDocument(tree, outputKind, context),
+    ...detectEmptyItems(tree),
   ]
   const score = scoreAiOutput(tree, outputKind, context)
   violations.push(...detectOverBudget(score, outputKind, tree, context))

@@ -618,7 +618,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     expect(measured()).toEqual({
       plan: { prefixTokens: 2_945, minimum: 1_024, caches: true, toolsStable: true },
       layout: { prefixTokens: 4_414, minimum: 1_024, caches: true, toolsStable: true },
-      template: { prefixTokens: 4_987, minimum: 1_024, caches: true, toolsStable: true },
+      template: { prefixTokens: 4_956, minimum: 1_024, caches: true, toolsStable: true },
       component: { prefixTokens: 5_022, minimum: 1_024, caches: true, toolsStable: true },
       email: { prefixTokens: 2_901, minimum: 1_024, caches: true, toolsStable: true },
       form: { prefixTokens: 2_529, minimum: 1_024, caches: true, toolsStable: true },

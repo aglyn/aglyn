@@ -728,7 +728,7 @@ confirmed `job.plan` and builds exactly one draft.
   tokens a caller names, and the palette validator is otherwise unchanged.
 - **Examples.** The template step sends the platform's starter pages as a
   cached block after its instructions (`src/lib/runtime/ai-template-examples.ts`),
-  each brought up to rules 3, 5 and 11 the same way, shown only when the
+  each brought up to rules 3, 5, 10 and 11 the same way, shown only when the
   doctrine accepts it with no repair, one page per shape, within 6,000
   characters.
 - **Drafts.** `src/lib/jobs/ai-job-drafts.ts` writes the document the host
@@ -1553,6 +1553,54 @@ the same way, in a Grid with a row direction and no container.
   the page-section ledger's prefix), and no credit figure the Free arithmetic quotes
   moves. A Grid item is an element, so a row of cards takes one more element a card:
   written once, one.
+
+### A finished section
+
+The first live Free About page (AGL-3072) passed every check with three defects a
+reader sees at once: a hero subhead ending "…that matter most, with", a list of estate
+planning services whose last item had no words, and a "Request a Consultation" button
+that went nowhere. Three validators in `runtime/ai-doctrine-validators.ts` refuse each on
+every page, template, layout and component tree, in the loop every rule uses, with a
+re-ask that names the model's own nodes and says what to write instead:
+
+- **Rule 14, `dangling-word`** (`detectDanglingWords`, `aiDanglingWord`). A line a reader
+  reads — a Typography's text in any style but a caption, an overline or a micro label,
+  a List Item Text's primary and secondary text, a Card Header's title and subheader, an
+  Accordion Summary, an email's text — with no closing punctuation is refused when it
+  ends on an article (`a` in lowercase, `an`, `the`) or a joining conjunction (`and`,
+  `or`, `but`, `nor`, `&`), or on a word that opens a phrase (a closed list of
+  prepositions and subordinating conjunctions such as `with`, `for`, `from` and
+  `because`) right after a comma, a semicolon or a dash. So "What we help with" is a
+  title and "…matter most, with" is a sentence cut short. A button's or a link's label,
+  a form field's label, a run of Inline Text, a bracketed fact and a binding are never
+  held to how they end. The re-ask quotes the line's last words and says to finish the
+  sentence or end it before that word.
+- **Rule 16, `empty-item`** (`detectEmptyItems`). A List Item or a Card that holds
+  elements, none of which shows a word, a picture or anything else, is an empty row or
+  box. One that holds no element at all stays `empty-container`'s. The re-ask says to
+  write the item's words or take it out.
+- **Rule 10, `link-without-destination`** (`detectLinksWithoutDestination`). A Button
+  and a Screen Link carry two destinations, a `screenId` and an `href`, and nothing
+  else: the palette validator keeps a screen the site has and an `href` that is a path
+  on the site, an `https:` address or a binding the caller admitted. A form is sent by
+  the button the Form draws from its own `submitLabel`, the elements a page places carry
+  no id an anchor could name (AGL-2867, so a bare `#fragment` is dropped), and a
+  generated node sets no interaction. So a link with neither is refused; the re-ask names
+  its words and both destinations, and says to take it out when the site has no page
+  for it, or, inside a Form, to set the form's `submitLabel` instead. An email's buttons
+  stay the email door's (`email-button-link`).
+- **The starter examples a template is shown** (`runtime/ai-template-examples.ts`) leave
+  a Button or Screen Link with no destination out, as they leave out an inline form: the
+  Portfolio starter's hero "Get in touch" points nowhere until a member picks where it
+  goes. The template ledger's prefix moves from 4,987 to 4,956 estimated tokens.
+- **Controls.** The validators spec refuses the live page's hero and estate planning
+  sections, kept by hand as `AI_FREE_PAGE_BUILT_SECTIONS` in
+  `jobs/fixtures/ai-free-page-recording.ts`, for exactly these three findings and
+  nothing else; a section pass names each by the model's own id; and the Free About eval
+  case holds a failing control for each. The section eval case's call to action now links
+  a path.
+- **What it costs.** No prompt line: a rule costs nothing until an answer breaks it, and
+  then one re-ask. No credit figure the Free arithmetic quotes moves.
 
 ### The time budget
 

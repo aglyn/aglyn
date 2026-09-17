@@ -23,7 +23,7 @@
 import { formatMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
 import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import { AI_FREE_PAGE_RECORDED_PLAN } from '../jobs/fixtures/ai-free-page-recording'
+import { AI_FREE_PAGE_BUILT_SECTIONS, AI_FREE_PAGE_RECORDED_PLAN } from '../jobs/fixtures/ai-free-page-recording'
 import type { AiBuildPlan, AiBuildPlanScreen } from '../model/ai-build-plan'
 import { AI_PAGE_CREATE_KINDS } from '../model/ai-page-job'
 import {
@@ -37,17 +37,21 @@ import {
   AI_DOCTRINE_RULES,
   AI_TYPED_LIST_MIN_ITEMS,
   aiBracketedFacts,
+  aiDanglingWord,
   aiDoctrineViolationText,
   aiNamesMatch,
   aiTreeCopy,
   detectAdHocWidths,
   detectCreateBeforeReuse,
+  detectDanglingWords,
   detectDocumentStructure,
+  detectEmptyItems,
   detectHeavyDocument,
   detectImageSources,
   detectInlineForms,
   detectInvisibleLinks,
   detectLayoutRegions,
+  detectLinksWithoutDestination,
   detectLiteralStyles,
   detectMissedDuplicate,
   detectMissingNavAndSeo,
@@ -789,6 +793,68 @@ describe('rule 10 — a link goes to a screen that does what its words say, or i
   })
 })
 
+describe('rule 10 — a link that goes nowhere (AGL-3072)', () => {
+  const button = (props: Record<string, unknown> = {}): Nested => ({
+    componentId: 'muiButton',
+    props: { children: 'Request a Consultation', variant: 'contained', ...props },
+  })
+
+  it('refuses the live hero’s button with no destination, naming its words and every destination it may take', () => {
+    expect(detectLinksWithoutDestination(tree(page(section(button()))), 'page')).toEqual([
+      {
+        rule: 10,
+        code: 'link-without-destination',
+        message:
+          '"Request a Consultation" goes nowhere. Give it the "screenId" of a screen the site has, or an "href" that is a path on this site or an https: address the brief gives. When the site has no page for it, take it out: a form on this page is sent by its own button, and no element can be reached by an anchor.',
+        nodeIds: ['n2'],
+      },
+    ])
+    const unlabeled = { componentId: 'muiScreenLink', props: { renderAs: 'link' } }
+    expect(detectLinksWithoutDestination(tree(page(section(unlabeled))), 'layout')).toMatchObject([
+      { code: 'link-without-destination', message: expect.stringMatching(/^A Screen Link goes nowhere\./), nodeIds: ['n2'] },
+    ])
+  })
+
+  it('tells a button drawn inside a Form that the Form draws its own send button from its submitLabel', () => {
+    const form: Nested = {
+      componentId: 'form',
+      props: { formName: 'Consultation request' },
+      children: [{ componentId: 'formField', props: { fieldName: 'email', label: 'Email', fieldType: 'email' } }, button({ children: 'Send' })],
+    }
+    expect(detectLinksWithoutDestination(tree(page(section(form))), 'page')).toMatchObject([
+      {
+        code: 'link-without-destination',
+        message: expect.stringContaining('A Form draws its own send button from its "submitLabel", so take out a button drawn inside one and set that label instead.'),
+        nodeIds: ['n4'],
+      },
+    ])
+  })
+
+  it('passes a link to a screen the site has, a path on the site, an https address and a bound one, and leaves an email’s buttons to the email door', () => {
+    const linked = tree(
+      page(
+        section(
+          button({ screenId: 'scr-about' }),
+          button({ href: '/contact' }),
+          button({ href: 'https://calendly.com/brightwater' }),
+          { componentId: 'muiScreenLink', props: { children: 'Read more', href: '{{prop.link}}' } },
+        ),
+      ),
+    )
+    expect(detectLinksWithoutDestination(linked, 'component')).toEqual([])
+    expect(detectLinksWithoutDestination(tree(page(section(button()))), 'email')).toEqual([])
+  })
+
+  it('refuses a link whose only destination was an anchor, which the palette validator drops and no element on a page could answer', () => {
+    const anchored = tree(page(section(text('h1', 'About Brightwater Law', 'h1'), button({ href: '#consultation' }))))
+    const report = validateAiDoctrineTree(anchored, 'page')
+    expect(report.tree?.repairs).toEqual(['n3.href is neither an https: URL nor a path on this site; dropped'])
+    expect(report.violations.map((violation) => [violation.code, violation.nodeIds])).toEqual([
+      ['link-without-destination', [Object.keys(report.tree?.sourceIds ?? {}).find((id) => report.tree?.sourceIds[id] === 'n3')]],
+    ])
+  })
+})
+
 describe('rule 14 — the facts in square brackets a draft asks the member to fill (AGL-3056)', () => {
   it('reads each fact once whatever its case, in the order it first appears, and nothing that is not one', () => {
     expect(
@@ -799,6 +865,82 @@ describe('rule 14 — the facts in square brackets a draft asks the member to fi
         '[Office phone number]',
       ]),
     ).toEqual(['[Office address]', '[Office hours]', '[office phone number]', '[nested]'])
+  })
+})
+
+describe('rule 14 — a line cut short (AGL-3072)', () => {
+  it('reads a line as unfinished on an article or a joining conjunction, and on a word that opens a phrase after a comma or a dash', () => {
+    expect(
+      [
+        'We are a client-focused law firm guiding individuals, families and businesses through the moments that matter most, with',
+        'Wills, trusts and',
+        'Meet the',
+        'We are a',
+        'Business &',
+        'Serving [city] families, from',
+        'Plain answers — about',
+        'Plain answers - for',
+      ].map(aiDanglingWord),
+    ).toEqual(['with', 'and', 'the', 'a', '&', 'from', 'about', 'for'])
+  })
+
+  it('reads a line as finished when it closes, strands a word a title may end on, ends on a name, a hyphenated word, a bracketed fact or a binding', () => {
+    expect(
+      [
+        'What we help with',
+        'Who we work for',
+        'Plan A',
+        'Drop-in hours',
+        'Check-in',
+        'We work with families.',
+        'Our services include:',
+        'Call us at [Office phone number]',
+        'Hi {{contact.firstName}}',
+        'Estate planning and wills',
+        '',
+      ].map(aiDanglingWord),
+    ).toEqual([null, null, null, null, null, null, null, null, null, null, null])
+  })
+
+  it('refuses a heading, a subhead or a body line cut short, naming each node and quoting the first line’s end', () => {
+    const found = detectDanglingWords(
+      tree(
+        page(
+          section(
+            text('h1', 'About Brightwater Law and', 'h1'),
+            text('h5', 'Guiding families through the moments that matter most, with', 'p'),
+            { componentId: 'muiList', children: [{ componentId: 'muiListItem', children: [{ componentId: 'muiListItemText', props: { primary: 'Wills', secondary: 'Written so your family knows the' } }] }] },
+            { componentId: 'muiCard', children: [{ componentId: 'muiCardHeader', props: { title: 'Real estate', subheader: 'Closings, leases and' } }] },
+          ),
+        ),
+      ),
+    )
+    expect(found).toEqual([
+      {
+        rule: 14,
+        code: 'dangling-word',
+        message:
+          '"About Brightwater Law and" has no closing punctuation, and its last word, "and", leaves the sentence unfinished. Finish the sentence, or end the line before "and".',
+        nodeIds: ['n2', 'n3', 'n6', 'n8'],
+      },
+    ])
+  })
+
+  it('holds no button, link, label, caption or run of inline text to how it ends', () => {
+    const labels = tree(
+      page(
+        section(
+          text('h1', 'Contact', 'h1'),
+          { componentId: 'muiButton', props: { children: 'Sign up for', href: '/signup' } },
+          { componentId: 'muiScreenLink', props: { children: 'Read about', screenId: 'scr-about' } },
+          text('caption', 'Photo by the'),
+          text('overline', 'Serving families and'),
+          { componentId: 'formField', props: { fieldName: 'topic', label: 'Tell us about the', fieldType: 'text' } },
+          { componentId: 'muiInlineText', props: { children: 'We work with the' } },
+        ),
+      ),
+    )
+    expect(detectDanglingWords(labels)).toEqual([])
   })
 })
 
@@ -1043,6 +1185,55 @@ describe('rule 16 — the smallest document that does the job', () => {
   })
 })
 
+describe('rule 16 — an item with nothing in it (AGL-3072)', () => {
+  const listItem = (props: Record<string, unknown>): Nested => ({
+    componentId: 'muiListItem',
+    children: [{ componentId: 'muiListItemText', props }],
+  })
+
+  it('refuses the live list’s last item, whose List Item Text has no words, saying to write them or take the item out', () => {
+    const list = tree(page(section({ componentId: 'muiList', children: [listItem({ primary: 'Wills & Trusts' }), listItem({})] })))
+    expect(detectEmptyItems(list)).toEqual([
+      {
+        rule: 16,
+        code: 'empty-item',
+        message: 'A list item holds no words, so its row shows empty. Write the words of its List Item Text, or take the item out.',
+        nodeIds: ['n5'],
+      },
+    ])
+  })
+
+  it('refuses a card that frames only blank words, and names a list item and a card together', () => {
+    const blankCard: Nested = {
+      componentId: 'muiCard',
+      children: [{ componentId: 'muiCardContent', children: [text('h3', '  ', 'h3'), { componentId: 'muiStack', children: [text('body2', '')] }] }],
+    }
+    expect(detectEmptyItems(tree(page(section(blankCard))))).toMatchObject([
+      { code: 'empty-item', message: 'A card holds nothing to read or see. Give it its words, or take the card out.', nodeIds: ['n2'] },
+    ])
+    const both = detectEmptyItems(tree(page(section(blankCard, { componentId: 'muiList', children: [listItem({ primary: '' })] }))))
+    expect(both).toMatchObject([
+      { message: 'A list item and a card hold nothing to read or see. Give each its words, or take it out.', nodeIds: ['n2', 'n8'] },
+    ])
+  })
+
+  it('passes an item with words or a picture, and leaves an item that holds no element at all to the empty-container rule', () => {
+    const filled = tree(
+      page(
+        section(
+          { componentId: 'muiList', children: [listItem({ secondary: 'Probate and trust administration' })] },
+          { componentId: 'muiCard', children: [image({ alt: 'The office on Main Street' })] },
+          { componentId: 'muiCard', children: [{ componentId: 'muiCardHeader', props: { title: 'Family law' } }] },
+        ),
+      ),
+    )
+    expect(detectEmptyItems(filled)).toEqual([])
+    const bare = tree(page(section({ componentId: 'muiCard' })))
+    expect(detectEmptyItems(bare)).toEqual([])
+    expect(codes(detectHeavyDocument(bare, 'page'))).toEqual(['empty-container'])
+  })
+})
+
 describe('rule 17 — a measured budget for every output', () => {
   it('scores what a tree weighs, in the save’s bytes and the library’s recorded sizes', () => {
     const measured = tree(
@@ -1179,6 +1370,23 @@ describe('validateAiDoctrineTree — the palette first, then every rule', () => 
       [5, 'link-color-on-band'],
       [10, 'link-unrelated-screen'],
     ])
+  })
+
+  it('refuses the live Free About page for its three defects and nothing else, by the ids it stored them under (AGL-3072)', () => {
+    const report = validateAiDoctrineTree(AI_FREE_PAGE_BUILT_SECTIONS, 'page', { reusableComponents: false })
+    expect(report.tree?.repairs).toEqual([])
+    expect(
+      report.violations.map((violation) => [
+        violation.rule,
+        violation.code,
+        violation.nodeIds?.map((id) => report.tree?.sourceIds[id]),
+      ]),
+    ).toEqual([
+      [10, 'link-without-destination', ['Jgquy_nSMC']],
+      [14, 'dangling-word', ['IxdLHxS6ds']],
+      [16, 'empty-item', ['Z-lpdjMIZb']],
+    ])
+    expect(report.violations[1].message).toContain('"…the moments that matter most, with" has no closing punctuation')
   })
 
   it('turns a tree the palette refuses into one unreadable-output finding, and still holds rule 13', () => {
