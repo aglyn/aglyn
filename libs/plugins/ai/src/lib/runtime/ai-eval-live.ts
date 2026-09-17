@@ -848,10 +848,10 @@ export const AI_EVAL_PLAN_GRADER_NOTE =
  *
  * A case that describes its workspace had its plan told what that workspace
  * may create, and a workspace that keeps no reusable components or saved
- * forms builds the only way it can: the repeated item drawn where it repeats,
- * the form carried by the page. A grader told none of that grades the doctrine
- * whole, and marks reuse down for exactly the build the workspace required,
- * as it marked down the first live recording of the Free brief.
+ * forms builds the only way it can: a list's repeated items drawn in one
+ * section, the form carried by the page. A grader told none of that grades
+ * the doctrine whole, and marks reuse down for exactly the build the workspace
+ * required, as it marked down the first live recording of the Free brief.
  */
 export const AI_EVAL_CAPABILITIES_GRADER_NOTE =
   'Grade reuse against what this workspace may create, as listed above: never mark an output down for not creating what the workspace may not make.'
@@ -861,7 +861,7 @@ export const AI_EVAL_CAPABILITIES_GRADER_NOTE =
  * forms, which the capability lines have already said.
  */
 export const AI_EVAL_INLINE_GRADER_NOTE =
-  'On this workspace, a repeated item drawn in its own section and a form drawn on the page, as a Form element holding its Form Fields, are the correct build and never a missed reuse.'
+  "On this workspace, a list's repeated items drawn in one section and a form drawn on the page, as a Form element holding its Form Fields, are the correct build and never a missed reuse."
 
 /**
  * The workspace a case describes, as its grader reads it: the capability

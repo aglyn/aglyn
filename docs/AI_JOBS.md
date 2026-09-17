@@ -388,8 +388,8 @@ live answer.
   loses the key and stops before its first request, saying why. Where a case
   describes its workspace, the grader is told it the way the plan was — the
   capability lines — and that on a workspace without reusable components or saved
-  forms, an item drawn where it repeats and a form drawn on the page are the correct
-  build rather than a missed reuse (`aiEvalGraderCapabilities`, AGL-3040). A built
+  forms, a list's repeated items drawn in one section and a form drawn on the page are
+  the correct build rather than a missed reuse (`aiEvalGraderCapabilities`, AGL-3040). A built
   page's grader is shown what its tree does not hold (AGL-3073): the plan's
   creations and sections (`aiEvalPlanOutline`), and the screen as the draft stored
   it, which a page recording keeps under `candidate.screen` — its address, search
