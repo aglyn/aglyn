@@ -356,6 +356,9 @@ describe('the pieces', () => {
       kind: 'Call',
       text: 'Asked us to text [phone number] instead',
     })
+    expect(crmOpenTaskFacts([{ title: 'Text 512 555 0100 the gate code', kind: 'todo', status: 'open' }], NOW)[0].title).toBe(
+      'Text [phone number] the gate code',
+    )
     expect(crmFactProse(42, 280)).toBe('')
   })
 

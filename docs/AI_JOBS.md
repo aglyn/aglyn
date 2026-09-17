@@ -2294,8 +2294,8 @@ from the job, and the step writes no CRM record.
   the facts its builders list (`libs/plugins/crm/src/lib/model/record-facts.ts`),
   which never include an email address, a phone number, a postal address,
   consent, a custom field value, a team member or a record id. Free text the
-  team typed (notes, a logged activity, a capture's summary, a reason) goes as
-  written, except that an email address or a phone number inside it is
+  team typed (notes, a logged activity, a capture's summary, a task's or a
+  deal's title, a reason) goes as written, except that an email address or a phone number inside it is
   replaced by a placeholder first (`crmFactProse`); a postal address typed
   into a note is not recognized. The step writes into a prompt only the facts
   it names, whatever else a reader reports.

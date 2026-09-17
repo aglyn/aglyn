@@ -71,8 +71,9 @@ import {
  * types, never a row of the file.
  *
  * What the team typed — notes, a logged activity, a capture's summary, a
- * reason — is reported as written, except that an email address or a phone
- * number inside it is replaced by a placeholder first ({@link crmFactProse}).
+ * task's or a deal's title, a reason — is reported as written, except that an
+ * email address or a phone number inside it is replaced by a placeholder
+ * first ({@link crmFactProse}).
  * A postal address typed into a note is not recognized and leaves as typed.
  *
  * ## Stable bytes
@@ -379,7 +380,7 @@ export function crmOpenTaskFacts(tasks: ReadonlyArray<Partial<CrmTask>>, nowMs: 
     .sort((a, b) => (a.due ?? Number.POSITIVE_INFINITY) - (b.due ?? Number.POSITIVE_INFINITY) || a.index - b.index)
     .slice(0, CRM_FACTS_TASKS_MAX)
     .map(({ task, due }) => ({
-      title: crmFactText(task.title, CRM_FACTS_LABEL_MAX),
+      title: crmFactProse(task.title, CRM_FACTS_LABEL_MAX),
       kind: task.kind && CRM_TASK_KIND_LABELS[task.kind] ? CRM_TASK_KIND_LABELS[task.kind] : 'To-do',
       priority: task.priority === 'high' || task.priority === 'low' ? task.priority : 'normal',
       due: due === null ? null : crmFactDay(due),
@@ -392,7 +393,7 @@ export function crmOpenTaskFacts(tasks: ReadonlyArray<Partial<CrmTask>>, nowMs: 
 export function crmDealFact(deal: Partial<CrmDeal>, pipeline: CrmPipeline | null | undefined): CrmDealFact {
   const stage = dealStageById(pipeline ?? undefined, String(deal.stageId ?? ''))
   return {
-    title: crmFactText(deal.title, CRM_FACTS_LABEL_MAX),
+    title: crmFactProse(deal.title, CRM_FACTS_LABEL_MAX),
     stage: crmFactText(stage?.name, CRM_FACTS_LABEL_MAX),
     status: deal.status === 'won' || deal.status === 'lost' ? deal.status : 'open',
     amount: crmFactMoney(deal.amountCents, deal.currency),
