@@ -18,7 +18,7 @@
 import type {
   ConsoleImportColumn,
   ConsoleImportColumnShape,
-} from '@aglyn/aglyn/plugin-manager/feature-plugins'
+} from '@aglyn/aglyn/plugin-manager/record-zone-props'
 
 /**
  * WHAT A FILE'S COLUMN HOLDS, WITHOUT SAYING WHAT IS IN IT (AGL-2917).

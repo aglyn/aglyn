@@ -20,10 +20,8 @@ import {
   type ConsoleWidgetSlotRenderer,
   useConsoleWidgetSlot,
 } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
-import type {
-  ConsoleProposedTask,
-  ConsoleRecordInsightsZoneProps,
-} from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { ConsoleRecordInsightsZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { ConsoleProposedTask } from '@aglyn/aglyn/plugin-manager/record-zone-props'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useCallback, useMemo, useState } from 'react'

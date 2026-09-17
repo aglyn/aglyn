@@ -18,7 +18,7 @@
 import type {
   ConsoleImportColumn,
   ConsoleImportColumnShape,
-} from '@aglyn/aglyn/plugin-manager/feature-plugins'
+} from '@aglyn/aglyn/plugin-manager/record-zone-props'
 import type { AiJobOutput, AiJobSummary } from './ai-jobs.types'
 
 /**

@@ -23,7 +23,7 @@ import {
   emptyAiAutomationRecords,
   type AiAutomationRecords,
 } from '../model/ai-automation-draft'
-import type { ConsoleImportColumn } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { ConsoleImportColumn } from '@aglyn/aglyn/plugin-manager/record-zone-props'
 import { AI_BUILD_PLAN_CREATE_KINDS, type AiBuildPlanCreateKind } from '../model/ai-build-plan'
 import {
   aiUnrestrictedPlanCapabilities,

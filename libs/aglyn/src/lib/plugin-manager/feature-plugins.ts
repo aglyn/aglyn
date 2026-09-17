@@ -64,6 +64,11 @@ export type {
   ConsoleProposedDiscount,
   ConsoleProposedProduct,
 } from './commerce-zone-props'
+export type {
+  ConsoleImportMappingZoneProps,
+  ConsoleRecordEmailZoneProps,
+  ConsoleRecordInsightsZoneProps,
+} from './record-zone-props'
 
 /** The mui bundle id every UI feature bundle depends on. */
 export const MUI_BUNDLE_ID: PluginId = 'mui'
@@ -669,33 +674,11 @@ export const CONSOLE_WIDGET_SLOTS = {
    * published site before that.
    */
   hostSeo: 'hostSeo',
-  /**
-   * On a business record's page (AGL-2917): a CRM contact, company, deal or
-   * lead, under the record's header. Props:
-   * {@link ConsoleRecordInsightsZoneProps} — the record, where it is read, and
-   * the proposals the page can take: a follow-up the page opens in its own
-   * task form, and, for a record that moves through stages, a stage the page
-   * asks the member to confirm before its own route moves the record.
-   *
-   * The record pages are the CRM plugin's own surface, so the plugin HOSTS
-   * the zone through the renderer `useConsoleWidgetSlot` hands down, as the
-   * product editor hosts `seoFields`. A widget here proposes and never writes.
-   */
+  /** {@link ConsoleRecordInsightsZoneProps} */
   recordInsights: 'recordInsights',
-  /**
-   * Inside a one-to-one email composer on a record (AGL-2917), under the
-   * message. Props: {@link ConsoleRecordEmailZoneProps}. Hosted by the CRM
-   * plugin's composer. A widget here puts a subject and a message in the
-   * composer; the member's own Send is the only way anything is sent.
-   */
+  /** {@link ConsoleRecordEmailZoneProps} */
   recordEmail: 'recordEmail',
-  /**
-   * Inside a spreadsheet import (AGL-2917), under the matching of the file's
-   * columns to fields. Props: {@link ConsoleImportMappingZoneProps}. Hosted by
-   * the CRM plugin's import drawers. A widget here proposes a matching the
-   * drawer shows in its own table and preview; the drawer's Import is the
-   * write.
-   */
+  /** {@link ConsoleImportMappingZoneProps} */
   importMapping: 'importMapping',
   /**
    * The besigner's secondary toolbar, after the undo and redo controls
@@ -985,119 +968,6 @@ export interface ConsoleHostSeoZoneProps {
    * applies once, and the form's Update is what stores them.
    */
   proposeDraft: (values: Record<string, string>, key: string) => void
-}
-
-/** The record a record zone is about (AGL-2917). */
-export interface ConsoleRecordRef {
-  /** The kind of record, in the owning plugin's words: `contact`, `company`, `deal`, `lead`. */
-  kind: string
-  id: string
-  /** The record's name as the page shows it, for a widget's own words. */
-  name: string
-}
-
-/** A follow-up a widget proposes, which the page opens in its own task form (AGL-2917). */
-export interface ConsoleProposedTask {
-  title: string
-  notes: string
-  kind: 'call' | 'email' | 'meeting' | 'todo'
-  priority: 'low' | 'normal' | 'high'
-  /** Days from today the task is due; the form sets the time of day. */
-  dueInDays: number
-}
-
-/** One stage a record can move to (AGL-2917). */
-export interface ConsoleRecordStage {
-  id: string
-  name: string
-}
-
-/** What the `recordInsights` zone hands each widget (AGL-2917). */
-export interface ConsoleRecordInsightsZoneProps {
-  /** The site the page is under, or `null` at the organization level. */
-  hostId: string | null
-  /** The org the page names; `undefined` while it resolves. */
-  orgId: string | undefined
-  record: ConsoleRecordRef
-  /**
-   * Opens the page's own task form with the proposal filled in, linked to the
-   * record; the form's Save is the write. Absent where the record takes no
-   * task.
-   */
-  proposeTask?: (task: ConsoleProposedTask, key: string) => void
-  /** The open stages the record can move to, in order; absent for a record without stages. */
-  stages?: readonly ConsoleRecordStage[]
-  /** The stage the record is in, beside `stages`. */
-  stageId?: string
-  /**
-   * Asks the member to confirm the move, then moves the record through the
-   * page's own stage route. Absent for a record without stages.
-   */
-  proposeStage?: (stageId: string, key: string) => void
-}
-
-/** A subject and a message a widget proposes for a composer (AGL-2917). */
-export interface ConsoleRecordEmailDraft {
-  subject: string
-  /** Plain text; a blank line starts a paragraph, and merge fields are filled at send. */
-  body: string
-}
-
-/** What the `recordEmail` zone hands each widget (AGL-2917). */
-export interface ConsoleRecordEmailZoneProps {
-  /** The site the composer is under, or `null` at the organization level. */
-  hostId: string | null
-  /** The org the composer names; `undefined` while it resolves. */
-  orgId: string | undefined
-  /** The record the message is written from: a contact, a deal (its contact) or a lead. */
-  record: ConsoleRecordRef
-  /** What the composer holds now. */
-  subject: string
-  body: string
-  /**
-   * Puts the draft in the composer, asking first when a message is already
-   * written. The composer's Send is the only write.
-   */
-  proposeDraft: (draft: ConsoleRecordEmailDraft, key: string) => void
-}
-
-/**
- * What a column of a file holds, read in the browser from its cells
- * (AGL-2917): the one thing a widget is told about a column's values.
- */
-export type ConsoleImportColumnShape =
-  | 'empty'
-  | 'email'
-  | 'phone'
-  | 'number'
-  | 'date'
-  | 'yes-no'
-  | 'url'
-  | 'text'
-
-/** One column of a file being imported (AGL-2917). */
-export interface ConsoleImportColumn {
-  header: string
-  shape: ConsoleImportColumnShape
-}
-
-/** What the `importMapping` zone hands each widget (AGL-2917). */
-export interface ConsoleImportMappingZoneProps {
-  /** The site the file is imported into, or `null` at the organization level. */
-  hostId: string | null
-  /** The org the drawer names; `undefined` while it resolves. */
-  orgId: string | undefined
-  /** What the file is imported as, in the owning plugin's words: `contacts`, `companies`, `deals`, `leads`. */
-  collection: string
-  /** The file's columns in order: each header and its shape, never a cell. */
-  columns: readonly ConsoleImportColumn[]
-  /** The matching the drawer holds now: column index to field key. */
-  mapping: Readonly<Record<number, string>>
-  /**
-   * Replaces the drawer's matching. A field the drawer does not offer is
-   * dropped, and one field takes one column.
-   */
-  proposeMapping: (mapping: Readonly<Record<number, string>>, key: string) => void
 }
 
 /**

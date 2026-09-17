@@ -16,7 +16,7 @@
  */
 
 import { CRM_MERGE_FIELDS, crmMergeFieldsIn } from '@aglyn/aglyn/app-utils/crm-email-templates'
-import type { ConsoleImportColumn } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { ConsoleImportColumn } from '@aglyn/aglyn/plugin-manager/record-zone-props'
 import {
   AI_CRM_LIMITS,
   type AiCrmColumnMatch,

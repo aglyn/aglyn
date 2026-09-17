@@ -32,7 +32,7 @@ import {
   resolveCrmMergeFields,
 } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
-import type { ConsoleRecordEmailDraft } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type { ConsoleRecordEmailDraft } from '@aglyn/aglyn/plugin-manager/record-zone-props'
 import { useSendingApi } from '@aglyn/plugins-email/components/use-sending-identity-api'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
