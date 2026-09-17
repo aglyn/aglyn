@@ -1371,6 +1371,15 @@ const NOT_A_LIST: Array<[string, string]> = [
       'shared grid, which draws their footer (AGL-3045).',
   ],
   [
+    'libs/plugins/ai/src/lib/components/ai-products-proposals.component.tsx',
+    'One products job\u2019s proposals (AGL-2916): copy for at most ' +
+      '`AI_PRODUCTS_BULK_MAX` saved products, a catalog of six to twelve ' +
+      'draft products, or a brief\u2019s categories and at most five ' +
+      'discounts. Each table holds one job\u2019s answer, bounded by the job ' +
+      'rather than a collection that grows, and the products hub\u2019s own ' +
+      'catalog table beneath it keeps the footer.',
+  ],
+  [
     'libs/plugins/ai/src/lib/components/ai-theme-proposal-card.component.tsx',
     'One theme PROPOSAL, read back as the change it would make (AGL-2938): ' +
       'a row per control it sets — the editor’s color controls in each ' +
@@ -1717,7 +1726,12 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // resolved for this reader, mirrored and kept as that list moves. It
     // opens no read of its own, so the footer it would need is the one the
     // page beneath it already has.
-    expect(NOT_A_LIST).toHaveLength(59)
+    //
+    // 60 since commerce by AI (AGL-2916): one products job's proposals, the
+    // copy for at most `AI_PRODUCTS_BULK_MAX` products, a catalog of six to
+    // twelve drafts, or a brief's categories and at most five discounts —
+    // one answer, bounded by the job that wrote it.
+    expect(NOT_A_LIST).toHaveLength(60)
   })
 })
 
