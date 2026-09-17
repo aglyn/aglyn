@@ -520,14 +520,14 @@ async function readRecords(
   firestore: Firestore,
   orgId: string,
   datasetId: string,
-): Promise<{ values: Array<Record<string, unknown>>; total: number }> {
+): Promise<{ rows: Array<Record<string, unknown>>; total: number }> {
   const recordsRef = firestore.collection('orgs').doc(orgId).collection('datasets').doc(datasetId).collection('records')
   const [page, count] = await Promise.all([
     recordsRef.limit(AI_DATASET_RECORDS_READ_LIMIT).get(),
     recordsRef.count().get(),
   ])
   return {
-    values: page.docs.map((doc) => ((doc.data() ?? {})['values'] ?? {}) as Record<string, unknown>),
+    rows: page.docs.map((doc) => ((doc.data() ?? {})['values'] ?? {}) as Record<string, unknown>),
     total: num(count.data().count),
   }
 }
@@ -611,7 +611,7 @@ export function datasetFigureReaders(firestore: AiFigureFirestore): PluginFigure
         }
         const dataset = datasets.find((entry) => entry.id === named || entry.name.toLowerCase() === named.toLowerCase())
         if (!dataset) return refused(404, 'That dataset is not one you can read here')
-        const { values, total } = await readRecords(db, request.orgId, dataset.id)
+        const { rows: values, total } = await readRecords(db, request.orgId, dataset.id)
         const rows = dataset.model.order.slice(0, PLUGIN_FIGURE_MAX_ROWS).map((fieldId) => {
           const field = dataset.model.fields[fieldId]
           const filled = values.filter((entry) => entry[fieldId] !== null && entry[fieldId] !== undefined && entry[fieldId] !== '')
@@ -678,7 +678,7 @@ export function datasetFigureReaders(firestore: AiFigureFirestore): PluginFigure
         if (operation !== 'count' && (!measure || !NUMERIC_TYPES.has(String(dataset.model.fields[measure]?.type)))) {
           return refused(400, 'Only a number field can be summed, averaged or ranged')
         }
-        const { values, total } = await readRecords(db, request.orgId, dataset.id)
+        const { rows: values, total } = await readRecords(db, request.orgId, dataset.id)
         const groups = new Map<string, number[]>()
         const sizes = new Map<string, number>()
         for (const entry of values) {
