@@ -58,10 +58,11 @@ import * as CommerceModel from '../../model'
  *   person to switch on from the discounts card.
  *
  * Each create passes over what the site already has — a product of the same
- * name among the hub's rows, a category of the same name, a discount with the
- * same code or, with no code, the same name — so a proposal applied twice, by
- * anyone, creates nothing twice. The category and discount checks are one
- * read each, made when a person applies, never while the hub is open.
+ * name, a category of the same name, a discount with the same code or, with no
+ * code, the same name — so a proposal applied twice, by anyone, creates
+ * nothing twice. Each check is a read made when a person applies, never while
+ * the hub is open, and reaches past the hub's filtered, ceilinged rows: a
+ * product is looked up by its search key.
  */
 
 type ProductRow = CommerceModel.HostProduct & { $id: string }
@@ -87,6 +88,9 @@ const CATEGORY_NAMES_READ = 250
 
 /** How a name is compared for a duplicate: case and spacing aside. */
 const nameKey = (name: string) => name.replace(/\s+/g, ' ').trim().toLowerCase()
+
+/** The most values one Firestore `in` clause takes. */
+const IN_CLAUSE_MAX = 10
 
 export function ProductsHubZone(props: ProductsHubZoneProps) {
   const { hostId, products, roomFor, lastImport, onCreated } = props
@@ -124,6 +128,20 @@ export function ProductsHubZone(props: ProductsHubZoneProps) {
   const createProductDrafts = useCallback(
     async (proposals: readonly ConsoleProposedProduct[]) => {
       const held = new Set(products.map((product) => nameKey(product.name)))
+      const searchKeys = [
+        ...new Set(proposals.map((proposal) => CommerceModel.productSearchFields({ name: proposal.name.trim() }).nameLower)),
+      ].filter(Boolean)
+      const productsRef = collection(firestore, 'hosts', hostId, 'products')
+      const stored = await Promise.all(
+        Array.from({ length: Math.ceil(searchKeys.length / IN_CLAUSE_MAX) }, (_, index) =>
+          getDocs(query(productsRef, where('nameLower', 'in', searchKeys.slice(index * IN_CLAUSE_MAX, (index + 1) * IN_CLAUSE_MAX)))),
+        ),
+      )
+      for (const read of stored) {
+        for (const existing of read.docs) {
+          if (!existing.get('deletedAt')) held.add(nameKey(String(existing.get('name') ?? '')))
+        }
+      }
       const fresh = proposals.filter((proposal) => {
         const key = nameKey(proposal.name)
         if (!key || held.has(key)) return false
@@ -153,7 +171,7 @@ export function ProductsHubZone(props: ProductsHubZoneProps) {
       }
       return created
     },
-    [products, roomFor, createHostResource, hostId, onCreated],
+    [products, roomFor, createHostResource, firestore, hostId, onCreated],
   )
 
   const createCategories = useCallback(

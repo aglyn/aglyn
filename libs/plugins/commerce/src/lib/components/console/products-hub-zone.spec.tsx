@@ -232,6 +232,27 @@ describe('proposed products, categories and discounts', () => {
     expect(await props.createProductDrafts([{ ...PROPOSAL, name: 'Desk lamp' }])).toEqual([])
   })
 
+  it('passes over a product the store has that the hub’s filtered rows do not show, looked up by its search key', async () => {
+    mockExisting['hosts/host-1/products'] = [
+      { name: 'Beeswax taper', nameLower: 'beeswax taper' },
+      { name: 'Retired tin', nameLower: 'retired tin', deletedAt: 1 },
+    ]
+    mockCreate.mockResolvedValueOnce({ id: 'p-new-1' })
+    const { props } = renderZone()
+    const ids = await props.createProductDrafts([
+      { ...PROPOSAL, name: 'Beeswax Taper' },
+      { ...PROPOSAL, name: 'Retired tin' },
+    ])
+    expect(ids).toEqual(['p-new-1'])
+    expect(mockCreate.mock.calls.map(([call]) => call.data.name)).toEqual(['Retired tin'])
+    expect(mockReads).toEqual([
+      {
+        path: 'hosts/host-1/products',
+        constraints: [{ field: 'nameLower', op: 'in', value: ['beeswax taper', 'retired tin'] }],
+      },
+    ])
+  })
+
   it('creates nothing past the plan’s allowance, or before the plan has loaded', async () => {
     const full = renderZone({ roomFor: () => ({ allowed: false, limit: 25 }) }).props
     await expect(full.createProductDrafts([PROPOSAL])).rejects.toThrow(

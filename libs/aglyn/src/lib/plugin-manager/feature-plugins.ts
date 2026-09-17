@@ -940,10 +940,10 @@ export interface ConsoleProposedDiscount {
  * when the hub refuses it: an allowance the plan has no room for, a product
  * that is gone.
  *
- * The creates are safe to ask twice: a product named like one the hub holds,
- * a category named like one the site has, and a discount with the code (or,
- * with no code, the name) of one the site has are passed over, so a proposal
- * applied again, by anyone, creates nothing it already created.
+ * The creates are safe to ask twice: a product or a category named like one
+ * the site has, and a discount with the code (or, with no code, the name) of
+ * one the site has, are passed over, so a proposal applied again, by anyone,
+ * creates nothing it already created.
  */
 export interface ConsoleProductsHubZoneProps {
   hostId: string
