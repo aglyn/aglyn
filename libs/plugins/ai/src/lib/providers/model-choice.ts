@@ -144,6 +144,13 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // site inventory and the brief ride uncached, and a form's answer is 200 to
   // 400 tokens of JSON with no extended thinking.
   'job.form': { inputTokens: 700, outputTokens: 450, cacheReadTokens: 3_900, cacheWriteTokens: 0 },
+  // An insight (AGL-2915): two exchanges, and NOTHING cached — the rules and
+  // the acceptable-use block are under the balanced tier's minimum, so they
+  // are billed as input on both. The read call carries the question and the
+  // readers' catalog (about 2,000 characters) and answers a few reads; the
+  // answer call carries four tables of about ten rows each (about 4,000
+  // characters) and answers three to five insights as JSON.
+  'job.insight': { inputTokens: 2_800, outputTokens: 650, cacheReadTokens: 0, cacheWriteTokens: 0 },
   // The email step, and the campaign step that shares its generation: the
   // doctrine, the email instructions, the email palette catalog and the
   // tool's schema (about 10,300 characters) are the cached prefix, the site

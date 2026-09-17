@@ -41,6 +41,9 @@ import {
   readAiAutomationAnswer,
   readAiWorkflowExplanation,
 } from '../tools/ai-workflow-tool'
+import type { AiInsightTable } from '../model/ai-insight'
+import { parseAiInsightAnswer } from '../tools/ai-insight-tool'
+import { checkAiInsightAnswer } from './ai-insight-check'
 import { aiAnswerTree, aiDoctrinePlanCheck, aiDoctrineTreeCheck, aiDoctrineTreeContext } from './ai-doctrine'
 import {
   AI_SEO_DESCRIPTION_MAX,
@@ -103,6 +106,7 @@ export type AiEvalKind =
   | 'text'
   | 'chat'
   | 'workflow'
+  | 'insight'
 
 export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'page',
@@ -119,6 +123,7 @@ export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'text',
   'chat',
   'workflow',
+  'insight',
 ]
 
 /** The document kind a tree kind is held to; a section rewrite is one reusable block. */
@@ -229,6 +234,11 @@ export interface AiEvalCase {
   /** Copy ceilings the brief sets, beside the kind's own. */
   maxChars?: number
   maxWords?: number
+  /**
+   * For an insight brief (AGL-2915): the tables the readers returned, which
+   * every insight an answer writes is traced against.
+   */
+  tables?: AiInsightTable[]
   /** For a theme brief: the site's current theme and where it comes from. */
   siteTheme?: HostTheme
   themeSource?: HostThemeSource
@@ -279,6 +289,7 @@ export const AI_EVAL_FLOORS: Readonly<Record<AiEvalKind, AiEvalFloor>> = {
   text: { passRate: 1, meanScore: 0.9 },
   chat: { passRate: 1, meanScore: 0.9 },
   workflow: { passRate: 1, meanScore: 0.9 },
+  insight: { passRate: 1, meanScore: 0.9 },
 }
 
 /** A rubric passes at this mean, with no criterion below three. */
@@ -532,6 +543,28 @@ function checkWorkflow(evalCase: AiEvalCase, answer: unknown): Checked {
   }
 }
 
+/**
+ * An insight answer held to the trace (AGL-2915): readable when it is a
+ * `submit_insights` call that keeps an insight, within the rules when no
+ * insight is left out for its numbers, its citations or its words, and within
+ * the budget when no insight runs long and there are no more than five.
+ */
+function checkInsight(evalCase: AiEvalCase, answer: unknown): Checked {
+  const parsed = parseAiInsightAnswer(answer)
+  if (!parsed || !parsed.insights.length) {
+    return { readable: false, rules: false, budget: false, findings: ['insight-no-answer'] }
+  }
+  const check = checkAiInsightAnswer(parsed, evalCase.tables ?? [])
+  const findings = check.findings.map((finding) => finding.split(':')[0])
+  const over = findings.filter((code) => code === 'insight-too-long' || code === 'insight-too-many')
+  return {
+    readable: check.kept.length > 0,
+    rules: findings.length === over.length,
+    budget: over.length === 0,
+    findings: check.findings,
+  }
+}
+
 function checkAnswer(evalCase: AiEvalCase, answer: unknown): Checked {
   const outputKind = AI_EVAL_TREE_OUTPUT[evalCase.kind]
   if (outputKind) return checkTree(evalCase, outputKind, answer)
@@ -550,6 +583,8 @@ function checkAnswer(evalCase: AiEvalCase, answer: unknown): Checked {
       return checkCopy(evalCase, answer, { maxChars: AI_EVAL_CHAT_MAX_CHARS }, chatLinks(evalCase))
     case 'workflow':
       return checkWorkflow(evalCase, answer)
+    case 'insight':
+      return checkInsight(evalCase, answer)
     default:
       return { readable: false, rules: false, budget: false, findings: ['kind-unknown'] }
   }

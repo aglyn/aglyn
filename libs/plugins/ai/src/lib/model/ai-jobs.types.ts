@@ -211,6 +211,7 @@ export type AiJobOutputResource =
   | 'text'
   | 'theme'
   | 'seo'
+  | 'insight'
 
 /**
  * One thing a job wrote. Addressed by resource and id so the console can

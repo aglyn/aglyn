@@ -962,6 +962,29 @@ Every payload passes `sanitizeEventParams` before reaching a transport:
 is allowed to hold. `form_name` is author-written site content, never a
 submitted field value.
 
+#### The same rule for AI insights (AGL-2915)
+
+The figures on this page's first-party side — `hosts/{id}/analytics/{day}`, the
+forms' counters, the store's orders, bookings, campaign and A/B testing results,
+datasets — can be asked about in plain words through AI insights
+(`docs/AI_JOBS.md`, *The insight kind*). What reaches the AI provider is a
+table of aggregates a reader computed, never a record:
+
+| what | sent | never sent |
+| -- | -- | -- |
+| traffic | page views, visitors, page paths, referring sites, campaign tags, each with a count | a visitor, an IP, a user agent |
+| forms | a form's name, views, submissions, completion rate, leads | a submission or any answer in one |
+| sales, bookings | revenue, orders, average order, product and service names with counts | a buyer, a guest, an address, an order or a booking |
+| campaigns, A/B tests | a subject or a test's name, delivered and open and click rates, conversions | a recipient or a visitor |
+| datasets | record and field counts, fill rates, the values of a field with at most 60 different values that three or more records share, with a count, sum, average, lowest or highest | a record |
+
+Contacts are counted, never named: every text cell is stripped of email
+addresses and phone numbers before a table is built, a dataset field with more
+than 60 different values is not grouped by, and a dataset group of fewer than
+three records is folded into one row. The answer is kept at
+`orgs/{orgId}/aiInsights/{jobId}` for 180 days, the AI job's own clock, and read
+only through its door.
+
 ### 4. CTA and outbound clicks come from one delegated listener (AGL-1562)
 
 `select_content` and `click` have no call sites, and cannot have any: the

@@ -216,6 +216,18 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       "the largest form the doctrine's output budget admits, a form's fields, its consent and routing declaration and the design that renders them written as JSON at the wordiest golden's characters a stored byte, under it with room; ai-job-form-step.spec.ts measures it",
     eval: { kinds: ['form'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
   },
+  'job.insight': {
+    // Readers chosen, then their tables phrased (AGL-2915): short sentences
+    // over figures code computed, each held to the rows it cites, so no
+    // extended thinking. The read call before the answer asks for at most
+    // `AI_INSIGHT_READ_MAX_TOKENS` of the same allowance.
+    thinking: 'off',
+    effort: null,
+    maxTokens: 1500,
+    maxTokensBasis:
+      'five insights at their 280-character bound, each citing three tables of ten rows, and the gap sentence, written as JSON: about 2,700 characters, under 1,000 tokens at three characters a token, with room',
+    eval: { kinds: ['insight'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+  },
   'job.page': {
     // One section of a page, written against a plan a member already
     // confirmed, so it writes without thinking (AGL-2907). The ceiling here

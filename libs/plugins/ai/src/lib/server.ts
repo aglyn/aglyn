@@ -29,6 +29,9 @@ import { registerAiEmailJob } from './jobs/ai-job-email-step'
 import { registerAiCampaignJob } from './jobs/ai-job-campaign-step'
 import { registerAiSiteJob } from './jobs/ai-job-site-step'
 import { registerAiWorkflowJob } from './jobs/ai-job-workflow-step'
+import { registerAiInsightJob } from './jobs/ai-job-insight-step'
+import { registerAiFigureReaders } from './insights/ai-figure-readers'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { ensureFirstPartyAiProviders } from './providers/registry'
 import { aiAssistHandler } from './server/ai-assist'
 import { POST as runAiJobsBeat } from './server/ai-jobs-beat-route'
@@ -50,6 +53,7 @@ import { GET as aiAdminUser } from './server/ai-admin-user'
 import { POST as aiAdminOverage } from './server/ai-admin-overage'
 import { GET as aiUsage } from './server/ai-usage'
 import { GET as aiAllotments } from './server/ai-allotments'
+import { GET as aiInsightAnswer } from './server/ai-insight-answer'
 import { GET as aiModels } from './server/ai-models'
 import { GET as billingCredits } from './server/billing-credits'
 import { POST as billingOverage } from './server/billing-overage'
@@ -104,6 +108,12 @@ function registerAiJobKinds(): void {
   // The site scaffold, which builds a whole site through the steps above
   // (AGL-2911).
   registerAiSiteJob()
+  // Insights (AGL-2915): a question about a site's figures, answered from
+  // tables the figure readers return, and the weekly digest. The readers for
+  // the platform's own records — page views, forms, datasets — are this
+  // plugin's; every other plugin registers its own from its console surface.
+  registerAiFigureReaders(() => firebaseAdmin.app().firestore())
+  registerAiInsightJob()
 }
 
 /**
@@ -142,6 +152,13 @@ export function registerAiConsoleApi(): void {
   registerPluginApiRoute('ai/jobs/:jobId/resume', {
     web: (request, context) =>
       resumeAiJob(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
+  })
+  // An insight job's answer (AGL-2915), which is kept off the job document
+  // and served only to the member who asked, or for a digest to the site's
+  // members.
+  registerPluginApiRoute('ai/insights/:jobId', {
+    web: (request, context) =>
+      aiInsightAnswer(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
   })
   registerPluginApiRoute('ai/jobs/:jobId/events', {
     web: (request, context) =>

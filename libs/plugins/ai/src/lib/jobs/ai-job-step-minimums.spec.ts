@@ -58,6 +58,7 @@ import {
 import { AI_JOB_COMPONENT_STEP_BUDGET } from './ai-job-component-step'
 import { AI_JOB_EMAIL_STEP_BUDGETS } from './ai-job-email-step'
 import { AI_JOB_FORM_STEP_BUDGET } from './ai-job-form-step'
+import { AI_INSIGHT_READS_MS, AI_JOB_INSIGHT_STEP_BUDGET } from './ai-job-insight-budget'
 import { AI_JOB_LAYOUT_STEP_BUDGET } from './ai-job-layout-step'
 import { AI_JOB_PAGE_SECTION_MAX_TOKENS, AI_JOB_PAGE_SECTION_TOKENS, AI_JOB_PAGE_STEP_BUDGET } from './ai-job-page-budget'
 import { AI_JOB_PLAN_STEP_BUDGET } from './ai-job-plan-step'
@@ -165,6 +166,15 @@ const STEP_TIMES: readonly StepTime[] = [
     shape: shape({ lookups: 0, ownReadsMs: AI_SEO_AUDIT_READS_MS }),
   },
   {
+    row: '`insight`',
+    kind: 'insight',
+    routing: 'job.insight',
+    budget: AI_JOB_INSIGHT_STEP_BUDGET,
+    ceiling: routed('job.insight'),
+    cap: routed('job.insight'),
+    shape: shape({ lookups: 1, ownReadsMs: AI_INSIGHT_READS_MS }),
+  },
+  {
     row: '`text`',
     kind: 'text',
     routing: 'job.text',
@@ -191,7 +201,7 @@ describe('every step the console runs registers the least time it needs (AGL-303
     expect(steps.filter(({ minimumMs }) => !(minimumMs > 0))).toEqual([])
     expect(steps.filter(({ minimumMs }) => minimumMs > AI_JOB_STEP_MAX_MINIMUM_MS)).toEqual([])
     // Every kind with a step module beside the machine is among them.
-    for (const kind of ['text', 'theme', 'seo', 'component', 'layout', 'template', 'form', 'page', 'email', 'campaign', 'site', 'workflow'] as const) {
+    for (const kind of ['text', 'theme', 'seo', 'component', 'layout', 'template', 'form', 'page', 'email', 'campaign', 'site', 'workflow', 'insight'] as const) {
       expect([kind, steps.some((entry) => entry.kind === kind)]).toEqual([kind, true])
     }
   })

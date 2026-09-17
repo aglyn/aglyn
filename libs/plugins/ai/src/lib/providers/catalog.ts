@@ -385,6 +385,7 @@ export type AiStepKind =
   | 'generate.section'
   | 'job.component'
   | 'job.form'
+  | 'job.insight'
   | 'job.layout'
   | 'job.template'
   | 'job.page'
@@ -409,6 +410,10 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   // A form is one small tree held to the building rules and to the contract
   // its submissions are read by; a re-ask costs more than the tier saves.
   'job.form': 'balanced',
+  // An insight (AGL-2915) chooses which figures answer a question and says
+  // what they show; the trace holds every number, and the judgment of what is
+  // worth saying is what the fast tier does worse.
+  'job.insight': 'balanced',
   // A layout or a page template is one structured tree held to every
   // building rule; the fast tier re-asks more than it saves.
   'job.layout': 'balanced',

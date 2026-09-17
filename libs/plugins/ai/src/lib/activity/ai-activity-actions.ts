@@ -168,6 +168,9 @@ const AI_OUTPUT_TARGET_TYPES: Record<AiJobOutputResource, AiOutputTargetType> = 
   seo: 'content',
   text: 'content',
   theme: 'theme',
+  // An insight answer (AGL-2915) is about the site's figures; the feed row
+  // names it and never what it says.
+  insight: 'content',
 }
 
 export function aiOutputTargetType(resource: AiJobOutputResource): AiOutputTargetType {

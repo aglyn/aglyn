@@ -47,6 +47,7 @@ import { detectPublishIntent } from './ai-doctrine-validators'
 import { AI_JOB_COMPONENT_INSTRUCTIONS } from '../jobs/ai-job-component-step'
 import { AI_JOB_EMAIL_INSTRUCTIONS, AI_JOB_EMAIL_TOOL } from '../jobs/ai-job-email-step'
 import { AI_JOB_FORM_INSTRUCTIONS } from '../jobs/ai-job-form-step'
+import { AI_JOB_INSIGHT_SYSTEM } from '../jobs/ai-job-insight-step'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
 import { AI_JOB_PAGE_INSTRUCTIONS, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
 import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
@@ -61,6 +62,7 @@ import { aiAutomationTool, aiWorkflowExplanationTool } from '../tools/ai-workflo
 import { AI_SEO_FIXES_INSTRUCTIONS, AI_SEO_SITE_INSTRUCTIONS } from '../jobs/ai-job-seo-step'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
 import { aiComponentTool } from '../tools/ai-component-tool'
+import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_SEO_FIELDS_INSTRUCTIONS, aiSeoFieldsInstructions } from './seo-fields'
 import {
@@ -210,6 +212,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     step: 'job.workflow',
     caches: true,
     why: 'the doctrine and the automation vocabulary, or the explanation rules; no site inventory block',
+  },
+  'jobs/ai-job-insight-step.ts': {
+    step: 'job.insight',
+    caches: false,
+    why: "an insight's rules and the acceptable-use block are under the balanced tier's minimum; the read call's catalog and the answer call's tables are the request",
   },
   'jobs/ai-job-text-step.ts': {
     step: 'job.text',
@@ -396,6 +403,21 @@ const REQUESTS: Record<string, Composed> = {
     blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_EVAL_GRADER_INSTRUCTIONS }),
     tools: () => [],
   },
+  // An insight's two calls (AGL-2915): the same system block, each with its
+  // own tool. The readers' catalog, the question and the tables are the user
+  // turn, so no workspace's byte is in either prefix.
+  'insight-read': {
+    door: 'jobs/ai-job-insight-step.ts',
+    step: 'job.insight',
+    blocks: () => [...AI_JOB_INSIGHT_SYSTEM],
+    tools: () => [aiInsightReadTool()],
+  },
+  'insight-answer': {
+    door: 'jobs/ai-job-insight-step.ts',
+    step: 'job.insight',
+    blocks: () => [...AI_JOB_INSIGHT_SYSTEM],
+    tools: () => [aiInsightAnswerTool()],
+  },
   text: {
     door: 'jobs/ai-job-text-step.ts',
     step: 'job.text',
@@ -523,6 +545,10 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // refuses a page outside the batch is worth more than a stable prefix.
       'seo-fixes': { prefixTokens: 921, minimum: 4_096, caches: false, toolsStable: false },
       'eval-grade': { prefixTokens: 1_802, minimum: 1_024, caches: true, toolsStable: true },
+      // An insight's rules are short on purpose: no model caches them, so every
+      // byte is billed as input on both calls and on a re-ask.
+      'insight-read': { prefixTokens: 883, minimum: 1_024, caches: false, toolsStable: true },
+      'insight-answer': { prefixTokens: 923, minimum: 1_024, caches: false, toolsStable: true },
       // The text step marks a breakpoint its prompt is far too short to fill.
       // It costs nothing and it caches nothing; the brief is the request.
       text: { prefixTokens: 128, minimum: 1_024, caches: false, toolsStable: true },

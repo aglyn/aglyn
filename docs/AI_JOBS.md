@@ -2079,3 +2079,71 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   and a run's recorded errors, which it does not name, so the doors stay behind
   `release_ai_generative` until wording that names them is published;
   `assist-anthropic-subprocessor-gate.spec.ts` records both.
+
+## The insight kind
+
+`insight` (AGL-2915) answers a question about a site's or a workspace's own figures, and makes
+the weekly insights a member asked for. It is read-only: the model never runs a query and never
+sees a record, and every insight a person reads is traced to the numbers it cites.
+
+- **Readers, on a seam.** A figure is read by a READER registered on
+  `libs/aglyn/src/lib/plugin-manager/plugin-figures.ts` by the plugin that owns its records: the
+  commerce plugin's `commerce.sales` and `commerce.products` (`server/order-figures.ts`, on the
+  Analytics tab card's own arithmetic in `model/order-figures.ts`), the bookings plugin's
+  `bookings.services`, the marketing plugin's `marketing.campaigns` and `marketing.experiments`.
+  This plugin registers the readers for records the platform keeps
+  (`src/lib/insights/ai-figure-readers.ts`): `traffic.summary`, `traffic.pages`,
+  `traffic.sources`, `traffic.daily`, `forms.performance`, `datasets.summary` and
+  `datasets.breakdown`. A reader answers one compact table — counts, sums and rates with a
+  `source` label and the console page they come from — held to the contract by
+  `normalizePluginFigureTable`: at most 25 rows and 8 typed columns, every text cell stripped of
+  email addresses and phone numbers. A dataset breakdown reads at most 2,000 records, refuses a
+  field with more than 60 different values, and folds every group of fewer than three records
+  into one row.
+- **Who may read what.** `aiInsightReaders` (`src/lib/insights/ai-insight-readers.ts`) offers a
+  reader only when the surface asks about its kind of figures, the plan includes the feature it is
+  sold under (`commerceAnalytics`, `bookings`, `abTesting`, `dataStore`), and its plugin is past
+  its release flag and on for the site. A dataset reader reads what the asking member may see, and
+  on a site only what is shared with it.
+- **Runner.** `src/lib/jobs/ai-job-insight-step.ts`. Two calls through `runAiRequest`, sharing one
+  allowance of twice the routing ceiling: `read_figures` chooses among the offered readers (never
+  a collection or a field path; an unreadable choice falls back to the digest's readers), then
+  `submit_insights` answers over the tables. `checkAiInsightAnswer`
+  (`src/lib/runtime/ai-insight-check.ts`) keeps each insight whose every number is in a row it
+  cites, as the table has it or rounded to the decimals written, and leaves out the rest: a
+  computed total, a rise the change does not show, an unknown table or row, a person named. An
+  answer that is not a call, or keeps nothing, is asked for once more with the reasons. The system
+  block is the insight rules and the acceptable-use block, under the balanced tier's cacheable
+  minimum, so the ledger records it as not caching.
+- **The answer is kept apart.** The step writes `orgs/{orgId}/aiInsights/{jobId}` under the job's
+  own expiry, which no rule lets a client read, and the job's output names it with a count and no
+  figure: a job document is readable by every member of the workspace, and a collaborator on one
+  site may not see another's revenue. `GET /api/ai/insights/{jobId}` (`server/ai-insight-answer.ts`)
+  serves it through the jobs read gate to the member who asked, or for a digest to any member who
+  reaches its site, while they still reach it.
+- **Admission.** An ask names a surface a person asks from (`analytics`, `datasets`,
+  `crm-reports`), a site of the job's own org where the surface needs one, and at least one reader
+  the workspace may read; a `digest` job is refused at the door.
+- **The surface.** The Assist panel's AI jobs offer **Ask about your numbers** on a site's
+  Analytics, Data and CRM Reports pages and the workspace's Data page
+  (`components/ai-insight-dialog.component.tsx`): the question and a window, the answer with each
+  insight's cited rows and a link to the page they come from, and the member's weekly-insights
+  switch. A job row with an insight output offers **View answer**.
+- **The weekly insights.** `POST /api/admin/ai-insights-digest`
+  (`server/ai-insight-digest-route.ts`, `insights/ai-insight-digest.ts`), at 06:00 and 14:00 UTC
+  through `consoleAiInsightsDigest` in `cloud/functions`. A member opts in per workspace
+  (`users/{uid}.insightDigests.{orgId}`, turned off again in Notifications). Monday's first run
+  checks `aiGenerative`, `release_ai_generative`, the workspace's AI pause and each site's AI
+  switch again, then makes one `digest` job per site for up to five of the busiest sites the
+  subscribers reach, created by the first of them who holds `ai.generate` there. The jobs run on
+  the beat and are metered like any job. Every run delivers what is written — a
+  `content.insightsDigest` notification and a platform email to each subscriber who reaches the
+  site, stamped per person until the site settles — and skips, without a message, a job that
+  failed or kept nothing, canceling one parked for credits.
+
+| step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
+| --- | --- | --- | --- | --- |
+| `insight` | balanced | 1 | 1,500 / 1,500 / 1,000 | 3 × 3 s + 2 × 25,000 ms + 3 s + 8 s = 70,000 ms |
+
+The lookup round is the read call, spent from the same allowance as the answer; the 8 s is
+`AI_INSIGHT_READS_MS`, the declared assumption for the readers between the two calls.
