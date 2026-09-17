@@ -317,6 +317,12 @@ export interface AiEvalCase {
   framing: AiCopyFraming
   /** The site the answer is built for; `null` for a brief that builds from none. */
   inventory: AiSiteInventory | null
+  /**
+   * The site's name as its visitors read it, where the case gives one
+   * (AGL-3077): a recorded page's listing names the site by it. A case that
+   * gives none is recorded on an untitled site.
+   */
+  siteName?: string
   /** Media library facts the image budget reads, by media id. */
   assets?: Record<string, AiAssetFacts>
   /** The documentation URLs a chat answer was grounded in; it may link only these. */
@@ -1051,6 +1057,9 @@ export function readAiEvalCase(raw: unknown, file: string): AiEvalCase {
     fail(`kind "${String(kind)}" is not one of ${AI_EVAL_KINDS.join(', ')}`)
   }
   if (typeof raw['brief'] !== 'string' || !raw['brief'].trim()) fail('no brief')
+  if (raw['siteName'] !== undefined && (typeof raw['siteName'] !== 'string' || !raw['siteName'].trim())) {
+    fail('siteName, where given, is the site’s name')
+  }
   const candidates = raw['candidates']
   const controls = raw['controls']
   if (!Array.isArray(candidates) || !candidates.length) fail('no candidates')

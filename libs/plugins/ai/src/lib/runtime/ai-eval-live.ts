@@ -288,11 +288,12 @@ const recordPage: AiEvalRecorder = async (evalCase, options) => {
   const job = evalJob(evalCase, 'page')
   const hostId = job.hostId as string
   const org = evalOrgDocument(evalCase)
+  // The page step names the site in the listing request by its host
+  // document, so the site is named only as the case names it (AGL-3077).
   const site = aiEvalMemoryFirestore({
     [`orgs/${EVAL_ORG}`]: org,
     [`hosts/${hostId}`]: {
-      subdomain: 'eval',
-      displayName: evalCase.id,
+      ...(evalCase.siteName ? { displayName: evalCase.siteName } : {}),
       screens: Object.fromEntries((evalCase.inventory?.screens ?? []).map((row) => [row.id, row.slug])),
     },
   })

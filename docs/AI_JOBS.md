@@ -299,7 +299,9 @@ live answer.
   `element`, `blog`, `text` and `chat`. A generator adds its briefs there.
 - **What a case holds.** The brief and its framing; the site `inventory` it is
   built for, in the shape `readSiteInventory` returns, and the media `assets`
-  its images are measured against; for a workspace that lacks something, its
+  its images are measured against; the site's `siteName` where the case gives
+  one, which a recording names the site by, and an untitled site where it gives
+  none (AGL-3077); for a workspace that lacks something, its
   `capabilities` (what it may create, whether it keeps reusable components, and whether
   it spends the Free taste), which hold the answer to the inline doctrine and the plan to
   what it may create and to the sections the Free wall pays for; for a planned kind, the plan shape a good

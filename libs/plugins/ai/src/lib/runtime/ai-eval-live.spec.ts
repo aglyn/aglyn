@@ -246,6 +246,27 @@ describe('the live run', () => {
     }
   })
 
+  it('names the site in a recorded page’s listing request only as the case names it, never by the case’s id (AGL-3077)', async () => {
+    const listingOf = async (evalCase: AiEvalCase): Promise<string> => {
+      mockRunAiRequest.mockReset()
+      armReferenceAnswers(undefined, freePage)
+      // On the routing table's models, whose listing fits the last pass's time.
+      await recordAiEvalLive([evalCase], { env: LIVE.env, graderModel: LIVE.graderModel })
+      const listing = mockRunAiRequest.mock.calls
+        .map((call) => call[0])
+        .find((request) => request.tools?.[0]?.name === AI_SEO_FIELDS_TOOL_NAME)
+      return String(listing.messages[0].content)
+    }
+    const untitled = await listingOf(freePage)
+    expect(untitled).toContain('Site: untitled site\n')
+    expect(untitled).not.toContain(freePage.id)
+    expect(await listingOf({ ...freePage, siteName: 'Brightwater Law' })).toContain('Site: Brightwater Law\n')
+    // A case that names its site names it with words.
+    const raw = JSON.parse(readFileSync(join(REPO_ROOT, 'tools', 'ai-eval', 'cases', 'page', 'free-law-firm-about.json'), 'utf8'))
+    expect(() => readAiEvalCase({ ...raw, siteName: ' ' }, 'free-law-firm-about.json')).toThrow('siteName')
+    expect(readAiEvalCase({ ...raw, siteName: 'Brightwater Law' }, 'free-law-firm-about.json').siteName).toBe('Brightwater Law')
+  })
+
   it('re-asks a page plan that places a creation it never declares, as the first live recording’s plan did, and records the page the re-ask plans (AGL-3040)', async () => {
     armReferenceAnswers(undefined, freePage)
     // The plan is answered first as it was live, then as the reference plan.
