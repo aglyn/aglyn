@@ -192,6 +192,13 @@ describe('Monday', () => {
     expect(mockCreated).toEqual([])
   })
 
+  it('stops a chunk that runs out of time where it stopped, and the next call resumes there', async () => {
+    const spent = await runAiInsightDigestSweep(deps(MONDAY, { budgetMs: -1 }), { cursor: 'org-0' })
+    expect(spent).toMatchObject({ created: 0, nextCursor: 'org-0', done: false })
+    const resumed = await runAiInsightDigestSweep(deps(MONDAY), { cursor: spent.nextCursor })
+    expect(resumed).toMatchObject({ created: 1, done: true })
+  })
+
   it('makes nothing on any other day', async () => {
     expect((await runAiInsightDigestSweep(deps(TUESDAY), { cursor: null })).created).toBe(0)
   })
@@ -246,6 +253,16 @@ describe('delivery', () => {
     expect(mockCanceled).toEqual(['job-1'])
     expect(sent).toEqual([])
     expect(notified).toEqual([])
+  })
+
+  it('stops when the call runs out of time, and the next run sends what is left', async () => {
+    mockJobs.set('job-1', { $id: 'job-1', status: 'done' })
+    mockDocs.set('orgs/org-1/aiInsights/job-1', { insights: [{ text: 'Page views rose 14.7%.', cites: [] }] })
+    const spent = await runAiInsightDigestSweep(deps(MONDAY_AFTERNOON, { budgetMs: -1 }), { cursor: null })
+    expect(spent).toMatchObject({ deferred: true, delivered: 0 })
+    expect(sent).toEqual([])
+    await runAiInsightDigestSweep(deps(TUESDAY), { cursor: null })
+    expect(sent).toHaveLength(1)
   })
 
   it('waits for a digest still being written, and stops without sending twice when the send rate refuses', async () => {

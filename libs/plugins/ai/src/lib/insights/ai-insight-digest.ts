@@ -92,6 +92,15 @@ export const AI_INSIGHT_DIGEST_DELIVER_LIMIT = 100
 /** How long a digest's job may take before its week is given up. */
 export const AI_INSIGHT_DIGEST_DEADLINE_MS = 48 * 60 * 60_000
 
+/**
+ * The time one call works before it stops and leaves the rest to the next:
+ * inside the plugin dispatcher's 60 s function ceiling, with room for the
+ * reads before the first check and the reply after the last. A call killed
+ * mid-send could send one person a site's digest twice, because a send is
+ * stamped after it goes.
+ */
+export const AI_INSIGHT_DIGEST_RUN_BUDGET_MS = 45_000
+
 export const AI_INSIGHT_DIGEST_MARKERS = 'aiInsightDigests'
 export const AI_INSIGHT_DIGEST_QUEUE = 'aiInsightDigestQueue'
 
@@ -133,6 +142,8 @@ export interface AiInsightDigestDeps {
   send: (email: { to: string; subject: string; text: string; fromName: string }) => Promise<AiInsightDigestSendResult>
   /** The console's absolute origin for an email link, or `''` when none is configured. */
   consoleOrigin: string
+  /** The call's working time; `AI_INSIGHT_DIGEST_RUN_BUDGET_MS` unless a spec holds it. */
+  budgetMs?: number
 }
 
 export interface AiInsightDigestReport {
@@ -141,7 +152,7 @@ export interface AiInsightDigestReport {
   created: number
   delivered: number
   skipped: number
-  /** The send rate refused; the run stops, and the next one delivers the rest. */
+  /** The send rate refused or the call's time ran out; the run stops, and the next one delivers the rest. */
   deferred: boolean
   nextCursor: string | null
   done: boolean
@@ -278,6 +289,7 @@ async function deliverOrgDigest(
   deps: AiInsightDigestDeps,
   orgId: string,
   week: string,
+  overBudget: () => boolean,
 ): Promise<{ delivered: number; skipped: number; settled: boolean; deferred: boolean }> {
   const { firestore, now } = deps
   const orgRef = firestore.collection('orgs').doc(orgId)
@@ -335,6 +347,12 @@ async function deliverOrgDigest(
       const user = users.get(member.$id)
       if (!insightDigestSubscribed(user?.get(INSIGHT_DIGESTS_FIELD), orgId)) continue
       if (site.sent?.[member.$id]) continue
+      if (overBudget()) {
+        // Out of time: what was sent is stamped, and the next run sends the rest.
+        result.deferred = true
+        result.settled = false
+        return result
+      }
       const address = str(member.email ?? user?.get('email')).toLowerCase()
       if (address.includes('@')) {
         const sent = await deps.send({
@@ -383,6 +401,9 @@ export async function runAiInsightDigestSweep(
   options: { cursor: string | null },
 ): Promise<AiInsightDigestReport> {
   const { firestore, now } = deps
+  const startedAtMs = Date.now()
+  const budgetMs = deps.budgetMs ?? AI_INSIGHT_DIGEST_RUN_BUDGET_MS
+  const overBudget = () => Date.now() - startedAtMs > budgetMs
   const week = aiInsightDigestWeek(now)
   const report: AiInsightDigestReport = {
     week,
@@ -404,8 +425,12 @@ export async function runAiInsightDigestSweep(
         .sort()
         .slice(0, AI_INSIGHT_DIGEST_DELIVER_LIMIT)
       for (const orgId of pending) {
+        if (overBudget()) {
+          report.deferred = true
+          return report
+        }
         try {
-          const delivered = await deliverOrgDigest(deps, orgId, owed)
+          const delivered = await deliverOrgDigest(deps, orgId, owed, overBudget)
           report.delivered += delivered.delivered
           report.skipped += delivered.skipped
           if (delivered.settled) {
@@ -429,7 +454,15 @@ export async function runAiInsightDigestSweep(
   if (options.cursor) query = query.startAfter(firestore.collection('orgs').doc(options.cursor))
   const page = await query.get()
   const orgs = page.docs.slice(0, AI_INSIGHT_DIGEST_ORG_CHUNK)
-  for (const orgDoc of orgs) {
+  for (const [index, orgDoc] of orgs.entries()) {
+    if (overBudget()) {
+      // Out of time: the next call resumes after the last workspace read. A
+      // call that read none has no cursor to hand on, and the next scheduled
+      // run starts the week's workspaces again, which the markers make safe.
+      report.nextCursor = index ? orgs[index - 1].id : (options.cursor ?? null)
+      report.done = report.nextCursor === null
+      return report
+    }
     report.swept += 1
     try {
       report.created += await createOrgDigest(deps, orgDoc, week)
