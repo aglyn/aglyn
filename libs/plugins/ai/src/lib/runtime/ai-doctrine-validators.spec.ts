@@ -283,7 +283,7 @@ describe('rule 1 — a list is one section whose items repeat (AGL-3071)', () =>
     planOf({ screens: [screen({ sections: entries.map(([name, uses, items]) => ({ name, uses, items })) })] })
 
   it('refuses the live Free plan’s four practice areas, each planned as a section of one item, and gives the one section to plan', () => {
-    expect(detectPlanSplitLists(AI_FREE_PAGE_BUILT_PLAN, emptyAiSiteInventory('host-brightwater-law'))).toEqual([
+    expect(detectPlanSplitLists(AI_FREE_PAGE_BUILT_PLAN, emptyAiSiteInventory('host-brightwater-law'), FREE)).toEqual([
       {
         rule: 1,
         code: 'plan-split-list',
@@ -291,6 +291,25 @@ describe('rule 1 — a list is one section whose items repeat (AGL-3071)', () =>
           'The sections "practice area: business & corporate law", "practice area: real estate law", "practice area: family law" and "practice area: estate planning" each show one item of the same kind, so they are one list split apart. Plan them as one section whose 4 items repeat: {"name":"practice areas","uses":[],"items":4}.',
         paths: ['screens[0].sections[2]', 'screens[0].sections[3]', 'screens[0].sections[4]', 'screens[0].sections[5]'],
       },
+    ])
+  })
+
+  it('asks a workspace that keeps components to place one for a split list long enough for rule 1, and a Free one only to join the sections', () => {
+    const tiers = sections(['tier: basic', [], 1], ['tier: standard', [], 1], ['tier: premium', [], 1])
+    const paid = detectPlanSplitLists(tiers, INVENTORY, aiUnrestrictedPlanCapabilities())
+    expect(paid).toMatchObject([
+      {
+        message:
+          'The sections "tier: basic", "tier: standard" and "tier: premium" each show one item of the same kind, so they are one list split apart. Plan them as one section whose 3 items repeat, placing one reusable component for the item: reuse one the site has by its id, or declare one in create and place it as new:<name>, as in {"name":"tiers","uses":["new:<name>"],"items":3}.',
+      },
+    ])
+    expect(detectPlanSplitLists(tiers, INVENTORY)).toEqual(paid)
+    expect(detectPlanSplitLists(tiers, INVENTORY, FREE)).toMatchObject([
+      { message: expect.stringContaining('Plan them as one section whose 3 items repeat: {"name":"tiers","uses":[],"items":3}.') },
+    ])
+    // Two items are fewer than rule 1 asks a component for.
+    expect(detectPlanSplitLists(sections(['tier: basic', [], 1], ['tier: premium', [], 1]), INVENTORY)).toMatchObject([
+      { message: expect.stringContaining('Plan them as one section whose 2 items repeat: {"name":"tiers","uses":[],"items":2}.') },
     ])
   })
 

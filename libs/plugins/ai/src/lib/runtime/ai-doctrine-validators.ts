@@ -2310,7 +2310,7 @@ export function detectPlanRepeats(
   return violations
 }
 
-/** Sections of one item, side by side and of one kind, that are one list split apart. */
+/** The fewest sections of one item, side by side and of one kind, that are one list split apart. */
 export const AI_SPLIT_LIST_MIN_SECTIONS = 2
 
 /** A section name's label: what comes before a colon or a spaced dash, as "practice area" in "practice area: family law". */
@@ -2361,7 +2361,9 @@ function sectionItemKind(
  * Free About page planned "the four areas we practice" as four sections of one
  * item: none was drawn from the one written-once item a repeated section is
  * built from, and the four came out in three different shapes. The re-ask
- * names the sections and gives the one section to plan instead.
+ * names the sections and gives the one section to plan instead. Where the
+ * workspace keeps reusable components, a list long enough for rule 1 places
+ * one for its item, so the section it gives places one too.
  *
  * Sections of several items are never joined: two lists that share a card
  * are two lists, and rule 8 counts each within its own section (AGL-3061).
@@ -2369,6 +2371,7 @@ function sectionItemKind(
 export function detectPlanSplitLists(
   plan: AiBuildPlan,
   inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
 ): AiDoctrineViolation[] {
   const kinds = inventoryKinds(inventory)
   const violations: AiDoctrineViolation[] = []
@@ -2379,11 +2382,17 @@ export function detectPlanSplitLists(
         const names = run.map(({ index }) => `"${screen.sections[index].name}"`)
         const listed = `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
         const [{ kind }] = run
-        const section = { name: kind.name, uses: kind.components, items: run.length }
+        // Rule 1 asks a list this long on a workspace that keeps components to place one for its item.
+        const component =
+          !kind.components.length && capabilities?.reusableComponents !== false && run.length >= AI_REPEAT_MIN_COUNT
+        const section = { name: kind.name, uses: component ? ['new:<name>'] : kind.components, items: run.length }
+        const instead = component
+          ? `, placing one reusable component for the item: reuse one the site has by its id, or declare one in create and place it as new:<name>, as in ${JSON.stringify(section)}.`
+          : `: ${JSON.stringify(section)}.`
         violations.push({
           rule: 1,
           code: 'plan-split-list',
-          message: `The sections ${listed} each show one item of the same kind, so they are one list split apart. Plan them as one section whose ${run.length} items repeat: ${JSON.stringify(section)}.`,
+          message: `The sections ${listed} each show one item of the same kind, so they are one list split apart. Plan them as one section whose ${run.length} items repeat${instead}`,
           paths: run.map(({ index }) => `screens[${screenIndex}].sections[${index}]`),
         })
       }
@@ -3009,7 +3018,7 @@ export function validateAiBuildPlan(
 ): AiDoctrineViolation[] {
   return [
     ...detectPlanRepeats(plan, inventory, capabilities),
-    ...detectPlanSplitLists(plan, inventory),
+    ...detectPlanSplitLists(plan, inventory, capabilities),
     ...detectPlanOverFreeWall(plan, inventory, capabilities),
     ...detectPlanLayoutRegions(plan, inventory, capabilities),
     ...detectPlanInlineForms(plan, inventory, capabilities),

@@ -511,7 +511,10 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   the same label before a colon or a dash ("practice area: family law"). The re-ask names
   the sections and gives the section to plan instead, as JSON:
   `{"name":"practice areas","uses":[],"items":4}`. It holds on every workspace, since one
-  component placed once a section is the same split. Sections of several items are never
+  component placed once a section is the same split; there the section it gives keeps the
+  component, and a list of labeled sections long enough for rule 1's component is told to
+  place one, the site's or one declared in `create`, so the answer it asks for is not
+  refused next. Sections of several items are never
   joined, so two lists that share a card stay two lists, as rule 8 counts them. No credit
   figure the Free arithmetic quotes moves.
 - **A typed list is counted within its section (AGL-3061).** Rule 8's tree check
