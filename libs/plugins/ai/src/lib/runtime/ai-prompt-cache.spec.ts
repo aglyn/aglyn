@@ -66,6 +66,16 @@ import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_SEO_FIELDS_INSTRUCTIONS, aiSeoFieldsInstructions } from './seo-fields'
 import {
+  AI_CATALOG_INSTRUCTIONS,
+  AI_CATEGORIES_INSTRUCTIONS,
+  AI_PRODUCT_COPY_INSTRUCTIONS,
+} from './ai-products-generation'
+import {
+  AI_CATALOG_TOOL,
+  AI_CATEGORIES_TOOL,
+  AI_PRODUCT_COPY_TOOL,
+} from '../tools/ai-products-tool'
+import {
   aiSeoFieldsTool,
   aiSeoFixesTool,
   aiSeoSiteTool,
@@ -217,6 +227,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     step: 'job.insight',
     caches: false,
     why: "an insight's rules and the acceptable-use block are under the balanced tier's minimum; the read call's catalog and the answer call's tables are the request",
+  },
+  'runtime/ai-products-generation.ts': {
+    step: 'job.products',
+    caches: true,
+    why: "the doctrine, the rules and the tool of a product's copy, a catalog, or categories and discounts; the product, its photo and the brief ride uncached",
   },
   'jobs/ai-job-text-step.ts': {
     step: 'job.text',
@@ -397,6 +412,27 @@ const REQUESTS: Record<string, Composed> = {
       }),
     tools: (site) => [aiSeoFixesTool(site.screens.map((screen) => screen.id))],
   },
+  // One product's copy (AGL-2916), the request a bulk job makes once a product.
+  // A custom kind, so the loop adds no catalog, and no site inventory rides:
+  // the product, its categories and its photo are the user turn.
+  'product-copy': {
+    door: 'runtime/ai-products-generation.ts',
+    step: 'job.products',
+    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_PRODUCT_COPY_INSTRUCTIONS }),
+    tools: () => [AI_PRODUCT_COPY_TOOL],
+  },
+  catalog: {
+    door: 'runtime/ai-products-generation.ts',
+    step: 'job.products',
+    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_CATALOG_INSTRUCTIONS }),
+    tools: () => [AI_CATALOG_TOOL],
+  },
+  categories: {
+    door: 'runtime/ai-products-generation.ts',
+    step: 'job.products',
+    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_CATEGORIES_INSTRUCTIONS }),
+    tools: () => [AI_CATEGORIES_TOOL],
+  },
   'eval-grade': {
     door: 'runtime/ai-eval-live.ts',
     step: 'job.plan',
@@ -549,6 +585,13 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // byte is billed as input on both calls and on a re-ask.
       'insight-read': { prefixTokens: 883, minimum: 1_024, caches: false, toolsStable: true },
       'insight-answer': { prefixTokens: 923, minimum: 1_024, caches: false, toolsStable: true },
+      // A product's copy, a catalog, and categories with discounts (AGL-2916):
+      // the whole doctrine, each generation's rules and its tool, which clear
+      // the balanced tier's minimum, so a bulk job reads the prefix once a
+      // product after its first.
+      'product-copy': { prefixTokens: 2_391, minimum: 1_024, caches: true, toolsStable: true },
+      catalog: { prefixTokens: 2_446, minimum: 1_024, caches: true, toolsStable: true },
+      categories: { prefixTokens: 2_345, minimum: 1_024, caches: true, toolsStable: true },
       // The text step marks a breakpoint its prompt is far too short to fill.
       // It costs nothing and it caches nothing; the brief is the request.
       text: { prefixTokens: 128, minimum: 1_024, caches: false, toolsStable: true },

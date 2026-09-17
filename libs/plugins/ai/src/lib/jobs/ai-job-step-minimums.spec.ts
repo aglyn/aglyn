@@ -39,9 +39,11 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AiBuildPlanCreate } from '../model/ai-build-plan'
 import { AI_JOB_KINDS, type AiJob, type AiJobKind, type AiJobOutput, type AiJobPlan } from '../model/ai-jobs.types'
+import { aiProductsJobInputs } from '../model/ai-products'
 import { AI_SITE_PAGES } from '../model/ai-site-job'
 import { AI_MODEL_CATALOG, AI_STEP_TIERS, type AiCatalogEntry, type AiStepKind } from '../providers/catalog'
 import { AI_ROUTING_TABLE } from '../providers/routing'
+import { AI_PRODUCT_COPY_MAX_TOKENS } from '../runtime/ai-products-generation'
 import { AI_INVENTORY_LOOKUP_MAX_ROUNDS } from '../tools/ai-inventory-lookup-tool'
 import { registerAiConsoleApi } from '../server'
 import {
@@ -62,6 +64,12 @@ import { AI_INSIGHT_READS_MS, AI_JOB_INSIGHT_STEP_BUDGET } from './ai-job-insigh
 import { AI_JOB_LAYOUT_STEP_BUDGET } from './ai-job-layout-step'
 import { AI_JOB_PAGE_SECTION_MAX_TOKENS, AI_JOB_PAGE_SECTION_TOKENS, AI_JOB_PAGE_STEP_BUDGET } from './ai-job-page-budget'
 import { AI_JOB_PLAN_STEP_BUDGET } from './ai-job-plan-step'
+import {
+  AI_JOB_CATALOG_BUDGET,
+  AI_JOB_CATEGORIES_BUDGET,
+  AI_JOB_PRODUCTS_STEP_BUDGET,
+} from './ai-job-products-step'
+import { AI_PRODUCT_IMAGE_READ_MS } from './ai-product-image'
 import {
   AI_JOB_SEO_STEP_BUDGET,
   AI_SEO_AUDIT_READS_MS,
@@ -175,6 +183,15 @@ const STEP_TIMES: readonly StepTime[] = [
     shape: shape({ lookups: 1, ownReadsMs: AI_INSIGHT_READS_MS }),
   },
   {
+    row: '`products`, a product’s copy',
+    kind: 'products',
+    routing: 'job.products',
+    budget: AI_JOB_PRODUCTS_STEP_BUDGET,
+    ceiling: AI_PRODUCT_COPY_MAX_TOKENS,
+    cap: AI_PRODUCT_COPY_MAX_TOKENS,
+    shape: shape({ lookups: 0, ownReadsMs: AI_PRODUCT_IMAGE_READ_MS }),
+  },
+  {
     row: '`text`',
     kind: 'text',
     routing: 'job.text',
@@ -201,7 +218,7 @@ describe('every step the console runs registers the least time it needs (AGL-303
     expect(steps.filter(({ minimumMs }) => !(minimumMs > 0))).toEqual([])
     expect(steps.filter(({ minimumMs }) => minimumMs > AI_JOB_STEP_MAX_MINIMUM_MS)).toEqual([])
     // Every kind with a step module beside the machine is among them.
-    for (const kind of ['text', 'theme', 'seo', 'component', 'layout', 'template', 'form', 'page', 'email', 'campaign', 'site', 'workflow', 'insight'] as const) {
+    for (const kind of ['text', 'theme', 'seo', 'component', 'layout', 'template', 'form', 'page', 'email', 'campaign', 'site', 'workflow', 'insight', 'products'] as const) {
       expect([kind, steps.some((entry) => entry.kind === kind)]).toEqual([kind, true])
     }
   })
@@ -365,5 +382,23 @@ describe('a pass needs the time of the step its unit is handed to (AGL-3035)', (
     // A scaffold with nothing left to build spends nothing; a page pass's time covers it.
     expect(aiJobNextStepMinimumMs({ ...job, outputs })).toBe(aiJobStepMinimumMs('site', 'generate'))
     expect(aiJobStepMinimumMs('site', 'generate')).toBe(aiJobStepMinimumMs('page', 'generate'))
+  })
+
+  it('gives a products job’s catalog and categories passes their own time, above the copy the step registers', () => {
+    const job = (inputs: Record<string, string>): AiJob =>
+      ({
+        ...plannedJob('products', {}, { inputs }),
+        plan: undefined,
+        steps: [{ name: 'generate', status: 'pending', creditsSpent: 0 }],
+      }) as unknown as AiJob
+    expect(aiJobNextStepMinimumMs(job(aiProductsJobInputs({ target: 'bulk', productIds: ['a', 'b'] })))).toBe(
+      aiJobStepMinimumMs('products', 'generate'),
+    )
+    expect(aiJobNextStepMinimumMs(job(aiProductsJobInputs({ target: 'catalog' })))).toBe(AI_JOB_CATALOG_BUDGET.minimumMs)
+    expect(aiJobNextStepMinimumMs(job(aiProductsJobInputs({ target: 'categories' })))).toBe(
+      AI_JOB_CATEGORIES_BUDGET.minimumMs,
+    )
+    expect(AI_JOB_CATEGORIES_BUDGET.minimumMs).toBeGreaterThan(aiJobStepMinimumMs('products', 'generate'))
+    expect(AI_JOB_CATALOG_BUDGET.minimumMs).toBeGreaterThan(AI_JOB_CATEGORIES_BUDGET.minimumMs)
   })
 })

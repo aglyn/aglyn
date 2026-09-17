@@ -70,7 +70,7 @@ rules deny every client write). Fields:
 
 | field | meaning |
 | --- | --- |
-| `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout`, `template`, `form`, `component`, `seo`, `page`, `email`, `campaign` and `site` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
+| `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout`, `template`, `form`, `component`, `seo`, `page`, `email`, `campaign`, `products` and `site` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
 | `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` and `needs_review` as the two parked states (below). |
 | `brief`, `inputs` | The customer's brief verbatim and the kind-specific scalars a runner reads. |
 | `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`. |
@@ -294,7 +294,8 @@ live answer.
 
 - **Where the cases live.** `tools/ai-eval/cases/<kind>/<id>.json`, one file
   per golden brief, filed under its kind: `page`, `template`, `component`,
-  `layout`, `form`, `email`, `section` (a section rewrite), `seo`, `theme`,
+  `layout`, `form`, `email`, `section` (a section rewrite), `seo`, `product`,
+  `catalog` and `categories` (the `products` kind's three answers), `theme`,
   `element`, `blog`, `text` and `chat`. A generator adds its briefs there.
 - **What a case holds.** The brief and its framing; the site `inventory` it is
   built for, in the shape `readSiteInventory` returns, and the media `assets`
@@ -2147,3 +2148,74 @@ sees a record, and every insight a person reads is traced to the numbers it cite
 
 The lookup round is the read call, spent from the same allowance as the answer; the 8 s is
 `AI_INSIGHT_READS_MS`, the declared assumption for the readers between the two calls.
+
+## The `products` kind
+
+Commerce by AI (AGL-2916): a `products` job writes product copy and proposes
+a store's first products, its categories and a first set of discounts. The
+step is `src/lib/jobs/ai-job-products-step.ts`; what it is asked and what it
+proposes is `src/lib/model/ai-products.ts`, one shape the step, the console
+cards and the eval harness read.
+
+- **Four targets.** `inputs.target` is `product` (one product's copy, from
+  what its editor holds, saved or not), `bulk` (the copy of up to 50 saved
+  products, one product a pass), `catalog` (six to twelve proposed products
+  from the brief) or `categories` (categories and up to five discounts from
+  the brief). The create door's admission refuses a site of another org, a
+  plan without Commerce and a site where Commerce is off, before anything is
+  reserved.
+- **It writes nothing.** Every output is a `product` proposal. The commerce
+  plugin's own surfaces write what a person accepts: the product editor's
+  Save, the products card's apply, and the create paths the catalog and
+  discount cards already use. A proposed product is created as a draft with
+  its price left empty, and a proposed discount is created switched off.
+- **What the model is shown.** The product's name, type, text, tags, options
+  and current search listing, the names of the site's categories and the
+  store's name; a catalog or categories request carries the brief, and the
+  second the store's existing category names. No price, stock, order,
+  customer or other product is read. For a model that reads pictures, the
+  product's FIRST photo: read only as an asset of the site's own media library
+  or its org's, the way the media CDN would serve it, and sent as a new JPEG
+  at most 768 px on its longer edge at quality 80, which carries none of the
+  original's metadata (`src/lib/jobs/ai-product-image.ts`). No other asset,
+  file name or alt text is read, and nothing is fetched from a URL. The
+  provider contract carries the picture as an image part of a user turn, and
+  the runtime refuses one for a model whose catalog row does not say `vision`.
+- **Held in code.** Each answer runs through its tool's check
+  (`src/lib/tools/ai-products-tool.ts`) inside the doctrine loop's one re-ask:
+  lengths and counts, a category the request did not list, markup, and the
+  storefront rules in `src/lib/model/ai-storefront-claims.ts` — no health,
+  financial or legal claim, no certification, award or endorsement the
+  merchant's own words do not state, and no price the merchant did not give.
+  A fact the copy cannot know is left in square brackets for a person, and
+  the proposal lists those gaps.
+- **A bulk job resumes.** A pass writes one product's copy and continues while
+  products remain, so each product is its own reservation, exchange and meter
+  row, and a job paused for credits resumes at the product it stopped at. The
+  next product is read from the job's own outputs. A product that is gone, or
+  whose copy the rules could not hold, is reported and passed over.
+- **Routing and the ceiling.** `job.products` is served from the balanced
+  tier with thinking off. Its routing ceiling, 8,000, is the largest catalog
+  the tool accepts, and the balanced tier asks as much of it as a beat can
+  start; one product's copy asks 1,500 and categories with discounts 2,000
+  (`ai-job-products-step.spec.ts` measures all three). Each pass meters as
+  the `products` kind.
+- **Evals.** Golden briefs under `tools/ai-eval/cases/product`, `catalog` and
+  `categories`, each with controls that must fail the check they name: copy
+  with a health claim and an unstated certification, an invented price and an
+  unlisted category, an overlong search title or no description; a catalog
+  with a price the brief never gives, an overlong description or two products
+  under one name; categories the store already has, a discount that takes
+  nearly everything off, a reason that promises a financial result, or
+  nothing proposed at all. The routing row's pass rate and mean score are
+  recomputed from them.
+- **Gates.** `release_ai_generative`, the `aiGenerative` entitlement, the
+  `ai-generate` lockdown key, the member's `ai.generate` permission and the
+  site's AI switch, as every generation job.
+
+The step's least time is its copy pass, and a catalog or categories pass
+asks for its own (`aiProductsRunMinimumMs`):
+
+| step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
+| -- | -- | -- | -- | -- |
+| `products`, a product’s copy | balanced | 0 | 1,500 / 1,500 / 1,000 | 2 × 3 s + 2 × 25,000 ms + 3 s + 6 s = 65,000 ms |

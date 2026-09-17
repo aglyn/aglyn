@@ -396,6 +396,7 @@ export type AiStepKind =
   | 'job.layout'
   | 'job.template'
   | 'job.page'
+  | 'job.products'
   | 'job.seo'
   | 'job.text'
   | 'job.theme'
@@ -428,6 +429,11 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   // A page section (AGL-2907) is held to the whole page's building rules on
   // every pass, for the same reason.
   'job.page': 'balanced',
+  // A product's copy, a store's first products, or its categories and
+  // discounts (AGL-2916): judgment about what a photo shows and what a shopper
+  // needs, held to storefront claim rules a re-ask costs more to meet than the
+  // tier saves.
+  'job.products': 'balanced',
   // SEO fields, alt text and an audit's fixes (AGL-2910): short answers
   // through a strict tool, held to a length and to the page's own text.
   'job.seo': 'fast',

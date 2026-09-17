@@ -127,6 +127,13 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // and the section line ride uncached; and a golden section answer is 901
   // characters at the median, asked for with no thinking.
   'job.page': { inputTokens: 600, outputTokens: 300, cacheReadTokens: 4_400, cacheWriteTokens: 0 },
+  // One product's copy (AGL-2916), the exchange a bulk job makes once a
+  // product: the doctrine, the copy rules and the tool (about 9,500 characters)
+  // are the cached prefix; the product's facts, the site's categories and a
+  // photo at most 768 pixels on its long edge (about 790 tokens) ride
+  // uncached; and the answer is a description with its search listing, tags,
+  // categories and option names, about 1,300 characters of JSON.
+  'job.products': { inputTokens: 1_500, outputTokens: 450, cacheReadTokens: 2_400, cacheWriteTokens: 0 },
   // The SEO step's listing exchange, which a page's or a product's listing is
   // exactly one of. NOTHING is cached here, whatever the breakpoints say: the
   // step runs on the fast tier, whose cacheable minimum is four times what

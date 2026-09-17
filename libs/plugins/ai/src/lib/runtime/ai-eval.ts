@@ -34,6 +34,12 @@ import type { AiAutomationCapabilities } from '../model/ai-workflow-job'
 import type { AiStepKind } from '../providers/catalog'
 import type { AiEffort, AiUsage } from '../providers/contract'
 import { aiComponentCheck } from '../jobs/ai-job-component-checks'
+import {
+  aiProductMerchantWords,
+  type AiProductCategory,
+  type AiProductFacts,
+} from '../model/ai-products'
+import { checkAiCatalog, checkAiCategories, checkAiProductCopy } from '../tools/ai-products-tool'
 import { parseAiThemeToolInput } from '../tools/ai-theme-tool'
 import {
   AI_AUTOMATION_OVERSIZE_CODES,
@@ -100,6 +106,9 @@ export type AiEvalKind =
   | 'email'
   | 'section'
   | 'seo'
+  | 'product'
+  | 'catalog'
+  | 'categories'
   | 'theme'
   | 'element'
   | 'blog'
@@ -117,6 +126,9 @@ export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'email',
   'section',
   'seo',
+  'product',
+  'catalog',
+  'categories',
   'theme',
   'element',
   'blog',
@@ -239,6 +251,13 @@ export interface AiEvalCase {
    * every insight an answer writes is traced against.
    */
   tables?: AiInsightTable[]
+  /**
+   * For a product copy brief (AGL-2916): the product as its editor handed it
+   * over, and the site's categories the request lists.
+   */
+  product?: { facts: AiProductFacts; categories: AiProductCategory[] }
+  /** For a categories brief: the names of the categories the store already has. */
+  existingCategoryNames?: string[]
   /** For a theme brief: the site's current theme and where it comes from. */
   siteTheme?: HostTheme
   themeSource?: HostThemeSource
@@ -283,6 +302,9 @@ export const AI_EVAL_FLOORS: Readonly<Record<AiEvalKind, AiEvalFloor>> = {
   email: { passRate: 1, meanScore: 0.9 },
   section: { passRate: 1, meanScore: 0.9 },
   seo: { passRate: 1, meanScore: 0.9 },
+  product: { passRate: 1, meanScore: 0.9 },
+  catalog: { passRate: 1, meanScore: 0.9 },
+  categories: { passRate: 1, meanScore: 0.9 },
   theme: { passRate: 1, meanScore: 0.9 },
   element: { passRate: 1, meanScore: 0.9 },
   blog: { passRate: 1, meanScore: 0.9 },
@@ -479,6 +501,43 @@ function checkSeo(evalCase: AiEvalCase, answer: unknown): Checked {
   }
 }
 
+/** What a products check refuses an answer for, by the check it fails. */
+const PRODUCTS_UNREADABLE = new Set(['type', 'missing', 'option-count'])
+const PRODUCTS_OVER_BUDGET = new Set(['too-long', 'too-many', 'product-count'])
+
+/**
+ * A products answer (AGL-2916), held by the check its generation is held by:
+ * a product's copy, a catalog, or categories with discounts. A finding about
+ * the answer's shape makes it unreadable, one about a length or a count is
+ * over its budget, and every other one — a claim, a price, markup, a category
+ * the request did not list — breaks a rule.
+ */
+function checkProducts(evalCase: AiEvalCase, answer: unknown): Checked {
+  if (!isRecord(answer)) {
+    return { readable: false, rules: false, budget: false, findings: ['products-not-a-call'] }
+  }
+  const result =
+    evalCase.kind === 'product'
+      ? checkAiProductCopy(answer, {
+          categoryIds: (evalCase.product?.categories ?? []).map((category) => category.id),
+          optionCount: evalCase.product?.facts.options.length ?? 0,
+          merchantWords: evalCase.product ? aiProductMerchantWords(evalCase.product.facts) : evalCase.brief,
+        })
+      : evalCase.kind === 'catalog'
+        ? checkAiCatalog(answer, { merchantWords: evalCase.brief })
+        : checkAiCategories(answer, {
+            existingCategoryNames: evalCase.existingCategoryNames ?? [],
+            merchantWords: evalCase.brief,
+          })
+  const found = [...codes(result.violations), ...codes(detectPublishIntent(answer))]
+  return {
+    readable: !found.some((code) => PRODUCTS_UNREADABLE.has(code)),
+    rules: !found.some((code) => !PRODUCTS_UNREADABLE.has(code) && !PRODUCTS_OVER_BUDGET.has(code)),
+    budget: !found.some((code) => PRODUCTS_OVER_BUDGET.has(code)),
+    findings: found,
+  }
+}
+
 function checkTheme(evalCase: AiEvalCase, answer: unknown): Checked {
   if (!isRecord(answer)) {
     return { readable: false, rules: false, budget: false, findings: ['theme-not-a-call'] }
@@ -571,6 +630,10 @@ function checkAnswer(evalCase: AiEvalCase, answer: unknown): Checked {
   switch (evalCase.kind) {
     case 'seo':
       return checkSeo(evalCase, answer)
+    case 'product':
+    case 'catalog':
+    case 'categories':
+      return checkProducts(evalCase, answer)
     case 'theme':
       return checkTheme(evalCase, answer)
     case 'element':

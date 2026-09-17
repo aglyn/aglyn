@@ -25,6 +25,7 @@ import { registerAiLayoutJob } from './jobs/ai-job-layout-step'
 import { registerAiTemplateJob } from './jobs/ai-job-template-step'
 import { registerAiFormJob } from './jobs/ai-job-form-step'
 import { registerAiPageJob } from './jobs/ai-job-page-step'
+import { registerAiProductsJob } from './jobs/ai-job-products-step'
 import { registerAiEmailJob } from './jobs/ai-job-email-step'
 import { registerAiCampaignJob } from './jobs/ai-job-campaign-step'
 import { registerAiSiteJob } from './jobs/ai-job-site-step'
@@ -107,6 +108,9 @@ function registerAiJobKinds(): void {
   // Automations drafted from a description, and explained, whose drafts the
   // workflows plugin writes on the resource-draft seam (AGL-2919).
   registerAiWorkflowJob()
+  // Product copy, and a store's products, categories and discounts from a
+  // brief, as proposals the commerce plugin's surfaces apply (AGL-2916).
+  registerAiProductsJob()
   // The site scaffold, which builds a whole site through the steps above
   // (AGL-2911).
   registerAiSiteJob()

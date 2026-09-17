@@ -241,6 +241,23 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       "a section of a page written as JSON, about forty elements at the step's measured 45 tokens an element; a pass lowers it to the worst case that fits AI_JOB_PAGE_STEP_MINIMUM_MS on the model it runs",
     eval: { kinds: ['page'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
   },
+  'job.products': {
+    // A product's copy from its name, text and photo, or a store's first
+    // products, categories and discounts from a brief (AGL-2916): answers held
+    // to the storefront claim rules, written with no extended thinking.
+    thinking: 'off',
+    effort: null,
+    maxTokens: 8000,
+    maxTokensBasis:
+      "the largest catalog the tool accepts, twelve proposed products at every bound written as JSON, which the balanced tier asks as much of as fits a beat; one product's copy asks 1,500 and categories with discounts 2,000, as ai-job-products-step.spec.ts measures them",
+    eval: {
+      kinds: ['product', 'catalog', 'categories'],
+      scores: 'answers',
+      source: 'authored',
+      passRate: 1,
+      meanScore: 0.9896,
+    },
+  },
   'job.email': {
     // One email design from the email palette, written against the brief with
     // no extended thinking (AGL-2912). A campaign job runs the same

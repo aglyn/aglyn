@@ -1,0 +1,273 @@
+{
+  "id": "catalog-asheville-candle-studio",
+  "kind": "catalog",
+  "brief": "A small candle studio in Asheville, North Carolina. We hand-pour soy candles in three scents, cedar and smoke, fig and black tea, and wild mint, each in an 8 oz or a 16 oz jar. We also sell wax melts in the same scents, a gift set with one candle and a pack of melts, and matchboxes with our logo. Warm, simple tone.",
+  "framing": null,
+  "inventory": null,
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: one product for each thing the brief sells, options only where the brief gives the choices, gaps marked where a shopper needs a fact the brief does not give, and no price.",
+      "plan": null,
+      "answer": {
+        "products": [
+          {
+            "name": "Cedar and smoke soy candle",
+            "type": "physical",
+            "description": "A soy candle poured by hand in our Asheville studio, scented with cedar and smoke.\n\nChoose an 8 oz or a 16 oz jar. Burn time: [hours].",
+            "tags": [
+              "soy candle",
+              "cedar and smoke",
+              "hand-poured"
+            ],
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "8 oz jar",
+                  "16 oz jar"
+                ]
+              }
+            ],
+            "seoTitle": "Cedar and smoke hand-poured soy candle",
+            "seoDescription": "A soy candle hand-poured in Asheville, scented with cedar and smoke, in an 8 oz or 16 oz jar.",
+            "photo": "The cedar and smoke candle lit on a wooden table, its label facing the camera."
+          },
+          {
+            "name": "Fig and black tea soy candle",
+            "type": "physical",
+            "description": "A soy candle poured by hand in our Asheville studio, scented with fig and black tea.\n\nChoose an 8 oz or a 16 oz jar. Burn time: [hours].",
+            "tags": [
+              "soy candle",
+              "fig and black tea",
+              "hand-poured"
+            ],
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "8 oz jar",
+                  "16 oz jar"
+                ]
+              }
+            ],
+            "seoTitle": "Fig and black tea hand-poured soy candle",
+            "seoDescription": "A soy candle hand-poured in Asheville, scented with fig and black tea, in an 8 oz or 16 oz jar.",
+            "photo": "The fig and black tea candle lit on a wooden table, its label facing the camera."
+          },
+          {
+            "name": "Wild mint soy candle",
+            "type": "physical",
+            "description": "A soy candle poured by hand in our Asheville studio, scented with wild mint.\n\nChoose an 8 oz or a 16 oz jar. Burn time: [hours].",
+            "tags": [
+              "soy candle",
+              "wild mint",
+              "hand-poured"
+            ],
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "8 oz jar",
+                  "16 oz jar"
+                ]
+              }
+            ],
+            "seoTitle": "Wild mint hand-poured soy candle",
+            "seoDescription": "A soy candle hand-poured in Asheville, scented with wild mint, in an 8 oz or 16 oz jar.",
+            "photo": "The wild mint candle lit on a wooden table, its label facing the camera."
+          },
+          {
+            "name": "Soy wax melts",
+            "type": "physical",
+            "description": "Soy wax melts in our three candle scents, for a warmer or burner.\n\nPieces per pack: [count].",
+            "tags": [
+              "wax melts",
+              "soy"
+            ],
+            "options": [
+              {
+                "name": "Scent",
+                "values": [
+                  "Cedar and smoke",
+                  "Fig and black tea",
+                  "Wild mint"
+                ]
+              }
+            ],
+            "seoTitle": "Soy wax melts in three scents",
+            "seoDescription": "Soy wax melts from our Asheville candle studio, in cedar and smoke, fig and black tea, or wild mint.",
+            "photo": "A pack of wax melts beside a warmer, a few pieces set out in front."
+          },
+          {
+            "name": "Candle and melts gift set",
+            "type": "physical",
+            "description": "One hand-poured soy candle and a pack of wax melts in the same scent, ready to give.\n\nCandle size in the set: [size].",
+            "tags": [
+              "gift set",
+              "soy candle",
+              "wax melts"
+            ],
+            "options": [
+              {
+                "name": "Scent",
+                "values": [
+                  "Cedar and smoke",
+                  "Fig and black tea",
+                  "Wild mint"
+                ]
+              }
+            ],
+            "seoTitle": "Soy candle and wax melts gift set",
+            "seoDescription": "A hand-poured soy candle and matching wax melts from our Asheville studio, in one of three scents.",
+            "photo": "The candle and its pack of melts together in the gift box, lid set to one side."
+          },
+          {
+            "name": "Logo matchbox",
+            "type": "physical",
+            "description": "A matchbox with our studio's logo, to keep beside your candles.\n\nMatches per box: [count].",
+            "tags": [
+              "matches",
+              "candle accessories"
+            ],
+            "options": [],
+            "seoTitle": "Logo matchbox",
+            "seoDescription": "A matchbox with the studio logo, made to sit beside a hand-poured soy candle.",
+            "photo": "A closed matchbox showing the logo, with a few matches laid beside it."
+          }
+        ]
+      },
+      "usage": null,
+      "rubric": {
+        "structure": 5,
+        "copy": 4,
+        "reuse": null,
+        "grader": "authored",
+        "notes": "Six products for a brief that sells six things; the descriptions are plain rather than evocative."
+      }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A certification and a price the brief never gives.",
+      "answer": {
+        "products": [
+          {
+            "name": "Cedar and smoke soy candle",
+            "type": "physical",
+            "description": "Certified organic soy, hand-poured in Asheville. Only $28 a jar.",
+            "tags": [
+              "soy candle",
+              "cedar and smoke",
+              "hand-poured"
+            ],
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "8 oz jar",
+                  "16 oz jar"
+                ]
+              }
+            ],
+            "seoTitle": "Cedar and smoke hand-poured soy candle",
+            "seoDescription": "A soy candle hand-poured in Asheville, scented with cedar and smoke, in an 8 oz or 16 oz jar.",
+            "photo": "The cedar and smoke candle lit on a wooden table, its label facing the camera."
+          }
+        ]
+      },
+      "fails": [
+        "rules"
+      ]
+    },
+    {
+      "why": "A description far past the length a product page holds.",
+      "answer": {
+        "products": [
+          {
+            "name": "Cedar and smoke soy candle",
+            "type": "physical",
+            "description": "A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. A soy candle poured by hand in our Asheville studio. ",
+            "tags": [
+              "soy candle",
+              "cedar and smoke",
+              "hand-poured"
+            ],
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "8 oz jar",
+                  "16 oz jar"
+                ]
+              }
+            ],
+            "seoTitle": "Cedar and smoke hand-poured soy candle",
+            "seoDescription": "A soy candle hand-poured in Asheville, scented with cedar and smoke, in an 8 oz or 16 oz jar.",
+            "photo": "The cedar and smoke candle lit on a wooden table, its label facing the camera."
+          }
+        ]
+      },
+      "fails": [
+        "budget"
+      ]
+    },
+    {
+      "why": "Two products under one name.",
+      "answer": {
+        "products": [
+          {
+            "name": "Cedar and smoke soy candle",
+            "type": "physical",
+            "description": "A soy candle poured by hand in our Asheville studio, scented with cedar and smoke.\n\nChoose an 8 oz or a 16 oz jar. Burn time: [hours].",
+            "tags": [
+              "soy candle",
+              "cedar and smoke",
+              "hand-poured"
+            ],
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "8 oz jar",
+                  "16 oz jar"
+                ]
+              }
+            ],
+            "seoTitle": "Cedar and smoke hand-poured soy candle",
+            "seoDescription": "A soy candle hand-poured in Asheville, scented with cedar and smoke, in an 8 oz or 16 oz jar.",
+            "photo": "The cedar and smoke candle lit on a wooden table, its label facing the camera."
+          },
+          {
+            "name": "Cedar and smoke soy candle",
+            "type": "physical",
+            "description": "A soy candle poured by hand in our Asheville studio, scented with cedar and smoke.\n\nChoose an 8 oz or a 16 oz jar. Burn time: [hours].",
+            "tags": [
+              "soy candle",
+              "cedar and smoke",
+              "hand-poured"
+            ],
+            "options": [
+              {
+                "name": "Size",
+                "values": [
+                  "8 oz jar",
+                  "16 oz jar"
+                ]
+              }
+            ],
+            "seoTitle": "Cedar and smoke hand-poured soy candle",
+            "seoDescription": "A soy candle hand-poured in Asheville, scented with cedar and smoke, in an 8 oz or 16 oz jar.",
+            "photo": "The cedar and smoke candle lit on a wooden table, its label facing the camera."
+          }
+        ]
+      },
+      "fails": [
+        "rules"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,122 @@
+{
+  "id": "categories-trail-running-shop",
+  "kind": "categories",
+  "brief": "An online trail running shop selling shoes, hydration packs and running apparel. We would like a welcome code for first orders, and free shipping on bigger orders, over $75.",
+  "framing": null,
+  "inventory": null,
+  "existingCategoryNames": [
+    "Shoes"
+  ],
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: the two categories the store lacks, not the one it has, and exactly the two discounts the brief asks for, modest and switched off until the owner turns them on.",
+      "plan": null,
+      "answer": {
+        "categories": [
+          {
+            "name": "Hydration packs",
+            "why": "Runners shop for water carriers on their own, apart from shoes and clothing."
+          },
+          {
+            "name": "Running apparel",
+            "why": "Shirts, shorts and jackets browse together when a runner dresses for the trail."
+          }
+        ],
+        "discounts": [
+          {
+            "name": "Welcome code",
+            "code": "WELCOME10",
+            "kind": "percent",
+            "value": 10,
+            "minimumOrderUsd": 0,
+            "why": "Gives a first-time customer a reason to place a first order."
+          },
+          {
+            "name": "Free shipping on bigger orders",
+            "code": "",
+            "kind": "free_shipping",
+            "value": 0,
+            "minimumOrderUsd": 75,
+            "why": "Applies on its own to orders over the amount the brief names."
+          }
+        ]
+      },
+      "usage": null,
+      "rubric": {
+        "structure": 5,
+        "copy": 5,
+        "reuse": null,
+        "grader": "authored"
+      }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A category the store already has.",
+      "answer": {
+        "categories": [
+          {
+            "name": "Shoes",
+            "why": "Runners need shoes."
+          }
+        ],
+        "discounts": []
+      },
+      "fails": [
+        "rules"
+      ]
+    },
+    {
+      "why": "A discount that takes nearly everything off.",
+      "answer": {
+        "categories": [],
+        "discounts": [
+          {
+            "name": "Launch sale",
+            "code": "LAUNCH",
+            "kind": "percent",
+            "value": 95,
+            "minimumOrderUsd": 0,
+            "why": "Clears the first orders fast."
+          }
+        ]
+      },
+      "fails": [
+        "rules"
+      ]
+    },
+    {
+      "why": "A reason that promises runners a financial result.",
+      "answer": {
+        "categories": [],
+        "discounts": [
+          {
+            "name": "Welcome code",
+            "code": "WELCOME10",
+            "kind": "percent",
+            "value": 10,
+            "minimumOrderUsd": 0,
+            "why": "Every runner who uses it is on the road to financial freedom."
+          }
+        ]
+      },
+      "fails": [
+        "rules"
+      ]
+    },
+    {
+      "why": "Nothing proposed at all.",
+      "answer": {
+        "categories": [],
+        "discounts": []
+      },
+      "fails": [
+        "rules"
+      ]
+    }
+  ]
+}
