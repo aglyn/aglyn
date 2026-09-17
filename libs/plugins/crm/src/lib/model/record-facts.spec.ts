@@ -22,6 +22,7 @@ import {
   contactFacts,
   crmActivityFact,
   crmFactMoney,
+  crmFactProse,
   crmOpenTaskFacts,
   dealFacts,
   importFacts,
@@ -339,6 +340,23 @@ describe('the pieces', () => {
       crmActivityFact({ kind: 'email', atMs: day('2026-09-01'), direction: 'inbound', from: 'sam@acme.test', threadSubject: 'Re: quote', body: 'Looks good' }),
     ).toEqual({ on: '2026-09-01', kind: 'Email', direction: 'inbound', subject: 'Re: quote', text: 'Looks good' })
     expect(crmActivityFact({ kind: 'note', atMs: Number.NaN, body: 'no time' })).toBeNull()
+  })
+
+  it('replaces an address or a number typed into free text, and leaves days, amounts and short numbers', () => {
+    expect(crmFactProse('Call Jane on (512) 555-0100 or +44 20 7946 0958, or write jane@example.com.', 280)).toBe(
+      'Call Jane on [phone number] or [phone number], or write [email address].',
+    )
+    expect(crmFactProse('Met 2026-09-09 2026-09-12; quoted USD 18450.00 for 3 bays, order 55512.', 280)).toBe(
+      'Met 2026-09-09 2026-09-12; quoted USD 18450.00 for 3 bays, order 55512.',
+    )
+    // Replaced before the cut, so a cut cannot leave half an address behind.
+    expect(crmFactProse('Reach her at jane.alt@example.com', 24)).toBe('Reach her at [email add…')
+    expect(crmActivityFact({ kind: 'call', atMs: day('2026-09-02'), body: 'Asked us to text 512.555.0199 instead' })).toEqual({
+      on: '2026-09-02',
+      kind: 'Call',
+      text: 'Asked us to text [phone number] instead',
+    })
+    expect(crmFactProse(42, 280)).toBe('')
   })
 
   it('orders open tasks by due day, undated last, and marks the ones past their day', () => {

@@ -70,6 +70,11 @@ import {
  * it went to or came from. An import catalog carries field keys, labels and
  * types, never a row of the file.
  *
+ * What the team typed — notes, a logged activity, a capture's summary, a
+ * reason — is reported as written, except that an email address or a phone
+ * number inside it is replaced by a placeholder first ({@link crmFactProse}).
+ * A postal address typed into a note is not recognized and leaves as typed.
+ *
  * ## Stable bytes
  *
  * Every builder writes its keys in one order, dates as UTC calendar days and
@@ -282,6 +287,34 @@ export function crmFactMoney(cents: unknown, currency: unknown): string | null {
   return `${code} ${(cents / 100).toFixed(2)}`
 }
 
+/** An email address written inside free text. */
+const EMAIL_IN_PROSE = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g
+/** A run of digits and the separators a phone number is written with. */
+const DIGIT_RUN_IN_PROSE = /\+?\(?\d[\d\s().-]{7,}\d/g
+/** Calendar days, which a run of digits may be and a phone number is not. */
+const DAYS_ONLY = /^\d{4}-\d{2}-\d{2}(?:\s+\d{4}-\d{2}-\d{2})*$/
+
+export const CRM_FACTS_EMAIL_PLACEHOLDER = '[email address]'
+export const CRM_FACTS_PHONE_PLACEHOLDER = '[phone number]'
+
+/**
+ * Free text the team wrote, as {@link crmFactText} reports it, with every
+ * email address, and every run of ten digits or more that is not a list of
+ * days, replaced by a placeholder. The fields that hold an address or a number
+ * are never reported, and this keeps one typed into a note from leaving
+ * either. Replaced before the cut, so a cut never halves an address into
+ * something unrecognized.
+ */
+export function crmFactProse(value: unknown, max: number): string {
+  if (typeof value !== 'string') return ''
+  const scrubbed = value
+    .replace(EMAIL_IN_PROSE, CRM_FACTS_EMAIL_PLACEHOLDER)
+    .replace(DIGIT_RUN_IN_PROSE, (run) =>
+      DAYS_ONLY.test(run.trim()) || run.replace(/\D/g, '').length < 10 ? run : CRM_FACTS_PHONE_PLACEHOLDER,
+    )
+  return crmFactText(scrubbed, max)
+}
+
 function tagsOf(value: unknown): string[] {
   return Array.isArray(value)
     ? value
@@ -300,11 +333,11 @@ export function crmActivityFact(activity: Partial<CrmActivity>): CrmTimelineFact
   if (kind === 'email' && (activity.direction === 'outbound' || activity.direction === 'inbound')) {
     fact.direction = activity.direction
   }
-  const subject = crmFactText(activity.subject ?? activity.threadSubject, CRM_FACTS_LABEL_MAX)
+  const subject = crmFactProse(activity.subject ?? activity.threadSubject, CRM_FACTS_LABEL_MAX)
   if (subject) fact.subject = subject
-  const text = crmFactText(activity.body, CRM_FACTS_TEXT_MAX)
+  const text = crmFactProse(activity.body, CRM_FACTS_TEXT_MAX)
   if (text) fact.text = text
-  const outcome = crmFactText(activity.outcome, CRM_FACTS_LABEL_MAX)
+  const outcome = crmFactProse(activity.outcome, CRM_FACTS_LABEL_MAX)
   if (outcome) fact.outcome = outcome
   if (kind === 'email' && isCrmEmailDeliveryState(activity.deliveryState)) {
     fact.delivery = CRM_EMAIL_DELIVERY_STATE_LABELS[activity.deliveryState]
@@ -318,7 +351,7 @@ export function crmInteractionFact(interaction: Partial<ContactInteraction>): Cr
   if (!on) return null
   const kind =
     interaction.type && CONTACT_SOURCE_LABELS[interaction.type] ? CONTACT_SOURCE_LABELS[interaction.type] : 'Capture'
-  const text = crmFactText(interaction.summary, CRM_FACTS_TEXT_MAX)
+  const text = crmFactProse(interaction.summary, CRM_FACTS_TEXT_MAX)
   return text ? { on, kind, text } : { on, kind }
 }
 
@@ -417,7 +450,7 @@ export function contactFacts(input: ContactFactsInput): CrmContactFacts {
     lastPurchase: crmFactDay(facet.lastPurchaseAtMs),
     since: crmFactDay(row['createdAt']),
     lastEmailEngagement: crmFactDay(facet.lastEmailEngagementAtMs),
-    notes: crmFactText(facet.notes, CRM_FACTS_NOTES_MAX),
+    notes: crmFactProse(facet.notes, CRM_FACTS_NOTES_MAX),
     timeline: crmTimelineFacts([
       ...input.activities.map((activity) => ({ atMs: activity.atMs, fact: crmActivityFact(activity) })),
       ...interactions.map((interaction) => ({ atMs: interaction.atMs, fact: crmInteractionFact(interaction) })),
@@ -449,7 +482,7 @@ export function companyFacts(input: CompanyFactsInput): CrmCompanyFacts {
         ? Math.floor(company.contactsCount)
         : 0,
     since: crmFactDay(company.createdAt),
-    notes: crmFactText(company.notes, CRM_FACTS_NOTES_MAX),
+    notes: crmFactProse(company.notes, CRM_FACTS_NOTES_MAX),
     timeline: crmTimelineFacts(
       input.activities.map((activity) => ({ atMs: activity.atMs, fact: crmActivityFact(activity) })),
     ),
@@ -487,12 +520,12 @@ export function dealFacts(input: DealFactsInput): CrmDealFacts {
     amount: summary.amount,
     expectedClose: summary.expectedClose,
     inStageSince: crmFactDay(deal.stageChangedAtMs),
-    lostReason: crmFactText(deal.lostReason, CRM_FACTS_LABEL_MAX),
+    lostReason: crmFactProse(deal.lostReason, CRM_FACTS_LABEL_MAX),
     contact: crmFactText(deal.contactName, CRM_FACTS_LABEL_MAX),
     company: crmFactText(deal.companyName, CRM_FACTS_LABEL_MAX),
     products: Array.isArray(deal.lineItems) ? deal.lineItems.length : 0,
     since: crmFactDay(deal.createdAt),
-    notes: crmFactText(deal.notes, CRM_FACTS_NOTES_MAX),
+    notes: crmFactProse(deal.notes, CRM_FACTS_NOTES_MAX),
     timeline: crmTimelineFacts(
       input.activities.map((activity) => ({ atMs: activity.atMs, fact: crmActivityFact(activity) })),
     ),
@@ -532,8 +565,8 @@ export function leadFacts(input: LeadFactsInput): CrmLeadFacts {
     lastSeen: crmFactDay(lead['lastSeenAtMs']),
     assigned: typeof lead['ownerUid'] === 'string' && lead['ownerUid'] !== '',
     converted: typeof lead['convertedContactId'] === 'string' && lead['convertedContactId'] !== '',
-    unqualifiedReason: crmFactText(lead['unqualifiedReason'], CRM_FACTS_LABEL_MAX),
-    notes: crmFactText(lead['notes'], CRM_FACTS_NOTES_MAX),
+    unqualifiedReason: crmFactProse(lead['unqualifiedReason'], CRM_FACTS_LABEL_MAX),
+    notes: crmFactProse(lead['notes'], CRM_FACTS_NOTES_MAX),
     timeline: crmTimelineFacts(
       input.activities.map((activity) => ({ atMs: activity.atMs, fact: crmActivityFact(activity) })),
     ),
