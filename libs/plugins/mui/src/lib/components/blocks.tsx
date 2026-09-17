@@ -40,7 +40,7 @@ import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import Stack from '@mui/material/Stack'
-import { forwardRef } from 'react'
+import { forwardRef, useContext } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -99,8 +99,12 @@ const VideoEmbed = forwardRef<HTMLDivElement, VideoEmbedProps>(
     const { url, height, ...rest } = props
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
+    const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
     const src = url ? parseVideoEmbedSrc(url) : null
     if (!src) {
+      // The hint is for the author, so only editing surfaces draw it; a
+      // published page renders the bare element.
+      if (!suppressNavigation) return <Box ref={ref} {...rest} />
       return (
         <Box
           ref={ref}
@@ -203,6 +207,7 @@ const SAFE_SOCIAL_HREF = /^https:\/\//i
 
 const SocialLinks = forwardRef<HTMLDivElement, SocialLinksProps>(
   (props, ref) => {
+    const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
     const entries = SOCIAL_NETWORKS.map(({ key, label, path }) => ({
       key,
       label,
@@ -213,18 +218,7 @@ const SocialLinks = forwardRef<HTMLDivElement, SocialLinksProps>(
     )
     return (
       <Stack ref={ref} direction="row" spacing={0.5} {...props}>
-        {entries.length === 0 ? (
-          <Box
-            sx={{
-              color: 'text.secondary',
-              fontSize: 12,
-              fontFamily: 'system-ui, sans-serif',
-              p: 1,
-            }}
-          >
-            {'Social links — add profile URLs in Attributes'}
-          </Box>
-        ) : (
+        {entries.length ? (
           entries.map((entry) => (
             <AppLink
               key={entry.key}
@@ -238,7 +232,19 @@ const SocialLinks = forwardRef<HTMLDivElement, SocialLinksProps>(
               <MdiIcon path={entry.path} />
             </AppLink>
           ))
-        )}
+        ) : suppressNavigation ? (
+          // Editing surfaces only: a visitor has no Attributes panel.
+          <Box
+            sx={{
+              color: 'text.secondary',
+              fontSize: 12,
+              fontFamily: 'system-ui, sans-serif',
+              p: 1,
+            }}
+          >
+            {'Social links — add profile URLs in Attributes'}
+          </Box>
+        ) : null}
       </Stack>
     )
   },

@@ -20,7 +20,7 @@ import { mdiCodeTags } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
 import type { SxProps } from '@mui/material/styles'
 import Typography from '@mui/material/Typography'
-import { forwardRef } from 'react'
+import { forwardRef, useContext } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -92,6 +92,7 @@ const CustomHtml = forwardRef<HTMLDivElement, CustomHtmlProps>(
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
+    const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
 
     // Same shape as typography's rich text, and fixed the same way
     // (AGL-1901): sanitized DURING render rather than in an effect. The
@@ -103,6 +104,9 @@ const CustomHtml = forwardRef<HTMLDivElement, CustomHtmlProps>(
     const sanitized = !html || embedMode ? '' : sanitizeCustomHtml(html)
 
     if (!html?.trim()) {
+      // The hint is for the author, so only editing surfaces draw it; a
+      // published page renders the bare element.
+      if (!suppressNavigation) return <Box ref={ref} {...rest} />
       return (
         <Box
           ref={ref}

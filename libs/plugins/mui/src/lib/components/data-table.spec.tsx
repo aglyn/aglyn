@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import { render, screen } from '@testing-library/react'
 import DataTable, { dataTablePresets, dataTableSchema } from './data-table'
 
@@ -73,9 +74,25 @@ describe('the Table element (AGL-2543)', () => {
   it('says what to do when it is empty rather than rendering nothing', () => {
     // An empty element that renders nothing is invisible on the canvas, and
     // an author cannot select what they cannot see.
-    render(<DataTable rows="" />)
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+        <DataTable rows="" />
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
     expect(screen.getByText(/add rows in Attributes/i)).toBeTruthy()
     expect(document.querySelector('table')).toBeNull()
+  })
+
+  it('renders nothing on a published page when it is empty (AGL-3067)', () => {
+    // A visitor has no Attributes panel. The published page is the surface
+    // with no editing flag, which is how the tenant renders.
+    const { container } = render(
+      <DataTable rows="" data-aglyn="leaf:matrix" />,
+    )
+    const root = container.firstElementChild as HTMLElement
+    expect(root.getAttribute('data-aglyn')).toBe('leaf:matrix')
+    expect(container.textContent).toBe('')
+    expect(getComputedStyle(root).borderStyle).not.toContain('dashed')
   })
 
   it('exposes the grid through the DATA_TABLE editor, not a text box', () => {

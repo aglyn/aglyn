@@ -250,8 +250,8 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
    * app concern; every other value — a legacy firebasestorage URL, a legacy
    * `/api/media/cdn/…` path, an author-typed hotlink — passes through.
    *
-   * `useSite().hostId` is the site being rendered: present on the tenant,
-   * absent in the besigner canvas and Preview. When it is there it names the
+   * `useSite().hostId` is the site being rendered: present on the tenant and
+   * in Preview, absent in the besigner canvas. When it is there it names the
    * asking site in the org scope, which is what lets ONE reference in a
    * layout or reusable component resolve on each site that uses it.
    */
@@ -270,6 +270,9 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       element
     )
   if (!src) {
+    // The labeled box is for the author, so only editing surfaces draw it; a
+    // published page renders the bare element.
+    if (!suppressNavigation) return <Box ref={ref} {...rest} sx={nodeSx} />
     return (
       <Box
         ref={ref}

@@ -636,6 +636,7 @@ const TableOfContents = observer(
      * what is spread onto the Box.
      */
     const rest = dropClearedProps(rawRest)
+    const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
     const source = resolveMarkdownSource(Aglyn.canvas.rootNode, forNodeId)
     const entries = useMemo(() => {
       const headings = Aglyn.collectMarkdownHeadings(
@@ -649,7 +650,8 @@ const TableOfContents = observer(
 
     if (!entries.length) {
       // Same split as the Markdown element: an affordance while authoring,
-      // nothing at all on the published page.
+      // nothing at all on the published page — and no empty `nav` landmark.
+      if (!suppressNavigation) return <Box ref={ref} sx={sx} {...rest} />
       return (
         <Box
           ref={ref}
@@ -661,9 +663,6 @@ const TableOfContents = observer(
               borderColor: 'divider',
               color: 'text.secondary',
               fontSize: 12,
-              // A page whose Markdown element has no headings yet should not
-              // publish an empty box where an aside was meant to be.
-              '@media print': { display: 'none' },
             },
             ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
           ]}

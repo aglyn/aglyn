@@ -32,7 +32,7 @@ import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
-import { forwardRef } from 'react'
+import { forwardRef, useContext } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -82,12 +82,16 @@ const DataTable = forwardRef<HTMLDivElement, DataTableProps>((props, ref) => {
   const { rows, headerRow = true, emphasizeColumn, ...rest } = props
   // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
   const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
+  const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
   const grid = parseDataTableRows(rows)
   const width = grid[0]?.length ?? 0
   const alignments = readDataTableAlignments(rows, width)
   const emphasis = normalizeEmphasisColumn(emphasizeColumn, width)
 
   if (grid.length === 0) {
+    // The hint is for the author, so only editing surfaces draw it; a
+    // published page renders the bare element.
+    if (!suppressNavigation) return <Box ref={ref} {...rest} />
     return (
       <Box
         ref={ref}
