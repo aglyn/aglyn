@@ -324,6 +324,7 @@ describe('every zone says how it places its widgets', () => {
       'staffOrg',
       'staffUser',
       'hostActivity',
+      'recordInsights',
     ]) {
       expect(`${zone}: ${widgetZoneLayout(zone)}`).toBe(`${zone}: stack`)
     }
@@ -345,6 +346,8 @@ describe('every zone says how it places its widgets', () => {
       'productEditor',
       'productsHub',
       'productImport',
+      'recordEmail',
+      'importMapping',
       'besignerToolbar',
       'besignerInspector',
       'seoFields',

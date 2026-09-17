@@ -49,8 +49,8 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them. Hosted by the commerce plugin | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
 | `productImport` | Inside the commerce CSV import dialog: options for what happens to the imported products once they land. Hosted by the commerce plugin | `hostId`, `orgId`, `count` (products the import creates), `options`, `setOption(key, on)` |
 | `recordInsights` | A CRM contact's, company's, deal's or lead's page, under its header. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId` (`null` at the organization level), `orgId`, `record` (`{ kind, id, name }`), `proposeTask(task, key)` (opens the CRM's task form filled in; absent on a lead), and on a deal `stages`, `stageId` and `proposeStage(stageId, key)` (asks, then moves the deal through its stage route) |
-| `recordEmail` | Inside the CRM's one-to-one composer, under the message. Hosted by the CRM plugin | `hostId`, `orgId`, `record`, `subject`, `body`, `proposeDraft({ subject, body }, key)` (fills the composer, asking before it replaces a written message; Send is the member's) |
-| `importMapping` | Inside a CRM contacts, companies, deals or leads import, under its column matching. Hosted by the CRM plugin | `hostId`, `orgId`, `collection`, `columns` (each `{ header, shape }`, where `shape` is `email`, `phone`, `number`, `date`, `yes-no`, `url`, `text` or `empty`; never a cell), `mapping`, `proposeMapping(mapping, key)` (replaces the drawer's matching; Import is the write) |
+| `recordEmail` | Inside the CRM's one-to-one composer, under the message. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `record`, `subject`, `body`, `proposeDraft({ subject, body }, key)` (fills the composer, asking before it replaces a written message; Send is the member's) |
+| `importMapping` | Inside a CRM contacts, companies, deals or leads import, under its column matching. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `collection`, `columns` (each `{ header, shape }`, where `shape` is `email`, `phone`, `number`, `date`, `yes-no`, `url`, `text` or `empty`; never a cell), `mapping`, `proposeMapping(mapping, key)` (replaces the drawer's matching; Import is the write) |
 
 Rules of thumb: widgets receive shell-resolved context as props and must
 not reach for console-app hooks; data access goes through
@@ -62,8 +62,9 @@ unloaded plugins.
 ## Zones a plugin hosts
 
 A zone can sit on a plugin's own surface rather than on a console page, such as `hostForms`
-on the forms plugin's Forms page, or `hostAutomations`, `automationEditor` and `automationRun`
-on the workflows plugin's Automation page. A plugin cannot import the console's `PluginWidgetSlot`,
+on the forms plugin's Forms page, `hostAutomations`, `automationEditor` and `automationRun`
+on the workflows plugin's Automation page, or `recordInsights`, `recordEmail` and
+`importMapping` on the CRM plugin's record pages, one-to-one composer and import drawers. A plugin cannot import the console's `PluginWidgetSlot`,
 so the shell hands its renderer down: read it with `useConsoleWidgetSlot()` from
 `@aglyn/aglyn` and draw the zone through it.
 
@@ -98,6 +99,8 @@ page spaces it there:
 - `productEditor`, `productsHub` and `productImport`: a section the commerce
   plugin places among its product editor's fields, above its catalog table,
   and in its CSV import dialog.
+- `recordEmail` and `importMapping`: a section the CRM plugin places under its
+  one-to-one composer's message and under an import drawer's column matching.
 - `besignerFunctions`, `orgData`, `orgMarketplace`, `orgAddons` and
   `marketplaceListing`: the body of a dialog or a page.
 - `assistPanel`: a floating dock.

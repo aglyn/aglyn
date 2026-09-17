@@ -132,6 +132,13 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   productEditor: 'bare',
   productsHub: 'bare',
   productImport: 'bare',
+  // A card among a CRM record page's own cards, which the CRM plugin hosts.
+  recordInsights: 'stack',
+  // Sections the CRM plugin places inside its own spaced layouts: under the
+  // one-to-one composer's message, and under an import drawer's column
+  // matching.
+  recordEmail: 'bare',
+  importMapping: 'bare',
   orgSites: 'stack',
 }
 
