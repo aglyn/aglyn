@@ -114,6 +114,7 @@ export const DOCS_HELP_EXCERPTS = {
   import: 'Bring a spreadsheet of people into the CRM — map its columns, preview the result, and import in batches with a report of what was added, updated and skipped.',
   importExport: 'Round-trip dataset records through CSV and JSON with validation on import.',
   injectionZones: 'Every named console zone a plugin widget can render into, and what each receives.',
+  insights: 'Ask Aglyn AI a question about your site\'s figures in plain words, and get answers where every number is traced to the figure it comes from — plus weekly insights by email.',
   installYourFirstPlugin: 'A click-by-click walkthrough of the Marketplace — find something, choose which sites get it, install it, and turn it off again.',
   interactions: 'Build element interactions in one dialog and drop sanitized custom markup anywhere.',
   inviteTeammates: 'Add people to your site and understand how team members act within your organization.',

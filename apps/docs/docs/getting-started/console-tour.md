@@ -222,6 +222,10 @@ both. It is account-wide, like the category mutes; muting **Forms & bookings** s
 the digest's console notification but not its email. What it counts, and when, is in
 [Tasks & follow-ups](../content-and-data/crm/tasks.md#the-daily-digest).
 
+**Weekly insights** appear beside it once you have turned them on for a workspace from
+**Ask about your numbers**, with one switch per workspace. They are off unless you turn
+them on. See [Insights](../marketing-and-automation/analytics/insights.md#weekly-insights).
+
 **Task reminders** — the notification and email a CRM task sends at its own due time —
 have no switch of their own. They are **Forms & bookings** notifications, beside **Task
 assigned to you**, and muting that category stops both the notification and the email;
