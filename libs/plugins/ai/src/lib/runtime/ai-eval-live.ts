@@ -25,17 +25,29 @@ import { createAiJobFormStep } from '../jobs/ai-job-form-step'
 import { createAiJobLayoutStep } from '../jobs/ai-job-layout-step'
 import { aiPageJobUnits, createAiJobPageStep } from '../jobs/ai-job-page-step'
 import { AI_JOB_PLAN_SCOPES, createAiJobPlanStep } from '../jobs/ai-job-plan-step'
+import { createAiJobProductsStep } from '../jobs/ai-job-products-step'
 import { aiSitePendingUnits } from '../jobs/ai-job-site-step'
 import type { AiJobStepOutcome } from '../jobs/ai-job-text-step'
 import { runAiJobTextStep } from '../jobs/ai-job-text-step'
 import { aiJobThemeCheck, aiJobThemeGeneration, aiJobThemeMode } from '../jobs/ai-job-theme-step'
+import {
+  aiJobWorkflowDraftGeneration,
+  aiJobWorkflowExplainGeneration,
+  aiJobWorkflowModel,
+} from '../jobs/ai-job-workflow-step'
+import { readAiProductImage, type AiProductImageSeams } from '../jobs/ai-product-image'
+import { emptyAiAutomationRecords, type AiAutomationRecords } from '../model/ai-automation-draft'
+import { aiActionOutline, aiActionRecordKinds, aiRunOutline } from '../model/ai-automation-outline'
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import { aiPlanCapabilitiesForJob, aiPlanCapabilityLines } from '../model/ai-plan-capabilities'
+import { aiProductsJobInputs, aiProductsProposalOf, type AiProductsProposal } from '../model/ai-products'
 import { aiDefaultModelFor, type AiStepKind } from '../providers/catalog'
-import type { AiProvider, AiSystemBlock, AiTool, AiUsage } from '../providers/contract'
+import type { AiImagePart, AiProvider, AiSystemBlock, AiTool, AiUsage } from '../providers/contract'
 import { aiModelForStep, resolveAiProvider } from '../providers/routing'
-import { aiSiteInventoryBlock, runValidatedGeneration } from './ai-doctrine'
+import { aiSiteInventoryBlock, runValidatedGeneration, type AiCustomGenerationInput } from './ai-doctrine'
 import {
+  AI_EVAL_AUTOMATION_CAPABILITIES,
+  AI_EVAL_SITE_ID,
   AI_EVAL_TREE_OUTPUT,
   type AiEvalCandidate,
   type AiEvalCase,
@@ -45,6 +57,8 @@ import {
   type AiEvalRubric,
 } from './ai-eval'
 import { aiEvalMemoryFirestore, aiEvalMemoryInventory } from './ai-eval-memory-firestore'
+import { aiCategoriesPrompt, aiProductCopyPrompt } from './ai-products-generation'
+import { aiModelReadsImages } from './ai-runtime'
 
 /**
  * THE EVAL HARNESS, LIVE (AGL-2937): recording new answers from the model.
@@ -57,15 +71,27 @@ import { aiEvalMemoryFirestore, aiEvalMemoryInventory } from './ai-eval-memory-f
  *
  * A recording is only worth having if it measures what production sends. So
  * each recorder answers a brief through the door that answers that kind in
- * production — the plan step's runner, the text step's runner, the theme
- * step's own generation call — with the case's site handed in where the door
- * would read one. Nothing here writes a prompt of its own for a kind.
+ * production — the plan step's runner, the text step's runner, the products
+ * step's runner, the theme and workflow steps' own generation calls — with
+ * the case's site handed in where the door would read one. Nothing here
+ * writes a prompt of its own for a kind.
  *
- * A kind whose door is a request route rather than a job step (the copy
- * assistant's section, element and blog modes, the chat door) has no
- * recorder, and neither does a planned kind's document until its generator
- * lands: its brief records the plan alone. A door that gains a recorder
+ * A kind with no recorder is skipped before any request, saying where
+ * production answers it (`AI_EVAL_UNRECORDED_DOORS`): a request route no job
+ * runs (the copy assistant's section, element and blog modes, the chat door),
+ * or a job step no recorder drives yet. A planned kind's document records the
+ * plan alone until its generator is recorded. A door that gains a recorder
  * registers it with `registerAiEvalRecorder`.
+ *
+ * An automation brief is recorded through the workflow step's own generation
+ * call (AGL-3074) — a draft from the workspace's reach and the site's records,
+ * an explanation from the outline of the saved automation — because the
+ * step's runner keeps the tool's input nowhere: it writes the draft it makes
+ * of it, or the text it reads out of it, and the harness scores the input. A
+ * product brief is recorded through the products step's runner, against the
+ * case's store in memory, its photo read from the case's fixtures through the
+ * step's own resize-and-strip path, and its answer read back off the proposal
+ * the runner makes.
  *
  * A page brief is recorded END TO END (AGL-3030): the plan step's runner,
  * the plan confirmed as a member confirms it, and every pass of the page
@@ -126,6 +152,12 @@ export interface AiEvalLiveOptions {
   /** The grader's model; the provider's deepest tier when absent. */
   graderModel?: string
   now?: Date
+  /**
+   * Reads a file a case's `media` names, by its path under
+   * `tools/ai-eval/fixtures` (AGL-3074). A run that records a case naming
+   * media is refused without one, before any request.
+   */
+  readFixture?: (file: string) => Promise<Buffer>
 }
 
 /** An answer to one brief, before it is graded. */
@@ -242,7 +274,10 @@ const recordPlan: AiEvalRecorder = async (evalCase, options) => {
 const AI_EVAL_PAGE_MAX_PASSES = 64
 
 /** One exchange's spend, as the machine meters a step. */
-function recordedStep(step: AiStepKind, outcome: AiJobStepOutcome): AiEvalRecordedStep {
+function recordedStep(
+  step: AiStepKind,
+  outcome: Pick<AiJobStepOutcome, 'model' | 'usage' | 'estCostUsd'>,
+): AiEvalRecordedStep {
   return {
     step,
     model: outcome.model,
@@ -503,6 +538,230 @@ const recordTheme: AiEvalRecorder = async (evalCase, options) => {
   }
 }
 
+/**
+ * The workflow step's generation for an automation brief (AGL-3074), from
+ * the case as the step's runner builds it from a site: a draft from what the
+ * workspace can run and the site's forms and datasets; or, for a brief about
+ * a saved action, an explanation from the action's outline, told whether the
+ * records its steps name exist as the runner reads only those, with a failed
+ * run's outline where the case gives one.
+ */
+export function aiEvalWorkflowGeneration(evalCase: AiEvalCase, model: string): AiCustomGenerationInput<unknown> {
+  const records = evalCase.automationRecords ?? emptyAiAutomationRecords()
+  const automation = evalCase.automation
+  if (!automation) {
+    return aiJobWorkflowDraftGeneration({
+      brief: evalCase.brief,
+      capabilities: evalCase.automationCapabilities ?? AI_EVAL_AUTOMATION_CAPABILITIES,
+      records,
+      model,
+    }) as AiCustomGenerationInput<unknown>
+  }
+  const named = aiActionRecordKinds(automation.action)
+  const read = Object.fromEntries(
+    Object.entries(records).map(([kind, rows]) => [kind, named.includes(kind as keyof AiAutomationRecords) ? rows : []]),
+  ) as unknown as AiAutomationRecords
+  return aiJobWorkflowExplainGeneration({
+    brief: evalCase.brief,
+    mode: automation.run ? 'diagnose' : 'explain',
+    outline: aiActionOutline(automation.action, read),
+    run: automation.run ? aiRunOutline(automation.run) : null,
+    model,
+  }) as AiCustomGenerationInput<unknown>
+}
+
+/**
+ * An automation brief, recorded through the workflow step's own generation
+ * call (AGL-3074). The tool's raw input is kept, because that is what the
+ * harness scores: the step's runner turns a draft into the action it writes,
+ * and an explanation into the text it reports, and keeps the input nowhere.
+ */
+const recordWorkflow: AiEvalRecorder = async (evalCase, options) => {
+  const generation = aiEvalWorkflowGeneration(evalCase, options.model ?? aiJobWorkflowModel())
+  let raw: Record<string, unknown> | null = null
+  const result = await runValidatedGeneration(
+    'workflow',
+    withProvider(
+      {
+        ...generation,
+        check: (answer: Record<string, unknown>) => {
+          raw = answer
+          return generation.check(answer)
+        },
+      },
+      options,
+    ),
+  )
+  return {
+    source: 'recorded',
+    scope: 'full',
+    step: 'job.workflow',
+    model: result.model,
+    effort: result.effort,
+    plan: null,
+    answer: result.status === 'refused' ? null : raw,
+    usage: result.usage,
+    steps: [recordedStep('job.workflow', result)],
+    ...(result.status === 'needs_input' ? { note: `needs review: ${result.message}` } : {}),
+  }
+}
+
+/** The site a case's job runs on: its inventory's, or the harness's own. */
+function aiEvalSiteId(evalCase: AiEvalCase): string {
+  return evalCase.inventory?.hostId ?? AI_EVAL_SITE_ID
+}
+
+/** A products brief's job inputs, as the editor or a products card hands them over. */
+function aiEvalProductsInputs(evalCase: AiEvalCase): Record<string, string> {
+  if (evalCase.kind === 'catalog') return aiProductsJobInputs({ target: 'catalog' })
+  if (evalCase.kind === 'categories') return aiProductsJobInputs({ target: 'categories' })
+  if (!evalCase.product) throw new Error(`${evalCase.id} names no product to write copy for`)
+  return aiProductsJobInputs({ target: 'product', product: evalCase.product.facts })
+}
+
+/** A picture's content type, from the extension of the fixture that holds it. */
+function fixtureContentType(file: string): string {
+  const extension = file.slice(file.lastIndexOf('.') + 1).toLowerCase()
+  return `image/${extension === 'jpg' ? 'jpeg' : extension}`
+}
+
+/**
+ * The storage read of a case's media library (AGL-3074): the fixture the case
+ * names for an asset of its own site's library, and nothing for any other. It
+ * stands in for the download alone, so the products step's own path still
+ * locates the photo, decodes it, turns it upright, resizes it and encodes the
+ * JPEG the model is sent.
+ */
+function aiEvalMediaSeams(evalCase: AiEvalCase, options: AiEvalLiveOptions): AiProductImageSeams {
+  return {
+    readBytes: async (_firestore, location, hostId) => {
+      const own = !location.scope.isOrg && location.scope.scopeId === hostId
+      const file = own ? evalCase.media?.[location.mediaId] : undefined
+      if (!file || !options.readFixture) return null
+      return { buffer: await options.readFixture(file), contentType: fixtureContentType(file) }
+    },
+  }
+}
+
+/**
+ * A product case's photo, as the products step sends it (AGL-3074): read
+ * through `ai-product-image.ts` from the case's fixtures. `null` for a case
+ * whose product has none, or whose photo cannot be read.
+ */
+export async function aiEvalCasePhoto(evalCase: AiEvalCase, options: AiEvalLiveOptions): Promise<AiImagePart | null> {
+  const value = evalCase.product?.facts.imageUrl
+  if (!value) return null
+  const read = await readAiProductImage(
+    {} as FirebaseFirestore.Firestore,
+    { value, hostId: aiEvalSiteId(evalCase), orgId: EVAL_ORG },
+    aiEvalMediaSeams(evalCase, options),
+  )
+  return read.status === 'read' ? read.image : null
+}
+
+/**
+ * A products proposal read back as the tool input the harness scores
+ * (AGL-3074): a product's copy as its check kept it, a catalog's products,
+ * and categories with each discount in the tool's own terms — a percentage or
+ * dollars, a minimum order in dollars, and an empty code for a discount that
+ * applies on its own.
+ */
+export function aiEvalProductsAnswer(proposal: AiProductsProposal): Record<string, unknown> | null {
+  if (proposal.kind === 'copy') return proposal.values ? { ...proposal.values } : null
+  if (proposal.kind === 'catalog') return { products: proposal.products }
+  return {
+    categories: proposal.categories,
+    discounts: proposal.discounts.map((discount) => ({
+      name: discount.name,
+      code: discount.code ?? '',
+      kind: discount.kind,
+      value:
+        discount.kind === 'percent'
+          ? (discount.valuePct ?? 0)
+          : discount.kind === 'fixed'
+            ? (discount.valueCents ?? 0) / 100
+            : 0,
+      minimumOrderUsd: (discount.minSubtotalCents ?? 0) / 100,
+      why: discount.why,
+    })),
+  }
+}
+
+/**
+ * A products brief — one product's copy, a store's first catalog, or its
+ * categories and discounts — recorded through the products step's runner
+ * (AGL-3074), against the case's store kept in memory: its name, its
+ * categories, and the photo its media names. What it answers is read back off
+ * the proposal the runner makes.
+ */
+const recordProducts: AiEvalRecorder = async (evalCase, options) => {
+  const hostId = aiEvalSiteId(evalCase)
+  const categories =
+    evalCase.kind === 'product'
+      ? (evalCase.product?.categories ?? [])
+      : (evalCase.existingCategoryNames ?? []).map((name, index) => ({ id: `category-${index + 1}`, name }))
+  const store = aiEvalMemoryFirestore({
+    [`hosts/${hostId}`]: { orgId: EVAL_ORG, ...(evalCase.siteName ? { displayName: evalCase.siteName } : {}) },
+    ...Object.fromEntries(
+      categories.map((category) => [`hosts/${hostId}/productCategories/${category.id}`, { name: category.name }]),
+    ),
+  })
+  const outcome = await createAiJobProductsStep({ image: aiEvalMediaSeams(evalCase, options) })({
+    job: { ...evalJob(evalCase, 'products'), hostId, inputs: aiEvalProductsInputs(evalCase) },
+    stepIndex: 0,
+    now: options.now ?? new Date(),
+    firestore: store.firestore,
+    modelFor: modelFor(options),
+  })
+  const proposal = aiProductsProposalOf(outcome.outputs[0])
+  const stopped = outcome.refused ? 'refused' : outcome.failure
+  return {
+    source: 'recorded',
+    scope: 'full',
+    step: 'job.products',
+    model: outcome.model,
+    effort: outcome.effort ?? null,
+    plan: null,
+    answer: proposal ? aiEvalProductsAnswer(proposal) : null,
+    usage: outcome.usage,
+    steps: [recordedStep('job.products', outcome)],
+    ...(proposal?.kind === 'copy' ? { photo: proposal.photo } : {}),
+    ...(stopped ? { note: `stopped: ${stopped}` } : {}),
+  }
+}
+
+/** Where production answers a kind no recorder covers. */
+export type AiEvalUnrecordedDoor =
+  /** A request route no job runs, by what it is and the module that answers it. */
+  | { route: string; file: string }
+  /** A job step no recorder drives yet, by its job kind and module. */
+  | { step: AiJob['kind']; file: string }
+
+/**
+ * Every kind no recorder covers, and the door that answers it in production
+ * (AGL-3074), so a skipped brief says why truthfully. Modules are named from
+ * the plugin's `src/lib`.
+ */
+export const AI_EVAL_UNRECORDED_DOORS: Readonly<Partial<Record<AiEvalKind, AiEvalUnrecordedDoor>>> = {
+  section: { route: 'the copy assistant’s section mode', file: 'server/ai-assist.ts' },
+  element: { route: 'the copy assistant’s element mode', file: 'server/ai-assist.ts' },
+  blog: { route: 'the copy assistant’s blog mode', file: 'server/ai-assist.ts' },
+  chat: { route: 'the console assistant', file: 'server/assist-chat.ts' },
+  email: { step: 'email', file: 'jobs/ai-job-email-step.ts' },
+  seo: { step: 'seo', file: 'jobs/ai-job-seo-step.ts' },
+  insight: { step: 'insight', file: 'jobs/ai-job-insight-step.ts' },
+  crm: { step: 'crm', file: 'jobs/ai-job-crm-step.ts' },
+}
+
+/** Why a brief of this kind is skipped: where its door is, and that no recorder drives it. */
+export function aiEvalSkipReason(kind: AiEvalKind): string {
+  const door = AI_EVAL_UNRECORDED_DOORS[kind]
+  if (!door) return 'no recorder: none is registered for this kind'
+  return 'route' in door
+    ? `no recorder: the door that answers this kind is a request route (${door.route}, ${door.file}), not a job step`
+    : `no recorder yet: this kind is answered by the ${door.step} job step (${door.file}), which no recorder drives`
+}
+
 for (const kind of Object.keys(AI_EVAL_TREE_OUTPUT) as AiEvalKind[]) {
   // A section rewrite is the copy assistant's, a request route: no plan step.
   if (kind !== 'section' && kind !== 'email') registerAiEvalRecorder(kind, recordPlan)
@@ -510,6 +769,8 @@ for (const kind of Object.keys(AI_EVAL_TREE_OUTPUT) as AiEvalKind[]) {
 registerAiEvalRecorder('page', recordPage)
 registerAiEvalRecorder('text', recordText)
 registerAiEvalRecorder('theme', recordTheme)
+registerAiEvalRecorder('workflow', recordWorkflow)
+for (const kind of ['product', 'catalog', 'categories'] as const) registerAiEvalRecorder(kind, recordProducts)
 
 // ── The grader ────────────────────────────────────────────────────────────
 
@@ -817,14 +1078,62 @@ export function aiEvalGraderOutput(output: unknown): string {
 }
 
 /**
- * The grader's user turn: the brief, its site, the workspace where the case
- * describes one, the plan a built answer came from, the screen and layout a
- * built page was built as, and the answer.
+ * What the grader of an answer written from more than its brief is shown of
+ * the request (AGL-3074): the user turn the kind's step sends, built from the
+ * case by the step's own prompt builder — a product and the categories it may
+ * go in, the categories a store already has, or what an automation draft or
+ * explanation was asked from. A grader that is not shown them grades copy
+ * against a product it never saw, and an explanation against an automation it
+ * never read. `null` for a kind whose request is its brief and its site.
  */
-export function aiEvalGraderPrompt(evalCase: AiEvalCase, answer: AiEvalRecordedAnswer): string {
+export function aiEvalGraderRequest(evalCase: AiEvalCase, answer: AiEvalRecordedAnswer): string | null {
+  if (evalCase.kind === 'product') {
+    return evalCase.product
+      ? aiProductCopyPrompt({
+          store: evalCase.siteName ?? '',
+          product: evalCase.product.facts,
+          categories: evalCase.product.categories,
+          photo: answer.photo === 'read',
+        })
+      : null
+  }
+  if (evalCase.kind === 'categories') {
+    return aiCategoriesPrompt({
+      store: evalCase.siteName ?? '',
+      brief: evalCase.brief,
+      existingCategoryNames: evalCase.existingCategoryNames ?? [],
+    })
+  }
+  if (evalCase.kind === 'workflow') {
+    const [turn] = aiEvalWorkflowGeneration(evalCase, answer.model ?? aiJobWorkflowModel()).messages
+    return typeof turn?.content === 'string' ? turn.content : null
+  }
+  return null
+}
+
+/** What the grader of product copy written with its photo in view is told beside the photo (AGL-3074). */
+export const AI_EVAL_PHOTO_GRADER_NOTE =
+  "The product's photo is attached, as the job sent it. Copy may state what the photo plainly shows and is never marked down for it; it is marked down for what neither the photo nor the product's words show."
+
+/** What the grader is told when the photo the copy was written with cannot be shown to it. */
+export const AI_EVAL_PHOTO_UNSHOWN_GRADER_NOTE =
+  "The copy was written with the product's photo in view, and this grader is not shown it: never mark copy down for a detail only the photo could show."
+
+/**
+ * The grader's user turn: the brief, its site, the workspace where the case
+ * describes one, the request beyond the brief, the plan a built answer came
+ * from, the screen and layout a built page was built as, and the answer.
+ * `shown.photo` says the product's photo rides beside this turn.
+ */
+export function aiEvalGraderPrompt(
+  evalCase: AiEvalCase,
+  answer: AiEvalRecordedAnswer,
+  shown: { photo?: boolean } = {},
+): string {
   const planScope = answer.scope === 'plan'
   const output = planScope ? answer.plan : answer.answer
   const workspace = aiEvalGraderCapabilities(evalCase)
+  const request = planScope ? null : aiEvalGraderRequest(evalCase, answer)
   const plan = planScope ? null : aiEvalPlanOutline(answer.plan)
   const page = !planScope && evalCase.kind === 'page' ? aiEvalBuiltPage(answer) : null
   return [
@@ -833,6 +1142,8 @@ export function aiEvalGraderPrompt(evalCase: AiEvalCase, answer: AiEvalRecordedA
     `Brief: ${evalCase.brief}`,
     aiSiteInventoryBlock(evalCase.inventory),
     ...(workspace ? [workspace] : []),
+    ...(request ? [`The request the answer was written from:\n${request}`] : []),
+    ...(answer.photo === 'read' ? [shown.photo ? AI_EVAL_PHOTO_GRADER_NOTE : AI_EVAL_PHOTO_UNSHOWN_GRADER_NOTE] : []),
     ...(plan ? [plan] : []),
     ...(page ? [page, AI_EVAL_PAGE_GRADER_NOTE] : []),
     `Output:\n${aiEvalGraderOutput(output)}`,
@@ -866,16 +1177,25 @@ export async function gradeAiEvalCandidate(
   answer: AiEvalRecordedAnswer,
   options: AiEvalLiveOptions,
 ): Promise<AiEvalRubric> {
-  const providerId = (options.provider ?? resolveAiProvider())?.id
-  const model = options.graderModel ?? (providerId ? aiDefaultModelFor(providerId, 'deep') : undefined)
+  const provider = options.provider ?? resolveAiProvider()
+  const model = options.graderModel ?? (provider ? aiDefaultModelFor(provider.id, 'deep') : undefined)
   if (!model) throw new Error('no grader model: the provider serves no deep tier and none was named')
+  // Copy written with the product's photo in view is graded with the same
+  // picture, where the grader's model reads one (AGL-3074).
+  const photo =
+    answer.photo === 'read' && provider && aiModelReadsImages(provider, model)
+      ? await aiEvalCasePhoto(evalCase, options)
+      : null
+  const prompt = aiEvalGraderPrompt(evalCase, answer, { photo: Boolean(photo) })
   const result = await runValidatedGeneration(
     'eval-grade',
     withProvider(
       {
         model,
         instructions: AI_EVAL_GRADER_INSTRUCTIONS,
-        messages: [{ role: 'user' as const, content: aiEvalGraderPrompt(evalCase, answer) }],
+        messages: [
+          { role: 'user' as const, content: photo ? [photo, { type: 'text' as const, text: prompt }] : prompt },
+        ],
         tool: AI_EVAL_RUBRIC_TOOL,
         maxTokens: 2_000,
         thinking: 'adaptive' as const,
@@ -905,22 +1225,25 @@ export interface AiEvalLiveReport {
 
 /**
  * Record and grade an answer for every brief a recorder covers. Refused
- * before anything else unless `AI_EVAL_LIVE=1` names the run.
+ * before anything else unless `AI_EVAL_LIVE=1` names the run, and before any
+ * request when a brief it would record names media the run cannot read.
  */
 export async function recordAiEvalLive(
   cases: readonly AiEvalCase[],
   options: AiEvalLiveOptions,
 ): Promise<AiEvalLiveReport> {
   if (!aiEvalLiveAllowed(options.env)) throw new AiEvalLiveRefusedError()
+  const unreadable = cases.filter((evalCase) => evalCase.media && aiEvalRecorderFor(evalCase.kind) && !options.readFixture)
+  if (unreadable.length) {
+    throw new Error(
+      `${unreadable.map((evalCase) => evalCase.id).join(', ')} name media, and this run was given no readFixture to read them with`,
+    )
+  }
   const report: AiEvalLiveReport = { recorded: [], skipped: [] }
   for (const evalCase of cases) {
     const recorder = aiEvalRecorderFor(evalCase.kind)
     if (!recorder) {
-      report.skipped.push({
-        caseId: evalCase.id,
-        kind: evalCase.kind,
-        why: 'no recorder: the door that answers this kind is a request route, not a job step',
-      })
+      report.skipped.push({ caseId: evalCase.id, kind: evalCase.kind, why: aiEvalSkipReason(evalCase.kind) })
       continue
     }
     const answer = await recorder(evalCase, options)

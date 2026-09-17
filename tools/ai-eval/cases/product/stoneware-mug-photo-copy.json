@@ -1,0 +1,100 @@
+{
+  "id": "product-stoneware-mug-photo-copy",
+  "kind": "product",
+  "brief": "Write the storefront copy for this product.",
+  "framing": null,
+  "inventory": null,
+  "siteName": "Hollow Oak Pottery",
+  "media": {
+    "mug-photo": "product/stoneware-mug.jpg"
+  },
+  "product": {
+    "facts": {
+      "id": "prod-mug",
+      "name": "Stoneware mug",
+      "type": "physical",
+      "text": "Wheel-thrown stoneware mug. Holds 12 oz. Dishwasher and microwave safe.",
+      "tags": ["kitchen"],
+      "categoryIds": [],
+      "options": [],
+      "imageUrl": "media:eval-site/mug-photo",
+      "seoTitle": "",
+      "seoDescription": ""
+    },
+    "categories": [
+      { "id": "cat-gifts", "name": "Gifts" },
+      { "id": "cat-kitchen", "name": "Kitchen" },
+      { "id": "cat-planters", "name": "Planters" }
+    ]
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand from the product's words and its photo: the size and care its text states, the speckled cream glaze, blue rim and handle the photo plainly shows, a marked gap for the height, and no option names, because the product has no options.",
+      "plan": null,
+      "answer": {
+        "description": "A wheel-thrown stoneware mug in a speckled cream glaze, with a blue rim and a rounded handle. It holds 12 oz.\n\nIt is dishwasher and microwave safe. Height: [height].",
+        "seoTitle": "Speckled stoneware mug with a blue rim, 12 oz",
+        "seoDescription": "A wheel-thrown stoneware mug in a speckled cream glaze with a blue rim. Holds 12 oz, and is dishwasher and microwave safe.",
+        "tags": ["stoneware mug", "coffee mug", "speckled glaze", "kitchen"],
+        "categoryIds": ["cat-kitchen", "cat-gifts"],
+        "optionNames": []
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 5, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "An award the product's words never state.",
+      "answer": {
+        "description": "An award-winning stoneware mug in a speckled cream glaze with a blue rim.",
+        "seoTitle": "Speckled stoneware mug",
+        "seoDescription": "A speckled stoneware mug with a blue rim.",
+        "tags": ["mug"],
+        "categoryIds": ["cat-kitchen"],
+        "optionNames": []
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A price the store owner never set.",
+      "answer": {
+        "description": "A speckled stoneware mug with a blue rim, now only $24.",
+        "seoTitle": "Speckled stoneware mug",
+        "seoDescription": "A speckled stoneware mug with a blue rim.",
+        "tags": ["mug"],
+        "categoryIds": ["cat-kitchen"],
+        "optionNames": []
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A name for an option the product does not have.",
+      "answer": {
+        "description": "A wheel-thrown stoneware mug in a speckled cream glaze with a blue rim.",
+        "seoTitle": "Speckled stoneware mug",
+        "seoDescription": "A speckled stoneware mug with a blue rim.",
+        "tags": ["mug"],
+        "categoryIds": ["cat-kitchen"],
+        "optionNames": ["Glaze"]
+      },
+      "fails": ["readable"]
+    },
+    {
+      "why": "A search title past the 60 characters a result shows.",
+      "answer": {
+        "description": "A wheel-thrown stoneware mug in a speckled cream glaze with a blue rim.",
+        "seoTitle": "Wheel-thrown speckled stoneware mug with a blue rim and a rounded handle, 12 oz",
+        "seoDescription": "A speckled stoneware mug with a blue rim.",
+        "tags": ["mug"],
+        "categoryIds": ["cat-kitchen"],
+        "optionNames": []
+      },
+      "fails": ["budget"]
+    }
+  ]
+}

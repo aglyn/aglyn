@@ -302,6 +302,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "Not a sink, and never on a tenant render: the building doctrine's validators (AGL-2935), run only inside `runValidatedGeneration` in runtime/ai-doctrine.ts, which the AI plan step (jobs/ai-job-plan-step.ts) calls for a generation job on the console's AI job doors. The marker is the `image` key of `MEDIA_IMAGE_PROPS`, the table naming which component props hold a media reference; rule 17 reads those props on a generated node tree to sum the recorded sizes of the library images it places. Nothing here emits a URL or renders a page: the tree it scores is a draft a member opens in the besigner.",
   },
+  'libs/plugins/ai/src/lib/runtime/ai-eval-live.ts': {
+    markers: 2,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: the AI eval harness's live recorders and grader (AGL-2937, AGL-3074), imported only by the AI plugin's own specs and run from a developer's machine by `npm run eval:ai-live`, never by a deployment. Both markers are a product's photo on its way to a model: the `image` seams handed to the products job step, which read a committed fixture under tools/ai-eval/fixtures in place of the storage download, and the `read.image` picture part `readAiProductImage` re-encodes for the grader. Neither is a URL, and nothing here renders a page.",
+  },
   'libs/plugins/ai/src/lib/runtime/ai-palette.generated.ts': {
     markers: 1,
     guard: 'platform',

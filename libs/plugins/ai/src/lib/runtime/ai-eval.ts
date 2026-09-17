@@ -16,7 +16,7 @@
  */
 
 import type { HostTheme } from '@aglyn/shared-data-types'
-import { validateHostAction } from '@aglyn/aglyn/app-utils/actions'
+import { validateHostAction, type HostAction } from '@aglyn/aglyn/app-utils/actions'
 import type { HostThemeSource } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import {
   aiAutomationDraft,
@@ -39,7 +39,9 @@ import {
   aiProductMerchantWords,
   type AiProductCategory,
   type AiProductFacts,
+  type AiProductPhotoRead,
 } from '../model/ai-products'
+import type { AiRunRecord } from '../model/ai-automation-outline'
 import { checkAiCatalog, checkAiCategories, checkAiProductCopy } from '../tools/ai-products-tool'
 import type { AiCrmRecordKind, AiCrmTask } from '../model/ai-crm'
 import {
@@ -251,9 +253,16 @@ export interface AiEvalCandidate {
    * A recorded answer's spend, one entry per metered exchange in the order
    * the job ran them — the plan, then every pass of its generation — with
    * the credits each came to as the machine meters a step (AGL-3030).
-   * Absent on an authored answer, and on a recording of a single exchange.
+   * Absent on an authored answer, and on a recording that keeps its tokens
+   * alone.
    */
   steps?: AiEvalRecordedStep[]
+  /**
+   * What a recorded product copy answer was written with of its product's
+   * photo, as the products step reports it (AGL-3074): `read` when the
+   * picture rode the request.
+   */
+  photo?: AiProductPhotoRead
   /**
    * What a recorded page was built as beside its tree (AGL-3073): its
    * screen's address and listing, and the layout it renders inside. Absent
@@ -353,6 +362,20 @@ export interface AiEvalCase {
   automationCapabilities?: AiAutomationCapabilities
   automationRecords?: AiAutomationRecords
   /**
+   * For an automation brief about a saved automation (AGL-3074): the action
+   * as the site stores it, and for a run's diagnosis, what the run history
+   * recorded of the failed run. Absent, the brief asks for a draft.
+   */
+  automation?: AiEvalAutomation
+  /**
+   * The media library assets of the case's site a recording reads
+   * (AGL-3074), by media id: each the path of the file under
+   * `tools/ai-eval/fixtures` that holds its bytes. A product's photo is
+   * `media:<site id>/<media id>`, where the site is the inventory's, or
+   * `AI_EVAL_SITE_ID` for a case that describes none.
+   */
+  media?: Record<string, string>
+  /**
    * For a CRM brief (AGL-2917): what the job was asked, about which kind of
    * record, the facts the CRM reported for it, and a mapping's columns.
    */
@@ -368,6 +391,23 @@ export interface AiEvalCase {
   candidates: AiEvalCandidate[]
   controls: AiEvalControl[]
 }
+
+/** The site a case's job runs on when the case describes no inventory. */
+export const AI_EVAL_SITE_ID = 'eval-site'
+
+/** What an automation brief's workspace can run when the case does not say: everything. */
+export const AI_EVAL_AUTOMATION_CAPABILITIES: AiAutomationCapabilities = { crm: true, webhooks: true, bookings: true }
+
+/** A saved automation an automation brief asks about, as the workflow step reads one. */
+export interface AiEvalAutomation {
+  /** The action as `hosts/{hostId}/actions/{id}` holds it. */
+  action: HostAction
+  /** A failed run of it; given, the brief asks why that run failed. */
+  run?: AiRunRecord
+}
+
+/** A fixture file a case's media names: a relative path to a picture, never out of its folder. */
+const AI_EVAL_MEDIA_FILE = /^(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9][A-Za-z0-9._/-]*\.(?:jpe?g|png|webp|gif|avif)$/
 
 /** What a CRM brief's answer is checked against, as the `crm` step checks it. */
 export interface AiEvalCrmContext {
@@ -709,7 +749,7 @@ function checkWorkflow(evalCase: AiEvalCase, answer: unknown): Checked {
       findings: [...found, ...publish, ...offVoice],
     }
   }
-  const capabilities = evalCase.automationCapabilities ?? { crm: true, webhooks: true, bookings: true }
+  const capabilities = evalCase.automationCapabilities ?? AI_EVAL_AUTOMATION_CAPABILITIES
   const read = readAiAutomationAnswer(answer, capabilities)
   const found = codes(read.violations)
   const unreadable = found.filter((code) => AI_AUTOMATION_UNREADABLE_CODES.includes(code))
@@ -1059,6 +1099,24 @@ export function readAiEvalCase(raw: unknown, file: string): AiEvalCase {
   if (typeof raw['brief'] !== 'string' || !raw['brief'].trim()) fail('no brief')
   if (raw['siteName'] !== undefined && (typeof raw['siteName'] !== 'string' || !raw['siteName'].trim())) {
     fail('siteName, where given, is the site’s name')
+  }
+  const automation = raw['automation']
+  if (automation !== undefined) {
+    const action = isRecord(automation) ? automation['action'] : undefined
+    const problem = isRecord(action) ? validateHostAction(action as unknown as HostAction) : 'it holds no action'
+    if (problem) fail(`automation.action is not an action the Actions editor would save: ${problem}`)
+    if (isRecord(automation) && automation['run'] !== undefined && !isRecord(automation['run'])) {
+      fail('automation.run, where given, is what the run history recorded')
+    }
+  }
+  const media = raw['media']
+  if (media !== undefined) {
+    if (!isRecord(media) || !Object.keys(media).length) fail('media, where given, names at least one asset')
+    for (const [mediaId, file] of Object.entries(media as Record<string, unknown>)) {
+      if (typeof file !== 'string' || !AI_EVAL_MEDIA_FILE.test(file)) {
+        fail(`media.${mediaId} is not a picture's path under tools/ai-eval/fixtures`)
+      }
+    }
   }
   const candidates = raw['candidates']
   const controls = raw['controls']

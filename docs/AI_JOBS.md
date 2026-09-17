@@ -360,9 +360,27 @@ live answer.
   each exchange's tokens and credits under `candidate.steps`, metered as the
   machine meters a step. Any other planned kind records its plan alone until its
   generator is recorded the same way (a `plan`-scope answer, counted toward the
-  plan step rather than the kind's floor); a kind whose door is a request route
-  (the copy assistant's modes, the chat door) has no recorder yet, and a door
-  that gains one registers it with `registerAiEvalRecorder`.
+  plan step rather than the kind's floor). An automation brief is recorded
+  through the workflow step's own generation call (AGL-3074): a draft from the
+  case's `automationCapabilities` and `automationRecords`, or, for a case whose
+  `automation` holds a saved action, an explanation from that action's outline,
+  and a failed run's diagnosis where it also holds the run. The runner is not
+  driven, because it keeps the tool's input nowhere, and the harness scores that
+  input; `ai-eval-live.spec.ts` holds the recorder's request equal to the one the
+  runner sends for the same site. Product copy, a catalog, and categories with
+  discounts are recorded through the products step's runner against the case's
+  store in memory, named by `siteName`, and read back off the proposal it makes.
+  A case's `media` names the fixture under `tools/ai-eval/fixtures` that holds a
+  photo of its site's library (`media:eval-site/<id>` for a case with no
+  inventory), and only the download is stood in for: the photo is located,
+  turned upright, fitted to 768 pixels and re-encoded by `ai-product-image.ts`,
+  so no camera metadata leaves with it. The run refuses, before any request, a
+  brief whose media it was given no `readFixture` for. A kind no recorder covers
+  is skipped before any request, and `AI_EVAL_UNRECORDED_DOORS` says where
+  production answers it: a request route (the copy assistant's section, element
+  and blog modes, the chat door), or a job step no recorder drives yet (email,
+  SEO, insight and CRM). A door that gains a recorder registers it with
+  `registerAiEvalRecorder` and leaves that table.
   `AI_EVAL_CASES=<id>[,<id>]` records only the briefs it names. The launcher
   marks the jest it starts, so the shared setup's `.env` scrub (AGL-690) keeps
   the provider key the run was handed even where the repo-root `.env` holds
@@ -380,7 +398,11 @@ live answer.
   (`aiEvalBuiltPage`). A recording made before the screen was kept gives the plan's
   screen and says so. The tree it grades goes without the keys the store keeps for
   itself (`aiEvalGraderOutput`), which leaves the recorded About page's grader input
-  at 18,372 characters, from 23,600.
+  at 18,372 characters, from 23,600. The grader of an automation, a product's copy
+  or a store's categories is shown the request beyond the brief, built from the
+  case by the step's own prompt builder (`aiEvalGraderRequest`, AGL-3074), and the
+  grader of copy written with its photo in view is sent the same photo where its
+  model reads one, and told so either way.
 
 ## The routing table
 
