@@ -80,6 +80,12 @@ export interface AiPlanCapabilities {
   reusableComponents: boolean
   /** Every creation kind a plan may name, and whether this job may make one here. */
   create: Readonly<Record<AiBuildPlanCreateKind, AiPlanCreation>>
+  /**
+   * Whether the workspace spends the Free taste, whose monthly credits are a
+   * wall (AGL-2925): a plan is then held to the sections the wall's worst
+   * case pays for (AGL-3070). Absent is `false`.
+   */
+  freeTaste?: boolean
 }
 
 /** What a job of one kind builds from its own plan, where it builds only some creations. */

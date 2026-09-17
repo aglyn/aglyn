@@ -25,7 +25,10 @@ import {
   MEDIA_CDN_VARIANT_WIDTHS,
   parseMediaRef,
 } from '@aglyn/aglyn/app-utils/media-ref'
-import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  ESTIMATED_PAGE_TRANSFER_BYTES,
+  FREE_AI_TASTE_CREDITS_PER_MONTH,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
@@ -2900,6 +2903,99 @@ export function detectMissedDuplicate(
   return violations
 }
 
+/** What each exchange of a Free page job comes to at its worst, in credits. */
+export interface AiFreePageWorstCase {
+  /** The page plan. */
+  plan: number
+  /** The one layout a Free plan includes, built first on a site with none (AGL-3031). */
+  layout: number
+  /** The first section pass, which writes the cached prefix. */
+  firstSection: number
+  /** Each later section pass, which reads it. */
+  laterSection: number
+  /** A page's listing. */
+  listing: number
+}
+
+/**
+ * The Free taste's wall at its worst (AGL-3030, AGL-3070): each exchange of a
+ * Free page job in credits, every answer at its ceiling, as
+ * `jobs/ai-job-free-page.spec.ts` derives them from the page plan and the
+ * layout generation measured live and the requests as they stand. The spec
+ * fails when a figure it derives moves and this does not, so the section cap
+ * below cannot drift from the proof.
+ */
+export const AI_FREE_PAGE_WORST_CASE_CREDITS: Readonly<AiFreePageWorstCase> = {
+  plan: 83,
+  layout: 64,
+  firstSection: 44,
+  laterSection: 20,
+  listing: 3,
+}
+
+/**
+ * The most sections a Free job fits in `FREE_AI_TASTE_CREDITS_PER_MONTH` at
+ * its worst: the plan, the layouts it builds first, a listing for each page
+ * and the first section's pass, then as many later passes as the rest pays
+ * for; none when that is already past the wall. A component or a form is never
+ * a Free creation, since rule 7 refuses both on a workspace that keeps no
+ * reusable components, so the wall's proof measures neither.
+ */
+export function aiFreePageSectionsWithin(
+  creations: { layouts: number; pages?: number },
+  credits: Readonly<AiFreePageWorstCase> = AI_FREE_PAGE_WORST_CASE_CREDITS,
+): number {
+  const before =
+    credits.plan + creations.layouts * credits.layout + (creations.pages ?? 1) * credits.listing + credits.firstSection
+  if (before > FREE_AI_TASTE_CREDITS_PER_MONTH) return 0
+  return 1 + Math.floor((FREE_AI_TASTE_CREDITS_PER_MONTH - before) / credits.laterSection)
+}
+
+/**
+ * The layouts a Free plan's job builds before its sections: the ones it
+ * creates that the workspace may make, and on a site with no layout where it
+ * may make one, the one rule 2 asks the plan to create.
+ */
+function freePlanLayouts(plan: AiBuildPlan, inventory: AiSiteInventory | null, capabilities: AiPlanCapabilities): number {
+  const refused = aiPlanUncreatable(plan, capabilities).filter((entry) => entry.kind === 'layout').length
+  const creates = plan.create.filter((entry) => entry.kind === 'layout').length - refused
+  const needs = !(inventory?.layouts.length ?? 0) && capabilities.create.layout.allowed ? 1 : 0
+  return Math.max(creates, needs)
+}
+
+/**
+ * The Free wall (plan): a plan asks for no more sections than the Free taste
+ * pays for at its worst beside what the job builds first (AGL-3070). A live
+ * Free plan asked for eight sections beside its layout, where the wall's worst
+ * case pays for six, and fit only because every exchange ran under its
+ * ceiling; one that does not runs out of credits with its page half built. The
+ * cap only lowers what a plan may ask for, from the same figures the wall is
+ * proven with, so no plan the proof admits is refused. It is no building rule,
+ * so it names none.
+ */
+export function detectPlanOverFreeWall(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null,
+): AiDoctrineViolation[] {
+  if (!capabilities?.freeTaste) return []
+  const asked = plan.screens.reduce((sum, screen) => sum + screen.sections.length, 0)
+  const layouts = freePlanLayouts(plan, inventory, capabilities)
+  const pages = Math.max(plan.screens.length, 1)
+  const fits = aiFreePageSectionsWithin({ layouts, pages })
+  if (asked <= fits) return []
+  const job = pages > 1 ? `a Free plan of ${pages} pages` : 'a Free page'
+  const beside = layouts ? ` that creates ${layouts > 1 ? `${layouts} layouts` : 'its layout'}` : ''
+  return [
+    {
+      rule: null,
+      code: 'plan-over-free-wall',
+      message: `This plan asks for ${asked} sections, and ${job}${beside} fits ${fits} in the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits a Free workspace has a month. Plan at most ${fits}: draw a list's repeated items in one section, and leave out a section the brief does not ask for.`,
+      paths: plan.screens.map((_, index) => `screens[${index}].sections`),
+    },
+  ]
+}
+
 /**
  * Every plan rule, against the site inventory the plan was made from and,
  * where the job read them, what it may create there (AGL-3030). `null`
@@ -2914,6 +3010,7 @@ export function validateAiBuildPlan(
   return [
     ...detectPlanRepeats(plan, inventory, capabilities),
     ...detectPlanSplitLists(plan, inventory),
+    ...detectPlanOverFreeWall(plan, inventory, capabilities),
     ...detectPlanLayoutRegions(plan, inventory, capabilities),
     ...detectPlanInlineForms(plan, inventory, capabilities),
     ...detectUntemplatedSimilarPages(plan, inventory),

@@ -21,7 +21,7 @@
  */
 
 import { formatMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
-import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { ESTIMATED_PAGE_TRANSFER_BYTES, FREE_AI_TASTE_CREDITS_PER_MONTH } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import {
   AI_FREE_PAGE_BUILT_PLAN,
@@ -39,10 +39,12 @@ import { aiHomeScreenIds, emptyAiSiteInventory, type AiSiteInventory } from '../
 import {
   AI_DOCTRINE_RULE_NUMBERS,
   AI_DOCTRINE_RULES,
+  AI_FREE_PAGE_WORST_CASE_CREDITS,
   AI_TYPED_LIST_MIN_ITEMS,
   aiBracketedFacts,
   aiDanglingWord,
   aiDoctrineViolationText,
+  aiFreePageSectionsWithin,
   aiNamesMatch,
   aiTreeCopy,
   detectAdHocWidths,
@@ -66,6 +68,7 @@ import {
   detectPlanInlineForms,
   detectPlanLayoutRegions,
   detectPlanLiteralColors,
+  detectPlanOverFreeWall,
   detectPlanRepeats,
   detectPlanSplitLists,
   detectPlanTypedData,
@@ -317,6 +320,59 @@ describe('rule 1 — a list is one section whose items repeat (AGL-3071)', () =>
     expect(detectPlanSplitLists(sections(['featured testimonial', [], 1], ['call to action', [], 1]), INVENTORY)).toEqual([])
     expect(detectPlanSplitLists(sections(['practice area: family law', [], 1]), INVENTORY)).toEqual([])
     expect(detectPlanSplitLists(sections(['team: Jane', ['ds-team'], 1], ['team: John', ['ds-team'], 1]), INVENTORY)).toEqual([])
+  })
+})
+
+describe('the Free wall — a Free plan asks for no more sections than its credits pay for at their worst (AGL-3070)', () => {
+  const FREE_TASTE: AiPlanCapabilities = { ...FREE, freeTaste: true }
+  /** A Free site with no layout yet, where the job may create the one its plan includes. */
+  const BARE: AiSiteInventory = { ...INVENTORY, layouts: [] }
+  const FREE_BARE: AiPlanCapabilities = { ...FREE_TASTE, create: { ...FREE.create, layout: { allowed: true, left: 1, reason: null } } }
+  const sections = (count: number) => Array.from({ length: count }, (_, index) => ({ name: `part ${index + 1}`, uses: [], items: 0 }))
+  const LAYOUT = { kind: 'layout' as const, name: 'Site layout', why: 'The site has no layout yet.', duplicateOf: null, fields: [] }
+
+  it('fits nine sections beside the plan, the first pass and the listing, and six when the job builds the layout first', () => {
+    const { plan, layout, firstSection, laterSection, listing } = AI_FREE_PAGE_WORST_CASE_CREDITS
+    expect(aiFreePageSectionsWithin({ layouts: 0 })).toBe(1 + Math.floor((FREE_AI_TASTE_CREDITS_PER_MONTH - plan - firstSection - listing) / laterSection))
+    expect([aiFreePageSectionsWithin({ layouts: 0 }), aiFreePageSectionsWithin({ layouts: 1 })]).toEqual([9, 6])
+    expect(aiFreePageSectionsWithin({ layouts: 1, pages: 3 })).toBe(
+      1 + Math.floor((FREE_AI_TASTE_CREDITS_PER_MONTH - plan - layout - 3 * listing - firstSection) / laterSection),
+    )
+    expect(aiFreePageSectionsWithin({ layouts: 4 })).toBe(0)
+  })
+
+  it('refuses a plan past the wall, saying how many sections to plan and how to get there', () => {
+    expect(detectPlanOverFreeWall(planOf({ screens: [screen({ sections: sections(10) })] }), INVENTORY, FREE_TASTE)).toEqual([
+      {
+        rule: null,
+        code: 'plan-over-free-wall',
+        message: `This plan asks for 10 sections, and a Free page fits 9 in the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits a Free workspace has a month. Plan at most 9: draw a list's repeated items in one section, and leave out a section the brief does not ask for.`,
+        paths: ['screens[0].sections'],
+      },
+    ])
+    expect(detectPlanOverFreeWall(planOf({ create: [LAYOUT], screens: [screen({ layout: 'new:Site layout', sections: sections(7) })] }), BARE, FREE_BARE)).toMatchObject([
+      { code: 'plan-over-free-wall', message: expect.stringContaining('This plan asks for 7 sections, and a Free page that creates its layout fits 6 in the') },
+    ])
+    // A plan that has not yet declared the layout its bare site needs is held to the layout rule 2 asks it for.
+    expect(detectPlanOverFreeWall(planOf({ reuse: [], screens: [screen({ layout: null, sections: sections(7) })] }), BARE, FREE_BARE)).toMatchObject([
+      { message: expect.stringContaining('a Free page that creates its layout fits 6') },
+    ])
+    const twoPages = planOf({ screens: [screen({ sections: sections(5) }), screen({ title: 'Team', slug: '/team', sections: sections(5) })] })
+    expect(detectPlanOverFreeWall(twoPages, INVENTORY, FREE_TASTE)).toMatchObject([
+      {
+        message: expect.stringContaining(`This plan asks for 10 sections, and a Free plan of 2 pages fits ${aiFreePageSectionsWithin({ layouts: 0, pages: 2 })} in the`),
+        paths: ['screens[0].sections', 'screens[1].sections'],
+      },
+    ])
+  })
+
+  it('admits what the wall fits, counts no layout the workspace may not make, and holds no workspace but a Free one', () => {
+    expect(detectPlanOverFreeWall(planOf({ screens: [screen({ sections: sections(9) })] }), INVENTORY, FREE_TASTE)).toEqual([])
+    expect(detectPlanOverFreeWall(planOf({ create: [LAYOUT], screens: [screen({ layout: 'new:Site layout', sections: sections(6) })] }), BARE, FREE_BARE)).toEqual([])
+    // Its one layout is the site's already, so a layout the plan still names is refused by rule 7 and never built.
+    expect(detectPlanOverFreeWall(planOf({ create: [LAYOUT], screens: [screen({ sections: sections(9) })] }), INVENTORY, FREE_TASTE)).toEqual([])
+    expect(detectPlanOverFreeWall(planOf({ screens: [screen({ sections: sections(16) })] }), INVENTORY, FREE)).toEqual([])
+    expect(detectPlanOverFreeWall(planOf({ screens: [screen({ sections: sections(16) })] }), INVENTORY, null)).toEqual([])
   })
 })
 

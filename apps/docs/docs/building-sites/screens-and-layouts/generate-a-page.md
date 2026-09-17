@@ -89,6 +89,10 @@ opens it in the Besigner.
 Each step of a page job counts toward your AI usage, including a section the job had to ask
 for again. **AI jobs** shows what each job used. A page with more sections uses more.
 
+On Free, a page's plan asks for no more sections than your monthly AI credits can always
+build, even when every step uses the most it can: nine sections, or six when the job also
+builds your site's layout.
+
 ## Who can use it
 
 Page jobs need the **Generate with AI** permission. See

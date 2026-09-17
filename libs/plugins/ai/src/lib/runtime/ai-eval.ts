@@ -1047,7 +1047,9 @@ export function readAiEvalCase(raw: unknown, file: string): AiEvalCase {
 
 /**
  * A case's capabilities read and checked for shape. A creation kind the case
- * leaves out may be created, so a case names only what its workspace lacks.
+ * leaves out may be created, so a case names only what its workspace lacks;
+ * a Free workspace's case says so with `freeTaste`, which holds its plan to
+ * the sections the Free wall pays for (AGL-3070).
  */
 function readAiEvalCapabilities(raw: unknown, fail: (why: string) => never): AiPlanCapabilities {
   if (!isRecord(raw) || typeof raw['reusableComponents'] !== 'boolean') {
@@ -1077,8 +1079,12 @@ function readAiEvalCapabilities(raw: unknown, fail: (why: string) => never): AiP
       fail(`capabilities.create.${kind} is not a creation kind`)
     }
   }
+  if (raw['freeTaste'] !== undefined && typeof raw['freeTaste'] !== 'boolean') {
+    return fail('capabilities.freeTaste is not true or false')
+  }
   return {
     reusableComponents: raw['reusableComponents'],
     create: Object.fromEntries(entries) as AiPlanCapabilities['create'],
+    ...(raw['freeTaste'] === true ? { freeTaste: true } : {}),
   }
 }

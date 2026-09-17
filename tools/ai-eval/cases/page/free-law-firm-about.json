@@ -5,6 +5,7 @@
   "framing": null,
   "capabilities": {
     "reusableComponents": false,
+    "freeTaste": true,
     "create": {
       "component": { "allowed": false, "left": 0, "reason": "this workspace's plan does not include reusable components" },
       "layout": { "allowed": true, "left": 1, "reason": null },
@@ -575,6 +576,49 @@
               { "name": "practice area: real estate", "uses": [], "items": 1 },
               { "name": "practice area: business formation", "uses": [], "items": 1 },
               { "name": "practice area: landlord and tenant", "uses": [], "items": 1 },
+              { "name": "consultation request form", "uses": [], "items": 0 }
+            ]
+          }
+        ]
+      },
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } }
+          }
+        }
+      },
+      "fails": ["plan"]
+    },
+    {
+      "why": "A plan that asks for eight sections beside the layout its job creates, where the Free wall's worst case pays for six (AGL-3070).",
+      "plan": {
+        "reuse": [],
+        "create": [
+          { "kind": "layout", "name": "Site layout", "why": "The site has no layout yet, so its pages would otherwise carry their own header and footer.", "duplicateOf": null, "fields": [] }
+        ],
+        "screens": [
+          {
+            "title": "About Brightwater Law",
+            "slug": "/about",
+            "layout": "new:Site layout",
+            "template": null,
+            "duplicateOf": null,
+            "nav": true,
+            "seoTitle": "About Brightwater Law",
+            "seoDescription": "A small firm for families and small businesses: estate planning, real estate, business formation and landlord-tenant matters.",
+            "sections": [
+              { "name": "hero", "uses": [], "items": 0 },
+              { "name": "who we are", "uses": [], "items": 0 },
+              { "name": "practice areas", "uses": [], "items": 4 },
+              { "name": "how we work", "uses": [], "items": 0 },
+              { "name": "our values", "uses": [], "items": 0 },
+              { "name": "fees", "uses": [], "items": 0 },
+              { "name": "our office", "uses": [], "items": 0 },
               { "name": "consultation request form", "uses": [], "items": 0 }
             ]
           }

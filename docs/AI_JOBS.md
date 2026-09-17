@@ -300,8 +300,9 @@ live answer.
 - **What a case holds.** The brief and its framing; the site `inventory` it is
   built for, in the shape `readSiteInventory` returns, and the media `assets`
   its images are measured against; for a workspace that lacks something, its
-  `capabilities` (what it may create, and whether it keeps reusable components),
-  which hold the answer to the inline doctrine and the plan to what it may create; for a planned kind, the plan shape a good
+  `capabilities` (what it may create, whether it keeps reusable components, and whether
+  it spends the Free taste), which hold the answer to the inline doctrine and the plan to
+  what it may create and to the sections the Free wall pays for; for a planned kind, the plan shape a good
   answer has (`expected.plan`: how many screens, what it must reuse, its
   layout, what it may create); `candidates`, each an answer with its plan, its
   rubric grade, and whether it was `authored` by hand or `recorded` from a
@@ -482,6 +483,23 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   within the plan's `formSubmissionsPerMonth`. A section's answer writes that
   repeated item once and lists its copies' values, and the page step draws the copies
   ([A repeated item written once](#a-repeated-item-written-once)).
+- **A Free plan fits the Free wall (AGL-3070).** A live Free plan asked for eight sections
+  beside the layout its job creates, where the wall's worst case pays for six, and fit
+  only because every exchange ran under its ceiling; a plan that does not runs out of
+  credits with its page half built. Capabilities read for a workspace whose effective plan
+  is Free carry `freeTaste` (`aiPlanCapabilitiesFrom`), and `detectPlanOverFreeWall`
+  refuses a plan asking for more sections than `aiFreePageSectionsWithin` fits in
+  `FREE_AI_TASTE_CREDITS_PER_MONTH`: the plan, the layouts the job builds first (those it
+  creates and may make, and one on a site with none where it may make one, which rule 2
+  asks for), a listing a page and the first section's pass, then as many later passes as
+  the rest pays for, each at `AI_FREE_PAGE_WORST_CASE_CREDITS`. Those are the figures the
+  wall is proven with ([Evals](#evals)), and `ai-job-free-page.spec.ts` derives them again
+  and fails when one moves, so the cap and the proof cannot drift. So a Free plan asks
+  for at most 9 sections, or 6 when its job creates the layout first. A component or a
+  form is never a Free creation (rule 7), so neither is counted. The finding names no
+  rule (`plan-over-free-wall`), and its re-ask gives the count to plan within and how to
+  get there: a list's repeated items in one section, and no section the brief does not
+  ask for. It only lowers what a plan may ask for, and no prompt line or figure changes.
 - **A list is one section whose items repeat (AGL-3071).** A live Free plan read the
   inline sentence's old words, "draw a repeated item in its own section", as a section an
   item, and planned "the four areas we practice" as four sections of one item: none was
@@ -1857,7 +1875,11 @@ the element budget its request asks for.
   (AGL-3031), at the layout generation measured live (1,709 input, 6,649 cache read,
   6,649 cache write and 2,057 output), grown with the layout request's cached prefix:
   the same page that creates its layout first comes to at most 254 credits, and a
-  Free page fits 6 sections with its layout. The spec fails when
+  Free page fits 6 sections with its layout. Those two counts are what the plan rules
+  hold a Free plan to (AGL-3070): the spec computes them with the plan rules' own
+  `aiFreePageSectionsWithin` and holds each exchange's figure to
+  `AI_FREE_PAGE_WORST_CASE_CREDITS`, and replays the live plan of eight sections beside
+  its layout through the real plan step to a re-ask that keeps six. The spec fails when
   a doctrine or plan change pushes the figure past the wall or out of step with this
   sentence. When a live run has recorded the Free brief
   (`AI_EVAL_LIVE=1 AI_EVAL_CASES=page-free-law-firm-about npm run eval:ai-live`), the
