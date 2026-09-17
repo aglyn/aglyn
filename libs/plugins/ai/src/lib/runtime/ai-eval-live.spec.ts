@@ -578,6 +578,37 @@ describe('the automation and products recorders (AGL-3074)', () => {
     }
   })
 
+  it('sends, for every products case, the request the products step sends for the store that case describes', async () => {
+    const photo = await readFixture('product/stoneware-mug.jpg')
+    for (const evalCase of [lampCopy, mugCopy, catalog, categories]) {
+      mockRunAiRequest.mockReset()
+      armReferenceAnswers()
+      await recordAiEvalLive([evalCase], { ...LIVE, model: 'claude-sonnet-5', readFixture })
+      const [recorded] = mockRunAiRequest.mock.calls.map((call) => call[0])
+
+      // The store as its own documents hold it: its name, and the categories it keeps.
+      mockRunAiRequest.mockReset()
+      armReferenceAnswers()
+      const kept = evalCase.product?.categories ?? (evalCase.existingCategoryNames ?? []).map((name) => ({ id: `kept-${name.length}`, name }))
+      const store = aiEvalMemoryFirestore({
+        [`hosts/${AI_EVAL_SITE_ID}`]: { orgId: 'org-runner', ...(evalCase.siteName ? { displayName: evalCase.siteName } : {}) },
+        ...Object.fromEntries(kept.map((category) => [`hosts/${AI_EVAL_SITE_ID}/productCategories/${category.id}`, { name: category.name }])),
+      })
+      const inputs = evalCase.product
+        ? aiProductsJobInputs({ target: 'product', product: evalCase.product.facts })
+        : aiProductsJobInputs({ target: evalCase.kind === 'catalog' ? 'catalog' : 'categories' })
+      await createAiJobProductsStep({ image: { readBytes: async () => ({ buffer: photo, contentType: 'image/jpeg' }) } })({
+        job: job('products', evalCase, inputs),
+        stepIndex: 0,
+        now: new Date(0),
+        firestore: store.firestore,
+        modelFor: () => 'claude-sonnet-5',
+      })
+      const [sentByRunner] = mockRunAiRequest.mock.calls.map((call) => call[0])
+      expect([evalCase.id, asked(recorded)]).toEqual([evalCase.id, asked(sentByRunner)])
+    }
+  })
+
   it('refuses, before any request, to record a case whose media the run cannot read', async () => {
     armReferenceAnswers()
     await expect(recordAiEvalLive([text, mugCopy], LIVE)).rejects.toThrow(`${mugCopy.id} name media`)
