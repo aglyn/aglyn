@@ -208,6 +208,11 @@ const SAFE_SOCIAL_HREF = /^https:\/\//i
 const SocialLinks = forwardRef<HTMLDivElement, SocialLinksProps>(
   (props, ref) => {
     const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+    // The profile fields are this element's data, not attributes of its row.
+    // Spread onto the Stack, each would be written into the page's HTML as a
+    // second copy of the URL, including a URL the filter below refuses.
+    const rowProps: Record<string, unknown> = { ...props }
+    for (const { key } of SOCIAL_NETWORKS) delete rowProps[key]
     const entries = SOCIAL_NETWORKS.map(({ key, label, path }) => ({
       key,
       label,
@@ -217,7 +222,7 @@ const SocialLinks = forwardRef<HTMLDivElement, SocialLinksProps>(
       (entry) => entry.href && SAFE_SOCIAL_HREF.test(entry.href),
     )
     return (
-      <Stack ref={ref} direction="row" spacing={0.5} {...props}>
+      <Stack ref={ref} direction="row" spacing={0.5} {...rowProps}>
         {entries.length ? (
           entries.map((entry) => (
             <AppLink
