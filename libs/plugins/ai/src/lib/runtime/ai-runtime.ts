@@ -172,8 +172,22 @@ export function aiRouteReadsImages(model: string, settings?: AiPluginSettings): 
   return provider ? aiModelReadsImages(provider, model) : false
 }
 
-/** Standard base64 with its padding, and nothing else: no `data:` prefix, no line breaks. */
-const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/
+/** A character standard base64 does not use, outside its padding. */
+const NOT_BASE64 = /[^A-Za-z0-9+/]/
+
+/**
+ * Whether `data` is standard base64 and nothing else: its alphabet, then at
+ * most two `=` of padding; no `data:` prefix, no line breaks.
+ *
+ * Scanned for a character outside the alphabet rather than matched whole: a
+ * picture is megabytes of base64, and a whole-string pattern with a greedy
+ * loop can exhaust the regular expression engine's backtrack stack on input
+ * that large, which throws a RangeError instead of answering.
+ */
+function isBareBase64(data: string): boolean {
+  const body = data.endsWith('==') ? data.slice(0, -2) : data.endsWith('=') ? data.slice(0, -1) : data
+  return body.length > 0 && !NOT_BASE64.test(body)
+}
 
 /**
  * The picture guard (AGL-2916), applied to the messages before any adapter
@@ -205,13 +219,18 @@ export function validateAiMessages(messages: readonly AiMessage[], readsImages: 
       if (!(AI_IMAGE_MEDIA_TYPES as readonly string[]).includes(part.mediaType)) {
         throw new AiRequestShapeError(`message ${index} carries a picture of an unsupported type`)
       }
-      if (typeof part.data !== 'string' || !BASE64.test(part.data)) {
+      if (typeof part.data !== 'string') {
         throw new AiRequestShapeError(`message ${index} carries a picture that is not bare base64`)
       }
+      // The size first: it needs only the length, so an oversized picture is
+      // refused without reading its bytes.
       if (aiBase64Bytes(part.data) > AI_IMAGE_MAX_BYTES) {
         throw new AiRequestShapeError(
           `message ${index} carries a picture over ${AI_IMAGE_MAX_BYTES} bytes`,
         )
+      }
+      if (!isBareBase64(part.data)) {
+        throw new AiRequestShapeError(`message ${index} carries a picture that is not bare base64`)
       }
     }
   })

@@ -293,6 +293,17 @@ describe('the picture guard (AGL-2916)', () => {
     expect(() => validateAiMessages([message], readsImages)).toThrow(AiRequestShapeError)
   })
 
+  it('reads a picture of the largest size one may be, and a stray character deep inside it, without the pattern engine giving out', () => {
+    const largest = 'A'.repeat(Math.floor((AI_IMAGE_MAX_BYTES * 4) / 3))
+    expect(() => validateAiMessages([pictureTurn({ data: largest })], readsImages)).not.toThrow()
+    expect(() => validateAiMessages([pictureTurn({ data: `${largest.slice(0, 64)}=` })], readsImages)).not.toThrow()
+    const stray = `${largest.slice(0, -10)}\n${largest.slice(-9)}`
+    expect(() => validateAiMessages([pictureTurn({ data: stray })], readsImages)).toThrow(/not bare base64/)
+    for (const data of ['===', 'QUJD===', 'QU=JD']) {
+      expect(() => validateAiMessages([pictureTurn({ data })], readsImages)).toThrow(/not bare base64/)
+    }
+  })
+
   it('refuses more pictures than one request carries', () => {
     const many = Array.from({ length: AI_REQUEST_MAX_IMAGES + 1 }, () => pictureTurn())
     expect(() => validateAiMessages(many, readsImages)).toThrow(/at most/)
