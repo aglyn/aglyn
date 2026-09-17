@@ -27,10 +27,10 @@ import type { AiInventoryTheme } from '../model/ai-site-inventory'
  * container of items full width on a phone (`detectUnresponsiveGrids`). What a
  * tree cannot show is what renders: a Stack that stays a row on a phone, a
  * line of copy wider than the screen. `tools/scripts/record-ai-page-axe.mts`
- * renders each golden page at the switcher's five devices — through
- * `devicePreviewWidth` and the canvas's own pinned theme, in a real browser —
- * and records what it measured here, in the shapes below. Specs read the
- * recording; nothing here renders.
+ * renders each golden page and each rendered eval answer at the switcher's
+ * five devices — through `devicePreviewWidth` and the canvas's own pinned
+ * theme, in a real browser — and records what it measured here, in the
+ * shapes below. Specs read the recording; nothing here renders.
  */
 
 /** The devices the switcher previews, narrowest first, by their flag names. */
@@ -56,8 +56,12 @@ export interface AiDeviceRender {
    * order; empty when the page is no wider than the screen.
    */
   overflow: string[]
-  /** axe-core's violations, every rule on. */
-  violations: AiAuditViolation[]
+  /**
+   * axe-core's violations, every rule on. Recorded for the golden pages, whose
+   * sites author the colors their pages are measured against; an eval answer
+   * is recorded for its widths alone.
+   */
+  violations?: AiAuditViolation[]
 }
 
 /**

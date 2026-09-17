@@ -178,7 +178,7 @@ describe('the live run', () => {
     expect(candidate).toMatchObject({ scope: 'plan', step: 'job.plan', answer: null })
     expect(mockRunAiRequest.mock.calls[0][0].system[0].text).toContain('How to build on this platform.')
     const score = scoreAiEvalCandidate(layout, candidate)
-    expect(score.checks).toEqual({ readable: null, rules: null, budget: null, plan: true, rubric: true })
+    expect(score.checks).toEqual({ readable: null, rules: null, budget: null, plan: true, responsive: null, rubric: true })
     expect(score.pass).toBe(true)
   })
 
@@ -208,7 +208,7 @@ describe('the live run', () => {
     // The page it answers is the draft the step wrote, held to the Free workspace's doctrine.
     const score = scoreAiEvalCandidate(freePage, candidate)
     expect({ checks: score.checks, findings: score.findings }).toEqual({
-      checks: { readable: true, rules: true, budget: true, plan: true, rubric: true },
+      checks: { readable: true, rules: true, budget: true, plan: true, responsive: null, rubric: true },
       findings: [],
     })
   })

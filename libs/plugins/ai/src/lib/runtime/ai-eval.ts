@@ -50,7 +50,15 @@ import {
 import type { AiInsightTable } from '../model/ai-insight'
 import { parseAiInsightAnswer } from '../tools/ai-insight-tool'
 import { checkAiInsightAnswer } from './ai-insight-check'
-import { aiAnswerTree, aiDoctrinePlanCheck, aiDoctrineTreeCheck, aiDoctrineTreeContext } from './ai-doctrine'
+import { aiDeviceAuditFindings, type AiDeviceAudit } from './ai-device-audit'
+import {
+  aiAnswerTree,
+  aiDoctrinePlanCheck,
+  aiDoctrineTreeCheck,
+  aiDoctrineTreeContext,
+  type AiGenerationCheckResult,
+  type AiValidatedTree,
+} from './ai-doctrine'
 import {
   AI_SEO_DESCRIPTION_MAX,
   AI_SEO_TITLE_MAX,
@@ -84,6 +92,13 @@ import { expandAiRepeatedItems } from './ai-repeated-items'
  *    the length ceiling for copy;
  *  - **rubric** — a grade against the brief for structure, copy fit and
  *    reuse decisions, recorded from a stronger model on a live run.
+ *
+ * A document of a kind a site renders is also held to **responsive** (AGL-3020):
+ * rendered at every device of the besigner's switcher, nothing runs past the
+ * screen and no band keeps its desktop columns on a phone. It is measured in a
+ * browser by `tools/scripts/record-ai-page-axe.mts` and read back from that
+ * recording, so it gates a pass without moving a score: a page that only works
+ * on desktop does not pass, whatever its checks and grade average to.
  *
  * A planned kind's answer also carries the plan, held to the plan rules and
  * to the case's expected shape.
@@ -149,8 +164,25 @@ export const AI_EVAL_TREE_OUTPUT: Partial<Record<AiEvalKind, AiOutputKind>> = {
   section: 'component',
 }
 
+/**
+ * Whether a kind's answer is a document a site renders, and so is held to
+ * every device width (AGL-3020). An email is not: its column is fixed at 600px
+ * by the medium, which rule 12 exempts it for.
+ */
+export function aiEvalRendersAtDeviceWidths(kind: AiEvalKind): boolean {
+  const output = AI_EVAL_TREE_OUTPUT[kind]
+  return output !== undefined && output !== 'email'
+}
+
+/**
+ * The recorded device audit of an answer, or `null` when none was recorded
+ * from it. The spec that scores the cases reads the recordings and answers
+ * this; a scorer given none holds nothing to its widths.
+ */
+export type AiEvalAudits = (evalCase: AiEvalCase, answer: unknown) => AiDeviceAudit | null
+
 /** The checks an answer is scored on, beside its rubric. */
-export type AiEvalCheck = 'readable' | 'rules' | 'budget' | 'plan' | 'rubric'
+export type AiEvalCheck = 'readable' | 'rules' | 'budget' | 'plan' | 'responsive' | 'rubric'
 
 /** A grade against the brief, each criterion from 1 (fails) to 5 (excellent). */
 export interface AiEvalRubric {
@@ -358,7 +390,16 @@ const codes = (violations: readonly AiDoctrineViolation[]) =>
 
 // ── The kinds ─────────────────────────────────────────────────────────────
 
-function checkTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknown): Checked {
+interface ReadTree {
+  /** The answer as the check reads it: a page's repeated items drawn. */
+  input: Record<string, unknown>
+  declaresProps: boolean
+  /** Why a page's repeated item could not be drawn; the tree is not read then. */
+  undrawn: AiDoctrineViolation[] | null
+  result: AiGenerationCheckResult<AiValidatedTree> | null
+}
+
+function readTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknown): ReadTree {
   const inline = evalCase.capabilities?.reusableComponents === false
   let input = isRecord(answer) ? answer : { tree: answer }
   // A component answer that declares its properties binds them in its tree,
@@ -378,12 +419,27 @@ function checkTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unkno
   // page step draws it, and refused as the page step refuses it (AGL-3053).
   if (evalCase.kind === 'page') {
     const drawn = expandAiRepeatedItems(aiAnswerTree(input), { inline, noun: 'page' })
-    if (drawn.ok === false) {
-      return { readable: false, rules: false, budget: false, findings: codes(drawn.violations) }
-    }
+    if (drawn.ok === false) return { input, declaresProps, undrawn: drawn.violations, result: null }
     if (drawn.items) input = { tree: drawn.tree }
   }
-  const result = check(input)
+  return { input, declaresProps, undrawn: null, result: check(input) }
+}
+
+/**
+ * The tree an answer of a tree kind is checked as — a page's repeated items
+ * drawn into their copies — or `null` when it cannot be read as one. The
+ * device audit renders exactly this tree (AGL-3020).
+ */
+export function aiEvalAnswerTree(evalCase: AiEvalCase, answer: unknown): AiValidatedTree | null {
+  const outputKind = AI_EVAL_TREE_OUTPUT[evalCase.kind]
+  return outputKind ? (readTree(evalCase, outputKind, answer).result?.value ?? null) : null
+}
+
+function checkTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknown): Checked {
+  const { input, declaresProps, undrawn, result } = readTree(evalCase, outputKind, answer)
+  if (undrawn || !result) {
+    return { readable: false, rules: false, budget: false, findings: codes(undrawn ?? []) }
+  }
   const violations = [
     ...result.violations,
     ...(declaresProps && result.value
@@ -709,10 +765,34 @@ export function aiEvalRubricVerdict(rubric: AiEvalRubric | null | undefined): {
   return { mean, pass: mean >= AI_EVAL_RUBRIC_PASS_MEAN && Math.min(...grades) >= 3 }
 }
 
+/**
+ * The widths a readable document of a rendered kind is held to, from its
+ * recorded device audit: `null` when the answer is not such a document or no
+ * audits were given; failing, with `widths-unrecorded`, when none was recorded
+ * from this answer.
+ */
+function checkWidths(
+  evalCase: AiEvalCase,
+  answer: unknown,
+  checked: Checked | null,
+  audits: AiEvalAudits | undefined,
+): { pass: boolean; findings: string[] } | null {
+  if (!audits || !checked?.readable || !aiEvalRendersAtDeviceWidths(evalCase.kind)) return null
+  const audit = audits(evalCase, answer)
+  if (!audit) return { pass: false, findings: ['widths-unrecorded'] }
+  const findings = aiDeviceAuditFindings(audit)
+  return { pass: findings.length === 0, findings }
+}
+
 /** One answer to one golden brief, scored. */
-export function scoreAiEvalCandidate(evalCase: AiEvalCase, candidate: AiEvalCandidate): AiEvalScore {
+export function scoreAiEvalCandidate(
+  evalCase: AiEvalCase,
+  candidate: AiEvalCandidate,
+  audits?: AiEvalAudits,
+): AiEvalScore {
   const scope = candidate.scope ?? 'full'
   const checked = scope === 'full' ? checkAnswer(evalCase, candidate.answer) : null
+  const widths = checkWidths(evalCase, candidate.answer, checked, audits)
   const plan = evalCase.expected?.plan ? checkAiEvalPlan(evalCase, candidate.plan) : null
   const rubric = aiEvalRubricVerdict(candidate.rubric)
   const rubricScore = (rubric.mean - 1) / 4
@@ -734,19 +814,28 @@ export function scoreAiEvalCandidate(evalCase: AiEvalCase, candidate: AiEvalCand
       rules: checked ? checked.rules : null,
       budget: checked ? checked.budget : null,
       plan: plan ? plan.pass : null,
+      responsive: widths ? widths.pass : null,
       rubric: rubric.pass,
     },
     rubricScore: Math.round(rubricScore * 10_000) / 10_000,
     score,
     // A plan answer to a brief with no expected plan has nothing to pass.
-    pass: documentPasses && (plan?.pass ?? scope === 'full') && rubric.pass,
-    findings: [...(checked?.findings ?? []), ...(plan?.findings ?? [])],
+    pass: documentPasses && (widths?.pass ?? true) && (plan?.pass ?? scope === 'full') && rubric.pass,
+    findings: [...(checked?.findings ?? []), ...(widths?.findings ?? []), ...(plan?.findings ?? [])],
   }
 }
 
-/** The checks a control failed; the harness requires every one it names. */
-export function scoreAiEvalControl(evalCase: AiEvalCase, control: AiEvalControl): AiEvalCheck[] {
+/**
+ * The checks a control failed; the harness requires every one it names. A
+ * control whose widths were never recorded fails none of them.
+ */
+export function scoreAiEvalControl(
+  evalCase: AiEvalCase,
+  control: AiEvalControl,
+  audits?: AiEvalAudits,
+): AiEvalCheck[] {
   const checked = checkAnswer(evalCase, control.answer)
+  const widths = audits?.(evalCase, control.answer) ? checkWidths(evalCase, control.answer, checked, audits) : null
   const plan =
     control.plan !== undefined && evalCase.expected?.plan
       ? checkAiEvalPlan(evalCase, control.plan)
@@ -756,6 +845,7 @@ export function scoreAiEvalControl(evalCase: AiEvalCase, control: AiEvalControl)
     ...(checked.rules ? [] : (['rules'] as const)),
     ...(checked.budget ? [] : (['budget'] as const)),
     ...(plan && !plan.pass ? (['plan'] as const) : []),
+    ...(widths && !widths.pass ? (['responsive'] as const) : []),
   ]
 }
 

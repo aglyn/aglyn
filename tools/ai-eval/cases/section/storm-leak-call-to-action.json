@@ -42,7 +42,7 @@
           }
         }
       },
-      "fails": ["rules"]
+      "fails": ["rules", "responsive"]
     }
   ]
 }

@@ -356,7 +356,7 @@
           }
         }
       },
-      "fails": ["rules"]
+      "fails": ["rules", "responsive"]
     },
     {
       "why": "A Grid container spaced by an sx gap its items' widths do not count, so the third column wraps onto a row of its own (AGL-3055).",

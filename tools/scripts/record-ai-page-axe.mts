@@ -16,16 +16,20 @@
  */
 
 /**
- * Records how the AI plugin's golden pages look at every width the besigner's
- * device switcher previews (AGL-2907, AGL-3020). Emits one GENERATED file:
+ * Records how the AI plugin's golden pages, and the eval harness's rendered
+ * answers, look at every width the besigner's device switcher previews
+ * (AGL-2907, AGL-3020). Emits GENERATED files:
  *
  *   libs/plugins/ai/src/lib/jobs/fixtures/ai-page-axe.generated.json
+ *   tools/ai-eval/widths.generated.json
+ *   tools/ai-eval/recordings/widths.generated.json   (where live recordings exist)
  *
  * Each golden page is assembled through the step's OWN section check and page
- * assembly, and rendered to markup with the real component bundles and node
- * renderer at each of the switcher's devices — `devicePreviewWidth` on the
- * site theme's own breakpoints, with the theme pinned to that width by
- * `createDevicePinnedTheme` and every element's sx by
+ * assembly; each eval answer is read into the tree the eval harness validates
+ * (`aiEvalAnswerTree`). Every document is rendered to markup with the real
+ * component bundles and node renderer at each of the switcher's devices —
+ * `devicePreviewWidth` on the site theme's own breakpoints, with the theme
+ * pinned to that width by `createDevicePinnedTheme` and every element's sx by
  * `resolveSxForDeviceWidth`, exactly as the canvas pins them — and loaded into
  * a headless Chrome whose viewport is that width. There it is measured:
  *
@@ -35,13 +39,13 @@
  *   - axe-core's audit, every rule on, `color-contrast` included, since a
  *     browser paints the colors jsdom never could.
  *
- * The result is a fixture, never a live run: `ai-job-page-widths.spec.ts` reads
- * it, holds every page to what the device audit requires
- * (`runtime/ai-device-audit.ts`), and refuses a recording whose fingerprint no
- * longer matches the goldens it claims to have rendered.
+ * The result is a fixture, never a live run: `ai-job-page-widths.spec.ts` and
+ * `ai-eval.spec.ts` read it, hold every page to what the device audit requires
+ * (`runtime/ai-device-audit.ts`), and refuse a recording whose fingerprint no
+ * longer matches what it claims to have rendered.
  *
- *   node tools/scripts/record-ai-page-axe.mts          (write the file)
- *   node tools/scripts/record-ai-page-axe.mts --check  (fail if it differs)
+ *   node tools/scripts/record-ai-page-axe.mts          (write the files)
+ *   node tools/scripts/record-ai-page-axe.mts --check  (fail if one differs)
  *
  * Rendering needs the bundles, which are React modules in TypeScript with
  * `@aglyn/*` aliases, so they load through jiti exactly as the palette
@@ -59,7 +63,7 @@
  * wrote and a faithful placeholder for what the site already had.
  */
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, relative } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -67,6 +71,10 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const PAGES_OUT = join(ROOT, 'libs/plugins/ai/src/lib/jobs/fixtures/ai-page-axe.generated.json')
+const CASES_DIR = join(ROOT, 'tools/ai-eval/cases')
+const CASES_OUT = join(ROOT, 'tools/ai-eval/widths.generated.json')
+const RECORDINGS_DIR = join(ROOT, 'tools/ai-eval/recordings')
+const RECORDINGS_OUT = join(RECORDINGS_DIR, 'widths.generated.json')
 
 /** The viewport's height at every width; only its width is measured. */
 const VIEWPORT_HEIGHT = 900
@@ -356,6 +364,8 @@ async function auditDocument(
     landmark: boolean
     title: string
     name: (id: string, path: number[]) => string | null
+    /** Whether to run axe-core at each width too. */
+    axe: boolean
   },
 ): Promise<Dict> {
   const definitions: Dict = {}
@@ -385,8 +395,11 @@ async function auditDocument(
       { waitUntil: 'load' },
     )
     const measured = await tab.evaluate(measureInPage, rowIds)
-    await tab.addScriptTag({ content: loaded.axeSource })
-    const violations = await tab.evaluate(axeInPage)
+    let violations: Dict[] | null = null
+    if (input.axe) {
+      await tab.addScriptTag({ content: loaded.axeSource })
+      violations = await tab.evaluate(axeInPage)
+    }
     for (const [id, count] of Object.entries(measured.columns as Record<string, number>)) {
       columns.set(id, { ...(columns.get(id) ?? {}), [device]: count })
     }
@@ -394,7 +407,7 @@ async function auditDocument(
       device,
       width,
       overflow: [...new Set((measured.overflow as string[]).map((id) => where.get(id) ?? id))],
-      violations,
+      ...(violations ? { violations } : {}),
     })
   }
   const rows = rowIds
@@ -426,6 +439,16 @@ function fingerprint(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16)
 }
 
+/** Every JSON file under a directory, in a stable order. */
+function jsonFiles(dir: string): string[] {
+  if (!existsSync(dir)) return []
+  return readdirSync(dir, { withFileTypes: true })
+    .flatMap((entry) =>
+      entry.isDirectory() ? jsonFiles(join(dir, entry.name)) : entry.name.endsWith('.json') ? [join(dir, entry.name)] : [],
+    )
+    .sort()
+}
+
 /** The golden pages the page step's evals replay from a site's inventory, and how each site builds. */
 function goldenPages(briefs: Dict): Array<{ fixture: Dict; reusableComponents: boolean }> {
   return [
@@ -451,6 +474,7 @@ async function recordGoldenPages(loaded: Dict, tab: Dict): Promise<Dict[]> {
       inventory: fixture.inventory,
       landmark: true,
       title: fixture.seo?.title ?? fixture.id,
+      axe: true,
       name: (_id, path) =>
         path.length === 0
           ? 'page'
@@ -462,6 +486,49 @@ async function recordGoldenPages(loaded: Dict, tab: Dict): Promise<Dict[]> {
     console.log(`       ${fixture.id}`)
   }
   return pages
+}
+
+async function recordEvalAnswers(loaded: Dict, tab: Dict, files: string[]): Promise<Dict[]> {
+  const answers: Dict[] = []
+  const cases = new Map<string, Dict>()
+  for (const file of jsonFiles(CASES_DIR)) {
+    const evalCase = loaded.evals.readAiEvalCase(JSON.parse(readFileSync(file, 'utf8')), relative(ROOT, file))
+    cases.set(evalCase.id, evalCase)
+  }
+  for (const file of files) {
+    const raw = JSON.parse(readFileSync(file, 'utf8'))
+    const fromRecording = file.startsWith(RECORDINGS_DIR)
+    const evalCase = fromRecording ? cases.get(raw.caseId) : loaded.evals.readAiEvalCase(raw, relative(ROOT, file))
+    if (!evalCase || !loaded.evals.aiEvalRendersAtDeviceWidths(evalCase.kind)) continue
+    const entries: Array<[string, unknown]> = fromRecording
+      ? [[`recording ${relative(RECORDINGS_DIR, file)}`, raw.candidate?.answer]]
+      : [
+          ...(evalCase.candidates as Dict[]).map((candidate, index): [string, unknown] => [`candidate ${index}`, candidate.answer]),
+          ...(evalCase.controls as Dict[]).map((control, index): [string, unknown] => [`control ${index}`, control.answer]),
+        ]
+    const recorded = new Set<string>()
+    for (const [of, answer] of entries) {
+      const tree = answer === null || answer === undefined ? null : loaded.evals.aiEvalAnswerTree(evalCase, answer)
+      // One recording an answer: two controls that differ only in their plan render once.
+      if (!tree || recorded.has(fingerprint(answer))) continue
+      recorded.add(fingerprint(answer))
+      const audit = await auditDocument(loaded, tab, {
+        nodes: tree.nodes,
+        rootId: tree.rootId,
+        inventory: evalCase.inventory,
+        landmark: loaded.evals.AI_EVAL_TREE_OUTPUT[evalCase.kind] !== 'layout',
+        title: evalCase.id,
+        // The theme an eval site renders with is the canvas's, whose base a
+        // site's published page does not always share, so its colors are not
+        // audited here: an eval answer is held to its widths.
+        axe: false,
+        name: (id) => tree.sourceIds?.[id] ?? null,
+      })
+      answers.push({ caseId: evalCase.id, of, answer: fingerprint(answer), devices: audit.devices, rows: audit.rows })
+    }
+    console.log(`       ${relative(ROOT, file)}`)
+  }
+  return answers
 }
 
 async function main(): Promise<void> {
@@ -506,6 +573,7 @@ async function main(): Promise<void> {
     sections: await load('libs/plugins/ai/src/lib/jobs/ai-job-page-sections.ts'),
     briefs: await load('libs/plugins/ai/src/lib/jobs/fixtures/ai-page-briefs.ts'),
     audit: await load('libs/plugins/ai/src/lib/runtime/ai-device-audit.ts'),
+    evals: await load('libs/plugins/ai/src/lib/runtime/ai-eval.ts'),
     axeSource: readFileSync(join(ROOT, 'node_modules/axe-core/axe.min.js'), 'utf8'),
   }
   const axeVersion = JSON.parse(readFileSync(join(ROOT, 'node_modules/axe-core/package.json'), 'utf8')).version
@@ -520,7 +588,7 @@ async function main(): Promise<void> {
     console.log('Rendering the golden pages')
     const pages = await recordGoldenPages(loaded, tab)
     const worst = pages
-      .flatMap((page) => (page.devices as Dict[]).flatMap((render) => render.violations as Dict[]))
+      .flatMap((page) => (page.devices as Dict[]).flatMap((render) => (render.violations ?? []) as Dict[]))
       .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical').length
     const findings = pages.flatMap((page) => loaded.audit.aiDeviceAuditFindings(page))
     outputs.push({
@@ -544,6 +612,31 @@ async function main(): Promise<void> {
       )}\n`,
     })
 
+    const recordings = jsonFiles(RECORDINGS_DIR).filter((file) => file !== RECORDINGS_OUT)
+    for (const [file, sources, label] of [
+      [CASES_OUT, jsonFiles(CASES_DIR), 'the eval cases'],
+      ...(recordings.length ? [[RECORDINGS_OUT, recordings, 'the live recordings']] : []),
+    ] as Array<[string, string[], string]>) {
+      console.log(`Rendering ${label}`)
+      const answers = await recordEvalAnswers(loaded, tab, sources)
+      const failing = answers.filter((entry) => loaded.audit.aiDeviceAuditFindings(entry).length).length
+      outputs.push({
+        file,
+        summary: `${answers.length} answers at ${loaded.audit.AI_AUDIT_DEVICES.length} widths, ${failing} with a width finding`,
+        content: `${JSON.stringify(
+          {
+            note:
+              'GENERATED by tools/scripts/record-ai-page-axe.mts (AGL-3020). Do not edit. Each answer of a kind that ' +
+              "renders is read into the tree the eval harness validates and rendered at every device of the besigner's " +
+              'switcher, as the golden pages are; `answer` fingerprints the answer it was recorded from, and the harness ' +
+              'refuses an answer with no recording of its own.',
+            answers,
+          },
+          null,
+          2,
+        )}\n`,
+      })
+    }
   } finally {
     await browser.close()
   }

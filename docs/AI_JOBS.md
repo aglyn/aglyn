@@ -319,6 +319,21 @@ live answer.
   expected shape. *Rubric*: a grade from 1 to 5 for structure, copy fit and
   reuse, passing at a mean of 3.5 with nothing under 3. An answer's score is
   those checks and the rubric averaged, from 0 to 1.
+  *Responsive* (AGL-3020): a readable answer of every kind a site renders — a
+  page, template, layout, component, section or form; an email's column is fixed
+  by its medium — is held to its recorded device audit.
+  `tools/scripts/record-ai-page-axe.mts` renders the tree the harness checks
+  (`aiEvalAnswerTree`) at every device of the besigner's switcher, as it renders
+  the golden pages, and writes `tools/ai-eval/widths.generated.json`, and
+  `tools/ai-eval/recordings/widths.generated.json` beside a live run's
+  recordings, which is how a recording is measured before it is scored. An answer
+  passes with nothing past a screen and no band that keeps its desktop columns on
+  a phone, and fails with no recording of its own (`widths-unrecorded`). It gates
+  a pass without entering the score, so a page that only works on desktop does not
+  pass however it grades, and its kind falls under its floor. The crew page and the
+  town template draw their cards as Grid rows, and each keeps its old Stack row as
+  a control that fails it; so do the Free About page's items sized 4 at every width
+  and the call to action's fixed pixel width.
 - **The floors.** `AI_EVAL_FLOORS` holds each kind's pass rate and mean
   score. `npm run test:ai-eval` fails when a kind falls under its floor, when a
   kind has no case, or when a control passes a check it names; the tools
