@@ -43,6 +43,7 @@ import {
   aiTreeCopy,
   detectAdHocWidths,
   detectCreateBeforeReuse,
+  detectCutLines,
   detectDanglingWords,
   detectDocumentStructure,
   detectEmptyItems,
@@ -941,6 +942,72 @@ describe('rule 14 — a line cut short (AGL-3072)', () => {
       ),
     )
     expect(detectDanglingWords(labels)).toEqual([])
+  })
+})
+
+describe('rule 14 — a line cut at its ceiling (AGL-3076)', () => {
+  /** The live hero subhead as the model most likely wrote it: the palette validator cut it at 120 characters to what the page stored. */
+  const WHOLE =
+    'We are a client-focused law firm guiding individuals, families and businesses through the moments that matter most, with clear advice and steady support.'
+  const idOf = (report: ReturnType<typeof validateAiDoctrineTree>, source: string) =>
+    Object.keys(report.tree?.sourceIds ?? {}).find((id) => report.tree?.sourceIds[id] === source)
+
+  it('refuses a heading-styled line the palette validator cut at 120 characters, naming the ceiling and a subtitle or body style', () => {
+    const report = validateAiDoctrineTree(tree(page(section(text('h1', 'About Brightwater Law', 'h1'), text('h5', WHOLE, 'p')))), 'page')
+    expect(report.tree?.nodes[idOf(report, 'n3') as string]?.props?.['children']).toBe(
+      'We are a client-focused law firm guiding individuals, families and businesses through the moments that matter most, with',
+    )
+    expect(report.violations.map((violation) => [violation.code, violation.nodeIds])).toEqual([
+      ['copy-cut-at-ceiling', [idOf(report, 'n3')]],
+      ['dangling-word', [idOf(report, 'n3')]],
+    ])
+    expect(report.violations[0]).toMatchObject({
+      rule: 14,
+      message:
+        'A line in a heading style holds at most 120 characters, and "We are a client-focused law firm guiding individuals,…" runs past them, so it was cut off where they end. Write it whole within 120 characters, or give a longer line a subtitle or body style.',
+    })
+  })
+
+  it('refuses a cut that falls inside a word, which no word list can see, and a button label cut at its own ceiling', () => {
+    const report = validateAiDoctrineTree(
+      tree(
+        page(
+          section(
+            text('h1', 'About Brightwater Law', 'h1'),
+            text('h5', 'Plain answers for families, landlords and small businesses across the county, from the first phone call to the final signature.', 'p'),
+            { componentId: 'muiButton', props: { children: 'Request a free consultation with one of our attorneys', href: '/contact' } },
+          ),
+        ),
+      ),
+      'page',
+    )
+    expect(report.violations.map((violation) => [violation.code, violation.nodeIds])).toEqual([
+      ['copy-cut-at-ceiling', [idOf(report, 'n3'), idOf(report, 'n4')]],
+    ])
+    const button = detectCutLines(
+      ['n4.children was over 40 characters; truncated'],
+      { n4: { componentId: 'muiButton', props: { children: 'Request a free consultation with one of our attorneys' } } },
+    )
+    expect(button).toEqual([
+      {
+        rule: 14,
+        code: 'copy-cut-at-ceiling',
+        message:
+          '"Request a free consultation with one of our…" runs past the 40 characters its element holds, so it was cut off where they end. Write it whole within 40 characters.',
+        nodeIds: ['n4'],
+      },
+    ])
+  })
+
+  it('keeps the same line written within its ceiling, and reads no repair of a prop a reader does not read as a line', () => {
+    const whole = 'We are a client-focused law firm guiding families and businesses through the moments that matter most.'
+    expect(validateAiDoctrineTree(tree(page(section(text('h1', 'About Brightwater Law', 'h1'), text('h5', whole, 'p')))), 'page').violations).toEqual([])
+    expect(
+      detectCutLines(
+        ['n2.alt was over 200 characters; truncated', 'n3.href is neither an https: URL nor a path on this site; dropped', 'n9.children was over 120 characters; truncated'],
+        { n2: { componentId: 'image', props: { alt: 'x'.repeat(240) } }, n3: { componentId: 'muiButton', props: { href: 'ftp://x' } } },
+      ),
+    ).toEqual([])
   })
 })
 

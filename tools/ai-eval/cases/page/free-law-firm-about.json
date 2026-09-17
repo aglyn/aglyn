@@ -536,6 +536,21 @@
         }
       },
       "fails": ["rules"]
+    },
+    {
+      "why": "A hero subhead in a heading style past the 120 characters that style holds, which the palette validator cuts off mid-word where they end (AGL-3076).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "h5", "component": "p", "children": "A small firm that helps families, landlords and small businesses in [city] plan ahead and settle disputes before they reach a courtroom." } }
+          }
+        }
+      },
+      "fails": ["rules"]
     }
   ]
 }

@@ -30,6 +30,7 @@ import {
   type AiGenerationCheck,
 } from '../runtime/ai-doctrine'
 import {
+  detectCutLines,
   validateAiDoctrineTree,
   walkTree,
   type AiDoctrineNode,
@@ -305,11 +306,12 @@ function offendingOf(raw: unknown, violations: readonly AiDoctrineViolation[]): 
 
 /**
  * The check a section's answer is held to: a repeated item written once drawn
- * into its copies (AGL-3053), then the palette validator on the section, the
- * doctrine's page check on the page with the section added, and the plan line
- * — every component it names placed as an instance, every form bound by its
- * id (rule 7). Violations name the section's own nodes by the ids the MODEL
- * wrote, and a copy's nodes by the item's.
+ * into its copies (AGL-3053), then the palette validator on the section, with
+ * any line it cut at its ceiling refused (AGL-3076), the doctrine's page check
+ * on the page with the section added, and the plan line — every component it
+ * names placed as an instance, every form bound by its id (rule 7). Violations
+ * name the section's own nodes by the ids the MODEL wrote, and a copy's nodes
+ * by the item's.
  */
 export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGenerationCheck<AiPageSection> {
   const sectionId = input.sectionIds[input.index]
@@ -386,15 +388,22 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
       const stored = pageIds[id] ?? id
       return own.has(stored) ? (modelIds[stored] ?? stored) : null
     }
+    // The page check reads the section as it is stored, where a line the
+    // palette validator cut is already cut, so the cut is read from the
+    // section's own validation, first (AGL-3076).
+    const drawnNodes = isRecord(drawn.tree) && isRecord(drawn.tree['nodes']) ? drawn.tree['nodes'] : {}
     // Copies of one item name one node the model wrote, once.
-    const violations: AiDoctrineViolation[] = report.violations.map((violation) =>
-      violation.nodeIds
-        ? {
-            ...violation,
-            nodeIds: [...new Set(violation.nodeIds.map(toModel).filter((id): id is string => id !== null))],
-          }
-        : violation,
-    )
+    const violations: AiDoctrineViolation[] = [
+      ...detectCutLines(validated.repairs, drawnNodes, written),
+      ...report.violations.map((violation) =>
+        violation.nodeIds
+          ? {
+              ...violation,
+              nodeIds: [...new Set(violation.nodeIds.map(toModel).filter((id): id is string => id !== null))],
+            }
+          : violation,
+      ),
+    ]
 
     const placed = new Set<string>()
     const bound = new Set<string>()

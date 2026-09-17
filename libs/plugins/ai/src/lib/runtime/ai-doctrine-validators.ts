@@ -58,6 +58,7 @@ import {
   AI_EMAIL_CLIP_BYTES,
   AI_OUTPUT_BUDGETS,
   AI_OUTPUT_SURFACE,
+  isHeadlineVariant,
   type AiBudgetMetric,
   type AiLoadEstimate,
   type AiOutputKind,
@@ -1623,6 +1624,68 @@ export function detectDanglingWords(tree: AiDoctrineTree): AiDoctrineViolation[]
   ]
 }
 
+/** The labels a button or a link shows, beside the lines: cut, they read as broken too. */
+const LABEL_PROPS: Readonly<Record<string, readonly string[]>> = {
+  muiButton: ['children'],
+  muiScreenLink: ['children'],
+  emailButton: ['children'],
+}
+
+/** The line the palette validator writes when it cuts a prop at its ceiling. */
+const CUT_REPAIR = /^(.+)\.([A-Za-z0-9_]+) was over (\d+) characters; truncated$/
+
+/** The first words of a line, as a re-ask quotes them. */
+function lineHead(line: string): string {
+  const words = line.trim().split(/\s+/)
+  return words.length > 8 ? `${words.slice(0, 8).join(' ')}…` : words.join(' ')
+}
+
+/**
+ * Rule 14, for a line cut at its ceiling (AGL-3076). The palette validator
+ * holds copy to a ceiling for its role and cuts what runs past it, and says so
+ * only in its repairs. A cut line is unfinished wherever the cut falls, after
+ * a word or inside one, and a heading style's ceiling of
+ * `AI_TEXT_LIMITS.headline` characters is one the catalog never shows a model:
+ * a live About page's hero subhead, a Typography in the h5 style, was cut at
+ * 120 characters to "…that matter most, with". So a heading, a subhead, a body
+ * line, or a button's or a link's label the validator cut is refused, with a
+ * re-ask naming the ceiling.
+ *
+ * `repairs` are the palette validator's, naming nodes by the ids of the tree
+ * it was given, `written`; `idOf` turns such an id into the id the violation
+ * names.
+ */
+export function detectCutLines(
+  repairs: readonly string[],
+  written: Readonly<Record<string, unknown>>,
+  idOf: (id: string) => string = (id) => id,
+): AiDoctrineViolation[] {
+  const cut: Array<{ id: string; line: string; limit: number; heading: boolean }> = []
+  for (const repair of repairs) {
+    const match = CUT_REPAIR.exec(repair)
+    if (!match) continue
+    const [, nodeId, name, limit] = match
+    const node = written[nodeId]
+    if (!isRecord(node) || typeof node['componentId'] !== 'string') continue
+    const props = isRecord(node['props']) ? node['props'] : {}
+    const shown = LINE_PROPS[node['componentId']] ?? LABEL_PROPS[node['componentId']] ?? []
+    const line = props[name]
+    if (!shown.includes(name) || typeof line !== 'string') continue
+    cut.push({
+      id: idOf(nodeId),
+      line,
+      limit: Number(limit),
+      heading: node['componentId'] === 'muiTypography' && isHeadlineVariant(props['variant']),
+    })
+  }
+  if (!cut.length) return []
+  const [first] = cut
+  const message = first.heading
+    ? `A line in a heading style holds at most ${first.limit} characters, and "${lineHead(first.line)}" runs past them, so it was cut off where they end. Write it whole within ${first.limit} characters, or give a longer line a subtitle or body style.`
+    : `"${lineHead(first.line)}" runs past the ${first.limit} characters its element holds, so it was cut off where they end. Write it whole within ${first.limit} characters.`
+  return [{ rule: 14, code: 'copy-cut-at-ceiling', message, nodeIds: unique(cut.map((entry) => entry.id)) }]
+}
+
 const PURE_CONTAINERS = new Set(['muiBox', 'muiStack', 'muiContainer', 'muiGrid', 'section'])
 const EMBED_COMPONENTS = new Set(['videoEmbed', 'custom-html', 'functionWidget'])
 const DUPLICATE_SX_MIN_KEYS = 2
@@ -2053,6 +2116,9 @@ export function validateAiDoctrineTree(
     rootId: validated.rootId,
     nodes: validated.nodes as unknown as Record<string, AiDoctrineNode>,
   }
+  // The validator's repairs name the nodes as they were written; every finding names the minted ids.
+  const minted = new Map(Object.entries(validated.sourceIds).map(([id, source]) => [source, id]))
+  const written = isRecord(input) && isRecord(input['nodes']) ? input['nodes'] : {}
   const violations = [
     ...publish,
     ...detectRepeatedSubtrees(tree, otherPages, context),
@@ -2069,6 +2135,7 @@ export function validateAiDoctrineTree(
     ...detectAdHocWidths(tree, outputKind),
     ...detectUnresponsiveGrids(tree, outputKind),
     ...detectOffVoiceCopy(aiTreeCopy(tree, context), context.framing),
+    ...detectCutLines(validated.repairs, written, (id) => minted.get(id) ?? id),
     ...detectDanglingWords(tree),
     ...detectHeavyDocument(tree, outputKind, context),
     ...detectEmptyItems(tree),

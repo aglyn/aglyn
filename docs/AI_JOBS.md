@@ -1559,9 +1559,10 @@ the same way, in a Grid with a row direction and no container.
 The first live Free About page (AGL-3072) passed every check with three defects a
 reader sees at once: a hero subhead ending "…that matter most, with", a list of estate
 planning services whose last item had no words, and a "Request a Consultation" button
-that went nowhere. Three validators in `runtime/ai-doctrine-validators.ts` refuse each on
-every page, template, layout and component tree, in the loop every rule uses, with a
-re-ask that names the model's own nodes and says what to write instead:
+that went nowhere. Validators in `runtime/ai-doctrine-validators.ts` refuse each on every
+page, template, layout and component tree, and the line the palette validator cut short
+wherever it cuts one (AGL-3076), in the loop every rule uses, with a re-ask that names the
+model's own nodes and says what to write instead:
 
 - **Rule 14, `dangling-word`** (`detectDanglingWords`, `aiDanglingWord`). A line a reader
   reads — a Typography's text in any style but a caption, an overline or a micro label,
@@ -1589,6 +1590,19 @@ re-ask that names the model's own nodes and says what to write instead:
   its words and both destinations, and says to take it out when the site has no page
   for it, or, inside a Form, to set the form's `submitLabel` instead. An email's buttons
   stay the email door's (`email-button-link`).
+- **Rule 14, `copy-cut-at-ceiling`** (`detectCutLines`, AGL-3076). The live subhead was
+  not written that way: it is a Typography in the h5 style, and the palette validator
+  holds a heading style's text to `AI_TEXT_LIMITS.headline`, 120 characters, and cut the
+  sentence there — "…that matter most, with clear advice and steady support." stored
+  as "…that matter most, with". The catalog shows a model `children=text≤2000`, the cut
+  was only a line in the tree's `repairs`, and a cut falls inside a word as readily as
+  after one, where no word list can see it. So a line (as above) or a Button's, Screen
+  Link's or email button's label the validator cut at its ceiling is refused, read from
+  the validator's repairs: in `validateAiDoctrineTree`, and in the page section check,
+  whose page check reads the section as stored and so already cut. The re-ask quotes the
+  line as the model wrote it and names the ceiling, and for a heading style says to write
+  it within 120 characters or give a longer line a subtitle or body style. A line cut on
+  a dangling word is named by both rules, the cut first.
 - **The starter examples a template is shown** (`runtime/ai-template-examples.ts`) leave
   a Button or Screen Link with no destination out, as they leave out an inline form: the
   Portfolio starter's hero "Get in touch" points nowhere until a member picks where it
@@ -1596,9 +1610,9 @@ re-ask that names the model's own nodes and says what to write instead:
 - **Controls.** The validators spec refuses the live page's hero and estate planning
   sections, kept by hand as `AI_FREE_PAGE_BUILT_SECTIONS` in
   `jobs/fixtures/ai-free-page-recording.ts`, for exactly these three findings and
-  nothing else; a section pass names each by the model's own id; and the Free About eval
-  case holds a failing control for each. The section eval case's call to action now links
-  a path.
+  nothing else; a section pass names each by the model's own id, and a cut line by the id
+  of the item a copy was drawn from; and the Free About eval case holds a failing control
+  for each of the four. The section eval case's call to action now links a path.
 - **What it costs.** No prompt line: a rule costs nothing until an answer breaks it, and
   then one re-ask. No credit figure the Free arithmetic quotes moves.
 
