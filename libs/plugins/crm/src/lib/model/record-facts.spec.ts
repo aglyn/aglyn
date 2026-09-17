@@ -359,6 +359,8 @@ describe('the pieces', () => {
     expect(crmOpenTaskFacts([{ title: 'Text 512 555 0100 the gate code', kind: 'todo', status: 'open' }], NOW)[0].title).toBe(
       'Text [phone number] the gate code',
     )
+    // A lead captured with an address where its name belongs.
+    expect(leadFacts({ lead: { name: 'jane@example.com', status: 'new' }, activities: [] }).name).toBe('[email address]')
     expect(crmFactProse(42, 280)).toBe('')
   })
 

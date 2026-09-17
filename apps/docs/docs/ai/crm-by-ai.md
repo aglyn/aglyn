@@ -104,8 +104,8 @@ an email draft, AI is given:
 AI is **never** given an email address, phone number or postal address field, anyone's
 marketing consent, a custom field's value, which team member owns a record or a task, or a
 record's id.
-When an email address or a phone number is typed into a note, a logged activity, or a task's or
-deal's title, it is replaced before the text is sent. A street address typed into a note is not recognized, so it is
+When an email address or a phone number is typed into any text that is sent, such as a name, a
+note, a logged activity, or a task's or deal's title, it is replaced before the text is sent. A street address typed into a note is not recognized, so it is
 sent as typed.
 
 ## Who can use it {#who-can-use-it}

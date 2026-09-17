@@ -70,11 +70,14 @@ import {
  * it went to or came from. An import catalog carries field keys, labels and
  * types, never a row of the file.
  *
- * What the team typed — notes, a logged activity, a capture's summary, a
- * task's or a deal's title, a reason — is reported as written, except that an
- * email address or a phone number inside it is replaced by a placeholder
- * first ({@link crmFactProse}).
- * A postal address typed into a note is not recognized and leaves as typed.
+ * Every text a person wrote into a record — a name, a job title, a tag, notes,
+ * a logged activity, a capture's summary, a task's or a deal's title, a
+ * reason — is reported as written, except that an email address or a phone
+ * number inside it is replaced by a placeholder first ({@link crmFactProse}):
+ * an import that put an address in the name column leaves no address behind.
+ * What the workspace configured — pipeline, stage and field names — and a
+ * company's domain are reported as they are. A postal address typed into a
+ * note is not recognized and leaves as typed.
  *
  * ## Stable bytes
  *
@@ -319,7 +322,7 @@ export function crmFactProse(value: unknown, max: number): string {
 function tagsOf(value: unknown): string[] {
   return Array.isArray(value)
     ? value
-        .map((tag) => crmFactText(tag, 40))
+        .map((tag) => crmFactProse(tag, 40))
         .filter(Boolean)
         .slice(0, CRM_FACTS_TAGS_MAX)
     : []
@@ -439,9 +442,9 @@ export function contactFacts(input: ContactFactsInput): CrmContactFacts {
   const interactions = interactionsForGroup(facet.interactions, group.hostIds)
   return {
     record: 'contact',
-    name: crmFactText(contactDisplayName(row, group.groupId), CRM_FACTS_LABEL_MAX),
-    jobTitle: crmFactText(facet.jobTitle, CRM_FACTS_LABEL_MAX),
-    company: crmFactText(facet.companyName, CRM_FACTS_LABEL_MAX),
+    name: crmFactProse(contactDisplayName(row, group.groupId), CRM_FACTS_LABEL_MAX),
+    jobTitle: crmFactProse(facet.jobTitle, CRM_FACTS_LABEL_MAX),
+    company: crmFactProse(facet.companyName, CRM_FACTS_LABEL_MAX),
     lifecycleStage: isContactLifecycleStage(facet.lifecycleStage)
       ? CONTACT_LIFECYCLE_STAGE_LABELS[facet.lifecycleStage]
       : '',
@@ -474,9 +477,9 @@ export function companyFacts(input: CompanyFactsInput): CrmCompanyFacts {
   const { company } = input
   return {
     record: 'company',
-    name: crmFactText(company.name, CRM_FACTS_LABEL_MAX),
+    name: crmFactProse(company.name, CRM_FACTS_LABEL_MAX),
     domain: crmFactText(company.domain, CRM_FACTS_LABEL_MAX),
-    industry: crmFactText(company.industry, CRM_FACTS_LABEL_MAX),
+    industry: crmFactProse(company.industry, CRM_FACTS_LABEL_MAX),
     tags: tagsOf(company.tags),
     people:
       typeof company.contactsCount === 'number' && company.contactsCount > 0
@@ -522,8 +525,8 @@ export function dealFacts(input: DealFactsInput): CrmDealFacts {
     expectedClose: summary.expectedClose,
     inStageSince: crmFactDay(deal.stageChangedAtMs),
     lostReason: crmFactProse(deal.lostReason, CRM_FACTS_LABEL_MAX),
-    contact: crmFactText(deal.contactName, CRM_FACTS_LABEL_MAX),
-    company: crmFactText(deal.companyName, CRM_FACTS_LABEL_MAX),
+    contact: crmFactProse(deal.contactName, CRM_FACTS_LABEL_MAX),
+    company: crmFactProse(deal.companyName, CRM_FACTS_LABEL_MAX),
     products: Array.isArray(deal.lineItems) ? deal.lineItems.length : 0,
     since: crmFactDay(deal.createdAt),
     notes: crmFactProse(deal.notes, CRM_FACTS_NOTES_MAX),
@@ -558,7 +561,7 @@ export function leadFacts(input: LeadFactsInput): CrmLeadFacts {
   const captures = Number(lead['submissionCount'])
   return {
     record: 'lead',
-    name: crmFactText(lead['name'], CRM_FACTS_LABEL_MAX),
+    name: crmFactProse(lead['name'], CRM_FACTS_LABEL_MAX),
     status: CRM_LEAD_STATUS_LABELS[crmLeadStatus(lead as { status?: never })],
     sources: [...new Set(rawSources.map((source) => leadSourceFact(String(source))))].sort(),
     captures: Number.isFinite(captures) && captures > 0 ? Math.floor(captures) : 0,
