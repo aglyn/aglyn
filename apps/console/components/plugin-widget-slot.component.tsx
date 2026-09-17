@@ -126,6 +126,12 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   hostAutomations: 'bare',
   automationEditor: 'bare',
   automationRun: 'bare',
+  // Sections the commerce plugin places inside its own spaced layouts: the
+  // product editor's fields, above the products hub's catalog table, and the
+  // CSV import dialog's options.
+  productEditor: 'bare',
+  productsHub: 'bare',
+  productImport: 'bare',
   orgSites: 'stack',
 }
 

@@ -45,6 +45,9 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `hostAutomations` | The Automation page's Actions, beside **Add action** and **Recipes**: another way to start an automation. Hosted by the workflows plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `openAction(actionId)` — opens a listed action in the Actions editor, and answers `false` for one the list has not read yet |
 | `automationEditor` | Inside the editor of one saved automation, an action or a workflow, on the Automation page. Hosted by the workflows plugin | `hostId`, `orgId`, `target` (`{ type: 'action' \| 'workflow', id, name }`, the automation as it is stored) |
 | `automationRun` | On each failed run in an automation's run history. Hosted by the workflows plugin | `hostId`, `orgId`, `target` (as above), `runId` (the run's entry in the site's activity log) |
+| `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes. Hosted by the commerce plugin | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
+| `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them. Hosted by the commerce plugin | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
+| `productImport` | Inside the commerce CSV import dialog: options for what happens to the imported products once they land. Hosted by the commerce plugin | `hostId`, `orgId`, `count` (products the import creates), `options`, `setOption(key, on)` |
 
 Rules of thumb: widgets receive shell-resolved context as props and must
 not reach for console-app hooks; data access goes through
@@ -89,6 +92,9 @@ page spaces it there:
   workflows plugin places beside its Actions buttons, in an automation's
   editor, and on a failed run.
 - `besignerInspector` and `seoFields`: a section among a panel's own fields.
+- `productEditor`, `productsHub` and `productImport`: a section the commerce
+  plugin places among its product editor's fields, above its catalog table,
+  and in its CSV import dialog.
 - `besignerFunctions`, `orgData`, `orgMarketplace`, `orgAddons` and
   `marketplaceListing`: the body of a dialog or a page.
 - `assistPanel`: a floating dock.
