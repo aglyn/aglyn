@@ -201,6 +201,11 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    * repeats. Absent is `true`, the doctrine whole.
    */
   reusableComponents?: boolean
+  /**
+   * The site's home screens, by id (AGL-3056): the screen a link falls back
+   * to when the site has none for what it promises. Absent: none is known.
+   */
+  homeScreenIds?: readonly string[]
 }
 
 /** One node of a walk: its id, its depth, and its ancestors' ids from the root down. */
@@ -1143,6 +1148,140 @@ export function detectUnresponsiveGrids(
   return violations
 }
 
+/** The palette colors a link or a button can take, and a band can be painted in. */
+const LINK_COLOR_FAMILIES = new Set(['primary', 'secondary', 'success', 'error', 'info', 'warning'])
+/** The elements a page links with; each draws its words in its `color` unless told otherwise. */
+const LINK_COMPONENTS = new Set(['muiButton', 'muiScreenLink'])
+/** Surfaces that paint their own background, whatever band they sit on. */
+const PAPER_COMPONENTS = new Set(['muiCard', 'muiPaper', 'muiAccordion', 'muiDrawer'])
+/** A palette color token of a link family: `primary.main`, `secondary.dark`. */
+const FAMILY_TOKEN = /^([a-z]+)\.(?:main|dark|light)$/
+
+/** The link family a color value names, if it names one. */
+function familyOf(value: unknown): string | null {
+  const family = typeof value === 'string' ? FAMILY_TOKEN.exec(value.trim())?.[1] : undefined
+  return family && LINK_COLOR_FAMILIES.has(family) ? family : null
+}
+
+/**
+ * The band a node sits on: the nearest ancestor that paints a background. An
+ * `sx` background in a link family's color is a band of that family, and an
+ * App Bar is one in its `color`, which is primary when it names none. Any
+ * other background, and every paper surface, is not.
+ */
+function bandOf(tree: AiDoctrineTree, visit: Visit): { family: string; token: string } | null {
+  for (const id of [...visit.ancestors].reverse()) {
+    const node = tree.nodes[id]
+    if (!node) continue
+    const background = node.sx?.['bgcolor'] ?? node.sx?.['backgroundColor']
+    if (background !== undefined) {
+      const token = sxValues(background).find((value) => familyOf(value) !== null)
+      return typeof token === 'string' ? { family: familyOf(token) as string, token: token.trim() } : null
+    }
+    if (node.componentId === 'muiAppBar') {
+      const color = typeof node.props?.['color'] === 'string' ? node.props['color'] : 'primary'
+      return LINK_COLOR_FAMILIES.has(color) ? { family: color, token: `${color}.main` } : null
+    }
+    if (PAPER_COMPONENTS.has(node.componentId)) return null
+  }
+  return null
+}
+
+/**
+ * The palette family a link or a button draws its words in: its own `sx`
+ * color when it sets one, else its `color` (primary when it names none). A
+ * link told to inherit takes the band's own, and a contained button draws its
+ * label in the family's contrast text on a fill of its own.
+ */
+function linkWordsFamily(node: AiDoctrineNode): string | null {
+  const own = node.sx?.['color']
+  if (own !== undefined) {
+    return sxValues(own).map(familyOf).find((family) => family !== null) ?? null
+  }
+  const color = typeof node.props?.['color'] === 'string' ? node.props['color'] : 'primary'
+  if (!LINK_COLOR_FAMILIES.has(color)) return null
+  const styledAsButton = node.componentId === 'muiButton' || node.props?.['renderAs'] !== 'link'
+  return styledAsButton && node.props?.['variant'] === 'contained' ? null : color
+}
+
+/**
+ * Rule 5, for a link on a colored band (AGL-3056). The doctrine asks for
+ * palette tokens, and a band in `primary.main` holding a Screen Link that
+ * sets no color is two valid tokens: but the link keeps the theme's primary
+ * color, so its words are navy on navy. A live About page's footer was the
+ * first, a "Request a Consultation" link on a primary band. A link or a button
+ * whose words are drawn in the family of the band it sits on is refused, with
+ * a re-ask to inherit the band's contrast text or to set it.
+ */
+export function detectInvisibleLinks(tree: AiDoctrineTree, outputKind: AiOutputKind): AiDoctrineViolation[] {
+  if (outputKind === 'email' || outputKind === 'form') return []
+  const hidden: Array<{ id: string; family: string; token: string }> = []
+  for (const visit of walkTree(tree)) {
+    if (!LINK_COMPONENTS.has(visit.node.componentId)) continue
+    const family = linkWordsFamily(visit.node)
+    const band = family ? bandOf(tree, visit) : null
+    if (band && band.family === family) hidden.push({ id: visit.id, ...band })
+  }
+  if (!hidden.length) return []
+  const [first] = hidden
+  return [
+    {
+      rule: 5,
+      code: 'link-color-on-band',
+      message: `A link or button on a ${first.token} band draws its words in the theme's ${first.family} color, the band's own, so they cannot be read. Give it "color": "inherit" under a band whose sx color is ${first.family}.contrastText, or set its own sx color to ${first.family}.contrastText.`,
+      nodeIds: unique(hidden.map((entry) => entry.id)),
+    },
+  ]
+}
+
+/** A link's words that say it goes home. */
+const HOME_WORDS = /\bhome(?:\s?page)?\b/i
+
+/**
+ * Rule 10, for a link sent where the site has nothing for it (AGL-3056). A
+ * link whose purpose the site has no screen for is left out; it never goes to
+ * a screen that does something else. The site inventory cannot say what each
+ * screen is for, but it can name the one a model falls back to: a live About
+ * page's footer sent "Request a Consultation" to the home screen, because the
+ * site had no consultation screen. So a Screen Link or a Button, outside the
+ * header and the navigation, that links the home screen with words that do
+ * not say home is refused, with a re-ask to link the screen that does what it
+ * says, or to leave the link out.
+ */
+export function detectUnrelatedScreenLinks(
+  tree: AiDoctrineTree,
+  outputKind: AiOutputKind,
+  context: Pick<AiDoctrineTreeContext, 'homeScreenIds'> = {},
+): AiDoctrineViolation[] {
+  if (outputKind === 'email' || outputKind === 'form') return []
+  const home = new Set(context.homeScreenIds ?? [])
+  const sent: Array<{ id: string; label: string }> = []
+  for (const visit of walkTree(tree)) {
+    const { node } = visit
+    if (!LINK_COMPONENTS.has(node.componentId)) continue
+    const screenId = node.props?.['screenId']
+    const linksHome = (typeof screenId === 'string' && home.has(screenId)) || node.props?.['href'] === '/'
+    const label = typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : ''
+    if (!linksHome || !label || HOME_WORDS.test(label)) continue
+    // The header and the navigation link home by name and by the site's own brand.
+    const inNavigation = hasAncestor(
+      tree,
+      visit,
+      (ancestor) => ancestor.componentId === 'muiAppBar' || ['header', 'nav'].includes(elementOf(ancestor)),
+    )
+    if (!inNavigation) sent.push({ id: visit.id, label })
+  }
+  if (!sent.length) return []
+  return [
+    {
+      rule: 10,
+      code: 'link-unrelated-screen',
+      message: `"${sent[0].label}" links the home page, which does not do what its words say. Link the screen that does, or leave the link out when the site has none.`,
+      nodeIds: unique(sent.map((entry) => entry.id)),
+    },
+  ]
+}
+
 /** Answer fields that say "publish", wherever the answer put them. */
 const PUBLISH_KEYS = /^(?:publish|published|publishNow|publishAt|goLive|isLive|live|makeLive)$/i
 
@@ -1196,6 +1335,25 @@ export function detectPublishIntent(answer: unknown): AiDoctrineViolation[] {
         },
       ]
     : []
+}
+
+/** A fact the brief never gave, marked in square brackets: `[Office phone number]`. */
+const BRACKETED_FACT = /\[([^[\]{}\n]{1,80})\]/g
+
+/**
+ * The facts in square brackets copy holds (rule 14), each once whatever its
+ * case, in the order they first appear, as the copy spells them
+ * (AGL-3056): what a member fills in before a draft is published.
+ */
+export function aiBracketedFacts(texts: Iterable<string>): string[] {
+  const facts = new Map<string, string>()
+  for (const text of texts) {
+    for (const match of text.matchAll(BRACKETED_FACT)) {
+      const fact = match[1].trim()
+      if (fact && !facts.has(fact.toLowerCase())) facts.set(fact.toLowerCase(), `[${fact}]`)
+    }
+  }
+  return [...facts.values()]
 }
 
 /**
@@ -1657,9 +1815,11 @@ export function validateAiDoctrineTree(
     ...detectLayoutRegions(tree, outputKind),
     ...detectInlineForms(tree, outputKind, context),
     ...detectLiteralStyles(tree, outputKind),
+    ...detectInvisibleLinks(tree, outputKind),
     ...detectOffBrandEmail(tree, outputKind, context.brand),
     ...detectTypedData(tree),
     ...detectImageSources(tree, context),
+    ...detectUnrelatedScreenLinks(tree, outputKind, context),
     ...detectDocumentStructure(tree, outputKind),
     ...detectAdHocWidths(tree, outputKind),
     ...detectUnresponsiveGrids(tree, outputKind),

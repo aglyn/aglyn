@@ -170,9 +170,16 @@ describe('the doctrine block', () => {
     }
   })
 
+  it('says in rule 10 that a link goes where its words say or is left out, which a link sent home is refused for (AGL-3056)', () => {
+    // A layout's footer sent "Request a Consultation" to the home screen for want
+    // of a consultation screen. The rule names the way out the refusal asks for.
+    const rule10 = AI_BUILDING_DOCTRINE.split('\n').find((line) => line.startsWith('10. ')) ?? ''
+    expect(rule10).toContain('A link goes to a screen that does what its words say, or is left out.')
+  })
+
   it('pins the doctrine’s bytes, so changing what every generator is told is a deliberate cache break', () => {
     expect(createHash('sha256').update(AI_DOCTRINE_SYSTEM_BLOCK.text).digest('hex')).toBe(
-      '72d97070a3c405b1fe61ff0a315fcbee8a93c1fe89ff2e955752faf0e296e1f8',
+      '234655edf7e3143960df5af93a664ea5697c20247d8f93e891dcd5b190b9b5d1',
     )
   })
 

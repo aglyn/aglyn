@@ -356,6 +356,45 @@ describe('the layout step', () => {
     })
   })
 
+  it('re-asks the live footer: a link drawn in the band’s own color, sent home for a purpose the site has no screen for, and lists the facts to fill (AGL-3056)', async () => {
+    // The Harborline layout's footer: a primary band, the facts the brief never gave, and a consultation link with nowhere to go.
+    const footer = (link: Record<string, unknown> | null) => ({
+      rootId: 'root',
+      nodes: {
+        ...LAYOUT_TREE.nodes,
+        footer: {
+          componentId: 'section',
+          props: { element: 'footer' },
+          sx: { backgroundColor: 'primary.main', color: 'background.paper', py: 6 },
+          nodes: ['address', 'phone', 'hours', ...(link ? ['consult'] : [])],
+        },
+        address: { componentId: 'muiTypography', props: { variant: 'body2', children: '[Office address]' } },
+        phone: { componentId: 'muiTypography', props: { variant: 'body2', children: '[Office phone number]' } },
+        hours: { componentId: 'muiTypography', props: { variant: 'body2', children: 'Open [Office hours]' } },
+        ...(link ? { consult: { componentId: 'muiScreenLink', props: { children: 'Request a Consultation', ...link } } } : {}),
+      },
+    })
+    mockRunAiRequest
+      .mockResolvedValueOnce(treeAnswer(footer({ screenId: 'scr-home' })))
+      .mockResolvedValueOnce(treeAnswer(footer(null)))
+    const outcome = await createAiJobLayoutStep()(context())
+
+    const reask = mockRunAiRequest.mock.calls[1][0].messages[2].content as string
+    expect(reask).toContain(
+      '- Rule 5 (Colors, spacing and type come from the theme): A link or button on a primary.main band draws its words in the theme\'s primary color, the band\'s own, so they cannot be read. Give it "color": "inherit" under a band whose sx color is primary.contrastText, or set its own sx color to primary.contrastText. (nodes consult)',
+    )
+    expect(reask).toContain(
+      '- Rule 10 (Navigation and SEO travel with a page): "Request a Consultation" links the home page, which does not do what its words say. Link the screen that does, or leave the link out when the site has none. (nodes consult)',
+    )
+    expect(outcome.review).toBeUndefined()
+    expect(outcome.outputs).toEqual([
+      expect.objectContaining({
+        resource: 'layout',
+        note: 'Before you publish, replace the facts in square brackets, which the brief did not give: [Office address], [Office phone number] and [Office hours].',
+      }),
+    ])
+  })
+
   it('runs on the model the switch resolves for the job, and reports it', async () => {
     mockRunAiRequest.mockResolvedValueOnce(treeAnswer(LAYOUT_TREE))
     const modelFor = jest.fn((kind: string) => (kind === 'job.layout' ? 'picked-model' : undefined))

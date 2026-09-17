@@ -577,6 +577,17 @@ describe('the form step', () => {
     expect(commits).toEqual([])
   })
 
+  it('adds the facts in square brackets the form shows after what the member decides (AGL-3056)', async () => {
+    const golden = GOLDENS['newsletterSignup']
+    const answer = structuredClone(golden.answer) as Golden['answer'] & { tree: { nodes: Record<string, { props?: Record<string, unknown> }> } }
+    answer.tree.nodes['signup'].props = { ...answer.tree.nodes['signup'].props, successMessage: 'Thanks. Your first issue arrives on [send day].' }
+    mockRunAiRequest.mockResolvedValueOnce(completion(answer))
+    const outcome = await createAiJobFormStep()(context(goldenJob('newsletterSignup')))
+    expect(outcome.outputs[0]?.note).toBe(
+      `${EXPECTED['newsletterSignup'].note} Before you publish, replace the facts in square brackets, which the brief did not give: [send day].`,
+    )
+  })
+
   it('reports the draft an earlier run wrote, without asking the model again', async () => {
     mockRunAiRequest.mockResolvedValueOnce(completion(GOLDENS['roofingQuote'].answer))
     await createAiJobFormStep()(context())

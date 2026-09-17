@@ -504,16 +504,16 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     // prompt moves one of them DOWN and says so in its commit, and a prompt
     // that grows without anyone meaning it to moves one UP and is red here.
     expect(measured()).toEqual({
-      plan: { prefixTokens: 2_927, minimum: 1_024, caches: true, toolsStable: true },
-      layout: { prefixTokens: 4_396, minimum: 1_024, caches: true, toolsStable: true },
-      template: { prefixTokens: 4_970, minimum: 1_024, caches: true, toolsStable: true },
-      component: { prefixTokens: 5_004, minimum: 1_024, caches: true, toolsStable: true },
-      email: { prefixTokens: 2_883, minimum: 1_024, caches: true, toolsStable: true },
-      form: { prefixTokens: 2_512, minimum: 1_024, caches: true, toolsStable: true },
-      'page-section': { prefixTokens: 4_580, minimum: 1_024, caches: true, toolsStable: true },
-      theme: { prefixTokens: 3_309, minimum: 1_024, caches: true, toolsStable: true },
-      'workflow-draft': { prefixTokens: 4_547, minimum: 1_024, caches: true, toolsStable: true },
-      'workflow-explain': { prefixTokens: 2_194, minimum: 1_024, caches: true, toolsStable: true },
+      plan: { prefixTokens: 2_945, minimum: 1_024, caches: true, toolsStable: true },
+      layout: { prefixTokens: 4_414, minimum: 1_024, caches: true, toolsStable: true },
+      template: { prefixTokens: 4_987, minimum: 1_024, caches: true, toolsStable: true },
+      component: { prefixTokens: 5_022, minimum: 1_024, caches: true, toolsStable: true },
+      email: { prefixTokens: 2_901, minimum: 1_024, caches: true, toolsStable: true },
+      form: { prefixTokens: 2_529, minimum: 1_024, caches: true, toolsStable: true },
+      'page-section': { prefixTokens: 4_598, minimum: 1_024, caches: true, toolsStable: true },
+      theme: { prefixTokens: 3_326, minimum: 1_024, caches: true, toolsStable: true },
+      'workflow-draft': { prefixTokens: 4_564, minimum: 1_024, caches: true, toolsStable: true },
+      'workflow-explain': { prefixTokens: 2_212, minimum: 1_024, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
       'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },
       'seo-site': { prefixTokens: 951, minimum: 4_096, caches: false, toolsStable: true },
@@ -522,7 +522,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // deliberately: on a door that cannot cache either way, a schema that
       // refuses a page outside the batch is worth more than a stable prefix.
       'seo-fixes': { prefixTokens: 921, minimum: 4_096, caches: false, toolsStable: false },
-      'eval-grade': { prefixTokens: 1_784, minimum: 1_024, caches: true, toolsStable: true },
+      'eval-grade': { prefixTokens: 1_802, minimum: 1_024, caches: true, toolsStable: true },
       // The text step marks a breakpoint its prompt is far too short to fill.
       // It costs nothing and it caches nothing; the brief is the request.
       text: { prefixTokens: 128, minimum: 1_024, caches: false, toolsStable: true },

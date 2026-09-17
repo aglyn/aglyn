@@ -918,6 +918,21 @@ describe('a golden page whose plan creates what its site lacks (AGL-3031)', () =
       ['reusableComponent', `${FIXTURE.jobId}-c0`],
       ['screen', FIXTURE.jobId],
     ])
+    // What each draft asks the member to fill (AGL-3056): the card's defaults on
+    // the card; on the page, the names its quotes leave in brackets, and the
+    // role every card leaves to the card's default, said once for three cards.
+    expect(outputs.map((output) => [output.resource, output.note ?? null])).toEqual([
+      ['layout', null],
+      ['form', expect.not.stringContaining('square brackets')],
+      [
+        'reusableComponent',
+        'Before you publish, replace the facts in square brackets, which the brief did not give: [What the customer said about working with you], [Customer name] and [Role or company].',
+      ],
+      [
+        'screen',
+        'Before you publish, replace the facts in square brackets, which the brief did not give: [customer name]. The "Testimonial card" component on this page shows [Role or company] until you replace it.',
+      ],
+    ])
     // Each creation is the draft its own step writes, under the job's slot.
     expect(mockDocs.get(`hosts/${HOST_ID}/layouts/${FIXTURE.jobId}-c1`)).toMatchObject({ displayName: 'Harbor Roofing site' })
     expect(mockDocs.get(`hosts/${HOST_ID}/forms/${FIXTURE.jobId}-c2`)).toMatchObject({ displayName: 'Roof quote request' })

@@ -115,7 +115,7 @@ import {
   aiJobAssumedAnswerMs,
   aiJobBudgetTier,
 } from './ai-job-budget'
-import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
+import { AI_JOB_ZERO_USAGE, aiBracketedFactsNote } from './ai-job-generation'
 import {
   AI_JOB_PAGE_INSTRUCTIONS,
   AI_PAGE_SECTION_TOOL,
@@ -546,6 +546,8 @@ describe('the passes', () => {
           label: SCREEN.title,
           load: expect.objectContaining({ pageBytes: expect.any(Number) }),
           proposal: { navigation: { label: SCREEN.title, slug: 'spring-roof-inspection' } },
+          // The quotes' names the brief never gave, once however many cards show one (AGL-3056).
+          note: 'Before you publish, replace the facts in square brackets, which the brief did not give: [customer name].',
         },
       ],
     })
@@ -554,6 +556,40 @@ describe('the passes', () => {
       title: 'Spring Roof Inspections in Springfield',
       description: 'A licensed roofer checks shingles, flashing and gutters.',
     })
+  })
+
+  it('names a placed component’s bracketed defaults once, where the page sets nothing of its own (AGL-3056)', () => {
+    const area = (title: string, summary?: string) => ({
+      componentId: 'reusableInstance',
+      props: { refId: 'cmp-area', propValues: { title, ...(summary ? { summary } : {}) } },
+    })
+    const tree = {
+      rootId: 'root',
+      nodes: {
+        root: { componentId: 'div', nodes: ['s'] },
+        s: { componentId: 'section', nodes: ['h', 'a1', 'a2', 'a3', 'hours'] },
+        h: { componentId: 'muiTypography', props: { variant: 'h2', children: 'Practice areas' } },
+        a1: area('Family law'),
+        a2: area('Estate planning'),
+        a3: area('Real estate', 'Closings for homes and small commercial property.'),
+        hours: { componentId: 'muiTypography', props: { variant: 'body2', children: 'Open [Office hours].' } },
+      },
+    }
+    const inventory = {
+      ...FIXTURE.inventory,
+      components: [
+        {
+          id: 'cmp-area',
+          name: 'Practice area card',
+          props: { title: 'text', summary: 'richText', icon: 'icon' },
+          bracketedDefaults: { title: ['[Practice area]'], summary: ['[What the firm handles]', '[Office hours]'] },
+        },
+      ],
+    }
+    expect(aiBracketedFactsNote({ tree, inventory })).toBe(
+      'Before you publish, replace the facts in square brackets, which the brief did not give: [Office hours]. The "Practice area card" component on this page shows [What the firm handles] until you replace it.',
+    )
+    expect(aiBracketedFactsNote({ tree: { rootId: 'root', nodes: { root: { componentId: 'div' } } }, inventory })).toBeNull()
   })
 
   it('writes the plan’s listing, held to the editor’s lengths, when the listing cannot be written', async () => {

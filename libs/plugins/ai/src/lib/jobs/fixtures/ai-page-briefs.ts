@@ -1039,10 +1039,11 @@ export const AI_PAGE_CREATION_FIXTURE: AiPageCreationFixture = (() => {
     cta: { label: 'Meet the crew', screenId: 'scr-about' },
   })
   const quotes = section('b', 'customer words', ['new:Testimonial card'], 3, (add) => {
+    // The brief names no customer's role, so each card leaves it to the card's default (AGL-3056).
     const cells = [
-      { quote: 'They found the leak two other companies missed.', name: '[customer name]', role: 'Homeowner, Harbor Point' },
-      { quote: 'On time, tidy, and the photos made the invoice easy to trust.', name: '[customer name]', role: 'Homeowner, Old Mill Road' },
-      { quote: 'The same crew came back to check the repair after the first storm.', name: '[customer name]', role: 'Homeowner, Bayside' },
+      { quote: 'They found the leak two other companies missed.', name: '[customer name]' },
+      { quote: 'On time, tidy, and the photos made the invoice easy to trust.', name: '[customer name]' },
+      { quote: 'The same crew came back to check the repair after the first storm.', name: '[customer name]' },
     ].map((propValues) => cell(add, 3, add({ componentId: 'reusableInstance', props: { refId: component, propValues } })))
     return framed(add, [add(typography('h2', 'What homeowners say', 'h2')), row(add, cells)], 'lg', 8)
   })

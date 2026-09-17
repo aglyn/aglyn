@@ -91,6 +91,11 @@ Open **Layouts** for the site and choose **Describe it**, beside **Templates** a
 Layout**. Write what the header, navigation and footer should hold, then choose **Plan the
 layout**, and open **AI jobs** in the Assist panel to read the plan and confirm it.
 
+A link in the layout goes only to a screen that does what its words say, and one on a colored
+band, such as a footer in your primary color, uses the band's text color. Where the brief leaves
+out a fact, such as your address or opening hours, the footer marks it in square brackets, and
+**AI jobs** lists those gaps beside the draft.
+
 The layout arrives as a new draft in **Layouts**, and **Open draft** on the job opens it in the
 Besigner. No screen uses it until you assign it, so nothing on the live site changes. It counts
 against your shared-layout allowance like a layout you create yourself, and when the site has

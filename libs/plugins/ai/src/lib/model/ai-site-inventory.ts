@@ -90,6 +90,13 @@ export interface AiInventoryComponent {
   name: string
   /** The props an instance fills in: name → declared type. */
   props: AiComponentPropTypes
+  /**
+   * The facts in square brackets each prop's default shows until a page sets
+   * its own, by prop name (AGL-3056): what a page placing the component still
+   * asks the member to fill. Read for the member's note, never listed in a
+   * prompt; absent when no default holds one.
+   */
+  bracketedDefaults?: Record<string, string[]>
 }
 
 export interface AiInventoryLayout {
@@ -225,6 +232,25 @@ export function aiInventoryLine(kind: AiInventoryKind, row: AiInventoryRow): str
 /** Every word of a record a lookup searches: its line, which holds them all. */
 export function aiInventoryHaystack(kind: AiInventoryKind, row: AiInventoryRow): string {
   return aiInventoryLine(kind, row).toLowerCase()
+}
+
+/** The addresses a site's home screen is stored under. */
+const HOME_SLUGS = new Set(['', 'home', 'index'])
+
+/**
+ * The site's home screens, by id (AGL-3056): a screen at the root or at
+ * `home`, as a seeded site stores its first screen, or one named Home. A link
+ * with nowhere to go is sent there, which is why the doctrine names them.
+ */
+export function aiHomeScreenIds(inventory: AiSiteInventory | null): string[] {
+  return (inventory?.screens ?? [])
+    .filter(
+      (screen) =>
+        !screen.template &&
+        (HOME_SLUGS.has(screen.slug.trim().replace(/^\/+|\/+$/g, '').toLowerCase()) ||
+          /^home(?:\s?page)?$/i.test(screen.name.trim())),
+    )
+    .map((screen) => screen.id)
 }
 
 /** A site the org does not own; the inventory is never read for it. */

@@ -32,7 +32,7 @@ import { aiPlanCapabilitiesForJob, aiPlanUncreatable } from '../model/ai-plan-ca
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import { aiModelForStep } from '../providers/routing'
 import { aiDoctrineNeedsInputMessage, runValidatedGeneration } from '../runtime/ai-doctrine'
-import { validateAiDoctrineTree } from '../runtime/ai-doctrine-validators'
+import { validateAiDoctrineTree, type AiDoctrineTree } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fields'
 import { readSiteInventory } from '../runtime/site-inventory'
@@ -51,6 +51,7 @@ import {
   type AiDraftRecord,
 } from './ai-job-drafts'
 import {
+  aiBracketedFactsNote,
   aiConfirmedPlan,
   aiDoctrineReview,
   aiGenerationSpent,
@@ -382,6 +383,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const output = (
       draft: Pick<AiDraftRecord, 'id' | 'versionId' | 'name' | 'hostSubdomain'>,
       load?: AiLoadEstimate | null,
+      note?: string | null,
     ): AiJobOutput => ({
       resource: 'screen',
       id: draft.id,
@@ -390,6 +392,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       hostSubdomain: draft.hostSubdomain,
       label: draft.name,
       ...(load ? { load } : {}),
+      ...(note ? { note } : {}),
       // Rule 10: a navigation entry travels with the page as a proposal, for
       // the member to add once the page is live; no menu is written.
       ...(screen.nav ? { proposal: { navigation: { label: name, slug } } } : {}),
@@ -482,7 +485,12 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         }
         await writeAiDraftScreenSeo(firestore, { hostId, id: job.$id, seo: values, now })
       }
-      return { ...spent, outputs: [output(written, report.load)] }
+      // The facts the brief did not give, on the page or in the defaults its components show (AGL-3056).
+      const note = aiBracketedFactsNote({
+        tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] },
+        inventory,
+      })
+      return { ...spent, outputs: [output(written, report.load, note)] }
     }
 
     // ── A section pass ──

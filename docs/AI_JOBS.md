@@ -35,6 +35,34 @@ otherwise. The `text` kind has no document of its own and carries its copy on
 the output itself. The `theme` kind writes nothing at all: its output carries
 a proposal, which a person puts in the theme editor and saves there.
 
+### What a draft asks the member to fill
+
+Where the brief leaves out a fact, such as an address, a phone number or a price,
+rule 14 has the copy mark the gap in square brackets instead of inventing it, and
+a draft is only ready to publish once a member fills those gaps. So a page, layout,
+component or form output's `note` lists the facts in square brackets its draft holds
+(AGL-3056), in the member's words and in the order they first appear, each once:
+"Before you publish, replace the facts in square brackets, which the brief did not
+give: [Office address], [Office phone number] and [Office hours]." A form's note
+keeps what the person decides next first. A layout's footer on a live site was the
+first to need it: its address, phone and hours were all brackets, and nothing said so.
+
+- **Read once, in one place.** `aiBracketedFacts` (`runtime/ai-doctrine-validators.ts`,
+  beside rule 14) reads the copy a tree shows (`aiTreeCopy`: every text prop, and the
+  copy an instance fills in) and `aiBracketedFactsNote` (`jobs/ai-job-generation.ts`)
+  writes the note, naming at most eight facts and counting the rest.
+- **A component's defaults are said once.** A component shows its defaults until a
+  page sets its own, so a component job's note reads its defaults as well as its tree,
+  and the site inventory keeps the facts each default holds
+  (`AiInventoryComponent.bracketedDefaults`, read by `readSiteInventory` and never
+  listed in a prompt). A page that places the component and leaves one of those props
+  unset gets one sentence for the component however often the page places it: "The
+  "Practice area card" component on this page shows [What the firm handles] until you
+  replace it."
+- **Nothing is refused for it.** A bracketed gap is the honest answer rule 14 asks
+  for, so the note costs no prompt byte and no re-ask; a draft copied through the
+  duplicate module, or reported by a run cut off after it wrote, carries none.
+
 ## The document
 
 `orgs/{orgId}/aiJobs/{jobId}` — member-readable, server-written only (the
@@ -46,7 +74,7 @@ rules deny every client write). Fields:
 | `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` and `needs_review` as the two parked states (below). |
 | `brief`, `inputs` | The customer's brief verbatim and the kind-specific scalars a runner reads. |
 | `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`. |
-| `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. A page's document carries its estimated first-visit `load`. An output may carry a customer-safe `note`: what the person decides next about it. |
+| `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. A page's document carries its estimated first-visit `load`. An output may carry a customer-safe `note`: what the person decides next about it, and the facts in square brackets its draft holds ([below](#what-a-draft-asks-the-member-to-fill)). |
 | `plan` | The plan a planned kind builds from: `reuse`, `create`, `screens`, the inventory `labels` it references, and `status` `proposed` → `confirmed` with who confirmed it and when. |
 | `review` | While the job is `needs_review`: the `reason` (`plan`, `doctrine` or `limit`), the customer-safe `message`, and the rules the last answer broke. |
 | `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step while the job can run — zero while it waits for a person, and a confirmed page or site plan's whole-job estimate where that is more — and the real spend at the plan's credit rate. |
@@ -616,6 +644,37 @@ door's cached prefix — about 195 tokens, written once per cache lifetime and
 read at a tenth of an input token after that, and a credit a page on the ten
 golden briefs.
 
+Two rules hold what a link does, because a page, a layout or a component links
+the same way (AGL-3056). A layout's footer on a live site, a band in `primary.main`,
+held a "Request a Consultation" Screen Link that set no color, so its words were
+drawn navy on navy; and it linked the home screen, because the site had no
+consultation screen.
+
+- **Rule 5, `link-color-on-band`** (`detectInvisibleLinks`). A Screen Link or a Button
+  draws its words in its `color`, primary when it names none, unless it inherits, sets
+  an `sx` color of its own or is a contained button, whose label is its family's
+  contrast text on a fill of its own. It is refused when those words are drawn in the
+  family of the band it sits on: the nearest ancestor with an `sx` background in a
+  link family's color (`primary`, `secondary`, `success`, `error`, `info` or
+  `warning`, in its main, dark or light shade), or an App Bar, which is primary when
+  it names no color. A paper surface such as a Card, and any other background, is
+  not a band. The re-ask: give it `"color": "inherit"` under a band whose sx color is
+  the family's contrast text, or set its own sx color to it.
+- **Rule 10, `link-unrelated-screen`** (`detectUnrelatedScreenLinks`), and a sentence
+  of rule 10: "A link goes to a screen that does what its words say, or is left out."
+  The inventory cannot say what each screen is for, but it can name the screen a
+  model falls back to: `aiHomeScreenIds` reads the site's home screens (at the root or
+  at `home`, as a seeded site stores its first screen, or named Home) into the tree
+  context. A Screen Link or a Button that links one, outside an App Bar, a `header`
+  and a `nav`, with words that do not say home, is refused; the re-ask names the words
+  and says to link the screen that does, or to leave the link out.
+- **What it costs.** Rule 10's sentence is 70 characters of the doctrine, and so of
+  every document door's cached prefix: 18 estimated tokens on the page, the plan and
+  the layout alike. With the Grid line, the page prefix is 4,598 estimated tokens,
+  the largest ceiling the Free wall holds moves from 1,074 to 1,060, and no credit
+  figure moves: the first pass still costs 44 credits, the page 190 of the 300 and
+  254 with its layout.
+
 The validators hold the seventeen rules by construction: one detector per rule
 for trees and plans, each naming its rule number and a customer-safe sentence,
 and the rule-17 scorer, which measures nodes, stored bytes (`nodeMapBytes`),
@@ -723,7 +782,8 @@ the submit route reads, agreeing with each other. It is a planned kind, like
   load, note }`, which the drawer links to the form's page. `note` says what
   the person decides next: the lead routing that is on, how to enroll the people
   who tick consent in an email list, and what the brief asked for that a form
-  cannot collect, such as a photo upload.
+  cannot collect, such as a photo upload; then the facts in square brackets the
+  form shows ([What a draft asks the member to fill](#what-a-draft-asks-the-member-to-fill)).
 - **The goldens.** `src/lib/jobs/fixtures/ai-job-form-goldens.json` holds
   recorded answers (a roofing quote request with a photo upload, a newsletter
   signup, an anonymous survey) that the step spec runs through the doctrine,
@@ -821,8 +881,9 @@ draft.
   as it does for a component Use template creates. Nothing places the
   component until a member does.
 - **Output.** `{ resource: 'reusableComponent', id, versionId: null, hostId,
-  hostSubdomain, label, load }`, which the drawer links to the component's
-  page. A plan that starts from a copy gets the copy through
+  hostSubdomain, label, load, note }`, which the drawer links to the component's
+  page; `note` lists the facts in square brackets its tree and its defaults show
+  ([What a draft asks the member to fill](#what-a-draft-asks-the-member-to-fill)). A plan that starts from a copy gets the copy through
   `duplicateResource('component', …)` and generates nothing.
 - **Fit.** The step's spec measures the cached prefix and the golden answer
   (`src/lib/jobs/goldens/`), holds `AI_STEP_NOMINAL_USAGE['job.component']`
@@ -1318,9 +1379,11 @@ Assist panel.
   spending nothing, when a rule no longer holds); the search title and
   description from `generateSeoFields` on `job.seo`, written from the page's
   own text, the site's name and the other screens' names; and the screen
-  output with its `load` and, when the plan sets `nav`, a
-  `proposal.navigation` label and slug, which AI jobs shows as a line for the
-  member to act on once the page is live. No menu is written. When the SEO
+  output with its `load`, a `note` listing the facts in square brackets the page
+  and its placed components' defaults show
+  ([What a draft asks the member to fill](#what-a-draft-asks-the-member-to-fill)),
+  and, when the plan sets `nav`, a `proposal.navigation` label and slug, which AI
+  jobs shows as a line for the member to act on once the page is live. No menu is written. When the SEO
   model's worst case does not fit the pass, the plan's listing is written
   instead, held to the SEO editor's lengths (`SCREEN_SEO_TEXT_GUIDANCE`). A
   listing a member typed is never replaced.
@@ -1470,10 +1533,10 @@ the same way, in a Grid with a row direction and no container.
   refusal: the goldens' old shape and the live page's shape (`grid-not-container`), items
   sized `"4"` at every width (`grid-item-size`) and a container spaced by an sx gap
   (`grid-gap`).
-- **What it costs.** The page prefix grows by 72 characters (the page-section ledger's
-  4,562 estimated tokens to 4,580), so the largest ceiling the Free wall holds moves
-  from 1,074 to 1,067, and no credit figure the Free arithmetic quotes moves. A Grid item
-  is an element, so a row of cards takes one more element a card: written once, one.
+- **What it costs.** The page instructions grow by 72 characters (18 estimated tokens of
+  the page-section ledger's prefix), and no credit figure the Free arithmetic quotes
+  moves. A Grid item is an element, so a row of cards takes one more element a card:
+  written once, one.
 
 ### The time budget
 
@@ -1578,7 +1641,7 @@ needs, and the machine does not start it with less.
   request's line is the same length either way, so no figure the Free page's
   arithmetic quotes moves.
 - **The ceiling does not move to make a section fit.** The balanced tier's
-  1,050 fits the Free page's wall with little to spare: past 1,067 tokens the
+  1,050 fits the Free page's wall with little to spare: past 1,060 tokens the
   first section pass costs 45 credits, and the Free page that builds its layout
   first leaves 45 of the 300 — no more than that pass, which is the room the
   arithmetic keeps for a re-asked section. A two-person introduction drawn
@@ -1671,9 +1734,9 @@ the element budget its request asks for.
   elements and the 1,050 tokens its pass asks for on the balanced tier. The same two
   people drawn roomier — a Grid item, a card body and styles a person, and an
   introduction — make a section the page's rules keep, in 20 elements, inside the 23
-  an estimate-counted budget allows, at 1,114 real tokens, past the ceiling. On every tier the spec holds a section of the
-  goldens' largest elements inside its ceiling at its element budget, and past it
-  at one element more.
+  an estimate-counted budget allows, at 1,114 real tokens, past the ceiling. On every
+  tier the spec holds a section of the goldens' largest elements inside its ceiling
+  at its element budget, and past it at one element more.
 - **A plan with creations, built end to end.** `AI_PAGE_CREATION_FIXTURE` is a
   roofing page on a Starter site with no layout, card or form: its plan creates all
   three. `ai-job-page-evals.spec.ts` replays it through the real page step, handing
@@ -1681,7 +1744,9 @@ the element budget its request asks for.
   own specs hold, with the site's inventory read as it grows, and holds the order
   (layout, form, component, then the page), each draft under its derived id, a page
   that renders inside the new layout and places the new card and form by id, every
-  building rule on the page, and nothing published.
+  building rule on the page, each draft's note of the facts in square brackets it
+  shows (the card's role, which no quote sets, named once for its three placements),
+  and nothing published.
 - **A Free page fits the taste.** `ai-job-free-page.spec.ts` replays
   `AI_FREE_PAGE_FIXTURE` — an about page with four practice areas, written once, and
   a consultation form, on a Free site that already has its one layout — through the
@@ -1995,8 +2060,8 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   three characters a token with as much again to think in. A longer answer is
   refused and re-asked shorter. It sends no site inventory block and so makes
   no lookup; its reads are the declared 4 s,
-  `AI_WORKFLOW_RECORDS_READ_MS`. Its cached prefixes are 4,547 tokens drafting
-  and 2,194 explaining, as the ledger spec measures them.
+  `AI_WORKFLOW_RECORDS_READ_MS`. Its cached prefixes are 4,564 tokens drafting
+  and 2,212 explaining, as the ledger spec measures them.
 
 | step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
 | --- | --- | --- | --- | --- |

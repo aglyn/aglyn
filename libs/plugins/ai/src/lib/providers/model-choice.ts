@@ -152,7 +152,7 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   'job.email': { inputTokens: 600, outputTokens: 1_500, cacheReadTokens: 3_600, cacheWriteTokens: 0 },
   'job.campaign': { inputTokens: 600, outputTokens: 1_500, cacheReadTokens: 3_600, cacheWriteTokens: 0 },
   // The workflow step's draft (AGL-2919): the doctrine, the automation
-  // vocabulary and the tool's schema are the cached prefix (4,547 tokens, as
+  // vocabulary and the tool's schema are the cached prefix (4,564 tokens, as
   // `runtime/ai-prompt-cache.spec.ts` measures it); what the workspace can
   // run, the site's forms and datasets and the description ride uncached; and
   // an automation of a few steps is about 1,300 characters of JSON with as

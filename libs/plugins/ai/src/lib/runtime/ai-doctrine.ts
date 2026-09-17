@@ -23,6 +23,7 @@ import {
   AI_INVENTORY_KIND_HEADINGS,
   AI_SITE_INVENTORY_LISTED_PER_KIND,
   AI_SITE_INVENTORY_MAX_CHARS,
+  aiHomeScreenIds,
   aiInventoryLine,
   aiInventoryRows,
   type AiInventoryKind,
@@ -180,7 +181,7 @@ const AI_DOCTRINE_RULE_TEXT: readonly AiDoctrineRuleText[] = [
   { n: 7, scopes: DOCUMENTS, text: 'Reuse before creating. Prefer what the site inventory lists: components, layouts, templates, forms, themes, datasets, collections and screens, referenced by id. Creating is the exception, and every creation says why nothing listed will do. In a plan, refer to something the plan itself creates as new:<name>, and create only what the request says this job may create on this site.' },
   { n: 8, scopes: DOCUMENTS, text: 'Data is bound, not typed. A list that exists as a dataset, collection, product or record is bound to it and never copied into text; a long list the site lacks becomes a dataset in the plan.' },
   { n: 9, scopes: DOCUMENTS, text: 'Images come from the media library, with alt text. Place images by media reference, or leave "src" empty for an upload; never link an image from another website. Every image has alt text describing it, or "decorative": true.' },
-  { n: 10, scopes: DOCUMENTS, text: 'Navigation and SEO travel with a page. Every new screen has a slug of lowercase words joined by hyphens that the site does not already use, a search title of at most 70 characters, a search description of at most 170, and a navigation entry when the brief implies one.' },
+  { n: 10, scopes: DOCUMENTS, text: 'Navigation and SEO travel with a page. Every new screen has a slug of lowercase words joined by hyphens that the site does not already use, a search title of at most 70 characters, a search description of at most 170, and a navigation entry when the brief implies one. A link goes to a screen that does what its words say, or is left out.' },
   { n: 11, scopes: DOCUMENTS, text: 'One main landmark and an ordered outline. A page declares at most one "main"; a component, form or email declares none; a layout has exactly one "layoutSlot". A page has exactly one h1 and never skips a heading level, and a layout has no h1. Set a heading\'s level with the Typography "component" (h1 to h6).' },
   { n: 12, scopes: DOCUMENTS, text: 'Responsive by the theme\'s breakpoints. Widths come from a Container\'s maxWidth, a Grid\'s size, a percentage, or responsive values keyed by xs, sm, md, lg and xl, never a fixed px or viewport width.' },
   { n: 13, scopes: EVERY_SCOPE, text: 'Drafts only. Everything you produce is a new draft that a person reviews and publishes. Never ask to publish, and never change something already live.' },
@@ -920,6 +921,7 @@ export function aiDoctrineTreeContext(
       ? { colors: inventory.theme.colors, fonts: inventory.theme.fonts }
       : null,
     ...aiNodeTreeContextFromInventory(inventory),
+    homeScreenIds: aiHomeScreenIds(inventory),
     ...extra,
   }
 }

@@ -15,14 +15,20 @@
  * limitations under the License.
  */
 
-import { REUSABLE_INSTANCE_COMPONENT_ID } from '@aglyn/aglyn/app-utils/reusable-component-keys'
+import {
+  REUSABLE_INSTANCE_COMPONENT_ID,
+  REUSABLE_INSTANCE_PROP_VALUES_KEY,
+} from '@aglyn/aglyn/app-utils/reusable-component-keys'
 import type { AiBuildPlanCreate, AiBuildPlanCreateKind } from '../model/ai-build-plan'
 import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import type { AiGenerationSpend, AiValidatedTree } from '../runtime/ai-doctrine'
 import {
+  aiBracketedFacts,
+  aiTreeCopy,
   walkTree,
   type AiDoctrineNode,
+  type AiDoctrineTree,
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
 import { AI_INSTANCE_REF_PROP } from '../runtime/ai-node-tree'
@@ -187,4 +193,67 @@ export function aiModelNodeIds(
   sourceIds: Readonly<Record<string, string>>,
 ): string[] {
   return ids.map((id) => sourceIds[id] ?? id)
+}
+
+/** The most facts a note names before it counts the rest. */
+const AI_NOTE_MAX_FACTS = 8
+
+/** Facts as a sentence lists them: "a, b and c", the ones past the cap counted. */
+function factList(facts: readonly string[]): string {
+  const shown = facts.slice(0, AI_NOTE_MAX_FACTS)
+  const items = facts.length > shown.length ? [...shown, `${facts.length - shown.length} more`] : shown
+  return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
+
+/**
+ * What a draft asks the member to fill in before it is published (AGL-3056),
+ * in the words the job's output note shows: the facts in square brackets its
+ * copy holds, which the brief did not give (rule 14), each once. A page's
+ * placed components show their own defaults wherever the page sets no value
+ * of its own, so a component whose defaults hold such facts is named once,
+ * however often the page places it. `copy` is what the draft shows beside its
+ * tree, such as a component's defaults. `null` when there is nothing to fill.
+ */
+export function aiBracketedFactsNote(input: {
+  tree: AiDoctrineTree
+  inventory: AiSiteInventory | null
+  copy?: readonly string[]
+}): string | null {
+  const components = input.inventory?.components ?? []
+  const componentProps = Object.fromEntries(components.map((component) => [component.id, component.props]))
+  const facts = aiBracketedFacts([
+    ...aiTreeCopy(input.tree, { componentProps }).map((sample) => sample.text),
+    ...(input.copy ?? []),
+  ])
+  const listed = new Set(facts.map((fact) => fact.toLowerCase()))
+  const byComponent = new Map<string, string[]>()
+  for (const { node } of walkTree(input.tree)) {
+    const component = components.find((row) => row.id === node.props?.[AI_INSTANCE_REF_PROP])
+    if (node.componentId !== REUSABLE_INSTANCE_COMPONENT_ID || !component?.bracketedDefaults) continue
+    const values = node.props?.[REUSABLE_INSTANCE_PROP_VALUES_KEY]
+    const set = (name: string): boolean => {
+      const value = values && typeof values === 'object' ? (values as Record<string, unknown>)[name] : undefined
+      return value !== undefined && value !== null && String(value).trim() !== ''
+    }
+    const shown = byComponent.get(component.name) ?? []
+    for (const [name, defaults] of Object.entries(component.bracketedDefaults)) {
+      if (set(name)) continue
+      for (const fact of defaults) {
+        if (!listed.has(fact.toLowerCase()) && !shown.some((known) => known.toLowerCase() === fact.toLowerCase())) {
+          shown.push(fact)
+        }
+      }
+    }
+    if (shown.length) byComponent.set(component.name, shown)
+  }
+  const sentences = [
+    ...(facts.length
+      ? [`Before you publish, replace the facts in square brackets, which the brief did not give: ${factList(facts)}.`]
+      : []),
+    ...[...byComponent.entries()].map(
+      ([name, shown]) =>
+        `The "${name}" component on this page shows ${factList(shown)} until you replace ${shown.length === 1 ? 'it' : 'them'}.`,
+    ),
+  ]
+  return sentences.length ? sentences.join(' ') : null
 }

@@ -21,7 +21,7 @@ import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import type { AiBuildPlanScreen, AiBuildPlanSection } from '../model/ai-build-plan'
 import { aiPageTypeDefinition, parseAiPageJobInputs } from '../model/ai-page-job'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
-import type { AiSiteInventory } from '../model/ai-site-inventory'
+import { aiHomeScreenIds, type AiSiteInventory } from '../model/ai-site-inventory'
 import type { AiTool } from '../providers/contract'
 import {
   AI_REASK_OFFENDING_MAX_CHARS,
@@ -271,6 +271,7 @@ export function aiPageCheckContext(
   return {
     brand: inventory?.theme ? { colors: inventory.theme.colors, fonts: inventory.theme.fonts } : null,
     ...aiNodeTreeContextFromInventory(inventory),
+    homeScreenIds: aiHomeScreenIds(inventory),
     ...(options.reusableComponents === false ? { reusableComponents: false } : {}),
   }
 }

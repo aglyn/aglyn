@@ -22,6 +22,7 @@ import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import { runValidatedGeneration } from '../runtime/ai-doctrine'
+import type { AiDoctrineTree } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
@@ -42,6 +43,7 @@ import {
   type AiDraftRecord,
 } from './ai-job-drafts'
 import {
+  aiBracketedFactsNote,
   aiConfirmedPlan,
   aiDoctrineReview,
   aiGenerationSpent,
@@ -151,7 +153,7 @@ export function createAiJobComponentStep(deps: AiJobComponentStepDeps = {}): AiJ
   return async ({ job, now, signal, firestore, modelFor }) => {
     const hostId = job.hostId
     if (!hostId) throw new Error('a component job names no site, and its admission refuses one')
-    const output = (draft: AiDraftRecord, load?: AiLoadEstimate | null): AiJobOutput => ({
+    const output = (draft: AiDraftRecord, load?: AiLoadEstimate | null, note?: string | null): AiJobOutput => ({
       resource: 'reusableComponent',
       id: draft.id,
       versionId: draft.versionId,
@@ -159,6 +161,7 @@ export function createAiJobComponentStep(deps: AiJobComponentStepDeps = {}): AiJ
       hostSubdomain: draft.hostSubdomain,
       label: draft.name,
       ...(load ? { load } : {}),
+      ...(note ? { note } : {}),
     })
     // The switch's answer for this job, else the routing table's (AGL-2942).
     const model = modelFor?.('job.component') ?? aiModelForStep('job.component')
@@ -252,7 +255,13 @@ export function createAiJobComponentStep(deps: AiJobComponentStepDeps = {}): AiJ
       if (draft.status === 404) throw new Error(`site ${hostId} vanished while its component was generated`)
       return { ...spent, review: aiLimitReview(draft.error) }
     }
-    return { ...spent, outputs: [output(draft, result.value.load)] }
+    // The facts the brief did not give, in the tree or the defaults a page shows (AGL-3056).
+    const note = aiBracketedFactsNote({
+      tree: { rootId: result.value.rootId, nodes: result.value.nodes as unknown as AiDoctrineTree['nodes'] },
+      inventory,
+      copy: props.map((prop) => (typeof prop.defaultValue === 'string' ? prop.defaultValue : '')),
+    })
+    return { ...spent, outputs: [output(draft, result.value.load, note)] }
   }
 }
 

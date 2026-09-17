@@ -327,6 +327,8 @@ describe('the component step', () => {
           hostSubdomain: 'acme',
           label: 'Testimonial card',
           load: expect.objectContaining({ pageBytes: 0 }),
+          // The facts its defaults show until a page sets its own (AGL-3056).
+          note: 'Before you publish, replace the facts in square brackets, which the brief did not give: [What the customer said about working with you], [Customer name] and [Role or company].',
         },
       ],
       usage: USAGE,

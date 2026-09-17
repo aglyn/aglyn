@@ -31,11 +31,12 @@ import {
   aiUnrestrictedPlanCapabilities,
   type AiPlanCapabilities,
 } from '../model/ai-plan-capabilities'
-import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
+import { aiHomeScreenIds, emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
 import {
   AI_DOCTRINE_RULE_NUMBERS,
   AI_DOCTRINE_RULES,
   AI_TYPED_LIST_MIN_ITEMS,
+  aiBracketedFacts,
   aiDoctrineViolationText,
   aiNamesMatch,
   aiTreeCopy,
@@ -45,6 +46,7 @@ import {
   detectHeavyDocument,
   detectImageSources,
   detectInlineForms,
+  detectInvisibleLinks,
   detectLayoutRegions,
   detectLiteralStyles,
   detectMissedDuplicate,
@@ -62,6 +64,7 @@ import {
   detectPublishIntent,
   detectRepeatedSubtrees,
   detectTypedData,
+  detectUnrelatedScreenLinks,
   detectUnresponsiveGrids,
   detectUntemplatedSimilarPages,
   estimateAiOutputLoad,
@@ -460,6 +463,68 @@ describe('rule 5 — colors, spacing and type come from the theme', () => {
   })
 })
 
+describe('rule 5 — a link on a colored band draws its words in a color the band does not have (AGL-3056)', () => {
+  const link = (props: Record<string, unknown> = {}, sx?: Record<string, unknown>): Nested => ({
+    componentId: 'muiScreenLink',
+    props: { children: 'Request a consultation', screenId: 'scr-about', ...props },
+    ...(sx ? { sx } : {}),
+  })
+  const band = (background: unknown, ...children: Nested[]): Nested => ({
+    componentId: 'section',
+    props: { element: 'footer' },
+    sx: { backgroundColor: background, color: 'background.paper' },
+    children,
+  })
+
+  it('refuses the live footer: a link that sets no color on a band in its own family, with a re-ask to inherit or set the contrast text', () => {
+    expect(detectInvisibleLinks(tree(page(band('primary.main', link()))), 'layout')).toEqual([
+      {
+        rule: 5,
+        code: 'link-color-on-band',
+        message:
+          'A link or button on a primary.main band draws its words in the theme\'s primary color, the band\'s own, so they cannot be read. Give it "color": "inherit" under a band whose sx color is primary.contrastText, or set its own sx color to primary.contrastText.',
+        nodeIds: ['n2'],
+      },
+    ])
+  })
+
+  it('refuses a text link, an outlined button and a link in an App Bar that names no color, each in the band’s own family', () => {
+    const found = detectInvisibleLinks(
+      tree(
+        page(
+          band({ xs: 'secondary.dark' }, link({ renderAs: 'link', color: 'secondary' }), { componentId: 'muiButton', props: { children: 'Call us', variant: 'outlined', color: 'secondary' } }),
+          { componentId: 'muiAppBar', props: { position: 'static' }, children: [{ componentId: 'muiToolbar', children: [link({ children: 'About' })] }] },
+          band('primary.light', link({}, { color: 'primary.main' })),
+        ),
+      ),
+      'page',
+    )
+    expect(found.map(({ code, nodeIds }) => [code, nodeIds])).toEqual([['link-color-on-band', ['n2', 'n3', 'n6', 'n8']]])
+  })
+
+  it('passes a link that inherits, sets a color of its own, fills its button, sits on paper or on a band of another family', () => {
+    const found = detectInvisibleLinks(
+      tree(
+        page(
+          band(
+            'primary.main',
+            link({ color: 'inherit' }),
+            link({}, { color: 'primary.contrastText' }),
+            { componentId: 'muiButton', props: { children: 'Book', variant: 'contained' } },
+            { componentId: 'muiCard', children: [{ componentId: 'muiCardContent', children: [link()] }] },
+            link({ color: 'secondary' }),
+          ),
+          band('background.paper', link()),
+          { componentId: 'muiAppBar', props: { color: 'default' }, children: [link()] },
+        ),
+      ),
+      'layout',
+    )
+    expect(found).toEqual([])
+    expect(detectInvisibleLinks(tree(page(band('primary.main', link()))), 'email')).toEqual([])
+  })
+})
+
 describe('rule 6 — emails use the brand', () => {
   const brand = { colors: { 'primary.main': '#1976d2' }, fonts: ['Inter'] }
   const email = (backgroundColor: string) =>
@@ -670,6 +735,70 @@ describe('rule 10 — navigation and SEO travel with a page', () => {
 
   it('passes a fresh address with both search fields', () => {
     expect(detectMissingNavAndSeo(planOf(), INVENTORY)).toEqual([])
+  })
+})
+
+describe('rule 10 — a link goes to a screen that does what its words say, or is left out (AGL-3056)', () => {
+  const home = { homeScreenIds: aiHomeScreenIds(INVENTORY) }
+  const link = (children: string, props: Record<string, unknown> = { screenId: 'scr-home' }): Nested => ({
+    componentId: 'muiScreenLink',
+    props: { children, ...props },
+  })
+  const footer = (...children: Nested[]): Nested => ({ componentId: 'section', props: { element: 'footer' }, children })
+
+  it('names the site’s home screens: at the root, at home, or named Home, and never a template', () => {
+    expect(aiHomeScreenIds(INVENTORY)).toEqual(['scr-home'])
+    const seeded: AiSiteInventory = {
+      ...INVENTORY,
+      screens: [
+        { id: 'seed-home', name: 'Welcome', slug: 'home', layoutId: null, template: false },
+        { id: 'scr-start', name: 'Home page', slug: 'start', layoutId: null, template: false },
+        { id: 'tpl-root', name: 'Home', slug: '/', layoutId: null, template: true },
+        { id: 'scr-about', name: 'About', slug: '/about', layoutId: null, template: false },
+      ],
+    }
+    expect(aiHomeScreenIds(seeded)).toEqual(['seed-home', 'scr-start'])
+    expect(aiHomeScreenIds(null)).toEqual([])
+  })
+
+  it('refuses the live footer’s consultation link sent home, naming its words and saying to link the screen that does or leave it out', () => {
+    expect(detectUnrelatedScreenLinks(tree(page(footer(link('Request a Consultation')))), 'layout', home)).toEqual([
+      {
+        rule: 10,
+        code: 'link-unrelated-screen',
+        message:
+          '"Request a Consultation" links the home page, which does not do what its words say. Link the screen that does, or leave the link out when the site has none.',
+        nodeIds: ['n2'],
+      },
+    ])
+    const button = { componentId: 'muiButton', props: { children: 'Get a quote', href: '/' } }
+    expect(detectUnrelatedScreenLinks(tree(page(section(button))), 'page', home).map((violation) => violation.nodeIds)).toEqual([['n2']])
+  })
+
+  it('passes a link home that says so, the header’s and the navigation’s links, a link elsewhere, and a site with no home known', () => {
+    const passing = tree(
+      page(
+        footer(link('Back to home'), link('Homepage'), link('Request a Consultation', { screenId: 'scr-about' })),
+        { componentId: 'muiAppBar', children: [{ componentId: 'muiToolbar', children: [link('Harborline Law')] }] },
+        { componentId: 'muiStack', props: { component: 'nav' }, children: [link('Our story')] },
+      ),
+    )
+    expect(detectUnrelatedScreenLinks(passing, 'layout', home)).toEqual([])
+    expect(detectUnrelatedScreenLinks(tree(page(footer(link('Request a Consultation')))), 'layout')).toEqual([])
+    expect(detectUnrelatedScreenLinks(tree(page(footer(link('Request a Consultation')))), 'email', home)).toEqual([])
+  })
+})
+
+describe('rule 14 — the facts in square brackets a draft asks the member to fill (AGL-3056)', () => {
+  it('reads each fact once whatever its case, in the order it first appears, and nothing that is not one', () => {
+    expect(
+      aiBracketedFacts([
+        'Visit us at [Office address], open [Office hours].',
+        'Call [office phone number] or [Office Address].',
+        'Wills and trusts {{1}}, [ ], [[nested]] and arrays [] stay copy.',
+        '[Office phone number]',
+      ]),
+    ).toEqual(['[Office address]', '[Office hours]', '[office phone number]', '[nested]'])
   })
 })
 
@@ -1034,6 +1163,22 @@ describe('validateAiDoctrineTree — the palette first, then every rule', () => 
     const report = validateAiDoctrineTree(broken, 'page')
     expect(report.ok).toBe(false)
     expect(codes(report.violations)).toEqual(['literal-color'])
+  })
+
+  it('holds a link to its band and to the home screen the inventory names, on every tree the doctrine checks (AGL-3056)', () => {
+    const footer = tree(
+      page({
+        componentId: 'section',
+        props: { element: 'footer' },
+        sx: { bgcolor: 'primary.main', color: 'background.paper' },
+        children: [{ componentId: 'muiScreenLink', props: { children: 'Request a Consultation', screenId: 'scr-home' } }],
+      }),
+    )
+    const report = validateAiDoctrineTree(footer, 'component', { screenIds: ['scr-home'], homeScreenIds: ['scr-home'] })
+    expect(report.violations.map((violation) => [violation.rule, violation.code])).toEqual([
+      [5, 'link-color-on-band'],
+      [10, 'link-unrelated-screen'],
+    ])
   })
 
   it('turns a tree the palette refuses into one unreadable-output finding, and still holds rule 13', () => {
