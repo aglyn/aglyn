@@ -36,6 +36,7 @@ import { usePipeline } from '../hooks/use-pipeline'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import { DEAL_STATUS_LABELS, formatMoney } from '../model/deal-board-model'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
+import { CrmRecordInsightsZone } from './crm-record-insights-zone'
 import { RecordActivityCard } from './record-activity-card'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import { DealEditDrawer } from './deal-edit-drawer'
@@ -204,6 +205,16 @@ export function DealDetailPage(props: CrmDetailPageProps) {
         </CrmRecordHeader>
         {deal ? (
           <>
+            {/* What an assistant proposes about the deal, its stage included (AGL-2917). */}
+            <CrmRecordInsightsZone
+              hostId={hostId}
+              org={org as Record<string, unknown> | undefined}
+              kind="deal"
+              recordId={deal.$id}
+              name={deal.title}
+              taskLink={{ dealId: deal.$id }}
+              deal={{ pipeline, ref: deal, stageId: deal.stageId, status: deal.status, api }}
+            />
             <DealStageCard deal={deal} pipeline={pipeline} api={api} nowMs={nowMs} />
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ alignItems: 'stretch' }}>
               <Stack sx={{ flex: 1, minWidth: 0 }}>

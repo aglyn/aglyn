@@ -33,6 +33,7 @@ import { RecordActivityCard } from './record-activity-card'
 import RecordFilesCard from './record-files-card'
 import { RecordTasksCard } from './record-tasks-card'
 import CompanyPropertiesCard from './company-properties-card'
+import { CrmRecordInsightsZone } from './crm-record-insights-zone'
 
 /**
  * `/crm/companies/{companyId}` — one organization (AGL-2597).
@@ -117,6 +118,15 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
           members={members}
           routes={routes}
           onDeleted={onDeleted}
+        />
+        {/* What an assistant proposes about the company (AGL-2917). */}
+        <CrmRecordInsightsZone
+          hostId={hostId}
+          org={org as Record<string, unknown> | undefined}
+          kind="company"
+          recordId={id}
+          name={String(company.name ?? '')}
+          taskLink={{ companyId: id }}
         />
         <CompanyContactsCard
           companyId={id}

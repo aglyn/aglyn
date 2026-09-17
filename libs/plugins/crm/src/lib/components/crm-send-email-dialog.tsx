@@ -31,6 +31,8 @@ import {
   hasCrmMergeFields,
   resolveCrmMergeFields,
 } from '@aglyn/aglyn'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import type { ConsoleRecordEmailDraft } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { useSendingApi } from '@aglyn/plugins-email/components/use-sending-identity-api'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -420,6 +422,42 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
     [body, appliedTemplate, confirm],
   )
 
+  /*
+   * The `recordEmail` zone (AGL-2917), hosted through the shell's renderer: a
+   * widget there proposes a subject and a message, which land in the fields
+   * above like a template does, asking first when a message is already
+   * written. Send is still the only write, and the zone reads the record the
+   * message is written from: the deal over its contact, a lead on its own site,
+   * and at the organization level a contact or a deal the org reads.
+   */
+  const EmailDraftSlot = useConsoleWidgetSlot()
+  const proposeDraft = useCallback(
+    async (draft: ConsoleRecordEmailDraft) => {
+      const next = { subject: draft.subject.slice(0, CRM_EMAIL_SUBJECT_MAX), body: draft.body.slice(0, CRM_EMAIL_BODY_MAX) }
+      if (body.trim() && body !== next.body) {
+        const accepted = await confirm({
+          title: 'Replace the message?',
+          description: 'The draft replaces what you have written in the subject and the message.',
+          confirmationText: 'Replace',
+        })
+          .then(() => true)
+          .catch(() => false)
+        if (!accepted) return
+      }
+      setSubject(next.subject)
+      setBody(next.body)
+      setAppliedTemplate(null)
+    },
+    [body, confirm],
+  )
+  const draftRecord = dealId
+    ? { kind: 'deal', id: dealId }
+    : leadId
+      ? { kind: 'lead', id: leadId }
+      : contactId
+        ? { kind: 'contact', id: contactId }
+        : null
+
   /** A snippet or a field where the caret is, the caret moved past it. */
   const insertAtCaret = useCallback(
     (text: string) => {
@@ -706,6 +744,19 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
             formHelperText: { sx: unresolved.length ? { color: 'warning.main' } : undefined },
           }}
         />
+        {EmailDraftSlot && draftRecord ? (
+          <EmailDraftSlot
+            slot="recordEmail"
+            // A lead is read on its own site; a contact or a deal at the level
+            // the composer was opened at.
+            hostId={draftRecord.kind === 'lead' || !mount ? hostId : null}
+            orgId={orgId ?? undefined}
+            record={{ ...draftRecord, name: String(props.name ?? '') }}
+            subject={subject}
+            body={body}
+            proposeDraft={(draft: ConsoleRecordEmailDraft) => void proposeDraft(draft)}
+          />
+        ) : null}
         {preview ? (
           <Stack spacing={0.5} data-testid="crm-email-preview">
             <Typography variant="caption" color="text.secondary">

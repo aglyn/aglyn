@@ -72,6 +72,7 @@ export const LEAD_IMPORT_VOCABULARY: CsvImportVocabulary<
   LeadImportSkippedRow
 > = {
   title: 'Import leads from CSV',
+  collection: 'leads',
   help: pluginDocsHelp('crmLeads', { anchor: '#import-from-csv' }),
   sitePickerHelperText:
     'The site these leads are filed under — a lead is private to one site, ' +

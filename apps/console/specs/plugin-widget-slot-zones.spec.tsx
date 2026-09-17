@@ -52,6 +52,11 @@ const mockProposeDraft = jest.fn()
 const mockOpenAction = jest.fn()
 /** The commerce zones' doors (AGL-2916), passed through by identity. */
 const mockProductWrite = jest.fn()
+/** The CRM record zones' proposal doors (AGL-2917), passed through by identity. */
+const mockProposeTask = jest.fn()
+const mockProposeStage = jest.fn()
+const mockProposeEmail = jest.fn()
+const mockProposeMapping = jest.fn()
 /**
  * Registrations the registry answers for `mockSlot` beside the demo card: a
  * table column widget on a zone that also mounts cards (AGL-3008).
@@ -268,6 +273,45 @@ const MOUNTS: Record<
       orgId: 'org-1',
       target: { type: 'action', id: 'act-1', name: 'Welcome new leads' },
       runId: 'run-1',
+    },
+  },
+  // AGL-2917: the CRM's record pages, its one-to-one composer and its import
+  // drawers, which are the CRM plugin's own surfaces.
+  recordInsights: {
+    file: 'libs/plugins/crm/src/lib/components/crm-record-insights-zone.tsx',
+    how: 'hosted',
+    props: {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      record: { kind: 'deal', id: 'deal-1', name: 'Warehouse re-roof' },
+      proposeTask: mockProposeTask,
+      stages: [{ id: 'negotiation', name: 'Negotiation' }],
+      stageId: 'qualified',
+      proposeStage: mockProposeStage,
+    },
+  },
+  recordEmail: {
+    file: 'libs/plugins/crm/src/lib/components/crm-send-email-dialog.tsx',
+    how: 'hosted',
+    props: {
+      hostId: null,
+      orgId: 'org-1',
+      record: { kind: 'contact', id: 'contact-1', name: 'Dana Whitfield' },
+      subject: '',
+      body: '',
+      proposeDraft: mockProposeEmail,
+    },
+  },
+  importMapping: {
+    file: 'libs/plugins/crm/src/lib/components/csv-import-drawer.tsx',
+    how: 'hosted',
+    props: {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      collection: 'contacts',
+      columns: [{ header: 'E-mail', shape: 'email' }],
+      mapping: {},
+      proposeMapping: mockProposeMapping,
     },
   },
   // AGL-2911: beside the sites on the organization's Sites page, for an

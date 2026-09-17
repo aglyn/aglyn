@@ -61,6 +61,7 @@ export const DEAL_IMPORT_VOCABULARY: CsvImportVocabulary<
   DealImportSkippedRow
 > = {
   title: 'Import deals from CSV',
+  collection: 'deals',
   help: pluginDocsHelp('deals', { anchor: '#import-from-csv' }),
   sitePickerHelperText:
     'The site these deals are filed under — it decides which of your sites ' +

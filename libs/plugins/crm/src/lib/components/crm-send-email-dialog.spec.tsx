@@ -14,7 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
 import { CrmSendEmailDialog } from './crm-send-email-dialog'
 
@@ -502,5 +503,80 @@ describe('templates, snippets and merge fields', () => {
       subject: 'Hi {{contact.firstName}}',
       body: 'Re {{deal.name}} from {{sender.firstName}} at {{site.name}}',
     })
+  })
+})
+
+/**
+ * The `recordEmail` zone (AGL-2917): the composer hosts it through the shell's
+ * renderer, hands it the record the message is written from, and takes a
+ * proposed draft into its own fields — asking first over a written message,
+ * as a template does. Send stays the member's.
+ */
+describe('the email zone', () => {
+  let zone: Record<string, unknown> | null = null
+  /** One stable renderer standing in for the shell's gated slot. */
+  function ZoneRenderer(props: Record<string, unknown>) {
+    zone = props
+    return null
+  }
+  const inShell = (ui: React.ReactElement) =>
+    render(<ConsoleWidgetSlotContext.Provider value={ZoneRenderer}>{ui}</ConsoleWidgetSlotContext.Provider>)
+  const propose = (draft: { subject: string; body: string }) =>
+    act(async () => {
+      ;(zone?.['proposeDraft'] as (value: typeof draft, key: string) => void)(draft, 'job-1')
+    })
+
+  beforeEach(() => {
+    zone = null
+  })
+
+  it('draws nothing outside the shell', () => {
+    open()
+    expect(zone).toBeNull()
+  })
+
+  it('names the deal over its contact, on this site, with what the composer holds', async () => {
+    inShell(<CrmSendEmailDialog open onClose={onClose} hostId="site-1" contactId="contact-1" dealId="deal-1" name="Ada" />)
+    expect(zone).toMatchObject({
+      slot: 'recordEmail',
+      hostId: 'site-1',
+      orgId: 'org-1',
+      record: { kind: 'deal', id: 'deal-1', name: 'Ada' },
+      subject: '',
+      body: '',
+    })
+    await propose({ subject: 'Your quote', body: 'Hi {{contact.firstName}},\n\nFollowing up.' })
+    expect(screen.getByLabelText('Subject')).toHaveProperty('value', 'Your quote')
+    expect(screen.getByLabelText('Message')).toHaveProperty('value', 'Hi {{contact.firstName}},\n\nFollowing up.')
+    expect(confirm).not.toHaveBeenCalled()
+    expect(crmApi).not.toHaveBeenCalledWith('email-send', expect.anything())
+  })
+
+  it('asks before a draft replaces a written message, and keeps the message when the rep declines', async () => {
+    inShell(<CrmSendEmailDialog open onClose={onClose} hostId="site-1" contactId="contact-1" email="ada@example.com" name="Ada" />)
+    draft()
+    confirm.mockRejectedValueOnce(new Error('cancelled'))
+    await propose({ subject: 'Your quote', body: 'Following up.' })
+    expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ title: 'Replace the message?' }))
+    expect(screen.getByLabelText('Message')).toHaveProperty('value', 'A note.')
+    await propose({ subject: 'Your quote', body: 'Following up.' })
+    await waitFor(() => expect(screen.getByLabelText('Message')).toHaveProperty('value', 'Following up.'))
+  })
+
+  it('reads a contact at the organization level, and a lead on its own site', () => {
+    const mount = { orgId: 'org-1', hosts: [{ id: 'site-2', name: 'Site Two', subdomain: 'two' }], hostsReady: true, hostsPath: '/acme/hosts' }
+    const { unmount } = inShell(
+      <CrmOrgMountProvider mount={mount}>
+        <CrmSendEmailDialog open onClose={onClose} hostId="site-2" contactId="contact-1" email="ada@example.com" name="Ada" />
+      </CrmOrgMountProvider>,
+    )
+    expect(zone).toMatchObject({ hostId: null, record: { kind: 'contact', id: 'contact-1' } })
+    unmount()
+    inShell(
+      <CrmOrgMountProvider mount={mount}>
+        <CrmSendEmailDialog open onClose={onClose} hostId="site-2" leadId="lead-1" email="sam@example.com" name="Sam" />
+      </CrmOrgMountProvider>,
+    )
+    expect(zone).toMatchObject({ hostId: 'site-2', record: { kind: 'lead', id: 'lead-1' } })
   })
 })

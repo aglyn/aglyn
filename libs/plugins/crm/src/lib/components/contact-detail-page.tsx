@@ -51,6 +51,7 @@ import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { CrmCallButton } from './crm-call-actions'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
+import { CrmRecordInsightsZone } from './crm-record-insights-zone'
 import { CrmSuiteNotice, crmSuiteIncluded, crmSuiteLockedReason } from './crm-suite-lock'
 import { useErasePersonAction } from './erase-person-action'
 import RecordFilesCard from './record-files-card'
@@ -474,6 +475,17 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             a site the page IS one site's view and the card would say so on
             every record.
           */}
+          {/* What an assistant proposes about the person (AGL-2917), where the plan works a contact. */}
+          {suiteIncluded ? (
+            <CrmRecordInsightsZone
+              hostId={hostId}
+              org={org as Record<string, unknown> | undefined}
+              kind="contact"
+              recordId={id}
+              name={record.name || record.email}
+              taskLink={{ contactId: id }}
+            />
+          ) : null}
           {mount ? <ContactKnownByCard row={row} contactId={id} org={org} /> : null}
           <ContactPropertiesCard
             hostId={hostId}
