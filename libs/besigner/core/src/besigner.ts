@@ -63,5 +63,6 @@ export * from './lib/definitions/emitter.types'
 // /_/  /_/_/  |_/_/ |_/_/  |_\____/_____/_/ |_|/____/
 // 👇
 
+export * from './lib/device-preview-width'
 export * from './lib/is-root-element-id'
 export * from './lib/managers'

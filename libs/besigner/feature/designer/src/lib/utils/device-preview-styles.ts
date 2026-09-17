@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import { BesignerDeviceFlag } from '@aglyn/besigner'
 import type { Theme } from '@aglyn/shared-ui-theme'
 
 /**
@@ -41,43 +40,13 @@ import type { Theme } from '@aglyn/shared-ui-theme'
  * Fluid Responsive (the default) provides neither, so the canvas keeps
  * today's real-viewport behavior; the published tenant never sees any
  * of this.
+ *
+ * The width each device simulates is `devicePreviewWidth`, which lives in
+ * `@aglyn/besigner` with the device flags so that anything auditing a page
+ * at the switcher's widths reads the same numbers the canvas pins to.
  */
 
-/**
- * The simulated viewport width per artboard device. XS mirrors the
- * artboard's 390px phone frame; the rest sit exactly on the theme
- * breakpoints so "SM - Tablet" activates the tablet band and the `sm`
- * slice of responsive values.
- */
-export const DEVICE_PREVIEW_XS_WIDTH = 390
-
-type BreakpointValues = Partial<
-  Record<'xs' | 'sm' | 'md' | 'lg' | 'xl', number>
->
-
-/**
- * The width the canvas should simulate for an artboard device flag, or
- * null when no device is pinned (Fluid Responsive / scale-to-fit).
- */
-export function devicePreviewWidth(
-  flag: BesignerDeviceFlag | undefined,
-  breakpointValues: BreakpointValues = {},
-): number | null {
-  switch (flag) {
-    case BesignerDeviceFlag.XS:
-      return DEVICE_PREVIEW_XS_WIDTH
-    case BesignerDeviceFlag.SM:
-      return breakpointValues.sm ?? 600
-    case BesignerDeviceFlag.MD:
-      return breakpointValues.md ?? 900
-    case BesignerDeviceFlag.LG:
-      return breakpointValues.lg ?? 1200
-    case BesignerDeviceFlag.XL:
-      return breakpointValues.xl ?? 1536
-    default:
-      return null
-  }
-}
+export { DEVICE_PREVIEW_XS_WIDTH, devicePreviewWidth } from '@aglyn/besigner'
 
 const MEDIA_CONDITION_PATTERN =
   /^\(\s*(min-width|max-width|width)\s*:\s*(\d+(?:\.\d+)?)px\s*\)$/i

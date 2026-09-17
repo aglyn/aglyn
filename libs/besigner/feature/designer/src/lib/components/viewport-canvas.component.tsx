@@ -16,7 +16,7 @@
  */
 
 import * as Besigner from '@aglyn/besigner'
-import { BesignerDeviceFlag } from '@aglyn/besigner'
+import { BesignerDeviceFlag, DEVICE_PREVIEW_XS_WIDTH } from '@aglyn/besigner'
 import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx/const/prebuilt-components'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import clsx from 'clsx'
@@ -66,7 +66,9 @@ const ViewportArtboard = styled('div', {
     duration: theme.transitions.duration.leavingScreen,
   }),
   [`&, &.${canvasArtboardClassKeys.responsive}`]: { width: '100%' },
-  [`&.${canvasArtboardClassKeys.deviceXs}`]: { width: 390 },
+  [`&.${canvasArtboardClassKeys.deviceXs}`]: {
+    width: DEVICE_PREVIEW_XS_WIDTH,
+  },
   [`&.${canvasArtboardClassKeys.deviceSm}`]: {
     width: theme.breakpoints.values.sm,
   },
