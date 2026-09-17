@@ -16,17 +16,29 @@
  */
 
 /**
- * Records the accessibility audit of the page job's golden briefs (AGL-2907).
- * Emits one GENERATED file:
+ * Records how the AI plugin's golden pages look at every width the besigner's
+ * device switcher previews (AGL-2907, AGL-3020). Emits one GENERATED file:
  *
  *   libs/plugins/ai/src/lib/jobs/fixtures/ai-page-axe.generated.json
  *
  * Each golden page is assembled through the step's OWN section check and page
- * assembly, rendered to markup with the real component bundles and node
- * renderer, and audited with axe-core. The result is a fixture, never a live
- * run: `ai-job-page-evals.spec.ts` reads it, holds every page to zero serious
- * or critical violations, and refuses a recording whose fingerprint no longer
- * matches the goldens it claims to have audited.
+ * assembly, and rendered to markup with the real component bundles and node
+ * renderer at each of the switcher's devices — `devicePreviewWidth` on the
+ * site theme's own breakpoints, with the theme pinned to that width by
+ * `createDevicePinnedTheme` and every element's sx by
+ * `resolveSxForDeviceWidth`, exactly as the canvas pins them — and loaded into
+ * a headless Chrome whose viewport is that width. There it is measured:
+ *
+ *   - what runs past the viewport's edge (a document wider than its screen);
+ *   - how many columns each row a layout element draws holds on its first
+ *     line, so a band that keeps its desktop columns on a phone shows;
+ *   - axe-core's audit, every rule on, `color-contrast` included, since a
+ *     browser paints the colors jsdom never could.
+ *
+ * The result is a fixture, never a live run: `ai-job-page-widths.spec.ts` reads
+ * it, holds every page to what the device audit requires
+ * (`runtime/ai-device-audit.ts`), and refuses a recording whose fingerprint no
+ * longer matches the goldens it claims to have rendered.
  *
  *   node tools/scripts/record-ai-page-axe.mts          (write the file)
  *   node tools/scripts/record-ai-page-axe.mts --check  (fail if it differs)
@@ -34,8 +46,10 @@
  * Rendering needs the bundles, which are React modules in TypeScript with
  * `@aglyn/*` aliases, so they load through jiti exactly as the palette
  * generator loads them, inside a jsdom window this script installs as the
- * globals the bundles expect. The run takes a couple of minutes, which is why
- * the audit is recorded here rather than recomputed in a spec.
+ * globals the bundles expect at import time. Measuring needs a browser that
+ * lays a page out: Chrome, found the way the e2e tools find it
+ * (`E2E_CHROME_PATH` first). The run takes a few minutes, which is why it is
+ * recorded here rather than recomputed in a spec.
  *
  * STAND-IN DEFINITIONS. A golden site's reusable components are inventory
  * rows — an id, a name and declared prop names — with no stored definition to
@@ -45,21 +59,42 @@
  * wrote and a faithful placeholder for what the site already had.
  */
 import { createHash } from 'node:crypto'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
-const OUT = join(
-  ROOT,
-  'libs/plugins/ai/src/lib/jobs/fixtures/ai-page-axe.generated.json',
-)
+const PAGES_OUT = join(ROOT, 'libs/plugins/ai/src/lib/jobs/fixtures/ai-page-axe.generated.json')
+
+/** The viewport's height at every width; only its width is measured. */
+const VIEWPORT_HEIGHT = 900
 
 const require = createRequire(join(ROOT, 'package.json'))
 
 type Dict = Record<string, any>
+
+/**
+ * Emotion decides once, when its modules evaluate, whether it runs in a
+ * browser, by looking for a global `document`. In a browser it inserts rules
+ * into the document from an insertion effect, which a server render never
+ * runs; on a server it writes each rule into the markup beside its element,
+ * which is what a published page's server render sends. Loaded before the
+ * jsdom globals exist, it takes the server's path, and the markup a device
+ * render produces carries its own styles.
+ */
+function loadEmotionForServerRendering(): void {
+  for (const id of [
+    '@emotion/cache',
+    '@emotion/react',
+    '@emotion/styled',
+    '@emotion/use-insertion-effect-with-fallbacks',
+    '@emotion/utils',
+  ]) {
+    require(id)
+  }
+}
 
 /**
  * The `@aglyn/*` aliases, in the prefix form jiti resolves: a wildcard path
@@ -82,17 +117,14 @@ function readAliases(): Record<string, string> {
 
 /**
  * A jsdom window installed as the globals a browser bundle reads at import
- * time. Written before anything is loaded, since a module that reads
- * `document` while evaluating cannot be given one afterwards.
+ * time. Written before the bundles load, since a module that reads `document`
+ * while evaluating cannot be given one afterwards.
  */
-function installWindow(html: string): Dict {
+function installWindow(): void {
   const { JSDOM } = require('jsdom')
-  const dom = new JSDOM(html, {
+  const dom = new JSDOM('<!doctype html><html lang="en"><head><title>Recording</title></head><body></body></html>', {
     pretendToBeVisual: true,
     url: 'https://example.test/',
-    // `outside-only` is what gives the window an `eval` this script can hand
-    // the audit library to, without letting the page's own markup run.
-    runScripts: 'outside-only',
   })
   const globals = globalThis as Dict
   const keys = [
@@ -133,15 +165,25 @@ function installWindow(html: string): Dict {
   }
   // jiti compiles JSX to the classic runtime, which reads a global React.
   globals['React'] = require('react')
-  return dom
+}
+
+/** The Chrome the e2e tools use: `E2E_CHROME_PATH`, else the first flavor installed. */
+function chromeExecutable(): Dict {
+  if (process.env['E2E_CHROME_PATH']) return { executablePath: process.env['E2E_CHROME_PATH'] }
+  if (process.platform === 'darwin') {
+    for (const executablePath of [
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    ]) {
+      if (existsSync(executablePath)) return { executablePath }
+    }
+  }
+  return { channel: 'chrome' }
 }
 
 /** A stand-in definition for an inventory component row, from its declared props. */
-function standInDefinition(row: {
-  id: string
-  name: string
-  props?: Record<string, unknown>
-}): Dict {
+function standInDefinition(row: { id: string; name: string; props?: Record<string, unknown> }): Dict {
   const names = Object.keys(row.props ?? {})
   const nodes: Dict = {}
   const children: string[] = []
@@ -170,13 +212,14 @@ function standInDefinition(row: {
   return { rootId: `${row.id}__root`, nodes }
 }
 
-/** The whole golden page as the step stores it, folded section by section. */
-function assemblePage(fixture: Dict, sections: Dict): Dict {
+/** A golden page as the step stores it, folded section by section. */
+function assemblePage(loaded: Dict, fixture: Dict, reusableComponents: boolean): Dict {
+  const { sections } = loaded
   const screen = fixture.plan.screens[0]
   const sectionIds = screen.sections.map((_: unknown, index: number) =>
     sections.aiPageSectionNodeId(`job-${fixture.id}`, index),
   )
-  const context = sections.aiPageCheckContext(fixture.inventory)
+  const context = sections.aiPageCheckContext(fixture.inventory, reusableComponents ? {} : { reusableComponents: false })
   let page = sections.aiEmptyPage()
   fixture.answers.forEach((answer: Dict, index: number) => {
     const check = sections.aiPageSectionCheck({
@@ -200,42 +243,89 @@ function assemblePage(fixture: Dict, sections: Dict): Dict {
 }
 
 /**
- * The page's markup, grafted and rendered the way a published page is: the
- * layout's one `main` around the sections the page owns.
+ * Where each element sits, as a recording names it: `name(id)` when the tree
+ * carries a name for the element, else the child positions from `rootId`.
  */
-function renderPage(loaded: Dict, fixture: Dict, page: Dict): string {
-  const definitions: Dict = {}
-  for (const row of fixture.inventory?.components ?? []) {
-    definitions[row.id] = standInDefinition(row)
+function locators(nodes: Dict, rootId: string, name: (id: string, path: number[]) => string | null): Map<string, string> {
+  const found = new Map<string, string>()
+  const walk = (id: string, path: number[]) => {
+    const node = nodes[id]
+    if (!node || found.has(id)) return
+    found.set(id, name(id, path) ?? (path.length ? path.join('.') : 'root'))
+    ;(node.nodes ?? []).forEach((child: string, index: number) => walk(child, [...path, index]))
   }
-  const grafted = loaded.compose.composeReusableComponentNodes(page, definitions)
-  loaded.core.canvas.setNodes(grafted)
+  walk(rootId, [])
+  return found
+}
+
+/** The markup of a document at one width, pinned the way the canvas pins its artboard. */
+function renderAt(loaded: Dict, root: Dict, theme: Dict, width: number, landmark: boolean): string {
   const React = require('react')
   const { renderToStaticMarkup } = require('react-dom/server')
-  const root = loaded.core.canvas.getNode(loaded.rootId)
+  const CssBaseline = require('@mui/material/CssBaseline').default
+  const h = React.createElement
+  const tree = h(loaded.renderer.AglynNodeRenderer, { node: root })
   return renderToStaticMarkup(
-    React.createElement(
-      'main',
-      null,
-      React.createElement(loaded.renderer.AglynNodeRenderer, { node: root }),
+    h(
+      loaded.themes.ThemeProvider,
+      { theme: loaded.device.createDevicePinnedTheme(theme, width) },
+      h(CssBaseline, null),
+      h(
+        loaded.renderer.LeafSxTransformContext.Provider,
+        { value: (sx: unknown) => loaded.device.resolveSxForDeviceWidth(sx, width) },
+        landmark ? h('main', null, tree) : tree,
+      ),
     ),
   )
 }
 
-/** Every violation axe finds in one page's document, as the fixture records them. */
-async function auditMarkup(markup: string, fixture: Dict): Promise<Dict[]> {
-  const title = fixture.seo?.title ?? fixture.id
-  const dom = installWindow(
-    `<!doctype html><html lang="en"><head><title>${title}</title></head><body>${markup}</body></html>`,
-  )
-  const source = readFileSync(join(ROOT, 'node_modules/axe-core/axe.min.js'), 'utf8')
-  dom.window.eval(source)
-  const result = await dom.window.axe.run(dom.window.document, {
-    resultTypes: ['violations'],
-    // Layout the renderer never computes in jsdom: a color pair and an
-    // element's box are measured on a real page, not recorded here.
-    rules: { 'color-contrast': { enabled: false } },
-  })
+/**
+ * What the browser measures of the loaded document: the deepest elements past
+ * the viewport's edge, and the columns on the first line of each row element
+ * named. Runs in the page.
+ */
+function measureInPage(rowIds: string[]): Dict {
+  const nodeIdOf = (element: Element) => (element.getAttribute('data-aglyn') ?? '').replace(/^leaf:/, '')
+  const box = (element: Element) => {
+    const style = getComputedStyle(element)
+    if (style.display === 'none' || style.position === 'absolute' || style.position === 'fixed') return null
+    const rect = element.getBoundingClientRect()
+    return rect.width > 0 && rect.height > 0 ? rect : null
+  }
+  const viewport = document.documentElement.clientWidth
+  const wanted = new Set(rowIds)
+  const columns: Record<string, number> = {}
+  for (const element of Array.from(document.querySelectorAll('[data-aglyn]'))) {
+    const id = nodeIdOf(element)
+    if (!wanted.has(id)) continue
+    const boxes = Array.from(element.children)
+      .map(box)
+      .filter((rect): rect is DOMRect => rect !== null)
+    if (!boxes.length) continue
+    const [first] = boxes
+    columns[id] = boxes.filter((rect) => rect.top < first.bottom - 0.5 && rect.bottom > first.top + 0.5).length
+  }
+  const overflow: string[] = []
+  if (document.documentElement.scrollWidth > viewport) {
+    // An element is past the edge when its box is, or when what it holds is:
+    // a word too long for its line overflows its heading's box, not the box.
+    const past = Array.from(document.querySelectorAll('[data-aglyn]')).filter((element) => {
+      const rect = element.getBoundingClientRect()
+      return rect.left + Math.max(rect.width, element.scrollWidth) > viewport + 0.5 || rect.left < -0.5
+    })
+    for (const element of past) {
+      if (!past.some((other) => other !== element && element.contains(other))) overflow.push(nodeIdOf(element))
+    }
+    // Wider than the screen with no element to name: the document itself.
+    const outermost = document.querySelector('[data-aglyn]')
+    if (!overflow.length && outermost) overflow.push(nodeIdOf(outermost))
+  }
+  return { columns, overflow }
+}
+
+/** axe-core's violations of the loaded document, every rule on. Runs in the page. */
+async function axeInPage(): Promise<Dict[]> {
+  const result = await (window as unknown as Dict)['axe'].run(document, { resultTypes: ['violations'] })
   return (result.violations as Dict[]).map((violation) => ({
     id: violation.id,
     impact: violation.impact,
@@ -244,13 +334,139 @@ async function auditMarkup(markup: string, fixture: Dict): Promise<Dict[]> {
   }))
 }
 
-/** What a recording claims to have audited: the goldens, exactly as they read. */
-function fingerprint(fixture: Dict): string {
-  return createHash('sha256').update(JSON.stringify(fixture.answers)).digest('hex').slice(0, 16)
+/** Whether an element is a control rather than content: an Input or Navigation element of the palette, or an icon. */
+function isControl(loaded: Dict, node: Dict | undefined): boolean {
+  if (!node) return false
+  const { ComponentCategory } = loaded.categories
+  const category = loaded.core.components.getSchema(node.componentId)?.category
+  return category === ComponentCategory.INPUT || category === ComponentCategory.NAVIGATION || node.componentId === 'icon'
+}
+
+/**
+ * A document rendered and measured at every device of the switcher: the
+ * shape `AiDeviceAudit` names, plus the characters of markup it renders.
+ */
+async function auditDocument(
+  loaded: Dict,
+  tab: Dict,
+  input: {
+    nodes: Dict
+    rootId: string
+    inventory: Dict | null
+    landmark: boolean
+    title: string
+    name: (id: string, path: number[]) => string | null
+  },
+): Promise<Dict> {
+  const definitions: Dict = {}
+  for (const row of input.inventory?.components ?? []) definitions[row.id] = standInDefinition(row)
+  const grafted = loaded.compose.composeReusableComponentNodes(input.nodes, definitions)
+  loaded.core.canvas.setNodes(grafted)
+  const root = loaded.core.canvas.getNode(input.rootId)
+  if (!root) throw new Error(`${input.title}: the rendered tree has no root ${input.rootId}`)
+  const where = locators(grafted, input.rootId, input.name)
+  const theme = loaded.theme.createAglynSiteTheme({
+    theme: loaded.audit.aiInventoryHostTheme(input.inventory?.theme ?? null) ?? undefined,
+  })
+  const { ComponentCategory } = loaded.categories
+  const rowIds = Object.keys(grafted).filter(
+    (id) => where.has(id) && loaded.core.components.getSchema(grafted[id].componentId)?.category === ComponentCategory.LAYOUT,
+  )
+  const devices: Dict[] = []
+  const columns = new Map<string, Record<string, number>>()
+  let markupChars = 0
+  for (const device of loaded.audit.AI_AUDIT_DEVICES as string[]) {
+    const width = loaded.besigner.devicePreviewWidth(loaded.besigner.BesignerDeviceFlag[device], theme.breakpoints.values)
+    const markup = renderAt(loaded, root, theme, width, input.landmark)
+    if (device === 'XS') markupChars = markup.replace(/<style\b[^>]*>[\s\S]*?<\/style>/g, '').length
+    await tab.setViewportSize({ width, height: VIEWPORT_HEIGHT })
+    await tab.setContent(
+      `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(input.title)}</title></head><body>${markup}</body></html>`,
+      { waitUntil: 'load' },
+    )
+    const measured = await tab.evaluate(measureInPage, rowIds)
+    await tab.addScriptTag({ content: loaded.axeSource })
+    const violations = await tab.evaluate(axeInPage)
+    for (const [id, count] of Object.entries(measured.columns as Record<string, number>)) {
+      columns.set(id, { ...(columns.get(id) ?? {}), [device]: count })
+    }
+    devices.push({
+      device,
+      width,
+      overflow: [...new Set((measured.overflow as string[]).map((id) => where.get(id) ?? id))],
+      violations,
+    })
+  }
+  const rows = rowIds
+    .map((id) => {
+      const node = grafted[id]
+      const counts = Object.fromEntries(
+        (loaded.audit.AI_AUDIT_DEVICES as string[]).map((device) => [device, columns.get(id)?.[device] ?? 0]),
+      )
+      const grid = node.componentId === 'muiGrid' && node.props?.container === true
+      const children = (node.nodes ?? []).filter((child: string) => grafted[child] && !grafted[child].hidden)
+      return {
+        node: where.get(id) as string,
+        component: node.componentId,
+        grid,
+        content: children.filter((child: string) => !isControl(loaded, grafted[child])).length,
+        columns: counts,
+      }
+    })
+    .filter((row) => row.grid || Object.values(row.columns).some((count) => (count as number) >= 2))
+  return { markupChars, devices, rows }
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/** What a recording claims to have rendered: the answers, exactly as they read. */
+function fingerprint(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16)
+}
+
+/** The golden pages the page step's evals replay from a site's inventory, and how each site builds. */
+function goldenPages(briefs: Dict): Array<{ fixture: Dict; reusableComponents: boolean }> {
+  return [
+    ...(briefs.AI_PAGE_BRIEF_FIXTURES as Dict[]).map((fixture) => ({ fixture, reusableComponents: true })),
+    // A Free workspace keeps no reusable components: its repeated items are
+    // drawn where they repeat, from the item its answer writes once.
+    { fixture: briefs.AI_FREE_PAGE_FIXTURE, reusableComponents: false },
+    { fixture: briefs.AI_FREE_PRACTICE_AREAS_FIXTURE, reusableComponents: false },
+    { fixture: briefs.AI_TWO_PERSON_PAGE_FIXTURE, reusableComponents: true },
+  ]
+}
+
+async function recordGoldenPages(loaded: Dict, tab: Dict): Promise<Dict[]> {
+  const { CANVAS_ROOT_ELEMENT_ID } = loaded.canvas
+  const pages: Dict[] = []
+  for (const { fixture, reusableComponents } of goldenPages(loaded.briefs)) {
+    const page = assemblePage(loaded, fixture, reusableComponents)
+    // A section by its name in the plan, and what it holds by position under it.
+    const sectionName = (index: number): string => fixture.plan.screens[0].sections[index]?.name ?? `section ${index + 1}`
+    const audit = await auditDocument(loaded, tab, {
+      nodes: page,
+      rootId: CANVAS_ROOT_ELEMENT_ID,
+      inventory: fixture.inventory,
+      landmark: true,
+      title: fixture.seo?.title ?? fixture.id,
+      name: (_id, path) =>
+        path.length === 0
+          ? 'page'
+          : path.length === 1
+            ? sectionName(path[0])
+            : `${sectionName(path[0])} > ${path.slice(1).join('.')}`,
+    })
+    pages.push({ id: fixture.id, answers: fingerprint(fixture.answers), ...audit })
+    console.log(`       ${fixture.id}`)
+  }
+  return pages
 }
 
 async function main(): Promise<void> {
-  installWindow('<!doctype html><html lang="en"><head><title>Recording</title></head><body></body></html>')
+  loadEmotionForServerRendering()
+  installWindow()
   const { createJiti } = require('jiti')
   const jiti = createJiti(join(ROOT, 'package.json'), {
     alias: readAliases(),
@@ -274,62 +490,81 @@ async function main(): Promise<void> {
       core.components.registerComponent(entry.component, entry.schema)
     }
   }
-  const canvas = (await load('libs/aglyn/src/lib/foundation/constants/canvas.ts')) as Dict
-  const loaded = {
+  const loaded: Dict = {
     core,
-    rootId: canvas.CANVAS_ROOT_ELEMENT_ID as string,
+    canvas: await load('libs/aglyn/src/lib/foundation/constants/canvas.ts'),
+    categories: await load('libs/aglyn/src/lib/foundation/constants/components.ts'),
     compose: await load('libs/aglyn/src/lib/app-utils/compose-reusable-components.ts'),
     renderer: await load('libs/aglyn-node-renderer/src/index.ts'),
+    theme: await load('libs/aglyn-node-renderer/src/lib/hooks/use-aglyn-site-theme.ts'),
+    themes: await load('libs/shared/ui/theme/src/index.ts'),
+    besigner: {
+      ...(await load('libs/besigner/core/src/lib/constants/besigner.ts')),
+      ...(await load('libs/besigner/core/src/lib/device-preview-width.ts')),
+    },
+    device: await load('libs/besigner/feature/designer/src/lib/utils/device-preview-styles.ts'),
+    sections: await load('libs/plugins/ai/src/lib/jobs/ai-job-page-sections.ts'),
+    briefs: await load('libs/plugins/ai/src/lib/jobs/fixtures/ai-page-briefs.ts'),
+    audit: await load('libs/plugins/ai/src/lib/runtime/ai-device-audit.ts'),
+    axeSource: readFileSync(join(ROOT, 'node_modules/axe-core/axe.min.js'), 'utf8'),
   }
-  const sections = await load('libs/plugins/ai/src/lib/jobs/ai-job-page-sections.ts')
-  const { AI_PAGE_BRIEF_FIXTURES } = (await load(
-    'libs/plugins/ai/src/lib/jobs/fixtures/ai-page-briefs.ts',
-  )) as { AI_PAGE_BRIEF_FIXTURES: Dict[] }
+  const axeVersion = JSON.parse(readFileSync(join(ROOT, 'node_modules/axe-core/package.json'), 'utf8')).version
 
-  const pages: Dict[] = []
-  for (const fixture of AI_PAGE_BRIEF_FIXTURES) {
-    const markup = renderPage(loaded, fixture, assemblePage(fixture, sections))
-    pages.push({
-      id: fixture.id,
-      answers: fingerprint(fixture),
-      markupChars: markup.length,
-      violations: await auditMarkup(markup, fixture),
+  const { chromium } = require('playwright-core')
+  const browser = await chromium.launch({ headless: true, ...chromeExecutable() })
+  const outputs: Array<{ file: string; content: string; summary: string }> = []
+  try {
+    const context = await browser.newContext({ offline: true })
+    const tab = await context.newPage()
+
+    console.log('Rendering the golden pages')
+    const pages = await recordGoldenPages(loaded, tab)
+    const worst = pages
+      .flatMap((page) => (page.devices as Dict[]).flatMap((render) => render.violations as Dict[]))
+      .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical').length
+    const findings = pages.flatMap((page) => loaded.audit.aiDeviceAuditFindings(page))
+    outputs.push({
+      file: PAGES_OUT,
+      summary: `${pages.length} pages at ${loaded.audit.AI_AUDIT_DEVICES.length} widths, ${worst} serious or critical violation(s), ${findings.length} width finding(s)`,
+      content: `${JSON.stringify(
+        {
+          note:
+            'GENERATED by tools/scripts/record-ai-page-axe.mts (AGL-2907, AGL-3020). Do not edit. Each page is the golden ' +
+            'brief assembled through the page step and rendered with the component bundles at every device of the ' +
+            "besigner's switcher, pinned the way the canvas pins its artboard, then measured and audited in a headless " +
+            'browser: what runs past the screen, the columns of every row a layout element draws, and axe-core with ' +
+            'every rule on. `answers` fingerprints the goldens it was recorded from, and ai-job-page-widths.spec.ts ' +
+            'refuses a stale one.',
+          axeVersion,
+          rulesOff: [],
+          pages,
+        },
+        null,
+        2,
+      )}\n`,
     })
+
+  } finally {
+    await browser.close()
   }
 
-  const recorded = {
-    note:
-      'GENERATED by tools/scripts/record-ai-page-axe.mts (AGL-2907). Do not edit. ' +
-      'Each page is the golden brief assembled through the page step, rendered with ' +
-      'the component bundles and audited offline; `answers` fingerprints the goldens ' +
-      'it was recorded from, and ai-job-page-evals.spec.ts refuses a stale one.',
-    axeVersion: JSON.parse(readFileSync(join(ROOT, 'node_modules/axe-core/package.json'), 'utf8'))
-      .version,
-    rulesOff: ['color-contrast'],
-    pages,
-  }
-  const content = `${JSON.stringify(recorded, null, 2)}\n`
-  const current = (() => {
-    try {
-      return readFileSync(OUT, 'utf8')
-    } catch {
-      return null
+  let stale = false
+  for (const output of outputs) {
+    const name = relative(ROOT, output.file)
+    const current = existsSync(output.file) ? readFileSync(output.file, 'utf8') : null
+    if (current === output.content) {
+      console.log(`OK     ${name} is current (${output.summary})`)
+    } else if (process.argv.includes('--check')) {
+      console.error(`STALE  ${name} (${output.summary})`)
+      stale = true
+    } else {
+      writeFileSync(output.file, output.content)
+      console.log(`WROTE  ${name} (${output.summary})`)
     }
-  })()
-  const worst = pages.flatMap((page) => page.violations as Dict[]).filter((violation) => violation.impact === 'serious' || violation.impact === 'critical').length
-  const summary = `${pages.length} pages, ${worst} serious or critical violation(s)`
-  if (current === content) {
-    console.log(`OK     ${OUT.slice(ROOT.length + 1)} is current (${summary})`)
-  } else if (process.argv.includes('--check')) {
-    console.error(
-      `STALE  ${OUT.slice(ROOT.length + 1)}\n\n` +
-        'The recorded audit does not match the golden briefs.\n' +
-        'Run: node tools/scripts/record-ai-page-axe.mts',
-    )
+  }
+  if (stale) {
+    console.error('\nThe recorded device audit does not match what it claims to have rendered.\nRun: node tools/scripts/record-ai-page-axe.mts')
     process.exit(1)
-  } else {
-    writeFileSync(OUT, content)
-    console.log(`WROTE  ${OUT.slice(ROOT.length + 1)} (${summary})`)
   }
 }
 

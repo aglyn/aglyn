@@ -102,7 +102,6 @@ jest.mock('./ai-jobs', () => ({
   registerAiJobStep: jest.fn(),
 }))
 
-import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
@@ -744,64 +743,6 @@ describe('a repeated item written once fits a Free section pass (AGL-3053)', () 
       expect(validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: once }, 'page', context).violations).toEqual([])
     },
   )
-})
-
-/**
- * The accessibility audit is a RECORDED fixture, not a run: rendering ten
- * pages through the component bundles takes minutes, so
- * `tools/scripts/record-ai-page-axe.mts` renders and audits them offline and
- * writes what it found. These hold the recording to the goldens it claims —
- * a changed golden answer changes its fingerprint, and a stale recording is
- * a failure here rather than a quiet, meaningless pass.
- */
-describe('the recorded accessibility audit of the golden pages', () => {
-  const recorded = JSON.parse(
-    readFileSync(join(__dirname, 'fixtures/ai-page-axe.generated.json'), 'utf8'),
-  ) as {
-    axeVersion: string
-    rulesOff: string[]
-    pages: Array<{
-      id: string
-      answers: string
-      markupChars: number
-      violations: Array<{ id: string; impact: string | null; help: string; nodes: number }>
-    }>
-  }
-
-  /** The fingerprint the recorder writes, computed the same way it computes it. */
-  const fingerprint = (fixture: AiPageBriefFixture): string =>
-    createHash('sha256').update(JSON.stringify(fixture.answers)).digest('hex').slice(0, 16)
-
-  it('covers every golden brief, and was recorded from the answers they hold now', () => {
-    expect(recorded.pages.map((page) => page.id)).toEqual(
-      AI_PAGE_BRIEF_FIXTURES.map((fixture) => fixture.id),
-    )
-    const stale = AI_PAGE_BRIEF_FIXTURES.filter(
-      (fixture, index) => recorded.pages[index]?.answers !== fingerprint(fixture),
-    ).map((fixture) => fixture.id)
-    // Re-record with: node tools/scripts/record-ai-page-axe.mts
-    expect(stale).toEqual([])
-    expect(recorded.pages.every((page) => page.markupChars > 0)).toBe(true)
-  })
-
-  it('finds no serious or critical violation on any golden page', () => {
-    const serious = recorded.pages.flatMap((page) =>
-      page.violations
-        .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-        .map((violation) => `${page.id}: ${violation.id}`),
-    )
-    expect(serious).toEqual([])
-  })
-
-  it('names in the developer notes what it measured and what it could not', () => {
-    const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
-    expect(notes).toContain(`axe-core ${recorded.axeVersion}`)
-    // A rule the recorder turned off is a gap the notes own, not a silence.
-    for (const rule of recorded.rulesOff) expect(notes).toContain(rule)
-    // Lighthouse's accessibility category is axe underneath, but no Lighthouse
-    // run happens here and the notes must not imply one.
-    expect(notes).not.toMatch(/lighthouse/i)
-  })
 })
 
 describe('a golden page whose plan creates what its site lacks (AGL-3031)', () => {

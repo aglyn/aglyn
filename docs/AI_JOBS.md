@@ -1774,21 +1774,36 @@ the element budget its request asks for.
   Recordings are never committed; the first live one, which stopped at its plan, is
   kept by hand as `src/lib/jobs/fixtures/ai-free-page-recording.ts` for the specs to
   hold that check and the plan rules to.
-- **Accessibility: an axe audit.** Zero violations of any impact on all ten
-  golden pages, and so none serious or critical, under axe-core 4.12.1.
-  `tools/scripts/record-ai-page-axe.mts` assembles each page through the
-  step's own section check, grafts a stand-in definition for each inventory
-  component from its declared props, renders it with the real MUI and Forms
-  bundles and the node renderer inside the layout's one `main`, and audits it;
-  it writes what it found to `fixtures/ai-page-axe.generated.json`, with a
-  fingerprint of the goldens it audited. The evals spec reads that file, holds
-  every page to zero serious or critical violations, and fails when the
-  fingerprint no longer matches the goldens — re-record with
-  `node tools/scripts/record-ai-page-axe.mts`. One rule is off: `color-contrast`
-  needs computed layout and painted color, which jsdom has neither of, and a
-  page's colors come from the theme rather than from anything the model wrote.
-  A recording, not a run: no browser, no network and no hosted audit service
-  is involved anywhere in it.
+- **Every device width, and an axe audit.** `tools/scripts/record-ai-page-axe.mts`
+  (AGL-3020) assembles each golden page the page step builds from a site — the ten
+  briefs, both Free pages and the two-person page — through the step's own section
+  check, grafts a stand-in definition for each inventory component from its declared
+  props, and renders it with the real MUI and Forms bundles and the node renderer
+  inside the layout's one `main` at each device of the besigner's switcher: XS 390,
+  SM 600, MD 900, LG 1200 and XL 1536, the widths `devicePreviewWidth`
+  (`@aglyn/besigner`) gives each device on the site theme's breakpoints. The theme is
+  the one the canvas builds (`createAglynSiteTheme`, from the golden inventory's
+  colors and fonts), pinned to each width by `createDevicePinnedTheme` with every
+  element's sx pinned by `resolveSxForDeviceWidth`, exactly as the canvas pins its
+  artboard. Each render is loaded into a headless Chrome whose viewport is that
+  width (found as the e2e tools find it, `E2E_CHROME_PATH` first), which measures
+  what runs past the screen, the columns on the first line of every row a layout
+  element of the palette draws, and axe-core 4.12.1 with every rule on,
+  `color-contrast` included, since a browser paints the colors the theme gives. It
+  writes what it measured to `fixtures/ai-page-axe.generated.json`, with a
+  fingerprint of the goldens it rendered. `ai-job-page-widths.spec.ts` holds every
+  page to the device audit's rule (`runtime/ai-device-audit.ts`): nothing past a
+  screen, and no band — a row of two or more columns of content at LG, where a
+  column drawn by a button, a link or an icon is a control rather than content —
+  with as many columns at XS as at LG. It also holds every Grid container and band
+  the goldens draw to one column at XS and more than one at MD and LG, and every
+  page to zero serious or critical axe violations at every width, and it fails when
+  a fingerprint no longer matches the goldens or a recorded width is not the one the
+  switcher previews its device at — re-record with
+  `node tools/scripts/record-ai-page-axe.mts`. Today no golden page runs past a
+  screen, every golden row is one column at XS and two to four at MD, LG and XL, and
+  no page has an axe violation of any impact. A recording, not a run: the spec
+  starts no browser, and no network or hosted audit service is involved anywhere.
 
 ## Indexes and retention
 
