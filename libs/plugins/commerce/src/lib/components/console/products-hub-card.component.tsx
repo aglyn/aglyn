@@ -66,7 +66,10 @@ import {
 import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 import ProductEditorDialog from './product-editor-dialog.component'
+import ProductsHubZone from './products-hub-zone.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import type { ConsoleProductsHubZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 
 /**
  * How many catalog documents the table's listener holds.
@@ -149,6 +152,15 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   } | null>(null)
   const [keysFor, setKeysFor] = useState<ProductRow | null>(null)
   const [keysText, setKeysText] = useState('')
+  /**
+   * What the import zone set for the import in the dialog, and what the last
+   * import created with those options (AGL-2916), which the hub's zone hands
+   * to its widgets.
+   */
+  const [importOptions, setImportOptions] = useState<Record<string, boolean>>({})
+  const [lastImport, setLastImport] =
+    useState<ConsoleProductsHubZoneProps['lastImport']>(null)
+  const WidgetSlot = useConsoleWidgetSlot()
 
   const {
     data: productDocs,
@@ -477,13 +489,21 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
 
   const handleStatus = useCallback(
     (product: ProductRow, status: CommerceModel.ProductStatus) => async () => {
+      // A product with a variant nobody has priced (AGL-2916) stays off the
+      // storefront until the editor has a price for each.
+      if (status === 'active' && CommerceModel.productPriceMissing(product)) {
+        return void enqueueSnackbar(
+          `Set a price for every variant of ${product.name} before activating it.`,
+          { variant: 'info', persist: false },
+        )
+      }
       await updateDoc(doc(firestore, 'hosts', hostId, 'products', product.$id), {
         status,
         updatedAtMs: Date.now(),
         updatedAt: Timestamp.now(),
       })
     },
-    [firestore, hostId],
+    [firestore, hostId, enqueueSnackbar],
   )
 
   const handleDelete = useCallback(
@@ -539,6 +559,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       )
     }
     const existingSlugs = new Set(products.map((product) => product.slug))
+    const created: string[] = []
     try {
       // Each create rides the quota-enforcing API (AGL-473); the batch cap
       // above short-circuits before we start, so this loop stays bounded.
@@ -546,7 +567,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         let slug = product.slug
         while (existingSlugs.has(slug)) slug = `${product.slug}-${Date.now() % 1000}`
         existingSlugs.add(slug)
-        await createHostResource({
+        const { id } = await createHostResource({
           hostId,
           resource: 'product',
           data: {
@@ -563,6 +584,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             updatedAtMs: Date.now(),
           },
         })
+        created.push(id)
       }
     } catch (error: any) {
       return void enqueueSnackbar(error?.message ?? 'Import failed', {
@@ -570,6 +592,12 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         persist: false,
       })
     }
+    setLastImport({
+      key: `${Date.now().toString(36)}-${created.length}`,
+      productIds: created,
+      options: importOptions,
+    })
+    setImportOptions({})
     setImporting(null)
     setProductCountEpoch((epoch) => epoch + 1)
     enqueueSnackbar(`Imported ${parsed.products.length} products`, {
@@ -585,6 +613,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     org,
     planReady,
     productCount,
+    importOptions,
   ])
 
   const handleAdjustSave = useCallback(async () => {
@@ -654,6 +683,24 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     productsFromCache,
     productsStatus,
   ])
+
+  /** The hub's allowance check for a batch of `count` new products, for its zone. */
+  const roomFor = useCallback(
+    (count: number) =>
+      planReady
+        ? Aglyn.checkQuota(org, 'productsPerHost', productCount + count - 1)
+        : null,
+    [org, planReady, productCount],
+  )
+  const onCatalogCreated = useCallback(
+    () => setProductCountEpoch((epoch) => epoch + 1),
+    [],
+  )
+  const setImportOption = useCallback(
+    (key: string, on: boolean) =>
+      setImportOptions((current) => ({ ...current, [key]: on })),
+    [],
+  )
 
   const formatPrice = (product: ProductRow) => {
     const [min, max] = CommerceModel.productPriceRange(product)
@@ -773,7 +820,10 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           <Button
             size="small"
             disabled={!planReady}
-            onClick={() => setImporting({ text: '', parsed: null })}
+            onClick={() => {
+              setImportOptions({})
+              setImporting({ text: '', parsed: null })
+            }}
           >
             {'Import'}
           </Button>
@@ -794,6 +844,13 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           used={productCount}
           limit={productQuota?.limit ?? 0}
           noun="product"
+        />
+        <ProductsHubZone
+          hostId={hostId}
+          products={products}
+          roomFor={roomFor}
+          lastImport={lastImport}
+          onCreated={onCatalogCreated}
         />
         {products.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
@@ -841,7 +898,13 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
                       />
                     </TableCell>
                     <TableCell>{product.type}</TableCell>
-                    <TableCell>{formatPrice(product)}</TableCell>
+                    <TableCell>
+                      {CommerceModel.productPriceMissing(product) ? (
+                        <Chip label="Set a price" size="small" color="warning" variant="outlined" />
+                      ) : (
+                        formatPrice(product)
+                      )}
+                    </TableCell>
                     <TableCell>
                       {formatStock(product)}
                       {formatHeld(product) ? (
@@ -1101,6 +1164,16 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
                 </Typography>
               ))}
             </>
+          ) : null}
+          {WidgetSlot && importing?.parsed?.products.length ? (
+            <WidgetSlot
+              slot="productImport"
+              hostId={hostId}
+              orgId={undefined}
+              count={importing.parsed.products.length}
+              options={importOptions}
+              setOption={setImportOption}
+            />
           ) : null}
         </DialogContent>
         <DialogActions>

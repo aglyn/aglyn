@@ -50,6 +50,8 @@ const mockProposeValues = jest.fn()
 const mockProposeDraft = jest.fn()
 /** The Actions editor's door (AGL-2919), passed through by identity. */
 const mockOpenAction = jest.fn()
+/** The commerce zones' doors (AGL-2916), passed through by identity. */
+const mockProductWrite = jest.fn()
 /**
  * Registrations the registry answers for `mockSlot` beside the demo card: a
  * table column widget on a zone that also mounts cards (AGL-3008).
@@ -280,6 +282,56 @@ const MOUNTS: Record<
     },
   },
 }
+
+/**
+ * Zones a PLUGIN hosts (AGL-2916): the commerce product editor, products hub
+ * and import dialog draw the shell's renderer through
+ * `useConsoleWidgetSlot`, as the product editor draws `seoFields`, so their
+ * mounts are in the plugin's files rather than a console page.
+ */
+Object.assign(MOUNTS, {
+  productEditor: {
+    file: 'libs/plugins/commerce/src/lib/components/console/product-editor-dialog.component.tsx',
+    how: 'slot',
+    props: {
+      hostId: 'host-1',
+      orgId: undefined,
+      product: {
+        id: 'prod-1',
+        name: 'Desk lamp',
+        type: 'physical',
+        description: '',
+        tags: [],
+        categoryIds: [],
+        options: [],
+        mediaUrls: [],
+        seoTitle: '',
+        seoDescription: '',
+      },
+      categories: [],
+      proposeValues: mockProposeValues,
+    },
+  },
+  productsHub: {
+    file: 'libs/plugins/commerce/src/lib/components/console/products-hub-zone.component.tsx',
+    how: 'slot',
+    props: {
+      hostId: 'host-1',
+      orgId: undefined,
+      products: [],
+      lastImport: null,
+      applyProductCopy: mockProductWrite,
+      createProductDrafts: mockProductWrite,
+      createCategories: mockProductWrite,
+      createDiscountDrafts: mockProductWrite,
+    },
+  },
+  productImport: {
+    file: 'libs/plugins/commerce/src/lib/components/console/products-hub-card.component.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', orgId: undefined, count: 2, options: {}, setOption: mockProductWrite },
+  },
+})
 
 const NEW_ZONES = Object.keys(MOUNTS)
 
