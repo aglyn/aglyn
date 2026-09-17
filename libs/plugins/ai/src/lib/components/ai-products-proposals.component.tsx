@@ -17,9 +17,8 @@
 'use client'
 
 import type { ConsoleProductsHubZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
-import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { ListTable, type ListTableProps } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { Alert, Button, Chip, CircularProgress, Stack, Typography } from '@mui/material'
-import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useMemo, useState } from 'react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import {
@@ -39,6 +38,9 @@ import { isAiJobMoving } from './use-ai-products-jobs'
  * Create drafts, Create selected — and the hub passes over what the site
  * already has, so a proposal applied twice creates nothing twice.
  */
+
+/** A column of a review table, in the shared list table's own terms. */
+type GridColDef = NonNullable<ListTableProps['columns']>[number]
 
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text)
 

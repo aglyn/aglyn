@@ -18,7 +18,7 @@
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import type { ConsoleProductsHubZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
-import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { ListTable, type ListTableProps } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import {
   Alert,
   Box,
@@ -33,7 +33,6 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import {
@@ -67,6 +66,9 @@ import { useAiProductsJobs } from './use-ai-products-jobs'
  */
 
 const BRIEF_MAX_CHARS = 4_000
+
+/** A column of the product picker, in the shared list table's own terms. */
+type GridColDef = NonNullable<ListTableProps['columns']>[number]
 
 type BriefKind = 'catalog' | 'categories'
 

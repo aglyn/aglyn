@@ -71,7 +71,7 @@ export const AI_PRODUCT_IMAGE_READ_MS = 6_000
 interface SharpJpegPipeline {
   rotate(): SharpJpegPipeline
   resize(options: { width: number; height: number; fit: 'inside'; withoutEnlargement: true }): SharpJpegPipeline
-  flatten(options: { background: string }): SharpJpegPipeline
+  flatten(options: { background: { r: number; g: number; b: number } }): SharpJpegPipeline
   jpeg(options: { quality: number }): SharpJpegPipeline
   toBuffer(): Promise<Buffer>
 }
@@ -102,7 +102,8 @@ export async function encodeAiProductImage(bytes: Buffer): Promise<Buffer> {
       fit: 'inside',
       withoutEnlargement: true,
     })
-    .flatten({ background: '#ffffff' })
+    // White, as channels: a transparent product shot reads on a white page.
+    .flatten({ background: { r: 255, g: 255, b: 255 } })
     .jpeg({ quality: AI_PRODUCT_IMAGE_JPEG_QUALITY })
     .toBuffer()
 }
