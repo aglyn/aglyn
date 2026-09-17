@@ -2518,3 +2518,29 @@ describe('the register warns about a shortfall and sells anyway (AGL-2357)', () 
     expect(orderDocs()).toHaveLength(1)
   })
 })
+
+/**
+ * A product proposed by AI is created with no price for the merchant to set
+ * (AGL-2916). The register refuses to ring one rather than selling it for
+ * nothing.
+ */
+describe('a variant nobody has priced yet at the register (AGL-2916)', () => {
+  it('is refused by name on either tender, with no order written', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Flat white',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'default', inventory: null }],
+    })
+    for (const payment of ['cash', 'card']) {
+      const result = await post({ payment, cashReceivedCents: 400 })
+      expect([payment, result.status, result.body]).toEqual([
+        payment,
+        400,
+        { error: 'Set a price for Flat white before selling it.' },
+      ])
+    }
+    expect(orderDocs()).toHaveLength(0)
+    expect(stripeCalls).toHaveLength(0)
+  })
+})

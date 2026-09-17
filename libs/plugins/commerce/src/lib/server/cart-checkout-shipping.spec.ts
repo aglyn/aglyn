@@ -892,3 +892,33 @@ describe('cart checkout shipping options (AGL-1707)', () => {
     })
   })
 })
+
+/**
+ * A product proposed by AI is created with no price for the merchant to set
+ * (AGL-2916). Checkout refuses a cart holding one, even once the product is
+ * active, rather than charging nothing for it.
+ */
+describe('a cart line nobody has priced yet (AGL-2916)', () => {
+  const realFetch = global.fetch
+  const realKey = process.env.STRIPE_SECRET_KEY
+
+  beforeAll(() => {
+    global.fetch = fetchMock as unknown as typeof fetch
+    process.env.STRIPE_SECRET_KEY = 'sk_test_fake_never_used'
+  })
+
+  afterAll(() => {
+    global.fetch = realFetch
+    process.env.STRIPE_SECRET_KEY = realKey as string
+  })
+
+  it('is refused before anything reaches Stripe', async () => {
+    fetchMock.mockClear()
+    const { result } = await runCheckout(null, {
+      product: { variants: [{ id: 'v1', weightGrams: 400, inventory: 10 }] },
+    })
+    expect(result.status).toBeGreaterThanOrEqual(400)
+    expect(JSON.stringify(result.body)).toContain('Kettle')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})

@@ -206,6 +206,13 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           visible: `"${product.name}" is sold out`,
         })
       }
+      // A variant with no price yet (AGL-2916) is not for sale: pricing it
+      // would charge nothing for it, or send the processor no amount.
+      if (!CommerceModel.variantHasPrice(variant)) {
+        throw Object.assign(new Error('unavailable'), {
+          visible: `"${product.name}" is not available`,
+        })
+      }
       // Gift cards are a Business+ entitlement, checked per sale (AGL-470).
       if (
         product.giftCard &&
