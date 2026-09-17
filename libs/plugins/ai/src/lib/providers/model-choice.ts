@@ -118,6 +118,14 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // answer — its tree and declared props as JSON — is about 1,700 characters.
   // The component step's spec measures the prefix and the answer against this.
   'job.component': { inputTokens: 700, outputTokens: 600, cacheReadTokens: 5_800, cacheWriteTokens: 0 },
+  // The CRM step's exchange (AGL-2917). NOTHING is cached: the step runs on
+  // the fast tier, whose cacheable minimum is far above what its prompt
+  // reaches — the doctrine's field rules, the CRM rules and the tool come to
+  // 650 to 913 tokens, as `runtime/ai-prompt-cache.spec.ts` measures — so
+  // every byte is billed as input. A record's facts ride with them, a
+  // timeline cut to its newest twelve entries, and the typical answer is a
+  // summary and a next step of a few sentences, with no thinking.
+  'job.crm': { inputTokens: 1_800, outputTokens: 250, cacheReadTokens: 0, cacheWriteTokens: 0 },
   'job.layout': { inputTokens: 700, outputTokens: 1_000, cacheReadTokens: 5_600, cacheWriteTokens: 0 },
   'job.template': { inputTokens: 1_200, outputTokens: 700, cacheReadTokens: 6_400, cacheWriteTokens: 0 },
   // One page section's exchange (AGL-2907), from the modules' own text: the
@@ -127,6 +135,13 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // and the section line ride uncached; and a golden section answer is 901
   // characters at the median, asked for with no thinking.
   'job.page': { inputTokens: 600, outputTokens: 300, cacheReadTokens: 4_400, cacheWriteTokens: 0 },
+  // One product's copy (AGL-2916), the exchange a bulk job makes once a
+  // product: the doctrine, the copy rules and the tool (about 9,500 characters)
+  // are the cached prefix; the product's facts, the site's categories and a
+  // photo at most 768 pixels on its long edge (about 790 tokens) ride
+  // uncached; and the answer is a description with its search listing, tags,
+  // categories and option names, about 1,300 characters of JSON.
+  'job.products': { inputTokens: 1_500, outputTokens: 450, cacheReadTokens: 2_400, cacheWriteTokens: 0 },
   // The SEO step's listing exchange, which a page's or a product's listing is
   // exactly one of. NOTHING is cached here, whatever the breakpoints say: the
   // step runs on the fast tier, whose cacheable minimum is four times what
@@ -144,6 +159,13 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // site inventory and the brief ride uncached, and a form's answer is 200 to
   // 400 tokens of JSON with no extended thinking.
   'job.form': { inputTokens: 700, outputTokens: 450, cacheReadTokens: 3_900, cacheWriteTokens: 0 },
+  // An insight (AGL-2915): two exchanges, and NOTHING cached — the rules and
+  // the acceptable-use block are under the balanced tier's minimum, so they
+  // are billed as input on both. The read call carries the question and the
+  // readers' catalog (about 2,000 characters) and answers a few reads; the
+  // answer call carries four tables of about ten rows each (about 4,000
+  // characters) and answers three to five insights as JSON.
+  'job.insight': { inputTokens: 2_800, outputTokens: 650, cacheReadTokens: 0, cacheWriteTokens: 0 },
   // The email step, and the campaign step that shares its generation: the
   // doctrine, the email instructions, the email palette catalog and the
   // tool's schema (about 10,300 characters) are the cached prefix, the site
@@ -151,6 +173,13 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // node map with three subject lines and three preheaders.
   'job.email': { inputTokens: 600, outputTokens: 1_500, cacheReadTokens: 3_600, cacheWriteTokens: 0 },
   'job.campaign': { inputTokens: 600, outputTokens: 1_500, cacheReadTokens: 3_600, cacheWriteTokens: 0 },
+  // The workflow step's draft (AGL-2919): the doctrine, the automation
+  // vocabulary and the tool's schema are the cached prefix (4,564 tokens, as
+  // `runtime/ai-prompt-cache.spec.ts` measures it); what the workspace can
+  // run, the site's forms and datasets and the description ride uncached; and
+  // an automation of a few steps is about 1,300 characters of JSON with as
+  // much again to think in. An explanation caches half as much.
+  'job.workflow': { inputTokens: 500, outputTokens: 1_000, cacheReadTokens: 4_500, cacheWriteTokens: 0 },
 }
 
 /** The fewest measured exchanges a median is taken over. */

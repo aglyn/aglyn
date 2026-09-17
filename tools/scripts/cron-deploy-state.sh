@@ -82,6 +82,9 @@ route_impl() {
     /api/lists/materialize)
       printf '%s' 'libs/plugins/marketing/src/lib/server/lists-materialize.ts'
       ;;
+    /api/admin/ai-insights-digest)
+      printf '%s' 'libs/plugins/ai/src/lib/server/ai-insight-digest-route.ts'
+      ;;
     /api/*)
       printf 'apps/console/app%s/route.ts' "$bare"
       ;;

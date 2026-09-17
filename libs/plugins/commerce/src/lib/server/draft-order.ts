@@ -125,6 +125,11 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       ? product.variants.find((item) => item.id === variantId)
       : product.variants[0]
     if (!variant) return res.status(404).json({ error: 'Unknown variant' })
+    // A variant with no price yet (AGL-2916) cannot be invoiced: the link
+    // would ask for nothing, or for no amount at all.
+    if (!CommerceModel.variantHasPrice(variant)) {
+      return res.status(400).json({ error: `Set a price for ${product.name} before selling it.` })
+    }
 
     // Merchant account like the storefront checkout (AGL-284).
     const ownerOrg = await getOrgForHost(hostId)

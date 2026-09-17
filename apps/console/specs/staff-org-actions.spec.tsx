@@ -112,6 +112,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({ confirm: mockConfirm }),
 }))
 
+import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn'
 import StaffOrgActions from '../components/staff-org-actions.component'
 
 const org = (over: Record<string, unknown> = {}) => ({
@@ -502,7 +503,8 @@ describe('StaffOrgActions (AGL-939)', () => {
       fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Comp plan' }))
       fireEvent.click(await screen.findByRole('option', { name: 'Pro' }))
       const body = await save(dialog)
-      expect(body.comp).toEqual({ plan: 'pro' })
+      // Capped unless staff choose otherwise, and said so on the wire (AGL-3049).
+      expect(body.comp).toEqual({ plan: 'pro', uncapped: false })
       expect(body.plan).toBe('pro')
     })
 
@@ -585,6 +587,143 @@ describe('StaffOrgActions (AGL-939)', () => {
           expect.objectContaining({ variant: 'success', persist: true }),
         ),
       )
+    })
+  })
+
+  /**
+   * UNCAPPED OR CAPPED (AGL-3049). The first case walks an internal
+   * workspace's path through this dialog: Enterprise stored directly, no
+   * subscription, an Enterprise comp chosen and its caps lifted. The rest pin
+   * what the dialog says about the bands a comp caps, and that the flag goes
+   * over the wire only as a boolean and only when it changes.
+   */
+  describe('a comp can be uncapped, or raised band by band (AGL-3049)', () => {
+    const openOverride = async (orgDoc: Record<string, unknown>) => {
+      render(<StaffOrgActions org={org(orgDoc)} onChanged={jest.fn()} />)
+      fireEvent.click(screen.getByText('Override'))
+      const dialog = screen.getByRole('dialog')
+      fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Reason' }))
+      fireEvent.click(await screen.findByRole('option', { name: 'Other — say what, below' }))
+      fireEvent.change(within(dialog).getByLabelText('Note (required for "other")'), {
+        target: { value: 'Internal workspace' },
+      })
+      return dialog
+    }
+    const save = async (dialog: HTMLElement) => {
+      fireEvent.click(within(dialog).getByText('Save (audited)'))
+      await waitFor(() => expect(overrideRequests().length).toBe(1))
+      return overrideRequests()[0].body
+    }
+    const placeholder = (dialog: HTMLElement, label: string) =>
+      (within(dialog).getByLabelText(label) as HTMLInputElement).placeholder
+    /** aglyn-org before it is comped. */
+    const INTERNAL = { plan: 'enterprise', enterprise: true }
+    const UNCAPPED = {
+      plan: 'enterprise',
+      uncapped: true,
+      reason: 'other',
+      note: 'Internal workspace',
+      grantedBy: 'staff-0',
+      grantedAt: '2026-09-17T12:00:00.000Z',
+    }
+
+    it('comps the internal workspace as uncapped Enterprise: two plain choices, and a boolean on the wire', async () => {
+      const dialog = await openOverride(INTERNAL)
+      // No comp yet, so no caps to choose.
+      expect(within(dialog).queryByRole('radiogroup', { name: 'Comp caps' })).toBeNull()
+
+      fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Comp plan' }))
+      fireEvent.click(await screen.findByRole('option', { name: 'Enterprise' }))
+      const caps = within(dialog).getByRole('radiogroup', { name: 'Comp caps' })
+      const capped = within(caps).getByRole('radio', { name: /^Capped — every band is a hard limit/ })
+      const uncapped = within(caps).getByRole('radio', { name: /^Uncapped — no band or quota limits at all/ })
+      // Capped is the default, and the dialog says which bands it caps and
+      // how to raise one.
+      expect((capped as HTMLInputElement).checked).toBe(true)
+      expect(dialog.textContent).toMatch(
+        /This comp caps every band below at the figure its empty field shows.*type a higher figure into it — that figure becomes its hard limit/,
+      )
+      expect(placeholder(dialog, 'Sites')).toBe(String(PLAN_ENTITLEMENTS.enterprise.hostLimit))
+
+      fireEvent.click(uncapped)
+      expect((uncapped as HTMLInputElement).checked).toBe(true)
+      expect(dialog.textContent).toMatch(/This comp is uncapped: every band below reads as unlimited/)
+      // Every band reads ∞; a fee is a price and keeps its figure.
+      expect(placeholder(dialog, 'Sites')).toBe('∞')
+      expect(placeholder(dialog, 'CRM records')).toBe('∞')
+      expect(placeholder(dialog, 'Marketplace fee %')).toBe(
+        String(PLAN_ENTITLEMENTS.enterprise.marketplaceFeePct),
+      )
+
+      const body = await save(dialog)
+      expect(body.comp).toEqual({ plan: 'enterprise', uncapped: true })
+      expect(body.comp.uncapped).toBe(true)
+      // The stored plan goes back as it was read.
+      expect(body.plan).toBe('enterprise')
+      expect(body.reason).toBe('other')
+      expect(body.note).toBe('Internal workspace')
+    })
+
+    it('names a standing uncapped comp as uncapped, and an untouched save sends no comp', async () => {
+      const dialog = await openOverride({ ...INTERNAL, entitlements: { planComp: UNCAPPED } })
+      expect(within(dialog).getByText('Comp: Enterprise (uncapped)')).toBeTruthy()
+      expect(within(dialog).getByRole('alert').textContent).toMatch(
+        /Enterprise is in force as an uncapped staff comp.*every band and quota reads as unlimited/,
+      )
+      expect(
+        (within(dialog).getByRole('radio', { name: /^Uncapped/ }) as HTMLInputElement).checked,
+      ).toBe(true)
+      expect(
+        within(dialog).getByLabelText(/Remove the uncapped Enterprise comp on save/),
+      ).toBeTruthy()
+      const body = await save(dialog)
+      expect(body).not.toHaveProperty('comp')
+    })
+
+    it('restores the caps of a standing uncapped comp when Capped is chosen', async () => {
+      const dialog = await openOverride({ ...INTERNAL, entitlements: { planComp: UNCAPPED } })
+      fireEvent.click(within(dialog).getByRole('radio', { name: /^Capped/ }))
+      const body = await save(dialog)
+      expect(body.comp).toEqual({ plan: 'enterprise', uncapped: false })
+    })
+
+    it('raises one band of a capped comp with a quota override, and sends no comp', async () => {
+      const dialog = await openOverride({
+        plan: 'pro',
+        billingStatus: 'canceled',
+        entitlements: {
+          planComp: { ...UNCAPPED, plan: 'pro', uncapped: false },
+        },
+      })
+      expect(within(dialog).getByText('Comp: Pro')).toBeTruthy()
+      expect(placeholder(dialog, 'CRM records')).toBe(String(PLAN_ENTITLEMENTS.pro.contactsPerHost))
+      fireEvent.change(within(dialog).getByLabelText('CRM records'), {
+        target: { value: String(PLAN_ENTITLEMENTS.pro.contactsPerHost * 2) },
+      })
+      const body = await save(dialog)
+      expect(body.quotas).toEqual({ contactsPerHost: PLAN_ENTITLEMENTS.pro.contactsPerHost * 2 })
+      expect(body).not.toHaveProperty('comp')
+    })
+
+    it('a dormant uncapped comp under a live subscription is named so, and offers no caps', async () => {
+      const dialog = await openOverride({
+        plan: 'pro',
+        billingStatus: 'active',
+        entitlements: { planComp: { ...UNCAPPED, plan: 'agency' } },
+      })
+      expect(within(dialog).getByText('Comp: Agency (uncapped, dormant)')).toBeTruthy()
+      expect(within(dialog).queryByRole('radiogroup', { name: 'Comp caps' })).toBeNull()
+      expect(within(dialog).getByRole('alert').textContent).toMatch(
+        /An uncapped Agency comp is stored and dormant/,
+      )
+    })
+
+    it('hides the caps once the comp is set to be removed', async () => {
+      const dialog = await openOverride({ ...INTERNAL, entitlements: { planComp: UNCAPPED } })
+      fireEvent.click(within(dialog).getByLabelText(/Remove the uncapped Enterprise comp on save/))
+      expect(within(dialog).queryByRole('radiogroup', { name: 'Comp caps' })).toBeNull()
+      const body = await save(dialog)
+      expect(body.comp).toBeNull()
     })
   })
 

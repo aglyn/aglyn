@@ -2349,6 +2349,19 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Erases workspaces whose sole owner never confirmed an email address, releasing the workspace address they took, and promotes the held address of every owner who has since verified. If it stops, a name claimed with a throwaway inbox is held until its reservation expires — and, worse, a real customer who verified keeps a pending address that becomes claimable by anyone on day twenty-one.',
   },
   {
+    id: 'ai-insights-digest',
+    label: 'Weekly insights',
+    // 06:00 and 14:00 every day (AGL-2915): Monday's first run makes the
+    // week's digests and every run after it delivers the ones the AI jobs beat
+    // has written. Served by the AI plugin.
+    cron: '0 6,14 * * *',
+    runner: 'cloud-scheduler',
+    target: '/api/admin/ai-insights-digest',
+    graceMinutes: 90,
+    drives:
+      'Each Monday, makes the weekly insights people asked for, and delivers them once they are written. If it stops, nobody who asked is sent their insights, and a digest parked for credits is never given up.',
+  },
+  {
     id: 'usage-email',
     label: 'Monthly usage summaries',
     // Hourly across the FIRST TWO DAYS only (AGL-2409). The idle-period case

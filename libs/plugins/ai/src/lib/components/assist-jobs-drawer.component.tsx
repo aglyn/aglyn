@@ -40,7 +40,9 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { AiInsightSurface } from '../model/ai-insight'
 import { AiPageBriefDialog } from './ai-page-brief-dialog.component'
+import { AiInsightDialog } from './ai-insight-dialog.component'
 import { AiJobPlan } from './ai-job-plan.component'
 
 /**
@@ -124,7 +126,9 @@ export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | 
     return `/${orgSlug}/hosts/${host}/products`
   }
   if (output.resource === 'workflow') {
-    return `/${orgSlug}/hosts/${host}/automation?tab=workflows`
+    // A drafted automation is an action (AGL-2919), listed switched off on
+    // the Automation page's Actions.
+    return `${buildRoute(Route.HOST_AUTOMATION, { orgSlug, host })}/actions`
   }
   if (output.resource === 'theme') {
     return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
@@ -194,6 +198,12 @@ export interface AssistJobsDrawerProps {
   visible: boolean
   /** The site the console page is on, when it is on one: a page is described for a site. */
   hostId?: string | null
+  /**
+   * The page's insight surface (AGL-2915) — a site's Analytics, Data or CRM
+   * Reports page, or the workspace's Data page — with the site's subdomain;
+   * `null` elsewhere, where no question about the figures is offered.
+   */
+  insight?: { surface: Exclude<AiInsightSurface, 'digest'>; host: string | null } | null
 }
 
 export function AssistJobsDrawer({
@@ -204,6 +214,7 @@ export function AssistJobsDrawer({
   user,
   visible,
   hostId,
+  insight,
 }: AssistJobsDrawerProps): JSX.Element | null {
   const entitled = orgReady && checkEntitlement(org as never, 'aiGenerative')
   const [expanded, setExpanded] = useState(false)
@@ -212,6 +223,11 @@ export function AssistJobsDrawer({
   const [notice, setNotice] = useState<string | null>(null)
   /** Whether the page brief dialog is open (AGL-2907). */
   const [describing, setDescribing] = useState(false)
+  /**
+   * The insight dialog (AGL-2915): `'ask'` for a new question, a job id for an
+   * answer a job already wrote, `null` when closed.
+   */
+  const [insightOpen, setInsightOpen] = useState<string | null>(null)
   /** Job ids whose terminal event has been tracked, so a re-read does not count twice. */
   const trackedRef = useRef(new Set<string>())
   /** The job whose stream is open, so a re-render does not open a second. */
@@ -397,6 +413,12 @@ export function AssistJobsDrawer({
             <Chip size="small" color="primary" label={`${active} running`} sx={{ ml: 1 }} />
           )}
         </Typography>
+        {/* A question about the page's figures (AGL-2915). */}
+        {insight && (
+          <Button size="small" onClick={() => setInsightOpen('ask')}>
+            Ask about your numbers
+          </Button>
+        )}
         {/* A page from a brief (AGL-2907), on a site's own routes. */}
         {hostId && (
           <Button size="small" onClick={() => setDescribing(true)}>
@@ -469,7 +491,11 @@ export function AssistJobsDrawer({
                   const navigation = aiJobNavigationProposal(output)
                   return (
                     <Box key={`${output.resource}:${output.id}:${index}`} sx={{ mt: 0.5 }}>
-                      {href ? (
+                      {output.resource === 'insight' ? (
+                        <Button size="small" onClick={() => setInsightOpen(output.id)}>
+                          View answer
+                        </Button>
+                      ) : href ? (
                         <AppLink componentVariant="naked" href={href}>
                           Open draft — {output.label}
                         </AppLink>
@@ -519,6 +545,23 @@ export function AssistJobsDrawer({
         below it is the only place the job is watched, so an open list reads
         the new job back as soon as the dialog hands it over.
       */}
+      {insightOpen !== null && (
+        <AiInsightDialog
+          open
+          onClose={() => {
+            setInsightOpen(null)
+            if (expanded) void load()
+          }}
+          orgId={orgId}
+          orgSlug={orgSlug}
+          hostId={insight?.host ? (hostId ?? null) : null}
+          host={insight?.host ?? null}
+          surface={insight?.surface ?? 'analytics'}
+          user={user}
+          uid={(user as { uid?: string } | null | undefined)?.uid ?? null}
+          jobId={insightOpen === 'ask' ? null : insightOpen}
+        />
+      )}
       {hostId && (
         <AiPageBriefDialog
           open={describing}

@@ -31,6 +31,7 @@ import {
 } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -40,7 +41,6 @@ import {
   Button,
   Chip,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -262,55 +262,53 @@ export function ThemeOverridesCard(props: {
                 'published theme. Taking an update keeps these and applies ' +
                 'the rest.'}
             </Typography>
-            <Box sx={{ overflowX: 'auto' }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>{'What'}</TableCell>
-                    <TableCell>{'Theme'}</TableCell>
-                    <TableCell>{'Yours'}</TableCell>
-                    <TableCell align="right" />
+            <ScrollTable size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>{'What'}</TableCell>
+                  <TableCell>{'Theme'}</TableCell>
+                  <TableCell>{'Yours'}</TableCell>
+                  <TableCell align="right" />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {entries.map((entry) => (
+                  <TableRow key={entry.path}>
+                    <TableCell>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        <Typography variant="body2">{entry.label}</Typography>
+                        {entry.scheme ? (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={entry.scheme}
+                          />
+                        ) : null}
+                      </Stack>
+                    </TableCell>
+                    <TableCell>
+                      <ValueCell value={entry.themeValue} />
+                    </TableCell>
+                    <TableCell>
+                      <ValueCell value={entry.overrideValue} />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Button
+                        size="small"
+                        disabled={busy}
+                        onClick={() => resetPath(entry)}
+                      >
+                        {'Reset'}
+                      </Button>
+                    </TableCell>
                   </TableRow>
-                </TableHead>
-                <TableBody>
-                  {entries.map((entry) => (
-                    <TableRow key={entry.path}>
-                      <TableCell>
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                        >
-                          <Typography variant="body2">{entry.label}</Typography>
-                          {entry.scheme ? (
-                            <Chip
-                              size="small"
-                              variant="outlined"
-                              label={entry.scheme}
-                            />
-                          ) : null}
-                        </Stack>
-                      </TableCell>
-                      <TableCell>
-                        <ValueCell value={entry.themeValue} />
-                      </TableCell>
-                      <TableCell>
-                        <ValueCell value={entry.overrideValue} />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Button
-                          size="small"
-                          disabled={busy}
-                          onClick={() => resetPath(entry)}
-                        >
-                          {'Reset'}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Box>
+                ))}
+              </TableBody>
+            </ScrollTable>
             <Box>
               <Button
                 size="small"

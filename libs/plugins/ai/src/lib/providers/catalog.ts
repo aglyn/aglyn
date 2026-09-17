@@ -174,22 +174,29 @@ export const AI_CATALOG_PROVIDERS: readonly AiCatalogProvider[] = [
       entity: 'Anthropic, PBC',
       region: 'United States',
       purpose:
-        "AI-assisted features in the console and the site editor: the Aglyn Assist helper, including changes it proposes to a page, component, or layout open in the editor; editor assistance (rewriting element copy, drafting blog bodies, generating a section layout); and AI generation, which creates drafts and proposals for a customer's site from a brief, such as copy, layouts, templates, search titles and descriptions, and theme changes",
-      publishedOn: '2026-09-15',
+        "AI-assisted features in the console and the site editor: the Aglyn Assist helper, including changes it proposes to a page, component, or layout open in the editor; editor assistance (rewriting element copy, drafting blog bodies, generating a section layout); and AI generation, which creates drafts and proposals for a customer's site from a brief or from what the site already holds, such as copy, layouts, templates, automations, search titles and descriptions, theme changes, product descriptions and tags, draft products, and store categories and discounts; explanations of a site's automations, including why an automation's run failed; AI insights, which answer a customer's questions about its own figures, such as site traffic, sales, bookings, forms, campaigns, A/B tests and datasets, and write a weekly summary of them for members who ask for one; and AI assistance in the CRM, which summarizes a contact, company, deal or lead for a user and suggests a next step, drafts a one-to-one email for the user to review and send, and suggests how the columns of a spreadsheet the user imports match CRM fields",
+      publishedOn: '2026-09-17',
       reason:
         "Reached through the AI plugin's Anthropic adapter (`libs/plugins/ai/src/lib/providers/anthropic.ts`) by the doors that call the AI runtime. `libs/plugins/ai/src/lib/server/assist-chat.ts` is gated by `release_assist` AND the key, and a generation job's text step by `release_ai_generative`; `libs/plugins/ai/src/lib/server/ai-assist.ts` carries NO release flag, so setting `{apiKeyEnv}` in production is by itself what starts this flow. `assist-anthropic-subprocessor-gate.spec.ts` holds the per-door detail and is the deeper guard for this one vendor.",
       dataReceived:
-        "What the user submits — a question, instruction or brief, with the earlier messages of the same Assist conversation — and the content of the element, post, section or page being worked on, with the generated response. On Pro and above, the organization's name and the console route and host travel with an Assist question. For an edit the assistant proposes in the besigner, an outline of the open page, component or layout: element and component ids, layer names, shortened setting values and the selected element's styles. For a generation job, the site inventory: the names and addresses of its screens and collections, the names of its components, layouts, templates, forms and datasets with their prop and field names, and the theme's summary, colors and fonts. For a theme change, the site's current theme settings and brand colors as hex values, from the organization's brand settings, the site logo in the media library or a public page the brief links to. For features that review or write search information, the text and structure of the pages concerned. No account identifiers, email addresses or authentication tokens.",
+        "What the user submits — a question, instruction or brief, with the earlier messages of the same Assist conversation — and the content of the element, post, section or page being worked on, with the generated response. On Pro and above, the organization's name and the console route and host travel with an Assist question. For an edit the assistant proposes in the besigner, an outline of the open page, component or layout: element and component ids, layer names, shortened setting values and the selected element's styles. For a generation job, the site inventory: the names and addresses of its screens and collections, the names of its components, layouts, templates, forms and datasets with their prop and field names, and the theme's summary, colors and fonts. For a theme change, the site's current theme settings and brand colors as hex values, from the organization's brand settings, the site logo in the media library or a public page the brief links to. For features that review or write search information, the text and structure of the pages concerned. For product copy, the store's name, the product's name, type, description, tags, options and search listing, the store's category names, and the product's first media-library photo as a copy at most 768 px on its longer edge with its metadata stripped; never another media file, a price, stock, an order or a customer. For products, categories and discounts proposed from a brief, the store's name and its existing category names. For an automation drafted from a brief, which of CRM, webhooks and bookings the plan includes; for an explanation, the automation's outline (trigger, conditions, each step's text with the names of the lists, campaigns, workflows, webhooks and datasets it uses and whether each exists, and a workflow's function names and expressions) and, for a failed run, its time, steps and recorded errors, with email addresses removed and never the triggering event's data. For an insight, the figure reports available and aggregate tables: traffic with top page paths, referrers and campaign tags; form views and submissions; revenue, orders and best-selling product names; bookings by service; campaign subjects with delivery, open and click rates; A/B test and variant conversions; and, for a dataset the member can see, field names and types, record and fill counts, number ranges and totals grouped by a value at least three records share. Email addresses and phone numbers are removed, and no individual record is sent. For CRM assistance, the opened contact, company, deal or lead as the CRM shows it: its name and, by kind, job title, company, lifecycle stage, tags, capture history and counts, domain, industry, headcount, pipeline stages, status, amount, dates, lost reason, parties and lead status, with its notes, newest timeline entries and open tasks and deals. Email addresses and phone numbers in that text are replaced, and no email, phone or postal field, marketing consent, custom field value, team member or record id is sent. An email draft adds the request and the record's merge field names; an import sends the field names and types and each column's header and value kind, never a row. No account identifiers, email addresses or authentication tokens.",
     },
   },
   { id: OPENAI_COMPATIBLE, label: 'OpenAI-compatible endpoint' },
 ]
 
+/**
+ * `vision` is written on every row rather than assumed (AGL-2916): each model
+ * below reads a picture in a user turn, in the four formats
+ * `AI_IMAGE_MEDIA_TYPES` names, as its vendor documents. A row added without
+ * it reads as a model that does not, and is never sent one.
+ */
 const anthropicCapabilities = {
   streaming: true,
   tools: true,
   thinking: true,
   promptCache: true,
+  vision: true,
 }
 
 export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
@@ -269,7 +276,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     id: 'gpt-5',
     provider: OPENAI_COMPATIBLE,
     label: 'GPT-5',
-    capabilities: { streaming: true, tools: true, thinking: false, promptCache: true },
+    capabilities: { streaming: true, tools: true, thinking: false, promptCache: true, vision: true },
     ...aiRatesAtList(1.25, 10),
     tier: 'balanced',
     cacheMinTokens: 1_024,
@@ -278,7 +285,7 @@ export const AI_MODEL_CATALOG: readonly AiCatalogEntry[] = [
     id: 'gpt-5-mini',
     provider: OPENAI_COMPATIBLE,
     label: 'GPT-5 mini',
-    capabilities: { streaming: true, tools: true, thinking: false, promptCache: true },
+    capabilities: { streaming: true, tools: true, thinking: false, promptCache: true, vision: true },
     ...aiRatesAtList(0.25, 2),
     tier: 'fast',
     cacheMinTokens: 1_024,
@@ -384,16 +391,20 @@ export type AiStepKind =
   | 'copy.blog'
   | 'generate.section'
   | 'job.component'
+  | 'job.crm'
   | 'job.form'
+  | 'job.insight'
   | 'job.layout'
   | 'job.template'
   | 'job.page'
+  | 'job.products'
   | 'job.seo'
   | 'job.text'
   | 'job.theme'
   | 'job.plan'
   | 'job.email'
   | 'job.campaign'
+  | 'job.workflow'
 
 /** The tier each step kind is served from when no setting overrides it. */
 export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
@@ -405,9 +416,18 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   // A reusable component is one structured tree with the typed props it
   // declares, and choosing what becomes a prop is the judgment the step sells.
   'job.component': 'balanced',
+  // CRM by AI (AGL-2917): a record's summary and next step, a deal's stage, a
+  // lead's standing, a one-to-one email draft and an import's column matches.
+  // Short answers through a strict tool, held to the facts the CRM reports
+  // about the record the member opened.
+  'job.crm': 'fast',
   // A form is one small tree held to the building rules and to the contract
   // its submissions are read by; a re-ask costs more than the tier saves.
   'job.form': 'balanced',
+  // An insight (AGL-2915) chooses which figures answer a question and says
+  // what they show; the trace holds every number, and the judgment of what is
+  // worth saying is what the fast tier does worse.
+  'job.insight': 'balanced',
   // A layout or a page template is one structured tree held to every
   // building rule; the fast tier re-asks more than it saves.
   'job.layout': 'balanced',
@@ -415,6 +435,11 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   // A page section (AGL-2907) is held to the whole page's building rules on
   // every pass, for the same reason.
   'job.page': 'balanced',
+  // A product's copy, a store's first products, or its categories and
+  // discounts (AGL-2916): judgment about what a photo shows and what a shopper
+  // needs, held to storefront claim rules a re-ask costs more to meet than the
+  // tier saves.
+  'job.products': 'balanced',
   // SEO fields, alt text and an audit's fixes (AGL-2910): short answers
   // through a strict tool, held to a length and to the page's own text.
   'job.seo': 'fast',
@@ -428,6 +453,10 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   // saves. A campaign is the same email, drafted into a campaign.
   'job.email': 'balanced',
   'job.campaign': 'balanced',
+  // An automation is a small structured answer whose judgment is choosing the
+  // trigger and steps a description means, and an explanation reads one
+  // closely; the fast tier re-asks more than it saves on both (AGL-2919).
+  'job.workflow': 'balanced',
 }
 
 /** The first catalog model of a tier on a provider, or the provider's first model. */

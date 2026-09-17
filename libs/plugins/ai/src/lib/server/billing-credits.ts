@@ -20,6 +20,7 @@ import {
   publicAssistCredits,
   resolveAssistBudgetUsd,
 } from '@aglyn/aglyn/app-utils/assist-credits'
+import { isUncappedPlanComp } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -56,8 +57,16 @@ import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token
  * dollar figure crosses this boundary.
  *
  * `credits: null` is the honest answer for a plan that sells no assist band —
- * Free and Starter. It is not "0 of 0"; there is no band to be a fraction of,
- * and the page renders no meter rather than an empty one.
+ * Starter without the AI add-on. It is not "0 of 0"; there is no band to be a
+ * fraction of, and the page renders no meter rather than an empty one.
+ *
+ * An UNCAPPED staff comp (AGL-3049) has no band either, but it has a meter:
+ * the workspace draws credits with no limit to draw them against. It answers
+ * `credits: { used, limit: null, remaining: null }` and `unlimited: true`.
+ * `null` is the band's absence on the wire — never `Infinity`, which
+ * `JSON.stringify` would turn into a `null` nobody chose — and the flag says
+ * which absence it is, so a reader that turns `null` into a number cannot
+ * mistake an unlimited workspace for one with a band of zero.
  *
  * Membership alone, not `billing.manage`: this is a capacity readout of the
  * kind every other meter on the page shows to anyone who can see the page, and
@@ -95,8 +104,10 @@ async function handler(request: Request): Promise<Response> {
     if (!orgSnapshot.exists) {
       return Response.json({ error: 'Unknown organization' }, { status: 404 })
     }
-    const budgetUsd = resolveAssistBudgetUsd(orgSnapshot.data() as never)
-    if (budgetUsd === null) return Response.json({ credits: null })
+    const org = orgSnapshot.data() as never
+    const budgetUsd = resolveAssistBudgetUsd(org)
+    const unlimited = budgetUsd === null && isUncappedPlanComp(org)
+    if (budgetUsd === null && !unlimited) return Response.json({ credits: null })
     const month = new Date().toISOString().slice(0, 7)
     const usage = await orgRef.collection('assistUsage').doc(month).get()
     const costUsd = Number(usage.get('estCostUsd') ?? 0)
@@ -105,6 +116,7 @@ async function handler(request: Request): Promise<Response> {
         Number.isFinite(costUsd) && costUsd > 0 ? costUsd : 0,
         budgetUsd,
       ),
+      ...(unlimited ? { unlimited: true } : {}),
     })
   } catch (error) {
     // A refused credential is a 401, not a fault of ours (AGL-1993). Null

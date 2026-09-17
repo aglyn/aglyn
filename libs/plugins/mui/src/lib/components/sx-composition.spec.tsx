@@ -29,6 +29,7 @@
  * must legitimately win.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import CustomHtml from './custom-html'
 import Icon from './icon'
 import PluginFrame from './plugin-frame'
@@ -39,32 +40,49 @@ import { render } from '@testing-library/react'
 const styled = (container: HTMLElement, selector: string): CSSStyleDeclaration =>
   getComputedStyle(container.querySelector(selector) as HTMLElement)
 
+/**
+ * Placeholders are drawn on editing surfaces only (AGL-3067), so the cases
+ * below render on one — without it they would be asserting the bare element a
+ * published page gets, and pass for the wrong reason.
+ */
+const editing = (element: JSX.Element) =>
+  render(
+    <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+      {element}
+    </Aglyn.ScreenLinkContext.Provider>,
+  )
+
 describe('authored sx survives the component literal (AGL-1240/1284)', () => {
   it('Custom HTML placeholder: the author overrides the dashed frame', () => {
     // Every empty-state placeholder in the plugin components had this shape.
-    const { container } = render(
+    const { container } = editing(
       <CustomHtml sx={{ padding: '40px', borderRadius: '12px' }} />,
     )
     const box = styled(container, '.MuiBox-root')
     expect(box.padding).toBe('40px')
     expect(box.borderRadius).toBe('12px')
+    expect(box.borderStyle).toBe('dashed')
   })
 
   it('Custom HTML placeholder: unstyled nodes keep the default look', () => {
     // The merge must not change what an author who set nothing sees.
-    const { container } = render(<CustomHtml />)
+    const { container } = editing(<CustomHtml />)
     const box = styled(container, '.MuiBox-root')
     expect(box.borderStyle).toBe('dashed')
   })
 
   it('Icon placeholder: the author overrides the 48px box', () => {
-    const { container } = render(<Icon sx={{ width: '96px' }} />)
-    expect(styled(container, '.MuiBox-root').width).toBe('96px')
+    const { container } = editing(<Icon sx={{ width: '96px' }} />)
+    const box = styled(container, '.MuiBox-root')
+    expect(box.width).toBe('96px')
+    expect(box.borderStyle).toBe('dashed')
   })
 
   it('Video placeholder: the author overrides the fallback height', () => {
-    const { container } = render(<Video sx={{ height: '400px' }} />)
-    expect(styled(container, '.MuiBox-root').height).toBe('400px')
+    const { container } = editing(<Video sx={{ height: '400px' }} />)
+    const box = styled(container, '.MuiBox-root')
+    expect(box.height).toBe('400px')
+    expect(box.borderStyle).toBe('dashed')
   })
 
   it('Plugin Frame: the author styles the frame itself', () => {

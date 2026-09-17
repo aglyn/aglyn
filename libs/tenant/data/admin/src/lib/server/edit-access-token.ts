@@ -26,19 +26,22 @@ import { tokenSigningSecret } from './media-signing'
  * The console session lives first-party on app.aglyn.com; published sites
  * live on aglyn.app subdomains and customer domains, and with third-party
  * cookies gone an embedded console frame cannot see its own session. So the
- * console VERIFIES edit access server-side (the same host `memberRoles`
- * admin/editor or org-role-above-viewer gate the presence broker applies for
- * co-editing) and bakes the verdict into a short-lived token the tenant can
- * check without asking anyone: `{hostId, uid, exp}` HMAC-signed with the
- * shared, fail-closed `TOKEN_SIGNING_SECRET` (docs/COMMERCE_TOKEN_SIGNING.md)
- * — already provisioned on both the console and tenant projects, which is the
- * whole reason to reuse it rather than mint a second secret to keep in step.
+ * console VERIFIES edit access server-side (the same host-scoped gate the
+ * presence broker applies for co-editing: a role on this host that may write
+ * content, or an org-wide role above viewer) and bakes the verdict into a
+ * short-lived token the tenant can check without asking anyone:
+ * `{hostId, uid, exp}` HMAC-signed with the shared, fail-closed
+ * `TOKEN_SIGNING_SECRET` (docs/COMMERCE_TOKEN_SIGNING.md) — already
+ * provisioned on both the console and tenant projects, which is the whole
+ * reason to reuse it rather than mint a second secret to keep in step.
  *
  * Deliberately NOT an auth system: the token grants nothing but the admin
- * bar's convenience UI plus a read of routing facts the page HTML already
- * carries. It is scoped to ONE host, expires in {@link
- * EDIT_ACCESS_TOKEN_TTL_MS}, and revocation is the `release_edit_bar` flag —
- * flipping it off makes every outstanding token useless at the verify site.
+ * bar's convenience UI, a read of routing facts the page HTML already
+ * carries, and the site's page-view counts for today, which are not public —
+ * the reason the mint must scope to the host. It is scoped to ONE host,
+ * expires in {@link EDIT_ACCESS_TOKEN_TTL_MS}, and revocation is the
+ * `release_edit_bar` flag — flipping it off makes every outstanding token
+ * useless at the verify site.
  * The `edit-bar:` context string domain-separates the signature so a token
  * minted here can never replay as a media or commerce signature (they share
  * the secret, so the namespace is the isolation).
@@ -73,10 +76,12 @@ export interface MintedEditAccessToken {
 }
 
 /**
- * Mints a token asserting "this uid may edit this host, until exp". Only the
- * console's `/api/edit-access/token` route calls this, AFTER verifying the
- * caller's Firebase ID token and membership — the mint itself checks nothing,
- * which is why it must never be reachable from unverified input.
+ * Mints a token asserting "this uid may edit this host, until exp". Two
+ * routes call this, each only AFTER proving who the caller is and passing the
+ * shared `editAccessMintRefusal` gate: the console's `/api/edit-access/token`
+ * (a verified Firebase ID token) and the tenant's `/api/edit-access/exchange`
+ * (a verified signed hint, AGL-1842). The mint itself checks nothing, which is
+ * why it must never be reachable from unverified input.
  */
 export function mintEditAccessToken(
   hostId: string,

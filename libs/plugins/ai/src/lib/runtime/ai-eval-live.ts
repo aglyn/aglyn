@@ -22,12 +22,13 @@ import { createAiJobComponentStep } from '../jobs/ai-job-component-step'
 import { createAiJobFormStep } from '../jobs/ai-job-form-step'
 import { createAiJobLayoutStep } from '../jobs/ai-job-layout-step'
 import { aiPageJobUnits, createAiJobPageStep } from '../jobs/ai-job-page-step'
-import { createAiJobPlanStep } from '../jobs/ai-job-plan-step'
+import { AI_JOB_PLAN_SCOPES, createAiJobPlanStep } from '../jobs/ai-job-plan-step'
 import { aiSitePendingUnits } from '../jobs/ai-job-site-step'
 import type { AiJobStepOutcome } from '../jobs/ai-job-text-step'
 import { runAiJobTextStep } from '../jobs/ai-job-text-step'
 import { aiJobThemeCheck, aiJobThemeGeneration, aiJobThemeMode } from '../jobs/ai-job-theme-step'
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
+import { aiPlanCapabilitiesForJob, aiPlanCapabilityLines } from '../model/ai-plan-capabilities'
 import { aiDefaultModelFor, type AiStepKind } from '../providers/catalog'
 import type { AiProvider, AiSystemBlock, AiTool, AiUsage } from '../providers/contract'
 import { aiModelForStep, resolveAiProvider } from '../providers/routing'
@@ -525,14 +526,57 @@ export const AI_EVAL_PLAN_GRADER_NOTE =
   'descriptions, and the names and rationales of what it creates. Do not mark a plan down for anything a plan ' +
   'cannot hold.'
 
-/** The grader's user turn: the brief, its site, and the answer — copy as written, anything else as JSON. */
+/**
+ * What the grader of a case with capabilities is told beside them (AGL-3040).
+ *
+ * A case that describes its workspace had its plan told what that workspace
+ * may create, and a workspace that keeps no reusable components or saved
+ * forms builds the only way it can: the repeated item drawn where it repeats,
+ * the form carried by the page. A grader told none of that grades the doctrine
+ * whole, and marks reuse down for exactly the build the workspace required,
+ * as it marked down the first live recording of the Free brief.
+ */
+export const AI_EVAL_CAPABILITIES_GRADER_NOTE =
+  'Grade reuse against what this workspace may create, as listed above: never mark an output down for not creating what the workspace may not make.'
+
+/**
+ * Beside that, where the workspace keeps no reusable components or saved
+ * forms, which the capability lines have already said.
+ */
+export const AI_EVAL_INLINE_GRADER_NOTE =
+  'On this workspace, a repeated item drawn in its own section and a form drawn on the page, as a Form element holding its Form Fields, are the correct build and never a missed reuse.'
+
+/**
+ * The workspace a case describes, as its grader reads it: the capability
+ * lines the plan step was sent, narrowed to what the job builds the way the
+ * step narrows them, and the notes on grading against them. `null` for a
+ * case that describes no workspace, whose output is held to the doctrine
+ * whole.
+ */
+export function aiEvalGraderCapabilities(evalCase: AiEvalCase): string | null {
+  if (!evalCase.capabilities) return null
+  const scope = AI_JOB_PLAN_SCOPES[evalCase.kind as AiJob['kind']] ?? null
+  const capabilities = aiPlanCapabilitiesForJob(evalCase.capabilities, scope)
+  return [
+    ...aiPlanCapabilityLines(capabilities),
+    AI_EVAL_CAPABILITIES_GRADER_NOTE,
+    ...(capabilities.reusableComponents ? [] : [AI_EVAL_INLINE_GRADER_NOTE]),
+  ].join('\n')
+}
+
+/**
+ * The grader's user turn: the brief, its site, the workspace where the case
+ * describes one, and the answer — copy as written, anything else as JSON.
+ */
 export function aiEvalGraderPrompt(evalCase: AiEvalCase, answer: AiEvalRecordedAnswer): string {
   const output = answer.scope === 'plan' ? answer.plan : answer.answer
+  const workspace = aiEvalGraderCapabilities(evalCase)
   return [
     `Output kind: ${evalCase.kind}${answer.scope === 'plan' ? ' (its build plan)' : ''}`,
     ...(answer.scope === 'plan' ? [AI_EVAL_PLAN_GRADER_NOTE] : []),
     `Brief: ${evalCase.brief}`,
     aiSiteInventoryBlock(evalCase.inventory),
+    ...(workspace ? [workspace] : []),
     `Output:\n${typeof output === 'string' ? output : JSON.stringify(output)}`,
   ].join('\n\n')
 }

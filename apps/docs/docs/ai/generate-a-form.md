@@ -24,6 +24,16 @@ Aglyn AI build jobs are released gradually. This page applies to form jobs as th
 workspace.
 :::
 
+## Describe the form
+
+Open **Forms** for the site and choose **Describe it**, beside **Create Form**. Write what the
+form is for in one box: who fills it in, what you need to know from them and what should happen
+with each submission. Then choose **Plan the form**.
+
+The job proposes its [plan](./how-aglyn-ai-builds.md#the-plan-comes-first) before it builds
+anything. Open **AI jobs** in the Assist panel to read it, then choose **Confirm plan** to build
+the form, or cancel.
+
 ## What the form gets
 
 - **Fields** of the types a form supports: text, email, multiline, dropdown, radio choice,
@@ -46,7 +56,9 @@ workspace.
 A form collects text, choices and ratings. When your brief asks for something else, such as a
 file or photo upload, a signature or a payment, the form leaves it out and the job says so
 beside **Open draft**. For a roofing quote request that asks for photos of the damage, for
-example, the form asks for a written description of the damage instead.
+example, the form asks for a written description of the damage instead. The job also lists any
+fact the brief did not give that the form marks in square brackets, such as a label naming your
+studio, for you to fill in before the form goes on a page.
 
 ## Nothing is live until you place it
 

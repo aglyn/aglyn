@@ -53,10 +53,12 @@ const CONSOLE_ORIGIN =
  * Resolves the admin bar's edit context for the page being viewed (admin
  * edit bar, AGL-1302 follow-on).
  *
- * The caller presents the signed token the console's `/api/edit-access/token`
- * minted after verifying edit access first-party — this route trusts NOTHING
- * else about the client. It verifies the signature and expiry, re-checks the
- * release flag (the revocation lever for outstanding tokens), confirms the
+ * The caller presents a signed token minted after edit access was verified —
+ * by the console's `/api/edit-access/token` (popup or silent probe) or by this
+ * site's own `/api/edit-access/exchange` (AGL-1842) — and this route trusts
+ * NOTHING else about the client. It verifies the signature and expiry,
+ * re-checks the release flag (on for every site since AGL-3041, and still the
+ * revocation lever for outstanding tokens), confirms the
  * token's host actually answers to the domain the request arrived on, and
  * only then maps the current path through the host's routing map to the
  * screen serving it — the same `hosts.screens` map the page render uses,

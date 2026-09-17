@@ -65,13 +65,19 @@
 
 import {
   checkEntitlement,
+  checkQuota,
   isBillingSubscription,
+  isUncappedPlanComp,
   PLAN_ENTITLEMENTS,
   RELEASE_FLAGS,
   resolveEffectivePlan,
   resolveOrgEntitlements,
+  resolvePlanPricing,
 } from '@aglyn/aglyn/server'
-import { resolveAssistOverageRateUsdPer1k } from '@aglyn/aglyn/app-utils/assist-credits'
+import {
+  assistBandRefuses,
+  resolveAssistOverageRateUsdPer1k,
+} from '@aglyn/aglyn/app-utils/assist-credits'
 
 /** Orgs whose tenant pages the route asked to drop, in order (AGL-3034). */
 let mockRevalidatedOrgs: string[] = []
@@ -937,6 +943,8 @@ describe('a plan with no live subscription behind it is a comp (AGL-3034)', () =
     const write = onlyOrgWrite().data
     expect((write['entitlements'] as Record<string, any>)['planComp']).toEqual({
       plan: 'pro',
+      // Stated even when false (AGL-3049): the write is a merge.
+      uncapped: false,
       reason: 'beta',
       note: 'AGL-3024 live run',
       grantedBy: 'staff-1',
@@ -976,8 +984,13 @@ describe('a plan with no live subscription behind it is a comp (AGL-3034)', () =
     expect(row).toMatchObject({ action: 'org.override', reason: 'beta' })
     expect((row['after'] as any).entitlements.planComp).toMatchObject({ plan: 'pro' })
     expect(row['planEffect']).toEqual({
-      before: { effectivePlan: 'free', decidedBy: 'lapsed' },
-      after: { effectivePlan: 'pro', decidedBy: 'comp', compInForce: true },
+      before: { effectivePlan: 'free', decidedBy: 'lapsed', uncapped: false },
+      after: {
+        effectivePlan: 'pro',
+        decidedBy: 'comp',
+        compInForce: true,
+        uncapped: false,
+      },
       compChange: 'granted',
       planChange: 'unchanged',
     })
@@ -1212,5 +1225,308 @@ describe('a plan with no live subscription behind it is a comp (AGL-3034)', () =
     // usage sweep bills only what the plan's rates price.
     expect(resolveAssistOverageRateUsdPer1k(org)).toBeNull()
     expect(isBillingSubscription(org)).toBe(false)
+  })
+})
+
+/**
+ * AN UNCAPPED COMP (AGL-3049), from the route's side: the one writer of the
+ * flag, and every crossing it makes.
+ *
+ * The flag goes in as a JSON boolean (`post` stringifies the body), lands in
+ * the org document and the audit row as a boolean, and comes back out of the
+ * response as one — never as the `Infinity` the lifted bands resolve to,
+ * which JSON would turn into `null`. The store double merges nested maps key
+ * by key, as Firestore does, so the cases that replace an uncapped comp prove
+ * the flag cannot outlive the grant that set it.
+ */
+describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
+  /** aglyn-org's shape before it is comped: Enterprise stored directly, no subscription. */
+  const INTERNAL = () => ({
+    plan: 'enterprise',
+    enterprise: true,
+    entitlements: { contactsPerHost: 50 },
+  })
+  const UNCAPPED_ENTERPRISE = {
+    plan: 'enterprise',
+    uncapped: true,
+    reason: 'other',
+    note: 'Internal workspace',
+    grantedBy: 'staff-0',
+    grantedAt: 'then',
+  }
+  /** The dialog's request for aglyn-org: its override kept, the comp added. */
+  const internalBody = (over: Record<string, unknown> = {}) =>
+    validBody({
+      plan: 'enterprise',
+      quotas: { contactsPerHost: 50 },
+      reason: 'other',
+      note: 'Internal workspace',
+      comp: { plan: 'enterprise', uncapped: true },
+      ...over,
+    })
+
+  it('grants an uncapped Enterprise comp: a boolean on the document, the row and the response', async () => {
+    mockStore['orgs/org-1'] = INTERNAL()
+    const response = await post(internalBody())
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    const payload = JSON.parse(text)
+
+    // The document: the flag as a literal boolean, beside the grant.
+    const written = (onlyOrgWrite().data['entitlements'] as Record<string, any>)[
+      'planComp'
+    ]
+    expect(written).toEqual({
+      plan: 'enterprise',
+      uncapped: true,
+      reason: 'other',
+      note: 'Internal workspace',
+      grantedBy: 'staff-1',
+      grantedAt: SERVER_TIMESTAMP,
+    })
+    expect(storedOrg()['plan']).toBe('enterprise')
+
+    // It takes effect: no band refuses, nothing is sold, nothing is billed.
+    const org = storedOrg() as never
+    expect(isUncappedPlanComp(org)).toBe(true)
+    expect(resolveOrgEntitlements(org).contactsPerHost).toBe(Number.POSITIVE_INFINITY)
+    expect(resolveOrgEntitlements(org).hostLimit).toBe(Number.POSITIVE_INFINITY)
+    expect(checkQuota(org, 'hostLimit', 1_000_000).allowed).toBe(true)
+    expect(assistBandRefuses(org)).toBe(false)
+    expect(resolveAssistOverageRateUsdPer1k(org)).toBeNull()
+    expect(resolvePlanPricing(org).meteredInfraPassThrough).toBe(false)
+    expect(isBillingSubscription(org)).toBe(false)
+
+    // The response: booleans, and no band crosses it at all.
+    expect(payload.planEffect).toMatchObject({
+      effectivePlan: 'enterprise',
+      decidedBy: 'comp',
+      compInForce: true,
+      uncapped: true,
+      comp: { plan: 'enterprise', uncapped: true },
+      compChange: 'granted',
+      planChange: 'unchanged',
+      before: { effectivePlan: 'enterprise', decidedBy: 'stored-plan', uncapped: false },
+    })
+    expect(payload.after.entitlements.planComp).toMatchObject({ uncapped: true })
+    expect(text).not.toMatch(/Infinity|"uncapped":null/)
+    expect(payload.planEffect.summary).toMatch(
+      /^Uncapped Enterprise comp granted\. Enterprise is in force as an uncapped staff comp, because no subscription pays for this workspace\. It bills nothing, every band and quota reads as unlimited/,
+    )
+
+    // The row, as booleans, and the published sites told the caps moved
+    // though the plan did not.
+    const row = onlyAuditRow()
+    expect((row['after'] as any).entitlements.planComp).toMatchObject({ uncapped: true })
+    expect(row['planEffect']).toEqual({
+      before: { effectivePlan: 'enterprise', decidedBy: 'stored-plan', uncapped: false },
+      after: {
+        effectivePlan: 'enterprise',
+        decidedBy: 'comp',
+        compInForce: true,
+        uncapped: true,
+      },
+      compChange: 'granted',
+      planChange: 'unchanged',
+    })
+    expect(mockRevalidatedOrgs).toEqual(['org-1'])
+  })
+
+  it('a grant without `uncapped` is capped, and says so on the document', async () => {
+    mockStore['orgs/org-1'] = INTERNAL()
+    const response = await post(internalBody({ comp: { plan: 'enterprise' } }))
+    expect(response.status).toBe(200)
+    expect((storedOrg()['entitlements'] as any).planComp).toMatchObject({
+      plan: 'enterprise',
+      uncapped: false,
+    })
+    const org = storedOrg() as never
+    expect(isUncappedPlanComp(org)).toBe(false)
+    expect(resolveOrgEntitlements(org).hostLimit).toBe(PLAN_ENTITLEMENTS.enterprise.hostLimit)
+    const payload = await response.json()
+    expect(payload.planEffect).toMatchObject({ uncapped: false, compChange: 'granted' })
+    expect(payload.planEffect.summary).toMatch(
+      /^Enterprise comp granted\..*every band is a hard limit that a quota override can raise/,
+    )
+    // Neither the plan nor the caps moved, so nothing is revalidated.
+    expect(mockRevalidatedOrgs).toEqual([])
+  })
+
+  it.each([
+    ['the string "true"', 'true'],
+    ['the number 1', 1],
+    ['null', null],
+    ['a map', { on: true }],
+  ])('refuses %s as `uncapped`, before any write', async (_label, uncapped) => {
+    mockStore['orgs/org-1'] = INTERNAL()
+    const response = await post(internalBody({ comp: { plan: 'enterprise', uncapped } }))
+    expect(response.status).toBe(400)
+    const payload = await response.json()
+    expect(payload).toMatchObject({ written: false })
+    expect(String(payload.error)).toMatch(/comp\.uncapped must be true or false/)
+    expect(mockCommits).toEqual([])
+    expect(mockAuditRows).toEqual([])
+  })
+
+  it('lifts the caps of a standing capped comp: a change to the comp, re-stamped', async () => {
+    mockStore['orgs/org-1'] = {
+      ...INTERNAL(),
+      entitlements: {
+        contactsPerHost: 50,
+        planComp: { ...UNCAPPED_ENTERPRISE, uncapped: false },
+      },
+    }
+    const response = await post(internalBody())
+    expect(response.status).toBe(200)
+    expect((storedOrg()['entitlements'] as any).planComp).toEqual({
+      plan: 'enterprise',
+      uncapped: true,
+      reason: 'other',
+      note: 'Internal workspace',
+      grantedBy: 'staff-1',
+      grantedAt: SERVER_TIMESTAMP,
+    })
+    const payload = await response.json()
+    expect(payload.planEffect).toMatchObject({
+      compChange: 'uncapped',
+      uncapped: true,
+      before: { uncapped: false },
+    })
+    expect(payload.planEffect.summary).toMatch(/^The Enterprise comp is now uncapped\./)
+    expect(onlyAuditRow()['planEffect']).toMatchObject({
+      compChange: 'uncapped',
+      before: { uncapped: false },
+      after: { uncapped: true },
+    })
+    expect(mockRevalidatedOrgs).toEqual(['org-1'])
+  })
+
+  it('removing uncapped restores the plan’s caps — and the override beneath them', async () => {
+    mockStore['orgs/org-1'] = {
+      ...INTERNAL(),
+      entitlements: { contactsPerHost: 50, planComp: UNCAPPED_ENTERPRISE },
+    }
+    expect(resolveOrgEntitlements(storedOrg() as never).contactsPerHost).toBe(
+      Number.POSITIVE_INFINITY,
+    )
+    const response = await post(
+      internalBody({ comp: { plan: 'enterprise', uncapped: false }, reason: 'correction', note: null }),
+    )
+    expect(response.status).toBe(200)
+    // The merge kept nothing of the uncapped grant: the flag was written false.
+    expect((storedOrg()['entitlements'] as any).planComp).toMatchObject({
+      plan: 'enterprise',
+      uncapped: false,
+      reason: 'correction',
+    })
+    const org = storedOrg() as never
+    expect(isUncappedPlanComp(org)).toBe(false)
+    const resolved = resolveOrgEntitlements(org)
+    expect(resolved.contactsPerHost).toBe(50)
+    expect(resolved.hostLimit).toBe(PLAN_ENTITLEMENTS.enterprise.hostLimit)
+    expect(checkQuota(org, 'hostLimit', PLAN_ENTITLEMENTS.enterprise.hostLimit).allowed).toBe(false)
+    expect(assistBandRefuses(org)).toBe(true)
+    const payload = await response.json()
+    expect(payload.planEffect).toMatchObject({ compChange: 'capped', uncapped: false })
+    expect(payload.planEffect.summary).toMatch(
+      /^The Enterprise comp is now capped\..*every band is a hard limit/,
+    )
+    expect(mockRevalidatedOrgs).toEqual(['org-1'])
+  })
+
+  it('replacing an uncapped comp with another plan leaves no flag behind under the merge', async () => {
+    mockStore['orgs/org-1'] = {
+      plan: 'free',
+      billingStatus: 'canceled',
+      entitlements: { planComp: UNCAPPED_ENTERPRISE },
+    }
+    // An older console tab's request: a plan change that says nothing of caps.
+    const response = await post(validBody({ plan: 'free', comp: { plan: 'business' } }))
+    expect(response.status).toBe(200)
+    expect((storedOrg()['entitlements'] as any).planComp).toMatchObject({
+      plan: 'business',
+      uncapped: false,
+    })
+    expect(isUncappedPlanComp(storedOrg() as never)).toBe(false)
+    const payload = await response.json()
+    expect(payload.planEffect.compChange).toBe('replaced')
+    expect(payload.planEffect.summary).toMatch(
+      /^Comp changed from uncapped Enterprise to Business\. Effective plan: Enterprise → Business\./,
+    )
+  })
+
+  it('granting the uncapped comp that already stands keeps it, and writes no comp', async () => {
+    mockStore['orgs/org-1'] = {
+      ...INTERNAL(),
+      entitlements: { contactsPerHost: 50, planComp: UNCAPPED_ENTERPRISE },
+    }
+    const response = await post(internalBody({ reason: 'support', note: null }))
+    expect(response.status).toBe(200)
+    expect('planComp' in (onlyOrgWrite().data['entitlements'] as object)).toBe(false)
+    expect((storedOrg()['entitlements'] as any).planComp).toEqual(UNCAPPED_ENTERPRISE)
+    const payload = await response.json()
+    expect(payload.planEffect).toMatchObject({ compChange: 'kept', uncapped: true })
+    expect(payload.planEffect.summary).toMatch(
+      /^The uncapped Enterprise comp already stands and is unchanged\./,
+    )
+    expect(mockRevalidatedOrgs).toEqual([])
+  })
+
+  it('removing an uncapped comp removes the flag with it', async () => {
+    mockStore['orgs/org-1'] = {
+      ...INTERNAL(),
+      entitlements: { contactsPerHost: 50, planComp: UNCAPPED_ENTERPRISE },
+    }
+    const response = await post(internalBody({ comp: null, reason: 'correction', note: null }))
+    expect(response.status).toBe(200)
+    expect(storedOrg()['entitlements']).toEqual({ contactsPerHost: 50, features: {} })
+    const org = storedOrg() as never
+    expect(isUncappedPlanComp(org)).toBe(false)
+    // The plan stored before comps decides again, with its caps.
+    expect(resolveEffectivePlan(org)).toBe('enterprise')
+    expect(resolveOrgEntitlements(org).contactsPerHost).toBe(50)
+    const payload = await response.json()
+    expect(payload.planEffect).toMatchObject({
+      compChange: 'removed',
+      uncapped: false,
+      decidedBy: 'stored-plan',
+      before: { uncapped: true, decidedBy: 'comp' },
+    })
+    expect(payload.planEffect.summary).toMatch(/^Uncapped Enterprise comp removed\./)
+    expect(mockRevalidatedOrgs).toEqual(['org-1'])
+  })
+
+  it('a live subscription: an uncapped grant is refused, and a dormant one lifts nothing', async () => {
+    mockStore['orgs/org-1'] = { plan: 'pro', billingStatus: 'active' }
+    const refused = await post(validBody({ plan: 'pro', comp: { plan: 'agency', uncapped: true } }))
+    expect(refused.status).toBe(409)
+    expect(await refused.json()).toMatchObject({ written: false })
+    expect(mockCommits).toEqual([])
+
+    mockStore['orgs/org-1'] = {
+      plan: 'pro',
+      billingStatus: 'active',
+      entitlements: { planComp: { ...UNCAPPED_ENTERPRISE, plan: 'agency' } },
+    }
+    const saved = await post(validBody({ plan: 'pro', quotas: {}, features: {} }))
+    expect(saved.status).toBe(200)
+    const org = storedOrg() as never
+    expect(isUncappedPlanComp(org)).toBe(false)
+    expect(resolveOrgEntitlements(org).hostLimit).toBe(PLAN_ENTITLEMENTS.pro.hostLimit)
+    const payload = await saved.json()
+    expect(payload.planEffect).toMatchObject({
+      decidedBy: 'subscription',
+      uncapped: false,
+      comp: { plan: 'agency', uncapped: true },
+    })
+    expect(payload.planEffect.summary).toMatch(/An uncapped Agency comp is stored and dormant/)
+  })
+
+  it('lets BILLING staff grant an uncapped comp, as they grant any comp', async () => {
+    mockDecodedToken['staffRole'] = 'billing'
+    mockStore['orgs/org-1'] = INTERNAL()
+    const response = await post(internalBody())
+    expect(response.status).toBe(200)
+    expect(isUncappedPlanComp(storedOrg() as never)).toBe(true)
   })
 })

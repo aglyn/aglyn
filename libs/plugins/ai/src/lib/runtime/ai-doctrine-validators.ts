@@ -30,14 +30,23 @@ import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
 } from '@aglyn/aglyn/app-utils/reusable-component-keys'
+import { parseBreakpointSpan } from '@aglyn/shared-data-enums/breakpoint-span'
 import { renderEmailHtml } from '@aglyn/shared-util-email/email-render'
 import {
   aiPlanCreateFor,
+  aiPlanUndeclaredRefs,
   isAiPlanNewRef,
   type AiBuildPlan,
   type AiBuildPlanCreateKind,
+  type AiBuildPlanSection,
+  type AiPlanUndeclaredRef,
 } from '../model/ai-build-plan'
-import { aiPlanUncreatable, type AiPlanCapabilities } from '../model/ai-plan-capabilities'
+import {
+  aiCreationNoun,
+  aiPlanUncreatable,
+  aiPlanUncreatableKind,
+  type AiPlanCapabilities,
+} from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import {
   AI_INSTANCE_REF_PROP,
@@ -192,6 +201,11 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    * repeats. Absent is `true`, the doctrine whole.
    */
   reusableComponents?: boolean
+  /**
+   * The site's home screens, by id (AGL-3056): the screen a link falls back
+   * to when the site has none for what it promises. Absent: none is known.
+   */
+  homeScreenIds?: readonly string[]
 }
 
 /** One node of a walk: its id, its depth, and its ancestors' ids from the root down. */
@@ -322,20 +336,22 @@ function repeatedByData(tree: AiDoctrineTree, visit: Visit): boolean {
 /**
  * Shapes that repeat at least `minCount` times, reported only where they are
  * the outermost repeat: the header inside each of twelve cards repeats
- * because the card does, and the fix is the card.
+ * because the card does, and the fix is the card. `groupOf` counts each
+ * group's repeats apart; absent, the whole tree is one group.
  */
 function repeatedShapes(
   tree: AiDoctrineTree,
   index: ShapeIndex,
   minNodes: number,
   minCount: number,
+  groupOf: (visit: Visit) => string = () => tree.rootId,
 ): Array<{ shape: string; ids: string[] }> {
   const byShape = new Map<string, string[]>()
   for (const visit of index.visits) {
     if (visit.id === tree.rootId) continue
     if ((index.sizeOf.get(visit.id) ?? 0) < minNodes) continue
     if (repeatedByData(tree, visit)) continue
-    const shape = index.shapeOf.get(visit.id) as string
+    const shape = JSON.stringify([groupOf(visit), index.shapeOf.get(visit.id)])
     byShape.set(shape, [...(byShape.get(shape) ?? []), visit.id])
   }
   const repeated = [...byShape.entries()].filter(([, ids]) => ids.length >= minCount)
@@ -727,14 +743,24 @@ export function detectOffBrandEmail(
  * dataset or a content collection it stays current; typed, it is a copy that
  * goes stale. Instances of one component filled in side by side are the same
  * list in a component's clothes, and are counted the same way.
+ *
+ * A list is counted within the Section it sits in, the unit a plan counts a
+ * section's items in (AGL-3061): a page's four practice areas and its four
+ * steps are two short lists that happen to share a card, not one long one,
+ * and a plan that kept them must not build a page this refuses. The same
+ * list split across a section's columns is still one list. A tree with no
+ * Section is one group.
  */
 export function detectTypedData(tree: AiDoctrineTree): AiDoctrineViolation[] {
   const index = indexShapes(tree)
+  const sectionOf = (visit: Visit): string =>
+    [...visit.ancestors].reverse().find((id) => tree.nodes[id]?.componentId === 'section') ?? tree.rootId
   const violations: AiDoctrineViolation[] = repeatedShapes(
     tree,
     index,
     AI_REPEAT_MIN_NODES - 1,
     AI_TYPED_LIST_MIN_ITEMS,
+    sectionOf,
   ).map(({ ids }) => ({
     rule: 8,
     code: 'typed-list',
@@ -831,8 +857,12 @@ export function detectImageSources(
   return violations
 }
 
-/** A heading's level: the element it renders as, else the variant's own. */
-function headingLevel(node: AiDoctrineNode): number | null {
+/**
+ * A heading's level: the element it renders as, else the variant's own.
+ * Exported for a door's own checks, which read an outline the way rule 11
+ * reads a page's.
+ */
+export function aiHeadingLevel(node: AiDoctrineNode): number | null {
   if (node.componentId !== 'muiTypography') return null
   const element =
     typeof node.props?.['component'] === 'string' ? String(node.props['component']) : ''
@@ -896,7 +926,7 @@ export function detectDocumentStructure(
   if (outputKind === 'email' || outputKind === 'form') return violations
 
   const headings = visits
-    .map((visit) => ({ id: visit.id, level: headingLevel(visit.node) }))
+    .map((visit) => ({ id: visit.id, level: aiHeadingLevel(visit.node) }))
     .filter((entry): entry is { id: string; level: number } => entry.level !== null)
   const h1s = headings.filter((heading) => heading.level === 1).map((heading) => heading.id)
   const page = outputKind === 'page' || outputKind === 'template'
@@ -979,6 +1009,279 @@ export function detectAdHocWidths(
     : []
 }
 
+const GRID = 'muiGrid'
+/** A Grid's props that only a container reads; on an item they do nothing. */
+const GRID_CONTAINER_PROPS = ['direction', 'wrap', 'spacing', 'rowSpacing', 'columnSpacing', 'columns']
+/** `sx` keys that space a container's columns outside the widths its items are sized by. */
+const GRID_GAP_SX_KEYS = ['gap', 'columnGap']
+/** The columns a container divides a row into when it names none. */
+const GRID_DEFAULT_COLUMNS = 12
+
+/** A Grid's columns: its own `columns` when it names a count, else the renderer's twelve. */
+function gridColumns(node: AiDoctrineNode): number {
+  const columns = Number(node.props?.['columns'])
+  return Number.isInteger(columns) && columns > 0 ? columns : GRID_DEFAULT_COLUMNS
+}
+
+/**
+ * Whether a Grid item's size is one the renderer reads, full width on a phone,
+ * and whether it steps down to a column at a larger width. The size is the
+ * stored string the besigner's breakpoint row writes and the Grid renderer
+ * parses (`parseBreakpointSpan`): a bare span at every width, or pairs such as
+ * `xs:12 md:4`.
+ */
+function gridItemSpan(size: unknown, columns: number): { phoneFull: boolean; steps: boolean } {
+  if (typeof size !== 'string' && typeof size !== 'number') return { phoneFull: false, steps: false }
+  const span = parseBreakpointSpan(size)
+  if (span.raw !== undefined) return { phoneFull: false, steps: false }
+  if (span.base !== undefined) return { phoneFull: span.base === columns, steps: false }
+  const values = span.values ?? {}
+  return {
+    phoneFull: values.xs === columns,
+    steps: Object.entries(values).some(([breakpoint, value]) => breakpoint !== 'xs' && value !== columns),
+  }
+}
+
+/** The size a container's column is asked for: full width on a phone, a row of up to four from md. */
+function gridItemSizeFor(items: number, columns: number): string {
+  const across = Math.min(Math.max(items, 2), 4)
+  const md = Math.max(1, Math.floor(columns / (items > 4 ? 3 : across)))
+  const sm = Math.floor(columns / 2)
+  return items >= 4 && sm !== md ? `xs:${columns} sm:${sm} md:${md}` : `xs:${columns} md:${md}`
+}
+
+/**
+ * Rule 12, for a Grid (AGL-3055). The palette's Grid is one element in both
+ * roles: a CONTAINER lays its direct Grid children out in columns, and an ITEM
+ * takes a size. The sizes are fractions of the container's columns, so an
+ * item under a Grid that is not a container is sized against nothing, and a
+ * row of them stacks one under another at every width; a size that holds at
+ * every width keeps a phone's columns as narrow as a desktop's; and an `sx`
+ * gap on a container spaces the columns outside the widths the items were
+ * sized by, so the last column wraps onto a row of its own. A live About
+ * page's practice areas were the first: a Grid with no container holding three
+ * items sized "4", one column at every width.
+ *
+ * - `grid-not-container`: a Grid that is not a container but holds sized Grid
+ *   items, sets a prop only a container reads, or holds two or more elements
+ *   without being an item of a container.
+ * - `grid-item-size`: a container's child that is not a Grid item sized full
+ *   width on a phone, or a container of several whose items never step down
+ *   to columns at a larger width.
+ * - `grid-gap`: a container spaced by an `sx` gap rather than its spacing.
+ *
+ * Each re-ask names the Grid or its items by the model's own ids and says what
+ * to write, in the size format the renderer reads.
+ */
+export function detectUnresponsiveGrids(
+  tree: AiDoctrineTree,
+  outputKind: AiOutputKind,
+): AiDoctrineViolation[] {
+  if (outputKind === 'email' || outputKind === 'form') return []
+  const notContainers: string[] = []
+  const unsized: string[] = []
+  const suggested: string[] = []
+  const gapped: Array<{ id: string; spacing: unknown }> = []
+  for (const visit of walkTree(tree)) {
+    const { id, node } = visit
+    if (node.componentId !== GRID) continue
+    const children = (node.nodes ?? []).filter((child) => tree.nodes[child])
+    const parent = tree.nodes[visit.ancestors[visit.ancestors.length - 1] ?? '']
+    const isItem = parent?.componentId === GRID && parent.props?.['container'] === true
+    if (node.props?.['container'] !== true) {
+      const holdsSizedItems = children.some(
+        (child) => tree.nodes[child].componentId === GRID && tree.nodes[child].props?.['size'] !== undefined,
+      )
+      const setsContainerProps = GRID_CONTAINER_PROPS.some((name) => node.props?.[name] !== undefined)
+      if (holdsSizedItems || setsContainerProps || (!isItem && children.length >= 2)) notContainers.push(id)
+      continue
+    }
+    const columns = gridColumns(node)
+    let steps = false
+    const offending: string[] = []
+    for (const child of children) {
+      const item = tree.nodes[child]
+      const span = item.componentId === GRID ? gridItemSpan(item.props?.['size'], columns) : null
+      if (!span?.phoneFull) offending.push(child)
+      if (span?.steps) steps = true
+    }
+    if (offending.length) {
+      unsized.push(...offending)
+    } else if (children.length >= 2 && !steps) {
+      unsized.push(...children)
+    }
+    if (offending.length || (children.length >= 2 && !steps)) {
+      suggested.push(gridItemSizeFor(children.length, columns))
+    }
+    const sx = node.sx ?? {}
+    const gap = GRID_GAP_SX_KEYS.find((key) => sx[key] !== undefined)
+    if (gap) gapped.push({ id, spacing: sx[gap] })
+  }
+  const violations: AiDoctrineViolation[] = []
+  if (notContainers.length) {
+    violations.push({
+      rule: 12,
+      code: 'grid-not-container',
+      message:
+        'A Grid lays out columns only as a container: this one is not, so what it holds stacks at every width. Set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4".',
+      nodeIds: unique(notContainers),
+    })
+  }
+  if (unsized.length) {
+    violations.push({
+      rule: 12,
+      code: 'grid-item-size',
+      message: `Every child of a Grid container is a Grid item whose size is full width on a phone and steps up to columns at a larger width, written as one string. Size these like "${suggested[0]}", and wrap any other element in such an item.`,
+      nodeIds: unique(unsized),
+    })
+  }
+  if (gapped.length) {
+    const [first] = gapped
+    const spacing = typeof first.spacing === 'number' ? first.spacing : 2
+    violations.push({
+      rule: 12,
+      code: 'grid-gap',
+      message: `A Grid container's items are sized by its "spacing", so an sx gap pushes its last column onto a row of its own. Remove the sx gap and set "spacing": ${spacing}.`,
+      nodeIds: gapped.map((entry) => entry.id),
+    })
+  }
+  return violations
+}
+
+/** The palette colors a link or a button can take, and a band can be painted in. */
+const LINK_COLOR_FAMILIES = new Set(['primary', 'secondary', 'success', 'error', 'info', 'warning'])
+/** The elements a page links with; each draws its words in its `color` unless told otherwise. */
+const LINK_COMPONENTS = new Set(['muiButton', 'muiScreenLink'])
+/** Surfaces that paint their own background, whatever band they sit on. */
+const PAPER_COMPONENTS = new Set(['muiCard', 'muiPaper', 'muiAccordion', 'muiDrawer'])
+/** A palette color token of a link family: `primary.main`, `secondary.dark`. */
+const FAMILY_TOKEN = /^([a-z]+)\.(?:main|dark|light)$/
+
+/** The link family a color value names, if it names one. */
+function familyOf(value: unknown): string | null {
+  const family = typeof value === 'string' ? FAMILY_TOKEN.exec(value.trim())?.[1] : undefined
+  return family && LINK_COLOR_FAMILIES.has(family) ? family : null
+}
+
+/**
+ * The band a node sits on: the nearest ancestor that paints a background. An
+ * `sx` background in a link family's color is a band of that family, and an
+ * App Bar is one in its `color`, which is primary when it names none. Any
+ * other background, and every paper surface, is not.
+ */
+function bandOf(tree: AiDoctrineTree, visit: Visit): { family: string; token: string } | null {
+  for (const id of [...visit.ancestors].reverse()) {
+    const node = tree.nodes[id]
+    if (!node) continue
+    const background = node.sx?.['bgcolor'] ?? node.sx?.['backgroundColor']
+    if (background !== undefined) {
+      const token = sxValues(background).find((value) => familyOf(value) !== null)
+      return typeof token === 'string' ? { family: familyOf(token) as string, token: token.trim() } : null
+    }
+    if (node.componentId === 'muiAppBar') {
+      const color = typeof node.props?.['color'] === 'string' ? node.props['color'] : 'primary'
+      return LINK_COLOR_FAMILIES.has(color) ? { family: color, token: `${color}.main` } : null
+    }
+    if (PAPER_COMPONENTS.has(node.componentId)) return null
+  }
+  return null
+}
+
+/**
+ * The palette family a link or a button draws its words in: its own `sx`
+ * color when it sets one, else its `color` (primary when it names none). A
+ * link told to inherit takes the band's own, and a contained button draws its
+ * label in the family's contrast text on a fill of its own.
+ */
+function linkWordsFamily(node: AiDoctrineNode): string | null {
+  const own = node.sx?.['color']
+  if (own !== undefined) {
+    return sxValues(own).map(familyOf).find((family) => family !== null) ?? null
+  }
+  const color = typeof node.props?.['color'] === 'string' ? node.props['color'] : 'primary'
+  if (!LINK_COLOR_FAMILIES.has(color)) return null
+  const styledAsButton = node.componentId === 'muiButton' || node.props?.['renderAs'] !== 'link'
+  return styledAsButton && node.props?.['variant'] === 'contained' ? null : color
+}
+
+/**
+ * Rule 5, for a link on a colored band (AGL-3056). The doctrine asks for
+ * palette tokens, and a band in `primary.main` holding a Screen Link that
+ * sets no color is two valid tokens: but the link keeps the theme's primary
+ * color, so its words are navy on navy. A live About page's footer was the
+ * first, a "Request a Consultation" link on a primary band. A link or a button
+ * whose words are drawn in the family of the band it sits on is refused, with
+ * a re-ask to inherit the band's contrast text or to set it.
+ */
+export function detectInvisibleLinks(tree: AiDoctrineTree, outputKind: AiOutputKind): AiDoctrineViolation[] {
+  if (outputKind === 'email' || outputKind === 'form') return []
+  const hidden: Array<{ id: string; family: string; token: string }> = []
+  for (const visit of walkTree(tree)) {
+    if (!LINK_COMPONENTS.has(visit.node.componentId)) continue
+    const family = linkWordsFamily(visit.node)
+    const band = family ? bandOf(tree, visit) : null
+    if (band && band.family === family) hidden.push({ id: visit.id, ...band })
+  }
+  if (!hidden.length) return []
+  const [first] = hidden
+  return [
+    {
+      rule: 5,
+      code: 'link-color-on-band',
+      message: `A link or button on a ${first.token} band draws its words in the theme's ${first.family} color, the band's own, so they cannot be read. Give it "color": "inherit" under a band whose sx color is ${first.family}.contrastText, or set its own sx color to ${first.family}.contrastText.`,
+      nodeIds: unique(hidden.map((entry) => entry.id)),
+    },
+  ]
+}
+
+/** A link's words that say it goes home. */
+const HOME_WORDS = /\bhome(?:\s?page)?\b/i
+
+/**
+ * Rule 10, for a link sent where the site has nothing for it (AGL-3056). A
+ * link whose purpose the site has no screen for is left out; it never goes to
+ * a screen that does something else. The site inventory cannot say what each
+ * screen is for, but it can name the one a model falls back to: a live About
+ * page's footer sent "Request a Consultation" to the home screen, because the
+ * site had no consultation screen. So a Screen Link or a Button, outside the
+ * header and the navigation, that links the home screen with words that do
+ * not say home is refused, with a re-ask to link the screen that does what it
+ * says, or to leave the link out.
+ */
+export function detectUnrelatedScreenLinks(
+  tree: AiDoctrineTree,
+  outputKind: AiOutputKind,
+  context: Pick<AiDoctrineTreeContext, 'homeScreenIds'> = {},
+): AiDoctrineViolation[] {
+  if (outputKind === 'email' || outputKind === 'form') return []
+  const home = new Set(context.homeScreenIds ?? [])
+  const sent: Array<{ id: string; label: string }> = []
+  for (const visit of walkTree(tree)) {
+    const { node } = visit
+    if (!LINK_COMPONENTS.has(node.componentId)) continue
+    const screenId = node.props?.['screenId']
+    const linksHome = (typeof screenId === 'string' && home.has(screenId)) || node.props?.['href'] === '/'
+    const label = typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : ''
+    if (!linksHome || !label || HOME_WORDS.test(label)) continue
+    // The header and the navigation link home by name and by the site's own brand.
+    const inNavigation = hasAncestor(
+      tree,
+      visit,
+      (ancestor) => ancestor.componentId === 'muiAppBar' || ['header', 'nav'].includes(elementOf(ancestor)),
+    )
+    if (!inNavigation) sent.push({ id: visit.id, label })
+  }
+  if (!sent.length) return []
+  return [
+    {
+      rule: 10,
+      code: 'link-unrelated-screen',
+      message: `"${sent[0].label}" links the home page, which does not do what its words say. Link the screen that does, or leave the link out when the site has none.`,
+      nodeIds: unique(sent.map((entry) => entry.id)),
+    },
+  ]
+}
+
 /** Answer fields that say "publish", wherever the answer put them. */
 const PUBLISH_KEYS = /^(?:publish|published|publishNow|publishAt|goLive|isLive|live|makeLive)$/i
 
@@ -1032,6 +1335,25 @@ export function detectPublishIntent(answer: unknown): AiDoctrineViolation[] {
         },
       ]
     : []
+}
+
+/** A fact the brief never gave, marked in square brackets: `[Office phone number]`. */
+const BRACKETED_FACT = /\[([^[\]{}\n]{1,80})\]/g
+
+/**
+ * The facts in square brackets copy holds (rule 14), each once whatever its
+ * case, in the order they first appear, as the copy spells them
+ * (AGL-3056): what a member fills in before a draft is published.
+ */
+export function aiBracketedFacts(texts: Iterable<string>): string[] {
+  const facts = new Map<string, string>()
+  for (const text of texts) {
+    for (const match of text.matchAll(BRACKETED_FACT)) {
+      const fact = match[1].trim()
+      if (fact && !facts.has(fact.toLowerCase())) facts.set(fact.toLowerCase(), `[${fact}]`)
+    }
+  }
+  return [...facts.values()]
 }
 
 /**
@@ -1493,11 +1815,14 @@ export function validateAiDoctrineTree(
     ...detectLayoutRegions(tree, outputKind),
     ...detectInlineForms(tree, outputKind, context),
     ...detectLiteralStyles(tree, outputKind),
+    ...detectInvisibleLinks(tree, outputKind),
     ...detectOffBrandEmail(tree, outputKind, context.brand),
     ...detectTypedData(tree),
     ...detectImageSources(tree, context),
+    ...detectUnrelatedScreenLinks(tree, outputKind, context),
     ...detectDocumentStructure(tree, outputKind),
     ...detectAdHocWidths(tree, outputKind),
+    ...detectUnresponsiveGrids(tree, outputKind),
     ...detectOffVoiceCopy(aiTreeCopy(tree, context), context.framing),
     ...detectHeavyDocument(tree, outputKind, context),
   ]
@@ -1668,11 +1993,26 @@ export function detectPlanRepeats(
   return violations
 }
 
+/** Where the plan's sections place a record of one kind, as `screens[0].sections[1].uses[0]`. */
+function placementsOf(
+  plan: AiBuildPlan,
+  kinds: Map<string, RecordKind>,
+  kind: RecordKind,
+): string[] {
+  return sectionPaths(plan).flatMap(({ section, path }) =>
+    section.uses.flatMap((ref, index) =>
+      refKind(ref, plan, kinds) === kind ? [`${path}.uses[${index}]`] : [],
+    ),
+  )
+}
+
 /**
- * Rule 2 (plan): every screen declares a layout, and no section is a copy of
- * a layout region. A site with no layout, where this job may not create one
+ * Rule 2 (plan): every screen declares a layout, no section is a copy of a
+ * layout region, and no section places a layout, which frames a whole screen
+ * (AGL-3040). A site with no layout, where this job may not create one
  * (AGL-3030), has nothing to declare: its screens name none, and a screen
- * that names none is not refused there.
+ * that names none is not refused there. A screen whose layout is a `new:`
+ * reference the plan never creates is refused here, and only here.
  */
 export function detectPlanLayoutRegions(
   plan: AiBuildPlan,
@@ -1681,10 +2021,8 @@ export function detectPlanLayoutRegions(
 ): AiDoctrineViolation[] {
   const kinds = inventoryKinds(inventory)
   const violations: AiDoctrineViolation[] = []
-  const noLayoutToName =
-    Boolean(capabilities) &&
-    !capabilities?.create.layout.allowed &&
-    !(inventory?.layouts.length ?? 0)
+  const mayCreateLayout = !capabilities || capabilities.create.layout.allowed
+  const noLayoutToName = !mayCreateLayout && !(inventory?.layouts.length ?? 0)
   const unlaid = plan.screens
     .map((screen, index) => ({ screen, index }))
     .filter(
@@ -1698,7 +2036,9 @@ export function detectPlanLayoutRegions(
       code: 'plan-screen-without-layout',
       message: noLayoutToName
         ? 'A screen names a layout the site does not have, and this job may not create one. Leave the layout empty.'
-        : "A screen names no layout the site has or the plan creates. Put every screen in the site's layout, or plan one.",
+        : mayCreateLayout
+          ? "A screen names no layout the site has or the plan creates. Put every screen in the site's layout, or plan one."
+          : 'A screen names no layout the site has, and this job may not create one. Put every screen in a layout the site has.',
       paths: unlaid.map(({ index }) => `screens[${index}].layout`),
     })
   }
@@ -1712,6 +2052,16 @@ export function detectPlanLayoutRegions(
       message:
         'A screen plans its own header, navigation or footer. Those live in the layout; take the section off the screen.',
       paths: regions.map((entry) => entry.path),
+    })
+  }
+  const placed = placementsOf(plan, kinds, 'layout')
+  if (placed.length) {
+    violations.push({
+      rule: 2,
+      code: 'plan-layout-in-section',
+      message:
+        "A section places a layout. A layout frames a whole screen and is never placed inside one: name it as the screen's layout, and take it out of the section's uses.",
+      paths: placed,
     })
   }
   return violations
@@ -1750,8 +2100,15 @@ export function detectPlanInlineForms(
 /** Pages sharing one shape this many times are a template applied. */
 export const AI_SIMILAR_PAGES_MIN = 3
 
-/** Rule 4 (plan): three or more screens with the same sections share one template. */
-export function detectUntemplatedSimilarPages(plan: AiBuildPlan): AiDoctrineViolation[] {
+/**
+ * Rule 4 (plan): three or more screens with the same sections share one
+ * template, and a template is what a screen applies, never what one of its
+ * sections places (AGL-3040).
+ */
+export function detectUntemplatedSimilarPages(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null = null,
+): AiDoctrineViolation[] {
   const groups = new Map<string, number[]>()
   plan.screens.forEach((screen, index) => {
     if (screen.sections.length < 2) return
@@ -1770,6 +2127,16 @@ export function detectUntemplatedSimilarPages(plan: AiBuildPlan): AiDoctrineViol
       code: 'plan-similar-pages',
       message: `${indexes.length} screens share one shape. Plan one template and apply it ${indexes.length} times with each page's copy, or bind it to a collection.`,
       paths: indexes.map((index) => `screens[${index}].template`),
+    })
+  }
+  const placed = placementsOf(plan, inventoryKinds(inventory), 'template')
+  if (placed.length) {
+    violations.push({
+      rule: 4,
+      code: 'plan-template-in-section',
+      message:
+        "A section places a template. A template is applied to a whole screen and is never placed inside one: take it out of the section's uses, and name it as the screen's template only when the whole screen is built from it.",
+      paths: placed,
     })
   }
   return violations
@@ -1874,6 +2241,74 @@ export function detectPlanUncreatable(
     message: entry.message,
     paths: [entry.path],
   }))
+}
+
+/**
+ * What a section most likely meant by a creation it places and the plan never
+ * declares, so the refusal can name the way out: a form where the reference
+ * or its section reads as one and the section places no form yet, otherwise
+ * a component. Only the message reads it; the reference is refused whatever
+ * it was meant to be.
+ */
+function undeclaredPlacementKind(
+  name: string,
+  section: AiBuildPlanSection,
+  plan: AiBuildPlan,
+  kinds: Map<string, RecordKind>,
+): 'form' | 'component' {
+  if (FORM_SECTION_NAME.test(name)) return 'form'
+  const placesForm = section.uses.some((ref) => refKind(ref, plan, kinds) === 'form')
+  return FORM_SECTION_NAME.test(section.name) && !placesForm ? 'form' : 'component'
+}
+
+/**
+ * Rule 7 (plan): what a plan places, it reuses or it creates (AGL-3040). The
+ * doctrine has a plan refer to what it creates as new:<name>, so a reference
+ * that names no entry of the create list is a creation nothing builds. A page
+ * kept with one stops at its first pass, sending the member to make that
+ * creation by hand, which a workspace that cannot make it never can. Each is
+ * refused with the one re-ask, once a name however often it is placed, and
+ * says what to do on THIS workspace: declare the creation where the job may
+ * make one more of that kind, and otherwise build the page without it, drawn
+ * on the page or placed from what the site has. A screen's layout is rule
+ * 2's (`plan-screen-without-layout`), and is not reported twice.
+ */
+export function detectPlanUndeclaredCreations(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
+): AiDoctrineViolation[] {
+  const kinds = inventoryKinds(inventory)
+  const byName = new Map<string, AiPlanUndeclaredRef[]>()
+  for (const ref of aiPlanUndeclaredRefs(plan)) {
+    if (ref.field === 'layout') continue
+    const key = ref.name.toLowerCase()
+    byName.set(key, [...(byName.get(key) ?? []), ref])
+  }
+  return [...byName.values()].map((refs): AiDoctrineViolation => {
+    const [first] = refs
+    const screen = plan.screens[first.screenIndex]
+    const section = first.field === 'uses' ? screen.sections[first.sectionIndex] : null
+    const kind: AiBuildPlanCreateKind = section
+      ? undeclaredPlacementKind(first.name, section, plan, kinds)
+      : 'template'
+    const refused = capabilities ? aiPlanUncreatableKind(plan, kind, capabilities) : null
+    const where = section
+      ? `${section.name ? `The "${section.name}" section` : 'A section'} places a creation named "${first.name}", but the plan never creates it`
+      : `${screen.title ? `The screen "${screen.title}"` : 'A screen'} applies a template named "${first.name}", but the plan never creates it`
+    let message: string
+    if (!refused) {
+      const otherwise = section
+        ? `place ${aiCreationNoun(kind)} the site already has by its id`
+        : "leave the screen's template empty"
+      message = `${where}. Declare it in create as ${aiCreationNoun(kind)}, with why nothing the site has will do, or ${otherwise}.`
+    } else if (section) {
+      message = `${where}, and ${refused.reason}. ${refused.instead} Take it out of the section's uses.`
+    } else {
+      message = `${where}, and ${refused.reason}. Leave the screen's template empty, or apply a template the site already has.`
+    }
+    return { rule: 7, code: 'plan-creation-undeclared', message, paths: refs.map((ref) => ref.path) }
+  })
 }
 
 /**
@@ -2077,10 +2512,11 @@ export function validateAiBuildPlan(
     ...detectPlanRepeats(plan, inventory, capabilities),
     ...detectPlanLayoutRegions(plan, inventory, capabilities),
     ...detectPlanInlineForms(plan, inventory, capabilities),
-    ...detectUntemplatedSimilarPages(plan),
+    ...detectUntemplatedSimilarPages(plan, inventory),
     ...detectPlanLiteralColors(plan),
     ...detectCreateBeforeReuse(plan, inventory),
     ...detectPlanUncreatable(plan, capabilities),
+    ...detectPlanUndeclaredCreations(plan, inventory, capabilities),
     ...detectPlanTypedData(plan, inventory, capabilities),
     ...detectMissingNavAndSeo(plan, inventory),
     ...detectOffVoiceCopy(aiPlanCopy(plan), framing),

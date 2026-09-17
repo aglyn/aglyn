@@ -20,7 +20,10 @@ import {
   isConsoleStaffWidgetSlot,
   listConsoleWidgets,
   type ConsoleWidgetColumn,
+  type ConsoleWidgetSlot,
 } from '@aglyn/aglyn'
+import { ABSENT_WHEN_EMPTY } from '@aglyn/shared-ui-jsx/components/grid-items'
+import { Stack } from '@mui/material'
 import type { ComponentType } from 'react'
 import { STAFF_PLUGIN_IDS } from '../constants/staff-plugins'
 import { useEnabledPluginIds } from './console-plugins-gate.component'
@@ -39,6 +42,145 @@ import {
   isDashboardWidgetHidden,
   orderDashboardWidgets,
 } from '../utils/dashboard-widgets'
+
+/**
+ * The gap a console page puts between two of its cards, in theme spacing
+ * units: every page's `Stack spacing={3}` and card grid `spacing={3}`.
+ */
+export const WIDGET_ZONE_SPACING = 3
+
+/**
+ * How a zone places the widgets it renders (AGL-3044).
+ *
+ * - `stack`: the zone is one block of the page. Its widgets are cards,
+ *   stacked with {@link WIDGET_ZONE_SPACING} between them, and the zone keeps
+ *   the same gap from the page's own cards beside it.
+ * - `bare`: every widget is one item of a layout the PAGE draws: a tile of a
+ *   dashboard grid, a control in a toolbar or a row of actions, a panel among
+ *   a form's fields, the body of a page, a column of a table. The page spaces
+ *   those items, so the zone adds no element of its own. A wrapper would put
+ *   every tile of a grid into one track and every button of a row into one
+ *   column.
+ */
+export type WidgetZoneLayout = 'stack' | 'bare'
+
+/**
+ * Every zone in the catalog, and how it places its widgets.
+ *
+ * Typed against the catalog, so a zone added to `CONSOLE_WIDGET_SLOTS` does
+ * not compile until it is given a layout here. A zone outside the catalog
+ * (`slot` is an open string) is a `stack`, the shape most zones have.
+ */
+export const WIDGET_ZONE_LAYOUTS: Readonly<
+  Record<ConsoleWidgetSlot, WidgetZoneLayout>
+> = {
+  hostActivity: 'stack',
+  // Tiles of the host dashboard's capability grid, which is also where the
+  // commerce glance sits.
+  hostDashboard: 'bare',
+  commerceGlance: 'bare',
+  // Tiles of the org dashboard row's grid on the sites page.
+  orgDashboard: 'bare',
+  // Page and section bodies: the widget IS the surface.
+  orgData: 'bare',
+  marketplaceListing: 'bare',
+  orgMarketplace: 'bare',
+  orgAddons: 'bare',
+  // The body of the ƒx dialog, which spaces its own contents.
+  besignerFunctions: 'bare',
+  dashboardFooter: 'stack',
+  orgSettings: 'stack',
+  hostSettings: 'stack',
+  hostTheme: 'stack',
+  adminOrgDetail: 'stack',
+  orgBillingUsage: 'stack',
+  orgBillingOverview: 'stack',
+  staffOrg: 'stack',
+  staffUser: 'stack',
+  // Columns of a table. The usage table's zone also draws a caption line
+  // above the table, and a caption is part of the table, not a card.
+  staffOrgsListColumn: 'bare',
+  staffOrgUsageColumn: 'bare',
+  orgMembersListColumn: 'bare',
+  orgMember: 'stack',
+  // The card beneath the collaborators table; its columns never render here.
+  hostMembers: 'stack',
+  // A floating dock, positioned by the widget itself.
+  assistPanel: 'bare',
+  // Controls in the besigner's Attributes panel and its toolbar.
+  besignerInspector: 'bare',
+  besignerToolbar: 'bare',
+  // A panel among a search listing editor's own fields.
+  seoFields: 'bare',
+  hostSeo: 'stack',
+  // A button in a site resource page's row of header actions: Screens,
+  // Templates, Layouts, Forms and Components.
+  hostScreens: 'bare',
+  hostTemplates: 'bare',
+  hostLayouts: 'bare',
+  hostForms: 'bare',
+  hostComponents: 'bare',
+  // Controls the workflows plugin places on its Automation page: a button
+  // beside Add action and Recipes, one in a saved automation's editor, and
+  // one on each failed run of its history.
+  hostAutomations: 'bare',
+  automationEditor: 'bare',
+  automationRun: 'bare',
+  // Sections the commerce plugin places inside its own spaced layouts: the
+  // product editor's fields, above the products hub's catalog table, and the
+  // CSV import dialog's options.
+  productEditor: 'bare',
+  productsHub: 'bare',
+  productImport: 'bare',
+  // A card among a CRM record page's own cards, which the CRM plugin hosts.
+  recordInsights: 'stack',
+  // Sections the CRM plugin places inside its own spaced layouts: under the
+  // one-to-one composer's message, and under an import drawer's column
+  // matching.
+  recordEmail: 'bare',
+  importMapping: 'bare',
+  orgSites: 'stack',
+}
+
+/** The layout a zone renders its widgets in. */
+export function widgetZoneLayout(slot: string): WidgetZoneLayout {
+  return (
+    (WIDGET_ZONE_LAYOUTS as Readonly<Record<string, WidgetZoneLayout>>)[slot] ??
+    'stack'
+  )
+}
+
+/**
+ * How a zone that is a block of its page sits among the page's own content:
+ * the gap it keeps from what is beside it, and no room at all when nothing
+ * in it drew anything.
+ *
+ * Margins, because the page decides what a zone sits in and a zone lands in
+ * pages built every way: a plain container holding one card after another,
+ * a `Stack` that spaces its children, a card grid's item. A zone that owns
+ * the gap in normal flow is the one place that fixes all of them, and the
+ * two conditions keep it off the edges: no margin above a zone nothing
+ * precedes, none below a zone nothing follows. Adjacent vertical margins
+ * collapse, so a card before the zone that carries its own bottom margin
+ * still leaves one gap, not two.
+ *
+ * `:where()` adds nothing to the selector's weight, so the rule is exactly
+ * as specific as the zone's own class. A MUI `Stack` resets its children's
+ * margins with `> :not(style):not(style)`, which weighs more, and then
+ * spaces them itself: a zone inside a spacing parent takes that parent's
+ * gap instead of adding a second one. A flex or grid container that spaces
+ * its children with `gap` has no such reset, and a stack zone must not be a
+ * direct child of one among siblings; the zones that sit in those are
+ * `bare`.
+ *
+ * A block whose widgets all drew nothing is `:empty`, and hides: it takes no
+ * room and carries no margin.
+ */
+export const WIDGET_ZONE_BLOCK = {
+  '&:where(:not(:first-child))': { mt: WIDGET_ZONE_SPACING },
+  '&:where(:not(:last-child))': { mb: WIDGET_ZONE_SPACING },
+  '&:empty': { display: 'none' },
+} as const
 
 /** A widget that survived the enablement and entitlement gates. */
 export interface EntitledSlotWidget {
@@ -199,6 +341,23 @@ export function useSlotWidgets(slots: readonly string[]): {
  * among the cards the gate already passed. Off the dashboard there is no
  * provider and the hook answers inert, which is why every other surface
  * rendering this slot neither filters nor reads anything.
+ *
+ * ## Spacing (AGL-3044)
+ *
+ * The zone spaces what it renders, in the layout {@link WIDGET_ZONE_LAYOUTS}
+ * names for it, so no page has to. A `stack` zone draws its cards in one
+ * `Stack` with the gap a page puts between its own cards, and sits among the
+ * page's cards as {@link WIDGET_ZONE_BLOCK} describes. Loose siblings would
+ * take whatever spacing the page's container happens to give: none in a card
+ * grid's item or a plain container, which draws the cards edge to edge. A
+ * widget renders no outer margin of its own; the zone's `Stack` resets one if
+ * it does.
+ *
+ * Nothing is drawn when no widget survives the gates, so a page that hides
+ * an empty item (`GridItems masonry`, `CardColumns`) still sees an empty
+ * item. A stack whose widgets all rendered nothing is `:empty` and hides, and
+ * it carries the {@link ABSENT_WHEN_EMPTY} mark, so the item holding it hides
+ * as well.
  */
 export default function PluginWidgetSlot({
   slot,
@@ -221,11 +380,19 @@ export default function PluginWidgetSlot({
   // Holding a customizable slot until the arrangement arrives is what keeps a
   // hidden card from being drawn and then taken away again.
   if (customizable && !prefsReady) return null
+  if (arranged.length === 0) return null
+  const rendered = arranged.map((widget) => (
+    <widget.Component key={widget.widgetId} {...props} />
+  ))
+  if (widgetZoneLayout(slot) === 'bare') return <>{rendered}</>
   return (
-    <>
-      {arranged.map((widget) => (
-        <widget.Component key={widget.widgetId} {...props} />
-      ))}
-    </>
+    <Stack
+      spacing={WIDGET_ZONE_SPACING}
+      data-widget-zone={slot}
+      {...ABSENT_WHEN_EMPTY}
+      sx={WIDGET_ZONE_BLOCK}
+    >
+      {rendered}
+    </Stack>
   )
 }

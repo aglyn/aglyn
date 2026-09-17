@@ -444,3 +444,21 @@ describe('the draft order records which tax it was composed under (AGL-2451)', (
     expect(orderDoc()?.taxMode).toBe('none')
   })
 })
+
+/**
+ * A product proposed by AI is created with no price for the merchant to set
+ * (AGL-2916). A payment link for one would ask for nothing, or send Stripe no
+ * amount, so the door refuses it before it writes or sends anything.
+ */
+describe('a variant nobody has priced yet (AGL-2916)', () => {
+  it('is refused by name, with no order written and nothing sent to Stripe', async () => {
+    const { result } = await runDraft({
+      settings: MANUAL_TX,
+      product: { status: 'draft', variants: [{ id: 'v1', inventory: 100 }] },
+    })
+    expect(result.status).toBe(400)
+    expect(result.body).toEqual({ error: 'Set a price for Kettle before selling it.' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(childPaths('hosts/host-1/orders')).toHaveLength(0)
+  })
+})

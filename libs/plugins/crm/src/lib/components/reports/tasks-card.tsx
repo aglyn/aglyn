@@ -19,11 +19,11 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Section } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
   Button,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -255,7 +255,7 @@ export function TasksCard(props: TasksCardProps) {
         ) : null}
         <Section title={'Open tasks by assignee'}>
           {load.length ? (
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   {ASSIGNEE_COLUMNS.map((column, index) => (
@@ -282,7 +282,7 @@ export function TasksCard(props: TasksCardProps) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
           ) : (
             <Typography variant="body2" color="text.secondary">
               {tasksStatus === 'loading' ? 'Reading…' : 'No open tasks.'}

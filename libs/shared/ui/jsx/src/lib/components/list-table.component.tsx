@@ -234,6 +234,9 @@ function ListQuickButton(props: {
   )
 }
 
+/** The field `listActionsColumn` draws, which a row click never opens through. */
+export const LIST_ACTIONS_FIELD = 'actions'
+
 /**
  * The trailing ACTIONS column, identical on every grid list.
  *
@@ -249,7 +252,7 @@ export function listActionsColumn(
   options: { width?: number } = {},
 ): GridColDef {
   return {
-    field: 'actions',
+    field: LIST_ACTIONS_FIELD,
     headerName: 'Actions',
     width: options.width ?? 110,
     align: 'right',
@@ -401,7 +404,20 @@ export function ListTable(props: ListTableProps) {
       {...selection}
       disableRowSelectionOnClick
       onRowClick={
-        onOpen ? ({ id, row }) => onOpen(String(id), row) : undefined
+        onOpen
+          ? ({ id, row }, event) => {
+              /*
+               * A press anywhere in the actions cell is aimed at the actions.
+               * `ListRowActions` stops its own clicks, but the cell is wider
+               * and taller than the cluster, and a press on the padding
+               * beside the menu would otherwise open the record from under
+               * the reader.
+               */
+              const target = event.target as Element | null
+              if (target?.closest?.(`[data-field="${LIST_ACTIONS_FIELD}"]`)) return
+              onOpen(String(id), row)
+            }
+          : undefined
       }
       /*
        * The list GROWS; the PAGE scrolls.

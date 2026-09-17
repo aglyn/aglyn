@@ -33,7 +33,6 @@ import {
   IconButton,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -58,7 +57,12 @@ import {
   seoListingFieldTooLong,
   type SeoListingFieldKey,
 } from '@aglyn/aglyn/app-utils/seo-listing-fields'
-import type { ConsoleSeoFieldValues } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import type {
+  ConsoleProductCopyValues,
+  ConsoleProductEditorZoneProps,
+  ConsoleSeoFieldValues,
+} from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   EntitlementUpsell,
   useCommerceEntitlement,
@@ -247,7 +251,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     setDraft({ ...current, ...patch })
 
   /** The shell's zone renderer (AGL-2910); `null` outside the console shell. */
-  const SeoFieldsSlot = useConsoleWidgetSlot()
+  const WidgetSlot = useConsoleWidgetSlot()
   /**
    * A listing zone widget's proposal, staged into the draft like typing.
    * Functional, because a proposal can arrive after a generation finishes,
@@ -269,6 +273,38 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     },
     [lifted],
   )
+
+  /**
+   * The product zone's proposal (AGL-2916): copy staged into the draft like
+   * typing, functional for the reason `proposeSeoValues` gives. Option names
+   * go through `renameProductOptions`, so every variant keeps its price, SKU
+   * and stock.
+   */
+  const proposeProductValues = useCallback(
+    (values: ConsoleProductCopyValues) => {
+      setDraft((prior) => {
+        const base = prior ?? lifted ?? blankProduct()
+        return { ...base, ...CommerceModel.productCopyPatch(base, values) }
+      })
+    },
+    [lifted],
+  )
+  const zoneCategories = useMemo(
+    () => categories.rows.map((category: any) => ({ id: String(category.$id), name: String(category.name ?? '') })),
+    [categories.rows],
+  )
+  const zoneProduct: ConsoleProductEditorZoneProps['product'] = {
+    id: product?.$id ?? null,
+    name: current.name,
+    type: current.type,
+    description: String(current.description ?? ''),
+    tags: current.tags ?? [],
+    categoryIds: current.categoryIds ?? [],
+    options: (current.options ?? []).map((option) => ({ name: option.name, values: option.values })),
+    mediaUrls: current.mediaUrls ?? [],
+    seoTitle: current.seo?.title ?? '',
+    seoDescription: current.seo?.description ?? '',
+  }
 
   const error = current.name ? CommerceModel.validateProduct(current) : null
 
@@ -314,6 +350,24 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
 
   const handleOptionsChange = useCallback(
     (index: number, patch: Partial<CommerceModel.ProductOption> | null) => {
+      // A RENAME moves each variant's selection to the new name (AGL-3066).
+      // Rebuilding the matrix matches variants by name and value, so under a
+      // new name it finds none and replaces every variant, its id, price, SKU
+      // and stock with them. Only a change of values rebuilds.
+      if (
+        patch &&
+        current.options?.[index] &&
+        Object.keys(patch).length === 1 &&
+        typeof patch.name === 'string'
+      ) {
+        update(
+          CommerceModel.renameProductOptions(
+            current,
+            current.options.map((option, at) => (at === index ? patch.name : option.name)),
+          ),
+        )
+        return
+      }
       const options = [...(current.options ?? [])]
       if (patch === null) options.splice(index, 1)
       else options[index] = { name: '', values: [], ...options[index], ...patch }
@@ -642,6 +696,21 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             )}
           />
         ) : null}
+        {/*
+          The product zone (AGL-2916), hosted like the listing zone below: a
+          widget proposes copy from what this product says and shows, staged in
+          the fields above like typing. Save product is still the only write.
+        */}
+        {WidgetSlot ? (
+          <WidgetSlot
+            slot="productEditor"
+            hostId={hostId}
+            orgId={undefined}
+            product={zoneProduct}
+            categories={zoneCategories}
+            proposeValues={proposeProductValues}
+          />
+        ) : null}
 
         <Divider textAlign="left">{'Media'}</Divider>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
@@ -760,8 +829,8 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             {'Add option'}
           </Button>
         ) : null}
-        <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small">
+        <Box>
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Variant'}</TableCell>
@@ -787,6 +856,10 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
                       }
                       size="small"
                       sx={{ width: 88 }}
+                      // An empty price is marked (AGL-2916): a proposed
+                      // product arrives with none, and Save waits for one.
+                      error={!CommerceModel.variantHasPrice(variant)}
+                      placeholder="Set"
                       slotProps={{ htmlInput: { inputMode: 'decimal' } }}
                     />
                   </TableCell>
@@ -857,7 +930,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </ScrollTable>
         </Box>
         <Typography variant="caption" color="text.secondary">
           {stockApplies
@@ -1247,8 +1320,8 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           says; they are staged in the fields above like typing, and Save
           product is still the only write.
         */}
-        {SeoFieldsSlot ? (
-          <SeoFieldsSlot
+        {WidgetSlot ? (
+          <WidgetSlot
             slot="seoFields"
             hostId={hostId}
             orgId={undefined}

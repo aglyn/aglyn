@@ -25,7 +25,6 @@ import {
   Button,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -35,6 +34,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
@@ -431,7 +431,7 @@ export default function StaffOrgRefundCard({
         ) : null}
         {charges != null && charges.length > 0 ? (
           <>
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Charge'}</TableCell>
@@ -480,7 +480,7 @@ export default function StaffOrgRefundCard({
                   )
                 })}
               </TableBody>
-            </Table>
+            </ScrollTable>
             <ListPagination
               page={page}
               pageSize={pageSize}

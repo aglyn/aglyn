@@ -20,6 +20,11 @@ so before it starts, and spends nothing.
 
 ## From a brief
 
+Open **Components** for the site and choose **Describe it**, beside **Templates** and **Create
+Component**. Write what the component should show and which of its values change from one page
+to the next, then choose **Plan the component**, and open **AI jobs** in the Assist panel to
+read the plan and confirm it.
+
 ### What the job builds
 
 The job proposes a plan first and builds once you confirm it, following
@@ -33,12 +38,17 @@ Each property is one of the kinds the **File ▸ Properties…** dialog offers:
 | Text, Long text | Copy: a heading, a paragraph, a button's label, an image's alt text. Copy can mix a property with words, such as `Portrait of {{prop.name}}`. |
 | Image | A picture's source. |
 | Link | A screen picker, or an address. |
+| Icon | An **Icon** element, or a button's icon. |
 | Number | A number setting, or copy. |
 | Yes / no | A switch, such as a button's **Full width**, or whether an optional part shows. |
 | Choice | A dropdown, such as a button's **Variant**, with answers that dropdown lists. |
 
-A property is bound only where its value can show: an Image never lands in a heading, and a
-Choice never offers an answer its dropdown does not list. These are the pairings the `{}` beside
+A property is bound only where its value can show: an Image never lands in a heading, an icon is
+never shown as words, and a Choice never offers an answer its dropdown does not list.
+
+A component's headings start one level below the heading of the section that places it, such as
+a card's title as a heading 3 under the section's heading 2, so the page's outline stays in order
+wherever the component goes. These are the pairings the `{}` beside
 a field offers when you bind one yourself.
 
 ### Optional parts
@@ -53,8 +63,9 @@ job never makes a property that hides the whole component.
 Each property's default is what the component shows until a page sets its own value. Copy is
 written in your site's voice from the brief. Where the brief leaves out a fact, such as a
 customer's name, the default marks the gap in square brackets, such as **[Customer name]**,
-instead of inventing one. An Image starts empty for you to upload, and a Link names one of your
-screens.
+instead of inventing one, and **AI jobs** lists those gaps beside the draft. An Image starts empty for you to upload, and a Link names one of your
+screens. An Icon starts empty too: you pick each icon from the library, on the component or on each
+page that places it, because the AI never picks an icon for you.
 
 ### Where it lands
 
@@ -75,7 +86,8 @@ Besigner and use **Make a reusable component with AI**, under the element's own 
 its values each page should be able to change.
 
 The suggestion is shown before anything happens, with what every page will be able to set. The
-kinds, the pairings and the **Hide …** rule above are the same ones.
+kinds, the pairings and the **Hide …** rule above are the same ones, except that a section's icon
+stays part of the section rather than becoming an **Icon** property.
 
 **Apply** then does what **Save as reusable component** does, with the properties already in
 place:

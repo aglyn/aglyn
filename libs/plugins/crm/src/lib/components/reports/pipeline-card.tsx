@@ -20,10 +20,10 @@ import * as Aglyn from '@aglyn/aglyn'
 import { money } from '@aglyn/shared-ui-email-campaigns/components/report-figures'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Section } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -311,7 +311,7 @@ export function PipelineCard(props: PipelineCardProps) {
         ) : null}
         {summary.top.length ? (
           <Section title={'Top open deals'}>
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Deal'}</TableCell>
@@ -339,7 +339,7 @@ export function PipelineCard(props: PipelineCardProps) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
             <ReportExport
               filename={reportFilename('top-open-deals')}
               columns={TOP_DEAL_COLUMNS}

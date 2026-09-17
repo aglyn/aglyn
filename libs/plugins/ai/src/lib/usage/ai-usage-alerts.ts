@@ -19,6 +19,7 @@ import { resolveAssistCreditBudget } from '@aglyn/aglyn/app-utils/assist-credits
 import {
   aiAddonName,
   hasAiAddon,
+  isUncappedPlanComp,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
@@ -26,9 +27,9 @@ import {
   assistCogsAlertThresholdUsd,
   assistMarginBreach,
   assistMarginMultiple,
-  assistOrgMonthlyCostLimitUsd,
 } from '@aglyn/aglyn/app-utils/usage-budget'
 import type { UsageAlertContext } from '@aglyn/aglyn/plugin-manager/usage-alert-contributors'
+import { assistBackstopCeilingUsd } from './assist-ceiling'
 
 /**
  * The AI plugin's staff alerts on provider spend (AGL-2984), evaluated for
@@ -48,6 +49,13 @@ import type { UsageAlertContext } from '@aglyn/aglyn/plugin-manager/usage-alert-
  *   threshold, so an org climbing from the threshold to the ceiling is still
  *   at 1x and says nothing. Announced once a month, because crossing is a
  *   state rather than an escalating sum.
+ *
+ *   The ceiling is the one THIS org's reservations refuse at —
+ *   `assistBackstopCeilingUsd` — not the repo default for everyone. That
+ *   default binds only a workspace with no band of its own; a band sold past,
+ *   a band that is a wall, and an uncapped staff comp are each measured
+ *   against something else, and announcing a $40 stop the reservation never
+ *   makes would send staff after an assistant that is still answering.
  *
  * Both are STAFF alerts. The org is not charged for this spend and has done
  * nothing wrong, so mailing the customer about our cost would be alarming and
@@ -103,9 +111,11 @@ async function alertOnMarginGuard(context: UsageAlertContext): Promise<void> {
     : `The ${aiAddonName()} add-on is off`
   const bandCredits = resolveAssistCreditBudget(org as never)
   const bandClause =
-    bandCredits === null
-      ? 'no AI credit band'
-      : `an AI credit band of ${bandCredits.toLocaleString()}`
+    bandCredits !== null
+      ? `an AI credit band of ${bandCredits.toLocaleString()}`
+      : isUncappedPlanComp(org as never)
+        ? 'no AI credit band (an uncapped staff comp)'
+        : 'no AI credit band'
   await context.alertStaff({
     quota: AI_MARGIN_GUARD_KEY,
     threshold: multiple,
@@ -123,12 +133,10 @@ async function alertOnMarginGuard(context: UsageAlertContext): Promise<void> {
 }
 
 async function alertOnHardCeiling(context: UsageAlertContext): Promise<void> {
-  const { month, spend } = context
-  // The same resolver the reservation refuses on, so the figure announced and
-  // the figure enforced cannot drift apart.
-  const ceilingUsd = assistOrgMonthlyCostLimitUsd(
-    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD,
-  )
+  const { org, month, spend } = context
+  // The same composition the reservation refuses on, for this org, so the
+  // figure announced and the figure enforced cannot drift apart.
+  const ceilingUsd = assistBackstopCeilingUsd(org as never)
   const due = assistCeilingBreach({
     assistUsd: spend.assistUsd,
     ceilingUsd,

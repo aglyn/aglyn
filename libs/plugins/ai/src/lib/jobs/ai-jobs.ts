@@ -772,11 +772,31 @@ export interface AiJobStepTokenRun {
   model: string
   effort: AiEffort | null
   latencyMs: number
+  /** Why the run's last model call stopped (AGL-3042). */
+  stopReason: string | null
 }
 
 /**
+ * The runs whose stop reasons a step's record keeps (AGL-3042), newest last.
+ * A page job that builds a layout, a form and a component, then five sections
+ * and its last pass, runs its generation step nine times: twelve keep such a
+ * page whole with room for three retries.
+ *
+ * What it costs the document: an entry is at most 67 bytes as Firestore sizes
+ * it (the two field names, 11 and 7; a stop reason, a provider's ASCII word of
+ * at most `AI_JOB_STEP_STOP_REASON_MAX_CHARS` characters, 41; an integer, 8),
+ * so a step's list is at most 813 bytes with its field name, and a job's two
+ * steps at most 1,626 of the 1,048,576 bytes a document may hold.
+ */
+export const AI_JOB_STEP_LAST_RUNS = 12
+
+/** The longest stop reason a run's entry keeps; every one a provider names today is shorter. */
+export const AI_JOB_STEP_STOP_REASON_MAX_CHARS = 40
+
+/**
  * A step's measure with one more run added: the four counts and the time
- * summed, the model and effort taken from the run.
+ * summed, the model and effort taken from the run, and why it stopped
+ * appended to the latest runs (AGL-3042).
  */
 export function addAiJobStepTokens(
   current: AiJobStepTokens | null | undefined,
@@ -786,6 +806,11 @@ export function addAiJobStepTokens(
     const parsed = Number(value ?? 0)
     return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0
   }
+  const kept = Array.isArray(current?.lastRuns) ? current.lastRuns : []
+  const stopReason =
+    typeof run.stopReason === 'string' && run.stopReason
+      ? run.stopReason.slice(0, AI_JOB_STEP_STOP_REASON_MAX_CHARS)
+      : null
   return {
     input: count(current?.input) + count(run.usage.inputTokens),
     cachedRead: count(current?.cachedRead) + count(run.usage.cacheReadTokens),
@@ -795,6 +820,7 @@ export function addAiJobStepTokens(
     effort: run.effort ?? null,
     latencyMs: count(current?.latencyMs) + count(run.latencyMs),
     runs: count(current?.runs) + 1,
+    lastRuns: [...kept, { stopReason, output: count(run.usage.outputTokens) }].slice(-AI_JOB_STEP_LAST_RUNS),
   }
 }
 
@@ -1503,6 +1529,7 @@ export async function runAiJobStep(
     model: outcome.model,
     effort: outcome.effort ?? null,
     latencyMs,
+    stopReason: outcome.stopReason,
   }
 
   // A step that stopped before the provider without failing — a site with no

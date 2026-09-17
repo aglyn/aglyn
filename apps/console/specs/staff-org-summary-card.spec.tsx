@@ -114,6 +114,41 @@ describe('StaffOrgSummaryCard (AGL-938)', () => {
     expect(screen.queryByText(/^stored:/)).toBeNull()
   })
 
+  it('says a comp is uncapped wherever it names it, dormant or in force (AGL-3049)', () => {
+    const uncapped = {
+      plan: 'enterprise',
+      uncapped: true,
+      reason: 'other',
+      note: 'Internal workspace',
+    }
+    const { unmount } = render(
+      <StaffOrgSummaryCard
+        orgId="hz_KgetqSq"
+        org={{
+          ...org,
+          plan: 'enterprise',
+          subscription: null,
+          entitlements: { planComp: uncapped },
+        }}
+        owner={null}
+        onImpersonateOwner={jest.fn()}
+      />,
+    )
+    expect(screen.getByText('comp: enterprise (uncapped)')).toBeTruthy()
+    unmount()
+
+    // Behind a live subscription the comp lifts nothing, and says so.
+    render(
+      <StaffOrgSummaryCard
+        orgId="hz_KgetqSq"
+        org={{ ...org, entitlements: { planComp: { ...uncapped, plan: 'agency' } } }}
+        owner={null}
+        onImpersonateOwner={jest.fn()}
+      />,
+    )
+    expect(screen.getByText('comp: agency (uncapped, dormant)')).toBeTruthy()
+  })
+
   it('renders a resolved owner as a person, uid demoted off the surface', () => {
     render(
       <StaffOrgSummaryCard

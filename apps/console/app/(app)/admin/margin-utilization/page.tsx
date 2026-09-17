@@ -19,6 +19,7 @@
 
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { ceilingedWindow, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -33,7 +34,6 @@ import {
   Menu,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -368,77 +368,75 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                       include at all, has no percentage and is excluded from the
                       sample rather than folded in as zero.
                     </Typography>
-                    <Box sx={{ overflowX: 'auto' }}>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Band</TableCell>
-                            <TableCell align="right">Orgs</TableCell>
-                            <TableCell align="right">Median</TableCell>
-                            <TableCell align="right">25th</TableCell>
-                            <TableCell align="right">75th</TableCell>
-                            <TableCell align="right">90th</TableCell>
-                            <TableCell align="right">Max</TableCell>
-                            <TableCell align="right">Over band</TableCell>
-                            <TableCell>Excluded</TableCell>
+                    <ScrollTable size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Band</TableCell>
+                          <TableCell align="right">Orgs</TableCell>
+                          <TableCell align="right">Median</TableCell>
+                          <TableCell align="right">25th</TableCell>
+                          <TableCell align="right">75th</TableCell>
+                          <TableCell align="right">90th</TableCell>
+                          <TableCell align="right">Max</TableCell>
+                          <TableCell align="right">Over band</TableCell>
+                          <TableCell>Excluded</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {bands.map((band) => (
+                          <TableRow key={band.band}>
+                            <TableCell>
+                              {UTILIZATION_BAND_LABELS[band.band]}
+                            </TableCell>
+                            <TableCell align="right">{band.counted}</TableCell>
+                            <TableCell align="right">
+                              <Typography
+                                variant="body2"
+                                sx={{ fontWeight: 'bold' }}
+                              >
+                                {pct(band.p50)}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">{pct(band.p25)}</TableCell>
+                            <TableCell align="right">{pct(band.p75)}</TableCell>
+                            <TableCell align="right">{pct(band.p90)}</TableCell>
+                            <TableCell align="right">{pct(band.max)}</TableCell>
+                            <TableCell align="right">{band.overBand}</TableCell>
+                            <TableCell>
+                              <Stack
+                                direction="row"
+                                spacing={0.5}
+                                sx={{ flexWrap: 'wrap', gap: 0.5 }}
+                              >
+                                {band.excludedUncapped ? (
+                                  <Chip
+                                    size="small"
+                                    variant="outlined"
+                                    color="tertiary"
+                                    label={`${band.excludedUncapped} uncapped`}
+                                  />
+                                ) : null}
+                                {band.excludedNoAllowance ? (
+                                  <Chip
+                                    size="small"
+                                    variant="outlined"
+                                    label={`${band.excludedNoAllowance} no allowance`}
+                                  />
+                                ) : null}
+                                {band.usageWithNoAllowance ? (
+                                  <Chip
+                                    size="small"
+                                    variant="outlined"
+                                    color="warning"
+                                    label={`${band.usageWithNoAllowance} spending it anyway`}
+                                  />
+                                ) : null}
+                              </Stack>
+                            </TableCell>
                           </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {bands.map((band) => (
-                            <TableRow key={band.band}>
-                              <TableCell>
-                                {UTILIZATION_BAND_LABELS[band.band]}
-                              </TableCell>
-                              <TableCell align="right">{band.counted}</TableCell>
-                              <TableCell align="right">
-                                <Typography
-                                  variant="body2"
-                                  sx={{ fontWeight: 'bold' }}
-                                >
-                                  {pct(band.p50)}
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="right">{pct(band.p25)}</TableCell>
-                              <TableCell align="right">{pct(band.p75)}</TableCell>
-                              <TableCell align="right">{pct(band.p90)}</TableCell>
-                              <TableCell align="right">{pct(band.max)}</TableCell>
-                              <TableCell align="right">{band.overBand}</TableCell>
-                              <TableCell>
-                                <Stack
-                                  direction="row"
-                                  spacing={0.5}
-                                  sx={{ flexWrap: 'wrap', gap: 0.5 }}
-                                >
-                                  {band.excludedUncapped ? (
-                                    <Chip
-                                      size="small"
-                                      variant="outlined"
-                                      color="tertiary"
-                                      label={`${band.excludedUncapped} uncapped`}
-                                    />
-                                  ) : null}
-                                  {band.excludedNoAllowance ? (
-                                    <Chip
-                                      size="small"
-                                      variant="outlined"
-                                      label={`${band.excludedNoAllowance} no allowance`}
-                                    />
-                                  ) : null}
-                                  {band.usageWithNoAllowance ? (
-                                    <Chip
-                                      size="small"
-                                      variant="outlined"
-                                      color="warning"
-                                      label={`${band.usageWithNoAllowance} spending it anyway`}
-                                    />
-                                  ) : null}
-                                </Stack>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </Box>
+                        ))}
+                      </TableBody>
+                    </ScrollTable>
                     <Typography variant="caption" color="text.secondary">
                       Over {fleet.orgs.toLocaleString()} organizations
                       {fleet.withRollup < fleet.orgs
@@ -524,112 +522,110 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                         Every figure above still covers all of them.
                       </Alert>
                     ) : null}
-                    <Box sx={{ overflowX: 'auto' }}>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Organization</TableCell>
-                            <TableCell>Plan</TableCell>
-                            <TableCell>Month</TableCell>
-                            <TableCell align="right">Net revenue</TableCell>
-                            <TableCell align="right">AI add-on</TableCell>
-                            <TableCell align="right">COGS</TableCell>
-                            <TableCell align="right">Margin</TableCell>
+                    <ScrollTable size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Organization</TableCell>
+                          <TableCell>Plan</TableCell>
+                          <TableCell>Month</TableCell>
+                          <TableCell align="right">Net revenue</TableCell>
+                          <TableCell align="right">AI add-on</TableCell>
+                          <TableCell align="right">COGS</TableCell>
+                          <TableCell align="right">Margin</TableCell>
+                          {bands.map((band) => (
+                            <TableCell key={band.band}>
+                              {UTILIZATION_BAND_LABELS[band.band]}
+                            </TableCell>
+                          ))}
+                          <TableCell align="right" />
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {table.rows.map((row) => (
+                          <TableRow
+                            key={row.orgId}
+                            hover
+                            sx={{ cursor: 'pointer' }}
+                            onClick={() =>
+                              router.push(
+                                buildRoute(Route.ADMIN_ORG_DETAIL, {
+                                  orgId: row.orgId,
+                                }),
+                              )
+                            }
+                          >
+                            <TableCell>{row.name ?? row.orgId}</TableCell>
+                            <TableCell>{row.plan}</TableCell>
+                            <TableCell>
+                              {row.month ?? (
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  label="No rollup"
+                                />
+                              )}
+                            </TableCell>
+                            <TableCell align="right">
+                              {usd(row.netRevenueUsd)}
+                            </TableCell>
+                            {/* Part of the net revenue beside it, not an
+                                addition to it (AGL-2930). A dash for an
+                                org without the add-on: "$0.00" would read
+                                as an add-on that earns nothing. */}
+                            <TableCell align="right">
+                              {row.aiAddonRevenueUsd > 0
+                                ? usd(row.aiAddonRevenueUsd)
+                                : '—'}
+                            </TableCell>
+                            <TableCell align="right">
+                              {usd(row.cogs.cogsUsd)}
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ display: 'block' }}
+                              >
+                                {/*
+                                  WHICH ARM PRODUCED THE FIGURE. `floor` means
+                                  the meters came in under the flat per-site
+                                  estimate, so the number says nothing about
+                                  what this organization actually consumed.
+                                */}
+                                {row.cogs.basis}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              {row.marginPct === null ? (
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  label="Not billing"
+                                />
+                              ) : (
+                                <Chip
+                                  size="small"
+                                  label={pct(row.marginPct)}
+                                  color={
+                                    row.rating === 'ok'
+                                      ? 'success'
+                                      : row.rating === 'warn'
+                                        ? 'warning'
+                                        : 'error'
+                                  }
+                                />
+                              )}
+                            </TableCell>
                             {bands.map((band) => (
-                              <TableCell key={band.band}>
-                                {UTILIZATION_BAND_LABELS[band.band]}
+                              <TableCell key={band.band} sx={{ minWidth: 120 }}>
+                                <BandCell reading={row.bands[band.band]} />
                               </TableCell>
                             ))}
-                            <TableCell align="right" />
+                            <TableCell align="right">
+                              <RowActions orgId={row.orgId} />
+                            </TableCell>
                           </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {table.rows.map((row) => (
-                            <TableRow
-                              key={row.orgId}
-                              hover
-                              sx={{ cursor: 'pointer' }}
-                              onClick={() =>
-                                router.push(
-                                  buildRoute(Route.ADMIN_ORG_DETAIL, {
-                                    orgId: row.orgId,
-                                  }),
-                                )
-                              }
-                            >
-                              <TableCell>{row.name ?? row.orgId}</TableCell>
-                              <TableCell>{row.plan}</TableCell>
-                              <TableCell>
-                                {row.month ?? (
-                                  <Chip
-                                    size="small"
-                                    variant="outlined"
-                                    label="No rollup"
-                                  />
-                                )}
-                              </TableCell>
-                              <TableCell align="right">
-                                {usd(row.netRevenueUsd)}
-                              </TableCell>
-                              {/* Part of the net revenue beside it, not an
-                                  addition to it (AGL-2930). A dash for an
-                                  org without the add-on: "$0.00" would read
-                                  as an add-on that earns nothing. */}
-                              <TableCell align="right">
-                                {row.aiAddonRevenueUsd > 0
-                                  ? usd(row.aiAddonRevenueUsd)
-                                  : '—'}
-                              </TableCell>
-                              <TableCell align="right">
-                                {usd(row.cogs.cogsUsd)}
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ display: 'block' }}
-                                >
-                                  {/*
-                                    WHICH ARM PRODUCED THE FIGURE. `floor` means
-                                    the meters came in under the flat per-site
-                                    estimate, so the number says nothing about
-                                    what this organization actually consumed.
-                                  */}
-                                  {row.cogs.basis}
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="right">
-                                {row.marginPct === null ? (
-                                  <Chip
-                                    size="small"
-                                    variant="outlined"
-                                    label="Not billing"
-                                  />
-                                ) : (
-                                  <Chip
-                                    size="small"
-                                    label={pct(row.marginPct)}
-                                    color={
-                                      row.rating === 'ok'
-                                        ? 'success'
-                                        : row.rating === 'warn'
-                                          ? 'warning'
-                                          : 'error'
-                                    }
-                                  />
-                                )}
-                              </TableCell>
-                              {bands.map((band) => (
-                                <TableCell key={band.band} sx={{ minWidth: 120 }}>
-                                  <BandCell reading={row.bands[band.band]} />
-                                </TableCell>
-                              ))}
-                              <TableCell align="right">
-                                <RowActions orgId={row.orgId} />
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </Box>
+                        ))}
+                      </TableBody>
+                    </ScrollTable>
                   </Stack>
                 </CardDisplay>
               </>

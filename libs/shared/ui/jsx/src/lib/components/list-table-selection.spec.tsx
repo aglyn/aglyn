@@ -33,7 +33,13 @@
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { useState } from 'react'
-import { ListTable, type ListTableProps } from './list-table.component'
+import {
+  LIST_ACTIONS_FIELD,
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+  type ListTableProps,
+} from './list-table.component'
 
 const rows = [
   { $id: 'row-a', name: 'Account A' },
@@ -116,5 +122,39 @@ describe('ListTable selection', () => {
 
     expect(onOpen).toHaveBeenCalledWith('row-b', rows[1])
     expect(onChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('ListTable row opening', () => {
+  const withActions = [
+    ...columns,
+    listActionsColumn((row) => (
+      <ListRowActions label={row.name} items={[{ key: 'edit', label: 'Edit', onClick: () => undefined }]} />
+    )),
+  ]
+
+  it('opens the record from a press on the row', () => {
+    const onOpen = jest.fn()
+    render(<ListTable rows={rows} columns={withActions} hideFooter onOpen={onOpen} />)
+
+    fireEvent.click(screen.getByRole('gridcell', { name: 'Account A' }))
+
+    expect(onOpen).toHaveBeenCalledWith('row-a', rows[0])
+  })
+
+  it('never opens it from a press on the actions cell beside the menu', () => {
+    const onOpen = jest.fn()
+    const { container } = render(
+      <ListTable rows={rows} columns={withActions} hideFooter onOpen={onOpen} />,
+    )
+    const cell = container.querySelector(
+      `[role="row"][data-id="row-a"] [data-field="${LIST_ACTIONS_FIELD}"]`,
+    ) as HTMLElement
+    // Positive control: the cell is there, and it holds the row's menu.
+    expect(within(cell).getByRole('button', { name: 'More actions for Account A' })).toBeTruthy()
+
+    fireEvent.click(cell)
+
+    expect(onOpen).not.toHaveBeenCalled()
   })
 })

@@ -61,6 +61,7 @@ import {
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -79,7 +80,6 @@ import {
   ListItemText,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -1765,7 +1765,7 @@ function ScreenDetails() {
                     help={docsHelp('versionsAndPublishing', { anchor: '#publish--roll-back', excerpt: 'Every publish is a version you can view, restore, or schedule.' })}
                     contentBordered="all"
                   >
-                    <Table size="small">
+                    <ScrollTable size="small">
                       <TableHead>
                         <TableRow>
                           <TableCell>{'Version'}</TableCell>
@@ -1874,7 +1874,7 @@ function ScreenDetails() {
                           )
                         })}
                       </TableBody>
-                    </Table>
+                    </ScrollTable>
                   </CardDisplay>
                 ),
               },

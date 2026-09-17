@@ -23,6 +23,7 @@ import {
   AI_INVENTORY_KIND_HEADINGS,
   AI_SITE_INVENTORY_LISTED_PER_KIND,
   AI_SITE_INVENTORY_MAX_CHARS,
+  aiHomeScreenIds,
   aiInventoryLine,
   aiInventoryRows,
   type AiInventoryKind,
@@ -95,6 +96,8 @@ import { AI_PALETTE_CATALOG } from './ai-palette.generated'
  *     request. Bounded, and not an answer attempt;
  *  3. on a violation, asks ONCE more with the broken rules named and the
  *     offending parts quoted — never the whole document again (AGL-2937);
+ *     an answer cut off at its output ceiling is asked for smaller instead,
+ *     whatever its truncated input made the check say (AGL-3042);
  *  4. and when the second answer still breaks a rule, gives up with
  *     `needs_input`: a person decides, rather than a loop spending on the
  *     same refusal.
@@ -178,7 +181,7 @@ const AI_DOCTRINE_RULE_TEXT: readonly AiDoctrineRuleText[] = [
   { n: 7, scopes: DOCUMENTS, text: 'Reuse before creating. Prefer what the site inventory lists: components, layouts, templates, forms, themes, datasets, collections and screens, referenced by id. Creating is the exception, and every creation says why nothing listed will do. In a plan, refer to something the plan itself creates as new:<name>, and create only what the request says this job may create on this site.' },
   { n: 8, scopes: DOCUMENTS, text: 'Data is bound, not typed. A list that exists as a dataset, collection, product or record is bound to it and never copied into text; a long list the site lacks becomes a dataset in the plan.' },
   { n: 9, scopes: DOCUMENTS, text: 'Images come from the media library, with alt text. Place images by media reference, or leave "src" empty for an upload; never link an image from another website. Every image has alt text describing it, or "decorative": true.' },
-  { n: 10, scopes: DOCUMENTS, text: 'Navigation and SEO travel with a page. Every new screen has a slug of lowercase words joined by hyphens that the site does not already use, a search title of at most 70 characters, a search description of at most 170, and a navigation entry when the brief implies one.' },
+  { n: 10, scopes: DOCUMENTS, text: 'Navigation and SEO travel with a page. Every new screen has a slug of lowercase words joined by hyphens that the site does not already use, a search title of at most 70 characters, a search description of at most 170, and a navigation entry when the brief implies one. A link goes to a screen that does what its words say, or is left out.' },
   { n: 11, scopes: DOCUMENTS, text: 'One main landmark and an ordered outline. A page declares at most one "main"; a component, form or email declares none; a layout has exactly one "layoutSlot". A page has exactly one h1 and never skips a heading level, and a layout has no h1. Set a heading\'s level with the Typography "component" (h1 to h6).' },
   { n: 12, scopes: DOCUMENTS, text: 'Responsive by the theme\'s breakpoints. Widths come from a Container\'s maxWidth, a Grid\'s size, a percentage, or responsive values keyed by xs, sm, md, lg and xl, never a fixed px or viewport width.' },
   { n: 13, scopes: EVERY_SCOPE, text: 'Drafts only. Everything you produce is a new draft that a person reviews and publishes. Never ask to publish, and never change something already live.' },
@@ -271,6 +274,11 @@ export const AI_DOCTRINE_KIND_SCOPE: Readonly<Record<string, AiDoctrineScope>> =
   'seo-fields': 'fields',
   'seo-site': 'fields',
   'seo-fixes': 'fields',
+  // CRM by AI (AGL-2917): a record's summary, an email draft, an import's
+  // column matches — values the CRM's own forms take, composing nothing.
+  'crm-email': 'fields',
+  'crm-mapping': 'fields',
+  'crm-record': 'fields',
 }
 
 /** The scope for a kind; `documents` unless the kind names another. */
@@ -665,15 +673,82 @@ export function aiDoctrinePlanCheck(
   }
 }
 
-/** The re-ask: the rules broken, where, and the offending parts as the model wrote them. */
+// ── An answer cut off at its ceiling ─────────────────────────────────────
+
+/** The finding an answer that ran past its output ceiling is refused for (AGL-3042). */
+export const AI_ANSWER_CUT_OFF_CODE = 'answer-cut-off'
+
+/**
+ * Whether a model call stopped because it reached the output ceiling it was
+ * asked for (AGL-3042). `max_tokens` is the contract's word, and the
+ * OpenAI-compatible adapter maps its endpoint's `length` onto it; `length` is
+ * read as well, for an adapter that passes its provider's own word through.
+ */
+export function aiStoppedAtCeiling(stopReason: string | null): boolean {
+  return stopReason === 'max_tokens' || stopReason === 'length'
+}
+
+/**
+ * How a door names what it generates, and what makes it smaller, for an
+ * answer cut off at its ceiling (AGL-3042).
+ */
+export interface AiGenerationCutOff {
+  /** What a person calls the output: `section` reads "This section was too large to build in one pass." */
+  noun: string
+  /**
+   * What the re-ask tells the model makes an answer of this kind smaller, in
+   * its own sentence: a section's element budget, shorter copy, a repeated
+   * item placed as an instance.
+   */
+  smaller: string
+}
+
+/**
+ * The refusal of an answer that ran past its ceiling. The message is what a
+ * person reads, so it names the output as they call it and says what helps;
+ * the detail is what the model is told makes it smaller. A plan or a palette
+ * kind is called by its kind, and any other a door leaves unnamed an answer.
+ */
+function cutOffAnswer(kind: string, cutOff: AiGenerationCutOff | undefined): AiDoctrineViolation {
+  const noun = cutOff?.noun ?? (kind === 'plan' || isAiOutputKind(kind) ? kind : 'answer')
+  return {
+    rule: null,
+    code: AI_ANSWER_CUT_OFF_CODE,
+    message: `This ${noun} was too large to build in one pass. Try again, or describe it smaller.`,
+    detail: cutOff?.smaller ?? `Build a smaller ${kind}.`,
+  }
+}
+
+function unreadableAnswer(toolName: string): AiDoctrineViolation {
+  return {
+    rule: null,
+    code: 'answer-unreadable',
+    message: `The answer did not come through ${toolName}.`,
+  }
+}
+
+/**
+ * The re-ask: the rules broken, where, and the offending parts as the model
+ * wrote them. An answer cut off at its ceiling is told that first, with what
+ * makes it smaller (AGL-3042): it broke no rule it can mend by reading one,
+ * and asking for the same answer again is asking to be cut off again.
+ */
 export function aiReaskMessage(
   kind: string,
   toolName: string,
   violations: readonly AiDoctrineViolation[],
   offending?: Record<string, unknown>,
 ): string {
-  const lines = [`Your ${kind} was not used, because it breaks these building rules:`]
-  for (const violation of violations) {
+  const cutOff = violations.find((violation) => violation.code === AI_ANSWER_CUT_OFF_CODE)
+  const broken = cutOff ? violations.filter((violation) => violation !== cutOff) : violations
+  const lines = cutOff
+    ? [
+        `Your ${kind} was not used: it ran past the size one answer may have, and was cut off before it was whole.`,
+        ...(cutOff.detail ? [cutOff.detail] : []),
+        ...(broken.length ? ['It also breaks these building rules:'] : []),
+      ]
+    : [`Your ${kind} was not used, because it breaks these building rules:`]
+  for (const violation of broken) {
     const where = violation.nodeIds?.length
       ? ` (nodes ${violation.nodeIds.join(', ')})`
       : violation.paths?.length
@@ -687,38 +762,29 @@ export function aiReaskMessage(
   }
   lines.push(
     '',
-    `Answer again with ${toolName}: the whole ${kind}, built so that none of these rules is broken.`,
+    cutOff
+      ? `Answer again with ${toolName}: the whole ${kind}, smaller than the one that was cut off${
+          broken.length ? ', and built so that none of these rules is broken' : ''
+        }.`
+      : `Answer again with ${toolName}: the whole ${kind}, built so that none of these rules is broken.`,
   )
   return lines.join('\n')
 }
 
-/** What a person reads when the second answer still broke a rule. */
+/**
+ * What a person reads when the second answer still broke a rule. An answer
+ * cut off at its ceiling broke none (AGL-3042), so its own sentence is what
+ * they read: it was too large, and what helps.
+ */
 export function aiDoctrineNeedsInputMessage(violations: readonly AiDoctrineViolation[]): string {
+  const cutOff = violations.find((violation) => violation.code === AI_ANSWER_CUT_OFF_CODE)
+  if (cutOff) return cutOff.message
   const first = violations.find((violation) => violation.rule !== null) ?? violations[0]
   if (!first) return 'This could not be built within the building rules.'
   const others = violations.length - 1
   return `This could not be built within the building rules. ${aiDoctrineViolationText(first)}${
     others > 0 ? ` (${others} more ${others === 1 ? 'rule was' : 'rules were'} also broken.)` : ''
   }`
-}
-
-function unreadableAnswer(
-  kind: string,
-  toolName: string,
-  stopReason: string | null,
-): AiDoctrineViolation {
-  const cutOff = stopReason === 'max_tokens' || stopReason === 'length'
-  return cutOff
-    ? {
-        rule: null,
-        code: 'answer-cut-off',
-        message: `The ${kind} ran past the size one answer may have. Build a smaller ${kind}.`,
-      }
-    : {
-        rule: null,
-        code: 'answer-unreadable',
-        message: `The answer did not come through ${toolName}.`,
-      }
 }
 
 // ── The loop ─────────────────────────────────────────────────────────────
@@ -748,6 +814,13 @@ interface AiGenerationInputBase {
    * them — spends at most `AI_GENERATION_MAX_ATTEMPTS` of it (AGL-3036).
    */
   maxTokens?: number
+  /**
+   * What the output is called, and what makes it smaller, when an answer is
+   * cut off at `maxTokens` (AGL-3042). Absent, a plan or a palette kind is
+   * called by its kind, any other output an answer, and the model is asked
+   * for a smaller one of its kind.
+   */
+  cutOff?: AiGenerationCutOff
   thinking?: AiThinking
   effort?: AiEffort
   signal?: AbortSignal
@@ -853,6 +926,7 @@ export function aiDoctrineTreeContext(
       ? { colors: inventory.theme.colors, fonts: inventory.theme.fonts }
       : null,
     ...aiNodeTreeContextFromInventory(inventory),
+    homeScreenIds: aiHomeScreenIds(inventory),
     ...extra,
   }
 }
@@ -957,7 +1031,7 @@ export async function runValidatedGeneration(
     const spent = Number(spend.usage.outputTokens)
     const left = allowance - (Number.isFinite(spent) ? spent : 0)
     if (left <= 0) {
-      if (!violations.length) violations = [unreadableAnswer(kind, input.tool.name, 'max_tokens')]
+      if (!violations.length) violations = [cutOffAnswer(kind, input.cutOff)]
       break
     }
     spend.attempts += 1
@@ -1008,15 +1082,25 @@ export async function runValidatedGeneration(
       continue
     }
     answers += 1
-    const checked = answer
-      ? check(answer)
-      : { value: null, violations: [unreadableAnswer(kind, input.tool.name, result.stopReason)] }
-    if (checked.value !== null && checked.violations.length === 0) {
+    const checked = answer ? check(answer) : null
+    if (checked && checked.value !== null && checked.violations.length === 0) {
       return { ...spend, status: 'ok', value: checked.value }
     }
-    violations = checked.violations.length
-      ? checked.violations
-      : [unreadableAnswer(kind, input.tool.name, result.stopReason)]
+    // CUT OFF WINS (AGL-3042). A call that stopped at its ceiling was cut
+    // off, whatever reached the tool: a tool input cut mid-answer arrives
+    // partial or empty, and a check reads the truncation as a shape error —
+    // "the answer could not be used as a section" — that a re-ask quoting it
+    // cannot mend, so the re-ask is cut off the same way. The attempt is
+    // refused as too large instead, and only a numbered rule the part that
+    // arrived already broke is named beside it.
+    const found = checked?.violations ?? []
+    const cutOff = aiStoppedAtCeiling(result.stopReason)
+    violations = cutOff
+      ? [cutOffAnswer(kind, input.cutOff), ...found.filter((violation) => violation.rule !== null)]
+      : found.length
+        ? found
+        : [unreadableAnswer(input.tool.name)]
+    const offending = cutOff && violations.length === 1 ? undefined : checked?.offending
     // The re-ask continues the turn rather than replacing it, so whatever the
     // model looked up is still in front of it and is not asked for twice.
     messages = [
@@ -1024,7 +1108,7 @@ export async function runValidatedGeneration(
       { role: 'assistant', content: `Submitted the ${kind} with ${input.tool.name}.` },
       {
         role: 'user',
-        content: aiReaskMessage(kind, input.tool.name, violations, checked.offending),
+        content: aiReaskMessage(kind, input.tool.name, violations, offending),
       },
     ]
   }

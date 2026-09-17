@@ -39,9 +39,11 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AiBuildPlanCreate } from '../model/ai-build-plan'
 import { AI_JOB_KINDS, type AiJob, type AiJobKind, type AiJobOutput, type AiJobPlan } from '../model/ai-jobs.types'
+import { aiProductsJobInputs } from '../model/ai-products'
 import { AI_SITE_PAGES } from '../model/ai-site-job'
 import { AI_MODEL_CATALOG, AI_STEP_TIERS, type AiCatalogEntry, type AiStepKind } from '../providers/catalog'
 import { AI_ROUTING_TABLE } from '../providers/routing'
+import { AI_PRODUCT_COPY_MAX_TOKENS } from '../runtime/ai-products-generation'
 import { AI_INVENTORY_LOOKUP_MAX_ROUNDS } from '../tools/ai-inventory-lookup-tool'
 import { registerAiConsoleApi } from '../server'
 import {
@@ -56,11 +58,19 @@ import {
   type AiJobStepBudget,
 } from './ai-job-budget'
 import { AI_JOB_COMPONENT_STEP_BUDGET } from './ai-job-component-step'
+import { AI_CRM_FACTS_READS_MS, AI_JOB_CRM_STEP_BUDGET } from './ai-job-crm-step'
 import { AI_JOB_EMAIL_STEP_BUDGETS } from './ai-job-email-step'
 import { AI_JOB_FORM_STEP_BUDGET } from './ai-job-form-step'
+import { AI_INSIGHT_READS_MS, AI_JOB_INSIGHT_STEP_BUDGET } from './ai-job-insight-budget'
 import { AI_JOB_LAYOUT_STEP_BUDGET } from './ai-job-layout-step'
 import { AI_JOB_PAGE_SECTION_MAX_TOKENS, AI_JOB_PAGE_SECTION_TOKENS, AI_JOB_PAGE_STEP_BUDGET } from './ai-job-page-budget'
 import { AI_JOB_PLAN_STEP_BUDGET } from './ai-job-plan-step'
+import {
+  AI_JOB_CATALOG_BUDGET,
+  AI_JOB_CATEGORIES_BUDGET,
+  AI_JOB_PRODUCTS_STEP_BUDGET,
+} from './ai-job-products-step'
+import { AI_PRODUCT_IMAGE_READ_MS } from './ai-product-image'
 import {
   AI_JOB_SEO_STEP_BUDGET,
   AI_SEO_AUDIT_READS_MS,
@@ -70,6 +80,7 @@ import {
 import { AI_JOB_TEMPLATE_STEP_BUDGET } from './ai-job-template-step'
 import { AI_JOB_TEXT_STEP_BUDGET } from './ai-job-text-step'
 import { AI_JOB_THEME_STEP_BUDGET, AI_THEME_BRAND_BUDGET_MS } from './ai-job-theme-budget'
+import { AI_JOB_WORKFLOW_STEP_BUDGET, AI_WORKFLOW_RECORDS_READ_MS } from './ai-job-workflow-step'
 import {
   AI_JOB_PLAN_STEP,
   aiJobNextStepMinimumMs,
@@ -164,6 +175,33 @@ const STEP_TIMES: readonly StepTime[] = [
     shape: shape({ lookups: 0, ownReadsMs: AI_SEO_AUDIT_READS_MS }),
   },
   {
+    row: '`insight`',
+    kind: 'insight',
+    routing: 'job.insight',
+    budget: AI_JOB_INSIGHT_STEP_BUDGET,
+    ceiling: routed('job.insight'),
+    cap: routed('job.insight'),
+    shape: shape({ lookups: 1, ownReadsMs: AI_INSIGHT_READS_MS }),
+  },
+  {
+    row: '`products`, a product’s copy',
+    kind: 'products',
+    routing: 'job.products',
+    budget: AI_JOB_PRODUCTS_STEP_BUDGET,
+    ceiling: AI_PRODUCT_COPY_MAX_TOKENS,
+    cap: AI_PRODUCT_COPY_MAX_TOKENS,
+    shape: shape({ lookups: 0, ownReadsMs: AI_PRODUCT_IMAGE_READ_MS }),
+  },
+  {
+    row: '`crm`',
+    kind: 'crm',
+    routing: 'job.crm',
+    budget: AI_JOB_CRM_STEP_BUDGET,
+    ceiling: routed('job.crm'),
+    cap: routed('job.crm'),
+    shape: shape({ lookups: 0, ownReadsMs: AI_CRM_FACTS_READS_MS }),
+  },
+  {
     row: '`text`',
     kind: 'text',
     routing: 'job.text',
@@ -171,6 +209,15 @@ const STEP_TIMES: readonly StepTime[] = [
     ceiling: routed('job.text'),
     cap: routed('job.text'),
     shape: shape({ attempts: 1, lookups: 0 }),
+  },
+  {
+    row: '`workflow`',
+    kind: 'workflow',
+    routing: 'job.workflow',
+    budget: AI_JOB_WORKFLOW_STEP_BUDGET,
+    ceiling: routed('job.workflow'),
+    cap: routed('job.workflow'),
+    shape: shape({ lookups: 0, ownReadsMs: AI_WORKFLOW_RECORDS_READ_MS }),
   },
 ]
 
@@ -181,19 +228,30 @@ describe('every step the console runs registers the least time it needs (AGL-303
     expect(steps.filter(({ minimumMs }) => !(minimumMs > 0))).toEqual([])
     expect(steps.filter(({ minimumMs }) => minimumMs > AI_JOB_STEP_MAX_MINIMUM_MS)).toEqual([])
     // Every kind with a step module beside the machine is among them.
-    for (const kind of ['text', 'theme', 'seo', 'component', 'layout', 'template', 'form', 'page', 'email', 'campaign', 'site'] as const) {
+    for (const kind of ['text', 'theme', 'seo', 'component', 'layout', 'template', 'form', 'page', 'email', 'campaign', 'site', 'workflow', 'insight', 'products', 'crm'] as const) {
       expect([kind, steps.some((entry) => entry.kind === kind)]).toEqual([kind, true])
     }
   })
 
-  it('leaves every step for the beat but the one whose worst case at its ceiling fits an inline door, proven by the helper', () => {
+  it('leaves every step for the beat but the ones whose worst case at their ceiling fits an inline door, proven by the helper', () => {
     const inline = registeredSteps().filter(({ minimumMs }) => minimumMs <= AI_JOB_INLINE_BUDGET_MS)
-    expect(inline.map(({ kind, step }) => `${kind}/${step}`)).toEqual(['text/draft'])
+    expect(inline.map(({ kind, step }) => `${kind}/${step}`)).toEqual(['crm/generate', 'text/draft'])
     // The text step's one request at the routing ceiling on its own tier is what fits.
     const tier = AI_STEP_TIERS['job.text']
     expect(AI_JOB_TEXT_STEP_BUDGET.maxTokens(modelOn(tier))).toBe(AI_ROUTING_TABLE['job.text'].maxTokens)
     expect(aiJobStepMinimumMs('text', 'draft')).toBe(
       aiGenerationWorstCaseOnTierMs({ tier, maxTokens: AI_ROUTING_TABLE['job.text'].maxTokens, attempts: 1, lookups: 0 }),
+    )
+    // So do the CRM step's answer and its re-ask at its ceiling, after the facts read (AGL-2917).
+    const crmTier = AI_STEP_TIERS['job.crm']
+    expect(AI_JOB_CRM_STEP_BUDGET.maxTokens(modelOn(crmTier))).toBe(AI_ROUTING_TABLE['job.crm'].maxTokens)
+    expect(aiJobStepMinimumMs('crm', 'generate')).toBe(
+      aiGenerationWorstCaseOnTierMs({
+        tier: crmTier,
+        maxTokens: AI_ROUTING_TABLE['job.crm'].maxTokens,
+        lookups: 0,
+        ownReadsMs: AI_CRM_FACTS_READS_MS,
+      }),
     )
   })
 
@@ -345,5 +403,23 @@ describe('a pass needs the time of the step its unit is handed to (AGL-3035)', (
     // A scaffold with nothing left to build spends nothing; a page pass's time covers it.
     expect(aiJobNextStepMinimumMs({ ...job, outputs })).toBe(aiJobStepMinimumMs('site', 'generate'))
     expect(aiJobStepMinimumMs('site', 'generate')).toBe(aiJobStepMinimumMs('page', 'generate'))
+  })
+
+  it('gives a products job’s catalog and categories passes their own time, above the copy the step registers', () => {
+    const job = (inputs: Record<string, string>): AiJob =>
+      ({
+        ...plannedJob('products', {}, { inputs }),
+        plan: undefined,
+        steps: [{ name: 'generate', status: 'pending', creditsSpent: 0 }],
+      }) as unknown as AiJob
+    expect(aiJobNextStepMinimumMs(job(aiProductsJobInputs({ target: 'bulk', productIds: ['a', 'b'] })))).toBe(
+      aiJobStepMinimumMs('products', 'generate'),
+    )
+    expect(aiJobNextStepMinimumMs(job(aiProductsJobInputs({ target: 'catalog' })))).toBe(AI_JOB_CATALOG_BUDGET.minimumMs)
+    expect(aiJobNextStepMinimumMs(job(aiProductsJobInputs({ target: 'categories' })))).toBe(
+      AI_JOB_CATEGORIES_BUDGET.minimumMs,
+    )
+    expect(AI_JOB_CATEGORIES_BUDGET.minimumMs).toBeGreaterThan(aiJobStepMinimumMs('products', 'generate'))
+    expect(AI_JOB_CATALOG_BUDGET.minimumMs).toBeGreaterThan(AI_JOB_CATEGORIES_BUDGET.minimumMs)
   })
 })

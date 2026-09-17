@@ -278,4 +278,5 @@ could not open as a contact.
 - [Forms & lead capture](../forms/overview.md)
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)
 - [Automations for the CRM](./automations.md)
+- [CRM by AI](../../ai/crm-by-ai.md): summaries, next steps, email drafts and column matching
 - [REST API — contacts](/api/resources/contacts), [companies](/api/resources/companies), [pipelines](/api/resources/pipelines), [deals](/api/resources/deals), [tasks](/api/resources/tasks) and [activities](/api/resources/activities)

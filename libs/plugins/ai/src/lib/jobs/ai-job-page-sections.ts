@@ -21,7 +21,7 @@ import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import type { AiBuildPlanScreen, AiBuildPlanSection } from '../model/ai-build-plan'
 import { aiPageTypeDefinition, parseAiPageJobInputs } from '../model/ai-page-job'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
-import type { AiSiteInventory } from '../model/ai-site-inventory'
+import { aiHomeScreenIds, type AiSiteInventory } from '../model/ai-site-inventory'
 import type { AiTool } from '../providers/contract'
 import {
   AI_REASK_OFFENDING_MAX_CHARS,
@@ -39,6 +39,7 @@ import {
 import { AI_INSTANCE_REF_PROP, validateAiNodeTree } from '../runtime/ai-node-tree'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
+import { AI_REPEAT_KEY, expandAiRepeatedItems } from '../runtime/ai-repeated-items'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiJobBriefLine, aiPlanReferenceLines } from './ai-job-generation'
 
@@ -60,6 +61,16 @@ import { aiJobBriefLine, aiPlanReferenceLines } from './ai-job-generation'
  * pass, not only on the last. The violations name the section's own nodes,
  * by the ids the model wrote, so a re-ask quotes this section and nothing
  * else — the page is never sent back.
+ *
+ * ── A repeated item written once (AGL-3053) ──────────────────────────────
+ *
+ * Where the workspace keeps no reusable components, an answer writes a
+ * repeated item once and lists its copies' values, and the check draws the
+ * copies before either validator reads the section (`ai-repeated-items.ts`).
+ * Both then read the section as the page stores it, so the page's rules hold
+ * on every copy exactly as on an item written out in full, and a finding on a
+ * copy names the node the model wrote. Where the workspace keeps components,
+ * an item written once is refused: it places instances.
  */
 
 /** The section root id a pass writes, from the job and the plan section's index. */
@@ -93,8 +104,8 @@ export const AI_JOB_PAGE_INSTRUCTIONS: readonly AiSystemBlock[] = [
       'You build a web page one section at a time, in the order a confirmed plan gives. Each answer is ONE section: call submit_section with a flat node map whose root is the document wrapper (componentId "div") holding exactly one Section (section).',
       'The first section is the top of the page and holds the page’s one h1, its title. Every later section opens with an h2, and headings below it step down one level at a time.',
       'Place what the section’s plan line names. A component the site has is placed as an instance, never drawn again: componentId "reusableInstance", props {"refId": "<component id>", "propValues": {…}} filling the props the inventory lists. A form the site has is a Form (form) whose formId is that form’s id. Another screen of the site is linked by its screen id, with a Screen Link (muiScreenLink) or a Button (muiButton) whose screenId is that id.',
-      'Where the request says the site keeps no saved forms or reusable components, draw them in the section instead: a repeated item is written out each time, and a form is a Form (form) with no formId, a formName saying what it collects and a submitLabel, holding one Form Field (formField) for each answer with its fieldName, label and fieldType.',
-      'Lay the section out with a Container, a Grid or a Stack, and size nothing with a fixed width. Colors come from the theme’s palette tokens such as primary.main, spacing from the spacing scale, and type from the text variants.',
+      'Where the request says the site keeps no saved forms or reusable components, draw them in the section instead: a repeated item is written once, and a form is a Form (form) with no formId, a formName saying what it collects and a submitLabel, holding one Form Field (formField) for each answer with its fieldName, label and fieldType.',
+      'Lay the section out with a Container, a Stack or a Grid ("container": true, "spacing": 3) of Grid items sized like "xs:12 md:4", and size nothing with a fixed width. Colors come from the theme’s palette tokens such as primary.main, spacing from the spacing scale, and type from the text variants.',
       'The page renders inside the site’s layout, so a section is never a header, navigation or footer.',
       'A picture is an Image (image) with alt text that says what it should show and no src, for the site owner to fill from the media library.',
       'Write plain, specific copy in the site’s voice, with no filler. Where the brief leaves out a fact, such as a price, a phone number or an address, write the gap in square brackets instead of inventing it.',
@@ -125,7 +136,37 @@ export interface AiPageSectionPromptInput {
 
 /** What a section request says where the workspace keeps no reusable components or saved forms. */
 export const AI_PAGE_SECTION_INLINE_LINE =
-  'This site keeps no saved forms or reusable components: write a repeated item out each time, and draw a form as a Form holding its Form Fields.'
+  'This site keeps no saved forms or reusable components: write a repeated item once, and draw a form as a Form holding its Form Fields.'
+
+/** How a repeated item is written once, in the words a request and a re-ask share. */
+const AI_PAGE_SECTION_REPEAT_SHAPE = `put {{1}}, {{2}}… where its copies differ, and give its outermost node "${AI_REPEAT_KEY}", one list of values a copy, in that order, as [["Title 1", "Text 1"], ["Title 2", "Text 2"]]`
+
+/**
+ * How a repeated item is written once (AGL-3053): the item's subtree once,
+ * with placeholders where its copies differ and their values listed, which
+ * the section check draws into its copies (`ai-repeated-items.ts`). It rides
+ * the request of a section whose plan line shows items on a workspace that
+ * keeps no reusable components, and no other: a section with nothing to repeat
+ * pays nothing for it, the cached prefix every workspace shares says only that
+ * a repeated item is written once, and a workspace that places components is
+ * never shown how.
+ */
+export const AI_PAGE_SECTION_REPEAT_LINE = `Write a repeated item once: ${AI_PAGE_SECTION_REPEAT_SHAPE}.`
+
+/**
+ * What a pass whose answer ran past its ceiling is told makes a section
+ * smaller (AGL-3042): fewer elements, down to the budget the request gave,
+ * shorter copy, and a repeated item drawn no more than once — placed as an
+ * instance where the workspace keeps reusable components, and written once
+ * where it keeps none (AGL-3053), with the shape spelled out, since a section
+ * whose plan line showed no items was never told it. It rides the re-ask,
+ * never the first request, so a pass that fits sends no byte more.
+ */
+export function aiPageSectionSmaller(input: Pick<AiPageSectionPromptInput, 'maxElements' | 'reusableComponents'>): string {
+  return input.reusableComponents === false
+    ? `Make it smaller: use fewer elements, at most ${input.maxElements}; write shorter copy; and write a repeated item once instead of drawing it again: ${AI_PAGE_SECTION_REPEAT_SHAPE}.`
+    : `Make it smaller: use fewer elements, at most ${input.maxElements}; write shorter copy; and place a repeated item as an instance of a component the site has instead of drawing it again.`
+}
 
 /** One pass's user turn: the page, the brief, the plan, this section and what is built above it. */
 export function aiPageSectionPrompt(input: AiPageSectionPromptInput): string {
@@ -147,7 +188,9 @@ export function aiPageSectionPrompt(input: AiPageSectionPromptInput): string {
     built.length
       ? `Already built, above it: ${built.join('; ')}. The page’s h1 is in section 1.`
       : 'Nothing is built yet: this section holds the page’s h1.',
-    ...(input.reusableComponents === false ? [AI_PAGE_SECTION_INLINE_LINE] : []),
+    ...(input.reusableComponents === false
+      ? [AI_PAGE_SECTION_INLINE_LINE, ...(section.items ? [AI_PAGE_SECTION_REPEAT_LINE] : [])]
+      : []),
     `Keep this section to at most ${input.maxElements} elements.`,
   ].join('\n')
 }
@@ -228,6 +271,7 @@ export function aiPageCheckContext(
   return {
     brand: inventory?.theme ? { colors: inventory.theme.colors, fonts: inventory.theme.fonts } : null,
     ...aiNodeTreeContextFromInventory(inventory),
+    homeScreenIds: aiHomeScreenIds(inventory),
     ...(options.reusableComponents === false ? { reusableComponents: false } : {}),
   }
 }
@@ -244,12 +288,28 @@ export interface AiPageSectionCheckInput {
   inventory: AiSiteInventory | null
 }
 
+/** The parts of an answer the violations name, as the model wrote them, capped as the doctrine caps a re-ask. */
+function offendingOf(raw: unknown, violations: readonly AiDoctrineViolation[]): { offending?: Record<string, unknown> } {
+  const rawNodes = isRecord(raw) && isRecord(raw['nodes']) ? raw['nodes'] : {}
+  const offending: Record<string, unknown> = {}
+  let used = 2
+  for (const id of new Set(violations.flatMap((violation) => violation.nodeIds ?? []))) {
+    if (rawNodes[id] === undefined) continue
+    const size = JSON.stringify(rawNodes[id]).length + id.length + 4
+    if (used + size > AI_REASK_OFFENDING_MAX_CHARS) break
+    offending[id] = rawNodes[id]
+    used += size
+  }
+  return Object.keys(offending).length ? { offending } : {}
+}
+
 /**
- * The check a section's answer is held to: the palette validator on the
- * section, the doctrine's page check on the page with the section added, and
- * the plan line — every component it names placed as an instance, every form
- * bound by its id (rule 7). Violations name the section's own nodes by the
- * ids the MODEL wrote.
+ * The check a section's answer is held to: a repeated item written once drawn
+ * into its copies (AGL-3053), then the palette validator on the section, the
+ * doctrine's page check on the page with the section added, and the plan line
+ * — every component it names placed as an instance, every form bound by its
+ * id (rule 7). Violations name the section's own nodes by the ids the MODEL
+ * wrote, and a copy's nodes by the item's.
  */
 export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGenerationCheck<AiPageSection> {
   const sectionId = input.sectionIds[input.index]
@@ -257,7 +317,13 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
   const forms = new Set((input.inventory?.forms ?? []).map((row) => row.id))
   return (answer) => {
     const raw = aiAnswerTree(answer)
-    const validated = validateAiNodeTree(raw, 'screen', input.context)
+    const drawn = expandAiRepeatedItems(raw, { inline: input.context.reusableComponents === false, noun: 'section' })
+    if (drawn.ok === false) {
+      return { value: null, violations: drawn.violations, ...offendingOf(raw, drawn.violations) }
+    }
+    // Every id below is the drawn tree's; a copy's leads back to the node the model wrote.
+    const written = (id: string): string => drawn.sourceIds[id] ?? id
+    const validated = validateAiNodeTree(drawn.tree, 'screen', input.context)
     if (validated.ok === false) {
       return {
         value: null,
@@ -290,8 +356,10 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
     // The section's root takes its plan id, so a pass run again finds it, and
     // hangs under the page root; every other minted id stays as minted.
     const minted = top[0]
-    const modelIds: Record<string, string> = { ...validated.sourceIds }
-    modelIds[sectionId] = validated.sourceIds[minted] ?? minted
+    const modelIds: Record<string, string> = Object.fromEntries(
+      Object.entries(validated.sourceIds).map(([id, source]) => [id, written(source)]),
+    )
+    modelIds[sectionId] = written(validated.sourceIds[minted] ?? minted)
     const sectionNodes: Record<string, Record<string, unknown>> = {}
     for (const { id, node } of walkTree({
       rootId: minted,
@@ -318,9 +386,13 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
       const stored = pageIds[id] ?? id
       return own.has(stored) ? (modelIds[stored] ?? stored) : null
     }
+    // Copies of one item name one node the model wrote, once.
     const violations: AiDoctrineViolation[] = report.violations.map((violation) =>
       violation.nodeIds
-        ? { ...violation, nodeIds: violation.nodeIds.map(toModel).filter((id): id is string => id !== null) }
+        ? {
+            ...violation,
+            nodeIds: [...new Set(violation.nodeIds.map(toModel).filter((id): id is string => id !== null))],
+          }
         : violation,
     )
 
@@ -344,21 +416,10 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
       })
     }
 
-    // The offending parts, as the model wrote them, capped as the doctrine caps a re-ask.
-    const rawNodes = isRecord(raw) && isRecord(raw['nodes']) ? raw['nodes'] : {}
-    const offending: Record<string, unknown> = {}
-    let used = 2
-    for (const id of new Set(violations.flatMap((violation) => violation.nodeIds ?? []))) {
-      if (rawNodes[id] === undefined) continue
-      const size = JSON.stringify(rawNodes[id]).length + id.length + 4
-      if (used + size > AI_REASK_OFFENDING_MAX_CHARS) break
-      offending[id] = rawNodes[id]
-      used += size
-    }
     return {
       value: { ...section, load: report.load },
       violations,
-      ...(Object.keys(offending).length ? { offending } : {}),
+      ...offendingOf(raw, violations),
     }
   }
 }

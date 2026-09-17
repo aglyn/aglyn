@@ -51,6 +51,11 @@ export interface AiGoldenNode {
   props?: Record<string, unknown>
   sx?: Record<string, unknown>
   nodes?: string[]
+  /**
+   * A repeated item written once (AGL-3053): each copy's values, in the order
+   * of the `{{1}}`, `{{2}}` placeholders its subtree carries.
+   */
+  repeat?: string[][]
 }
 
 /** A section as the model answers it: the document wrapper holding one Section. */
@@ -116,14 +121,35 @@ function hero(prefix: string, input: { name?: string; title: string; lead: strin
   })
 }
 
+/**
+ * The size each item of a golden row takes (AGL-3055): full width on a phone,
+ * two across from sm where four or more share the row, and two, three or four
+ * across from md, as the stored string the Grid renderer reads.
+ */
+function span(items: number): string {
+  if (items <= 2) return 'xs:12 md:6'
+  if (items === 3) return 'xs:12 md:4'
+  return items === 4 ? 'xs:12 sm:6 md:3' : 'xs:12 sm:6 md:4'
+}
+
+/** A Grid item of a row of `items`, holding one element. */
+function cell(add: Add, items: number, child: string, repeat?: string[][]): string {
+  return add({ componentId: 'muiGrid', props: { size: span(items) }, nodes: [child], ...(repeat ? { repeat } : {}) })
+}
+
+/** A row of Grid items: a Grid container spaced by its own spacing (AGL-3055). */
+function row(add: Add, cells: string[]): string {
+  return add({ componentId: 'muiGrid', props: { container: true, spacing: 3 }, nodes: cells })
+}
+
 function cards(prefix: string, input: { name: string; heading: string; intro?: string; componentId: string; items: Array<Record<string, string>> }): Built {
   return section(prefix, input.name, [input.componentId], input.items.length, (add) => {
-    const instances = input.items.map((propValues) =>
-      add({ componentId: 'reusableInstance', props: { refId: input.componentId, propValues } }),
+    const cells = input.items.map((propValues) =>
+      cell(add, input.items.length, add({ componentId: 'reusableInstance', props: { refId: input.componentId, propValues } })),
     )
     const children = [add(typography('h2', input.heading, 'h2'))]
     if (input.intro) children.push(add(typography('body1', input.intro)))
-    children.push(add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: instances }))
+    children.push(row(add, cells))
     return framed(add, children, 'lg', 8)
   })
 }
@@ -164,14 +190,40 @@ function form(prefix: string, input: { name: string; heading: string; intro: str
  */
 function inlineCards(prefix: string, input: { name: string; heading: string; items: Array<{ title: string; summary: string }> }): Built {
   return section(prefix, input.name, [], input.items.length, (add) => {
-    const cards = input.items.map((item) =>
+    const cells = input.items.map((item) =>
+      cell(
+        add,
+        input.items.length,
+        add({
+          componentId: 'muiCard',
+          props: { variant: 'outlined' },
+          nodes: [add({ componentId: 'muiCardContent', nodes: [add(typography('h3', item.title, 'h3')), add(typography('body2', item.summary))] })],
+        }),
+      ),
+    )
+    return framed(add, [add(typography('h2', input.heading, 'h2')), row(add, cells)], 'lg', 8)
+  })
+}
+
+/**
+ * The same cards written once (AGL-3053): one Grid item holding a Card whose
+ * title is `{{1}}` and whose summary is `{{2}}`, with every card's pair listed
+ * on the item, which the section check draws into exactly the cells
+ * `inlineCards` writes out.
+ */
+function inlineCardsOnce(prefix: string, input: { name: string; heading: string; items: Array<{ title: string; summary: string }> }): Built {
+  return section(prefix, input.name, [], input.items.length, (add) => {
+    const item = cell(
+      add,
+      input.items.length,
       add({
         componentId: 'muiCard',
         props: { variant: 'outlined' },
-        nodes: [add({ componentId: 'muiCardContent', nodes: [add(typography('h3', item.title, 'h3')), add(typography('body2', item.summary))] })],
+        nodes: [add({ componentId: 'muiCardContent', nodes: [add(typography('h3', '{{1}}', 'h3')), add(typography('body2', '{{2}}'))] })],
       }),
+      input.items.map((entry) => [entry.title, entry.summary]),
     )
-    return framed(add, [add(typography('h2', input.heading, 'h2')), add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: cards })], 'lg', 8)
+    return framed(add, [add(typography('h2', input.heading, 'h2')), row(add, [item])], 'lg', 8)
   })
 }
 
@@ -814,15 +866,41 @@ export const AI_PAGE_BRIEF_FIXTURES: readonly AiPageBriefFixture[] = [
 ]
 
 /**
+ * A page brief for a workspace that keeps no reusable components, answered the
+ * way such a workspace answers (AGL-3053): every repeated item written once
+ * with its copies' values listed. `writtenOut` is the same page with every
+ * repeated item written out card by card — the control, which the section
+ * check draws the golden answers into, node for node apart from ids.
+ */
+export interface AiFreePageFixture extends AiPageBriefFixture {
+  /** The golden answers, in the plan's order, with every repeated item written out in full. */
+  writtenOut: AiGoldenSection[]
+}
+
+type PracticeAreas = { name: string; heading: string; items: Array<{ title: string; summary: string }> }
+
+/** A Free page brief whose card sections are written once, with the page written out in full beside it. */
+function freeBrief(input: Omit<Parameters<typeof brief>[0], 'sections'> & { sections: Array<Built | { once: Built; full: Built }> }): AiFreePageFixture {
+  const once = input.sections.map((entry) => ('once' in entry ? entry.once : entry))
+  const full = input.sections.map((entry) => ('full' in entry ? entry.full : entry))
+  return { ...brief({ ...input, sections: once }), writtenOut: full.map((entry) => entry.answer) }
+}
+
+/** A section of cards, written once and written out. */
+function repeatedCards(prefix: string, input: PracticeAreas): { once: Built; full: Built } {
+  return { once: inlineCardsOnce(prefix, input), full: inlineCards(prefix, input) }
+}
+
+/**
  * A page brief for a Free workspace (AGL-3030): a site that keeps no reusable
  * components and no saved forms, with the one layout its plan includes. Its
  * practice areas repeat and its consultation request is a form, so the page
  * is built the one way such a workspace can build it — the cards drawn where
- * they repeat, and the form carried by the page with its fields inside it.
- * The plan the page job keeps for it is held to the Free workspace's
- * capabilities, never the whole doctrine.
+ * they repeat, written once in the answer (AGL-3053), and the form carried by
+ * the page with its fields inside it. The plan the page job keeps for it is
+ * held to the Free workspace's capabilities, never the whole doctrine.
  */
-export const AI_FREE_PAGE_FIXTURE: AiPageBriefFixture = brief({
+export const AI_FREE_PAGE_FIXTURE: AiFreePageFixture = freeBrief({
   id: 'free-law-firm-about',
   icp: 'small-business',
   pageType: 'about',
@@ -841,7 +919,7 @@ export const AI_FREE_PAGE_FIXTURE: AiPageBriefFixture = brief({
       title: 'About Brightwater Law',
       lead: 'We are a small firm that helps families and small businesses in [city] plan ahead and settle disputes before they reach a courtroom.',
     }),
-    inlineCards('b', {
+    repeatedCards('b', {
       name: 'practice areas',
       heading: 'What we help with',
       items: [
@@ -869,6 +947,59 @@ export const AI_FREE_PAGE_FIXTURE: AiPageBriefFixture = brief({
         { fieldName: 'email', label: 'Email', fieldType: 'email', required: true },
         { fieldName: 'phone', label: 'Phone', fieldType: 'text' },
         { fieldName: 'matter', label: 'What can we help with?', fieldType: 'textarea', required: true },
+      ],
+    }),
+  ],
+})
+
+/**
+ * A Free law firm's practice areas with copy of the length a firm writes
+ * (AGL-3053): four areas for families and six for businesses and property
+ * owners, 25 to 29 words a summary. A live Free About page's four practice
+ * areas, drawn card by card, were cut off at their pass's ceiling on their
+ * answer and on their re-ask. Written once, four and six such cards each fit a
+ * balanced-tier pass; written out card by card, neither does
+ * (`ai-job-page-evals.spec.ts`).
+ */
+export const AI_FREE_PRACTICE_AREAS_FIXTURE: AiFreePageFixture = freeBrief({
+  id: 'free-law-firm-practice-areas',
+  icp: 'small-business',
+  pageType: 'about',
+  brief: 'An about page for Cedar Point Law: who we are, the four ways we help families, and the six ways we help businesses and property owners, a few sentences on each.',
+  inventory: site('host-cedar-point-law', {}),
+  title: 'About Cedar Point Law',
+  slug: '/about',
+  layout: 'lay-site',
+  nav: true,
+  seo: {
+    title: 'About Cedar Point Law',
+    description: 'A general practice for families, businesses and property owners in [county], from estate planning and probate to leases and closings.',
+  },
+  sections: [
+    hero('a', {
+      title: 'About Cedar Point Law',
+      lead: 'A general practice in [town] for families, small businesses and property owners, with the same attorney answering your calls from the first meeting to the last filing.',
+    }),
+    repeatedCards('b', {
+      name: 'four ways we help families',
+      heading: 'For families',
+      items: [
+        { title: 'Estate planning', summary: 'Wills, revocable trusts, powers of attorney and health care directives, drafted after a conversation about your family, your property and who should decide for you if you cannot.' },
+        { title: 'Divorce and custody', summary: 'Uncontested and contested divorces, parenting plans and support, with a written estimate before anything is filed and a schedule for the children that both households can follow.' },
+        { title: 'Probate', summary: 'Opening probate, listing assets, paying debts and distributing property for personal representatives, with a written timeline so heirs know what happens next and about how long it takes.' },
+        { title: 'Guardianship and elder law', summary: 'Guardianship and conservatorship petitions, long-term care planning and help for adult children managing a parent’s money, with meetings at home or at a care facility when travel is hard.' },
+      ],
+    }),
+    repeatedCards('c', {
+      name: 'six ways we help businesses and property owners',
+      heading: 'For businesses and property owners',
+      items: [
+        { title: 'Business formation', summary: 'Choosing between an LLC and a corporation, operating agreements, partner buyout terms and the first contracts a new business signs with its landlord, lenders and first employees.' },
+        { title: 'Contracts', summary: 'Vendor, customer and service agreements drafted or reviewed in plain language, with the payment terms, termination rights and limits on liability explained before you sign anything.' },
+        { title: 'Commercial leases', summary: 'First leases and renewals for shops, offices and restaurants, including build-out allowances, personal guarantees, rent increases and what happens when the business outgrows the space.' },
+        { title: 'Real estate closings', summary: 'Purchase agreements, title review, boundary questions and closings for homes, rental property and small commercial buildings, with one attorney following the file from contract to keys.' },
+        { title: 'Landlord and tenant', summary: 'Leases, security deposits, repair disputes and eviction notices, for owners with a few rental units and for tenants who need to know where they stand before they answer.' },
+        { title: 'Employment matters', summary: 'Offer letters, handbooks, contractor questions and separation agreements for businesses with fewer than fifty employees, written to fit the state rules that apply to them.' },
       ],
     }),
   ],
@@ -908,17 +1039,13 @@ export const AI_PAGE_CREATION_FIXTURE: AiPageCreationFixture = (() => {
     cta: { label: 'Meet the crew', screenId: 'scr-about' },
   })
   const quotes = section('b', 'customer words', ['new:Testimonial card'], 3, (add) => {
-    const instances = [
-      { quote: 'They found the leak two other companies missed.', name: '[customer name]', role: 'Homeowner, Harbor Point' },
-      { quote: 'On time, tidy, and the photos made the invoice easy to trust.', name: '[customer name]', role: 'Homeowner, Old Mill Road' },
-      { quote: 'The same crew came back to check the repair after the first storm.', name: '[customer name]', role: 'Homeowner, Bayside' },
-    ].map((propValues) => add({ componentId: 'reusableInstance', props: { refId: component, propValues } }))
-    return framed(
-      add,
-      [add(typography('h2', 'What homeowners say', 'h2')), add({ componentId: 'muiGrid', props: { direction: 'row' }, sx: { gap: 3 }, nodes: instances })],
-      'lg',
-      8,
-    )
+    // The brief names no customer's role, so each card leaves it to the card's default (AGL-3056).
+    const cells = [
+      { quote: 'They found the leak two other companies missed.', name: '[customer name]' },
+      { quote: 'On time, tidy, and the photos made the invoice easy to trust.', name: '[customer name]' },
+      { quote: 'The same crew came back to check the repair after the first storm.', name: '[customer name]' },
+    ].map((propValues) => cell(add, 3, add({ componentId: 'reusableInstance', props: { refId: component, propValues } })))
+    return framed(add, [add(typography('h2', 'What homeowners say', 'h2')), row(add, cells)], 'lg', 8)
   })
   const request = section('c', 'quote request form', ['new:Roof quote request'], 0, (add) =>
     framed(
@@ -1004,4 +1131,130 @@ export const AI_PAGE_CREATION_FIXTURE: AiPageCreationFixture = (() => {
     componentGolden: 'component-testimonial-card',
     formGolden: 'roofingQuote',
   }
+})()
+
+/**
+ * A page whose second section introduces two people (AGL-3042): a photo, a
+ * name, a role and a short bio for each, as a law firm's About page asks for
+ * its attorneys, on a paid workspace whose site keeps no card for a person.
+ * Two items are fewer than a component is required for, so the section draws
+ * both where they stand.
+ *
+ * The golden answer is the drawing a section's request asks for at the
+ * balanced tier's ceiling: a Card a person holding the four, in fifteen
+ * elements. `roomier` is the same two people drawn the way a model reaches for
+ * with more elements to spend — a grid cell, a card body and styles a person,
+ * and an introduction — in twenty, inside the twenty-three a budget counted in
+ * estimated tokens allows. The page's evals measure both against the ceiling.
+ */
+export interface AiTwoPersonPageFixture extends AiPageBriefFixture {
+  /** The introduction drawn in twenty elements: a valid section, and past the ceiling in real tokens. */
+  roomier: AiGoldenSection
+}
+
+const ATTORNEYS = [
+  {
+    photo: 'A portrait of [attorney name], the founding partner, in the firm’s office',
+    name: '[attorney name]',
+    role: 'Founding partner, family law',
+    bio: 'Has represented parents and spouses in [county] for [years] years, and settles most cases before they reach a courtroom.',
+  },
+  {
+    photo: 'A portrait of [attorney name] at a conference table',
+    name: '[attorney name]',
+    role: 'Partner, estate planning and real estate',
+    bio: 'Writes wills and trusts for young families, and handles closings for homes and small commercial property.',
+  },
+]
+
+export const AI_TWO_PERSON_PAGE_FIXTURE: AiTwoPersonPageFixture = (() => {
+  const introduction = section('b', 'meet our attorneys', [], ATTORNEYS.length, (add) => {
+    const cards = ATTORNEYS.map((person) =>
+      add({
+        componentId: 'muiCard',
+        props: { variant: 'outlined' },
+        sx: { flex: 1 },
+        nodes: [
+          add({ componentId: 'image', props: { alt: person.photo } }),
+          add(typography('h3', person.name, 'h3')),
+          add(typography('subtitle1', person.role)),
+          add(typography('body2', person.bio)),
+        ],
+      }),
+    )
+    // A Grid of two would take two more elements than the fifteen the pass
+    // asks for (AGL-3055); a Stack that turns from a column into a row at md
+    // is the same responsive pair in none.
+    return framed(
+      add,
+      [
+        add(typography('h2', 'Meet our attorneys', 'h2')),
+        add({ componentId: 'muiStack', sx: { flexDirection: { xs: 'column', md: 'row' }, gap: 3 }, nodes: cards }),
+      ],
+      'lg',
+      8,
+    )
+  })
+  const roomier = section('b', 'meet our attorneys', [], ATTORNEYS.length, (add) => {
+    const cells = ATTORNEYS.map((person) =>
+      add({
+        componentId: 'muiGrid',
+        props: { size: span(ATTORNEYS.length) },
+        nodes: [
+          add({
+            componentId: 'muiCard',
+            props: { variant: 'outlined' },
+            sx: { height: '100%' },
+            nodes: [
+              add({ componentId: 'image', props: { alt: person.photo, objectFit: 'cover', loading: 'lazy' }, sx: { width: '100%' } }),
+              add({
+                componentId: 'muiCardContent',
+                nodes: [
+                  add(typography('h3', person.name, 'h3')),
+                  add({ componentId: 'muiTypography', props: { variant: 'subtitle1', children: person.role }, sx: { color: 'text.secondary' } }),
+                  add(typography('body2', person.bio)),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+    )
+    return framed(
+      add,
+      [
+        add(typography('h2', 'Meet our attorneys', 'h2')),
+        add(typography('body1', 'Two attorneys, and one of them handles your matter from the first meeting to the final order.')),
+        row(add, cells),
+      ],
+      'lg',
+      8,
+    )
+  })
+  const fixture = brief({
+    id: 'agency-law-firm-two-attorneys',
+    icp: 'agency',
+    pageType: 'about',
+    brief: 'An about page for Harborline Law: who we are, and our two attorneys with a photo, their role and a short bio for each.',
+    inventory: site('host-harborline-law', {
+      screens: [{ id: 'scr-contact', name: 'Contact', slug: 'contact', layoutId: 'lay-site', template: false }],
+    }),
+    title: 'About Harborline Law',
+    slug: '/about',
+    layout: 'lay-site',
+    nav: true,
+    seo: {
+      title: 'About Harborline Law',
+      description: 'A coastal law firm for families and homeowners: family law, estate planning and real estate closings.',
+    },
+    sections: [
+      hero('a', {
+        title: 'About Harborline Law',
+        lead: 'A small coastal firm for families and homeowners, in family law, estate planning and real estate closings.',
+        cta: { label: 'Request a consultation', screenId: 'scr-contact' },
+      }),
+      introduction,
+    ],
+  })
+  return { ...fixture, roomier: roomier.answer }
 })()

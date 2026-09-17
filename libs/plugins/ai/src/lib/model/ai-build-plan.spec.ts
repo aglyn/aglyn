@@ -24,6 +24,7 @@ import {
   AI_BUILD_PLAN_LIMITS,
   AI_BUILD_PLAN_TOOL,
   aiPlanCreateFor,
+  aiPlanUndeclaredRefs,
   isAiPlanNewRef,
   parseAiBuildPlan,
   type AiBuildPlan,
@@ -160,6 +161,31 @@ describe('new: references', () => {
     expect(aiPlanCreateFor(plan(), 'new:service card')?.name).toBe('Service card')
     expect(aiPlanCreateFor(plan(), 'new:Price table')).toBeUndefined()
     expect(aiPlanCreateFor(plan(), 'lay-site')).toBeUndefined()
+  })
+
+  it('lists every reference the create list does not carry, where the plan writes it, in plan order (AGL-3040)', () => {
+    const [screen] = plan().screens
+    const dangling = plan({
+      screens: [
+        {
+          ...screen,
+          layout: 'new:Site frame',
+          template: 'new:Service page',
+          sections: [
+            // A declared creation, in any case, and an inventory id are not listed.
+            { name: 'services grid', uses: ['new:service card', 'cmp-card', 'new:Price table'], items: 6 },
+          ],
+        },
+        { ...screen, slug: '/quote', sections: [{ name: 'quote form', uses: ['new:Quote request'], items: 0 }] },
+      ],
+    })
+    expect(aiPlanUndeclaredRefs(dangling)).toEqual([
+      { name: 'Site frame', path: 'screens[0].layout', screenIndex: 0, field: 'layout', sectionIndex: null },
+      { name: 'Service page', path: 'screens[0].template', screenIndex: 0, field: 'template', sectionIndex: null },
+      { name: 'Price table', path: 'screens[0].sections[0].uses[2]', screenIndex: 0, field: 'uses', sectionIndex: 0 },
+      { name: 'Quote request', path: 'screens[1].sections[0].uses[0]', screenIndex: 1, field: 'uses', sectionIndex: 0 },
+    ])
+    expect(aiPlanUndeclaredRefs(plan())).toEqual([])
   })
 })
 

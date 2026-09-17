@@ -550,11 +550,19 @@ describe('QuotaWarningsBanner AI credits row (AGL-2898)', () => {
    * credits effect would too, leaving these cases unfalsifiable.
    */
   function answerCredits(credits: { used: number; limit: number } | null) {
+    answerCreditsBody({
+      credits: credits && { ...credits, remaining: Math.max(0, credits.limit - credits.used) },
+    })
+  }
+
+  /** Answer the credits route with a body exactly as JSON carries it. */
+  function answerCreditsBody(credits: Record<string, unknown>) {
+    const wire = JSON.parse(JSON.stringify(credits))
     global.fetch = jest.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       seatFetches.push(url)
       const body = url.includes('/api/ai/billing/credits')
-        ? { credits: credits && { ...credits, remaining: Math.max(0, credits.limit - credits.used) } }
+        ? wire
         : { managerSeats: 1, memberCount: 1 }
       return { ok: true, status: 200, json: async () => body } as unknown as Response
     }) as unknown as typeof fetch
@@ -591,6 +599,23 @@ describe('QuotaWarningsBanner AI credits row (AGL-2898)', () => {
     expect(links[0].getAttribute('href')).toBe('/acme/billing/usage')
   })
 
+  it('at the band on Starter WITH the AI add-on: billed past it, not "nothing is billed" (AGL-3014)', async () => {
+    // Starter lists no rate on `PLAN_PRICING`; the add-on's comes from the
+    // resolver `assistBandRefuses` asks. A banner that read the table would
+    // tell this workspace nothing is billed while its invoice bills $3.00
+    // per 1,000 past the add-on's 4,000 credits.
+    currentOrg.org = { plan: 'starter', seatAddons: { aiAddon: 1 } }
+    answerCredits({ used: 4_100, limit: 4_000 })
+    const { unmount } = render(<QuotaWarningsBanner />)
+    await screen.findByText(/extra credits are billed at your plan’s rate unless you set a stop under Billing → Usage/)
+    expect(screen.queryByText(/nothing is billed/)).toBeNull()
+    unmount()
+    // The control: the same workspace with its switch on is the wall.
+    currentOrg.org = { plan: 'starter', seatAddons: { aiAddon: 1 }, assistOverage: { hardCap: true } }
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/AI assist stops until next month or an upgrade, and nothing is billed/)
+  })
+
   it('at the band with the org’s own switch on: AI stops, nothing billed', async () => {
     currentOrg.org = { plan: 'business', assistOverage: { hardCap: true } }
     answerCredits({ used: 2_800, limit: 2_750 })
@@ -616,6 +641,25 @@ describe('QuotaWarningsBanner AI credits row (AGL-2898)', () => {
     render(<QuotaWarningsBanner />)
     await waitFor(() => expect(assistFetches()).toHaveLength(2))
     expect(screen.queryByText(/AI assist/)).toBeNull()
+  })
+
+  it('an uncapped staff comp: no band on the wire is no row, however much it draws (AGL-3049)', async () => {
+    currentOrg.org = {
+      plan: 'enterprise',
+      enterprise: true,
+      entitlements: {
+        planComp: { plan: 'enterprise', uncapped: true, reason: 'other', note: 'Internal', grantedBy: 'staff-1' },
+      },
+    }
+    // The route's answer for that workspace: credits drawn, `limit: null`.
+    answerCreditsBody({
+      credits: { used: 900_000, limit: null, remaining: null },
+      unlimited: true,
+    })
+    render(<QuotaWarningsBanner />)
+    await waitFor(() => expect(assistFetches()).toHaveLength(1))
+    expect(screen.queryByText(/AI assist/)).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('sits beside the other rows rather than replacing them', async () => {

@@ -361,6 +361,231 @@ export function expandVariantMatrix(
   return combos
 }
 
+/**
+ * The option axes renamed, with every variant's selection carried to the new
+ * name in place (AGL-3066).
+ *
+ * A variant keeps its selections keyed by option NAME, so a rename has to move
+ * each key rather than rebuild the matrix: a rebuild matches variants by name
+ * and value, finds none under the new name, and replaces every variant with a
+ * new id holding the first variant's price and stock and no SKU, barcode,
+ * compare-at price or weight. Moving the key keeps the id every order line
+ * and stock movement refers to, and every field a person set.
+ *
+ * `names` holds one entry per option, in order; an entry that is not a string
+ * keeps that option's name. Each selection keeps its position among a
+ * variant's selections, because a variant is labeled by them in order.
+ *
+ * Two options may share a name for a moment while a person types. A variant
+ * cannot hold two selections under one name, so while the new names are not
+ * all different nothing is moved, and `validateProduct` refuses the product.
+ * The selection left under the old name is found again by its value once the
+ * names differ, so typing through a duplicate loses nothing.
+ */
+export function renameProductOptions(
+  product: Pick<HostProduct, 'options' | 'variants'>,
+  names: ReadonlyArray<string | null | undefined>,
+): Pick<HostProduct, 'options' | 'variants'> {
+  const current = product.options ?? []
+  const options = current.map((option, index) => {
+    const name = names[index]
+    return typeof name === 'string' ? { ...option, name } : option
+  })
+  const next = options.map((option) => option.name)
+  if (new Set(next).size !== next.length) return { options, variants: product.variants }
+  const variants = (product.variants ?? []).map((variant) => {
+    const selections = variant.options
+    if (!selections) return variant
+    const axisOf = optionAxesOf(current, selections)
+    const moved: Record<string, string> = {}
+    let changed = false
+    for (const [key, value] of Object.entries(selections)) {
+      const axis = axisOf.get(key)
+      const name = axis === undefined ? key : next[axis]
+      if (name !== key) changed = true
+      moved[name] = value
+    }
+    return changed ? { ...variant, options: moved } : variant
+  })
+  return { options, variants }
+}
+
+/**
+ * Which option each of a variant's selections belongs to: the option of the
+ * same name first, and then, for a selection under a name no option has any
+ * longer, the one remaining option whose values hold its value. A selection
+ * that fits neither belongs to no option and is left as it is.
+ */
+function optionAxesOf(
+  options: readonly ProductOption[],
+  selections: Readonly<Record<string, string>>,
+): Map<string, number> {
+  const axisOf = new Map<string, number>()
+  const taken = new Set<number>()
+  options.forEach((option, index) => {
+    if (Object.prototype.hasOwnProperty.call(selections, option.name) && !axisOf.has(option.name)) {
+      axisOf.set(option.name, index)
+      taken.add(index)
+    }
+  })
+  for (const [key, value] of Object.entries(selections)) {
+    if (axisOf.has(key)) continue
+    const axis = options.findIndex(
+      (option, index) => !taken.has(index) && (option.values ?? []).includes(value),
+    )
+    if (axis === -1) continue
+    axisOf.set(key, axis)
+    taken.add(axis)
+  }
+  return axisOf
+}
+
+/**
+ * Whether a variant has a price a sale can charge (AGL-2916).
+ *
+ * A product proposed by AI is created with every price left empty for the
+ * merchant to set, so a stored variant can lack one. `Number(undefined)` is
+ * no price, and neither is `null`, which `Number` reads as zero: a sale door
+ * that priced either would charge nothing, or fail at the processor.
+ */
+export function variantHasPrice(variant: object | null | undefined): boolean {
+  const price = (variant as { priceUsd?: unknown } | null | undefined)?.priceUsd
+  return typeof price === 'number' && Number.isFinite(price) && price >= 0
+}
+
+/** Whether any variant of a product still needs its price set (AGL-2916). */
+export function productPriceMissing(product: { variants?: readonly object[] }): boolean {
+  return (product.variants ?? []).some((variant) => !variantHasPrice(variant))
+}
+
+/** Copy proposed for a product, by field (AGL-2916). A field left out is left alone. */
+export interface ProductCopyValues {
+  description?: string
+  tags?: string[]
+  categoryIds?: string[]
+  /** One name per option the product has, in order. */
+  optionNames?: string[]
+  seoTitle?: string
+  seoDescription?: string
+}
+
+/**
+ * The fields proposed copy changes on a product (AGL-2916), in the shape the
+ * editor stores them: only the fields `values` names. Tags and categories are
+ * each kept once; the search listing keeps its share image; and option names
+ * rename the product's options through `renameProductOptions`, keeping every
+ * variant, only when they name each option once with a name of its own.
+ */
+export function productCopyPatch(
+  product: Pick<HostProduct, 'options' | 'variants' | 'seo'>,
+  values: ProductCopyValues,
+): Partial<Pick<HostProduct, 'description' | 'tags' | 'categoryIds' | 'seo' | 'options' | 'variants'>> {
+  const patch: Partial<
+    Pick<HostProduct, 'description' | 'tags' | 'categoryIds' | 'seo' | 'options' | 'variants'>
+  > = {}
+  if (typeof values.description === 'string') patch.description = values.description
+  if (Array.isArray(values.tags)) {
+    patch.tags = [...new Set(values.tags.map((tag) => tag.trim()).filter(Boolean))]
+  }
+  if (Array.isArray(values.categoryIds)) {
+    patch.categoryIds = [...new Set(values.categoryIds.filter(Boolean))]
+  }
+  if (typeof values.seoTitle === 'string' || typeof values.seoDescription === 'string') {
+    patch.seo = {
+      ...product.seo,
+      ...(typeof values.seoTitle === 'string' ? { title: values.seoTitle } : {}),
+      ...(typeof values.seoDescription === 'string' ? { description: values.seoDescription } : {}),
+    }
+  }
+  const options = product.options ?? []
+  const names = values.optionNames?.map((name) => name.trim())
+  if (
+    names &&
+    options.length > 0 &&
+    names.length === options.length &&
+    names.every(Boolean) &&
+    new Set(names).size === names.length &&
+    names.some((name, index) => name !== options[index].name)
+  ) {
+    Object.assign(patch, renameProductOptions(product, names))
+  }
+  return patch
+}
+
+/** A product proposed for a store, before anyone has priced it (AGL-2916). */
+export interface ProposedProduct {
+  name: string
+  type: ProductType
+  description: string
+  tags: string[]
+  options: ProductOption[]
+  seoTitle: string
+  seoDescription: string
+}
+
+/** A new product whose variants carry no price yet. */
+export type UnpricedProductDraft = Omit<HostProduct, 'variants'> & {
+  variants: Array<Omit<ProductVariant, 'priceUsd'>>
+}
+
+/**
+ * The document a proposed product is created as (AGL-2916): a `draft`, under
+ * a slug no product in `takenSlugs` has, with one variant for each
+ * combination of its options and NO price on any of them. Prices are the
+ * merchant's to set: the editor refuses to save the product until every
+ * variant has one, and no sale door sells a variant without one
+ * (`variantHasPrice`). The search keys travel with the name, as on every
+ * create path.
+ */
+export function unpricedProductDraft(
+  proposal: ProposedProduct,
+  takenSlugs: ReadonlySet<string>,
+  nowMs: number,
+): UnpricedProductDraft {
+  const name = proposal.name.trim().slice(0, 120)
+  const base = commerceSlug(name) || 'product'
+  let slug = base
+  for (let suffix = 2; takenSlugs.has(slug); suffix += 1) slug = `${base}-${suffix}`
+  const seen = new Set<string>()
+  const options = proposal.options
+    .map((option) => ({
+      name: option.name.trim(),
+      values: [...new Set(option.values.map((value) => value.trim()).filter(Boolean))].slice(
+        0,
+        COMMERCE_MAX_OPTION_VALUES,
+      ),
+    }))
+    .filter((option) => {
+      if (!option.name || !option.values.length || seen.has(option.name)) return false
+      seen.add(option.name)
+      return true
+    })
+    .slice(0, COMMERCE_MAX_OPTIONS)
+  const variants = options.length
+    ? expandVariantMatrix(options).map((combo, index) => ({
+        id: `v${nowMs.toString(36)}${index}`,
+        options: combo,
+      }))
+    : [{ id: 'default' }]
+  const seoTitle = proposal.seoTitle.trim()
+  const seoDescription = proposal.seoDescription.trim()
+  return {
+    ...productSearchFields({ name }),
+    slug,
+    type: proposal.type,
+    status: 'draft',
+    description: proposal.description,
+    tags: [...new Set(proposal.tags.map((tag) => tag.trim()).filter(Boolean))],
+    ...(options.length ? { options } : {}),
+    variants,
+    ...(seoTitle || seoDescription
+      ? { seo: { ...(seoTitle ? { title: seoTitle } : {}), ...(seoDescription ? { description: seoDescription } : {}) } }
+      : {}),
+    createdAtMs: nowMs,
+    updatedAtMs: nowMs,
+  }
+}
+
 /** Variant whose option selections match exactly; undefined if none. */
 export function findVariant(
   product: Pick<HostProduct, 'variants'>,
@@ -810,6 +1035,11 @@ export function validateProduct(product: HostProduct): string | null {
       return `Option "${option.name}" has duplicate values`
     }
   }
+  // A variant keys its selections by option name, so two options with one
+  // name cannot both be selected (AGL-3066).
+  if (new Set(options.map((option) => option.name.trim())).size !== options.length) {
+    return 'Each option needs its own name'
+  }
   const variants = product.variants ?? []
   if (variants.length === 0) return 'Products need at least one variant'
   if (variants.length > COMMERCE_MAX_VARIANTS) {
@@ -821,6 +1051,9 @@ export function validateProduct(product: HostProduct): string | null {
     if (!variant.id) return 'Variants need stable ids'
     if (ids.has(variant.id)) return 'Variant ids must be unique'
     ids.add(variant.id)
+    if (variant.priceUsd === undefined || variant.priceUsd === null) {
+      return 'Set a price for every variant'
+    }
     const price = Number(variant.priceUsd)
     if (!Number.isFinite(price) || price < 0) {
       return 'Variant prices must be zero or more'

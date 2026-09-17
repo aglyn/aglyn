@@ -16,8 +16,10 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { render } from '@testing-library/react'
 import { schema as appBar } from './app-bar'
 import {
+  SocialLinks,
   blockPresets,
   socialLinksSchema,
   videoEmbedSchema,
@@ -242,5 +244,50 @@ describe('mui block presets', () => {
       if (node.componentId === screenLink.$id) links += 1
     })
     expect(links).toBeGreaterThanOrEqual(2)
+  })
+})
+
+/**
+ * The Social Links row carries the node's DOM props and none of its profile
+ * fields (AGL-3075). Spread whole, the six URLs were serialized onto the row
+ * as unknown attributes — a second copy of each, including a URL the element
+ * refuses to link.
+ */
+describe('Social Links keeps its profile fields off the row (AGL-3075)', () => {
+  /** Every profile field the element declares, set to a value. */
+  const profiles = Object.fromEntries(
+    (socialLinksSchema.attributes ?? []).map((attribute) => [
+      attribute.name,
+      `https://example.com/${attribute.name}`,
+    ]),
+  )
+
+  it('writes no profile field onto any element as an attribute', () => {
+    const { container } = render(<SocialLinks {...profiles} github="nope" />)
+    const leaked = Object.keys(profiles).filter((name) =>
+      container.querySelector(`[${name}]`),
+    )
+    expect(leaked).toEqual([])
+    // The links themselves still render, less the one refused as unsafe.
+    expect(container.querySelectorAll('a[href^="https://"]')).toHaveLength(
+      Object.keys(profiles).length - 1,
+    )
+  })
+
+  it('still hands the row the DOM props the renderer gives it', () => {
+    const { container } = render(
+      <SocialLinks
+        {...profiles}
+        {...({
+          id: 'follow',
+          title: 'Follow us',
+          'data-aglyn': 'leaf:social',
+        } as object)}
+      />,
+    )
+    const row = container.firstElementChild as HTMLElement
+    expect(row.id).toBe('follow')
+    expect(row.getAttribute('title')).toBe('Follow us')
+    expect(row.getAttribute('data-aglyn')).toBe('leaf:social')
   })
 })

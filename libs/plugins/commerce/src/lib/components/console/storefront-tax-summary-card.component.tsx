@@ -21,6 +21,7 @@ import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
   Box,
@@ -28,7 +29,6 @@ import {
   Divider,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -377,7 +377,7 @@ export function StorefrontTaxSummaryCard(props: StorefrontTaxSummaryCardProps) {
                       </Typography>
                     </Box>
                   </Stack>
-                  <Table size="small">
+                  <ScrollTable size="small">
                     <TableHead>
                       <TableRow>
                         <TableCell>{'Jurisdiction'}</TableCell>
@@ -409,7 +409,7 @@ export function StorefrontTaxSummaryCard(props: StorefrontTaxSummaryCardProps) {
                           </TableRow>
                       ))}
                     </TableBody>
-                  </Table>
+                  </ScrollTable>
                 </Box>
               ))}
 

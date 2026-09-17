@@ -221,9 +221,10 @@ const mountCard = async () => {
 const memberQueries = () =>
   mockBuiltQueries.filter((path) => path.endsWith('/members'))
 
+/** The list names the grid draws, in row order. */
 const renderedNames = () =>
-  Array.from(document.querySelectorAll('tbody tr')).map(
-    (row) => row.querySelector('td')?.textContent?.trim() ?? '',
+  Array.from(document.querySelectorAll('[role="row"][data-id]')).map(
+    (row) => row.querySelector('[data-field="name"]')?.textContent?.trim() ?? '',
   )
 
 describe('the email-list table walks the collection (AGL-2501)', () => {
@@ -266,16 +267,15 @@ describe('the email-list table walks the collection (AGL-2501)', () => {
     // over that list's own `members` subcollection, so it is larger than the
     // page and stays the same when the page changes.
     await mountCard()
-    // Located by its HEADER rather than by a fixed cell index: the column is
+    // Located by its COLUMN rather than by a fixed cell index: the column is
     // what this asserts about, and a positional read turns any new column
     // into a failure of the count instead of a failure of the layout.
-    const headers = Array.from(document.querySelectorAll('thead th')).map(
+    const headers = Array.from(document.querySelectorAll('[role="columnheader"]')).map(
       (cell) => cell.textContent,
     )
-    const column = headers.indexOf('Subscribers')
-    expect(column).toBeGreaterThan(-1)
-    const first = Array.from(document.querySelectorAll('tbody tr'))[0]
-    expect(first.querySelectorAll('td')[column].textContent).toBe(
+    expect(headers).toContain('Subscribers')
+    const first = document.querySelectorAll('[role="row"][data-id]')[0]
+    expect(first.querySelector('[data-field="subscribers"]')?.textContent).toBe(
       String(MEMBERS_PER_LIST),
     )
     expect(MEMBERS_PER_LIST).toBeGreaterThan(TABLE_PAGE_SIZE_DEFAULT)

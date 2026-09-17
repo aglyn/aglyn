@@ -20,12 +20,12 @@ import { aiAddonName } from '@aglyn/aglyn'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -157,7 +157,7 @@ export function MemberAiUsageCard(props: MemberAiUsageCardProps) {
         </Typography>
       ) : (
         <Stack spacing={1.5}>
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Month'}</TableCell>
@@ -182,7 +182,7 @@ export function MemberAiUsageCard(props: MemberAiUsageCardProps) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </ScrollTable>
           {sites.length ? (
             <Stack spacing={0.5}>
               <Typography variant="caption" color="text.secondary">

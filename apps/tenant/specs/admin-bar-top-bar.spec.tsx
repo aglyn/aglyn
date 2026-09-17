@@ -33,7 +33,9 @@
  *   plugin-gated quick links (Orders absent when its URL is null),
  *   connected-as identity;
  * - Disconnect clears the token, remembers the opt-out, and unmounts;
- * - × dismisses for this pageview only — storage untouched.
+ * - × dismisses for this pageview only — storage untouched;
+ * - following a soft navigation, the bar stays up and the page keeps its
+ *   offset while the next page's context resolves (AGL-3064).
  */
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -327,6 +329,51 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     // The page gets its room back.
     expect(document.documentElement.style.marginTop).toBe('')
   })
+
+  it(
+    'stays up while it follows a soft navigation, so the page never jumps',
+    async () => {
+      await renderReadyBar()
+      expect(screen.getByText('About')).toBeTruthy()
+
+      // The next page's context is held back, so the checks in between run
+      // while the bar is re-resolving.
+      let answer: (() => void) | undefined
+      const nextContext = jest.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = () =>
+              resolve({
+                ok: true,
+                status: 200,
+                json: async () => ({ ...CONTEXT_RESPONSE, screenName: 'Pricing' }),
+              })
+          }),
+      )
+      global.fetch = nextContext as unknown as typeof fetch
+      window.history.pushState({}, '', '/pricing')
+      try {
+        // The bar notices the new path on its next poll.
+        await waitFor(() => expect(nextContext).toHaveBeenCalled(), {
+          timeout: 6000,
+        })
+        expect(
+          screen.getByRole('region', { name: 'Aglyn admin bar' }),
+        ).toBeTruthy()
+        expect(document.documentElement.style.marginTop).toBe('40px')
+        expect(screen.queryByText('Checking access…')).toBeNull()
+
+        await act(async () => {
+          answer?.()
+        })
+        await waitFor(() => expect(screen.getByText('Pricing')).toBeTruthy())
+        expect(document.documentElement.style.marginTop).toBe('40px')
+      } finally {
+        window.history.pushState({}, '', '/')
+      }
+    },
+    15_000,
+  )
 
   it('× dismisses for this pageview only — storage untouched', async () => {
     await renderReadyBar()

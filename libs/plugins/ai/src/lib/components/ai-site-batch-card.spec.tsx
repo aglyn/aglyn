@@ -272,18 +272,29 @@ describe('starting a run', () => {
       }),
     )
     render(<AiSiteBatchCard {...props} />)
-    const table = await screen.findByRole('table', {
+    // A run is rows of jobs, so it is the shared grid, which scrolls its own
+    // columns inside the card (AGL-3045).
+    const run = await screen.findByRole('grid', {
       name: 'Sites in this run',
     })
-    expect(within(table).getByText('Confirm the plan')).toBeTruthy()
-    expect(within(table).getByText('Running')).toBeTruthy()
+    expect(within(run).getByText('Confirm the plan')).toBeTruthy()
+    expect(within(run).getByText('Running')).toBeTruthy()
     expect(
-      (within(table).getByText('Wag & Co') as HTMLAnchorElement).getAttribute(
+      (within(run).getByText('Wag & Co') as HTMLAnchorElement).getAttribute(
         'href',
       ),
     ).toBe('/acme/hosts/wag')
     // A site with no address the console can open gets no link.
-    expect(within(table).getByText('Fetch').tagName).not.toBe('A')
+    expect(within(run).getByText('Fetch').tagName).not.toBe('A')
+    // Drafts are counted once a job has settled or produced one.
+    const fetchRow = within(run).getByText('Fetch').closest('[role="row"]') as HTMLElement
+    expect(within(fetchRow).getByText('1')).toBeTruthy()
+  })
+
+  it('draws the per-site form in a box that scrolls sideways (AGL-3045)', async () => {
+    await openForm()
+    const table = screen.getByRole('table', { name: 'Sites to generate for' })
+    expect(getComputedStyle(table.parentElement as HTMLElement).overflowX).toBe('auto')
   })
 
   it('names the sites the door refused, and starts the rest', async () => {

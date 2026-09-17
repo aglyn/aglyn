@@ -1754,7 +1754,9 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
  * It is also what keeps a comp away from Stripe without a check anyone could
  * forget: the AI overage charge claims only what `assistMonthOverage` prices,
  * the usage sweep bills only what these rates price, and a `null` rate prices
- * zero. A comp that needs more of something gets a quota override beside it.
+ * zero. A comp that needs more of something gets a quota override beside it,
+ * or is uncapped outright (AGL-3049) — and an uncapped comp reads THIS row
+ * too, so lifting every band sells nothing past any of them.
  *
  * Derived from the row rather than written out, so a rate added to
  * `PlanPricing` later is withheld from a comp on the day it ships.
@@ -1880,6 +1882,11 @@ export function orgSubscriptionState(
 export interface ResolvedOrgPlanComp {
   /** The plan granted — always a paid plan this build knows. */
   plan: OrgPlan
+  /**
+   * Whether the comp lifts every cap (AGL-3049) — see `isUncappedPlanComp`.
+   * `false` for anything but a stored `true`.
+   */
+  uncapped: boolean
   /** `null` when the stored code is not one of the override set's. */
   reason: OrgOverrideReasonCode | null
   note: string | null
@@ -1931,6 +1938,10 @@ function trimmedOrNull(value: unknown): string | null {
  * exactly as it would without one, which is the direction a malformed grant
  * must fail in. The descriptive fields are narrowed and never block the plan:
  * a comp whose note or stamp did not read back is still the comp staff wrote.
+ *
+ * `uncapped` is strict in the same direction (AGL-3049): it lifts every cap,
+ * so only a literal `true` does. A `"true"`, a `1` or a map written by hand
+ * reads as a capped comp — the plan still stands, and its bands stay walls.
  */
 export function readOrgPlanComp(
   org: Partial<AglynOrgBilling> | null | undefined,
@@ -1951,6 +1962,7 @@ export function readOrgPlanComp(
   const reason = record['reason']
   return {
     plan: plan as OrgPlan,
+    uncapped: record['uncapped'] === true,
     reason: isOrgOverrideReasonCode(reason) ? reason : null,
     note: trimmedOrNull(record['note']),
     grantedBy: trimmedOrNull(record['grantedBy']),
@@ -1971,6 +1983,37 @@ export function resolvePlanComp(
 ): ResolvedOrgPlanComp | null {
   if (orgSubscriptionState(org) === 'live') return null
   return readOrgPlanComp(org)
+}
+
+/**
+ * Whether an UNCAPPED comp is in force (AGL-3049): every band and quota the
+ * org resolves reads as `UNLIMITED`, whatever its plan row and its per-org
+ * overrides say — see `withEveryCapLifted`.
+ *
+ * In force only, like the comp itself. A live subscription decides the plan
+ * and its bands, so a dormant uncapped comp lifts nothing, and a canceled one
+ * lifts every cap again the moment the subscription ends.
+ *
+ * What it does NOT lift is anything that is not a plan band: the fee
+ * percentages (`PRICE_ENTITLEMENT_KEYS`) are prices, and the platform's own
+ * guards live outside the entitlements map and are not the plan's to give
+ * away — the form-submission and bandwidth abuse ceilings (which read an
+ * unlimited band as `FORM_ABUSE_CEILING_UNLIMITED` and
+ * `BANDWIDTH_ABUSE_CEILING_UNLIMITED`), the flat per-site caps on webhooks,
+ * actions and collection entries, the email send pacing, the assist runaway
+ * message cap, an operator's explicit spend ceiling, and staff pauses and
+ * lockdowns. It never sells anything either: the pricing stays the comp's,
+ * with every rate withheld, so an unbounded band is still billed nothing.
+ *
+ * The lifted value is `UNLIMITED` in process and nowhere else. Every route
+ * that sends a band off-process sends a finite number with an explicit flag,
+ * or `null` with a documented meaning, because `JSON.stringify(Infinity)` is
+ * `null` — and the comp itself is stored and sent as a boolean.
+ */
+export function isUncappedPlanComp(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  return resolvePlanComp(org)?.uncapped === true
 }
 
 /**
@@ -2000,7 +2043,49 @@ export interface OrgPlanDescription {
   /** The STORED comp — in force or dormant; see `compInForce`. */
   comp: ResolvedOrgPlanComp | null
   compInForce: boolean
+  /**
+   * An uncapped comp is IN FORCE, so every band reads as unlimited
+   * (AGL-3049). A dormant uncapped comp is `false` here and `comp.uncapped`.
+   */
+  uncapped: boolean
   decidedBy: OrgPlanDecidedBy
+}
+
+/**
+ * How a staff chip names a stored comp (AGL-3049): the plan, then whether it
+ * is uncapped and whether a live subscription holds it dormant —
+ * `Enterprise (uncapped)`, `Pro (dormant)`, `Agency (uncapped, dormant)`.
+ *
+ * One reading of the terms, so the orgs list, the org summary and the
+ * override dialog cannot describe the same grant differently. `name` is the
+ * plan as the surface already writes plans: the label by default, the stored
+ * key on the surfaces whose other chips show keys.
+ */
+export function planCompLabel(
+  comp: Pick<ResolvedOrgPlanComp, 'plan' | 'uncapped'>,
+  inForce: boolean,
+  name: string = PLAN_LABELS[comp.plan],
+): string {
+  const terms = [comp.uncapped ? 'uncapped' : null, inForce ? null : 'dormant']
+    .filter(Boolean)
+    .join(', ')
+  return terms ? `${name} (${terms})` : name
+}
+
+/**
+ * A stored comp as a sentence names it (AGL-3049): `uncapped Enterprise
+ * comp`, `Pro comp`. Shared by the plan description and the override route's
+ * account of what it changed.
+ */
+export function planCompPhrase(
+  comp: Pick<ResolvedOrgPlanComp, 'plan' | 'uncapped'>,
+): string {
+  return `${comp.uncapped ? 'uncapped ' : ''}${PLAN_LABELS[comp.plan]} comp`
+}
+
+/** "A Pro comp", "An uncapped Enterprise comp": the article a phrase takes. */
+function withArticle(phrase: string): string {
+  return `${/^[aeiou]/i.test(phrase) ? 'An' : 'A'} ${phrase}`
 }
 
 /**
@@ -2039,6 +2124,7 @@ export function describeOrgPlan(
     subscription,
     comp,
     compInForce,
+    uncapped: compInForce && comp?.uncapped === true,
     decidedBy,
   }
 }
@@ -2047,6 +2133,10 @@ export function describeOrgPlan(
  * One sentence for staff saying what decides the plan and what a plan set in
  * the override dialog would do (AGL-3034). Shared by the route's response and
  * the dialog, for the reason `describeOrgPlan` is.
+ *
+ * A comp in force also says whether its bands are walls or lifted
+ * (AGL-3049), because that is the question a comped workspace refused at a
+ * band brings to staff.
  */
 export function orgPlanDescriptionSentence(
   description: OrgPlanDescription,
@@ -2055,8 +2145,8 @@ export function orgPlanDescriptionSentence(
   const status = description.subscriptionStatus ?? 'none'
   const dormant =
     description.comp && !description.compInForce
-      ? ` A ${label(description.comp.plan)} comp is stored and dormant: it ` +
-        'takes effect if the subscription ends.'
+      ? ` ${withArticle(planCompPhrase(description.comp))} is stored and ` +
+        'dormant: it takes effect if the subscription ends.'
       : ''
   switch (description.decidedBy) {
     case 'subscription':
@@ -2067,12 +2157,16 @@ export function orgPlanDescriptionSentence(
       )
     case 'comp':
       return (
-        `${label(description.effectivePlan)} is in force as a staff comp, ` +
+        `${label(description.effectivePlan)} is in force as ` +
+        `${description.uncapped ? 'an uncapped' : 'a'} staff comp, ` +
         (description.subscription === 'dead'
           ? `because the subscription is ${status}. `
           : 'because no subscription pays for this workspace. ') +
-        'It bills nothing, and lasts until it is removed or a live ' +
-        'subscription starts.'
+        (description.uncapped
+          ? 'It bills nothing, every band and quota reads as unlimited, '
+          : 'It bills nothing, every band is a hard limit that a quota ' +
+            'override can raise, ') +
+        'and it lasts until it is removed or a live subscription starts.'
       )
     case 'lapsed':
       return (
@@ -3100,6 +3194,50 @@ export const RETIRED_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
 ])
 
 /**
+ * The numeric entitlements that are PRICES rather than caps (AGL-3049): the
+ * platform's percentage of a storefront or marketplace sale.
+ *
+ * Every other numeric key is a band — a count, a size, a monthly or daily
+ * allowance — and an uncapped comp lifts it to `UNLIMITED`. These three it
+ * must never touch. `transactionFee*Pct` becomes Stripe's
+ * `application_fee_amount` at checkout, so an unlimited one is a fee larger
+ * than the charge and every sale on the storefront fails; and "no cap" has
+ * no meaning for a price in the first place. An uncapped workspace pays its
+ * plan's percentages, or whatever a per-org override sets them to.
+ *
+ * Named rather than derived from the `Pct` suffix, so a new numeric key is a
+ * band unless someone decides here that it is a price. `plan-comp.spec.ts`
+ * pins these three by name and proves every other numeric key is lifted.
+ */
+export const PRICE_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
+  'transactionFeePhysicalPct',
+  'transactionFeeDigitalPct',
+  'marketplaceFeePct',
+])
+
+/**
+ * The entitlements with every band lifted (AGL-3049): `UNLIMITED` on each
+ * numeric key but the prices, features untouched. What an uncapped comp in
+ * force resolves to — see `isUncappedPlanComp`.
+ *
+ * Applied LAST, over the plan row, the per-org overrides and the folded
+ * add-ons alike: "every band reads as unlimited" means an override written
+ * before the comp was uncapped does not quietly cap it again. The overrides
+ * stay stored, and apply once more if the comp is capped or removed.
+ */
+function withEveryCapLifted(
+  entitlements: ResolvedOrgEntitlements,
+): ResolvedOrgEntitlements {
+  const lifted: Record<string, unknown> = { ...entitlements }
+  for (const [key, value] of Object.entries(entitlements)) {
+    if (typeof value === 'number' && !PRICE_ENTITLEMENT_KEYS.has(key)) {
+      lifted[key] = UNLIMITED
+    }
+  }
+  return lifted as unknown as ResolvedOrgEntitlements
+}
+
+/**
  * Effective entitlements for an org: plan defaults with the org doc's
  * per-key overrides applied (features merge key-by-key too), then
  * purchased add-ons stacked on top (AGL-524): `seatAddons.hosts` raises
@@ -3145,8 +3283,20 @@ export const RETIRED_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
  * (`eventCalendar` is still org-wide on purpose: it is documented and priced
  * as "one purchase covers every host in the org". The register add-on never
  * was, which is the whole difference.)
+ *
+ * AN UNCAPPED COMP IN FORCE (AGL-3049) resolves every band as `UNLIMITED`
+ * on top of all of the above — `withEveryCapLifted` — and leaves the
+ * features and the fee percentages exactly as resolved.
  */
 export function resolveOrgEntitlements(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): ResolvedOrgEntitlements {
+  const resolved = resolveCappedOrgEntitlements(org)
+  return isUncappedPlanComp(org) ? withEveryCapLifted(resolved) : resolved
+}
+
+/** `resolveOrgEntitlements` before an uncapped comp lifts anything. */
+function resolveCappedOrgEntitlements(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): ResolvedOrgEntitlements {
   const defaults = withPluginFeatureDefaults(

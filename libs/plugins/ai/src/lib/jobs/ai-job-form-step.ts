@@ -42,7 +42,7 @@ import {
   runValidatedGeneration,
   type AiValidatedTree,
 } from '../runtime/ai-doctrine'
-import type { AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
+import type { AiDoctrineTree, AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { AI_PALETTE } from '../runtime/ai-palette.generated'
 import type { AiSystemBlock, AiTool } from '../runtime/ai-runtime'
@@ -57,6 +57,7 @@ import {
   type AiDraftRecord,
 } from './ai-job-drafts'
 import {
+  aiBracketedFactsNote,
   aiConfirmedPlan,
   aiDoctrineReview,
   aiGenerationSpent,
@@ -553,9 +554,19 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
       if (write.status === 404) throw new Error(`site ${hostId} vanished while its form was generated`)
       return { ...spent, review: aiLimitReview(write.error) }
     }
+    // What the person decides next, then the facts the brief did not give (AGL-3056).
+    const note = [
+      aiFormOutputNote(draft.answer),
+      aiBracketedFactsNote({
+        tree: { rootId: result.value.rootId, nodes: result.value.nodes as unknown as AiDoctrineTree['nodes'] },
+        inventory,
+      }),
+    ]
+      .filter(Boolean)
+      .join(' ')
     return {
       ...spent,
-      outputs: [output(write, { load: result.value.load, note: aiFormOutputNote(draft.answer) })],
+      outputs: [output(write, { load: result.value.load, note })],
     }
   }
 }

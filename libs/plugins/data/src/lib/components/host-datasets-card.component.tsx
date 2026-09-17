@@ -39,6 +39,7 @@ import { exportShortfall, mapImportColumns, parseImportRows } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -49,7 +50,6 @@ import {
   DialogTitle,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -1415,7 +1415,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         ) : null}
         {selected && (records.length > 0 || recordPage > 0) ? (
           <>
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 {fields.map((fieldId) => {
@@ -1505,7 +1505,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </ScrollTable>
           {/* The count line is the PAGE's, deliberately. `recordCount` is the
               dataset's real size and it already has its own readout above —
               handing it to the footer as `count` would tell MUI the walk is

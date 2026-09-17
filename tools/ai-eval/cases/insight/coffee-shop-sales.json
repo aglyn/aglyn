@@ -1,0 +1,317 @@
+{
+  "id": "insight-coffee-shop-sales",
+  "kind": "insight",
+  "brief": "How are sales doing this month compared to last month, and what is selling best?",
+  "framing": null,
+  "inventory": null,
+  "tables": [
+    {
+      "ref": "t1",
+      "reader": "commerce.sales",
+      "days": 30,
+      "scope": "site",
+      "title": "Sales",
+      "source": {
+        "label": "Store analytics",
+        "path": "products/analytics"
+      },
+      "period": {
+        "from": "2026-08-18",
+        "to": "2026-09-16",
+        "days": 30
+      },
+      "columns": [
+        {
+          "key": "window",
+          "label": "Window",
+          "kind": "text"
+        },
+        {
+          "key": "revenue",
+          "label": "Revenue",
+          "kind": "money",
+          "currency": "USD"
+        },
+        {
+          "key": "orders",
+          "label": "Orders",
+          "kind": "count"
+        },
+        {
+          "key": "averageOrder",
+          "label": "Average order",
+          "kind": "money",
+          "currency": "USD"
+        },
+        {
+          "key": "revenueChange",
+          "label": "Revenue change",
+          "kind": "change"
+        },
+        {
+          "key": "ordersChange",
+          "label": "Orders change",
+          "kind": "change"
+        }
+      ],
+      "rows": [
+        {
+          "window": "2026-08-18 to 2026-09-16",
+          "revenue": 18234.5,
+          "orders": 284,
+          "averageOrder": 64.2,
+          "revenueChange": 9.6,
+          "ordersChange": -2.1
+        },
+        {
+          "window": "2026-07-19 to 2026-08-17",
+          "revenue": 16637.0,
+          "orders": 290,
+          "averageOrder": 57.37,
+          "revenueChange": null,
+          "ordersChange": null
+        }
+      ],
+      "omitted": 0,
+      "notes": []
+    },
+    {
+      "ref": "t2",
+      "reader": "commerce.products",
+      "days": 30,
+      "scope": "site",
+      "title": "Top products",
+      "source": {
+        "label": "Store analytics",
+        "path": "products/analytics"
+      },
+      "period": {
+        "from": "2026-08-18",
+        "to": "2026-09-16",
+        "days": 30
+      },
+      "columns": [
+        {
+          "key": "product",
+          "label": "Product",
+          "kind": "text"
+        },
+        {
+          "key": "units",
+          "label": "Units",
+          "kind": "count"
+        },
+        {
+          "key": "revenue",
+          "label": "Line revenue",
+          "kind": "money",
+          "currency": "USD"
+        }
+      ],
+      "rows": [
+        {
+          "product": "Harvest coffee blend 1 lb",
+          "units": 212,
+          "revenue": 3816.0
+        },
+        {
+          "product": "Pour-over kit",
+          "units": 41,
+          "revenue": 2419.0
+        },
+        {
+          "product": "Ceramic mug",
+          "units": 96,
+          "revenue": 1440.0
+        }
+      ],
+      "omitted": 18,
+      "notes": [
+        "Line revenue is each line’s price times its quantity, before discounts, shipping and tax."
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand, quoting money as the table shows it and rounding one figure.",
+      "plan": null,
+      "answer": {
+        "insights": [
+          {
+            "text": "Revenue rose 9.6% to $18,234.50 over the last 30 days, even though orders fell 2.1% to 284.",
+            "cites": [
+              {
+                "table": "t1",
+                "rows": [
+                  0
+                ]
+              }
+            ]
+          },
+          {
+            "text": "The rise came from larger orders: the average order was $64.20, against $57.37 in the 30 days before.",
+            "cites": [
+              {
+                "table": "t1",
+                "rows": [
+                  0,
+                  1
+                ]
+              }
+            ]
+          },
+          {
+            "text": "The Harvest coffee blend sold best, 212 units for about $3.8k of line revenue.",
+            "cites": [
+              {
+                "table": "t2",
+                "rows": [
+                  0
+                ]
+              }
+            ]
+          }
+        ],
+        "gap": null
+      },
+      "usage": null,
+      "rubric": {
+        "structure": 5,
+        "copy": 4,
+        "reuse": null,
+        "grader": "authored"
+      }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A rate the model worked out: 212 of 349 units is 60.7%, which no row holds.",
+      "answer": {
+        "insights": [
+          {
+            "text": "The coffee blend was 60.7% of the units these products sold.",
+            "cites": [
+              {
+                "table": "t2",
+                "rows": [
+                  0,
+                  1,
+                  2
+                ]
+              }
+            ]
+          }
+        ],
+        "gap": null
+      },
+      "fails": [
+        "readable",
+        "rules"
+      ]
+    },
+    {
+      "why": "Six insights, past the five one answer may carry, the sixth untraced.",
+      "answer": {
+        "insights": [
+          {
+            "text": "Revenue rose 9.6%.",
+            "cites": [
+              {
+                "table": "t1",
+                "rows": [
+                  0
+                ]
+              }
+            ]
+          },
+          {
+            "text": "Orders fell 2.1%.",
+            "cites": [
+              {
+                "table": "t1",
+                "rows": [
+                  0
+                ]
+              }
+            ]
+          },
+          {
+            "text": "The average order was $64.20.",
+            "cites": [
+              {
+                "table": "t1",
+                "rows": [
+                  0
+                ]
+              }
+            ]
+          },
+          {
+            "text": "The coffee blend sold 212 units.",
+            "cites": [
+              {
+                "table": "t2",
+                "rows": [
+                  0
+                ]
+              }
+            ]
+          },
+          {
+            "text": "The pour-over kit sold 41 units.",
+            "cites": [
+              {
+                "table": "t2",
+                "rows": [
+                  1
+                ]
+              }
+            ]
+          },
+          {
+            "text": "The mug sold 96 units.",
+            "cites": [
+              {
+                "table": "t2",
+                "rows": [
+                  2
+                ]
+              }
+            ]
+          }
+        ],
+        "gap": null
+      },
+      "fails": [
+        "budget"
+      ]
+    },
+    {
+      "why": "An insight that cites a table the job never read.",
+      "answer": {
+        "insights": [
+          {
+            "text": "Revenue rose 9.6%.",
+            "cites": [
+              {
+                "table": "t9",
+                "rows": [
+                  0
+                ]
+              }
+            ]
+          }
+        ],
+        "gap": null
+      },
+      "fails": [
+        "readable",
+        "rules"
+      ]
+    }
+  ]
+}

@@ -46,6 +46,7 @@ import {
   type AiInventoryTheme,
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
+import { aiBracketedFacts } from './ai-doctrine-validators'
 
 /**
  * The reader behind the site inventory (AGL-2935): one site's components,
@@ -184,11 +185,20 @@ export async function readSiteInventory(
           // Soft-deleted, or never published: an instance of either renders nothing.
           if (data['deletedAt'] || !(data['rootId'] || data['versionId'])) return null
           const props: AiComponentPropTypes = {}
+          const bracketedDefaults: Record<string, string[]> = {}
           for (const prop of Array.isArray(data['props']) ? (data['props'] as Data[]) : []) {
             const name = text(prop?.['name'])
-            if (name) props[name] = text(prop['type']) || 'text'
+            if (!name) continue
+            props[name] = text(prop['type']) || 'text'
+            const facts = aiBracketedFacts([text(prop['defaultValue'])])
+            if (facts.length) bracketedDefaults[name] = facts
           }
-          return { id, name: nameOf(data, id, 'displayName'), props }
+          return {
+            id,
+            name: nameOf(data, id, 'displayName'),
+            props,
+            ...(Object.keys(bracketedDefaults).length ? { bracketedDefaults } : {}),
+          }
         },
       ),
       readWindow<AiInventoryLayout>(

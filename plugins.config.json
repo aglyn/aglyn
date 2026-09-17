@@ -154,7 +154,8 @@
       "package": "@aglyn/plugins-workflows",
       "register": {
         "console": "registerWorkflowsConsole",
-        "tenantApi": "registerWorkflowsApi"
+        "tenantApi": "registerWorkflowsApi",
+        "consoleApi": "registerWorkflowsConsoleApi"
       },
       "apiPrefixes": [
         "hooks"

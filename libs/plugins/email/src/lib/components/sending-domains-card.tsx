@@ -36,6 +36,7 @@ import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navig
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -44,7 +45,6 @@ import {
   Divider,
   IconButton,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -699,7 +699,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
                   'address possible.'}
               </Typography>
             ) : null}
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Sends as'}</TableCell>
@@ -785,7 +785,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
           </>
         ) : null}
 
@@ -983,7 +983,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
             {'Loading…'}
           </Typography>
         ) : domains.length ? (
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Domain'}</TableCell>
@@ -1061,7 +1061,7 @@ export function SendingDomainsCard(props: SendingDomainsCardProps) {
                 )
               })}
             </TableBody>
-          </Table>
+          </ScrollTable>
         ) : (
           <Typography variant="body2" color="text.secondary">
             {'No domain has been added yet.'}

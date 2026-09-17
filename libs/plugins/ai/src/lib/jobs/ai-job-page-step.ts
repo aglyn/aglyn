@@ -32,7 +32,7 @@ import { aiPlanCapabilitiesForJob, aiPlanUncreatable } from '../model/ai-plan-ca
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import { aiModelForStep } from '../providers/routing'
 import { aiDoctrineNeedsInputMessage, runValidatedGeneration } from '../runtime/ai-doctrine'
-import { validateAiDoctrineTree } from '../runtime/ai-doctrine-validators'
+import { validateAiDoctrineTree, type AiDoctrineTree } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fields'
 import { readSiteInventory } from '../runtime/site-inventory'
@@ -51,6 +51,7 @@ import {
   type AiDraftRecord,
 } from './ai-job-drafts'
 import {
+  aiBracketedFactsNote,
   aiConfirmedPlan,
   aiDoctrineReview,
   aiGenerationSpent,
@@ -72,6 +73,7 @@ import {
   aiPageSectionCheck,
   aiPageSectionNodeId,
   aiPageSectionPrompt,
+  aiPageSectionSmaller,
   aiPageWithSection,
   type AiPageSection,
 } from './ai-job-page-sections'
@@ -156,14 +158,44 @@ export {
 }
 
 /**
- * Tokens one element takes in a section's answer: the tree as JSON text
- * inside the tool call, at four characters a token. Measured on the ten
+ * Tokens one element takes in a section's answer, ESTIMATED: the tree as JSON
+ * text inside the tool call, at four characters a token. Measured on the ten
  * golden pages at a median of 38 and a most of 43 over their 39 sections, and
- * `ai-job-page-evals.spec.ts` holds every golden section under it. Turns an
- * answer ceiling into the element count a request asks a section to keep
- * under.
+ * `ai-job-page-evals.spec.ts` holds every golden section under it.
  */
 export const AI_JOB_PAGE_TOKENS_PER_ELEMENT = 45
+
+/**
+ * Real tokens to every token estimated at four characters (AGL-3042). A
+ * section's ceiling is counted by the provider in its own tokens, which run
+ * above that estimate. MEASURED on the first live document run on a Free
+ * workspace (AGL-3024, test-org, 2026-09-16), as the cache read of a request
+ * over the estimate of the same cached prefix: 4,059 over 2,825 for the page
+ * plan and 6,649 over 4,310 for the layout, the higher of the two, 1.5427 —
+ * the ratio `ai-job-free-page.spec.ts` prices a Free page at. It is measured on
+ * prompt text; an answer's own is read off a recorded pass, whose output
+ * tokens the step's record keeps (`lastRuns`), beside the section it stored.
+ */
+export const AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED = Math.max(4_059 / 2_825, 6_649 / 4_310)
+
+/**
+ * Real tokens one element takes in a section's answer: the estimate at its
+ * golden most, in real tokens, rounded up — 45 × 1.5427 → 70 (AGL-3042).
+ */
+export const AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT = Math.ceil(
+  AI_JOB_PAGE_TOKENS_PER_ELEMENT * AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED,
+)
+
+/**
+ * The most elements a section's request asks it to keep under at an answer
+ * ceiling: 15 at the balanced tier's 1,050 (AGL-3042). Counted in real
+ * tokens, because the ceiling is: counted in the estimate, the budget is 23
+ * elements, which a section of the goldens' largest elements fills at 1,597
+ * real tokens — half as much again as the ceiling that cuts it off.
+ */
+export function aiJobPageSectionMaxElements(maxTokens: number): number {
+  return Math.max(1, Math.floor(maxTokens / AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT))
+}
 
 /** A page's name when the plan names none. */
 export const AI_JOB_PAGE_DEFAULT_NAME = 'New page'
@@ -351,6 +383,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const output = (
       draft: Pick<AiDraftRecord, 'id' | 'versionId' | 'name' | 'hostSubdomain'>,
       load?: AiLoadEstimate | null,
+      note?: string | null,
     ): AiJobOutput => ({
       resource: 'screen',
       id: draft.id,
@@ -359,6 +392,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       hostSubdomain: draft.hostSubdomain,
       label: draft.name,
       ...(load ? { load } : {}),
+      ...(note ? { note } : {}),
       // Rule 10: a navigation entry travels with the page as a proposal, for
       // the member to add once the page is live; no menu is written.
       ...(screen.nav ? { proposal: { navigation: { label: name, slug } } } : {}),
@@ -451,7 +485,12 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         }
         await writeAiDraftScreenSeo(firestore, { hostId, id: job.$id, seo: values, now })
       }
-      return { ...spent, outputs: [output(written, report.load)] }
+      // The facts the brief did not give, on the page or in the defaults its components show (AGL-3056).
+      const note = aiBracketedFactsNote({
+        tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] },
+        inventory,
+      })
+      return { ...spent, outputs: [output(written, report.load, note)] }
     }
 
     // ── A section pass ──
@@ -460,6 +499,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       if (allowance) return aiUnspentOutcome(model, { review: aiLimitReview(allowance) })
     }
     const maxTokens = aiJobPageSectionMaxTokens(model)
+    const maxElements = aiJobPageSectionMaxElements(maxTokens)
     const result = await runValidatedGeneration<AiPageSection>('page-section', {
       step: 'job.page',
       model,
@@ -468,18 +508,14 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       messages: [
         {
           role: 'user',
-          content: aiPageSectionPrompt({
-            job,
-            plan,
-            screen,
-            index,
-            maxElements: Math.max(1, Math.floor(maxTokens / AI_JOB_PAGE_TOKENS_PER_ELEMENT)),
-            reusableComponents,
-          }),
+          content: aiPageSectionPrompt({ job, plan, screen, index, maxElements, reusableComponents }),
         },
       ],
       tool: AI_PAGE_SECTION_TOOL,
       maxTokens,
+      // A section cut off at its ceiling is asked for smaller, and a member
+      // whose section still does not fit reads that it was too large (AGL-3042).
+      cutOff: { noun: 'section', smaller: aiPageSectionSmaller({ maxElements, reusableComponents }) },
       thinking: 'off',
       check: aiPageSectionCheck({
         page,

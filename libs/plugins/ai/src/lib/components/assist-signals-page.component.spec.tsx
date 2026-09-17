@@ -532,3 +532,21 @@ describe('tokens by kind (AGL-2937)', () => {
     expect(await screen.findByText('No model turns in this sample.')).toBeTruthy()
   })
 })
+
+describe('every table scrolls inside its card (AGL-3045)', () => {
+  afterEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('puts each table in a box that scrolls sideways, so a model id never runs past the edge', async () => {
+    serve(report())
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
+    await rowFor('claude-sonnet-5')
+    const tables = screen.getAllByRole('table')
+    // Positive control: the page draws its breakdowns and rankings as tables.
+    expect(tables.length).toBeGreaterThan(2)
+    for (const table of tables) {
+      expect(getComputedStyle(table.parentElement as HTMLElement).overflowX).toBe('auto')
+    }
+  })
+})

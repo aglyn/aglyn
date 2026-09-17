@@ -17,11 +17,16 @@
 'use client'
 
 import { CONSOLE_WIDGET_SLOTS, type ConsolePluginOrgMount } from '@aglyn/aglyn'
+import { ABSENT_WHEN_EMPTY } from '@aglyn/shared-ui-jsx/components/grid-items'
 import { Box } from '@mui/material'
 import useOrgPermissions from '../hooks/use-org-permissions'
 import { useOrgReach } from '../hooks/use-org-reach'
 import { resolveOrgCrmAccess } from '../utils/org-crm-access'
-import PluginWidgetSlot, { useSlotWidgets } from './plugin-widget-slot.component'
+import PluginWidgetSlot, {
+  useSlotWidgets,
+  WIDGET_ZONE_BLOCK,
+  WIDGET_ZONE_SPACING,
+} from './plugin-widget-slot.component'
 
 export interface OrgDashboardWidgetsProps {
   /**
@@ -89,13 +94,17 @@ export function OrgDashboardWidgets(props: OrgDashboardWidgetsProps) {
   return (
     // The host dashboard's capability grid, for the same reason it is a
     // grid there: the shell does not know how many cards a slot holds, and a
-    // widget that renders null occupies no track.
+    // widget that renders null occupies no track. The zone is `bare`, so this
+    // grid is the zone's block of the page: set apart from the cards beside
+    // it the way every stacked zone is, and gone when every card in it
+    // rendered nothing.
     <Box
+      {...ABSENT_WHEN_EMPTY}
       sx={{
         display: 'grid',
-        gap: 3,
+        gap: WIDGET_ZONE_SPACING,
         alignItems: 'start',
-        mb: 3,
+        ...WIDGET_ZONE_BLOCK,
         gridTemplateColumns: {
           xs: '1fr',
           md: 'repeat(2, minmax(0, 1fr))',

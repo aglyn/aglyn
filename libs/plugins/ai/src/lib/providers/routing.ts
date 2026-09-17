@@ -204,6 +204,18 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       "the ceiling the layout and template steps keep, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
     eval: { kinds: ['component'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
   },
+  'job.crm': {
+    // CRM by AI (AGL-2917): short answers through a strict tool, written from
+    // the facts the CRM reports about the record the member opened, with no
+    // thinking. The ceiling fits an inline door, so a member is answered in
+    // the request that asked.
+    thinking: null,
+    effort: null,
+    maxTokens: 700,
+    maxTokensBasis:
+      "the largest answer a CRM tool accepts: sixty columns matched to fields by number, or an email draft at its length limits, at three characters a token with room, as ai-job-crm-step.spec.ts measures it",
+    eval: { kinds: ['crm'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9938 },
+  },
   'job.form': {
     // A form's two halves in one answer: the field declaration and the design
     // that renders it, as JSON, with no extended thinking (AGL-2913). The step
@@ -215,6 +227,18 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis:
       "the largest form the doctrine's output budget admits, a form's fields, its consent and routing declaration and the design that renders them written as JSON at the wordiest golden's characters a stored byte, under it with room; ai-job-form-step.spec.ts measures it",
     eval: { kinds: ['form'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+  },
+  'job.insight': {
+    // Readers chosen, then their tables phrased (AGL-2915): short sentences
+    // over figures code computed, each held to the rows it cites, so no
+    // extended thinking. The read call before the answer asks for at most
+    // `AI_INSIGHT_READ_MAX_TOKENS` of the same allowance.
+    thinking: 'off',
+    effort: null,
+    maxTokens: 1500,
+    maxTokensBasis:
+      'five insights at their 280-character bound, each citing three tables of ten rows, and the gap sentence, written as JSON: about 2,700 characters, under 1,000 tokens at three characters a token, with room',
+    eval: { kinds: ['insight'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
   },
   'job.page': {
     // One section of a page, written against a plan a member already
@@ -228,6 +252,23 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis:
       "a section of a page written as JSON, about forty elements at the step's measured 45 tokens an element; a pass lowers it to the worst case that fits AI_JOB_PAGE_STEP_MINIMUM_MS on the model it runs",
     eval: { kinds: ['page'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+  },
+  'job.products': {
+    // A product's copy from its name, text and photo, or a store's first
+    // products, categories and discounts from a brief (AGL-2916): answers held
+    // to the storefront claim rules, written with no extended thinking.
+    thinking: 'off',
+    effort: null,
+    maxTokens: 8000,
+    maxTokensBasis:
+      "the largest catalog the tool accepts, twelve proposed products at every bound written as JSON, which the balanced tier asks as much of as fits a beat; one product's copy asks 1,500 and categories with discounts 2,000, as ai-job-products-step.spec.ts measures them",
+    eval: {
+      kinds: ['product', 'catalog', 'categories'],
+      scores: 'answers',
+      source: 'authored',
+      passRate: 1,
+      meanScore: 0.9896,
+    },
   },
   'job.email': {
     // One email design from the email palette, written against the brief with
@@ -250,6 +291,17 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis:
       "an email's node map written as JSON, with three subject lines and three preheaders beside it",
     eval: { kinds: ['email'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+  },
+  'job.workflow': {
+    // An automation drafted from a description, or one explained (AGL-2919):
+    // which trigger and which steps a description means is the judgment the
+    // step sells, so it thinks before it answers.
+    thinking: 'adaptive',
+    effort: null,
+    maxTokens: 4000,
+    maxTokensBasis:
+      'the largest automation the tool accepts, 6,000 characters written out as JSON, at three characters a token with as much again to think in, as ai-job-workflow-step.spec.ts measures it',
+    eval: { kinds: ['workflow'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
   },
   'job.seo': {
     thinking: null,

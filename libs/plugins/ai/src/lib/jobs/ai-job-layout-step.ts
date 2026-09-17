@@ -29,6 +29,7 @@ import {
 import {
   walkTree,
   type AiDoctrineNode,
+  type AiDoctrineTree,
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
@@ -44,6 +45,7 @@ import {
   type AiDraftRecord,
 } from './ai-job-drafts'
 import {
+  aiBracketedFactsNote,
   aiConfirmedPlan,
   aiDoctrineReview,
   aiGenerationSpent,
@@ -197,7 +199,7 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
   return async ({ job, now, signal, firestore, modelFor }) => {
     const hostId = job.hostId
     if (!hostId) throw new Error('a layout job names no site, and its admission refuses one')
-    const output = (draft: AiDraftRecord, load?: AiLoadEstimate | null): AiJobOutput => ({
+    const output = (draft: AiDraftRecord, load?: AiLoadEstimate | null, note?: string | null): AiJobOutput => ({
       resource: 'layout',
       id: draft.id,
       versionId: draft.versionId,
@@ -205,6 +207,7 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
       hostSubdomain: draft.hostSubdomain,
       label: draft.name,
       ...(load ? { load } : {}),
+      ...(note ? { note } : {}),
     })
     // The switch's answer for this job, else the routing table's (AGL-2942).
     const model = modelFor?.('job.layout') ?? aiModelForStep('job.layout')
@@ -279,7 +282,12 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
       if (draft.status === 404) throw new Error(`site ${hostId} vanished while its layout was generated`)
       return { ...spent, review: aiLimitReview(draft.error) }
     }
-    return { ...spent, outputs: [output(draft, result.value.load)] }
+    // The facts the brief did not give, which the member fills before publishing (AGL-3056).
+    const note = aiBracketedFactsNote({
+      tree: { rootId: result.value.rootId, nodes: result.value.nodes as unknown as AiDoctrineTree['nodes'] },
+      inventory,
+    })
+    return { ...spent, outputs: [output(draft, result.value.load, note)] }
   }
 }
 

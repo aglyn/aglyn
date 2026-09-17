@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v7'
+export const LEGAL_DOCUMENT_VERSION = 'v8'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -543,6 +543,47 @@ export interface LegalDocumentManifestEntry {
  * instead: on 2026-09-15 the live pages reproduced the `v2` pins (terms 39062
  * bytes / `7257cc…`, privacy 15426 bytes / `6cb2c8…`) byte for byte.
  *
+ * v8 (2026-09-17, AGL-3069): one version for the four AI disclosures drafted
+ * beside their features, so every account re-accepts once. Production held
+ * acceptance records labeled `v1`, `v2`, `v6` and `v7`, so `v8` outranks them
+ * all.
+ *
+ *   - AGL-2915, AI insights. Privacy §2 names AI insights, which answer a
+ *     member's questions about the site's own figures and can write a weekly
+ *     summary. It says a question sends tables of totals, counts and rates,
+ *     never an individual record, and that the answer and its tables are kept
+ *     beside the job record and shown only to the member who asked (or, for a
+ *     weekly summary, to members who can access the site). §5 keeps those
+ *     tables on the job's 180 days, and the weekly-insights choice until it is
+ *     changed.
+ *   - AGL-2916, product copy and proposals. Privacy §2 says what writing a
+ *     product's copy sends, including its first photo as a copy at most 768
+ *     pixels on its longer side without the original's embedded details, and
+ *     what a brief for products, categories or discounts sends.
+ *   - AGL-2917, AI assistance in the CRM. Privacy §2 names it and says what a
+ *     record summary, an email draft and an import's column matching send; that
+ *     the result is kept beside the job record and who sees it; and that AI
+ *     never sends an email. §5 deletes that result 14 days after it is
+ *     produced.
+ *   - AGL-2919, automations. Privacy §2 says what drafting an automation and
+ *     explaining one or its failed run send, and that the details of the event
+ *     that started a run are never sent.
+ *
+ * The Subprocessors Anthropic row (its purpose, its data, and a change-log
+ * entry) and the `/legal` index cards published in the same sitting; neither
+ * is acceptance-pinned. The Terms, the Acceptable Use Policy, the DPA and the
+ * Cookie Policy are unchanged: the DPA's nature and purpose already names
+ * AI-assisted features. The Privacy Policy and Subprocessors move "Last
+ * updated" to September 17, 2026. The combined wording is recorded in
+ * `Platform Docs/Legal/Proposed/2026-09-16-ai-data-flows/COMBINED-FINAL.md`.
+ *
+ * Publication-first: the pages were published, the live pages confirmed
+ * serving the new text, and only then was privacy captured: 25267 bytes
+ * (`069319…`), identical across two requests and a cache-busting query.
+ * The Terms did not change, so they were the control: the live terms page
+ * reproduced its `v7` pin (43836 bytes / `69d59b…`) byte for byte before and
+ * after publication, and keeps that pin.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -609,7 +650,7 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '59e577d3072aff8acf0da0260feb2b34da775a4974aa5e7d7bf45faa043e467b',
-    bytes: 20785,
+      '069319b0e5a43b6d4e01f1d37114ffa4bbedf72d6bce827dacf3ee58b6f63086',
+    bytes: 25267,
   },
 ]

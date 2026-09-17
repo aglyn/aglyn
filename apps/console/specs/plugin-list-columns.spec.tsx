@@ -23,7 +23,8 @@
  */
 
 import { fireEvent, render, screen } from '@testing-library/react'
-import { Table, TableBody, TableCell, TableHead, TableRow } from '@mui/material'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { TableBody, TableCell, TableHead, TableRow } from '@mui/material'
 
 let mockWidgets: Array<Record<string, unknown>>
 
@@ -51,7 +52,7 @@ function Card() {
 function Team(props: { rows: Array<{ $id: string }> }) {
   const { columns } = usePluginListColumns('orgMembersListColumn')
   return (
-    <Table>
+    <ScrollTable>
       <TableHead>
         <TableRow>
           <TableCell>{'Member'}</TableCell>
@@ -66,7 +67,7 @@ function Team(props: { rows: Array<{ $id: string }> }) {
           </TableRow>
         ))}
       </TableBody>
-    </Table>
+    </ScrollTable>
   )
 }
 
@@ -171,7 +172,7 @@ describe('usePluginColumnSort', () => {
     const { columns } = usePluginListColumns('orgMembersListColumn')
     const { rows, sortedBy, onSort } = usePluginColumnSort(props.rows)
     return (
-      <Table>
+      <ScrollTable>
         <TableHead>
           <TableRow>
             <TableCell>{'Member'}</TableCell>
@@ -191,7 +192,7 @@ describe('usePluginColumnSort', () => {
             </TableRow>
           ))}
         </TableBody>
-      </Table>
+      </ScrollTable>
     )
   }
 

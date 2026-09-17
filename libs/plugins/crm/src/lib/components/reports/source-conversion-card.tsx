@@ -23,10 +23,10 @@ import {
   percent,
   Section,
 } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -189,7 +189,7 @@ export function SourceConversionCard(props: SourceConversionCardProps) {
         ) : null}
         <Section title={'By source'}>
           {conversion.rows.length ? (
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   {COLUMNS.map((column, index) => (
@@ -209,7 +209,7 @@ export function SourceConversionCard(props: SourceConversionCardProps) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
           ) : (
             <Typography variant="body2" color="text.secondary">
               {status === 'loading' ? 'Reading…' : 'Nobody captured in this period.'}

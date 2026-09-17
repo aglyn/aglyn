@@ -18,6 +18,7 @@
 import {
   AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K,
   hasAiAddon,
+  isUncappedPlanComp,
   resolveEffectivePlan,
   resolveOrgEntitlements,
   resolvePlanComp,
@@ -207,6 +208,14 @@ export function assistCreditsFromUsd(usd: number): number {
  * reached here as `Infinity` is a band that would read as zero somewhere
  * else. Falling through to the backstop is bounded and consistent; honouring
  * it would be an unbounded budget on one process and a refusal on the next.
+ *
+ * An UNCAPPED staff comp (AGL-3049) is where that `Infinity` comes from on
+ * purpose, and `null` is right for it here too: there is no band to measure
+ * against, be over, price or alert on. What `null` must NOT bring with it is
+ * the backstop, whose repo default would cap the one workspace staff said
+ * has no cap — so `assistBandRefuses` answers false for it, and the
+ * reservation's ceiling (`assistMonthlyCeilingUsd` in the AI plugin) drops
+ * the default and keeps only an operator's explicit figure.
  */
 export function resolveAssistCreditBudget(
   org: Partial<AglynOrgBilling> | null | undefined,
@@ -437,10 +446,16 @@ export function resolveAssistHardCap(
  * decision this function encodes. A plan with no band at all (Free, Starter)
  * answers the same as Enterprise, harmlessly: `resolveAssistBudgetUsd` is
  * `null` for them and the reservation never measures against a band.
+ *
+ * An UNCAPPED staff comp (AGL-3049) is neither: it has no band to be a wall,
+ * and nothing is sold past a band it does not have. It answers false, ahead
+ * of the switch — a workspace staff uncapped is not stopped by a band, and
+ * the reservation reads that answer as "no wall, no backstop default".
  */
 export function assistBandRefuses(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): boolean {
+  if (isUncappedPlanComp(org)) return false
   if (resolveAssistHardCap(org)) return true
   return resolveAssistOverageRateUsdPer1k(org) === null
 }

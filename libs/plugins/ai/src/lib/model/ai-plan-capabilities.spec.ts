@@ -28,6 +28,7 @@ import {
   aiCreationNoun,
   aiPlanCapabilitiesForJob,
   aiPlanCapabilityLines,
+  aiPlanUncreatableKind,
   aiUnrestrictedPlanCapabilities,
   type AiPlanCapabilities,
 } from './ai-plan-capabilities'
@@ -80,5 +81,22 @@ describe('what a plan may create', () => {
     expect(aiCreationNoun('layout')).toBe('a layout')
     expect(aiCreationNoun('email')).toBe('an email design')
     expect(aiCreationNoun('theme-change')).toBe('a theme change')
+  })
+
+  it('says whether a plan could add one more of a kind, counted past the ones it already creates (AGL-3040)', () => {
+    const layout = { kind: 'layout' as const, name: 'Site frame', why: 'The site has none.', duplicateOf: null, fields: [] }
+    // Room for one more, and the plan has not used it.
+    expect(aiPlanUncreatableKind({ create: [] }, 'layout', FREE)).toBeNull()
+    // The plan's own layout takes the room, so another would be refused next.
+    expect(aiPlanUncreatableKind({ create: [layout] }, 'layout', FREE)).toEqual({
+      reason: 'this site has room for 1 more',
+      instead: 'Put the page in a layout the site already has.',
+    })
+    // What the workspace keeps no reusable components for is drawn on the page.
+    expect(aiPlanUncreatableKind({ create: [] }, 'component', FREE)).toEqual({
+      reason: "this workspace's plan does not include reusable components",
+      instead: 'Draw the item in its own section instead.',
+    })
+    expect(aiPlanUncreatableKind({ create: [layout] }, 'layout', aiUnrestrictedPlanCapabilities())).toBeNull()
   })
 })

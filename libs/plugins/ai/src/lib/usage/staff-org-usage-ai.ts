@@ -20,6 +20,7 @@ import {
   AI_ADDON_CREDITS_PER_MONTH,
   aiAddonName,
   hasAiAddon,
+  isUncappedPlanComp,
   resolveEffectivePlan,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -82,6 +83,11 @@ export interface StaffAssistPool {
   addonCredits: number
   /** Plan band plus add-on band, or null where the plan sells no band. */
   creditsPerMonth: number | null
+  /**
+   * Present, and true, only where an uncapped staff comp lifts the band
+   * (AGL-3049) — the other reason `creditsPerMonth` is null.
+   */
+  uncapped?: true
 }
 
 /**
@@ -101,7 +107,13 @@ export function staffAssistPool(
     addonCredits: aiAddon
       ? AI_ADDON_CREDITS_PER_MONTH[resolveEffectivePlan(org)]
       : 0,
-    creditsPerMonth: creditsPerMonth > 0 ? creditsPerMonth : null,
+    // Finite only: an uncapped comp resolves the band `UNLIMITED`, which is
+    // no band to name a figure for.
+    creditsPerMonth:
+      Number.isFinite(creditsPerMonth) && creditsPerMonth > 0
+        ? creditsPerMonth
+        : null,
+    ...(isUncappedPlanComp(org) ? { uncapped: true as const } : {}),
   }
 }
 
@@ -111,9 +123,11 @@ export function staffAssistPool(
  */
 export function assistPoolSentence(pool: StaffAssistPool): string {
   const band =
-    pool.creditsPerMonth === null
-      ? 'no AI credit band'
-      : `${pool.creditsPerMonth.toLocaleString()} AI credits/mo`
+    pool.creditsPerMonth !== null
+      ? `${pool.creditsPerMonth.toLocaleString()} AI credits/mo`
+      : pool.uncapped
+        ? 'no AI credit band (uncapped staff comp)'
+        : 'no AI credit band'
   const name = aiAddonName()
   return pool.aiAddon
     ? `${name} add-on on — ${band}, ${pool.addonCredits.toLocaleString()} ` +

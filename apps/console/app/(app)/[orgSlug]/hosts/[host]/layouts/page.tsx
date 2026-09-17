@@ -84,6 +84,7 @@ import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
 } from '../../../../../../components/templates/save-as-template-dialog.component'
 import MainLayout from '../../../../../../components/layouts/main.layout'
+import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
@@ -598,6 +599,12 @@ function Layouts(props) {
               noun="layout"
             />
             <Stack direction="row" spacing={1}>
+              {/* Other ways to start a layout, from plugins (AGL-3043). */}
+              <PluginWidgetSlot
+                slot="hostLayouts"
+                hostId={hostId}
+                orgId={org?.$id}
+              />
               <Button
                 size="small"
                 variant="outlined"

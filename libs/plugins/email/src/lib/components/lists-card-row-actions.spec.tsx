@@ -159,7 +159,7 @@ const mountCard = async () => {
 }
 
 const rowFor = (name: string) =>
-  Array.from(document.querySelectorAll('tbody tr')).find((row) =>
+  Array.from(document.querySelectorAll('[role="row"][data-id]')).find((row) =>
     row.textContent?.includes(name),
   ) as HTMLElement
 
@@ -248,8 +248,8 @@ describe('the row’s actions are in the shared overflow menu', () => {
      * opens the list, which is a list opening from a press aimed at a menu.
      */
     await mountCard()
-    const actions = rowFor('Newsletter').querySelectorAll('td')
-    fireEvent.click(actions[actions.length - 1])
+    const actions = rowFor('Newsletter').querySelector('[data-field="actions"]') as HTMLElement
+    fireEvent.click(actions)
     expect(mockPush).not.toHaveBeenCalled()
   })
 

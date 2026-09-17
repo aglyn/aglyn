@@ -46,13 +46,23 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
 import { AI_PAGE_SECTION_INLINE_LINE, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
-import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
+import { AI_JOB_PLAN_INSTRUCTIONS, AI_JOB_PLAN_SCOPES } from '../jobs/ai-job-plan-step'
+import { AI_FREE_PAGE_RECORDED_PLAN } from '../jobs/fixtures/ai-free-page-recording'
 import { AI_FREE_PAGE_FIXTURE } from '../jobs/fixtures/ai-page-briefs'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
+import {
+  aiPlanCapabilitiesForJob,
+  aiPlanCapabilityLines,
+  aiUnrestrictedPlanCapabilities,
+  type AiPlanCapabilities,
+} from '../model/ai-plan-capabilities'
 import { AI_SEO_FIELDS_TOOL_NAME } from '../tools/ai-seo-tool'
 import { AI_THEME_TOOL_NAME } from '../tools/ai-theme-tool'
+import { AI_DOCTRINE_RULES } from './ai-doctrine-validators'
 import { readAiEvalCase, scoreAiEvalCandidate, type AiEvalCase } from './ai-eval'
 import {
+  AI_EVAL_CAPABILITIES_GRADER_NOTE,
+  AI_EVAL_INLINE_GRADER_NOTE,
   AI_EVAL_PLAN_GRADER_NOTE,
   AI_EVAL_RUBRIC_TOOL,
   AiEvalLiveRefusedError,
@@ -168,7 +178,7 @@ describe('the live run', () => {
     expect(candidate).toMatchObject({ scope: 'plan', step: 'job.plan', answer: null })
     expect(mockRunAiRequest.mock.calls[0][0].system[0].text).toContain('How to build on this platform.')
     const score = scoreAiEvalCandidate(layout, candidate)
-    expect(score.checks).toEqual({ readable: null, rules: null, budget: null, plan: true, rubric: true })
+    expect(score.checks).toEqual({ readable: null, rules: null, budget: null, plan: true, responsive: null, rubric: true })
     expect(score.pass).toBe(true)
   })
 
@@ -198,9 +208,33 @@ describe('the live run', () => {
     // The page it answers is the draft the step wrote, held to the Free workspace's doctrine.
     const score = scoreAiEvalCandidate(freePage, candidate)
     expect({ checks: score.checks, findings: score.findings }).toEqual({
-      checks: { readable: true, rules: true, budget: true, plan: true, rubric: true },
+      checks: { readable: true, rules: true, budget: true, plan: true, responsive: null, rubric: true },
       findings: [],
     })
+  })
+
+  it('re-asks a page plan that places a creation it never declares, as the first live recording’s plan did, and records the page the re-ask plans (AGL-3040)', async () => {
+    armReferenceAnswers(undefined, freePage)
+    // The plan is answered first as it was live, then as the reference plan.
+    mockRunAiRequest.mockImplementationOnce(async () => toolCall(AI_BUILD_PLAN_TOOL.name, AI_FREE_PAGE_RECORDED_PLAN))
+    const [{ candidate }] = (await recordAiEvalLive([freePage], LIVE)).recorded
+    const sent = mockRunAiRequest.mock.calls.map((call) => call[0])
+    const plans = sent.filter((request) => request.tools?.[0]?.name === AI_BUILD_PLAN_TOOL.name)
+    expect(plans).toHaveLength(2)
+    // The one re-ask names both rules, and tells this Free workspace to draw its form.
+    const reask = String(plans[1].messages.at(-1).content)
+    expect(reask).toContain(`Rule 2 (${AI_DOCTRINE_RULES[2]}): A section places a layout.`)
+    expect(reask).toContain(
+      `Rule 7 (${AI_DOCTRINE_RULES[7]}): The "consultation request form" section places a creation named "consultation-form", but the plan never creates it, and this workspace's plan does not include saved forms. Draw the form on the page instead, as a Form element holding its Form Fields.`,
+    )
+    // The recording goes on to build the page, with both plan answers on its bill.
+    expect(candidate).toMatchObject({ scope: 'full', plan: freePage.candidates[0].plan })
+    expect(candidate.note).toBeUndefined()
+    expect(candidate.steps?.[0]).toMatchObject({ step: 'job.plan', usage: { inputTokens: 2 * USAGE.inputTokens } })
+    expect(candidate.steps?.filter((step) => step.step === 'job.page')).toHaveLength(AI_FREE_PAGE_FIXTURE.answers.length)
+    // And its grader is told the workspace it was built for.
+    const grade = sent.find((request) => request.tools?.[0]?.name === AI_EVAL_RUBRIC_TOOL.name)
+    expect(String(grade.messages[0].content)).toContain(AI_EVAL_INLINE_GRADER_NOTE)
   })
 
   it('records only the briefs AI_EVAL_CASES names, and refuses a name no brief has', () => {
@@ -250,6 +284,32 @@ describe('aiEvalGraderPrompt', () => {
     const prompt = aiEvalGraderPrompt(text, { ...answer, scope: 'full', plan: null, answer: 'Fresh bread.' })
     expect(prompt).not.toContain(AI_EVAL_PLAN_GRADER_NOTE)
     expect(prompt).toContain('Fresh bread.')
+  })
+
+  it('tells the grader what the case’s workspace may create, as the plan step was told, and that building inline is right there (AGL-3040)', () => {
+    // A grader told nothing of the workspace marked the Free brief's inline
+    // repeats down for reuse, on a workspace that can keep no component.
+    const told = aiPlanCapabilitiesForJob(freePage.capabilities as AiPlanCapabilities, AI_JOB_PLAN_SCOPES.page)
+    for (const scope of ['plan', 'full'] as const) {
+      const prompt = aiEvalGraderPrompt(freePage, { ...answer, scope, plan: { reuse: [] }, answer: { tree: {} } })
+      for (const line of aiPlanCapabilityLines(told)) expect([scope, prompt.includes(line)]).toEqual([scope, true])
+      expect(prompt).toContain("- form: no, because this workspace's plan does not include saved forms")
+      expect(prompt).toContain('- template: no, because a page job does not build one')
+      expect(prompt).toContain(AI_EVAL_CAPABILITIES_GRADER_NOTE)
+      expect(prompt).toContain(AI_EVAL_INLINE_GRADER_NOTE)
+      // Read before the output it is graded against.
+      expect(prompt.indexOf(AI_EVAL_INLINE_GRADER_NOTE)).toBeLessThan(prompt.indexOf('Output:\n'))
+    }
+  })
+
+  it('says nothing of a workspace for a case that describes none, and nothing of building inline where one keeps components', () => {
+    const plan = { ...answer, scope: 'plan', plan: { reuse: [] }, answer: null } as const
+    const none = aiEvalGraderPrompt(page, plan)
+    expect(none).not.toContain('What this job may create')
+    expect(none).not.toContain(AI_EVAL_CAPABILITIES_GRADER_NOTE)
+    const paid = aiEvalGraderPrompt({ ...page, capabilities: aiUnrestrictedPlanCapabilities() }, plan)
+    expect(paid).toContain(AI_EVAL_CAPABILITIES_GRADER_NOTE)
+    expect(paid).not.toContain(AI_EVAL_INLINE_GRADER_NOTE)
   })
 
   it('excuses an empty screens list for exactly the kinds the plan step tells to plan none (AGL-3022)', () => {

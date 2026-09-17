@@ -44,8 +44,8 @@ export const dynamic = 'force-dynamic'
  * same-origin POST from the bar, and this route turns it into the SAME
  * signed token the console's `/api/edit-access/token` popup mints — by
  * asking the same authorization question through the same shared code
- * (`editAccessMintRefusal`): release flag, org membership, host
- * `memberRoles` admin/editor or org role above viewer, lockdown.
+ * (`editAccessMintRefusal`): release flag, org membership, a role on this
+ * host that may write content or an org-wide role above viewer, lockdown.
  *
  * A hint names a uid, nothing more. So beyond the shared gate this route
  * re-proves two things the console route gets from a live ID token for

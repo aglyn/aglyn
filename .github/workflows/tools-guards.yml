@@ -25,7 +25,7 @@ name: Tools guards
 # (AGL-1776/AGL-1816/AGL-1822/AGL-2381).
 #
 # What each guards:
-#  - test:eslint-rules        the eight local ESLint guard rules' RuleTester
+#  - test:eslint-rules        the nine local ESLint guard rules' RuleTester
 #                             suites (the RULES run at every `nx lint`; their
 #                             self-tests otherwise run nowhere)
 #  - test:plugin-loader       the sandbox CSP the plugin origin serves (AGL-1092)
@@ -1211,7 +1211,7 @@ jobs:
       # so `tools/` is in NO nx project and `nx affected -t lint` has never
       # reached one of its 214 `.mjs` files. That is the whole tree this
       # workflow's other twenty-odd guards are WRITTEN IN: the drift checkers,
-      # the deploy tooling, the erase-org CLI, all eight local lint rules.
+      # the deploy tooling, the erase-org CLI, all nine local lint rules.
       #
       # The root config already has a `**/*.mjs` block written for exactly
       # these files — AGL-1815 added it, and its comment names

@@ -38,12 +38,12 @@ import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
   Chip,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -271,7 +271,7 @@ export function EmailTopicsCard(props: EmailTopicsCardProps) {
             {'This site has no organization, so it has no topic list.'}
           </Typography>
         ) : (
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Topic'}</TableCell>
@@ -346,7 +346,7 @@ export function EmailTopicsCard(props: EmailTopicsCardProps) {
                 )
               })}
             </TableBody>
-          </Table>
+          </ScrollTable>
         )}
       </Stack>
       <CreateArtifactDrawer

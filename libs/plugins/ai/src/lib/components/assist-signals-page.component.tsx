@@ -19,6 +19,7 @@
 import { aiAddonName, type ConsoleStaffPageProps } from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Accordion,
   AccordionDetails,
@@ -28,7 +29,6 @@ import {
   Chip,
   LinearProgress,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -151,7 +151,7 @@ function CostSplitTable({
   return (
     <Stack spacing={1} sx={{ width: '100%' }}>
       <Typography variant="subtitle2">{caption}</Typography>
-      <Table size="small">
+      <ScrollTable size="small">
         <TableHead>
           <TableRow>
             <TableCell>{label}</TableCell>
@@ -184,7 +184,7 @@ function CostSplitTable({
             ))
           )}
         </TableBody>
-      </Table>
+      </ScrollTable>
     </Stack>
   )
 }
@@ -423,7 +423,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
             {'Ranked over a sample of the month documents — there are more. This is not the whole fleet.'}
           </Alert>
         ) : null}
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>Workspace</TableCell>
@@ -482,7 +482,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
               ))
             )}
           </TableBody>
-        </Table>
+        </ScrollTable>
         <RankingFootnote
           shown={spend?.rows?.length ?? 0}
           total={spend?.ranked ?? 0}
@@ -566,7 +566,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
           answer size 95 of every 100 requests stayed within — the figure its
           output ceiling is sized against.
         </Typography>
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>Kind</TableCell>
@@ -607,7 +607,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
               ))
             )}
           </TableBody>
-        </Table>
+        </ScrollTable>
       </CardDisplay>
 
       <CardDisplay
@@ -621,7 +621,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
           landed there. A page near the top is being found and is not
           answering — that is a docs issue with its evidence attached.
         </Typography>
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>Docs page</TableCell>
@@ -662,7 +662,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
               ))
             )}
           </TableBody>
-        </Table>
+        </ScrollTable>
         <RankingFootnote
           shown={report?.docsGaps?.length ?? 0}
           total={report?.ranked?.docsGaps ?? 0}
@@ -681,7 +681,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
             ? `${report.ungrounded.questions.toLocaleString()} turns matched no documentation at all, ${report.ungrounded.down} of them rated down. These cite no page, so they cannot appear in the ranking above — a missing page is invisible to anything keyed on paths.`
             : 'Turns where retrieval matched no documentation at all.'}
         </Typography>
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>Asked from</TableCell>
@@ -710,7 +710,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
               ))
             )}
           </TableBody>
-        </Table>
+        </ScrollTable>
         <RankingFootnote
           shown={report?.ungrounded?.routes?.length ?? 0}
           total={report?.ranked?.ungroundedRoutes ?? 0}
@@ -829,7 +829,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
           Our estimated cost at the serving model&apos;s list rates —
           telemetry for tuning price against margin, not a bill.
         </Typography>
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>Workspace</TableCell>
@@ -880,7 +880,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
               ))
             )}
           </TableBody>
-        </Table>
+        </ScrollTable>
         <RankingFootnote
           shown={report?.orgs?.length ?? 0}
           total={report?.ranked?.orgs ?? 0}

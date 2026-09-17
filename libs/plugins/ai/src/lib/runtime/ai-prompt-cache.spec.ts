@@ -45,19 +45,43 @@ import {
 } from './ai-doctrine'
 import { detectPublishIntent } from './ai-doctrine-validators'
 import { AI_JOB_COMPONENT_INSTRUCTIONS } from '../jobs/ai-job-component-step'
+import {
+  AI_CRM_EMAIL_INSTRUCTIONS,
+  AI_CRM_GENERATION_KINDS,
+  AI_CRM_MAPPING_INSTRUCTIONS,
+  aiCrmRecordInstructions,
+} from '../jobs/ai-job-crm-step'
 import { AI_JOB_EMAIL_INSTRUCTIONS, AI_JOB_EMAIL_TOOL } from '../jobs/ai-job-email-step'
 import { AI_JOB_FORM_INSTRUCTIONS } from '../jobs/ai-job-form-step'
+import { AI_JOB_INSIGHT_SYSTEM } from '../jobs/ai-job-insight-step'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
 import { AI_JOB_PAGE_INSTRUCTIONS, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
 import { AI_JOB_PLAN_INSTRUCTIONS } from '../jobs/ai-job-plan-step'
 import { AI_JOB_TEMPLATE_INSTRUCTIONS } from '../jobs/ai-job-template-step'
 import { AI_JOB_TEXT_SYSTEM } from '../jobs/ai-job-text-step'
 import { AI_JOB_THEME_INSTRUCTIONS } from '../jobs/ai-job-theme-step'
+import {
+  AI_JOB_WORKFLOW_DRAFT_INSTRUCTIONS,
+  AI_JOB_WORKFLOW_EXPLAIN_INSTRUCTIONS,
+} from '../jobs/ai-job-workflow-step'
+import { aiAutomationTool, aiWorkflowExplanationTool } from '../tools/ai-workflow-tool'
 import { AI_SEO_FIXES_INSTRUCTIONS, AI_SEO_SITE_INSTRUCTIONS } from '../jobs/ai-job-seo-step'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
 import { aiComponentTool } from '../tools/ai-component-tool'
+import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
+import { AI_CRM_EMAIL_TOOL, AI_CRM_MAPPING_TOOL, aiCrmRecordTool } from '../tools/ai-crm-tool'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_SEO_FIELDS_INSTRUCTIONS, aiSeoFieldsInstructions } from './seo-fields'
+import {
+  AI_CATALOG_INSTRUCTIONS,
+  AI_CATEGORIES_INSTRUCTIONS,
+  AI_PRODUCT_COPY_INSTRUCTIONS,
+} from './ai-products-generation'
+import {
+  AI_CATALOG_TOOL,
+  AI_CATEGORIES_TOOL,
+  AI_PRODUCT_COPY_TOOL,
+} from '../tools/ai-products-tool'
 import {
   aiSeoFieldsTool,
   aiSeoFixesTool,
@@ -181,6 +205,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     caches: true,
     why: 'the doctrine, the component rules and the component palette',
   },
+  'jobs/ai-job-crm-step.ts': {
+    step: 'job.crm',
+    caches: false,
+    why: "a record's, an email's and an import's rules are far under the fast tier's minimum; the prompts are kept short instead",
+  },
   'server/ai-generate-component.ts': {
     step: 'job.component',
     caches: false,
@@ -200,6 +229,21 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     step: 'job.seo',
     caches: false,
     why: "the audit's site and fix passes, on the same fast tier as a listing",
+  },
+  'jobs/ai-job-workflow-step.ts': {
+    step: 'job.workflow',
+    caches: true,
+    why: 'the doctrine and the automation vocabulary, or the explanation rules; no site inventory block',
+  },
+  'jobs/ai-job-insight-step.ts': {
+    step: 'job.insight',
+    caches: false,
+    why: "an insight's rules and the acceptable-use block are under the balanced tier's minimum; the read call's catalog and the answer call's tables are the request",
+  },
+  'runtime/ai-products-generation.ts': {
+    step: 'job.products',
+    caches: true,
+    why: "the doctrine, the rules and the tool of a product's copy, a catalog, or categories and discounts; the product, its photo and the brief ride uncached",
   },
   'jobs/ai-job-text-step.ts': {
     step: 'job.text',
@@ -318,6 +362,20 @@ const REQUESTS: Record<string, Composed> = {
     blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_JOB_THEME_INSTRUCTIONS }),
     tools: () => [aiThemeTool()],
   },
+  // An automation drafted from a description (AGL-2919): the site's forms and
+  // datasets ride in the user turn, so the system blocks carry no inventory.
+  'workflow-draft': {
+    door: 'jobs/ai-job-workflow-step.ts',
+    step: 'job.workflow',
+    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_JOB_WORKFLOW_DRAFT_INSTRUCTIONS }),
+    tools: () => [aiAutomationTool()],
+  },
+  'workflow-explain': {
+    door: 'jobs/ai-job-workflow-step.ts',
+    step: 'job.workflow',
+    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_JOB_WORKFLOW_EXPLAIN_INSTRUCTIONS }),
+    tools: () => [aiWorkflowExplanationTool()],
+  },
   // The default listing shape: the three fields a page's SEO card asks for,
   // with no share image, no target keywords and no other titles to avoid.
   'seo-fields': {
@@ -366,11 +424,89 @@ const REQUESTS: Record<string, Composed> = {
       }),
     tools: (site) => [aiSeoFixesTool(site.screens.map((screen) => screen.id))],
   },
+  // One product's copy (AGL-2916), the request a bulk job makes once a product.
+  // A custom kind, so the loop adds no catalog, and no site inventory rides:
+  // the product, its categories and its photo are the user turn.
+  'product-copy': {
+    door: 'runtime/ai-products-generation.ts',
+    step: 'job.products',
+    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_PRODUCT_COPY_INSTRUCTIONS }),
+    tools: () => [AI_PRODUCT_COPY_TOOL],
+  },
+  catalog: {
+    door: 'runtime/ai-products-generation.ts',
+    step: 'job.products',
+    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_CATALOG_INSTRUCTIONS }),
+    tools: () => [AI_CATALOG_TOOL],
+  },
+  categories: {
+    door: 'runtime/ai-products-generation.ts',
+    step: 'job.products',
+    blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_CATEGORIES_INSTRUCTIONS }),
+    tools: () => [AI_CATEGORIES_TOOL],
+  },
+  // CRM by AI (AGL-2917): the lightest record shape, a contact's, and the
+  // heaviest, a deal's with its stage; an email draft; an import's columns.
+  'crm-record-contact': {
+    door: 'jobs/ai-job-crm-step.ts',
+    step: 'job.crm',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: aiCrmRecordInstructions('contact'),
+        scope: aiDoctrineScopeFor(AI_CRM_GENERATION_KINDS.record),
+      }),
+    tools: () => [aiCrmRecordTool('contact')],
+  },
+  'crm-record-deal': {
+    door: 'jobs/ai-job-crm-step.ts',
+    step: 'job.crm',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: aiCrmRecordInstructions('deal'),
+        scope: aiDoctrineScopeFor(AI_CRM_GENERATION_KINDS.record),
+      }),
+    tools: () => [aiCrmRecordTool('deal')],
+  },
+  'crm-email': {
+    door: 'jobs/ai-job-crm-step.ts',
+    step: 'job.crm',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: AI_CRM_EMAIL_INSTRUCTIONS,
+        scope: aiDoctrineScopeFor(AI_CRM_GENERATION_KINDS.email),
+      }),
+    tools: () => [AI_CRM_EMAIL_TOOL],
+  },
+  'crm-mapping': {
+    door: 'jobs/ai-job-crm-step.ts',
+    step: 'job.crm',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: AI_CRM_MAPPING_INSTRUCTIONS,
+        scope: aiDoctrineScopeFor(AI_CRM_GENERATION_KINDS.mapping),
+      }),
+    tools: () => [AI_CRM_MAPPING_TOOL],
+  },
   'eval-grade': {
     door: 'runtime/ai-eval-live.ts',
     step: 'job.plan',
     blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_EVAL_GRADER_INSTRUCTIONS }),
     tools: () => [],
+  },
+  // An insight's two calls (AGL-2915): the same system block, each with its
+  // own tool. The readers' catalog, the question and the tables are the user
+  // turn, so no workspace's byte is in either prefix.
+  'insight-read': {
+    door: 'jobs/ai-job-insight-step.ts',
+    step: 'job.insight',
+    blocks: () => [...AI_JOB_INSIGHT_SYSTEM],
+    tools: () => [aiInsightReadTool()],
+  },
+  'insight-answer': {
+    door: 'jobs/ai-job-insight-step.ts',
+    step: 'job.insight',
+    blocks: () => [...AI_JOB_INSIGHT_SYSTEM],
+    tools: () => [aiInsightAnswerTool()],
   },
   text: {
     door: 'jobs/ai-job-text-step.ts',
@@ -480,14 +616,16 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     // prompt moves one of them DOWN and says so in its commit, and a prompt
     // that grows without anyone meaning it to moves one UP and is red here.
     expect(measured()).toEqual({
-      plan: { prefixTokens: 2_922, minimum: 1_024, caches: true, toolsStable: true },
-      layout: { prefixTokens: 4_396, minimum: 1_024, caches: true, toolsStable: true },
-      template: { prefixTokens: 4_970, minimum: 1_024, caches: true, toolsStable: true },
-      component: { prefixTokens: 4_925, minimum: 1_024, caches: true, toolsStable: true },
-      email: { prefixTokens: 2_883, minimum: 1_024, caches: true, toolsStable: true },
-      form: { prefixTokens: 2_512, minimum: 1_024, caches: true, toolsStable: true },
-      'page-section': { prefixTokens: 4_565, minimum: 1_024, caches: true, toolsStable: true },
-      theme: { prefixTokens: 3_309, minimum: 1_024, caches: true, toolsStable: true },
+      plan: { prefixTokens: 2_945, minimum: 1_024, caches: true, toolsStable: true },
+      layout: { prefixTokens: 4_414, minimum: 1_024, caches: true, toolsStable: true },
+      template: { prefixTokens: 4_987, minimum: 1_024, caches: true, toolsStable: true },
+      component: { prefixTokens: 5_022, minimum: 1_024, caches: true, toolsStable: true },
+      email: { prefixTokens: 2_901, minimum: 1_024, caches: true, toolsStable: true },
+      form: { prefixTokens: 2_529, minimum: 1_024, caches: true, toolsStable: true },
+      'page-section': { prefixTokens: 4_598, minimum: 1_024, caches: true, toolsStable: true },
+      theme: { prefixTokens: 3_326, minimum: 1_024, caches: true, toolsStable: true },
+      'workflow-draft': { prefixTokens: 4_564, minimum: 1_024, caches: true, toolsStable: true },
+      'workflow-explain': { prefixTokens: 2_212, minimum: 1_024, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
       'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },
       'seo-site': { prefixTokens: 951, minimum: 4_096, caches: false, toolsStable: true },
@@ -496,7 +634,24 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // deliberately: on a door that cannot cache either way, a schema that
       // refuses a page outside the batch is worth more than a stable prefix.
       'seo-fixes': { prefixTokens: 921, minimum: 4_096, caches: false, toolsStable: false },
-      'eval-grade': { prefixTokens: 1_784, minimum: 1_024, caches: true, toolsStable: true },
+      'eval-grade': { prefixTokens: 1_802, minimum: 1_024, caches: true, toolsStable: true },
+      // An insight's rules are short on purpose: no model caches them, so every
+      // byte is billed as input on both calls and on a re-ask.
+      'insight-read': { prefixTokens: 883, minimum: 1_024, caches: false, toolsStable: true },
+      'insight-answer': { prefixTokens: 923, minimum: 1_024, caches: false, toolsStable: true },
+      // A product's copy, a catalog, and categories with discounts (AGL-2916):
+      // the whole doctrine, each generation's rules and its tool, which clear
+      // the balanced tier's minimum, so a bulk job reads the prefix once a
+      // product after its first.
+      'product-copy': { prefixTokens: 2_391, minimum: 1_024, caches: true, toolsStable: true },
+      catalog: { prefixTokens: 2_446, minimum: 1_024, caches: true, toolsStable: true },
+      categories: { prefixTokens: 2_345, minimum: 1_024, caches: true, toolsStable: true },
+      // CRM by AI (AGL-2917), on the fast tier: no shape reaches its minimum,
+      // so each prompt is only the field rules, the kind's own and its tool.
+      'crm-record-contact': { prefixTokens: 768, minimum: 4_096, caches: false, toolsStable: true },
+      'crm-record-deal': { prefixTokens: 913, minimum: 4_096, caches: false, toolsStable: true },
+      'crm-email': { prefixTokens: 650, minimum: 4_096, caches: false, toolsStable: true },
+      'crm-mapping': { prefixTokens: 680, minimum: 4_096, caches: false, toolsStable: true },
       // The text step marks a breakpoint its prompt is far too short to fill.
       // It costs nothing and it caches nothing; the brief is the request.
       text: { prefixTokens: 128, minimum: 1_024, caches: false, toolsStable: true },

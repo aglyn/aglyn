@@ -21,6 +21,13 @@ import { render } from '@testing-library/react'
 import { renderToString } from 'react-dom/server'
 import Image, { type ImageProps, leadImageNodeIds, schema } from './image'
 
+/** The besigner canvas or Preview: the surfaces an authoring hint is for. */
+const editing = (element: JSX.Element) => (
+  <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+    {element}
+  </Aglyn.ScreenLinkContext.Provider>
+)
+
 describe('Image element (AGL-579 SSR hardening)', () => {
   it('is flagged self-closing so renderers never pass it children', () => {
     expect(
@@ -48,9 +55,23 @@ describe('Image element (AGL-579 SSR hardening)', () => {
     expect(() => render(<Image {...props} />)).not.toThrow()
   })
 
-  it('renders the placeholder when src is empty', () => {
-    const { getByText } = render(<Image />)
+  it('renders the placeholder on an editing surface when src is empty', () => {
+    const { getByText } = render(editing(<Image />))
     expect(getByText(/choose a source/i)).toBeTruthy()
+  })
+
+  it('renders the bare element on a published page when src is empty', () => {
+    // The label is addressed to the author (AGL-3067). A visitor gets the
+    // node's own element, with the node's styles, and nothing inside it.
+    const { container } = render(
+      <Image data-aglyn="leaf:hero" sx={{ marginTop: '24px' }} />,
+    )
+    const root = container.firstElementChild as HTMLElement
+    expect(root.getAttribute('data-aglyn')).toBe('leaf:hero')
+    expect(container.textContent).toBe('')
+    expect(container.querySelector('img')).toBeNull()
+    expect(getComputedStyle(root).marginTop).toBe('24px')
+    expect(getComputedStyle(root).borderStyle).not.toContain('dashed')
   })
 })
 
@@ -96,7 +117,7 @@ describe('Image src resolution (AGL-1215)', () => {
   })
 
   it('falls back to the placeholder for an unparseable reference', () => {
-    const { getByText } = render(<Image src="media:nonsense" />)
+    const { getByText } = render(editing(<Image src="media:nonsense" />))
     expect(getByText(/choose a source/i)).toBeTruthy()
   })
 })

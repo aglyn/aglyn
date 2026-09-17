@@ -35,6 +35,7 @@ import {
 import {
   AI_ADDON_CREDITS_PER_MONTH,
   hasAiAddon,
+  isUncappedPlanComp,
   PLAN_ENTITLEMENTS,
   resolveEffectivePlan,
   resolvePlanPricing,
@@ -87,6 +88,13 @@ export interface StaffOrgAiPool {
   addonCredits: number
   /** The whole pool as the meter resolves it, or null where no band applies. */
   totalCredits: number | null
+  /**
+   * Whether an uncapped staff comp is why no band applies (AGL-3049) — a
+   * boolean, so "no band because uncapped" crosses JSON as itself rather
+   * than as the `null` an `Infinity` would become. Absent from a route older
+   * than the flag.
+   */
+  uncapped?: boolean
   /** Credits drawn this month, rounded up from the measured spend. */
   usedCredits: number
   /**
@@ -298,6 +306,7 @@ export function composeStaffOrgAiPool(
     overrideCredits: assistBandOverride(org),
     addonCredits: addon ? AI_ADDON_CREDITS_PER_MONTH[plan] : 0,
     totalCredits,
+    uncapped: isUncappedPlanComp(org),
     usedCredits,
     billedUsd,
     providerUsd,

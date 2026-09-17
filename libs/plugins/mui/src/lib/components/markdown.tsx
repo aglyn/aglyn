@@ -18,6 +18,13 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiLanguageMarkdown, mdiTableOfContents } from '@aglyn/shared-data-mdi'
 import { AppLink } from '@aglyn/shared-ui-jsx'
+import {
+  scrollOverflowFadeKeyframes,
+  scrollOverflowFadeTimeline,
+  scrollRegionProps,
+  scrollableTableSx,
+  scrollableTableWrapperSx,
+} from '@aglyn/shared-ui-jsx/utils/scroll-overflow'
 import Box, { type BoxProps } from '@mui/material/Box'
 import MuiLink from '@mui/material/Link'
 import type { Theme } from '@mui/material/styles'
@@ -28,13 +35,6 @@ import { forwardRef, useContext, useMemo } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
-import {
-  scrollOverflowFadeKeyframes,
-  scrollOverflowFadeTimeline,
-  scrollRegionProps,
-  scrollableTableSx,
-  scrollableTableWrapperSx,
-} from '../utils/scroll-overflow'
 
 // Component ids are persisted in screen documents; never rename.
 export const MARKDOWN_ID: Aglyn.ComponentId = 'markdown'
@@ -636,6 +636,7 @@ const TableOfContents = observer(
      * what is spread onto the Box.
      */
     const rest = dropClearedProps(rawRest)
+    const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
     const source = resolveMarkdownSource(Aglyn.canvas.rootNode, forNodeId)
     const entries = useMemo(() => {
       const headings = Aglyn.collectMarkdownHeadings(
@@ -649,7 +650,8 @@ const TableOfContents = observer(
 
     if (!entries.length) {
       // Same split as the Markdown element: an affordance while authoring,
-      // nothing at all on the published page.
+      // nothing at all on the published page — and no empty `nav` landmark.
+      if (!suppressNavigation) return <Box ref={ref} sx={sx} {...rest} />
       return (
         <Box
           ref={ref}
@@ -661,9 +663,6 @@ const TableOfContents = observer(
               borderColor: 'divider',
               color: 'text.secondary',
               fontSize: 12,
-              // A page whose Markdown element has no headings yet should not
-              // publish an empty box where an aside was meant to be.
-              '@media print': { display: 'none' },
             },
             ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
           ]}

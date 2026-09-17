@@ -92,6 +92,20 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-16 — The site admin bar is released to every site, on every plan
+
+- **Decided by:** the account owner, 2026-09-16, as recorded in AGL-3041: the admin bar's rollout was never finished, and it is to be fully released and on by default.
+- **Scope:** packaging
+- **Evidence:** `RELEASE_FLAGS` in `libs/aglyn/src/lib/app-utils/release-flags.ts` (`release_edit_bar`, `defaultEnabled: true`) and `cloud/firebase-remoteconfig.template.json` (`"enabled":true`), held together by `release-flags-template.spec.ts`; production Remote Config template v11, which published only that parameter, with its `adminAudit` row; the bar checked on a production tenant site, where a signed-in editor got it and an anonymous visitor got nothing; the `release_edit_bar` entry dropped from `apps/console/constants/docs-release-flags.ts` and the rolling-out disclosures taken down from the two pages it watched; the mint gate scoped to the site being minted for (AGL-3062); AGL-3041.
+
+**No price, band or entitlement moves.** The bar is on for every site on every plan,
+Free included. The count of today's views of the page on it stays behind
+`screenAnalytics`, which is Pro+. `release_edit_bar` stays the kill switch: turned off
+for the platform, or for one organization by a staff override, the bar disappears and
+every outstanding edit token stops working.
+
+---
+
 ## 2026-09-15 — An AI credit carries a markup: the catalog's billed rate and the provider's rate are two figures, and cost is measured at the provider's
 
 - **Decided by:** the account owner on 2026-09-15 (AGL-3015). Asked whether to correct the balanced tier's catalog rate down to the vendor's published list, they kept the higher figure and named it deliberate: the platform is upcharging on AI, and the answer to cost is to spend fewer tokens rather than to charge less for them.

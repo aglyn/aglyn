@@ -37,9 +37,10 @@
 import { RELEASE_FLAGS, type ReleaseFlagKey } from '@aglyn/aglyn'
 
 /**
- * The `edit-from-the-live-site.md` treatment: the admonition a page that is
- * ABOUT an unreleased feature must open with. Matched on the marker, not on
- * loose prose — "we're working on it" further down the page is not disclosure.
+ * The admonition a page that is ABOUT an unreleased feature must open with —
+ * `docs/content-and-data/crm/outreach.md` carries it today. Matched on the
+ * marker, not on loose prose — "we're working on it" further down the page is
+ * not disclosure.
  */
 export const ROLLING_OUT_ADMONITION =
   /^:::(?:caution|warning|note|info)\s+Rolling out\s*$/m
@@ -100,9 +101,10 @@ export interface FlagDocPage {
 /**
  * Flag key → the docs pages that document it.
  *
- * Entries STAY after a flag flips on: the spec then asserts the inverse (the
- * disclosure must be gone), which is what stops a rolling-out marker rotting in
- * place on a shipped feature.
+ * While an entry stays after its flag flips on, the spec asserts the inverse
+ * (the disclosure must be gone), which is what stops a rolling-out marker
+ * rotting in place on a shipped feature. An entry may instead go in the same
+ * change that takes its disclosures down, once no page needs watching.
  */
 export const FLAG_DOC_PAGES: Partial<
   Record<ReleaseFlagKey, readonly FlagDocPage[]>
@@ -131,21 +133,6 @@ export const FLAG_DOC_PAGES: Partial<
     },
   ],
 
-  // AGL-1302 follow-on. The template AGL-1603 was told to copy.
-  release_edit_bar: [
-    {
-      path: 'docs/building-sites/besigner/edit-from-the-live-site.md',
-      disclosure: 'admonition',
-      checkNoPriceClaim: true,
-    },
-    {
-      path: 'docs/whats-new.md',
-      disclosure: [/Edit from the live site\][\s\S]{0,120}\*\(rolling out\)\*/],
-      checkNoPriceClaim: false,
-      priceClaimNote:
-        'A changelog prices the whole product; the admin bar itself carries no price claim anywhere.',
-    },
-  ],
   // AGL-2974. The flag closes Outreach's console hub and its API routes
   // together, and the one page about it is ABOUT the feature, so it takes the
   // admonition treatment, whole-file. No plan carries the entitlement either,

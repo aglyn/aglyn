@@ -60,7 +60,24 @@ import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.componen
 import AiSeoAuditCard from './components/ai-seo-audit-card.component'
 import AiSiteBatchCard from './components/ai-site-batch-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
+import AiDescribeAutomationButton from './components/ai-describe-automation.component'
+import AiCrmEmailDraft from './components/ai-crm-email-draft.component'
+import AiCrmImportMapping from './components/ai-crm-import-mapping.component'
+import AiCrmRecordCard from './components/ai-crm-record-card.component'
 import AiDescribePageButton from './components/ai-describe-page.component'
+import {
+  AiDescribeComponentButton,
+  AiDescribeFormButton,
+  AiDescribeLayoutButton,
+  AiDescribeTemplateButton,
+} from './components/ai-describe-button.component'
+import {
+  AiExplainAutomation,
+  AiExplainRunFailure,
+} from './components/ai-explain-automation.component'
+import AiProductCopyCard from './components/ai-product-copy-card.component'
+import AiProductImportOption from './components/ai-product-import-option.component'
+import AiProductsHubCard from './components/ai-products-hub-card.component'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
 
@@ -323,6 +340,105 @@ export function registerAiConsole(): void {
         permission: 'ai.generate',
         Component: AiDescribePageButton,
       },
+      // The same entry for a page template, a layout and a form (AGL-3043),
+      // beside the create action of the page that lists each: the same
+      // dialog, the same gates, and the same question to the jobs route
+      // before it shows anything.
+      {
+        slot: 'hostTemplates',
+        widgetId: 'ai-describe-template',
+        title: 'Describe a page template',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeTemplateButton,
+      },
+      {
+        slot: 'hostLayouts',
+        widgetId: 'ai-describe-layout',
+        title: 'Describe a layout',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeLayoutButton,
+      },
+      {
+        slot: 'hostForms',
+        widgetId: 'ai-describe-form',
+        title: 'Describe a form',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeFormButton,
+      },
+      // And a reusable component from a brief (AGL-3051), beside Templates
+      // and Create Component: the component job's first entry point, which
+      // had none in the console.
+      {
+        slot: 'hostComponents',
+        widgetId: 'ai-describe-component',
+        title: 'Describe a reusable component',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeComponentButton,
+      },
+      // Automations by AI (AGL-2919), in the zones the workflows plugin hosts
+      // on its Automation page: "Describe it" beside Add action and Recipes,
+      // "Explain it" in the editor of a saved automation, and "Why did this
+      // fail?" on a failed run. Gated as the other generative widgets are;
+      // each asks the jobs route about the release flag before it shows
+      // anything, and none of them changes an automation.
+      {
+        slot: 'hostAutomations',
+        widgetId: 'ai-describe-automation',
+        title: 'Describe an automation',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeAutomationButton,
+      },
+      {
+        slot: 'automationEditor',
+        widgetId: 'ai-explain-automation',
+        title: 'Explain this automation',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiExplainAutomation,
+      },
+      {
+        slot: 'automationRun',
+        widgetId: 'ai-explain-run-failure',
+        title: 'Why did this run fail?',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiExplainRunFailure,
+      },
+      // CRM by AI (AGL-2917): a record's summary and next step on its page,
+      // a draft in the one-to-one composer, and an import's column matches.
+      // The CRM hosts each zone, so it is drawn only where the CRM is; the
+      // shell holds the plan and `ai.generate`, each card asks the jobs route
+      // about the release flag before it shows anything, and none writes what
+      // it proposes.
+      {
+        slot: 'recordInsights',
+        widgetId: 'ai-crm-record',
+        title: 'AI summary',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiCrmRecordCard,
+      },
+      {
+        slot: 'recordEmail',
+        widgetId: 'ai-crm-email',
+        title: 'Draft with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiCrmEmailDraft,
+      },
+      {
+        slot: 'importMapping',
+        widgetId: 'ai-crm-import-mapping',
+        title: 'Match columns with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiCrmImportMapping,
+      },
       // The agency batch (AGL-2911): one brief across many of the org's
       // sites, from the page that lists them. The card asks the jobs route
       // about the release flag before it shows anything, and its own door
@@ -335,6 +451,35 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiSiteBatchCard,
+      },
+      // Commerce by AI (AGL-2916): product copy in the product editor, the
+      // catalog, categories and discounts on the products hub, and copy for
+      // an import as it lands. The commerce plugin hosts the zones and makes
+      // every write; each card asks the jobs route about the release flag
+      // before it shows anything.
+      {
+        slot: 'productEditor',
+        widgetId: 'ai-product-copy',
+        title: 'Product copy assistant',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiProductCopyCard,
+      },
+      {
+        slot: 'productsHub',
+        widgetId: 'ai-products-hub',
+        title: 'Build your catalog with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiProductsHubCard,
+      },
+      {
+        slot: 'productImport',
+        widgetId: 'ai-product-import',
+        title: 'Write imported product copy with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiProductImportOption,
       },
     ],
   })

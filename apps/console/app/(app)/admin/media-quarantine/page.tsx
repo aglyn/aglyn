@@ -74,6 +74,7 @@ import {
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -88,7 +89,6 @@ import {
   MenuItem,
   Stack,
   Switch,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -939,8 +939,8 @@ function AdminMediaQuarantine() {
                 ) : null}
 
                 {rows.length ? (
-                  <Stack sx={{ overflowX: 'auto' }}>
-                    <Table size="small">
+                  <Stack>
+                    <ScrollTable size="small">
                       <TableHead>
                         <TableRow>
                           <TableCell>{'Key'}</TableCell>
@@ -1050,7 +1050,7 @@ function AdminMediaQuarantine() {
                           </TableRow>
                         ))}
                       </TableBody>
-                    </Table>
+                    </ScrollTable>
                     <ListPagination
                       page={page}
                       pageSize={pageSize}

@@ -170,9 +170,16 @@ describe('the doctrine block', () => {
     }
   })
 
+  it('says in rule 10 that a link goes where its words say or is left out, which a link sent home is refused for (AGL-3056)', () => {
+    // A layout's footer sent "Request a Consultation" to the home screen for want
+    // of a consultation screen. The rule names the way out the refusal asks for.
+    const rule10 = AI_BUILDING_DOCTRINE.split('\n').find((line) => line.startsWith('10. ')) ?? ''
+    expect(rule10).toContain('A link goes to a screen that does what its words say, or is left out.')
+  })
+
   it('pins the doctrine’s bytes, so changing what every generator is told is a deliberate cache break', () => {
     expect(createHash('sha256').update(AI_DOCTRINE_SYSTEM_BLOCK.text).digest('hex')).toBe(
-      '72d97070a3c405b1fe61ff0a315fcbee8a93c1fe89ff2e955752faf0e296e1f8',
+      '234655edf7e3143960df5af93a664ea5697c20247d8f93e891dcd5b190b9b5d1',
     )
   })
 
@@ -572,6 +579,81 @@ describe('runValidatedGeneration — a plan', () => {
     ])
     await runValidatedGeneration('plan', planInput(fake))
     expect(requests[1].messages[2].content).toContain('ran past the size one answer may have')
+    expect(requests[1].messages[2].content).toContain('Build a smaller plan.')
+  })
+
+  describe('a tool answer cut off at its ceiling (AGL-3042)', () => {
+    /** A tool call the provider stopped on its ceiling: the input is what had arrived. */
+    const cutOff = (input: object, stopReason = 'max_tokens'): AiCompletion => ({
+      ...toolAnswer(AI_BUILD_PLAN_TOOL.name, input),
+      stopReason,
+    })
+
+    it('is refused as too large, not as the shape its cut input fails, and the re-ask asks for it smaller', async () => {
+      const { fake, requests } = provider([
+        cutOff({ reuse: CLEAN_PLAN.reuse }),
+        toolAnswer(AI_BUILD_PLAN_TOOL.name, CLEAN_PLAN),
+      ])
+      const result = await runValidatedGeneration('plan', planInput(fake))
+      expect(result).toMatchObject({ status: 'ok', value: CLEAN_PLAN, attempts: 2 })
+      expect(requests[1].messages[2].content).toBe(
+        [
+          'Your plan was not used: it ran past the size one answer may have, and was cut off before it was whole.',
+          'Build a smaller plan.',
+          '',
+          'Answer again with submit_build_plan: the whole plan, smaller than the one that was cut off.',
+        ].join('\n'),
+      )
+      expect(requests[1].messages[2].content).not.toContain('could not be read as a plan')
+    })
+
+    it('reads a provider’s own `length` the way it reads the contract’s `max_tokens`', async () => {
+      const { fake, requests } = provider([cutOff({}, 'length'), toolAnswer(AI_BUILD_PLAN_TOOL.name, CLEAN_PLAN)])
+      await runValidatedGeneration('plan', planInput(fake))
+      expect(requests[1].messages[2].content).toContain('ran past the size one answer may have')
+    })
+
+    it('names a numbered rule the part that arrived already broke beside it, with the part quoted', async () => {
+      const { fake, requests } = provider([cutOff(UNLAID_PLAN), cutOff(UNLAID_PLAN)])
+      const result = await runValidatedGeneration('plan', planInput(fake))
+      const reask = requests[1].messages[2].content
+      expect(reask).toContain('was cut off before it was whole.\nBuild a smaller plan.\nIt also breaks these building rules:')
+      expect(reask).toContain(`Rule 2 (${AI_DOCTRINE_RULES[2]})`)
+      expect(reask).toContain('{"screens[0].layout":null}')
+      expect(reask).toContain('smaller than the one that was cut off, and built so that none of these rules is broken.')
+      expect(result.status).toBe('needs_input')
+      if (result.status !== 'needs_input') return
+      expect(result.violations.map((violation) => violation.code)).toEqual(['answer-cut-off', 'plan-screen-without-layout'])
+      // What a person reads is that it was too large, which is what stopped it.
+      expect(result.message).toBe('This plan was too large to build in one pass. Try again, or describe it smaller.')
+    })
+
+    it('names the output and what shrinks it as the door says, and calls a kind of its own an answer when it says nothing', async () => {
+      const tool = { name: 'submit_probe', description: 'x', strict: true as const, inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false } }
+      const probe = (fake: AiProvider, cut?: { noun: string; smaller: string }) =>
+        runValidatedGeneration('probe', {
+          model: 'test-model',
+          provider: fake,
+          instructions: [{ text: 'Answer the probe.' }],
+          messages: [{ role: 'user' as const, content: 'Brief' }],
+          tool,
+          ...(cut ? { cutOff: cut } : {}),
+          check: (answer: Record<string, unknown>) =>
+            answer['ok'] === true ? { value: answer, violations: [] } : { value: null, violations: [{ rule: null, code: 'probe-shape', message: 'Not a probe.' }] },
+        })
+      const cut = { ...toolAnswer('submit_probe', {}), stopReason: 'max_tokens' }
+      const named = provider([cut, { ...cut }])
+      const result = await probe(named.fake, { noun: 'listing', smaller: 'Write fewer words.' })
+      expect(named.requests[1].messages[2].content).toContain('cut off before it was whole.\nWrite fewer words.')
+      expect(result).toMatchObject({ status: 'needs_input', message: 'This listing was too large to build in one pass. Try again, or describe it smaller.' })
+
+      const unnamed = provider([cut, { ...cut }])
+      expect(await probe(unnamed.fake)).toMatchObject({
+        status: 'needs_input',
+        message: 'This answer was too large to build in one pass. Try again, or describe it smaller.',
+        violations: [expect.objectContaining({ code: 'answer-cut-off', detail: 'Build a smaller probe.' })],
+      })
+    })
   })
 
   it('runs a door’s own checks beside the doctrine’s, never instead of them', async () => {

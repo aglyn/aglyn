@@ -36,8 +36,9 @@ import { useHostId, useHostSubdomain } from '../../../../../../components/host-i
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../components/layouts/main.layout'
+import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.component'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
-import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
+import useOrgScope, { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
 
 /**
@@ -48,6 +49,9 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
+  // The org the header's plugin actions start under (AGL-3051): the scope's,
+  // read from context, and `undefined` until the scope names one.
+  const { currentOrg } = useOrgScope()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
 
@@ -149,21 +153,29 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
               noun="component"
             />
           ) : null}
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => setTemplatesOpen(true)}
-          >
-            {'Templates'}
-          </Button>
-          <Button
-            size="small"
-            variant="contained"
-            disabled={creating}
-            onClick={() => setCreateOpen(true)}
-          >
-            {creating ? 'Creating…' : 'Create Component'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {/* Other ways to start a component, from plugins (AGL-3051). */}
+            <PluginWidgetSlot
+              slot="hostComponents"
+              hostId={hostId}
+              orgId={currentOrg?.$id}
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => setTemplatesOpen(true)}
+            >
+              {'Templates'}
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={creating}
+              onClick={() => setCreateOpen(true)}
+            >
+              {creating ? 'Creating…' : 'Create Component'}
+            </Button>
+          </Stack>
         </Stack>
       }
       aside={

@@ -32,39 +32,58 @@
  *
  * And the one that keeps it away from money: a comp sells nothing past any
  * band, so nothing it does can be priced onto an invoice.
+ *
+ * AGL-3049 adds the UNCAPPED comp — every band and quota unlimited, for an
+ * internal workspace — and pins the rules that keep it safe: it never refuses
+ * at a band, it is never billable, a live subscription ignores it, removing
+ * the flag restores the plan's caps, and a capped comp with one band raised
+ * refuses only past that band.
  */
 
 import {
   assistBandRefuses,
   assistMonthOverage,
   priceAssistCreditOverage,
+  resolveAssistCreditBudget,
   resolveAssistOverageRateUsdPer1k,
 } from './assist-credits'
 import {
   AI_ADDON_CREDITS_PER_MONTH,
+  apiRequestEnforcementShape,
   checkApiRequestQuota,
+  checkCrmEmailQuota,
   checkCrmRecordsQuota,
   checkDataStorageQuota,
   checkDatasetQuota,
   checkEntitlement,
+  checkFormSubmissionQuota,
+  checkHostCollaboratorQuota,
+  checkHostRegisterQuota,
+  checkQuota,
   checkSeatQuota,
+  dataStorageEnforcementShape,
   describeOrgPlan,
   hasAiAddon,
   isBillingSubscription,
   isEnterpriseOrg,
+  isUncappedPlanComp,
   orgListPriceMonthlyUsd,
   orgMonthlyRevenueUsd,
   orgPlanDescriptionSentence,
   orgSubscriptionState,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
+  planCompLabel,
+  planCompPhrase,
   planMetersInfraOverage,
+  PRICE_ENTITLEMENT_KEYS,
   priceEmailSendOverage,
   readOrgPlanComp,
   resolveEffectivePlan,
   resolveOrgEntitlements,
   resolvePlanComp,
   resolvePlanPricing,
+  UNLIMITED,
 } from './plan-entitlements'
 import type { OrgPlan } from '../foundation'
 
@@ -166,6 +185,7 @@ describe('a comp applies on a dead subscription (AGL-3034)', () => {
     const iso = '2026-09-16T12:00:00.000Z'
     expect(readOrgPlanComp(withComp({}, comp('pro', { grantedAt: iso })))).toEqual({
       plan: 'pro',
+      uncapped: false,
       reason: 'beta',
       note: 'AGL-3024 live run',
       grantedBy: 'staff-1',
@@ -394,5 +414,273 @@ describe('describing the plan to staff (AGL-3034)', () => {
     expect(
       orgPlanDescriptionSentence(describeOrgPlan(withComp(TEST_ORG, comp('pro')))),
     ).toMatch(/Pro is in force as a staff comp.*bills nothing/)
+  })
+})
+
+/** An uncapped comp as the override route writes it (AGL-3049). */
+const uncappedComp = (plan: string, extra: Record<string, unknown> = {}) =>
+  comp(plan, { uncapped: true, reason: 'other', note: 'Internal workspace', ...extra })
+
+/** Every numeric key a plan row carries: the bands, and the prices. */
+const NUMERIC_KEYS = Object.entries(PLAN_ENTITLEMENTS.free)
+  .filter(([, value]) => typeof value === 'number')
+  .map(([key]) => key)
+  .sort()
+
+/** The bands alone — every numeric key an uncapped comp lifts. */
+const BAND_KEYS = NUMERIC_KEYS.filter((key) => !PRICE_ENTITLEMENT_KEYS.has(key))
+
+/**
+ * An internal workspace the way aglyn-org would carry one: no subscription,
+ * Enterprise stored before comps, a staff override on two bands and a fee,
+ * a staff-set extra-sites quantity, and a feature forced off.
+ */
+const INTERNAL = {
+  plan: 'enterprise',
+  enterprise: true,
+  seatAddons: { hosts: 3 },
+  entitlements: {
+    contactsPerHost: 50,
+    assistCreditsPerMonth: 5000,
+    marketplaceFeePct: 12,
+    features: { ssoEnabled: false },
+  },
+}
+
+describe('an uncapped comp lifts every cap (AGL-3049)', () => {
+  it('reads every band and quota as unlimited, over the plan row, the overrides and the add-ons', () => {
+    const org = withComp(INTERNAL, uncappedComp('enterprise'))
+    expect(isUncappedPlanComp(org)).toBe(true)
+    const resolved = resolveOrgEntitlements(org) as unknown as Record<string, unknown>
+    const lifted = Object.keys(resolved)
+      .filter((key) => resolved[key] === UNLIMITED)
+      .sort()
+    expect(lifted).toEqual(BAND_KEYS)
+    // The capped reading of the same document, for the control on every key
+    // the lift must NOT touch.
+    const capped = resolveOrgEntitlements(
+      withComp(INTERNAL, comp('enterprise')),
+    ) as unknown as Record<string, unknown>
+    expect(capped['contactsPerHost']).toBe(50)
+    expect(capped['assistCreditsPerMonth']).toBe(5000)
+    expect(resolved['features']).toEqual(capped['features'])
+    expect((resolved['features'] as Record<string, boolean>)['ssoEnabled']).toBe(false)
+    expect('planComp' in resolved).toBe(false)
+  })
+
+  it('never lifts a price: the fee percentages are the ones listed, and stay as resolved', () => {
+    // Named, so a new numeric key is a band unless someone decides here that
+    // it is a price. Lifted to Infinity, a transaction fee would be larger
+    // than the charge and every sale would fail at checkout.
+    expect([...PRICE_ENTITLEMENT_KEYS].sort()).toEqual([
+      'marketplaceFeePct',
+      'transactionFeeDigitalPct',
+      'transactionFeePhysicalPct',
+    ])
+    for (const key of PRICE_ENTITLEMENT_KEYS) expect(NUMERIC_KEYS).toContain(key)
+    const resolved = resolveOrgEntitlements(withComp(INTERNAL, uncappedComp('enterprise')))
+    expect(resolved.marketplaceFeePct).toBe(12)
+    expect(resolved.transactionFeePhysicalPct).toBe(
+      PLAN_ENTITLEMENTS.enterprise.transactionFeePhysicalPct,
+    )
+    const starter = resolveOrgEntitlements(withComp({}, uncappedComp('starter')))
+    expect(starter.transactionFeeDigitalPct).toBe(PLAN_ENTITLEMENTS.starter.transactionFeeDigitalPct)
+    expect(starter.marketplaceFeePct).toBe(PLAN_ENTITLEMENTS.starter.marketplaceFeePct)
+  })
+
+  it('never refuses at a band, on any gate the plan module answers', () => {
+    const org = withComp({ billingStatus: 'canceled' }, uncappedComp('starter'))
+    const huge = 1_000_000_000
+    for (const key of BAND_KEYS) {
+      const verdict = checkQuota(org, key as never, huge)
+      expect(`${key}: ${verdict.allowed}`).toBe(`${key}: true`)
+    }
+    expect(checkSeatQuota(org, 'managers', huge).allowed).toBe(true)
+    expect(checkSeatQuota(org, 'members', huge).allowed).toBe(true)
+    expect(checkHostCollaboratorQuota(org, 'host-1', huge).allowed).toBe(true)
+    expect(checkHostRegisterQuota(org, 'host-1', huge).allowed).toBe(true)
+    expect(checkDatasetQuota(org, huge).allowed).toBe(true)
+    expect(checkDataStorageQuota(org, huge).allowed).toBe(true)
+    expect(checkApiRequestQuota(org, huge).allowed).toBe(true)
+    expect(checkCrmRecordsQuota(org, huge).allowed).toBe(true)
+    expect(checkCrmEmailQuota(org, huge).allowed).toBe(true)
+    expect(checkFormSubmissionQuota(org, huge).allowed).toBe(true)
+    expect(dataStorageEnforcementShape(org)).toBe('never-blocks')
+    expect(apiRequestEnforcementShape(org)).toBe('never-blocks')
+    // The AI band: no band to be a wall at, and none to measure against.
+    expect(assistBandRefuses(org)).toBe(false)
+    expect(resolveAssistCreditBudget(org)).toBeNull()
+
+    // The control: the same Starter comp, capped, refuses at its bands —
+    // so the verdicts above are the lift's, not a gate that never refuses.
+    const capped = withComp({ billingStatus: 'canceled' }, comp('starter'))
+    const band = PLAN_ENTITLEMENTS.starter
+    expect(checkQuota(capped, 'screensPerHost', band.screensPerHost).allowed).toBe(false)
+    expect(checkCrmRecordsQuota(capped, band.contactsPerHost).allowed).toBe(false)
+    expect(checkCrmEmailQuota(capped, band.crmEmailsPerDay).allowed).toBe(false)
+    expect(checkFormSubmissionQuota(capped, band.formSubmissionsPerMonth).allowed).toBe(false)
+    expect(dataStorageEnforcementShape(capped)).toBe('measure')
+    expect(assistBandRefuses(capped)).toBe(true)
+  })
+
+  it('is never billable: every rate withheld, no overage priced, no revenue booked', () => {
+    const org = withComp(INTERNAL, uncappedComp('agency'))
+    const pricing = resolvePlanPricing(org)
+    expect(pricing).toEqual(resolvePlanPricing(withComp(INTERNAL, comp('agency'))))
+    for (const [key, value] of Object.entries(pricing)) {
+      if (key.startsWith('basePrice')) continue
+      expect(`${key}: ${value}`).toBe(`${key}: ${typeof value === 'boolean' ? false : null}`)
+    }
+    expect(planMetersInfraOverage(org)).toBe(false)
+    const month = assistMonthOverage(org, 1_000_000)
+    expect(month).toMatchObject({
+      bandCredits: null,
+      overageCredits: 0,
+      overageMonthlyUsd: 0,
+      overageRateUsd: null,
+    })
+    expect(resolveAssistOverageRateUsdPer1k(org)).toBeNull()
+    expect(priceAssistCreditOverage(org, 1_000_000).overageMonthlyUsd).toBe(0)
+    expect(priceEmailSendOverage(org, 1_000_000).overageMonthlyUsd).toBe(0)
+    expect(checkCrmRecordsQuota(org, 1_000_000_000)).toMatchObject({
+      overageRecords: 0,
+      overageMonthlyUsd: 0,
+    })
+    expect(checkApiRequestQuota(org, 1_000_000_000).overageMonthlyUsd).toBe(0)
+    expect(checkDataStorageQuota(org, 1_000_000_000).overageMonthlyUsd).toBe(0)
+    expect(isBillingSubscription(org)).toBe(false)
+    expect(orgListPriceMonthlyUsd(org)).toBe(0)
+    expect(orgMonthlyRevenueUsd(org)).toBe(0)
+  })
+
+  it('is ignored while a live subscription is in force, and lifts again when it ends', () => {
+    const live = withComp(
+      { plan: 'starter', billingStatus: 'active', entitlements: { contactsPerHost: 2000 } },
+      uncappedComp('agency'),
+    )
+    expect(isUncappedPlanComp(live)).toBe(false)
+    expect(resolveEffectivePlan(live)).toBe('starter')
+    const resolved = resolveOrgEntitlements(live)
+    expect(resolved.screensPerHost).toBe(PLAN_ENTITLEMENTS.starter.screensPerHost)
+    expect(resolved.contactsPerHost).toBe(2000)
+    expect(Object.values(resolved).includes(UNLIMITED)).toBe(false)
+    expect(checkQuota(live, 'hostLimit', PLAN_ENTITLEMENTS.starter.hostLimit).allowed).toBe(false)
+    // The paying workspace's AI band is sold past as Starter's own terms say,
+    // not lifted: no add-on, no band, so it is a wall like any Starter's.
+    expect(assistBandRefuses(live)).toBe(true)
+    expect(resolvePlanPricing(live)).toEqual(PLAN_PRICING.starter)
+    // Dormant, and said so.
+    const description = describeOrgPlan(live)
+    expect(description).toMatchObject({
+      decidedBy: 'subscription',
+      compInForce: false,
+      uncapped: false,
+      comp: { plan: 'agency', uncapped: true },
+    })
+    expect(orgPlanDescriptionSentence(description)).toMatch(
+      /An uncapped Agency comp is stored and dormant/,
+    )
+
+    const ended = { ...live, billingStatus: 'canceled' }
+    expect(isUncappedPlanComp(ended)).toBe(true)
+    expect(resolveOrgEntitlements(ended).contactsPerHost).toBe(UNLIMITED)
+  })
+
+  it('removing uncapped restores the plan’s caps — and the overrides beneath them', () => {
+    const uncapped = withComp(INTERNAL, uncappedComp('enterprise'))
+    const recapped = withComp(INTERNAL, comp('enterprise', { uncapped: false }))
+    expect(resolveOrgEntitlements(uncapped).hostLimit).toBe(UNLIMITED)
+    const resolved = resolveOrgEntitlements(recapped)
+    // No live subscription, so staff-set add-on quantities still count.
+    expect(resolved.hostLimit).toBe(PLAN_ENTITLEMENTS.enterprise.hostLimit + 3)
+    expect(resolved.contactsPerHost).toBe(50)
+    expect(resolved.screensPerHost).toBe(PLAN_ENTITLEMENTS.enterprise.screensPerHost)
+    expect(checkCrmRecordsQuota(recapped, 50).allowed).toBe(false)
+    expect(assistBandRefuses(recapped)).toBe(true)
+    expect(resolveAssistCreditBudget(recapped)).toBe(5000)
+    // And removing the comp outright returns the plan stored before it.
+    const removed = { ...INTERNAL, entitlements: { ...INTERNAL.entitlements } }
+    expect(resolveEffectivePlan(removed as any)).toBe('enterprise')
+    expect(isUncappedPlanComp(removed as any)).toBe(false)
+    expect(resolveOrgEntitlements(removed as any).contactsPerHost).toBe(50)
+  })
+
+  it.each<[string, unknown]>([
+    ['the string "true"', 'true'],
+    ['the number 1', 1],
+    ['a map', { on: true }],
+    ['null', null],
+    ['false', false],
+  ])('only a literal true uncaps — %s reads as a capped comp that still grants its plan', (_label, uncapped) => {
+    const org = withComp({ billingStatus: 'canceled' }, comp('pro', { uncapped }))
+    expect(readOrgPlanComp(org)).toMatchObject({ plan: 'pro', uncapped: false })
+    expect(resolveEffectivePlan(org)).toBe('pro')
+    expect(isUncappedPlanComp(org)).toBe(false)
+    expect(resolveOrgEntitlements(org).screensPerHost).toBe(PLAN_ENTITLEMENTS.pro.screensPerHost)
+  })
+})
+
+describe('a capped comp raises one band at a time (AGL-3049)', () => {
+  it('refuses only past the raised band, and every other band stays the plan’s wall', () => {
+    const band = PLAN_ENTITLEMENTS.pro
+    const raised = band.contactsPerHost * 2
+    const org = withComp(
+      { billingStatus: 'canceled', entitlements: { contactsPerHost: raised } },
+      comp('pro'),
+    )
+    expect(isUncappedPlanComp(org)).toBe(false)
+    // Past the plan's own figure, inside the raised one: admitted.
+    expect(checkCrmRecordsQuota(org, band.contactsPerHost).allowed).toBe(true)
+    expect(checkCrmRecordsQuota(org, raised - 1).allowed).toBe(true)
+    // At the raised figure: refused, and nothing is sold past it.
+    expect(checkCrmRecordsQuota(org, raised)).toMatchObject({
+      allowed: false,
+      overageMonthlyUsd: 0,
+    })
+    // The bands nobody raised are still the plan's walls.
+    expect(checkQuota(org, 'screensPerHost', band.screensPerHost).allowed).toBe(false)
+    expect(checkCrmEmailQuota(org, band.crmEmailsPerDay).allowed).toBe(false)
+  })
+
+  it('raises the AI band the same way: a wall at the raised figure, priced at nothing', () => {
+    const org = withComp(
+      { billingStatus: 'canceled', entitlements: { assistCreditsPerMonth: 20_000 } },
+      comp('pro'),
+    )
+    expect(resolveAssistCreditBudget(org)).toBe(20_000)
+    expect(assistBandRefuses(org)).toBe(true)
+    expect(assistMonthOverage(org, 50).overageMonthlyUsd).toBe(0)
+  })
+})
+
+describe('naming an uncapped comp to staff (AGL-3049)', () => {
+  it('says uncapped wherever the comp is named, and says what the bands do', () => {
+    expect(planCompLabel({ plan: 'enterprise', uncapped: true }, true)).toBe(
+      'Enterprise (uncapped)',
+    )
+    expect(planCompLabel({ plan: 'pro', uncapped: false }, true)).toBe('Pro')
+    expect(planCompLabel({ plan: 'pro', uncapped: false }, false)).toBe('Pro (dormant)')
+    expect(planCompLabel({ plan: 'agency', uncapped: true }, false)).toBe(
+      'Agency (uncapped, dormant)',
+    )
+    // The surfaces that show plan keys name the comp by its key.
+    expect(planCompLabel({ plan: 'agency', uncapped: true }, true, 'agency')).toBe(
+      'agency (uncapped)',
+    )
+    expect(planCompPhrase({ plan: 'enterprise', uncapped: true })).toBe(
+      'uncapped Enterprise comp',
+    )
+    expect(planCompPhrase({ plan: 'pro', uncapped: false })).toBe('Pro comp')
+
+    const uncapped = describeOrgPlan(withComp(INTERNAL, uncappedComp('enterprise')))
+    expect(uncapped).toMatchObject({ decidedBy: 'comp', compInForce: true, uncapped: true })
+    expect(orgPlanDescriptionSentence(uncapped)).toMatch(
+      /Enterprise is in force as an uncapped staff comp.*bills nothing, every band and quota reads as unlimited/,
+    )
+    const capped = describeOrgPlan(withComp(TEST_ORG, comp('pro')))
+    expect(capped.uncapped).toBe(false)
+    expect(orgPlanDescriptionSentence(capped)).toMatch(
+      /Pro is in force as a staff comp.*every band is a hard limit that a quota override can raise/,
+    )
   })
 })

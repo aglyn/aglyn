@@ -17,8 +17,7 @@
 
 import {
   AI_BUILD_PLAN_CREATION_NOUNS,
-  aiPlanCreateFor,
-  isAiPlanNewRef,
+  aiPlanUndeclaredRefs,
   type AiBuildPlan,
   type AiBuildPlanCreateKind,
 } from './ai-build-plan'
@@ -150,14 +149,11 @@ export function aiPagePlanPrerequisites(plan: AiBuildPlan): AiPagePrerequisite[]
     if (!AI_PAGE_CREATE_KINDS.includes(entry.kind)) add(entry.kind, entry.name)
   }
   // A reference the create list does not carry is refused by the plan rules
-  // before a plan is kept; one that slipped through still names a creation.
-  for (const screen of plan.screens) {
-    for (const ref of [screen.layout, screen.template, ...screen.sections.flatMap((section) => section.uses)]) {
-      if (!isAiPlanNewRef(ref)) continue
-      const creation = aiPlanCreateFor(plan, ref)
-      if (!creation) add('component', ref.slice(ref.indexOf(':') + 1).trim())
-    }
-  }
+  // before a plan is kept: rule 2 for a screen's layout, rule 7 for anything
+  // else (`plan-creation-undeclared`, AGL-3040). A plan confirmed before that
+  // rule existed can still carry one. It is named as a component: the
+  // reference carries no kind, and the refusal must say where one is made.
+  for (const { name } of aiPlanUndeclaredRefs(plan)) add('component', name)
   return prerequisites
 }
 

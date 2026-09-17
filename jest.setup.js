@@ -33,7 +33,23 @@ const path = require('path')
 //
 // Using dotenv's own parser means there is no second implementation of its
 // quoting and escaping rules to drift out of step with it.
+//
+// THE LIVE EVAL RUN KEEPS WHAT IT WAS STARTED WITH (AGL-3038).
+//
+// `tools/ai-eval/record-live.mjs` starts bare jest, which loads no .env, and
+// hands it the provider key the operator passed. A developer's .env holds
+// that same key, so the check below took it for a leak and deleted it, and
+// every live recording from such a checkout stopped before its first request
+// saying the key was not set. The launcher marks the jest it starts, and only
+// a marked live run skips the scrub. `nx test` never carries the mark, so the
+// .env nx loads is still removed from every spec, `AI_EVAL_LIVE=1` or not.
 ;(() => {
+  if (
+    process.env.AI_EVAL_LIVE === '1' &&
+    process.env.AI_EVAL_LIVE_LAUNCHER === 'tools/ai-eval/record-live.mjs'
+  ) {
+    return
+  }
   let raw
   try {
     raw = fs.readFileSync(path.join(__dirname, '.env'), 'utf8')

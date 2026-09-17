@@ -32,6 +32,7 @@ import {
   assistMonthOverage,
   assistOwnControlRefusalText,
   assistRefusedByHardCap,
+  assistRefusedByOverageCap,
   assistUsdFromCredits,
 } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
@@ -2417,5 +2418,83 @@ describe('tokens by kind on the month, on the signal and on the person’s month
       NOW,
     )
     expect(mockDocs.get(orgMonthPath)?.['kinds']).toMatchObject({ assist: { requests: 1 } })
+  })
+})
+
+describe('Starter WITH the AI add-on is metered like the plan whose rate it carries (AGL-3014)', () => {
+  const monthPath = `orgs/${ORG}/assistUsage/2026-08`
+  /** The add-on's band on Starter, sold past at $3.00 per 1,000. */
+  const ADDON_BAND = 4_000
+  const starterWithAi = { plan: 'starter' as const, seatAddons: { aiAddon: 1 } }
+  /** 2,000 credits past the band: $6.00 at the add-on's rate. */
+  const PAST_ADDON_BAND = {
+    messages: 12,
+    estCostUsd: assistUsdFromCredits(ADDON_BAND + 2_000),
+  }
+
+  beforeAll(() => {
+    // The band arrives with the plugin's declaration of the add-on, as the
+    // declarations manifest registers it in a running app — by a call.
+    const { registerAiDeclarations } = require('../declarations') as typeof import('../declarations')
+    registerAiDeclarations()
+  })
+
+  it('keeps answering past the add-on band, measured against that band', async () => {
+    // The gate asks `assistBandRefuses`, the same resolver the card, the
+    // alert and the invoice ask, so past the band the workspace is SOLD
+    // credits rather than walled — which is what makes the invoice line in
+    // `report-usage` a line for credits the workspace actually received.
+    mockDocs.set(monthPath, PAST_ADDON_BAND)
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, starterWithAi)
+    expect(reservation).toMatchObject({
+      allowed: true,
+      refusedBy: null,
+      costLimitUsd: null,
+      budgetUsd: 4,
+    })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 13 })
+    expect(publicAssistQuota(reservation).credits).toEqual({
+      used: 6_000,
+      limit: ADDON_BAND,
+      remaining: 0,
+    })
+  })
+
+  it('its own ceiling refuses as `cap`, and the door names the ceiling rather than a 429', async () => {
+    // `assistRefusedByOverageCap` read the rate off `PLAN_PRICING` before
+    // AGL-3014 and answered false here, so the refusal fell through to the
+    // doors' generic 429 while the ceiling the workspace set had caused it.
+    // FORCED RED by restoring that table read: `assistOwnControlRefusalText`
+    // answered null.
+    const capped = { ...starterWithAi, assistOverage: { capUsd: 6 } }
+    mockDocs.set(monthPath, PAST_ADDON_BAND)
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, capped)
+    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'cap', capReason: 'customer' })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 12 })
+    const refusedBy = coreRefusal(reservation.refusedBy)
+    expect(assistRefusedByOverageCap(capped, refusedBy)).toBe(true)
+    expect(assistOwnControlRefusalText(capped, refusedBy)).toContain('$6.00')
+  })
+
+  it('its switch walls the band, and the sentence quotes the rate turning it off buys', async () => {
+    const stopped = { ...starterWithAi, assistOverage: { hardCap: true } }
+    mockDocs.set(monthPath, PAST_ADDON_BAND)
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, stopped)
+    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'band', costLimitUsd: 4 })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 12 })
+    expect(assistOwnControlRefusalText(stopped, coreRefusal(reservation.refusedBy))).toContain(
+      '$3.00 per 1,000 credits',
+    )
+  })
+
+  it('THE CONTROL: without the add-on the same spend meets no band, and a stored ceiling binds nothing', async () => {
+    // Starter alone sells no band, so there is no overage for a ceiling to
+    // reach: only the operator backstop measures it, and $6 is under that.
+    mockDocs.set(monthPath, PAST_ADDON_BAND)
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
+      plan: 'starter',
+      assistOverage: { capUsd: 6 },
+    })
+    expect(reservation).toMatchObject({ allowed: true, refusedBy: null, budgetUsd: null })
   })
 })

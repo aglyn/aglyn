@@ -24,6 +24,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { readAiEvalCase, type AiEvalCase } from './ai-eval'
 import { aiEvalCasesNamed, aiEvalLiveAllowed, recordAiEvalLive } from './ai-eval-live'
+import { aiActiveProvider, aiProviderReady } from './ai-runtime'
 
 /**
  * THE LIVE RUN (AGL-2937). Skipped unless `AI_EVAL_LIVE=1` names it — it asks
@@ -49,6 +50,16 @@ const live = aiEvalLiveAllowed(process.env)
   it(
     'records and grades an answer for every brief a recorder covers',
     async () => {
+      // A key removed before the run reads as "not set" at the first request,
+      // which sends the operator looking for a key they did pass (AGL-3038).
+      // Say what happened before anything is asked.
+      if (!aiProviderReady()) {
+        throw new Error(
+          `No ${aiActiveProvider()?.apiKeyEnv ?? 'provider key'} reached this run. Start it with ` +
+            '`AI_EVAL_LIVE=1 npm run eval:ai-live` and the key in the environment: the shared jest ' +
+            'setup removes every value the repo-root .env also defines from a run that launcher did not start.',
+        )
+      }
       const cases: AiEvalCase[] = aiEvalCasesNamed(
         files(CASES_DIR).map((file) => readAiEvalCase(JSON.parse(readFileSync(file, 'utf8')), file)),
         process.env,

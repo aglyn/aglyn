@@ -21,10 +21,11 @@
  * The shell lists a zone's widgets against the site's resolved plugin set on
  * a site's pages, and against the workspace's everywhere else. So which zone
  * an AI widget is registered into decides whether a site's switch hides it:
- * the dock, Describe it, the SEO and theme cards, the collaborator columns and
- * the editor's AI controls all sit in SITE zones and go; the billing cards,
- * the member usage and the agency batch sit in WORKSPACE zones and stay,
- * because they carry no site; the staff zones name no workspace at all.
+ * the dock, every Describe it, the SEO and theme cards, the collaborator
+ * columns, the editor's AI controls and the automation controls all sit in
+ * SITE zones and go; the billing cards, the member usage and the agency batch
+ * sit in WORKSPACE zones and stay, because they carry no site; the staff zones
+ * name no workspace at all.
  *
  * Every zone the plugin registers into is classified below, and a widget
  * added to an unclassified zone fails the first test — it has to say which
@@ -64,12 +65,35 @@ const SITE_ZONES: readonly string[] = [
   // the site's set, so a switched-off site draws none.
   CONSOLE_WIDGET_SLOTS.assistPanel,
   CONSOLE_WIDGET_SLOTS.hostScreens,
+  // Describe it on a site's Templates, Layouts and Forms pages (AGL-3043).
+  // The Forms page is the forms plugin's, which draws its zone through the
+  // shell's slot, so the site's set decides there too.
+  CONSOLE_WIDGET_SLOTS.hostTemplates,
+  CONSOLE_WIDGET_SLOTS.hostLayouts,
+  CONSOLE_WIDGET_SLOTS.hostForms,
+  // And on its Components page (AGL-3051).
+  CONSOLE_WIDGET_SLOTS.hostComponents,
   CONSOLE_WIDGET_SLOTS.hostSeo,
   CONSOLE_WIDGET_SLOTS.seoFields,
   CONSOLE_WIDGET_SLOTS.hostTheme,
   CONSOLE_WIDGET_SLOTS.hostMembers,
   CONSOLE_WIDGET_SLOTS.besignerToolbar,
   CONSOLE_WIDGET_SLOTS.besignerInspector,
+  // The Automation page's zones, hosted by the workflows plugin on a site's page.
+  CONSOLE_WIDGET_SLOTS.hostAutomations,
+  CONSOLE_WIDGET_SLOTS.automationEditor,
+  CONSOLE_WIDGET_SLOTS.automationRun,
+  // The commerce zones a site's products pages host (AGL-2916).
+  CONSOLE_WIDGET_SLOTS.productEditor,
+  CONSOLE_WIDGET_SLOTS.productsHub,
+  CONSOLE_WIDGET_SLOTS.productImport,
+  // The CRM's record pages, composer and imports (AGL-2917). Under a site
+  // they are listed from the site's set; at the organization level, from the
+  // workspace's, where a job still names the record's site when it has one
+  // and the jobs route refuses a site that switched AI off.
+  CONSOLE_WIDGET_SLOTS.recordInsights,
+  CONSOLE_WIDGET_SLOTS.recordEmail,
+  CONSOLE_WIDGET_SLOTS.importMapping,
 ]
 
 /** Zones drawn on the WORKSPACE's pages, where no site's switch reaches. */

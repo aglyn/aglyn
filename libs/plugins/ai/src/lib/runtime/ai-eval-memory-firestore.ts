@@ -32,6 +32,7 @@
  */
 
 import type { AiSiteInventory } from '../model/ai-site-inventory'
+import { aiBracketedFacts } from './ai-doctrine-validators'
 
 type Data = Record<string, unknown>
 
@@ -165,15 +166,22 @@ export function aiEvalMemoryInventory(base: AiSiteInventory, docs: ReadonlyMap<s
       ...base.components,
       ...rows('components')
         .filter(({ id, data }) => !components.has(id) && Boolean(data['rootId'] || data['versionId']))
-        .map(({ id, data }) => ({
-          id,
-          name: String(data['displayName'] ?? id),
-          props: Object.fromEntries(
-            ((data['props'] as Array<{ name?: string; type?: string }> | undefined) ?? [])
-              .filter((prop) => typeof prop.name === 'string' && prop.name)
-              .map((prop) => [prop.name as string, prop.type || 'text']),
-          ),
-        })),
+        .map(({ id, data }) => {
+          const props = ((data['props'] as Array<{ name?: string; type?: string; defaultValue?: unknown }> | undefined) ?? []).filter(
+            (prop) => typeof prop.name === 'string' && prop.name,
+          )
+          const bracketedDefaults = Object.fromEntries(
+            props
+              .map((prop) => [prop.name as string, aiBracketedFacts([typeof prop.defaultValue === 'string' ? prop.defaultValue : ''])] as const)
+              .filter(([, facts]) => facts.length),
+          )
+          return {
+            id,
+            name: String(data['displayName'] ?? id),
+            props: Object.fromEntries(props.map((prop) => [prop.name as string, prop.type || 'text'])),
+            ...(Object.keys(bracketedDefaults).length ? { bracketedDefaults } : {}),
+          }
+        }),
     ],
     forms: [
       ...base.forms,

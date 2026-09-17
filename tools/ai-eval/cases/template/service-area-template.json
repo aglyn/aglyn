@@ -50,7 +50,9 @@
             "lede": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Harbor Roofing crews work across [county], and most repairs in [town] are booked within a week." } },
             "services": { "componentId": "section", "props": { "element": "section", "ariaLabel": "Repairs we make in [town]" }, "nodes": ["services-title", "services-grid"] },
             "services-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "Repairs we make in [town]" } },
-            "services-grid": { "componentId": "muiStack", "props": { "direction": "row", "flexWrap": "wrap" }, "sx": { "gap": 3 }, "nodes": ["card-leaks", "card-storm"] },
+            "services-grid": { "componentId": "muiGrid", "props": { "container": true, "spacing": 3 }, "nodes": ["cell-leaks", "cell-storm"] },
+            "cell-leaks": { "componentId": "muiGrid", "props": { "size": "xs:12 md:6" }, "nodes": ["card-leaks"] },
+            "cell-storm": { "componentId": "muiGrid", "props": { "size": "xs:12 md:6" }, "nodes": ["card-storm"] },
             "card-leaks": { "componentId": "reusableInstance", "props": { "refId": "cmp-service-card", "propValues": { "title": "Leak repair", "body": "We trace the water to where it gets in and seal it for good." } } },
             "card-storm": { "componentId": "reusableInstance", "props": { "refId": "cmp-service-card", "propValues": { "title": "Storm damage", "body": "Missing and lifted shingles replaced to match the roof you have." } } },
             "quote": { "componentId": "section", "props": { "element": "section", "ariaLabel": "Request a quote" }, "nodes": ["quote-title", "quote-form"] },
@@ -78,6 +80,26 @@
         }
       },
       "fails": ["rules"]
+    },
+    {
+      "why": "The service cards in a Stack that is a row at every width, which no rule of the tree refuses: every town page would show a phone two cards at half its width each (rule 12, measured at the switcher's widths, AGL-3020).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro", "services"] },
+            "intro": { "componentId": "section", "props": { "element": "section", "ariaLabel": "Roof repair in [town]" }, "nodes": ["title", "lede"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Roof repair in [town]" } },
+            "lede": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Harbor Roofing crews work across [county], and most repairs in [town] are booked within a week." } },
+            "services": { "componentId": "section", "props": { "element": "section", "ariaLabel": "Repairs we make in [town]" }, "nodes": ["services-title", "services-grid"] },
+            "services-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "Repairs we make in [town]" } },
+            "services-grid": { "componentId": "muiStack", "props": { "direction": "row", "flexWrap": "wrap" }, "sx": { "gap": 3 }, "nodes": ["card-leaks", "card-storm"] },
+            "card-leaks": { "componentId": "reusableInstance", "props": { "refId": "cmp-service-card", "propValues": { "title": "Leak repair", "body": "We trace the water to where it gets in and seal it for good." } } },
+            "card-storm": { "componentId": "reusableInstance", "props": { "refId": "cmp-service-card", "propValues": { "title": "Storm damage", "body": "Missing and lifted shingles replaced to match the roof you have." } } }
+          }
+        }
+      },
+      "fails": ["responsive"]
     }
   ]
 }

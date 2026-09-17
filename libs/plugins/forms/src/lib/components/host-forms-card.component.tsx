@@ -25,6 +25,7 @@ import {
   pluginDocsHelp,
   Route,
 } from '@aglyn/aglyn'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
 import {
   mdiArchiveArrowDownOutline,
@@ -122,6 +123,11 @@ export function HostFormsCard(props: HostFormsCardProps) {
   const { orgSlug, subdomain: host } = useConsoleHostRoute(hostId)
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
+  /**
+   * The shell's zone renderer (AGL-3043), for other ways to start a form; `null`
+   * outside the console shell, where there is no workspace to gate on.
+   */
+  const CreateZone = useConsoleWidgetSlot()
 
   /**
    * One form's page, beneath this surface's own path.
@@ -531,17 +537,28 @@ export function HostFormsCard(props: HostFormsCardProps) {
           >
             {showArchived ? 'Hide retired' : 'Show retired'}
           </Button>
-          <Button
-            size="small"
-            variant="contained"
-            disabled={creating}
-            onClick={() => {
-              setCreateError(null)
-              setCreateOpen(true)
-            }}
-          >
-            {creating ? 'Creating…' : 'Create Form'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {/*
+              Other ways to start a form, from plugins (AGL-3043): the
+              `hostForms` zone, drawn through the shell's own gated slot. A
+              plugin page cannot mount that slot itself, so the shell hands it
+              down, and a widget here passes the gates a console page's would.
+            */}
+            {CreateZone ? (
+              <CreateZone slot="hostForms" hostId={hostId} orgId={org?.$id} />
+            ) : null}
+            <Button
+              size="small"
+              variant="contained"
+              disabled={creating}
+              onClick={() => {
+                setCreateError(null)
+                setCreateOpen(true)
+              }}
+            >
+              {creating ? 'Creating…' : 'Create Form'}
+            </Button>
+          </Stack>
         </Stack>
       </PageHeaderActions>
       <CardDisplay

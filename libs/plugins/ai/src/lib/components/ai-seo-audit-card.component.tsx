@@ -21,6 +21,7 @@ import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import type { ConsoleHostSeoZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -32,7 +33,6 @@ import {
   CircularProgress,
   Collapse,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -302,7 +302,6 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
       : null
 
   return (
-    <Box sx={{ mb: 3 }}>
       <CardDisplay
         contentGutterX
         contentGutterY
@@ -412,8 +411,8 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
               ) : null}
 
               {report.pages.length ? (
-                <Box sx={{ overflowX: 'auto' }}>
-                  <Table size="small" aria-label="Audited pages">
+                <Box>
+                  <ScrollTable size="small" aria-label="Audited pages">
                     <TableHead>
                       <TableRow>
                         <TableCell>{'Page'}</TableCell>
@@ -461,7 +460,7 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
                         </TableRow>
                       ))}
                     </TableBody>
-                  </Table>
+                  </ScrollTable>
                   <ListPagination
                     page={page}
                     pageSize={pageSize}
@@ -536,7 +535,6 @@ export function AiSeoAuditCard(props: ConsoleHostSeoZoneProps) {
           ) : null}
         </Stack>
       </CardDisplay>
-    </Box>
   )
 }
 AiSeoAuditCard.displayName = 'AiSeoAuditCard'

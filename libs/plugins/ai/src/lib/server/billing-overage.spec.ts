@@ -584,6 +584,34 @@ describe('setCap — the ceiling on overage (AGL-2898)', () => {
     expect(mockAudit).toEqual([])
   })
 
+  it('Starter WITH the add-on may set a ceiling — it has overage to bound (AGL-3014)', async () => {
+    // The ceiling's refusal is the switch's, `!sellsOverage`, and it misread
+    // the same way: Starter lists no rate on `PLAN_PRICING`, so a workspace
+    // billed $3 per 1,000 past the add-on's band was told there was no
+    // overage to cap. FORCED RED by reading `overageRateUsdPer1k` off the
+    // table again: this answered 409 `not_sold` and wrote nothing.
+    mockDocs.set('orgs/org-1', { ...org('starter'), seatAddons: { aiAddon: 1 } })
+    const response = await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 25 }))
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, capUsd: 25 })
+    expect(mockDocs.get('orgs/org-1')).toMatchObject({
+      assistOverage: { capUsd: 25, capSetBy: 'user-1' },
+    })
+    // The card reads back the ceiling it just set, beside the rate it bounds.
+    const read = await (await POST(post({ orgId: 'org-1', action: 'get' }))).json()
+    expect(read).toMatchObject({ capUsd: 25, overageRateUsdPer1k: 3, sellsOverage: true })
+
+    // The control: the same request on Starter without the add-on has no
+    // band and nothing sold past it, so it is still refused.
+    mockAudit = []
+    mockDocs.set('orgs/org-1', org('starter'))
+    const bare = await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 25 }))
+    expect(bare.status).toBe(409)
+    await expect(bare.json()).resolves.toMatchObject({ code: 'not_sold' })
+    expect(mockDocs.get('orgs/org-1')).toEqual(org('starter'))
+    expect(mockAudit).toEqual([])
+  })
+
   it('403 without billing.manage — the same gate as the switch', async () => {
     mockPermissions = new Set(['billing.view'])
     mockDocs.set('orgs/org-1', org('pro'))

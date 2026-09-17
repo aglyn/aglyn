@@ -23,17 +23,20 @@
 import { formatMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
 import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
+import { AI_FREE_PAGE_RECORDED_PLAN } from '../jobs/fixtures/ai-free-page-recording'
 import type { AiBuildPlan, AiBuildPlanScreen } from '../model/ai-build-plan'
+import { AI_PAGE_CREATE_KINDS } from '../model/ai-page-job'
 import {
   aiPlanCapabilitiesForJob,
   aiUnrestrictedPlanCapabilities,
   type AiPlanCapabilities,
 } from '../model/ai-plan-capabilities'
-import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
+import { aiHomeScreenIds, emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
 import {
   AI_DOCTRINE_RULE_NUMBERS,
   AI_DOCTRINE_RULES,
   AI_TYPED_LIST_MIN_ITEMS,
+  aiBracketedFacts,
   aiDoctrineViolationText,
   aiNamesMatch,
   aiTreeCopy,
@@ -43,6 +46,7 @@ import {
   detectHeavyDocument,
   detectImageSources,
   detectInlineForms,
+  detectInvisibleLinks,
   detectLayoutRegions,
   detectLiteralStyles,
   detectMissedDuplicate,
@@ -56,9 +60,12 @@ import {
   detectPlanRepeats,
   detectPlanTypedData,
   detectPlanUncreatable,
+  detectPlanUndeclaredCreations,
   detectPublishIntent,
   detectRepeatedSubtrees,
   detectTypedData,
+  detectUnrelatedScreenLinks,
+  detectUnresponsiveGrids,
   detectUntemplatedSimilarPages,
   estimateAiOutputLoad,
   scoreAiOutput,
@@ -456,6 +463,68 @@ describe('rule 5 — colors, spacing and type come from the theme', () => {
   })
 })
 
+describe('rule 5 — a link on a colored band draws its words in a color the band does not have (AGL-3056)', () => {
+  const link = (props: Record<string, unknown> = {}, sx?: Record<string, unknown>): Nested => ({
+    componentId: 'muiScreenLink',
+    props: { children: 'Request a consultation', screenId: 'scr-about', ...props },
+    ...(sx ? { sx } : {}),
+  })
+  const band = (background: unknown, ...children: Nested[]): Nested => ({
+    componentId: 'section',
+    props: { element: 'footer' },
+    sx: { backgroundColor: background, color: 'background.paper' },
+    children,
+  })
+
+  it('refuses the live footer: a link that sets no color on a band in its own family, with a re-ask to inherit or set the contrast text', () => {
+    expect(detectInvisibleLinks(tree(page(band('primary.main', link()))), 'layout')).toEqual([
+      {
+        rule: 5,
+        code: 'link-color-on-band',
+        message:
+          'A link or button on a primary.main band draws its words in the theme\'s primary color, the band\'s own, so they cannot be read. Give it "color": "inherit" under a band whose sx color is primary.contrastText, or set its own sx color to primary.contrastText.',
+        nodeIds: ['n2'],
+      },
+    ])
+  })
+
+  it('refuses a text link, an outlined button and a link in an App Bar that names no color, each in the band’s own family', () => {
+    const found = detectInvisibleLinks(
+      tree(
+        page(
+          band({ xs: 'secondary.dark' }, link({ renderAs: 'link', color: 'secondary' }), { componentId: 'muiButton', props: { children: 'Call us', variant: 'outlined', color: 'secondary' } }),
+          { componentId: 'muiAppBar', props: { position: 'static' }, children: [{ componentId: 'muiToolbar', children: [link({ children: 'About' })] }] },
+          band('primary.light', link({}, { color: 'primary.main' })),
+        ),
+      ),
+      'page',
+    )
+    expect(found.map(({ code, nodeIds }) => [code, nodeIds])).toEqual([['link-color-on-band', ['n2', 'n3', 'n6', 'n8']]])
+  })
+
+  it('passes a link that inherits, sets a color of its own, fills its button, sits on paper or on a band of another family', () => {
+    const found = detectInvisibleLinks(
+      tree(
+        page(
+          band(
+            'primary.main',
+            link({ color: 'inherit' }),
+            link({}, { color: 'primary.contrastText' }),
+            { componentId: 'muiButton', props: { children: 'Book', variant: 'contained' } },
+            { componentId: 'muiCard', children: [{ componentId: 'muiCardContent', children: [link()] }] },
+            link({ color: 'secondary' }),
+          ),
+          band('background.paper', link()),
+          { componentId: 'muiAppBar', props: { color: 'default' }, children: [link()] },
+        ),
+      ),
+      'layout',
+    )
+    expect(found).toEqual([])
+    expect(detectInvisibleLinks(tree(page(band('primary.main', link()))), 'email')).toEqual([])
+  })
+})
+
 describe('rule 6 — emails use the brand', () => {
   const brand = { colors: { 'primary.main': '#1976d2' }, fonts: ['Inter'] }
   const email = (backgroundColor: string) =>
@@ -536,6 +605,23 @@ describe('rule 8 — data is bound, not typed', () => {
   it('passes a short list', () => {
     const short = tree(page({ componentId: 'muiList', children: Array.from({ length: AI_TYPED_LIST_MIN_ITEMS - 1 }, (_, i) => item(`Member ${i}`)) }))
     expect(detectTypedData(short)).toEqual([])
+  })
+
+  it('counts a list within its own section, as a plan counts a section’s items (AGL-3061)', () => {
+    const cards = (count: number, name: string) => Array.from({ length: count }, (_, i) => card(`${name} ${i}`, 'What it covers.'))
+    const grid = (...children: Nested[]): Nested => ({ componentId: 'muiGrid', children })
+    // Two short lists that share a card are not one long one.
+    expect(detectTypedData(tree(page(section(grid(...cards(4, 'Area'))), section(grid(...cards(4, 'Step'))))))).toEqual([])
+    expect(detectTypedData(tree(page(section(grid(...cards(4, 'Area'))), section(grid(...cards(6, 'Service'))))))).toEqual([])
+    // One section's long list is one list, in one grid or split across two.
+    const one = tree(page(section(grid(...cards(AI_TYPED_LIST_MIN_ITEMS, 'Area')))))
+    expect(codes(detectTypedData(one))).toEqual(['typed-list'])
+    const split = tree(page(section(grid(...cards(4, 'Area')), grid(...cards(AI_TYPED_LIST_MIN_ITEMS - 4, 'More')))))
+    expect(detectTypedData(split)).toMatchObject([{ rule: 8, code: 'typed-list', nodeIds: expect.arrayContaining([]) }])
+    expect(detectTypedData(split)[0].nodeIds).toHaveLength(AI_TYPED_LIST_MIN_ITEMS)
+    // A tree with no Section is one list, wherever its items sit.
+    const loose = tree(page(grid(...cards(4, 'Area')), grid(...cards(AI_TYPED_LIST_MIN_ITEMS - 4, 'More'))))
+    expect(codes(detectTypedData(loose))).toEqual(['typed-list'])
   })
 
   it('in a plan: a long list is bound, and a list the site already holds is bound to it', () => {
@@ -652,6 +738,70 @@ describe('rule 10 — navigation and SEO travel with a page', () => {
   })
 })
 
+describe('rule 10 — a link goes to a screen that does what its words say, or is left out (AGL-3056)', () => {
+  const home = { homeScreenIds: aiHomeScreenIds(INVENTORY) }
+  const link = (children: string, props: Record<string, unknown> = { screenId: 'scr-home' }): Nested => ({
+    componentId: 'muiScreenLink',
+    props: { children, ...props },
+  })
+  const footer = (...children: Nested[]): Nested => ({ componentId: 'section', props: { element: 'footer' }, children })
+
+  it('names the site’s home screens: at the root, at home, or named Home, and never a template', () => {
+    expect(aiHomeScreenIds(INVENTORY)).toEqual(['scr-home'])
+    const seeded: AiSiteInventory = {
+      ...INVENTORY,
+      screens: [
+        { id: 'seed-home', name: 'Welcome', slug: 'home', layoutId: null, template: false },
+        { id: 'scr-start', name: 'Home page', slug: 'start', layoutId: null, template: false },
+        { id: 'tpl-root', name: 'Home', slug: '/', layoutId: null, template: true },
+        { id: 'scr-about', name: 'About', slug: '/about', layoutId: null, template: false },
+      ],
+    }
+    expect(aiHomeScreenIds(seeded)).toEqual(['seed-home', 'scr-start'])
+    expect(aiHomeScreenIds(null)).toEqual([])
+  })
+
+  it('refuses the live footer’s consultation link sent home, naming its words and saying to link the screen that does or leave it out', () => {
+    expect(detectUnrelatedScreenLinks(tree(page(footer(link('Request a Consultation')))), 'layout', home)).toEqual([
+      {
+        rule: 10,
+        code: 'link-unrelated-screen',
+        message:
+          '"Request a Consultation" links the home page, which does not do what its words say. Link the screen that does, or leave the link out when the site has none.',
+        nodeIds: ['n2'],
+      },
+    ])
+    const button = { componentId: 'muiButton', props: { children: 'Get a quote', href: '/' } }
+    expect(detectUnrelatedScreenLinks(tree(page(section(button))), 'page', home).map((violation) => violation.nodeIds)).toEqual([['n2']])
+  })
+
+  it('passes a link home that says so, the header’s and the navigation’s links, a link elsewhere, and a site with no home known', () => {
+    const passing = tree(
+      page(
+        footer(link('Back to home'), link('Homepage'), link('Request a Consultation', { screenId: 'scr-about' })),
+        { componentId: 'muiAppBar', children: [{ componentId: 'muiToolbar', children: [link('Harborline Law')] }] },
+        { componentId: 'muiStack', props: { component: 'nav' }, children: [link('Our story')] },
+      ),
+    )
+    expect(detectUnrelatedScreenLinks(passing, 'layout', home)).toEqual([])
+    expect(detectUnrelatedScreenLinks(tree(page(footer(link('Request a Consultation')))), 'layout')).toEqual([])
+    expect(detectUnrelatedScreenLinks(tree(page(footer(link('Request a Consultation')))), 'email', home)).toEqual([])
+  })
+})
+
+describe('rule 14 — the facts in square brackets a draft asks the member to fill (AGL-3056)', () => {
+  it('reads each fact once whatever its case, in the order it first appears, and nothing that is not one', () => {
+    expect(
+      aiBracketedFacts([
+        'Visit us at [Office address], open [Office hours].',
+        'Call [office phone number] or [Office Address].',
+        'Wills and trusts {{1}}, [ ], [[nested]] and arrays [] stay copy.',
+        '[Office phone number]',
+      ]),
+    ).toEqual(['[Office address]', '[Office hours]', '[office phone number]', '[nested]'])
+  })
+})
+
 describe('rule 11 — one main landmark and an ordered outline', () => {
   it('refuses a page with no h1, two h1s, or a skipped level', () => {
     expect(codes(detectDocumentStructure(tree(page(section(text('h2', 'Services', 'h2')))), 'page'))).toEqual([
@@ -699,6 +849,100 @@ describe('rule 12 — responsive by the theme’s breakpoints', () => {
       detectAdHocWidths(tree(page({ ...section(), sx: { width: '100%', maxWidth: 1, minWidth: { xs: '100%', md: '50%' } } })), 'page'),
     ).toEqual([])
     expect(detectAdHocWidths(tree(page({ ...section(), sx: { width: '600px' } })), 'email')).toEqual([])
+  })
+})
+
+describe('rule 12 — a Grid of columns is a container of items sized for every width (AGL-3055)', () => {
+  const grid = (props: Record<string, unknown>, children: Nested[], sx?: Record<string, unknown>): Nested => ({
+    componentId: 'muiGrid',
+    props,
+    ...(sx ? { sx } : {}),
+    children,
+  })
+  const item = (size: unknown, child: Nested = card('Estate planning', 'Wills and trusts.')): Nested => ({
+    componentId: 'muiGrid',
+    props: size === undefined ? {} : { size },
+    children: [child],
+  })
+  const areas = ['Estate planning', 'Real estate', 'Business formation']
+  const cells = (size: unknown) => areas.map((title) => item(size, card(title, 'What it covers.')))
+  const found = (root: Nested, kind: Parameters<typeof detectUnresponsiveGrids>[1] = 'page') =>
+    detectUnresponsiveGrids(tree(page(section(root))), kind).map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))
+
+  it('refuses the live About page’s shape: items sized 4 under a Grid that is not a container, naming the Grid and saying what to set', () => {
+    const live = detectUnresponsiveGrids(tree(page(section(grid({ ariaLabel: 'Practice areas' }, cells('4'))))), 'page')
+    expect(live).toEqual([
+      {
+        rule: 12,
+        code: 'grid-not-container',
+        message:
+          'A Grid lays out columns only as a container: this one is not, so what it holds stacks at every width. Set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4".',
+        nodeIds: ['n2'],
+      },
+    ])
+  })
+
+  it('refuses the goldens’ old shape, a row direction on a Grid that is not a container, and a bare Grid holding several elements', () => {
+    const cardsOf = areas.map((title) => card(title, 'What it covers.'))
+    expect(found(grid({ direction: 'row' }, cardsOf, { gap: 3 }))).toEqual([{ rule: 12, code: 'grid-not-container', nodeIds: ['n2'] }])
+    expect(found(grid({}, cardsOf))).toEqual([{ rule: 12, code: 'grid-not-container', nodeIds: ['n2'] }])
+    // One element is no row, and an item of a container holds what it likes.
+    expect(found(grid({}, [card('One', 'Only.')]))).toEqual([])
+    expect(found(grid({ container: true, spacing: '3' }, [grid({ size: 'xs:12 md:6' }, [text('h3', 'A', 'h3'), text('body1', 'B')])]))).toEqual([])
+  })
+
+  it('refuses a container’s child that is not an item full width on a phone, with the size for that many columns', () => {
+    const fixed = detectUnresponsiveGrids(tree(page(section(grid({ container: true, spacing: '3' }, cells('4'))))), 'page')
+    expect(fixed.map(({ code, nodeIds }) => [code, nodeIds])).toEqual([['grid-item-size', ['n3', 'n8', 'n13']]])
+    expect(fixed[0].message).toBe(
+      'Every child of a Grid container is a Grid item whose size is full width on a phone and steps up to columns at a larger width, written as one string. Size these like "xs:12 md:4", and wrap any other element in such an item.',
+    )
+    // A card placed straight in the container, an item with no size, one whose phone size is not full width, and one the renderer cannot read.
+    const mixed = grid({ container: true }, [card('Loose', 'No item.'), item(undefined), item('sm:6 md:3'), item('4 columns')])
+    expect(found(mixed)).toEqual([{ rule: 12, code: 'grid-item-size', nodeIds: ['n3', 'n7', 'n12', 'n17'] }])
+    expect(detectUnresponsiveGrids(tree(page(section(mixed))), 'page')[0].message).toContain('like "xs:12 sm:6 md:3"')
+    // Full width at every width is one column at every width.
+    expect(found(grid({ container: true }, cells('xs:12')))).toEqual([{ rule: 12, code: 'grid-item-size', nodeIds: ['n3', 'n8', 'n13'] }])
+    // A container of its own column count is sized against it.
+    expect(found(grid({ container: true, columns: '6' }, cells('xs:6 md:2')))).toEqual([])
+  })
+
+  it('refuses a container spaced by an sx gap its items’ widths do not count, with the spacing to set instead', () => {
+    const gapped = detectUnresponsiveGrids(tree(page(section(grid({ container: true }, cells('xs:12 md:4'), { gap: 3 })))), 'page')
+    expect(gapped).toEqual([
+      {
+        rule: 12,
+        code: 'grid-gap',
+        message:
+          'A Grid container\'s items are sized by its "spacing", so an sx gap pushes its last column onto a row of its own. Remove the sx gap and set "spacing": 3.',
+        nodeIds: ['n2'],
+      },
+    ])
+    expect(found(grid({ container: true }, cells('xs:12 md:4'), { columnGap: 2 }))).toEqual([{ rule: 12, code: 'grid-gap', nodeIds: ['n2'] }])
+    // A row gap spaces rows, which the item widths never count.
+    expect(found(grid({ container: true, spacing: '3' }, cells('xs:12 md:4'), { rowGap: 4 }))).toEqual([])
+  })
+
+  it('passes a responsive row on every document a Grid is built in, and holds a layout and a component the same way', () => {
+    const responsive = grid({ container: true, spacing: '3' }, [
+      item('xs:12'),
+      ...areas.map((title) => item('xs:12 sm:6 md:4', card(title, 'What it covers.'))),
+    ])
+    for (const kind of ['page', 'template', 'layout', 'component'] as const) {
+      expect([kind, found(responsive, kind)]).toEqual([kind, []])
+    }
+    const live = grid({ ariaLabel: 'Practice areas' }, cells('4'))
+    for (const kind of ['layout', 'component'] as const) {
+      expect([kind, found(live, kind).map((violation) => violation.code)]).toEqual([kind, ['grid-not-container']])
+    }
+    expect(found(live, 'email')).toEqual([])
+  })
+
+  it('runs on every tree the doctrine checks, after the palette validator has read the sizes', () => {
+    // A switch written as text and a size written as a number arrive as the palette reads them.
+    const answer = tree(page(section(text('h1', 'About', 'h1')), section(text('h2', 'What we help with', 'h2'), grid({ container: 'true', spacing: 3 }, cells(4)))))
+    const report = validateAiDoctrineTree(answer, 'page', { reusableComponents: false })
+    expect(report.violations.map((violation) => violation.code)).toEqual(['grid-item-size'])
   })
 })
 
@@ -921,6 +1165,22 @@ describe('validateAiDoctrineTree — the palette first, then every rule', () => 
     expect(codes(report.violations)).toEqual(['literal-color'])
   })
 
+  it('holds a link to its band and to the home screen the inventory names, on every tree the doctrine checks (AGL-3056)', () => {
+    const footer = tree(
+      page({
+        componentId: 'section',
+        props: { element: 'footer' },
+        sx: { bgcolor: 'primary.main', color: 'background.paper' },
+        children: [{ componentId: 'muiScreenLink', props: { children: 'Request a Consultation', screenId: 'scr-home' } }],
+      }),
+    )
+    const report = validateAiDoctrineTree(footer, 'component', { screenIds: ['scr-home'], homeScreenIds: ['scr-home'] })
+    expect(report.violations.map((violation) => [violation.rule, violation.code])).toEqual([
+      [5, 'link-color-on-band'],
+      [10, 'link-unrelated-screen'],
+    ])
+  })
+
   it('turns a tree the palette refuses into one unreadable-output finding, and still holds rule 13', () => {
     const report = validateAiDoctrineTree(
       { ...tree(page({ componentId: 'marketplacePlugin' })), publish: true },
@@ -934,6 +1194,252 @@ describe('validateAiDoctrineTree — the palette first, then every rule', () => 
   })
 })
 
+describe('what a plan places, it reuses or creates (AGL-3040)', () => {
+  const PAGE_JOB = { noun: 'a page job', creates: AI_PAGE_CREATE_KINDS }
+  /** A workspace that keeps everything, narrowed to what a page job builds. */
+  const PAID_PAGE = aiPlanCapabilitiesForJob(aiUnrestrictedPlanCapabilities(), PAGE_JOB)
+  const creation = (kind: AiBuildPlan['create'][number]['kind'], name: string) => ({
+    kind,
+    name,
+    why: 'Nothing the site has will do.',
+    duplicateOf: null,
+    fields: [],
+  })
+
+  it('rule 2: refuses a section that places a layout, the site’s or one the plan creates', () => {
+    const placed = planOf({
+      create: [creation('layout', 'Main layout')],
+      screens: [
+        screen({
+          layout: 'new:Main layout',
+          sections: [
+            { name: 'hero', uses: ['new:Main layout'], items: 0 },
+            { name: 'services grid', uses: ['cmp-card', 'lay-site'], items: 3 },
+          ],
+        }),
+      ],
+    })
+    expect(detectPlanLayoutRegions(placed, INVENTORY)).toEqual([
+      {
+        rule: 2,
+        code: 'plan-layout-in-section',
+        message:
+          "A section places a layout. A layout frames a whole screen and is never placed inside one: name it as the screen's layout, and take it out of the section's uses.",
+        paths: ['screens[0].sections[0].uses[0]', 'screens[0].sections[1].uses[1]'],
+      },
+    ])
+    expect(detectPlanLayoutRegions(planOf(), INVENTORY)).toEqual([])
+  })
+
+  it('rule 2: refuses a screen’s undeclared layout once, saying what this workspace may do instead', () => {
+    const undeclared = planOf({ screens: [screen({ layout: 'new:Site frame' })] })
+    // The site holds its one layout, and this workspace may create no other.
+    expect(detectPlanLayoutRegions(undeclared, INVENTORY, FREE)).toEqual([
+      {
+        rule: 2,
+        code: 'plan-screen-without-layout',
+        message:
+          'A screen names no layout the site has, and this job may not create one. Put every screen in a layout the site has.',
+        paths: ['screens[0].layout'],
+      },
+    ])
+    expect(detectPlanLayoutRegions(undeclared, INVENTORY)[0].message).toContain('or plan one')
+    // Rule 7 leaves a screen's layout to rule 2.
+    expect(detectPlanUndeclaredCreations(undeclared, INVENTORY, FREE)).toEqual([])
+  })
+
+  it('rule 4: refuses a section that places a template, which only a whole screen applies', () => {
+    const placed = planOf({ screens: [screen({ sections: [{ name: 'hero', uses: ['tpl-service'], items: 0 }] })] })
+    expect(detectUntemplatedSimilarPages(placed, INVENTORY)).toEqual([
+      {
+        rule: 4,
+        code: 'plan-template-in-section',
+        message:
+          "A section places a template. A template is applied to a whole screen and is never placed inside one: take it out of the section's uses, and name it as the screen's template only when the whole screen is built from it.",
+        paths: ['screens[0].sections[0].uses[0]'],
+      },
+    ])
+    const created = planOf({
+      create: [creation('template', 'Service page v2')],
+      screens: [screen({ sections: [{ name: 'body', uses: ['new:Service page v2'], items: 0 }] })],
+    })
+    expect(codes(detectUntemplatedSimilarPages(created))).toEqual(['plan-template-in-section'])
+    expect(detectUntemplatedSimilarPages(planOf({ screens: [screen({ template: 'tpl-service' })] }), INVENTORY)).toEqual([])
+  })
+
+  it('rule 7: refuses a creation a section places and the plan never declares, and tells a workspace that may make it to declare it', () => {
+    const plan = planOf({
+      screens: [
+        screen({
+          sections: [
+            { name: 'contact form', uses: ['new:Contact request'], items: 0 },
+            { name: 'services grid', uses: ['new:Service tile'], items: 6 },
+          ],
+        }),
+      ],
+    })
+    expect(detectPlanUndeclaredCreations(plan, INVENTORY, PAID_PAGE)).toEqual([
+      {
+        rule: 7,
+        code: 'plan-creation-undeclared',
+        message:
+          'The "contact form" section places a creation named "Contact request", but the plan never creates it. Declare it in create as a form, with why nothing the site has will do, or place a form the site already has by its id.',
+        paths: ['screens[0].sections[0].uses[0]'],
+      },
+      {
+        rule: 7,
+        code: 'plan-creation-undeclared',
+        message:
+          'The "services grid" section places a creation named "Service tile", but the plan never creates it. Declare it in create as a component, with why nothing the site has will do, or place a component the site already has by its id.',
+        paths: ['screens[0].sections[1].uses[0]'],
+      },
+    ])
+    // With no capabilities read, the doctrine applies whole, and the way out is the same.
+    expect(detectPlanUndeclaredCreations(plan, INVENTORY)).toEqual(detectPlanUndeclaredCreations(plan, INVENTORY, PAID_PAGE))
+    // A form section that already places its form placed something else beside it.
+    const beside = planOf({
+      screens: [screen({ sections: [{ name: 'contact form', uses: ['frm-contact', 'new:Office map'], items: 0 }] })],
+    })
+    expect(detectPlanUndeclaredCreations(beside, INVENTORY, PAID_PAGE)[0].message).toContain(
+      'Declare it in create as a component',
+    )
+  })
+
+  it('rule 7: tells a workspace that cannot make the creation to build the page without it', () => {
+    const plan = planOf({
+      screens: [
+        screen({
+          sections: [
+            { name: 'quote request', uses: ['new:Quote form'], items: 0 },
+            { name: 'services grid', uses: ['new:Service tile'], items: 6 },
+          ],
+        }),
+      ],
+    })
+    expect(
+      detectPlanUndeclaredCreations(plan, INVENTORY, aiPlanCapabilitiesForJob(FREE, PAGE_JOB)).map((found) => found.message),
+    ).toEqual([
+      'The "quote request" section places a creation named "Quote form", but the plan never creates it, and this workspace\'s plan does not include saved forms. Draw the form on the page instead, as a Form element holding its Form Fields. Take it out of the section\'s uses.',
+      'The "services grid" section places a creation named "Service tile", but the plan never creates it, and this workspace\'s plan does not include reusable components. Draw the item in its own section instead. Take it out of the section\'s uses.',
+    ])
+  })
+
+  it('rule 7: never tells a plan to declare a creation the site has no room left for', () => {
+    const oneForm: AiPlanCapabilities = {
+      ...PAID_PAGE,
+      create: { ...PAID_PAGE.create, form: { allowed: true, left: 1, reason: null } },
+    }
+    const plan = planOf({
+      create: [creation('form', 'Newsletter')],
+      screens: [
+        screen({
+          sections: [
+            { name: 'newsletter signup', uses: ['new:Newsletter'], items: 0 },
+            { name: 'contact form', uses: ['new:Contact'], items: 0 },
+          ],
+        }),
+      ],
+    })
+    expect(detectPlanUndeclaredCreations(plan, INVENTORY, oneForm)).toEqual([
+      {
+        rule: 7,
+        code: 'plan-creation-undeclared',
+        message:
+          'The "contact form" section places a creation named "Contact", but the plan never creates it, and this site has room for 1 more. Place a form the site already has. Take it out of the section\'s uses.',
+        paths: ['screens[0].sections[1].uses[0]'],
+      },
+    ])
+  })
+
+  it('rule 7: refuses a template a screen applies and the plan never declares', () => {
+    const plan = planOf({ screens: [screen({ template: 'new:Service page' })] })
+    expect(detectPlanUndeclaredCreations(plan, INVENTORY, PAID_PAGE)).toEqual([
+      {
+        rule: 7,
+        code: 'plan-creation-undeclared',
+        message:
+          'The screen "Roof repair" applies a template named "Service page", but the plan never creates it, and a page job does not build one. Leave the screen\'s template empty, or apply a template the site already has.',
+        paths: ['screens[0].template'],
+      },
+    ])
+    expect(detectPlanUndeclaredCreations(plan, INVENTORY)[0].message).toBe(
+      'The screen "Roof repair" applies a template named "Service page", but the plan never creates it. Declare it in create as a template, with why nothing the site has will do, or leave the screen\'s template empty.',
+    )
+  })
+
+  it('rule 7: reports a name once however often it is placed, and nothing for a plan that declares what it places', () => {
+    const plan = planOf({
+      screens: [
+        screen({ sections: [{ name: 'cards', uses: ['new:Card'], items: 3 }] }),
+        screen({ title: 'Gutters', slug: '/gutters', sections: [{ name: 'more cards', uses: ['new:card'], items: 3 }] }),
+      ],
+    })
+    expect(detectPlanUndeclaredCreations(plan, INVENTORY, PAID_PAGE)).toMatchObject([
+      { code: 'plan-creation-undeclared', paths: ['screens[0].sections[0].uses[0]', 'screens[1].sections[0].uses[0]'] },
+    ])
+    const declared = planOf({ ...plan, create: [creation('component', 'Card')] })
+    expect(detectPlanUndeclaredCreations(declared, INVENTORY, PAID_PAGE)).toEqual([])
+  })
+
+  describe('the plan the first live recording of the Free brief kept', () => {
+    /**
+     * The brief's workspace as its eval case describes it: no reusable
+     * components, saved forms or datasets, and room for the one layout its
+     * site does not have yet — narrowed to what a page job builds.
+     */
+    const FREE_BRIEF = aiPlanCapabilitiesForJob(
+      {
+        reusableComponents: false,
+        create: {
+          ...aiUnrestrictedPlanCapabilities().create,
+          component: { allowed: false, left: 0, reason: "this workspace's plan does not include reusable components" },
+          layout: { allowed: true, left: 1, reason: null },
+          template: { allowed: true, left: 10, reason: null },
+          form: { allowed: false, left: 0, reason: "this workspace's plan does not include saved forms" },
+          dataset: { allowed: false, left: 0, reason: "this workspace's plan does not include datasets" },
+        },
+      },
+      PAGE_JOB,
+    )
+    const SITE: AiSiteInventory = {
+      ...emptyAiSiteInventory('host-brightwater-law'),
+      screens: [{ id: 'scr-home', name: 'Home', slug: '/', layoutId: null, template: false }],
+    }
+
+    it('is refused on the Free workspace it was recorded for: the layout off the hero section, the form drawn on the page', () => {
+      expect(validateAiBuildPlan(AI_FREE_PAGE_RECORDED_PLAN, SITE, null, FREE_BRIEF)).toEqual([
+        {
+          rule: 2,
+          code: 'plan-layout-in-section',
+          message:
+            "A section places a layout. A layout frames a whole screen and is never placed inside one: name it as the screen's layout, and take it out of the section's uses.",
+          paths: ['screens[0].sections[0].uses[0]'],
+        },
+        {
+          rule: 7,
+          code: 'plan-creation-undeclared',
+          message:
+            'The "consultation request form" section places a creation named "consultation-form", but the plan never creates it, and this workspace\'s plan does not include saved forms. Draw the form on the page instead, as a Form element holding its Form Fields. Take it out of the section\'s uses.',
+          paths: ['screens[0].sections[4].uses[0]'],
+        },
+      ])
+    })
+
+    it('is refused on a paid workspace as well, where the form it places is declared and its repeats are components', () => {
+      const found = validateAiBuildPlan(AI_FREE_PAGE_RECORDED_PLAN, SITE, null, PAID_PAGE)
+      expect(found.map(({ rule, code, paths }) => [rule, code, paths])).toEqual([
+        [1, 'plan-repeated-items', ['screens[0].sections[2]', 'screens[0].sections[3]']],
+        [2, 'plan-layout-in-section', ['screens[0].sections[0].uses[0]']],
+        [3, 'plan-form-not-placed', ['screens[0].sections[4]']],
+        [7, 'plan-creation-undeclared', ['screens[0].sections[4].uses[0]']],
+      ])
+      expect(found[3].message).toBe(
+        'The "consultation request form" section places a creation named "consultation-form", but the plan never creates it. Declare it in create as a form, with why nothing the site has will do, or place a form the site already has by its id.',
+      )
+    })
+  })
+})
+
 describe('validateAiBuildPlan', () => {
   it('passes a plan that reuses the site’s layout for one fresh screen', () => {
     expect(validateAiBuildPlan(planOf(), INVENTORY)).toEqual([])
@@ -944,12 +1450,17 @@ describe('validateAiBuildPlan', () => {
       planOf({
         reuse: [{ kind: 'component', id: 'cmp-missing', purpose: 'cards' }],
         screens: [
-          screen({ title: 'Lorem ipsum', layout: null, slug: 'Bad Slug', sections: [{ name: 'price grid', uses: [], items: 9 }] }),
+          screen({
+            title: 'Lorem ipsum',
+            layout: null,
+            slug: 'Bad Slug',
+            sections: [{ name: 'price grid', uses: ['tpl-service', 'new:Price tile'], items: 9 }],
+          }),
         ],
       }),
       INVENTORY,
     )
-    expect(found.map((violation) => violation.rule)).toEqual([1, 2, 7, 8, 10, 14])
+    expect(found.map((violation) => violation.rule)).toEqual([1, 2, 4, 7, 7, 8, 10, 14])
   })
 
   it('holds a plan to what its job may create, and to the inline doctrine where the workspace keeps no reusable components (AGL-3030)', () => {

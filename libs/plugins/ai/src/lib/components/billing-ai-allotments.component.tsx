@@ -17,48 +17,26 @@
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { mdiPencilOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import { useUser } from '@aglyn/tenant-feature-instance'
 import {
-  Alert,
-  Button,
-  Checkbox,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material'
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { useUser } from '@aglyn/tenant-feature-instance'
+import { Alert, Button, Stack, Typography } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useMemo, useState } from 'react'
 import { AI_ALLOTMENT_ORG_SUBJECT, aiAllotmentState } from '../model/ai-allotments'
-import type { AiAllotmentRowWire } from '../usage/ai-usage-wire'
+import type {
+  AiAllotmentRowWire,
+  AiAllotmentsHostWire,
+  AiAllotmentsMemberWire,
+} from '../usage/ai-usage-wire'
 import { AiAllotmentEditor, type AiAllotmentValue } from './ai-allotment-editor.component'
 import { saveAiAllotments, useAiAllotments } from './use-ai-allotments'
-
-/**
- * One table's page on the shared footer. The page is clamped to the rows
- * there are, so a table that shrinks under the reader — an allotment removed
- * on its last page — shows its new last page rather than an empty one.
- */
-function useTablePage() {
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  return {
-    pageSize,
-    setPage,
-    setPageSize,
-    /** The rows on the current page, and the page they are on. */
-    slice<T>(rows: readonly T[]): { page: number; rows: T[] } {
-      const last = Math.max(0, Math.ceil(rows.length / pageSize) - 1)
-      const current = Math.min(page, last)
-      return { page: current, rows: rows.slice(current * pageSize, (current + 1) * pageSize) }
-    },
-  }
-}
 
 /** An allotment as a table cell reads it: used of credits, mode, models. */
 export function aiAllotmentSummary(
@@ -100,6 +78,49 @@ const valueOf = (row: AiAllotmentRowWire | undefined): AiAllotmentValue | null =
   row ? { credits: row.credits, mode: row.mode, models: row.models } : null
 
 /**
+ * A row of one of the three lists: the subject its allotment is stored under,
+ * that subject's allotment when it has one, and `$id` — the id `ListTable`
+ * selects by, which is the member's uid, the site's id, or the collaborator's
+ * subject.
+ */
+type AllotmentListRow = {
+  $id: string
+  subject: string
+  allotment: AiAllotmentRowWire | undefined
+}
+type MemberRow = AllotmentListRow & { member: AiAllotmentsMemberWire }
+type SiteRow = AllotmentListRow & { host: AiAllotmentsHostWire }
+type CollaboratorRow = AllotmentListRow & { name: string; site: string }
+
+/** The allotment column: used of credits, in the tone its share has reached. */
+const allotmentColumn = <Row extends AllotmentListRow>(): GridColDef<Row> => ({
+  field: 'allotment',
+  headerName: 'Allotment',
+  flex: 1,
+  minWidth: 200,
+  sortable: false,
+  valueGetter: (_value, row) => aiAllotmentSummary(row.allotment),
+  renderCell: ({ row }) => (
+    <Typography variant="body2" noWrap sx={{ color: aiAllotmentTone(row.allotment) }}>
+      {aiAllotmentSummary(row.allotment)}
+    </Typography>
+  ),
+})
+
+const creditsColumn = <Row extends AllotmentListRow>(
+  credits: (row: Row) => number,
+): GridColDef<Row> => ({
+  field: 'credits',
+  headerName: 'Credits this month',
+  type: 'number',
+  align: 'right',
+  headerAlign: 'right',
+  width: 170,
+  valueGetter: (_value, row) => credits(row),
+  valueFormatter: (value: number) => value.toLocaleString(),
+})
+
+/**
  * AI ALLOTMENTS ON BILLING → USAGE (AGL-2942): who may draw how much of the
  * workspace's AI pool.
  *
@@ -121,11 +142,6 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
   const [editing, setEditing] = useState<Editing | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Each table pages on its own. A selection is kept by member and site id
-  // rather than by row, so it survives a page change.
-  const teamPage = useTablePage()
-  const sitePage = useTablePage()
-  const collaboratorPage = useTablePage()
   const data = allotments.data
   const bySubject = useMemo(
     () => new Map((data?.allotments ?? []).map((row) => [row.subject, row])),
@@ -159,10 +175,30 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
   const siteName = (hostId: string | null) =>
     data.hosts.find((host) => host.hostId === hostId)?.name ?? hostId ?? ''
   const collaborators = data.allotments.filter((row) => row.scope === 'collab')
-  const teamShown = teamPage.slice(team)
-  const sitesShown = sitePage.slice(data.hosts)
-  const collaboratorsShown = collaboratorPage.slice(collaborators)
   const restriction = bySubject.get(AI_ALLOTMENT_ORG_SUBJECT)
+  /*
+   * Each list pages, sorts and searches on its own, and a selection is kept
+   * by member and site id rather than by row, so it survives a page change.
+   */
+  const teamRows: MemberRow[] = team.map((member) => ({
+    $id: member.uid,
+    subject: `member:${member.uid}`,
+    allotment: bySubject.get(`member:${member.uid}`),
+    member,
+  }))
+  const siteRows: SiteRow[] = data.hosts.map((host) => ({
+    $id: host.hostId,
+    subject: `host:${host.hostId}`,
+    allotment: bySubject.get(`host:${host.hostId}`),
+    host,
+  }))
+  const collaboratorRows: CollaboratorRow[] = collaborators.map((row) => ({
+    $id: row.subject,
+    subject: row.subject,
+    allotment: row,
+    name: nameOf(row.uid),
+    site: siteName(row.hostId),
+  }))
 
   const editSubjects = (subjects: string[], title: string, description: string) => {
     const rows = subjects.map((subject) => bySubject.get(subject))
@@ -212,8 +248,48 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
       remove: editing.kind === 'restriction' ? [AI_ALLOTMENT_ORG_SUBJECT] : editing.subjects,
     })
   }
-  const toggle = (list: string[], set: (next: string[]) => void, value: string) =>
-    set(list.includes(value) ? list.filter((entry) => entry !== value) : [...list, value])
+  const editMember = (row: MemberRow) =>
+    editSubjects([row.subject], `AI allotment — ${row.member.name}`, 'Counts what this person draws across every site.')
+  const editSite = (row: SiteRow) =>
+    editSubjects([row.subject], `AI allotment — ${row.host.name}`, 'Counts what everyone draws on the site, together.')
+  const editCollaborator = (row: CollaboratorRow) =>
+    editSubjects(
+      [row.subject],
+      `AI allotment — ${row.name} on ${row.site}`,
+      'Counts what this collaborator draws on this site.',
+    )
+  /** The one action a row has: set its allotment, or edit the one it has. */
+  const editColumn = <Row extends AllotmentListRow>(label: (row: Row) => string, edit: (row: Row) => void) =>
+    listActionsColumn((row: Row) => (
+      <ListRowActions
+        label={label(row)}
+        quick={{
+          icon: mdiPencilOutline.path,
+          label: row.allotment ? 'Edit allotment' : 'Set allotment',
+          onClick: () => edit(row),
+        }}
+        items={[]}
+      />
+    ))
+
+  const teamColumns: GridColDef<MemberRow>[] = [
+    { field: 'name', headerName: 'Member', flex: 1, minWidth: 180, valueGetter: (_value, row) => row.member.name },
+    creditsColumn<MemberRow>((row) => row.member.credits),
+    allotmentColumn<MemberRow>(),
+    ...(canEdit ? [editColumn<MemberRow>((row) => row.member.name, editMember)] : []),
+  ]
+  const siteColumns: GridColDef<SiteRow>[] = [
+    { field: 'name', headerName: 'Site', flex: 1, minWidth: 180, valueGetter: (_value, row) => row.host.name },
+    creditsColumn<SiteRow>((row) => row.host.credits),
+    allotmentColumn<SiteRow>(),
+    ...(canEdit ? [editColumn<SiteRow>((row) => row.host.name, editSite)] : []),
+  ]
+  const collaboratorColumns: GridColDef<CollaboratorRow>[] = [
+    { field: 'name', headerName: 'Collaborator', flex: 1, minWidth: 180 },
+    { field: 'site', headerName: 'Site', flex: 1, minWidth: 160 },
+    allotmentColumn<CollaboratorRow>(),
+    ...(canEdit ? [editColumn<CollaboratorRow>((row) => `${row.name} on ${row.site}`, editCollaborator)] : []),
+  ]
 
   return (
     <Stack spacing={2}>
@@ -243,59 +319,15 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
           </Button>
         ) : null}
       </Stack>
-      <Table size="small" aria-label="Team members' AI allotments">
-        <TableHead>
-          <TableRow>
-            {canEdit ? <TableCell padding="checkbox" /> : null}
-            <TableCell>{'Member'}</TableCell>
-            <TableCell align="right">{'Credits this month'}</TableCell>
-            <TableCell>{'Allotment'}</TableCell>
-            {canEdit ? <TableCell /> : null}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {teamShown.rows.map((member) => {
-            const subject = `member:${member.uid}`
-            const row = bySubject.get(subject)
-            return (
-              <TableRow key={member.uid} hover>
-                {canEdit ? (
-                  <TableCell padding="checkbox">
-                    <Checkbox
-                      size="small"
-                      checked={members.includes(member.uid)}
-                      onChange={() => toggle(members, setMembers, member.uid)}
-                      slotProps={{ input: { 'aria-label': `Select ${member.name}` } }}
-                    />
-                  </TableCell>
-                ) : null}
-                <TableCell>{member.name}</TableCell>
-                <TableCell align="right">{member.credits.toLocaleString()}</TableCell>
-                <TableCell sx={{ color: aiAllotmentTone(row) }}>{aiAllotmentSummary(row)}</TableCell>
-                {canEdit ? (
-                  <TableCell align="right">
-                    <Button
-                      size="small"
-                      onClick={() =>
-                        editSubjects([subject], `AI allotment — ${member.name}`, 'Counts what this person draws across every site.')
-                      }
-                    >
-                      {row ? 'Edit' : 'Set'}
-                    </Button>
-                  </TableCell>
-                ) : null}
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
-      <ListPagination
-        page={teamShown.page}
-        pageSize={teamPage.pageSize}
-        rowCount={teamShown.rows.length}
-        count={team.length}
-        onPageChange={teamPage.setPage}
-        onPageSizeChange={teamPage.setPageSize}
+      <ListTable
+        aria-label="Team members' AI allotments"
+        rows={teamRows}
+        columns={teamColumns}
+        rowHeight={TABLE_ROW_HEIGHT}
+        noRowsLabel="No team members"
+        {...(canEdit
+          ? { selectable: { selected: members, onChange: setMembers }, onOpen: (_id: string, row: MemberRow) => editMember(row) }
+          : {})}
       />
 
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
@@ -330,106 +362,26 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
           </>
         ) : null}
       </Stack>
-      <Table size="small" aria-label="Sites' AI allotments">
-        <TableHead>
-          <TableRow>
-            {canEdit ? <TableCell padding="checkbox" /> : null}
-            <TableCell>{'Site'}</TableCell>
-            <TableCell align="right">{'Credits this month'}</TableCell>
-            <TableCell>{'Allotment'}</TableCell>
-            {canEdit ? <TableCell /> : null}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {sitesShown.rows.map((host) => {
-            const subject = `host:${host.hostId}`
-            const row = bySubject.get(subject)
-            return (
-              <TableRow key={host.hostId} hover>
-                {canEdit ? (
-                  <TableCell padding="checkbox">
-                    <Checkbox
-                      size="small"
-                      checked={sites.includes(host.hostId)}
-                      onChange={() => toggle(sites, setSites, host.hostId)}
-                      slotProps={{ input: { 'aria-label': `Select ${host.name}` } }}
-                    />
-                  </TableCell>
-                ) : null}
-                <TableCell>{host.name}</TableCell>
-                <TableCell align="right">{host.credits.toLocaleString()}</TableCell>
-                <TableCell sx={{ color: aiAllotmentTone(row) }}>{aiAllotmentSummary(row)}</TableCell>
-                {canEdit ? (
-                  <TableCell align="right">
-                    <Button
-                      size="small"
-                      onClick={() =>
-                        editSubjects([subject], `AI allotment — ${host.name}`, 'Counts what everyone draws on the site, together.')
-                      }
-                    >
-                      {row ? 'Edit' : 'Set'}
-                    </Button>
-                  </TableCell>
-                ) : null}
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
-      <ListPagination
-        page={sitesShown.page}
-        pageSize={sitePage.pageSize}
-        rowCount={sitesShown.rows.length}
-        count={data.hosts.length}
-        onPageChange={sitePage.setPage}
-        onPageSizeChange={sitePage.setPageSize}
+      <ListTable
+        aria-label="Sites' AI allotments"
+        rows={siteRows}
+        columns={siteColumns}
+        rowHeight={TABLE_ROW_HEIGHT}
+        noRowsLabel="No sites"
+        {...(canEdit
+          ? { selectable: { selected: sites, onChange: setSites }, onOpen: (_id: string, row: SiteRow) => editSite(row) }
+          : {})}
       />
 
       {collaborators.length ? (
         <>
           <Typography variant="subtitle2">{'Site collaborators'}</Typography>
-          <Table size="small" aria-label="Site collaborators' AI allotments">
-            <TableHead>
-              <TableRow>
-                <TableCell>{'Collaborator'}</TableCell>
-                <TableCell>{'Site'}</TableCell>
-                <TableCell>{'Allotment'}</TableCell>
-                {canEdit ? <TableCell /> : null}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {collaboratorsShown.rows.map((row) => (
-                <TableRow key={row.subject} hover>
-                  <TableCell>{nameOf(row.uid)}</TableCell>
-                  <TableCell>{siteName(row.hostId)}</TableCell>
-                  <TableCell sx={{ color: aiAllotmentTone(row) }}>{aiAllotmentSummary(row)}</TableCell>
-                  {canEdit ? (
-                    <TableCell align="right">
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          editSubjects(
-                            [row.subject],
-                            `AI allotment — ${nameOf(row.uid)} on ${siteName(row.hostId)}`,
-                            'Counts what this collaborator draws on this site.',
-                          )
-                        }
-                      >
-                        {'Edit'}
-                      </Button>
-                    </TableCell>
-                  ) : null}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <ListPagination
-            page={collaboratorsShown.page}
-            pageSize={collaboratorPage.pageSize}
-            rowCount={collaboratorsShown.rows.length}
-            count={collaborators.length}
-            onPageChange={collaboratorPage.setPage}
-            onPageSizeChange={collaboratorPage.setPageSize}
+          <ListTable
+            aria-label="Site collaborators' AI allotments"
+            rows={collaboratorRows}
+            columns={collaboratorColumns}
+            rowHeight={TABLE_ROW_HEIGHT}
+            {...(canEdit ? { onOpen: (_id: string, row: CollaboratorRow) => editCollaborator(row) } : {})}
           />
         </>
       ) : null}

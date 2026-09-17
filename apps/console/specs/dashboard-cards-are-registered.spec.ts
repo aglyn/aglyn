@@ -128,6 +128,14 @@ describe('the dashboard lays its capability cards out as one row', () => {
     expect(capabilityGrid()).toContain("alignItems: 'start'")
   })
 
+  it('draws no row when every card in it rendered nothing (AGL-3058)', () => {
+    // A glance card with nothing to say renders nothing. The grid is a child
+    // of the page's Stack, which spaces both sides of it, so an empty grid
+    // left in place is a zero-height row with a gap above and below: 48px
+    // under Traffic in Chrome, against 24px with the grid hidden.
+    expect(capabilityGrid()).toContain("'&:empty': { display: 'none' }")
+  })
+
   it('THE CONTROL: the slice really is the grid, and it ends', () => {
     const source = read(DASHBOARD)
     expect(source.indexOf("display: 'grid'")).toBeGreaterThan(0)

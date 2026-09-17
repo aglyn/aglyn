@@ -47,9 +47,9 @@ import { AI_TEXT_LIMITS } from '../runtime/ai-palette'
  * dialog does not compile here until it is offered or given a reason.
  *
  * What is offered is what a generated element can carry and a brief can
- * fill: copy (Text, Long text), a picture (Image), a link (Link), a number
- * (Number), a switch or a part's visibility (Yes / no), and a setting with
- * fixed answers (Choice).
+ * fill: copy (Text, Long text), a picture (Image), a link (Link), an icon
+ * the site owner picks (Icon), a number (Number), a switch or a part's
+ * visibility (Yes / no), and a setting with fixed answers (Choice).
  *
  * ── A declaration as the dialog saves one ────────────────────────────────
  *
@@ -60,7 +60,7 @@ import { AI_TEXT_LIMITS } from '../runtime/ai-palette'
  * quotes by its path.
  */
 
-type OfferedKind = 'text' | 'richText' | 'image' | 'href' | 'number' | 'boolean' | 'choice'
+type OfferedKind = 'text' | 'richText' | 'image' | 'href' | 'icon' | 'number' | 'boolean' | 'choice'
 
 const STYLE_REASON =
   'Styling comes from the theme and the component’s own styles (rules 5 and 12); a page restyles one placement with an override, not a property.'
@@ -81,7 +81,6 @@ export const AI_COMPONENT_PROP_KINDS_NOT_OFFERED: Readonly<
     'Long text binds to the same formatted-document fields, with a default a brief can write.',
   [FieldComponentType.DATA_TABLE]:
     'A table is rows and columns a page fills in, not one value a brief describes.',
-  icon: 'An Icon default is stored with the drawing its picker supplies, which a model cannot supply.',
   [FieldComponentType.SLIDER]:
     'Number binds to every slider, without the range settings a Slider property must declare.',
   [FieldComponentType.CHECKBOX]:
@@ -129,11 +128,20 @@ export const AI_COMPONENT_PROP_KINDS: readonly OfferedKind[] = (
 
 export type AiComponentPropKind = OfferedKind
 
+/**
+ * The kinds a property proposed for a section already on a page may take
+ * (AGL-3054): every offered kind but an Icon. That door reads each default off
+ * the live field it binds, and an icon's default is drawn from a path the
+ * picker stores beside its id, which the field it reads does not carry.
+ */
+export const AI_COMPONENT_SELECTION_PROP_KINDS: readonly AiComponentPropKind[] =
+  AI_COMPONENT_PROP_KINDS.filter((type) => type !== 'icon')
+
 /** The kinds as a model reads them: the stored type and the name a page reads. */
-export function aiComponentPropKindWords(): string {
-  return AI_COMPONENT_PROP_KINDS.map(
-    (type) => `${type} (${REUSABLE_PROP_KINDS[type].label})`,
-  ).join(', ')
+export function aiComponentPropKindWords(
+  kinds: readonly AiComponentPropKind[] = AI_COMPONENT_PROP_KINDS,
+): string {
+  return kinds.map((type) => `${type} (${REUSABLE_PROP_KINDS[type].label})`).join(', ')
 }
 
 export const AI_COMPONENT_TOOL_NAME = 'submit_component'
@@ -191,7 +199,7 @@ export function aiComponentTool(): AiTool {
               defaultValue: {
                 type: 'string',
                 description:
-                  'What the component shows until a page sets it: copy for text and richText, a screen id from the site inventory or "" for href, "" for image, a number for number, "true" or "false" for boolean, one answer’s value for choice.',
+                  'What the component shows until a page sets it: copy for text and richText, a screen id from the site inventory or "" for href, "" for image and icon, a number for number, "true" or "false" for boolean, one answer’s value for choice.',
               },
               options: {
                 type: 'array',
@@ -265,6 +273,10 @@ function readDefault(
       return value.length > AI_TEXT_LIMITS.body
         ? { error: `runs past ${AI_TEXT_LIMITS.body} characters`, rule: 1 }
         : { value }
+    case 'icon':
+      // The picker stores an icon with the drawing a model cannot name, so
+      // the site owner picks it where a page places the component.
+      return { error: 'is an icon, which the site owner picks; leave it ""', rule: 1 }
     case 'image':
       if (/^https?:\/\//i.test(value)) {
         return { error: 'links a picture from another website; leave it empty for an upload', rule: 9 }

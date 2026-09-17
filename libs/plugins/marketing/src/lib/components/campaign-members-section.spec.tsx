@@ -52,7 +52,7 @@
  * membership query already returns, so no new listener may appear.
  */
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 
 /** Every query the section built, in order, as a readable description. */
 const queries: string[] = []
@@ -157,6 +157,30 @@ describe('finding the records that name this campaign', () => {
 
     expect(screen.getByText('Spring landing page')).toBeTruthy()
     expect(screen.getByText('Newsletter signup')).toBeTruthy()
+  })
+
+  it('lists each kind in the shared grid, which scrolls its own columns (AGL-3045)', () => {
+    rows.set(queryKey('screens'), [
+      { $id: 'landing', displayName: 'Spring landing page', versionId: 'v1' },
+    ])
+    rows.set(queryKey('forms'), [
+      { $id: 'signup', displayName: 'Newsletter signup' },
+    ])
+
+    const { container } = draw()
+
+    expect(container.querySelectorAll('table')).toHaveLength(0)
+    const grids = screen.getAllByRole('grid')
+    expect(grids).toHaveLength(2)
+    const [screensGrid, formsGrid] = grids
+    expect(within(screensGrid).getByText('Spring landing page')).toBeTruthy()
+    // Only the forms carry their own counters, so only they grow the columns.
+    const headers = (grid: HTMLElement) =>
+      within(grid)
+        .getAllByRole('columnheader')
+        .map((cell) => cell.textContent)
+    expect(headers(screensGrid)).toEqual(['Name'])
+    expect(headers(formsGrid)).toEqual(['Name', 'Views', 'Started', 'Submissions', 'Leads'])
   })
 
   it('links a member to its own page', () => {

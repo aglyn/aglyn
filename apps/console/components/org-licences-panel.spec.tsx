@@ -33,7 +33,7 @@
  * "buy it again".
  */
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import OrgLicencesPanel from './org-licences-panel.component'
 
 interface FakeRead {
@@ -178,5 +178,35 @@ describe('OrgLicencesPanel presents its empty tab like the rest of the console',
 
     expect(screen.queryByText('$25.00')).toBeNull()
     expect(screen.getByText(ORG_ZERO_STATE)).toBeTruthy()
+  })
+
+  it('lists both in the shared grid, which scrolls its own columns inside the card (AGL-3045)', () => {
+    const { container } = renderPanel(
+      {
+        data: [
+          { $id: 'p1', listingId: 'l1', buyerUid: 'u1', buyerOrgId: 'org1', amountCents: 2500, taxCents: 500 },
+        ],
+        status: 'success',
+        serverDenied: false,
+      },
+      {
+        data: [
+          { $id: 'p1', listingId: 'l1', buyerUid: 'u1', buyerOrgId: 'org1', amountCents: 2500 },
+          { $id: 'p2', listingId: 'l2', buyerUid: 'u1', buyerOrgId: '', amountCents: 900 },
+        ],
+        status: 'success',
+        serverDenied: false,
+      },
+    )
+
+    expect(container.querySelectorAll('table')).toHaveLength(0)
+    const held = screen.getByRole('grid', { name: 'Licenses this workspace holds' })
+    const mine = screen.getByRole('grid', { name: 'Licenses you bought' })
+    // What was paid, before tax, and who paid it.
+    expect(within(held).getByText('$20.00')).toBeTruthy()
+    expect(within(held).getByText('You')).toBeTruthy()
+    // Which workspace each purchase licensed, and the one that names none.
+    expect(within(mine).getByText('This workspace')).toBeTruthy()
+    expect(within(mine).getByText('Every workspace you belong to')).toBeTruthy()
   })
 })

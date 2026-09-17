@@ -70,7 +70,9 @@
             "promise-body": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "We answer the phone, we arrive when we said we would, and we photograph every repair so you can see the work without climbing a ladder." } },
             "words": { "componentId": "section", "props": { "element": "section", "ariaLabel": "What customers say" }, "nodes": ["words-title", "words-row"] },
             "words-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What customers say" } },
-            "words-row": { "componentId": "muiStack", "props": { "direction": "row", "flexWrap": "wrap" }, "sx": { "gap": 3 }, "nodes": ["quote-dana", "quote-luis"] },
+            "words-row": { "componentId": "muiGrid", "props": { "container": true, "spacing": 3 }, "nodes": ["cell-dana", "cell-luis"] },
+            "cell-dana": { "componentId": "muiGrid", "props": { "size": "xs:12 md:6" }, "nodes": ["quote-dana"] },
+            "cell-luis": { "componentId": "muiGrid", "props": { "size": "xs:12 md:6" }, "nodes": ["quote-luis"] },
             "quote-dana": { "componentId": "reusableInstance", "props": { "refId": "cmp-testimonial", "propValues": { "quote": "They found the leak two other companies missed.", "name": "Dana, Harbor Point" } } },
             "quote-luis": { "componentId": "reusableInstance", "props": { "refId": "cmp-testimonial", "propValues": { "quote": "On time, tidy, and the photos made the invoice easy to trust.", "name": "Luis, Old Mill Road" } } }
           }
@@ -81,6 +83,32 @@
     }
   ],
   "controls": [
+    {
+      "why": "The customer quotes written once with \"repeat\", on a site that keeps reusable components, where a repeated item is placed as instances of its component (rule 1, AGL-3053).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro", "words"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "intro-body"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Meet the crew" } },
+            "intro-body": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Six roofers who know Harbor County roofs." } },
+            "words": { "componentId": "section", "props": { "element": "section" }, "nodes": ["words-title", "words-row"] },
+            "words-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What customers say" } },
+            "words-row": { "componentId": "muiStack", "props": { "direction": "row", "flexWrap": "wrap" }, "sx": { "gap": 3 }, "nodes": ["quote"] },
+            "quote": {
+              "componentId": "reusableInstance",
+              "props": { "refId": "cmp-testimonial", "propValues": { "quote": "{{1}}", "name": "{{2}}" } },
+              "repeat": [
+                ["They found the leak two other companies missed.", "Dana, Harbor Point"],
+                ["On time, tidy, and the photos made the invoice easy to trust.", "Luis, Old Mill Road"]
+              ]
+            }
+          }
+        }
+      },
+      "fails": ["readable"]
+    },
     {
       "why": "The page carries its own app bar, a copy of the site header the layout already has (rule 2).",
       "answer": {
@@ -98,6 +126,26 @@
         }
       },
       "fails": ["rules"]
+    },
+    {
+      "why": "The customer quotes in a Stack that is a row at every width, which no rule of the tree refuses: on a phone the two quotes keep half its width each, as they do on a desktop (rule 12, measured at the switcher's widths, AGL-3020).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro", "words"] },
+            "intro": { "componentId": "section", "props": { "element": "section", "ariaLabel": "Meet the crew" }, "nodes": ["title", "intro-body"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Meet the crew" } },
+            "intro-body": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Six roofers, most with more than ten years on Harbor County roofs." } },
+            "words": { "componentId": "section", "props": { "element": "section", "ariaLabel": "What customers say" }, "nodes": ["words-title", "words-row"] },
+            "words-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What customers say" } },
+            "words-row": { "componentId": "muiStack", "props": { "direction": "row", "flexWrap": "wrap" }, "sx": { "gap": 3 }, "nodes": ["quote-dana", "quote-luis"] },
+            "quote-dana": { "componentId": "reusableInstance", "props": { "refId": "cmp-testimonial", "propValues": { "quote": "They found the leak two other companies missed.", "name": "Dana, Harbor Point" } } },
+            "quote-luis": { "componentId": "reusableInstance", "props": { "refId": "cmp-testimonial", "propValues": { "quote": "On time, tidy, and the photos made the invoice easy to trust.", "name": "Luis, Old Mill Road" } } }
+          }
+        }
+      },
+      "fails": ["responsive"]
     }
   ]
 }

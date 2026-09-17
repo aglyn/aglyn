@@ -80,7 +80,7 @@ const STARTER_WITH_AI = {
 } as any
 
 /** What `/api/ai/billing/credits` answers, or `null` for no band. */
-let mockCredits: { used: number; limit: number; remaining: number } | null
+let mockCredits: { used: number; limit: number | null; remaining: number | null } | null
 
 beforeEach(() => {
   mockCredits = { used: 4_500, limit: 7_500, remaining: 3_000 }
@@ -171,6 +171,56 @@ describe('a workspace with a band can see how much of it is left', () => {
  * add-ons card — on the Billing overview, because these meters render on the
  * Usage section where a bare hash resolves to nothing.
  */
+describe('an uncapped staff comp has a meter and no band (AGL-3049)', () => {
+  const INTERNAL = {
+    $id: 'org-1',
+    plan: 'enterprise',
+    enterprise: true,
+    entitlements: {
+      planComp: {
+        plan: 'enterprise',
+        uncapped: true,
+        reason: 'other',
+        note: 'Internal workspace',
+        grantedBy: 'staff-1',
+      },
+    },
+  } as any
+
+  it('reads the credits drawn against Unlimited, with no bar and no Infinity', async () => {
+    // The route's answer for this workspace, as JSON carries it: the band's
+    // absence is `null`, never the `Infinity` the entitlement resolves to.
+    mockCredits = JSON.parse(
+      JSON.stringify({ used: 250_000, limit: null, remaining: null }),
+    )
+    render(<AiCreditsCard orgId="org-1" org={INTERNAL} />)
+    await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
+    const row = screen.getByText(METER).parentElement?.parentElement
+    await waitFor(() => expect(row?.textContent).toContain('250000 / Unlimited'))
+    expect(row?.textContent).not.toMatch(/Infinity|null|NaN/)
+    expect(row?.querySelector('[role="progressbar"]')).toBeNull()
+  })
+
+  it('the control: the same workspace with the comp capped meters against Enterprise’s band', async () => {
+    mockCredits = { used: 1_000, limit: 116_000, remaining: 115_000 }
+    const capped = {
+      ...INTERNAL,
+      entitlements: {
+        planComp: { ...INTERNAL.entitlements.planComp, uncapped: false },
+      },
+    }
+    render(<AiCreditsCard orgId="org-1" org={capped} />)
+    await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
+    const row = screen.getByText(METER).parentElement?.parentElement
+    await waitFor(() =>
+      expect(row?.textContent).toContain(
+        `1000 / ${PLAN_ENTITLEMENTS.enterprise.assistCreditsPerMonth}`,
+      ),
+    )
+    expect(row?.querySelector('[role="progressbar"]')).not.toBeNull()
+  })
+})
+
 describe('the Aglyn AI add-on widens the one meter (AGL-2899)', () => {
   it('without the add-on: the plan band, and the Add Aglyn AI link', async () => {
     mockCredits = { used: 1_000, limit: 2_750, remaining: 1_750 }

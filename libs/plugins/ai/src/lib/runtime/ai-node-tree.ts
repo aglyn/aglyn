@@ -306,6 +306,8 @@ const STRIPPED_NODE_KEYS = [
 ] as const
 
 const SCREEN_ID = /^[A-Za-z0-9_-]{1,64}$/
+/** The field an icon is picked with; its value carries a drawing no model can write. */
+const ICON_PICKER_FIELD = 'icon-picker'
 const MAX_SX_KEYS = 40
 /** A string prop with no role of its own — a color, a CSS length, an icon id. */
 const PLAIN_STRING_MAX = 500
@@ -470,6 +472,13 @@ function sanitizeString(
   let value = raw.trim()
   if (HOSTILE_TEXT.test(value)) {
     repairs.push(`${nodeId}.${name} carried markup or script; dropped`)
+    return undefined
+  }
+  // An icon is drawn from the path its picker stores beside the id, which a
+  // model can never supply, so an icon a model names draws nothing where the
+  // page is published (AGL-3054). The site owner picks it.
+  if (entry.propFields[name] === ICON_PICKER_FIELD) {
+    repairs.push(`${nodeId}.${name} is an icon, which the site owner picks from the library; dropped`)
     return undefined
   }
   const role = entry.propRoles[name]
@@ -685,6 +694,13 @@ function instancePropValue(
       repairs.push(`${nodeId}.propValues.${name} is not a boolean; dropped`)
     }
     return coerced
+  }
+  if (type === 'icon') {
+    // A page cannot fill an icon: the pick is an id and the path drawn from
+    // it, and a word in its place draws nothing (AGL-3054). The property is
+    // left for the site owner to pick.
+    repairs.push(`${nodeId}.propValues.${name} is an icon, which the site owner picks from the library; dropped`)
+    return undefined
   }
   if (typeof raw !== 'string' && typeof raw !== 'number' && typeof raw !== 'boolean') {
     repairs.push(`${nodeId}.propValues.${name} is not a value; dropped`)

@@ -24,6 +24,7 @@ import {
   mergeThemeOptions,
   ThemeProvider,
 } from '@aglyn/shared-ui-theme'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Accordion,
   AccordionDetails,
@@ -51,7 +52,6 @@ import {
   Stack,
   Switch,
   Tab,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -356,7 +356,7 @@ export function ThemePreview(props: ThemePreviewProps) {
               <ListItemText primary="Unselected list row" />
             </ListItemButton>
           </List>
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Column'}</TableCell>
@@ -373,7 +373,7 @@ export function ThemePreview(props: ThemePreviewProps) {
                 <TableCell align="right">{'34'}</TableCell>
               </TableRow>
             </TableBody>
-          </Table>
+          </ScrollTable>
           <Accordion disableGutters>
             <AccordionSummary>
               <Typography variant="body2">{'Accordion summary'}</Typography>

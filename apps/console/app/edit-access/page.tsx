@@ -48,6 +48,14 @@ import { Suspense, useEffect, useRef, useState } from 'react'
  * Deliberately no auto-redirect to /signin: the popup names the problem and
  * links there instead, so a signed-out visitor is never bounced through an
  * auth flow they did not ask for by a page they may not recognize.
+ *
+ * The popup depends on keeping its opener, which is why the console
+ * middleware exempts this one page from its COOP header (AGL-3046) — and
+ * why the page never closes itself. The SITE closes the popup once the
+ * token has arrived. A popup that closed only after a successful delivery
+ * would tell any page that opened it, for any hostId, whether this visitor
+ * can edit that host: `popup.closed` is readable across origins. Staying
+ * open in every outcome leaves it nothing to read.
  */
 
 type Phase =
@@ -90,6 +98,14 @@ function EditAccessBody() {
     // Silent mode only makes sense framed; a top-level visit with the param
     // has no parent to deliver to and gets the visible flow's copy instead.
     if (silent && window.parent === window) {
+      setPhase('missing-params')
+      return
+    }
+    // The popup's twin: with no opener there is nobody to deliver to, so
+    // nothing is minted. Reporting "Connected" here is exactly how a severed
+    // opener hid (AGL-3046) — the token went nowhere and the page said it
+    // had arrived.
+    if (!silent && !window.opener) {
       setPhase('missing-params')
       return
     }
@@ -141,8 +157,9 @@ function EditAccessBody() {
           },
           targetOrigin,
         )
+        // No self-close: the site closes the popup on delivery. See the
+        // module comment for why success must not be what closes it.
         setPhase('sent')
-        if (!silent) window.setTimeout(() => window.close(), 1200)
       } catch {
         setPhase('error')
       }
@@ -186,7 +203,7 @@ function EditAccessBody() {
     },
     sent: {
       title: 'Connected',
-      body: 'Edit access confirmed — you can head back to the site. This window closes itself.',
+      body: 'Edit access confirmed — head back to the site. If this window stays open, you can close it.',
     },
     error: {
       title: 'Something went wrong',

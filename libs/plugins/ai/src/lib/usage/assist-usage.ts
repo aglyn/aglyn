@@ -57,11 +57,8 @@ import {
   type AiAllotmentGate,
   type AiAllotmentRequestSubject,
 } from './ai-allotments'
-import {
-  assistOperatorCeilingUsd,
-  assistOrgMonthlyCostLimitUsd,
-} from '@aglyn/aglyn/app-utils/usage-budget'
-import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import { isUncappedPlanComp } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { assistMonthlyCeilingUsd } from './assist-ceiling'
 import { estimateAiBilledUsd, estimateAiProviderCostUsd } from '../providers/catalog'
 import { recordAssistRefusal } from './assist-refusals'
 import {
@@ -82,6 +79,11 @@ import {
   aiUsageKindFromRoute,
   type AiUsageKind,
 } from '../model/ai-usage-by-user'
+
+// The ceiling composition lives beside the one other reader it has, the staff
+// refusal alert, in a module that writes nothing; the reservation's importers
+// keep reaching it here.
+export { assistMonthlyCeilingUsd } from './assist-ceiling'
 
 /**
  * Aglyn Assist metering + the data loop (AGL-1860, phase 1).
@@ -228,58 +230,6 @@ export function assistEntitledMonthlyLimit(): number {
   const raw = process.env.ASSIST_ENTITLED_MONTHLY_LIMIT
   const parsed = raw ? Number(raw) : Number.NaN
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1000
-}
-
-/**
- * The ceiling one reservation is actually measured against, given the org's
- * plan band.
- *
- * ## Why the repo default must not bind an org that has a band
- *
- * `ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD` (in `usage-budget.ts`, beside
- * the alert that announces the ceiling) is $40, which was sized as a
- * runaway guard back when every org's assist spend was bounded by a message
- * cap. It is BELOW what Agency and Enterprise include, so applying it to a
- * plan band would refuse those workspaces partway through capacity they are
- * paying for. The rule is not about which tiers happen to clear $40 today: a
- * band that is sold is a product limit, and a default nobody typed is not
- * allowed to undercut one at any size.
- *
- * ## Why an operator's explicit figure still does
- *
- * A self-hoster paying their own provider bill, or an operator responding to
- * an incident, sets `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD` on purpose. The lower
- * of the two wins there, because that is what setting it means.
- *
- * `off` removes the operator's ceiling and does NOT remove a plan band: the
- * word turns off a backstop, and the band is not one.
- *
- * An org with no band (`budgetUsd === null` — Free, Starter, and any org
- * whose plan sells no assist) is unchanged in every case: it gets exactly the
- * ceiling it got before, default and all.
- *
- * ## When the band is a line rather than a wall (AGL-2653)
- *
- * `bandRefuses` is `assistBandRefuses(org)`: false on a plan that sells
- * credits past its band unless the org's `assistOverage.hardCap` is on. A
- * band that does not refuse is not a ceiling, so it drops out of the
- * composition and the operator's explicit figure is the only thing left that
- * can bind — the repo default stays off, for the reason above, and `off`
- * leaves nothing. The message cap is still there either way, so a workspace
- * buying overage is bounded by messages a month rather than by nothing; the
- * overage it buys is priced by `report-usage` at the plan's rate.
- */
-export function assistMonthlyCeilingUsd(
-  budgetUsd: number | null,
-  bandRefuses = true,
-): number | null {
-  const configured = process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
-  if (budgetUsd === null) return assistOrgMonthlyCostLimitUsd(configured)
-  const operator = assistOperatorCeilingUsd(configured)
-  if (!bandRefuses) return typeof operator === 'number' ? operator : null
-  return typeof operator === 'number'
-    ? Math.min(budgetUsd, operator)
-    : budgetUsd
 }
 
 export interface AssistTokenUsage {
@@ -654,7 +604,12 @@ async function reserveInTransaction(
   // attempts.
   const budgetUsd = resolveAssistBudgetUsd(org)
   const bandRefuses = assistBandRefuses(org)
-  const costLimitUsd = assistMonthlyCeilingUsd(budgetUsd, bandRefuses)
+  // An uncapped staff comp has no band and no backstop default (AGL-3049).
+  const costLimitUsd = assistMonthlyCeilingUsd(
+    budgetUsd,
+    bandRefuses,
+    isUncappedPlanComp(org),
+  )
   // The ceiling IS the band when the band refuses and nothing lower undercut
   // it. That is the refusal the surface has to attribute to the org's own
   // switch (or to a plan that sells no overage); a lower operator figure is

@@ -29,11 +29,20 @@ export const AI_JOB_PAGE_SECTION_MAX_TOKENS = 2_000
 
 /**
  * The ceiling a section's answer asks on the tier the page step is served
- * from (AGL-2907): twenty-three elements at `AI_JOB_PAGE_TOKENS_PER_ELEMENT`,
- * the size every golden section fits (`ai-job-page-evals.spec.ts`) and a Free
- * page's credits are counted at (`ai-job-free-page.spec.ts`). A faster tier
- * asks more in the same time, up to `AI_JOB_PAGE_SECTION_MAX_TOKENS`, and a
- * slower one less.
+ * from (AGL-2907): fifteen elements at `AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT`
+ * (AGL-3042), the size every golden section and a two-person introduction fit
+ * (`ai-job-page-evals.spec.ts`) and a Free page's credits are counted at
+ * (`ai-job-free-page.spec.ts`). A faster tier asks more in the same time, up
+ * to `AI_JOB_PAGE_SECTION_MAX_TOKENS`, and a slower one less.
+ *
+ * A Free page fits its wall at this ceiling with little to spare, so the
+ * ceiling does not move to make a section fit: past 1,074 tokens, the Free
+ * page that builds its layout first leaves no more of the wall than its
+ * largest pass spends, which is the room a re-asked section needs
+ * (`ai-job-free-page.spec.ts`). A section that runs past it is asked for
+ * smaller instead (AGL-3042), and on a workspace that keeps no reusable
+ * components a repeated item is written once, which is what lets a Free
+ * section of cards with real copy fit at all (AGL-3053).
  */
 export const AI_JOB_PAGE_SECTION_TOKENS = 1_050
 

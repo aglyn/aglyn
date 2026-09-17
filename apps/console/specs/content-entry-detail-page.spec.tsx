@@ -48,7 +48,7 @@
  * on an undefined org answers NO and would tell a paying Business org, during
  * its own loading window, that it lacks the feature it pays for.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 const mockUpdateDoc = jest.fn().mockResolvedValue(undefined)
@@ -90,6 +90,9 @@ const mockOrg = {
  * of them needs there to be two.
  */
 const mockCollections: Array<Record<string, unknown>> = []
+
+/** The site's authors; empty unless a suite puts one there. */
+const mockAuthors: Array<Record<string, unknown>> = []
 
 const mockEntries = {
   data: [
@@ -156,6 +159,10 @@ jest.mock('@aglyn/aglyn', () => ({
     '../../../libs/aglyn/src/lib/foundation/definitions/platform.types',
   ).HostEntityType,
   resolveMediaSrc: () => '',
+  // The author editor previews the author's page address from its slug.
+  urlSlugSegment: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/url-slug',
+  ).urlSlugSegment,
 }))
 
 jest.mock('@aglyn/shared-util-timestamp', () => ({
@@ -330,6 +337,9 @@ jest.mock('../hooks/use-firestore-collection', () => ({
     }
     if (name === 'collections') {
       return { data: mockCollections, status: 'success', fromCache: false }
+    }
+    if (name === 'authors') {
+      return { data: mockAuthors, status: 'success', fromCache: false }
     }
     return { data: [], status: 'success', fromCache: false }
   },
@@ -916,5 +926,34 @@ describe('the collection list addresses its entries (AGL-2498)', () => {
     fireEvent.click(screen.getByRole('option', { name: /Changelog/ }))
 
     expect(lastPushed()).toBe('/acme/hosts/shop/content/changelog')
+  })
+})
+
+describe('the Authors tab is a record list in the shared grid (AGL-3045)', () => {
+  afterEach(() => {
+    mockAuthors.length = 0
+  })
+
+  it('lists the site’s authors in the grid, and the row opens the author', () => {
+    mockAuthors.push({
+      $id: 'author-1',
+      name: 'Ada Lovelace',
+      slug: 'ada-lovelace',
+      jobTitle: 'Editor',
+    })
+    mockNav.search = '?tab=authors'
+
+    render(<List />)
+
+    const grid = screen.getByRole('grid', { name: 'Authors' })
+    const row = within(grid).getByText('Ada Lovelace').closest('[role="row"]') as HTMLElement
+    expect(within(row).getByText('Editor')).toBeTruthy()
+    // An author with no stored type publishes as an organization.
+    expect(within(row).getByText('Organization')).toBeTruthy()
+    // Editing and deleting live in the row's menu, not inline.
+    expect(within(row).getByRole('button', { name: /More actions/i })).toBeTruthy()
+
+    fireEvent.click(within(row).getByText('Ada Lovelace'))
+    expect(screen.getByRole('dialog', { name: 'Edit author' })).toBeTruthy()
   })
 })

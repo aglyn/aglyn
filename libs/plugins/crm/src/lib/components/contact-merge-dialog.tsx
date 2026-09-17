@@ -26,6 +26,7 @@ import {
 } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
   Button,
@@ -42,10 +43,8 @@ import {
   Radio,
   RadioGroup,
   Stack,
-  Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -367,37 +366,35 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
                   'address becomes an alternate on the kept record, so a later capture ' +
                   'on it lands here — and the other record is deleted.'}
               </Typography>
-              <TableContainer sx={{ overflowX: 'auto' }}>
-                <Table size="small" aria-label="What the merge keeps">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>{'Field'}</TableCell>
-                      <TableCell>{'Kept'}</TableCell>
-                      <TableCell>{'Merged'}</TableCell>
-                      <TableCell>{'After'}</TableCell>
+              <ScrollTable size="small" aria-label="What the merge keeps">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>{'Field'}</TableCell>
+                    <TableCell>{'Kept'}</TableCell>
+                    <TableCell>{'Merged'}</TableCell>
+                    <TableCell>{'After'}</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {rows.map((row) => (
+                    <TableRow key={row.key}>
+                      <TableCell component="th" scope="row">
+                        {row.label}
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: 'pre-wrap' }}>{row.survivor}</TableCell>
+                      <TableCell sx={{ whiteSpace: 'pre-wrap' }}>{row.merged}</TableCell>
+                      <TableCell
+                        sx={{
+                          whiteSpace: 'pre-wrap',
+                          fontWeight: row.from === 'merged' || row.from === 'both' ? 600 : undefined,
+                        }}
+                      >
+                        {row.result}
+                      </TableCell>
                     </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {rows.map((row) => (
-                      <TableRow key={row.key}>
-                        <TableCell component="th" scope="row">
-                          {row.label}
-                        </TableCell>
-                        <TableCell sx={{ whiteSpace: 'pre-wrap' }}>{row.survivor}</TableCell>
-                        <TableCell sx={{ whiteSpace: 'pre-wrap' }}>{row.merged}</TableCell>
-                        <TableCell
-                          sx={{
-                            whiteSpace: 'pre-wrap',
-                            fontWeight: row.from === 'merged' || row.from === 'both' ? 600 : undefined,
-                          }}
-                        >
-                          {row.result}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                  ))}
+                </TableBody>
+              </ScrollTable>
               {!props.other ? (
                 <Button size="small" onClick={() => setOther(null)} sx={{ alignSelf: 'flex-start' }}>
                   {'Pick a different contact'}

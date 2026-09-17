@@ -62,9 +62,11 @@ import {
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { Container, HelpTip, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
 import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { useUser } from '@aglyn/tenant-feature-instance'
+import { useOrgDataScope, useUser } from '@aglyn/tenant-feature-instance'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import {
   Alert,
   AlertTitle,
@@ -75,7 +77,6 @@ import {
   LinearProgress,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -94,6 +95,7 @@ import {
 } from 'react'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { downloadTextFile } from '../model/contacts-csv'
+import { importColumns } from '../model/import-column-shapes'
 import { CrmSitePicker } from './crm-site-picker'
 
 /** A column's target: a standard field, or a custom one as `custom:<key>`. */
@@ -119,6 +121,12 @@ export interface CsvImportVocabulary<
 > {
   /** The drawer's title — "Import contacts from CSV". */
   title: string
+  /**
+   * What the import is called where the `importMapping` zone names it —
+   * `contacts`, `companies`, `deals`, `leads` (AGL-2917). Absent, the drawer
+   * hosts no zone.
+   */
+  collection?: string
   help: ComponentProps<typeof HelpTip>
   /**
    * What the site picker's answer decides, said under it at the
@@ -321,6 +329,40 @@ export function CsvImportDrawer<
     [mapping],
   )
 
+  /*
+   * The `importMapping` zone (AGL-2917), hosted through the shell's renderer:
+   * a widget there reads each column's header and shape, never a cell, and
+   * proposes a matching, which replaces the table's above for the preview to
+   * show. A target this import does not offer, or one a column before it
+   * already took, is dropped, as the table itself would refuse it.
+   */
+  const MappingSlot = useConsoleWidgetSlot()
+  const { orgId } = useOrgDataScope({ hostId: hostId ?? undefined, orgId: mount?.orgId })
+  const shapedColumns = useMemo(() => importColumns(columns, rows), [columns, rows])
+  const offeredTargets = useMemo(
+    () =>
+      new Set<string>([
+        ...vocabulary.fields,
+        ...(vocabulary.customFields ?? []).map((field) => customImportTarget(field.key)),
+      ]),
+    [vocabulary],
+  )
+  const proposeMapping = useCallback(
+    (proposed: Readonly<Record<number, string>>) => {
+      const taken = new Set<string>()
+      const next: CsvImportMapping<F> = {}
+      for (const [column, target] of Object.entries(proposed).sort(([a], [b]) => Number(a) - Number(b))) {
+        const index = Number(column)
+        if (!Number.isInteger(index) || index < 0 || index >= columns.length) continue
+        if (!offeredTargets.has(target) || taken.has(target)) continue
+        taken.add(target)
+        next[index] = target as CsvImportTarget<F>
+      }
+      setMapping(next)
+    },
+    [offeredTargets, columns.length],
+  )
+
   const handleMap = useCallback((index: number, target: string) => {
     setMapping((previous) => {
       const next: CsvImportMapping<F> = {}
@@ -508,6 +550,17 @@ export function CsvImportDrawer<
                   onMap={handleMap}
                 />
               ) : null}
+              {columns.length && MappingSlot && vocabulary.collection ? (
+                <MappingSlot
+                  slot="importMapping"
+                  hostId={hostId}
+                  orgId={orgId ?? undefined}
+                  collection={vocabulary.collection}
+                  columns={shapedColumns}
+                  mapping={mapping}
+                  proposeMapping={(proposed: Readonly<Record<number, string>>) => proposeMapping(proposed)}
+                />
+              ) : null}
               {columns.length > 0 && !requiredMapped ? (
                 <Alert severity="warning">{vocabulary.requiredWarning}</Alert>
               ) : null}
@@ -560,7 +613,7 @@ function ImportMappingTable<F extends string>(props: {
   return (
     <Stack spacing={1}>
       <Typography variant="subtitle2">{'Columns'}</Typography>
-      <Table size="small">
+      <ScrollTable size="small">
         <TableHead>
           <TableRow>
             <TableCell>{'Column'}</TableCell>
@@ -601,7 +654,7 @@ function ImportMappingTable<F extends string>(props: {
             </TableRow>
           ))}
         </TableBody>
-      </Table>
+      </ScrollTable>
     </Stack>
   )
 }
@@ -641,8 +694,8 @@ function ImportPreviewTable<F extends string>(props: {
       {unusable > 0 ? (
         <Alert severity="info">{vocabulary.unusableNotice(unusable, total)}</Alert>
       ) : null}
-      <Box sx={{ overflowX: 'auto' }}>
-        <Table size="small">
+      <Box>
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               {targets.map((target) => (
@@ -663,7 +716,7 @@ function ImportPreviewTable<F extends string>(props: {
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </ScrollTable>
       </Box>
     </Stack>
   )
@@ -708,7 +761,7 @@ function ImportResultPanel<F extends string, S extends ImportSkippedRow<string>>
         sx={{ borderRadius: 1 }}
       />
       {skippedByReason.length ? (
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>{'Skipped'}</TableCell>
@@ -723,7 +776,7 @@ function ImportResultPanel<F extends string, S extends ImportSkippedRow<string>>
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </ScrollTable>
       ) : null}
       {droppedFields.length ? (
         <Alert severity="info">

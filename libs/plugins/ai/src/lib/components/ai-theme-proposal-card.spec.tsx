@@ -164,7 +164,11 @@ describe('a proposal, before and after', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Show' }))
     expect(screen.getByText('Warmer accents.')).toBeTruthy()
-    const rows = within(screen.getByRole('table', { name: 'Proposed changes' })).getAllByRole('row')
+    const changes = screen.getByRole('table', { name: 'Proposed changes' })
+    // A swatch's value is an unbreakable token, so the table scrolls sideways
+    // inside the card rather than past its edge (AGL-3045).
+    expect(getComputedStyle(changes.parentElement as HTMLElement).overflowX).toBe('auto')
+    const rows = within(changes).getAllByRole('row')
     expect(rows.map((row) => row.textContent)).toEqual([
       'ControlNowProposed',
       'Primarylight#1565c0#c2410c',

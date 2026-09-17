@@ -37,14 +37,25 @@
  *    (the layout's slot is the document's one main) and no raw binding token,
  *    and stays an unpublished draft;
  *  - every section fits the answer ceiling a pass asks for on the balanced
- *    tier, under the element measure the step asks by;
+ *    tier — in the provider's tokens, at the ratio measured live (AGL-3042) —
+ *    under the element budget the step asks by;
  *  - the credits a page takes, ESTIMATED from the requests the step sent and
  *    the golden answers' sizes, match the figure the developer notes quote.
+ *
+ * A page that introduces two people fits its passes too (AGL-3042): the
+ * section a live About page was cut off on, drawn inside the element budget,
+ * and drawn roomier inside the budget the estimate alone would allow, which
+ * runs past the ceiling.
  *
  * And one brief whose plan CREATES what its site lacks (AGL-3031): a layout,
  * a reusable component and a saved form, each built first through the REAL
  * layout, form and component steps on their own goldens, then the page, which
  * places what was built.
+ *
+ * A Free page's repeated items fit their passes written once (AGL-3053): four
+ * and six practice areas with a firm's copy, each inside the ceiling written
+ * once and past it written out, and every section drawn from them equal to
+ * the one written out, node for node apart from ids.
  */
 
 const mockRunAiRequest = jest.fn()
@@ -91,7 +102,6 @@ jest.mock('./ai-jobs', () => ({
   registerAiJobStep: jest.fn(),
 }))
 
-import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
@@ -108,16 +118,34 @@ import { aiGenerationMaxTokensWithin } from './ai-job-budget'
 import { createAiJobComponentStep } from './ai-job-component-step'
 import { createAiJobFormStep } from './ai-job-form-step'
 import { createAiJobLayoutStep } from './ai-job-layout-step'
-import { aiPageCheckContext } from './ai-job-page-sections'
+import { expandAiRepeatedItems } from '../runtime/ai-repeated-items'
 import {
+  AI_PAGE_SECTION_INLINE_LINE,
+  AI_PAGE_SECTION_REPEAT_LINE,
+  aiEmptyPage,
+  aiPageCheckContext,
+  aiPageSectionCheck,
+  aiPageSectionNodeId,
+  aiPageWithSection,
+  type AiPageSection,
+} from './ai-job-page-sections'
+import {
+  AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT,
+  AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED,
   AI_JOB_PAGE_SECTION_MAX_TOKENS,
   AI_JOB_PAGE_STEP_MINIMUM_MS,
   AI_JOB_PAGE_TOKENS_PER_ELEMENT,
+  aiJobPageSectionMaxElements,
+  aiJobPageSectionMaxTokens,
   createAiJobPageStep,
 } from './ai-job-page-step'
 import {
+  AI_FREE_PAGE_FIXTURE,
+  AI_FREE_PRACTICE_AREAS_FIXTURE,
   AI_PAGE_BRIEF_FIXTURES,
   AI_PAGE_CREATION_FIXTURE,
+  AI_TWO_PERSON_PAGE_FIXTURE,
+  type AiFreePageFixture,
   type AiGoldenSection,
   type AiPageBriefFixture,
 } from './fixtures/ai-page-briefs'
@@ -253,7 +281,11 @@ function labelsOf(fixture: AiPageBriefFixture): Record<string, string> {
 }
 
 /** Every pass of one brief's page job: a section pass per golden answer, then the last pass. */
-async function replay(fixture: AiPageBriefFixture, index: number): Promise<PageReplay> {
+async function replay(
+  fixture: AiPageBriefFixture,
+  index: number,
+  org: Record<string, unknown> = STARTER_ORG,
+): Promise<PageReplay> {
   mockDocs.clear()
   mockOwners.clear()
   commits = []
@@ -265,7 +297,7 @@ async function replay(fixture: AiPageBriefFixture, index: number): Promise<PageR
     displayName: fixture.id,
     screens: Object.fromEntries(fixture.inventory.screens.map((row) => [row.id, row.slug])),
   })
-  mockDocs.set('orgs/org-1', STARTER_ORG)
+  mockDocs.set('orgs/org-1', org)
 
   const seoFields = jest.fn(async () => ({
     status: 'ok' as const,
@@ -342,6 +374,15 @@ const tokensOf = (chars: number) => Math.ceil(chars / 4)
 /** A section answer as its tool call carries it. */
 const answerChars = (answer: AiGoldenSection) => JSON.stringify({ tree: JSON.stringify(answer) }).length
 
+/**
+ * An estimate as the provider's tokens, which a pass's ceiling is counted in:
+ * scaled by the ratio measured live (AGL-3042).
+ */
+const realTokensOf = (estimated: number) => Math.ceil(estimated * AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED)
+
+/** The elements a section answer carries: every node but the document wrapper. */
+const elementsOf = (answer: AiGoldenSection) => Object.keys(answer.nodes).length - 1
+
 /** One section pass's estimated usage: the cached prefix, what rides after it, and the answer. */
 function passUsage(request: SentRequest, answer: AiGoldenSection, first: boolean): AiUsage {
   const lastBreakpoint = request.system.map((block) => Boolean(block.cacheBreakpoint)).lastIndexOf(true)
@@ -400,26 +441,28 @@ describe('the ten golden page briefs', () => {
       const result = await replay(fixture, index)
 
       // One exchange a section, at the balanced tier's ceiling: no golden
-      // answer needed its re-ask, and every one fits what its pass asks for.
+      // answer needed its re-ask, and every one fits what its pass asks for,
+      // in the provider's tokens the ceiling is counted in.
       expect(result.requests).toHaveLength(fixture.answers.length)
       const ceiling = aiGenerationMaxTokensWithin({
         budgetMs: AI_JOB_PAGE_STEP_MINIMUM_MS,
         model: PAGE_MODEL,
         cap: AI_JOB_PAGE_SECTION_MAX_TOKENS,
       })
-      const maxElements = Math.floor(ceiling / AI_JOB_PAGE_TOKENS_PER_ELEMENT)
+      const maxElements = aiJobPageSectionMaxElements(ceiling)
       result.requests.forEach((request, pass) => {
         const answer = fixture.answers[pass]
-        const elements = Object.keys(answer.nodes).length - 1
+        const elements = elementsOf(answer)
         const tokens = tokensOf(answerChars(answer))
         const label = `${fixture.id} section ${pass + 1}`
         expect([label, request.model, request.maxTokens]).toEqual([label, PAGE_MODEL, ceiling])
         expect([
           label,
-          tokens <= ceiling,
+          realTokensOf(tokens) <= ceiling,
           elements <= maxElements,
           tokens / elements <= AI_JOB_PAGE_TOKENS_PER_ELEMENT,
         ]).toEqual([label, true, true, true])
+        expect(String(request.messages[0].content)).toContain(`Keep this section to at most ${maxElements} elements.`)
       })
 
       // The draft: reported with its weight and its listing, never published.
@@ -471,61 +514,235 @@ describe('the ten golden page briefs', () => {
 })
 
 /**
- * The accessibility audit is a RECORDED fixture, not a run: rendering ten
- * pages through the component bundles takes minutes, so
- * `tools/scripts/record-ai-page-axe.mts` renders and audits them offline and
- * writes what it found. These hold the recording to the goldens it claims —
- * a changed golden answer changes its fingerprint, and a stale recording is
- * a failure here rather than a quiet, meaningless pass.
+ * A two-person introduction fits a pass on the balanced tier (AGL-3042).
+ *
+ * A live About page asked for its two attorneys — a photo, a name, a role and
+ * a short bio each — and the section was cut off at the balanced tier's
+ * ceiling on its answer and on its re-ask. The ceiling holds a Free page's
+ * wall and stays; what a section is asked to keep under is what makes it fit,
+ * counted in the provider's tokens the ceiling is counted in rather than in
+ * the estimate.
  */
-describe('the recorded accessibility audit of the golden pages', () => {
-  const recorded = JSON.parse(
-    readFileSync(join(__dirname, 'fixtures/ai-page-axe.generated.json'), 'utf8'),
-  ) as {
-    axeVersion: string
-    rulesOff: string[]
-    pages: Array<{
-      id: string
-      answers: string
-      markupChars: number
-      violations: Array<{ id: string; impact: string | null; help: string; nodes: number }>
-    }>
+describe('a two-person introduction fits a pass on the balanced tier (AGL-3042)', () => {
+  const FIXTURE = AI_TWO_PERSON_PAGE_FIXTURE
+  const ceiling = aiJobPageSectionMaxTokens(PAGE_MODEL)
+  const realTokensOfAnswer = (answer: AiGoldenSection) => realTokensOf(tokensOf(answerChars(answer)))
+
+  it('builds the page in one exchange a section, the introduction inside the elements its request asks for and the tokens its ceiling holds', async () => {
+    const result = await replay(FIXTURE, AI_PAGE_BRIEF_FIXTURES.length)
+    expect(result.requests).toHaveLength(FIXTURE.answers.length)
+    expect(result.outcome.review).toBeUndefined()
+    expect(result.outcome.failure).toBeUndefined()
+    const report = validateAiDoctrineTree(
+      { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: result.page as never },
+      'page',
+      aiPageCheckContext(FIXTURE.inventory),
+    )
+    expect(report.violations).toEqual([])
+
+    const maxElements = aiJobPageSectionMaxElements(ceiling)
+    expect([ceiling, maxElements]).toEqual([1_050, 15])
+    expect(String(result.requests[1].messages[0].content)).toContain(`Keep this section to at most ${maxElements} elements.`)
+    const [, introduction] = FIXTURE.answers
+    // Fifteen elements, 540 estimated tokens: 834 of the provider's.
+    expect([elementsOf(introduction), realTokensOfAnswer(introduction)]).toEqual([15, 834])
+    expect(elementsOf(introduction)).toBeLessThanOrEqual(maxElements)
+    expect(realTokensOfAnswer(introduction)).toBeLessThanOrEqual(ceiling)
+  })
+
+  it('runs past the ceiling drawn roomier, inside the elements a budget counted in estimated tokens allows', () => {
+    const screen = FIXTURE.plan.screens[0]
+    const sectionIds = screen.sections.map((_, index) => aiPageSectionNodeId('job-two-person', index))
+    const context = aiPageCheckContext(FIXTURE.inventory)
+    const hero = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, uses: screen.sections[0].uses, inventory: FIXTURE.inventory })({
+      tree: JSON.stringify(FIXTURE.answers[0]),
+    })
+    const page = aiPageWithSection(aiEmptyPage(), hero.value as AiPageSection, sectionIds)
+    // A section the page's rules keep, and not one its ceiling holds.
+    const roomier = aiPageSectionCheck({ page, sectionIds, index: 1, context, uses: [], inventory: FIXTURE.inventory })({
+      tree: JSON.stringify(FIXTURE.roomier),
+    })
+    expect([roomier.value !== null, roomier.violations]).toEqual([true, []])
+    const estimatedBudget = Math.floor(ceiling / AI_JOB_PAGE_TOKENS_PER_ELEMENT)
+    expect([estimatedBudget, elementsOf(FIXTURE.roomier), realTokensOfAnswer(FIXTURE.roomier)]).toEqual([23, 20, 1_114])
+    expect(elementsOf(FIXTURE.roomier)).toBeLessThanOrEqual(estimatedBudget)
+    expect(elementsOf(FIXTURE.roomier)).toBeGreaterThan(aiJobPageSectionMaxElements(ceiling))
+    expect(realTokensOfAnswer(FIXTURE.roomier)).toBeGreaterThan(ceiling)
+  })
+
+  it.each(['fast', 'balanced', 'deep'] as const)(
+    'on the %s tier, a section of the goldens’ largest elements fits its ceiling at its element budget, and not at one more',
+    (tier) => {
+      const model = AI_MODEL_CATALOG.find((entry) => entry.tier === tier)?.id as string
+      const tierCeiling = aiJobPageSectionMaxTokens(model)
+      const budget = aiJobPageSectionMaxElements(tierCeiling)
+      expect(realTokensOf(budget * AI_JOB_PAGE_TOKENS_PER_ELEMENT)).toBeLessThanOrEqual(tierCeiling)
+      expect(realTokensOf((budget + 1) * AI_JOB_PAGE_TOKENS_PER_ELEMENT)).toBeGreaterThan(tierCeiling)
+      // Counted in the estimate, the budget holds half as much again as the ceiling.
+      expect(realTokensOf(Math.floor(tierCeiling / AI_JOB_PAGE_TOKENS_PER_ELEMENT) * AI_JOB_PAGE_TOKENS_PER_ELEMENT)).toBeGreaterThan(
+        tierCeiling,
+      )
+    },
+  )
+
+  it('is stated in the developer notes with the figures the code computes', () => {
+    const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
+    const figure = (value: number) => value.toLocaleString('en-US')
+    const budgetOn = (tier: 'fast' | 'balanced' | 'deep') =>
+      aiJobPageSectionMaxElements(aiJobPageSectionMaxTokens(AI_MODEL_CATALOG.find((entry) => entry.tier === tier)?.id as string))
+    const [, introduction] = FIXTURE.answers
+    expect(notes).toContain(
+      `\`AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT\` (${AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT} real tokens an element, ` +
+        `${AI_JOB_PAGE_TOKENS_PER_ELEMENT} × ${AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED.toFixed(4)} rounded up)`,
+    )
+    expect(notes).toContain(
+      `asks for ${budgetOn('fast')} elements on the fast tier, ${budgetOn('balanced')} on the balanced tier and ${budgetOn('deep')} on the deep tier`,
+    )
+    expect(notes).toContain(
+      `is ${figure(tokensOf(answerChars(introduction)))} estimated tokens and ${figure(realTokensOfAnswer(introduction))} real, ` +
+        `inside the ${aiJobPageSectionMaxElements(ceiling)} elements and the ${figure(ceiling)} tokens its pass asks for`,
+    )
+    expect(notes).toContain(
+      `in ${elementsOf(FIXTURE.roomier)} elements, inside the ${Math.floor(ceiling / AI_JOB_PAGE_TOKENS_PER_ELEMENT)} an estimate-counted budget allows, ` +
+        `at ${figure(realTokensOfAnswer(FIXTURE.roomier))} real tokens`,
+    )
+    // The budget errs dear for a section of many small elements, and the notes say by how much.
+    const cards = AI_FREE_PAGE_FIXTURE.writtenOut[1]
+    const perElement = Math.round(realTokensOfAnswer(cards) / elementsOf(cards))
+    expect(perElement).toBeLessThan(AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT)
+    expect(notes).toContain(
+      `practice-area cards written out, each in its Grid item, take ${elementsOf(cards)} elements at ${figure(realTokensOfAnswer(cards))} real tokens: ` +
+        `${perElement} real tokens an element, against the ${AI_JOB_PAGE_REAL_TOKENS_PER_ELEMENT} the budget counts`,
+    )
+  })
+})
+
+/**
+ * A repeated item written once fits a Free section pass (AGL-3053).
+ *
+ * A live Free About page's four practice areas, drawn card by card with the
+ * copy a firm writes, were cut off at the balanced tier's ceiling on their
+ * answer and on their re-ask. Written once — one card, with each card's title
+ * and summary listed on it — the same cards fit the pass, and six do too. The
+ * section the check draws from them is the section written out, node for node
+ * apart from ids, held to the same rules and stored the same.
+ */
+describe('a repeated item written once fits a Free section pass (AGL-3053)', () => {
+  const FREE_ORG = { plan: 'free' }
+  const FIXTURE = AI_FREE_PRACTICE_AREAS_FIXTURE
+  const ceiling = aiJobPageSectionMaxTokens(PAGE_MODEL)
+  const realTokensOfAnswer = (answer: AiGoldenSection) => realTokensOf(tokensOf(answerChars(answer)))
+  /** The sections a fixture writes once, by their place in the plan. */
+  const repeated = (fixture: AiFreePageFixture) =>
+    fixture.answers.flatMap((answer, index) => (answer === fixture.writtenOut[index] ? [] : [index]))
+
+  type Node = { nodes?: string[]; [key: string]: unknown }
+  /** A tree as its elements in order, every field of each but its id, its parent and its children's ids. */
+  const shapeOf = (nodes: Readonly<Record<string, object>>, id: string): unknown => {
+    const node = nodes[id] as Node
+    return {
+      ...Object.fromEntries(Object.entries(node).filter(([key]) => !['$id', 'parentId', 'nodes'].includes(key))),
+      nodes: (node.nodes ?? []).filter((child) => nodes[child]).map((child) => shapeOf(nodes, child)),
+    }
   }
 
-  /** The fingerprint the recorder writes, computed the same way it computes it. */
-  const fingerprint = (fixture: AiPageBriefFixture): string =>
-    createHash('sha256').update(JSON.stringify(fixture.answers)).digest('hex').slice(0, 16)
-
-  it('covers every golden brief, and was recorded from the answers they hold now', () => {
-    expect(recorded.pages.map((page) => page.id)).toEqual(
-      AI_PAGE_BRIEF_FIXTURES.map((fixture) => fixture.id),
+  it('builds a page of four and six practice areas, each written once and inside its pass’s ceiling', async () => {
+    expect(repeated(FIXTURE)).toEqual([1, 2])
+    // The copy a firm writes: every summary 20 to 35 words.
+    const words = [1, 2].flatMap((index) =>
+      Object.values(FIXTURE.answers[index].nodes).flatMap((node) => (node.repeat ?? []).map(([, summary]) => summary.split(/\s+/).length)),
     )
-    const stale = AI_PAGE_BRIEF_FIXTURES.filter(
-      (fixture, index) => recorded.pages[index]?.answers !== fingerprint(fixture),
-    ).map((fixture) => fixture.id)
-    // Re-record with: node tools/scripts/record-ai-page-axe.mts
-    expect(stale).toEqual([])
-    expect(recorded.pages.every((page) => page.markupChars > 0)).toBe(true)
+    expect([words.length, Math.min(...words) >= 20, Math.max(...words) <= 35]).toEqual([10, true, true])
+
+    const result = await replay(FIXTURE, AI_PAGE_BRIEF_FIXTURES.length + 1, FREE_ORG)
+    expect(result.requests).toHaveLength(FIXTURE.answers.length)
+    expect([result.outcome.review, result.outcome.failure]).toEqual([undefined, undefined])
+    // Every section is asked for the page built inline, and a section whose plan line shows items is shown how to write one once.
+    result.requests.forEach((request, index) => {
+      const content = String(request.messages[0].content)
+      expect([index, content.includes(AI_PAGE_SECTION_INLINE_LINE), content.includes(AI_PAGE_SECTION_REPEAT_LINE)]).toEqual([
+        index,
+        true,
+        FIXTURE.plan.screens[0].sections[index].items > 0,
+      ])
+    })
+    const report = validateAiDoctrineTree(
+      { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: result.page as never },
+      'page',
+      aiPageCheckContext(FIXTURE.inventory, { reusableComponents: false }),
+    )
+    expect(report.violations).toEqual([])
+    // The page stores ten cards, and no trace of how they were written.
+    expect(Object.values(result.page).filter((node) => node.componentId === 'muiCard')).toHaveLength(10)
+    expect(JSON.stringify(result.page)).not.toMatch(/\{\{|"repeat"/)
+
+    // Four cards in 10 elements and six in 10, inside the tokens the pass asks for.
+    const [, families, businesses] = FIXTURE.answers
+    expect([elementsOf(families), realTokensOfAnswer(families), elementsOf(businesses), realTokensOfAnswer(businesses)]).toEqual([
+      10, 770, 10, 932,
+    ])
+    for (const answer of [families, businesses]) expect(realTokensOfAnswer(answer)).toBeLessThanOrEqual(ceiling)
   })
 
-  it('finds no serious or critical violation on any golden page', () => {
-    const serious = recorded.pages.flatMap((page) =>
-      page.violations
-        .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-        .map((violation) => `${page.id}: ${violation.id}`),
-    )
-    expect(serious).toEqual([])
+  it('runs past the ceiling with the same cards written out card by card, four and six alike', () => {
+    const [, families, businesses] = FIXTURE.writtenOut
+    expect([elementsOf(families), realTokensOfAnswer(families), elementsOf(businesses), realTokensOfAnswer(businesses)]).toEqual([
+      25, 1_304, 35, 1_830,
+    ])
+    for (const answer of [families, businesses]) expect(realTokensOfAnswer(answer)).toBeGreaterThan(ceiling)
   })
 
-  it('names in the developer notes what it measured and what it could not', () => {
+  it('is stated in the developer notes with the figures the code computes', () => {
     const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
-    expect(notes).toContain(`axe-core ${recorded.axeVersion}`)
-    // A rule the recorder turned off is a gap the notes own, not a silence.
-    for (const rule of recorded.rulesOff) expect(notes).toContain(rule)
-    // Lighthouse's accessibility category is axe underneath, but no Lighthouse
-    // run happens here and the notes must not imply one.
-    expect(notes).not.toMatch(/lighthouse/i)
+    const figure = (value: number) => value.toLocaleString('en-US')
+    const measure = (answer: AiGoldenSection) => [elementsOf(answer), figure(realTokensOfAnswer(answer))]
+    const [aboutOnce, aboutTokens] = measure(AI_FREE_PAGE_FIXTURE.answers[1])
+    const [aboutOut, aboutOutTokens] = measure(AI_FREE_PAGE_FIXTURE.writtenOut[1])
+    expect(notes).toContain(
+      `practice areas written once take ${aboutOnce} elements at ${aboutTokens} real tokens, where written out they take ${aboutOut} at ${aboutOutTokens}`,
+    )
+    const [fourOnce, fourTokens] = measure(FIXTURE.answers[1])
+    const [fourOut, fourOutTokens] = measure(FIXTURE.writtenOut[1])
+    const [sixOnce, sixTokens] = measure(FIXTURE.answers[2])
+    const [sixOut, sixOutTokens] = measure(FIXTURE.writtenOut[2])
+    expect(notes).toContain(
+      `its four practice areas written once take ${fourOnce} elements at ${fourTokens} real tokens, and ${fourOut} at ${fourOutTokens} written out; ` +
+        `its six take ${sixOnce} elements at ${sixTokens} real tokens, and ${sixOut} at ${sixOutTokens} written out`,
+    )
   })
+
+  it.each([AI_FREE_PAGE_FIXTURE, AI_FREE_PRACTICE_AREAS_FIXTURE].map((fixture) => [fixture.id, fixture] as const))(
+    '%s: draws exactly the section written out, node for node apart from ids, held to the same rules and stored the same',
+    (_id, fixture) => {
+      const screen = fixture.plan.screens[0]
+      const sectionIds = screen.sections.map((_, index) => aiPageSectionNodeId('job-once', index))
+      const context = aiPageCheckContext(fixture.inventory, { reusableComponents: false })
+      let once = aiEmptyPage()
+      let full = aiEmptyPage()
+      fixture.answers.forEach((answer, index) => {
+        const label = `${fixture.id} section ${index + 1}`
+        const written = fixture.writtenOut[index]
+        if (answer !== written) {
+          const drawn = expandAiRepeatedItems(answer, { inline: true, noun: 'section' })
+          if (drawn.ok === false) throw new Error(`${label} was not drawn`)
+          const tree = drawn.tree as { rootId: string; nodes: Record<string, object> }
+          expect([label, shapeOf(tree.nodes, tree.rootId)]).toEqual([label, shapeOf(written.nodes, written.rootId)])
+        }
+        const check = (page: typeof once, tree: AiGoldenSection) =>
+          aiPageSectionCheck({ page, sectionIds, index, context, uses: screen.sections[index].uses, inventory: fixture.inventory })({
+            tree: JSON.stringify(tree),
+          })
+        const fromOnce = check(once, answer)
+        const fromFull = check(full, written)
+        expect([label, fromOnce.violations, fromFull.violations]).toEqual([label, [], []])
+        once = aiPageWithSection(once, fromOnce.value as AiPageSection, sectionIds)
+        full = aiPageWithSection(full, fromFull.value as AiPageSection, sectionIds)
+      })
+      const stored = (page: typeof once) => shapeOf(page as unknown as Record<string, object>, CANVAS_ROOT_ELEMENT_ID)
+      expect(stored(once)).toEqual(stored(full))
+      expect(validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: once }, 'page', context).violations).toEqual([])
+    },
+  )
 })
 
 describe('a golden page whose plan creates what its site lacks (AGL-3031)', () => {
@@ -641,6 +858,21 @@ describe('a golden page whose plan creates what its site lacks (AGL-3031)', () =
       ['form', `${FIXTURE.jobId}-c2`],
       ['reusableComponent', `${FIXTURE.jobId}-c0`],
       ['screen', FIXTURE.jobId],
+    ])
+    // What each draft asks the member to fill (AGL-3056): the card's defaults on
+    // the card; on the page, the names its quotes leave in brackets, and the
+    // role every card leaves to the card's default, said once for three cards.
+    expect(outputs.map((output) => [output.resource, output.note ?? null])).toEqual([
+      ['layout', null],
+      ['form', expect.not.stringContaining('square brackets')],
+      [
+        'reusableComponent',
+        'Before you publish, replace the facts in square brackets, which the brief did not give: [What the customer said about working with you], [Customer name] and [Role or company].',
+      ],
+      [
+        'screen',
+        'Before you publish, replace the facts in square brackets, which the brief did not give: [customer name]. The "Testimonial card" component on this page shows [Role or company] until you replace it.',
+      ],
     ])
     // Each creation is the draft its own step writes, under the job's slot.
     expect(mockDocs.get(`hosts/${HOST_ID}/layouts/${FIXTURE.jobId}-c1`)).toMatchObject({ displayName: 'Harbor Roofing site' })

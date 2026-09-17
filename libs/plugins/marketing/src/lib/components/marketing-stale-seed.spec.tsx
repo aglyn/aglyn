@@ -279,9 +279,33 @@ describe('AnnouncementBarCard (AGL-1358)', () => {
   })
 })
 
+describe('HostExperimentsCard lists experiments in the shared grid (AGL-3045)', () => {
+  it('opens an experiment’s results from its row, and keeps its actions in the menu', async () => {
+    listener.fromCache = false
+    render(<HostExperimentsCard hostId="host-1" org={ORG} />)
+
+    const grid = screen.getByRole('grid', { name: 'Experiments' })
+    const row = within(grid).getByText('Hero copy').closest('[role="row"]') as HTMLElement
+    // A running experiment offers Pause, never Start, beside Edit and Delete.
+    fireEvent.click(within(row).getByRole('button', { name: 'More actions for Hero copy' }))
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Results',
+      'Pause',
+      'Edit',
+      'Delete',
+    ])
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    fireEvent.click(within(row).getByText('Hero copy'))
+    expect(await screen.findByRole('dialog')).toBeTruthy()
+  })
+})
+
 describe('HostExperimentsCard (AGL-1358)', () => {
   const editFirstExperimentAndSave = () => {
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    // Editing is in the experiment's row menu, beside starting and deleting.
+    fireEvent.click(screen.getAllByRole('button', { name: /^More actions for / })[0])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
   }
 

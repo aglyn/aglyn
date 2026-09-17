@@ -25,6 +25,7 @@ import {
   orgBillingStatusFrom,
   pickOrgBillingFields,
   type OrgBillingDoc,
+  type OrgInlineBilling,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from './firebase-admin'
 
@@ -166,13 +167,17 @@ export async function readOrgBillingCustomerModes(
 }
 
 /**
- * Writes the commercial keys to the billing doc and mirrors the status.
+ * Writes the commercial keys to the billing doc, and onto the org doc the
+ * entitlement inputs that stay there.
  *
  * Three writes, one batch:
  *
  * 1. the billing doc itself, `merge: true` to match what the org-doc write did;
- * 2. `billingStatus` back onto the org doc, so the AGL-275 dunning banner keeps
- *    working for non-managers who can no longer read `subscription`;
+ * 2. the org doc, merged, with what entitlement resolution reads there:
+ *    `billingStatus`, so the AGL-275 dunning banner keeps working for
+ *    non-managers who can no longer read `subscription`; and `seatAddons`,
+ *    which never moved (`ORG_BILLING_MOVED_KEYS`), whenever the patch carries
+ *    the add-on quantities;
  * 3. the `stripeCustomers` reverse index, so the webhook can still resolve an
  *    org from a Stripe customer id without a query.
  *
@@ -190,7 +195,7 @@ export async function readOrgBillingCustomerModes(
  */
 export async function writeOrgBilling(
   orgId: string,
-  patch: Partial<OrgBillingDoc>,
+  patch: Partial<OrgBillingDoc> & Pick<OrgInlineBilling, 'seatAddons'>,
   options: { writeInline?: boolean } = {},
 ): Promise<void> {
   if (!orgId) return
@@ -216,6 +221,15 @@ export async function writeOrgBilling(
   const orgPatch: Record<string, unknown> = writeInline ? { ...fields } : {}
   if (patch.subscription !== undefined) {
     orgPatch['billingStatus'] = orgBillingStatusFrom(patch)
+  }
+  // The add-on quantities are what grants and removes an add-on, and the org
+  // doc is the only place they are read from: a subscription sync that wrote
+  // them nowhere would charge for an add-on bought at checkout without
+  // granting it, and leave a removed one in place. Merged with the rest of
+  // this patch, so the explicit zeros of a sync converge while a key the
+  // subscription items do not name survives.
+  if (patch.seatAddons !== undefined) {
+    orgPatch['seatAddons'] = patch.seatAddons
   }
   if (Object.keys(orgPatch).length) batch.set(orgRef, orgPatch, { merge: true })
 

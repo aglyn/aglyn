@@ -1,0 +1,96 @@
+{
+  "id": "product-brass-desk-lamp-copy",
+  "kind": "product",
+  "brief": "Write the storefront copy for this product.",
+  "framing": null,
+  "inventory": null,
+  "product": {
+    "facts": {
+      "id": "prod-lamp",
+      "name": "Brass desk lamp",
+      "type": "physical",
+      "text": "Adjustable brass desk lamp with a warm dimmable LED bulb and a cotton-braided cord. Two finishes.",
+      "tags": ["lighting"],
+      "categoryIds": [],
+      "options": [{ "name": "finish", "values": ["Brushed brass", "Matte black"] }],
+      "imageUrl": null,
+      "seoTitle": "",
+      "seoDescription": ""
+    },
+    "categories": [
+      { "id": "cat-gifts", "name": "Gifts" },
+      { "id": "cat-office", "name": "Home office" },
+      { "id": "cat-lighting", "name": "Lighting" }
+    ]
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: only the facts the product's text states, a marked gap for the bulb's brightness, both listing fields inside their ceilings, and the option renamed to read clearly.",
+      "plan": null,
+      "answer": {
+        "description": "An adjustable brass desk lamp with a warm, dimmable LED bulb: turn it down low in the evening, or up for reading.\n\nIt runs on a cotton-braided cord and comes in brushed brass or matte black. Brightness at full power: [lumens].",
+        "seoTitle": "Adjustable brass desk lamp with dimmable LED",
+        "seoDescription": "A brass desk lamp with a warm dimmable LED bulb and a cotton-braided cord, in brushed brass or matte black.",
+        "tags": ["desk lamp", "brass", "dimmable", "lighting"],
+        "categoryIds": ["cat-lighting", "cat-office"],
+        "optionNames": ["Finish"]
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 5, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A health claim and a certification the product's text never states.",
+      "answer": {
+        "description": "A brass desk lamp that relieves eye strain and prevents headaches. Award-winning design.",
+        "seoTitle": "Brass desk lamp",
+        "seoDescription": "A dimmable brass desk lamp.",
+        "tags": ["lamp"],
+        "categoryIds": ["cat-lighting"],
+        "optionNames": ["Finish"]
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "An invented price, and a category the request never listed.",
+      "answer": {
+        "description": "A dimmable brass desk lamp, now only $49.",
+        "seoTitle": "Brass desk lamp",
+        "seoDescription": "A dimmable brass desk lamp.",
+        "tags": ["lamp"],
+        "categoryIds": ["cat-kitchen"],
+        "optionNames": ["Finish"]
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A search title past the 60 characters a result shows.",
+      "answer": {
+        "description": "An adjustable brass desk lamp with a warm dimmable LED bulb.",
+        "seoTitle": "Adjustable brass desk lamp with a warm dimmable LED bulb and a braided cord",
+        "seoDescription": "A dimmable brass desk lamp.",
+        "tags": ["lamp"],
+        "categoryIds": [],
+        "optionNames": ["Finish"]
+      },
+      "fails": ["budget"]
+    },
+    {
+      "why": "No description, and no name for the product's one option.",
+      "answer": {
+        "description": "",
+        "seoTitle": "Brass desk lamp",
+        "seoDescription": "A dimmable brass desk lamp.",
+        "tags": [],
+        "categoryIds": [],
+        "optionNames": []
+      },
+      "fails": ["readable"]
+    }
+  ]
+}

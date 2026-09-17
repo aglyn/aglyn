@@ -170,7 +170,9 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
       const variant = line.variantId
         ? product.variants.find((item) => item.id === line.variantId)
         : product.variants[0]
-      if (!variant) {
+      // A variant with no price yet (AGL-2916) is not for sale, and never a
+      // line worth nothing.
+      if (!variant || !CommerceModel.variantHasPrice(variant)) {
         return {
           ...line,
           name: product.name,

@@ -48,6 +48,7 @@
 
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -59,7 +60,6 @@ import {
   LinearProgress,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -531,7 +531,7 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                         {`${csp.totalViolations} violations across ` +
                           `${csp.rowCount} rows since ${csp.since}.`}
                       </Typography>
-                      <Table size="small">
+                      <ScrollTable size="small">
                         <TableHead>
                           <TableRow>
                             <TableCell>{'Day'}</TableCell>
@@ -566,7 +566,7 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                             </TableRow>
                           ))}
                         </TableBody>
-                      </Table>
+                      </ScrollTable>
                       {csp.rows.length > 100 ? (
                         <Typography variant="caption" color="text.secondary">
                           {`Showing the 100 highest-count rows of ${csp.rows.length}.`}

@@ -19,13 +19,13 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
   AlertTitle,
   Chip,
   Link,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -171,7 +171,7 @@ export default function StaffTaxFindingsCard({
               </Alert>
             ) : (
               <>
-                <Table size="small">
+                <ScrollTable size="small">
                   <TableHead>
                     <TableRow>
                       <TableCell>{'Invoice'}</TableCell>
@@ -272,7 +272,7 @@ export default function StaffTaxFindingsCard({
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                </ScrollTable>
                 <ListPagination
                   page={page}
                   pageSize={pageSize}

@@ -20,18 +20,23 @@
  * limitations under the License.
  */
 
+import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { basename, join, relative } from 'node:path'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE } from '../providers/routing'
+import { aiDeviceAuditFindings, type AiDeviceAudit } from './ai-device-audit'
 import {
   AI_EVAL_KINDS,
+  aiEvalAnswerTree,
+  aiEvalRendersAtDeviceWidths,
   readAiEvalCase,
   readAiEvalRecording,
   scoreAiEvalCandidate,
   scoreAiEvalControl,
   summarizeAiEval,
   summarizeAiEvalPlans,
+  type AiEvalAudits,
   type AiEvalCase,
 } from './ai-eval'
 
@@ -41,12 +46,22 @@ import {
  * and every control made to fail the checks it names — a scorer that passes
  * everything would otherwise pass here too. `npm run test:ai-eval` runs this
  * file in CI; nothing here reaches a provider.
+ *
+ * A document a site renders is scored against its recorded device audit
+ * (AGL-3020): `tools/scripts/record-ai-page-axe.mts` renders every readable
+ * answer of such a kind at the besigner switcher's widths and writes what the
+ * browser measured beside the cases, and beside the recordings of a live run.
  */
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
 const CASES_DIR = join(REPO_ROOT, 'tools', 'ai-eval', 'cases')
 /** What a live run recorded (`npm run eval:ai-live`); none until one has run. */
 const RECORDINGS_DIR = join(REPO_ROOT, 'tools', 'ai-eval', 'recordings')
+/** The device audit of the cases' answers, and of a live run's where one has run. */
+const WIDTHS_FILES = [
+  join(REPO_ROOT, 'tools', 'ai-eval', 'widths.generated.json'),
+  join(RECORDINGS_DIR, 'widths.generated.json'),
+]
 
 function caseFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
@@ -68,12 +83,31 @@ const cases: AiEvalCase[] = caseFiles(CASES_DIR).map((file) => {
 
 // Each recording joins its brief's candidates, scored like any other answer.
 for (const file of existsSync(RECORDINGS_DIR) ? caseFiles(RECORDINGS_DIR) : []) {
+  // The recordings' device audit sits beside them, and is not one.
+  if (basename(file) === 'widths.generated.json') continue
   const name = relative(REPO_ROOT, file)
   const recording = readAiEvalRecording(JSON.parse(readFileSync(file, 'utf8')), name)
   const evalCase = cases.find((entry) => entry.id === recording.caseId)
   if (!evalCase) throw new Error(`${name}: no golden brief has the id ${recording.caseId}`)
   evalCase.candidates.push(recording.candidate)
 }
+
+interface RecordedAnswer extends AiDeviceAudit {
+  caseId: string
+  of: string
+  answer: string
+}
+
+const recordedAnswers: RecordedAnswer[] = WIDTHS_FILES.filter((file) => existsSync(file)).flatMap(
+  (file) => (JSON.parse(readFileSync(file, 'utf8')) as { answers: RecordedAnswer[] }).answers,
+)
+
+/** The fingerprint the recorder writes for an answer, computed the same way it computes it. */
+const fingerprint = (answer: unknown): string =>
+  createHash('sha256').update(JSON.stringify(answer)).digest('hex').slice(0, 16)
+
+const audits: AiEvalAudits = (evalCase, answer) =>
+  recordedAnswers.find((entry) => entry.caseId === evalCase.id && entry.answer === fingerprint(answer)) ?? null
 
 describe('the golden briefs', () => {
   it('hold at least one case for every kind, with unique ids', () => {
@@ -87,7 +121,7 @@ describe.each(cases.map((evalCase) => [evalCase.id, evalCase] as const))('%s', (
   it.each(evalCase.candidates.map((candidate, index) => [index, candidate] as const))(
     'candidate %i passes every check',
     (_index, candidate) => {
-      const score = scoreAiEvalCandidate(evalCase, candidate)
+      const score = scoreAiEvalCandidate(evalCase, candidate, audits)
       expect({ pass: score.pass, checks: score.checks, findings: score.findings }).toEqual({
         pass: true,
         checks: {
@@ -95,6 +129,7 @@ describe.each(cases.map((evalCase) => [evalCase.id, evalCase] as const))('%s', (
           rules: (candidate.scope ?? 'full') === 'full' ? true : null,
           budget: (candidate.scope ?? 'full') === 'full' ? true : null,
           plan: evalCase.expected?.plan ? true : null,
+          responsive: (candidate.scope ?? 'full') === 'full' && aiEvalRendersAtDeviceWidths(evalCase.kind) ? true : null,
           rubric: true,
         },
         findings: [],
@@ -105,7 +140,7 @@ describe.each(cases.map((evalCase) => [evalCase.id, evalCase] as const))('%s', (
   it.each(evalCase.controls.map((control) => [control.why, control] as const))(
     'control fails: %s',
     (_why, control) => {
-      const failed = scoreAiEvalControl(evalCase, control)
+      const failed = scoreAiEvalControl(evalCase, control, audits)
       expect(control.fails.filter((check) => !failed.includes(check))).toEqual([])
     },
   )
@@ -115,16 +150,34 @@ describe('the floors', () => {
   it('holds every kind at or above its floor', () => {
     const summary = summarizeAiEval(
       cases.flatMap((evalCase) =>
-        evalCase.candidates.map((candidate) => scoreAiEvalCandidate(evalCase, candidate)),
+        evalCase.candidates.map((candidate) => scoreAiEvalCandidate(evalCase, candidate, audits)),
       ),
     )
     expect(summary.filter((kind) => kind.belowFloor)).toEqual([])
   })
 
+  it('holds a kind under its floor when one of its pages only works on desktop (AGL-3020)', () => {
+    // The crew page with its quotes in a Stack that stays a row on a phone:
+    // every check of the tree passes and the grade is the reference's own.
+    const crew = cases.find((evalCase) => evalCase.id === 'page-meet-the-crew') as AiEvalCase
+    const desktopOnly = crew.controls.find((control) => control.fails.includes('responsive'))
+    expect(desktopOnly).toBeDefined()
+    const [reference] = crew.candidates
+    const candidate = { ...reference, answer: desktopOnly?.answer }
+    const score = scoreAiEvalCandidate(crew, candidate, audits)
+    expect(score.checks).toMatchObject({ readable: true, rules: true, budget: true, responsive: false })
+    expect(score.findings).toEqual(['band-not-broken-down:words-row'])
+    const pages = cases
+      .filter((evalCase) => evalCase.kind === 'page')
+      .flatMap((evalCase) => evalCase.candidates.map((entry) => scoreAiEvalCandidate(evalCase, entry, audits)))
+    const floor = (scores: typeof pages) => summarizeAiEval(scores).find((kind) => kind.kind === 'page')?.belowFloor
+    expect([floor(pages), floor([...pages, score])]).toEqual([false, true])
+  })
+
   it('holds every plan a brief expects to its shape', () => {
     const plans = summarizeAiEvalPlans(
       cases.flatMap((evalCase) =>
-        evalCase.candidates.map((candidate) => scoreAiEvalCandidate(evalCase, candidate)),
+        evalCase.candidates.map((candidate) => scoreAiEvalCandidate(evalCase, candidate, audits)),
       ),
     )
     expect(plans.plans).toBeGreaterThan(0)
@@ -132,9 +185,46 @@ describe('the floors', () => {
   })
 })
 
+describe('the device audit of the answers a site renders (AGL-3020)', () => {
+  it('has recorded every readable answer of a rendered kind, from the answer it holds now', () => {
+    const unrecorded = cases
+      .filter((evalCase) => aiEvalRendersAtDeviceWidths(evalCase.kind))
+      .flatMap((evalCase) =>
+        [
+          ...evalCase.candidates.filter((candidate) => (candidate.scope ?? 'full') === 'full').map((candidate) => candidate.answer),
+          ...evalCase.controls.map((control) => control.answer),
+        ]
+          .filter((answer) => aiEvalAnswerTree(evalCase, answer) !== null && !audits(evalCase, answer))
+          .map(() => evalCase.id),
+      )
+    // Re-record with: node tools/scripts/record-ai-page-axe.mts
+    expect(unrecorded).toEqual([])
+  })
+
+  it('records nothing the cases no longer hold', () => {
+    const committed = JSON.parse(readFileSync(WIDTHS_FILES[0], 'utf8')) as { answers: RecordedAnswer[] }
+    const stale = committed.answers.filter((entry) => {
+      const evalCase = cases.find((candidate) => candidate.id === entry.caseId)
+      const answers = evalCase ? [...evalCase.candidates.map((c) => c.answer), ...evalCase.controls.map((c) => c.answer)] : []
+      return !answers.some((answer) => fingerprint(answer) === entry.answer)
+    })
+    expect(stale.map((entry) => `${entry.caseId} ${entry.of}`)).toEqual([])
+  })
+
+  it('fails a control on each thing it measures: a page wider than a phone, and a band that keeps its columns on one', () => {
+    const findings = cases.flatMap((evalCase) =>
+      evalCase.controls
+        .filter((control) => control.fails.includes('responsive'))
+        .flatMap((control) => aiDeviceAuditFindings(audits(evalCase, control.answer) ?? { devices: [], rows: [] })),
+    )
+    expect(findings.some((finding) => finding.startsWith('overflow:XS:'))).toBe(true)
+    expect(findings.some((finding) => finding.startsWith('band-not-broken-down:'))).toBe(true)
+  })
+})
+
 describe('the routing table (AGL-2937)', () => {
   const scores = cases.flatMap((evalCase) =>
-    evalCase.candidates.map((candidate) => scoreAiEvalCandidate(evalCase, candidate)),
+    evalCase.candidates.map((candidate) => scoreAiEvalCandidate(evalCase, candidate, audits)),
   )
 
   it.each(Object.entries(AI_ROUTING_TABLE))(

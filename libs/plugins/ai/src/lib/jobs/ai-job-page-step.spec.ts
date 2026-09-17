@@ -115,11 +115,12 @@ import {
   aiJobAssumedAnswerMs,
   aiJobBudgetTier,
 } from './ai-job-budget'
-import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
+import { AI_JOB_ZERO_USAGE, aiBracketedFactsNote } from './ai-job-generation'
 import {
   AI_JOB_PAGE_INSTRUCTIONS,
   AI_PAGE_SECTION_TOOL,
   aiPageSectionNodeId,
+  aiPageSectionSmaller,
 } from './ai-job-page-sections'
 import {
   AI_JOB_PAGE_CREATION_EMPTY_COPY,
@@ -129,7 +130,7 @@ import {
   AI_JOB_PAGE_SECTION_MAX_TOKENS,
   AI_JOB_PAGE_SECTION_TOKENS,
   AI_JOB_PAGE_STEP_MINIMUM_MS,
-  AI_JOB_PAGE_TOKENS_PER_ELEMENT,
+  aiJobPageSectionMaxElements,
   aiJobPageSectionMaxTokens,
   aiPageJobAdmission,
   aiPageJobRunMinimumMs,
@@ -457,7 +458,7 @@ describe('the time budget: a pass fits the least time it registers, and that fit
       expect(clock + AI_JOB_STEP_OVERHEAD_MS).toBeLessThanOrEqual(AI_JOB_PAGE_STEP_MINIMUM_MS)
       // The request asks the section to stay under what that ceiling holds.
       const prompt = mockRunAiRequest.mock.calls[0][0].messages[0].content as string
-      expect(prompt).toContain(`Keep this section to at most ${Math.floor(ceiling / AI_JOB_PAGE_TOKENS_PER_ELEMENT)} elements.`)
+      expect(prompt).toContain(`Keep this section to at most ${aiJobPageSectionMaxElements(ceiling)} elements.`)
     },
   )
 })
@@ -545,6 +546,8 @@ describe('the passes', () => {
           label: SCREEN.title,
           load: expect.objectContaining({ pageBytes: expect.any(Number) }),
           proposal: { navigation: { label: SCREEN.title, slug: 'spring-roof-inspection' } },
+          // The quotes' names the brief never gave, once however many cards show one (AGL-3056).
+          note: 'Before you publish, replace the facts in square brackets, which the brief did not give: [customer name].',
         },
       ],
     })
@@ -553,6 +556,40 @@ describe('the passes', () => {
       title: 'Spring Roof Inspections in Springfield',
       description: 'A licensed roofer checks shingles, flashing and gutters.',
     })
+  })
+
+  it('names a placed component’s bracketed defaults once, where the page sets nothing of its own (AGL-3056)', () => {
+    const area = (title: string, summary?: string) => ({
+      componentId: 'reusableInstance',
+      props: { refId: 'cmp-area', propValues: { title, ...(summary ? { summary } : {}) } },
+    })
+    const tree = {
+      rootId: 'root',
+      nodes: {
+        root: { componentId: 'div', nodes: ['s'] },
+        s: { componentId: 'section', nodes: ['h', 'a1', 'a2', 'a3', 'hours'] },
+        h: { componentId: 'muiTypography', props: { variant: 'h2', children: 'Practice areas' } },
+        a1: area('Family law'),
+        a2: area('Estate planning'),
+        a3: area('Real estate', 'Closings for homes and small commercial property.'),
+        hours: { componentId: 'muiTypography', props: { variant: 'body2', children: 'Open [Office hours].' } },
+      },
+    }
+    const inventory = {
+      ...FIXTURE.inventory,
+      components: [
+        {
+          id: 'cmp-area',
+          name: 'Practice area card',
+          props: { title: 'text', summary: 'richText', icon: 'icon' },
+          bracketedDefaults: { title: ['[Practice area]'], summary: ['[What the firm handles]', '[Office hours]'] },
+        },
+      ],
+    }
+    expect(aiBracketedFactsNote({ tree, inventory })).toBe(
+      'Before you publish, replace the facts in square brackets, which the brief did not give: [Office hours]. The "Practice area card" component on this page shows [What the firm handles] until you replace it.',
+    )
+    expect(aiBracketedFactsNote({ tree: { rootId: 'root', nodes: { root: { componentId: 'div' } } }, inventory })).toBeNull()
   })
 
   it('writes the plan’s listing, held to the editor’s lengths, when the listing cannot be written', async () => {
@@ -609,6 +646,64 @@ describe('when a pass stops', () => {
     const outcome = await step()(context())
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     expect(outcome.review).toEqual(expect.objectContaining({ reason: 'doctrine', findings: [expect.objectContaining({ rule: 11, code: 'missing-h1' })] }))
+    expect(outcome.continue).toBeUndefined()
+    expect(commits).toEqual([])
+  })
+
+  /**
+   * A tool call cut off at its ceiling (AGL-3042): the provider stops on
+   * `max_tokens`, and the input it hands over is what had arrived — a `tree`
+   * cut mid-string, or nothing at all.
+   */
+  const cutOffAnswer = (input: Record<string, unknown>, outputTokens: number) => ({
+    kind: 'completion',
+    text: '',
+    toolUse: [{ name: 'submit_section', input }],
+    usage: { ...USAGE, outputTokens },
+    estCostUsd: 0.02,
+    stopReason: 'max_tokens',
+  })
+  const CUT_TREE = { tree: '{"rootId":"root","nodes":{"root":{"componentId":"div","nodes":["a1"]},"a1":{"componentId":"section","props":{"elem' }
+  const TOO_LARGE = 'This section was too large to build in one pass. Try again, or describe it smaller.'
+
+  it('asks a section cut off at its ceiling for a smaller one, naming what shrinks it, and keeps the re-ask that fits (AGL-3042)', async () => {
+    const ceiling = aiJobPageSectionMaxTokens('claude-sonnet-5')
+    mockRunAiRequest
+      .mockResolvedValueOnce(cutOffAnswer(CUT_TREE, ceiling))
+      .mockResolvedValueOnce(sectionAnswer(FIXTURE.answers[0]))
+    const outcome = await step()(context())
+    expect(outcome).toMatchObject({ continue: true, stopReason: 'tool_use', usage: { outputTokens: ceiling + USAGE.outputTokens } })
+
+    const [first, reask] = mockRunAiRequest.mock.calls.map(([request]) => request)
+    // The re-ask is asked for the whole ceiling: the cut answer spent one of the two.
+    expect([first.maxTokens, reask.maxTokens]).toEqual([ceiling, ceiling])
+    const text = String(reask.messages.at(-1)?.content)
+    expect(text).toBe(
+      [
+        'Your page-section was not used: it ran past the size one answer may have, and was cut off before it was whole.',
+        aiPageSectionSmaller({ maxElements: aiJobPageSectionMaxElements(ceiling), reusableComponents: true }),
+        '',
+        'Answer again with submit_section: the whole page-section, smaller than the one that was cut off.',
+      ].join('\n'),
+    )
+    expect(text).toContain('at most 15;')
+    expect(text).not.toContain('could not be used as a section')
+    expect(storedPage()[CANVAS_ROOT_ELEMENT_ID].nodes).toEqual([SECTION_IDS[0]])
+  })
+
+  it('stops a section cut off on its answer and its re-ask for review as too large, not as unreadable, and writes nothing (AGL-3042)', async () => {
+    const ceiling = aiJobPageSectionMaxTokens('claude-sonnet-5')
+    mockRunAiRequest
+      .mockResolvedValueOnce(cutOffAnswer(CUT_TREE, ceiling))
+      .mockResolvedValueOnce(cutOffAnswer({}, ceiling))
+    const outcome = await step()(context())
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    expect(outcome).toMatchObject({ stopReason: 'max_tokens', usage: { outputTokens: 2 * ceiling } })
+    expect(outcome.review).toEqual({
+      reason: 'doctrine',
+      message: TOO_LARGE,
+      findings: [{ rule: null, code: 'answer-cut-off', message: TOO_LARGE }],
+    })
     expect(outcome.continue).toBeUndefined()
     expect(commits).toEqual([])
   })

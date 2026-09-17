@@ -80,8 +80,13 @@ const product = {
 /** What the shell's renderer was last handed for the zone. */
 let zone: (ConsoleSeoFieldsZoneProps & { slot: string }) | null = null
 
-/** A stand-in for the shell's gated renderer, with one widget that proposes. */
+/**
+ * A stand-in for the shell's gated renderer, with one widget that proposes on
+ * the listing zone. The dialog hosts other zones too, where this stand-in has
+ * no widget registered, as the shell has none for a zone nobody registered.
+ */
 function ShellSlot(props: ConsoleSeoFieldsZoneProps & { slot: string }) {
+  if (props.slot !== 'seoFields') return null
   zone = props
   return (
     <button

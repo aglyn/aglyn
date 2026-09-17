@@ -18,7 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiPackageVariant } from '@aglyn/shared-data-mdi'
 import Box, { type BoxProps } from '@mui/material/Box'
-import { forwardRef } from 'react'
+import { forwardRef, useContext } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 
 // Persisted in screen documents; never rename (see AGL-34 ADR).
@@ -50,6 +50,10 @@ export interface ReusableInstanceProps extends BoxProps {
  * canvas), so the CSS `:empty` placeholder marks it visibly instead — named,
  * since a layout whose chrome has been promoted is otherwise nothing but
  * indistinguishable dashed boxes.
+ *
+ * The placeholder is drawn on editing surfaces only. A published instance
+ * whose definition does not resolve is left empty by the compose step, and a
+ * visitor must not see the marker there.
  */
 const ReusableInstance = forwardRef<any, ReusableInstanceProps>(
   (props, ref) => {
@@ -72,6 +76,7 @@ const ReusableInstance = forwardRef<any, ReusableInstanceProps>(
       sx,
       ...rest
     } = props
+    const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
     return (
       <Box
         ref={ref}
@@ -79,7 +84,7 @@ const ReusableInstance = forwardRef<any, ReusableInstanceProps>(
         // and the placeholder cannot be mistaken for grafted content.
         data-aglyn-component={name || 'Reusable component'}
         sx={[
-          {
+          Boolean(suppressNavigation) && {
             '&:empty': {
               minHeight: 56,
               m: 1,

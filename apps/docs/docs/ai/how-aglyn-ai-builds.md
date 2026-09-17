@@ -17,6 +17,24 @@ Aglyn AI build jobs are released gradually. The rules on this page apply to ever
 build as it reaches your workspace.
 :::
 
+## Where to describe a build
+
+Open the site you are building for, go to the page that lists what you want built, and
+choose **Describe it** beside its create button:
+
+- a page on **Screens**, or **Describe a page** in **AI jobs** in the Assist panel; see
+  [Generate a page](../building-sites/screens-and-layouts/generate-a-page.md);
+- a page template on **Templates**; see
+  [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai);
+- a layout on **Layouts**; see
+  [Generate a layout](../building-sites/screens-and-layouts/layouts.md#generate-a-layout-with-aglyn-ai);
+- a form on **Forms**; see [Generate a form](./generate-a-form.md);
+- a reusable component on **Components**; see
+  [Generate a reusable component](../building-sites/components/generate-a-component-with-aglyn-ai.md#from-a-brief).
+
+**Describe it** is there when your workspace has AI build jobs, you have the **Generate
+with AI** permission, and AI is on for the site.
+
 ## The plan comes first
 
 Before it generates anything, a build job proposes a **plan**:
@@ -60,12 +78,15 @@ generated until you confirm.
    one template or bound to a collection.
 5. **Colors, spacing and type come from your theme.** Generated content uses your
    theme's colors, spacing scale and text styles, never a fixed color value. A
-   color your theme lacks is proposed as a theme change for you to review.
+   color your theme lacks is proposed as a theme change for you to review. A link
+   or button on a colored band, such as a footer in your primary color, uses the
+   band's text color, so it stays readable.
 6. **Emails use your brand.** Email designs use your brand's colors and fonts, and
    campaigns start from an email template.
 7. **Reuse before creating.** Creating something new is the exception, and the plan
    says why. A plan never creates something your plan does not include or your site
-   has no room for.
+   has no room for, and everything it puts on a page is something your site already
+   has or something the plan itself creates.
 8. **Data is bound, not typed.** A list you already keep as a dataset, collection
    or product catalog is bound to it rather than typed into the page, so it stays
    current. A long list your site does not have yet becomes a proposed dataset.
@@ -74,18 +95,23 @@ generated until you confirm.
    from another website. Every image has alt text or is marked decorative.
 10. **Navigation and SEO travel with a page.** Every new screen gets its own
     address, a search title and description, and a navigation entry when the brief
-    calls for one.
+    calls for one. A link goes only to a page that does what its words say: when your
+    site has no such page yet, the link is left out rather than sent to your home
+    page.
 11. **One main landmark and an ordered outline.** Every page has one main content
     area, one top-level heading, and headings that step down in order, so it reads
     well to screen readers and search engines.
 12. **Responsive by your theme's breakpoints.** Widths follow your theme's
     breakpoints instead of fixed sizes, so pages hold up on phones, tablets and
-    desktops.
+    desktops. A row of cards or columns is a grid that shows one column on a phone
+    and steps up to several side by side on larger screens.
 13. **Drafts only.** Everything the AI builds is a new draft. It never publishes,
     and never changes a live page in place.
 14. **Your voice, with no filler.** Copy follows your site's tone and the brief,
     with no lorem ipsum. Where the brief leaves out a fact, such as a phone number
-    or a price, the AI marks the gap in square brackets instead of inventing it.
+    or a price, the AI marks the gap in square brackets instead of inventing it, and
+    **AI jobs** lists those gaps beside the draft so you can fill them before you
+    publish.
 15. **Start from a duplicate of the nearest thing.** When your site has a similar
     screen, template or email, the job starts from a copy of it, which keeps its
     bindings and SEO.

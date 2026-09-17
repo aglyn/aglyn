@@ -21,8 +21,9 @@
  * and as a `PluginWidgetSlot` mounted on a page. This spec ties the two
  * together, both ways:
  *
- * 1. every catalog key is mounted somewhere under `apps/console` (a key with
- *    no mount is a zone a plugin can register for and never appear in);
+ * 1. every catalog key is mounted somewhere under `apps/console`, or on a
+ *    plugin surface that hosts it through the shell's renderer (a key with no
+ *    mount is a zone a plugin can register for and never appear in);
  * 2. every new key, when a plugin registers a widget for it, renders that
  *    widget with the props the zone documents — through the REAL slot, so
  *    the enablement, entitlement and permission gates are the ones a page
@@ -47,6 +48,15 @@ let lastWidgetProps: Record<string, unknown> | undefined
 /** The SEO zones' proposal doors (AGL-2910), passed through by identity. */
 const mockProposeValues = jest.fn()
 const mockProposeDraft = jest.fn()
+/** The Actions editor's door (AGL-2919), passed through by identity. */
+const mockOpenAction = jest.fn()
+/** The commerce zones' doors (AGL-2916), passed through by identity. */
+const mockProductWrite = jest.fn()
+/** The CRM record zones' proposal doors (AGL-2917), passed through by identity. */
+const mockProposeTask = jest.fn()
+const mockProposeStage = jest.fn()
+const mockProposeEmail = jest.fn()
+const mockProposeMapping = jest.fn()
 /**
  * Registrations the registry answers for `mockSlot` beside the demo card: a
  * table column widget on a zone that also mounts cards (AGL-3008).
@@ -105,11 +115,18 @@ import {
 /**
  * Where each new zone is mounted, and how. A `slot` entry is a
  * `<PluginWidgetSlot slot="…">`; a `columns` entry is the column helper
- * reading the zone for table columns.
+ * reading the zone for table columns; a `hosted` entry is a plugin's own
+ * surface drawing the zone through the renderer the shell hands down
+ * (`useConsoleWidgetSlot`, which is `PluginWidgetSlot` with its gates), because
+ * a plugin cannot import the console's slot.
  */
 const MOUNTS: Record<
   string,
-  { file: string; how: 'slot' | 'columns' | 'both'; props: Record<string, unknown> }
+  {
+    file: string
+    how: 'slot' | 'columns' | 'both' | 'hosted'
+    props: Record<string, unknown>
+  }
 > = {
   orgBillingUsage: {
     file: 'apps/console/app/(app)/[orgSlug]/billing/(sections)/usage/page.tsx',
@@ -208,6 +225,95 @@ const MOUNTS: Record<
     how: 'slot',
     props: { hostId: 'host-1', orgId: 'org-1' },
   },
+  // AGL-3043: beside the create actions on a site's Templates and Layouts
+  // pages, and on the Forms page, which is the forms plugin's own surface.
+  hostTemplates: {
+    file: 'apps/console/app/(app)/[orgSlug]/hosts/[host]/templates/page.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', orgId: 'org-1' },
+  },
+  hostLayouts: {
+    file: 'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', orgId: 'org-1' },
+  },
+  hostForms: {
+    file: 'libs/plugins/forms/src/lib/components/host-forms-card.component.tsx',
+    how: 'hosted',
+    props: { hostId: 'host-1', orgId: 'org-1' },
+  },
+  // AGL-3051: beside Templates and Create Component on a site's Components page.
+  hostComponents: {
+    file: 'apps/console/app/(app)/[orgSlug]/hosts/[host]/components/page.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', orgId: 'org-1' },
+  },
+  // AGL-2919: the Automation page, which is the workflows plugin's own
+  // surface — beside Add action and Recipes, in the editor of a saved
+  // automation, and on a failed run in its history.
+  hostAutomations: {
+    file: 'libs/plugins/workflows/src/lib/components/host-actions-card.component.tsx',
+    how: 'hosted',
+    props: { hostId: 'host-1', orgId: 'org-1', openAction: mockOpenAction },
+  },
+  automationEditor: {
+    file: 'libs/plugins/workflows/src/lib/components/host-actions-card.component.tsx',
+    how: 'hosted',
+    props: {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      target: { type: 'action', id: 'act-1', name: 'Welcome new leads' },
+    },
+  },
+  automationRun: {
+    file: 'libs/plugins/workflows/src/lib/components/host-run-history-card.component.tsx',
+    how: 'hosted',
+    props: {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      target: { type: 'action', id: 'act-1', name: 'Welcome new leads' },
+      runId: 'run-1',
+    },
+  },
+  // AGL-2917: the CRM's record pages, its one-to-one composer and its import
+  // drawers, which are the CRM plugin's own surfaces.
+  recordInsights: {
+    file: 'libs/plugins/crm/src/lib/components/crm-record-insights-zone.tsx',
+    how: 'hosted',
+    props: {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      record: { kind: 'deal', id: 'deal-1', name: 'Warehouse re-roof' },
+      proposeTask: mockProposeTask,
+      stages: [{ id: 'negotiation', name: 'Negotiation' }],
+      stageId: 'qualified',
+      proposeStage: mockProposeStage,
+    },
+  },
+  recordEmail: {
+    file: 'libs/plugins/crm/src/lib/components/crm-send-email-dialog.tsx',
+    how: 'hosted',
+    props: {
+      hostId: null,
+      orgId: 'org-1',
+      record: { kind: 'contact', id: 'contact-1', name: 'Dana Whitfield' },
+      subject: '',
+      body: '',
+      proposeDraft: mockProposeEmail,
+    },
+  },
+  importMapping: {
+    file: 'libs/plugins/crm/src/lib/components/csv-import-drawer.tsx',
+    how: 'hosted',
+    props: {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      collection: 'contacts',
+      columns: [{ header: 'E-mail', shape: 'email' }],
+      mapping: {},
+      proposeMapping: mockProposeMapping,
+    },
+  },
   // AGL-2911: beside the sites on the organization's Sites page, for an
   // action taken across many of them at once.
   orgSites: {
@@ -221,11 +327,63 @@ const MOUNTS: Record<
   },
 }
 
+/**
+ * Zones a PLUGIN hosts (AGL-2916): the commerce product editor, products hub
+ * and import dialog draw the shell's renderer through
+ * `useConsoleWidgetSlot`, as the product editor draws `seoFields`, so their
+ * mounts are in the plugin's files rather than a console page.
+ */
+Object.assign(MOUNTS, {
+  productEditor: {
+    file: 'libs/plugins/commerce/src/lib/components/console/product-editor-dialog.component.tsx',
+    how: 'slot',
+    props: {
+      hostId: 'host-1',
+      orgId: undefined,
+      product: {
+        id: 'prod-1',
+        name: 'Desk lamp',
+        type: 'physical',
+        description: '',
+        tags: [],
+        categoryIds: [],
+        options: [],
+        mediaUrls: [],
+        seoTitle: '',
+        seoDescription: '',
+      },
+      categories: [],
+      proposeValues: mockProposeValues,
+    },
+  },
+  productsHub: {
+    file: 'libs/plugins/commerce/src/lib/components/console/products-hub-zone.component.tsx',
+    how: 'slot',
+    props: {
+      hostId: 'host-1',
+      orgId: undefined,
+      products: [],
+      lastImport: null,
+      applyProductCopy: mockProductWrite,
+      createProductDrafts: mockProductWrite,
+      createCategories: mockProductWrite,
+      createDiscountDrafts: mockProductWrite,
+    },
+  },
+  productImport: {
+    file: 'libs/plugins/commerce/src/lib/components/console/products-hub-card.component.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1', orgId: undefined, count: 2, options: {}, setOption: mockProductWrite },
+  },
+})
+
 const NEW_ZONES = Object.keys(MOUNTS)
 
 /**
  * Every zone mounted anywhere in the console: a literal `slot="…"`, a
- * `slot={CONSOLE_WIDGET_SLOTS.…}`, or the column helper reading a zone.
+ * `slot={CONSOLE_WIDGET_SLOTS.…}`, or the column helper reading a zone — on a
+ * console page, or on a plugin's own surface drawing the renderer the shell
+ * hands it (AGL-3043).
  */
 function mountedZones(): Set<string> {
   const out = execFileSync(
@@ -239,6 +397,7 @@ function mountedZones(): Set<string> {
       String.raw`(slot="[A-Za-z]+"|slot=\{CONSOLE_WIDGET_SLOTS\.[A-Za-z]+\}|usePluginListColumns\('[A-Za-z]+'\))`,
       '--',
       'apps/console',
+      'libs/plugins',
       ':!apps/console/specs',
       ':!*.spec.*',
     ],
@@ -265,7 +424,7 @@ describe('AGL-2940 · the new zones are in the catalog and mounted', () => {
     }
   })
 
-  it('mounts every catalog zone somewhere under apps/console', () => {
+  it('mounts every catalog zone somewhere a console page draws', () => {
     const mounted = mountedZones()
     // ANTI-VACUITY: the grep found the zones that predate this issue.
     expect(mounted.has('hostDashboard')).toBe(true)
@@ -284,6 +443,13 @@ describe('AGL-2940 · the new zones are in the catalog and mounted', () => {
       if (mount.how === 'columns') expect(`${zone}: ${columnMount}`).toBe(`${zone}: true`)
       if (mount.how === 'both') {
         expect(`${zone}: ${slotMount && columnMount}`).toBe(`${zone}: true`)
+      }
+      if (mount.how === 'hosted') {
+        // Drawn through the shell's gated renderer, never a list of its own.
+        const hosted = slotMount && source.includes('useConsoleWidgetSlot()')
+        expect(`${zone}: ${mount.file.startsWith('libs/plugins/') && hosted}`).toBe(
+          `${zone}: true`,
+        )
       }
     }
   })

@@ -21,14 +21,16 @@ import {
   actionRunSummary,
   actionTriggerLabel,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import type { ConsoleAutomationTarget } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
   Chip,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -46,8 +48,17 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface HostRunHistoryCardProps {
   hostId: string
+  /** The org the page names, for what other plugins add to a failed run. */
+  orgId?: string
   /** Show only runs of this action/workflow. */
   targetId?: string
+  /**
+   * What `targetId` names, and its name. A run row records its automation's id
+   * but not whether it is an action or a workflow, so the card that opened the
+   * history says; without it, a failed run offers nothing beside its summary.
+   */
+  targetType?: ConsoleAutomationTarget['type']
+  targetName?: string
   header?: string
   /** Overrides the default help affordance on the card header. */
   help?: HelpTipContent
@@ -102,7 +113,10 @@ const RESULT_LABEL = {
 export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
   const {
     hostId,
+    orgId,
     targetId,
+    targetType,
+    targetName = '',
     header = 'Run history',
     help = pluginDocsHelp('buildAWorkflow', {
       anchor: '#4-save-and-test',
@@ -112,6 +126,16 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
     }),
   } = props
   const firestore = useFirestore()
+  /**
+   * The shell's zone renderer (AGL-2919), for what other plugins add to a
+   * failed run; `null` outside the console shell.
+   */
+  const RunZone = useConsoleWidgetSlot()
+  /** The automation a failed run belongs to, as the `automationRun` zone names it. */
+  const zoneTarget = useMemo<ConsoleAutomationTarget | null>(
+    () => (targetId && targetType ? { type: targetType, id: targetId, name: targetName } : null),
+    [targetId, targetType, targetName],
+  )
   /*
    * The window is NARROWED BY THE SERVER, not by the client (AGL-2292).
    *
@@ -210,7 +234,7 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
         </Typography>
       ) : (
         <Stack spacing={1.5}>
-        <Table size="small" aria-label="Run history">
+        <ScrollTable size="small" aria-label="Run history">
           <TableHead>
             <TableRow>
               <TableCell>{'Time'}</TableCell>
@@ -250,12 +274,25 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
                         {`${entry.durationMs}ms`}
                       </Typography>
                     ) : null}
+                    {/*
+                      What other plugins add to a failed run (AGL-2919): the
+                      `automationRun` zone, through the shell's gated slot.
+                    */}
+                    {RunZone && zoneTarget && result === 'failed' ? (
+                      <RunZone
+                        slot="automationRun"
+                        hostId={hostId}
+                        orgId={orgId}
+                        target={zoneTarget}
+                        runId={entry.$id}
+                      />
+                    ) : null}
                   </TableCell>
                 </TableRow>
               )
             })}
           </TableBody>
-        </Table>
+        </ScrollTable>
         <ListPagination
           page={page}
           pageSize={pageSize}

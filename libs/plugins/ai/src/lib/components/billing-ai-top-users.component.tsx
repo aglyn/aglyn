@@ -18,9 +18,14 @@
 
 import { aiAddonName, countCsvDataRows } from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
-import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
+import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -29,22 +34,20 @@ import {
   Button,
   MenuItem,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
-import { useCallback, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useCallback, useMemo, useState } from 'react'
 import { topAiUsageKinds } from '../model/ai-usage-by-user'
 import { useOrgAiUsage } from './use-org-ai-usage'
 import {
   AI_USAGE_EXPORT_ROWS_HEADER,
   aiUsageMonthLabel,
   formatAiUsageShare,
+  type OrgAiUsageRowWire,
 } from '../usage/ai-usage-wire'
 
 export interface BillingAiTopUsersProps {
@@ -79,12 +82,7 @@ export function BillingAiTopUsersComponent(props: BillingAiTopUsersProps) {
   const [month, setMonth] = useState<string | undefined>(undefined)
   const [exporting, setExporting] = useState(false)
   const usage = useOrgAiUsage(orgId, { month })
-  // One row per member, so the table pages in memory over the month it read.
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  useEffect(() => {
-    setPage(0)
-  }, [usage.month])
+  const router = useRouter()
   const name = aiAddonName()
 
   const handleExport = useCallback(async () => {
@@ -127,7 +125,97 @@ export function BillingAiTopUsersComponent(props: BillingAiTopUsersProps) {
   }, [orgId, exporting, usage.month, user, enqueueSnackbar])
 
   const rows = usage.data?.rows ?? []
-  const visible = rows.slice(page * pageSize, page * pageSize + pageSize)
+  const memberHref = useCallback(
+    (uid: string) => buildRoute(Route.MANAGE_TEAM_MEMBER, { orgSlug, uid }),
+    [orgSlug],
+  )
+
+  /*
+   * One row per member, and the whole month is in hand, so the grid pages,
+   * sorts and searches it itself. The row opens the member's page, which is
+   * where the split by site and by kind lives.
+   */
+  const columns = useMemo<GridColDef<OrgAiUsageRowWire>[]>(
+    () => [
+      {
+        field: 'name',
+        headerName: 'Member',
+        flex: 1,
+        minWidth: 220,
+        renderCell: ({ row }) => (
+          <Stack sx={{ minWidth: 0 }}>
+            <Typography variant="body2" noWrap title={row.name}>
+              {row.name}
+            </Typography>
+            {row.email && row.email !== row.name ? (
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {row.email}
+              </Typography>
+            ) : null}
+          </Stack>
+        ),
+      },
+      {
+        field: 'credits',
+        headerName: 'Credits',
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+        width: 110,
+        valueFormatter: (value: number) => value.toLocaleString(),
+      },
+      {
+        field: 'share',
+        headerName: 'Share',
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+        width: 90,
+        valueFormatter: (value: number) => formatAiUsageShare(value),
+      },
+      {
+        field: 'requests',
+        headerName: 'Requests',
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+        width: 110,
+        valueFormatter: (value: number) => value.toLocaleString(),
+      },
+      {
+        field: 'refusals',
+        headerName: 'Refusals',
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+        width: 110,
+        valueFormatter: (value: number) => value.toLocaleString(),
+      },
+      {
+        field: 'mostly',
+        headerName: 'Mostly',
+        flex: 1,
+        minWidth: 160,
+        sortable: false,
+        valueGetter: (_value, row) =>
+          topAiUsageKinds(row.byKind, 2)
+            .map((entry) => entry.kind)
+            .join(', ') || '—',
+      },
+      listActionsColumn((row: OrgAiUsageRowWire) => (
+        <ListRowActions
+          label={row.name}
+          quick={{
+            icon: mdiOpenInNew.path,
+            label: 'View member',
+            to: memberHref(row.uid),
+          }}
+          items={[]}
+        />
+      )),
+    ],
+    [memberHref],
+  )
 
   return (
     <Stack spacing={1.5}>
@@ -179,60 +267,15 @@ export function BillingAiTopUsersComponent(props: BillingAiTopUsersProps) {
           {`No ${name} usage attributed to a member in ${aiUsageMonthLabel(usage.month)}.`}
         </Typography>
       ) : (
-        <>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{'Member'}</TableCell>
-                <TableCell align="right">{'Credits'}</TableCell>
-                <TableCell align="right">{'Share'}</TableCell>
-                <TableCell align="right">{'Requests'}</TableCell>
-                <TableCell align="right">{'Refusals'}</TableCell>
-                <TableCell>{'Mostly'}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {visible.map((row) => (
-                <TableRow key={row.uid} hover>
-                  <TableCell>
-                    <AppLink
-                      href={buildRoute(Route.MANAGE_TEAM_MEMBER, { orgSlug, uid: row.uid })}
-                      color="inherit"
-                      underline="hover"
-                    >
-                      {row.name}
-                    </AppLink>
-                    {row.email && row.email !== row.name ? (
-                      <Typography variant="caption" color="text.secondary" component="div">
-                        {row.email}
-                      </Typography>
-                    ) : null}
-                  </TableCell>
-                  <TableCell align="right">{row.credits.toLocaleString()}</TableCell>
-                  <TableCell align="right">{formatAiUsageShare(row.share)}</TableCell>
-                  <TableCell align="right">{row.requests.toLocaleString()}</TableCell>
-                  <TableCell align="right">{row.refusals.toLocaleString()}</TableCell>
-                  <TableCell>
-                    {topAiUsageKinds(row.byKind, 2)
-                      .map((entry) => entry.kind)
-                      .join(', ') || '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <ListPagination
-            page={page}
-            pageSize={pageSize}
-            rowCount={visible.length}
-            count={rows.length}
-            onPageChange={setPage}
-            onPageSizeChange={(size) => {
-              setPageSize(size)
-              setPage(0)
-            }}
-          />
-        </>
+        <ListTable
+          // Another month is another list: it opens on its first page.
+          key={usage.month}
+          rows={rows}
+          columns={columns}
+          getRowId={(row: OrgAiUsageRowWire) => row.uid}
+          rowHeight={TABLE_ROW_HEIGHT}
+          onOpen={(uid) => router.push(memberHref(uid))}
+        />
       )}
     </Stack>
   )

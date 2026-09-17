@@ -21,15 +21,22 @@ import { AI_JOBS_BEAT_PATH } from './jobs/ai-jobs-beat'
 import { registerAiJobPlan } from './jobs/ai-job-plan-step'
 import { registerAiJobsPause } from './jobs/ai-jobs-pause'
 import { registerAiComponentJob } from './jobs/ai-job-component-step'
+import { registerAiCrmJob } from './jobs/ai-job-crm-step'
 import { registerAiLayoutJob } from './jobs/ai-job-layout-step'
 import { registerAiTemplateJob } from './jobs/ai-job-template-step'
 import { registerAiFormJob } from './jobs/ai-job-form-step'
 import { registerAiPageJob } from './jobs/ai-job-page-step'
+import { registerAiProductsJob } from './jobs/ai-job-products-step'
 import { registerAiEmailJob } from './jobs/ai-job-email-step'
 import { registerAiCampaignJob } from './jobs/ai-job-campaign-step'
 import { registerAiSiteJob } from './jobs/ai-job-site-step'
+import { registerAiWorkflowJob } from './jobs/ai-job-workflow-step'
+import { registerAiInsightJob } from './jobs/ai-job-insight-step'
+import { registerAiFigureReaders } from './insights/ai-figure-readers'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { ensureFirstPartyAiProviders } from './providers/registry'
 import { aiAssistHandler } from './server/ai-assist'
+import { GET as aiCrmAnswer } from './server/ai-crm-answer'
 import { POST as runAiJobsBeat } from './server/ai-jobs-beat-route'
 import { POST as cancelAiJob } from './server/ai-jobs-cancel'
 import { GET as aiJobEvents } from './server/ai-jobs-events-route'
@@ -49,6 +56,9 @@ import { GET as aiAdminUser } from './server/ai-admin-user'
 import { POST as aiAdminOverage } from './server/ai-admin-overage'
 import { GET as aiUsage } from './server/ai-usage'
 import { GET as aiAllotments } from './server/ai-allotments'
+import { GET as aiInsightAnswer } from './server/ai-insight-answer'
+import { POST as runAiInsightsDigest } from './server/ai-insight-digest-route'
+import { AI_INSIGHTS_DIGEST_PATH } from './insights/ai-insight-digest'
 import { GET as aiModels } from './server/ai-models'
 import { GET as billingCredits } from './server/billing-credits'
 import { POST as billingOverage } from './server/billing-overage'
@@ -97,9 +107,24 @@ function registerAiJobKinds(): void {
   // plugins write on the resource-draft seam (AGL-2912).
   registerAiEmailJob()
   registerAiCampaignJob()
+  // Automations drafted from a description, and explained, whose drafts the
+  // workflows plugin writes on the resource-draft seam (AGL-2919).
+  registerAiWorkflowJob()
+  // Product copy, and a store's products, categories and discounts from a
+  // brief, as proposals the commerce plugin's surfaces apply (AGL-2916).
+  registerAiProductsJob()
   // The site scaffold, which builds a whole site through the steps above
   // (AGL-2911).
   registerAiSiteJob()
+  // Insights (AGL-2915): a question about a site's figures, answered from
+  // tables the figure readers return, and the weekly digest. The readers for
+  // the platform's own records — page views, forms, datasets — are this
+  // plugin's; every other plugin registers its own from its console surface.
+  registerAiFigureReaders(() => firebaseAdmin.app().firestore())
+  registerAiInsightJob()
+  // CRM by AI (AGL-2917): a record's summary and next step, an email draft
+  // and an import's column matches, read through the CRM's facts readers.
+  registerAiCrmJob()
 }
 
 /**
@@ -139,6 +164,19 @@ export function registerAiConsoleApi(): void {
     web: (request, context) =>
       resumeAiJob(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
   })
+  // An insight job's answer (AGL-2915), which is kept off the job document
+  // and served only to the member who asked, or for a digest to the site's
+  // members.
+  registerPluginApiRoute('ai/insights/:jobId', {
+    web: (request, context) =>
+      aiInsightAnswer(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
+  })
+  // A CRM job's answer (AGL-2917), which is kept off the job document and
+  // served only to a member the CRM still lets read the record.
+  registerPluginApiRoute('ai/crm/:jobId', {
+    web: (request, context) =>
+      aiCrmAnswer(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
+  })
   registerPluginApiRoute('ai/jobs/:jobId/events', {
     web: (request, context) =>
       aiJobEvents(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
@@ -147,6 +185,10 @@ export function registerAiConsoleApi(): void {
   // minute by the console's scheduler on the cron secret, on the one surface
   // that holds the provider's key.
   registerPluginApiRoute(AI_JOBS_BEAT_PATH, { web: runAiJobsBeat })
+  // The weekly insights (AGL-2915): Monday's digests made for the people who
+  // asked for them, and delivered once the beat has written them. Beside the
+  // beat under `/api/admin/`, where the console's scheduled sweeps live.
+  registerPluginApiRoute(AI_INSIGHTS_DIGEST_PATH, { web: runAiInsightsDigest })
   // A site SEO audit's "Apply all" (AGL-2910): content fixes as new
   // unpublished versions, listing values staged for their SEO cards.
   registerPluginApiRoute('ai/seo/apply', { web: applyAiSeoAudit })

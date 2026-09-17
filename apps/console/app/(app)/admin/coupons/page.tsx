@@ -24,6 +24,7 @@ import {
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -39,7 +40,6 @@ import {
   FormControlLabel,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -542,7 +542,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                 </Typography>
               ) : (
                 <>
-                <Table size="small">
+                <ScrollTable size="small">
                   <TableHead>
                     <TableRow>
                       <TableCell>{'Coupon'}</TableCell>
@@ -635,7 +635,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                </ScrollTable>
                 <ListPagination
                   page={page}
                   pageSize={pageSize}

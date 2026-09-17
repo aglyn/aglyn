@@ -34,7 +34,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { StaffOrgAiResponse } from '../usage/staff-org-ai'
 
@@ -56,6 +56,14 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   AppLink: ({ href, children }: { href: string; children?: ReactNode }) => (
     <a href={href}>{children}</a>
   ),
+}))
+
+const mockPush = jest.fn()
+jest.mock('next/navigation', () => ({
+  __esModule: true,
+  useRouter: () => ({ push: mockPush }),
+  // The grid's row action is a real link, and a link asks where it is.
+  usePathname: () => '/admin/orgs/org-1',
 }))
 
 /** ONE signed-in staff user, held: a provider hands back the same instance. */
@@ -215,6 +223,41 @@ describe('StaffOrgAiCard (AGL-2930)', () => {
     expect(screen.queryByText(/^since /)).toBeNull()
   })
 
+  it('names an uncapped staff comp as the reason there is no band, and nothing is sold (AGL-3049)', async () => {
+    // The route's answer as JSON carries it: no band is `null`, and the flag
+    // says it is the comp's doing rather than a plan that sells none.
+    mockAnswer.payload = JSON.parse(
+      JSON.stringify(
+        body({
+          addon: { on: false, priceUsd: null, since: null, sinceSource: 'no-subscription' },
+          pool: {
+            ...body().pool,
+            planCredits: 116_000,
+            overrideCredits: null,
+            addonCredits: 0,
+            totalCredits: null,
+            remainingCredits: null,
+            uncapped: true,
+          },
+          overage: { ...body().overage, rateUsdPer1k: null, sellsOverage: false },
+        }),
+      ),
+    )
+    render(<StaffOrgAiCard orgId="org-1" />)
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'Uncapped staff comp — no AI credit band. Bounded only by the message cap and an operator’s explicit spend ceiling.',
+        ),
+      ).toBeTruthy(),
+    )
+    expect(
+      screen.getByText('Nothing is sold past a band: an uncapped staff comp has none, and bills nothing.'),
+    ).toBeTruthy()
+    expect(screen.queryByText(/No AI credit band on this plan/)).toBeNull()
+    expect(screen.queryByText(/Not sold past the band/)).toBeNull()
+  })
+
   it('says which of the org’s own controls stopped the overage', async () => {
     mockAnswer.payload = body({
       overage: { ...body().overage, overageCredits: 900, accruedUsd: 2.7, capUsd: 50, capReached: true },
@@ -266,12 +309,71 @@ describe('StaffOrgAiCard (AGL-2930)', () => {
     render(<StaffOrgAiCard orgId="org-1" />)
     await waitFor(() => expect(screen.getByText('job-9')).toBeTruthy())
     expect(screen.getByText('queued 1')).toBeTruthy()
-    // The roster's name links to the account; the uid rides beneath it.
+    // The roster's name opens the account; the uid rides beneath it.
     expect(screen.getByText('Ada')).toBeTruthy()
     expect(screen.getAllByText('user-a').length).toBeGreaterThan(0)
     expect(screen.getByText('1,800')).toBeTruthy()
     expect(screen.getByText('72%')).toBeTruthy()
     expect(screen.getByText('$1.80')).toBeTruthy()
+    // The job's credits read spent over reserved, in one cell.
+    expect(screen.getByText('0 / 400')).toBeTruthy()
+  })
+
+  it('draws jobs and people as record lists in the shared grid, which scrolls its own columns (AGL-3045)', async () => {
+    const { container } = render(<StaffOrgAiCard orgId="org-1" />)
+    await waitFor(() => expect(screen.getByText('job-9')).toBeTruthy())
+    const grids = screen.getAllByRole('grid')
+    expect(grids).toHaveLength(2)
+    // No bare table is left to be cut off by the card: a route that sends no
+    // token breakdown leaves the card with no table at all.
+    expect(container.querySelectorAll('table')).toHaveLength(0)
+    const [jobs, people] = grids
+    const headers = (grid: HTMLElement) =>
+      within(grid)
+        .getAllByRole('columnheader')
+        .map((cell) => cell.textContent)
+    expect(headers(jobs)).toEqual(
+      expect.arrayContaining(['Job', 'Kind', 'Status', 'Credits', 'Started', 'Started by']),
+    )
+    expect(headers(people)).toEqual(
+      expect.arrayContaining(['Person', 'Credits', 'Share', 'Provider $', 'Requests', 'Refusals']),
+    )
+  })
+
+  it('opens the account from a top user’s row', async () => {
+    mockPush.mockClear()
+    render(<StaffOrgAiCard orgId="org-1" />)
+    await waitFor(() => expect(screen.getByText('Ada')).toBeTruthy())
+    fireEvent.click(screen.getByRole('gridcell', { name: /Ada/ }))
+    expect(mockPush).toHaveBeenCalledWith('/admin/users/user-a')
+  })
+
+  it('draws every remaining table in a box that scrolls sideways (AGL-3045)', async () => {
+    mockAnswer.payload = body({
+      tokens: {
+        total: { input: 3_000, cached: 9_000, cacheWrite: 3_000, output: 1_500 },
+        cacheHitRate: 0.6,
+        kinds: [
+          {
+            kind: 'page',
+            requests: 4,
+            estCostUsd: 2.2,
+            providerCostUsd: 1.6,
+            costPerRequestUsd: 0.4,
+            tokens: { input: 2_000, cached: 0, cacheWrite: 3_000, output: 1_000 },
+            cacheHitRate: 0,
+          },
+        ],
+      },
+    })
+    const { container } = render(<StaffOrgAiCard orgId="org-1" />)
+    await waitFor(() => expect(screen.getByText('cache hit rate 60%')).toBeTruthy())
+    const tables = [...container.querySelectorAll('table')]
+    // Positive control: the tokens breakdown is a table, and it is found.
+    expect(tables).toHaveLength(1)
+    for (const table of tables) {
+      expect(getComputedStyle(table.parentElement as HTMLElement).overflowX).toBe('auto')
+    }
   })
 
   it('turns the margin red when spend exceeds the add-on plus the plan’s share', async () => {

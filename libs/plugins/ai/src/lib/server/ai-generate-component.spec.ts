@@ -51,7 +51,7 @@ import {
   AI_COMPONENT_SELECTION_TOOL_NAME,
   checkAiComponentSelection,
 } from './ai-generate-component'
-import { AI_COMPONENT_PROP_KINDS } from '../tools/ai-component-tool'
+import { AI_COMPONENT_PROP_KINDS, AI_COMPONENT_SELECTION_PROP_KINDS } from '../tools/ai-component-tool'
 
 const GOLDEN = JSON.parse(
   readFileSync(join(__dirname, '..', 'jobs', 'goldens', 'component-from-selection.json'), 'utf8'),
@@ -120,11 +120,13 @@ describe('the selection', () => {
 describe('the tool', () => {
   const tool = aiComponentSelectionTool()
 
-  it('is strict, and offers only the kinds the Properties dialog has', () => {
+  it('is strict, and offers only the kinds the Properties dialog has, less the Icon its apply cannot carry (AGL-3054)', () => {
     expect(tool.name).toBe(AI_COMPONENT_SELECTION_TOOL_NAME)
     expect(tool.strict).toBe(true)
     const props = (tool.inputSchema as any).properties.props.items
-    expect(props.properties.type.enum).toEqual([...AI_COMPONENT_PROP_KINDS])
+    expect(props.properties.type.enum).toEqual([...AI_COMPONENT_SELECTION_PROP_KINDS])
+    expect(AI_COMPONENT_SELECTION_PROP_KINDS).toEqual(AI_COMPONENT_PROP_KINDS.filter((kind) => kind !== 'icon'))
+    expect(props.properties.type.description).not.toContain('icon (Icon)')
     expect(props.additionalProperties).toBe(false)
   })
 
@@ -239,7 +241,7 @@ describe('the check — the binding rules', () => {
     expect(codes(checkAiComponentSelection(unlabeled, context(), SELECTED))).toEqual(['hide-label'])
   })
 
-  it('refuses a property that is declared and never bound', () => {
+  it('refuses a property that is declared and never bound, saying where its kind binds (AGL-3054)', () => {
     const unbound = answer()
     ;(unbound['props'] as any[]).push({
       name: 'spare',
@@ -248,7 +250,11 @@ describe('the check — the binding rules', () => {
       description: '',
       options: [],
     })
-    expect(codes(checkAiComponentSelection(unbound, context(), SELECTED))).toEqual(['prop-unbound'])
+    const result = checkAiComponentSelection(unbound, context(), SELECTED)
+    expect(codes(result)).toEqual(['prop-unbound'])
+    expect(result.violations[0].message).toBe(
+      '"spare" is declared and never bound. Every property fills a setting of the section: bind a text property to copy, such as a Typography’s children or a Button’s label.',
+    )
   })
 
   it('refuses a binding naming a property that was never declared', () => {

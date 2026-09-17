@@ -77,6 +77,7 @@ import {
 } from '../model/assist-edit'
 import { applyAssistEdit, describeAssistEditCanvas } from './assist-edit-canvas'
 import { AssistEditCard } from './assist-edit-card.component'
+import { aiInsightSurfaceForPath } from '../model/ai-insight'
 import { AssistJobsDrawer } from './assist-jobs-drawer.component'
 import { AiModelSelector } from './ai-model-selector.component'
 import { AiUsageStrip } from './ai-usage-strip.component'
@@ -954,6 +955,10 @@ export function AssistPanelComponent(props: AssistDockProps) {
               user={user}
               visible={generativeVisible}
               hostId={hostId}
+              // A question about the figures, where the page reports them
+              // (AGL-2915); hidden with the rest of AI jobs, and refused by
+              // the jobs door where the member may not generate.
+              insight={ai.generate ? aiInsightSurfaceForPath(pathname) : null}
             />
             {!messages.length && (
               <Alert severity="info" sx={{ mb: 2 }}>

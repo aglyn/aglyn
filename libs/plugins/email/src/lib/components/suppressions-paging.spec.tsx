@@ -257,8 +257,8 @@ const mountCard = async () => {
 
 /** The address cell of every rendered row, top to bottom. */
 const renderedAddresses = () =>
-  Array.from(document.querySelectorAll('tbody tr')).map(
-    (row) => row.querySelector('td')?.textContent?.trim() ?? '',
+  Array.from(document.querySelectorAll('[role="row"][data-id]')).map(
+    (row) => row.querySelector('[data-field="email"]')?.textContent?.trim() ?? '',
   )
 
 describe('the suppression list walks the collection (AGL-2501)', () => {

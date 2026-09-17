@@ -166,6 +166,9 @@ it('reads back the last audit: its pages, its findings, its fixes and what it co
   mockFetch.mockResolvedValueOnce(json({ jobs: [audit()] }))
   render(<AiSeoAuditCard {...props} />)
   const table = await screen.findByRole('table', { name: 'Audited pages' })
+  // A page's findings wrap in their cell, so this stays a table — in a box
+  // that scrolls sideways inside the card rather than past its edge (AGL-3045).
+  expect(getComputedStyle(table.parentElement as HTMLElement).overflowX).toBe('auto')
   expect(within(table).getByText('/lamps')).toBeTruthy()
   expect(within(table).getByText('No search title')).toBeTruthy()
   expect(within(table).getByText('Title: Brass desk lamps · 1 image description')).toBeTruthy()

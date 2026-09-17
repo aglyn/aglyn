@@ -48,6 +48,13 @@ const LAST_MONTH = '2026-08'
 /** A Pro org, which sells an AI credit band. */
 const PRO_ORG = { plan: 'pro', slug: 'acme' }
 
+/**
+ * A Starter org without the AI add-on: no band of its own, so the operator
+ * backstop — the repo default when nothing is configured — is the ceiling its
+ * reservations refuse at.
+ */
+const NO_BAND_ORG = { plan: 'starter', slug: 'acme' }
+
 type Guards = Record<string, { month?: string; threshold?: number }>
 
 interface FakeSweep {
@@ -209,7 +216,10 @@ describe('the margin guard (AGL-2984)', () => {
 
 describe('the hard ceiling (AGL-2984)', () => {
   it('announces the refusal at the shipped ceiling, in the words staff read', async () => {
+    // The premise: the default binds a workspace with no band of its own.
+    expect(resolveAssistCreditBudget(NO_BAND_ORG as never)).toBeNull()
     const { context, recorded, sent } = fakeSweep({
+      org: NO_BAND_ORG,
       assistUsd: 41,
       // $41 is still 1x of the review threshold, announced earlier this month.
       guards: { assistCogs: { month: MONTH, threshold: 1 } },
@@ -237,6 +247,7 @@ describe('the hard ceiling (AGL-2984)', () => {
 
   it('announces once a month, however far past the ceiling the spend climbs', async () => {
     const announced = fakeSweep({
+      org: NO_BAND_ORG,
       assistUsd: 4_000,
       guards: {
         ...MARGIN_ALREADY_SPOKEN,
@@ -248,6 +259,7 @@ describe('the hard ceiling (AGL-2984)', () => {
     expect(announced.sent).toEqual([])
 
     const lastMonth = fakeSweep({
+      org: NO_BAND_ORG,
       assistUsd: 4_000,
       guards: {
         ...MARGIN_ALREADY_SPOKEN,
@@ -261,6 +273,7 @@ describe('the hard ceiling (AGL-2984)', () => {
   it('says nothing when the operator turned the ceiling off', async () => {
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = 'off'
     const { context, recorded, sent } = fakeSweep({
+      org: NO_BAND_ORG,
       assistUsd: 10_000,
       guards: MARGIN_ALREADY_SPOKEN,
     })
@@ -271,11 +284,11 @@ describe('the hard ceiling (AGL-2984)', () => {
 
   it('follows the operator’s number when one is configured', async () => {
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '500'
-    const under = fakeSweep({ assistUsd: 100, guards: MARGIN_ALREADY_SPOKEN })
+    const under = fakeSweep({ org: NO_BAND_ORG, assistUsd: 100, guards: MARGIN_ALREADY_SPOKEN })
     await evaluateAiUsageAlerts(under.context)
     expect(under.sent).toEqual([])
 
-    const over = fakeSweep({ assistUsd: 500, guards: MARGIN_ALREADY_SPOKEN })
+    const over = fakeSweep({ org: NO_BAND_ORG, assistUsd: 500, guards: MARGIN_ALREADY_SPOKEN })
     await evaluateAiUsageAlerts(over.context)
     expect(over.sent.map((alert) => alert.title)).toEqual([
       'Assist is REFUSING acme — the $500 monthly spend ceiling is crossed',
@@ -284,6 +297,7 @@ describe('the hard ceiling (AGL-2984)', () => {
 
   it('names the org by its id when the document carries no slug', async () => {
     const { context, sent } = fakeSweep({
+      org: NO_BAND_ORG,
       assistUsd: 41,
       orgSlug: null,
       guards: { assistCogs: { month: MONTH, threshold: 1 } },
@@ -296,9 +310,89 @@ describe('the hard ceiling (AGL-2984)', () => {
   })
 })
 
+/**
+ * Announced only where the reservation refuses. The repo default binds a
+ * workspace with no band; every other org is measured against its band or an
+ * operator's explicit figure, and a stop it never makes is not announced.
+ */
+describe('the hard ceiling is the one this org is refused at', () => {
+  it('a band sold past is not refused at the default, and is announced only past an operator’s figure', async () => {
+    const quiet = fakeSweep({ assistUsd: 41, guards: MARGIN_ALREADY_SPOKEN })
+    await evaluateAiUsageAlerts(quiet.context)
+    expect(quiet.recorded).toEqual([])
+    expect(quiet.sent).toEqual([])
+
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '500'
+    const over = fakeSweep({ assistUsd: 500, guards: MARGIN_ALREADY_SPOKEN })
+    await evaluateAiUsageAlerts(over.context)
+    expect(over.sent.map((alert) => alert.title)).toEqual([
+      'Assist is REFUSING acme — the $500 monthly spend ceiling is crossed',
+    ])
+  })
+
+  it('a band that is a wall is the workspace’s own limit, unless an operator’s figure sits below it', async () => {
+    // Enterprise sells nothing past its band, so the band refuses first.
+    const wall = { plan: 'enterprise', slug: 'acme' }
+    const atBand = fakeSweep({ org: wall, assistUsd: 4_000, guards: MARGIN_ALREADY_SPOKEN })
+    await evaluateAiUsageAlerts(atBand.context)
+    expect(atBand.sent).toEqual([])
+
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '25'
+    const underOperator = fakeSweep({ org: wall, assistUsd: 30, guards: MARGIN_ALREADY_SPOKEN })
+    await evaluateAiUsageAlerts(underOperator.context)
+    expect(underOperator.sent.map((alert) => alert.title)).toEqual([
+      'Assist is REFUSING acme — the $25 monthly spend ceiling is crossed',
+    ])
+  })
+
+  it('an uncapped staff comp is announced only past an operator’s explicit figure (AGL-3049)', async () => {
+    const internal = {
+      plan: 'enterprise',
+      enterprise: true,
+      slug: 'acme',
+      entitlements: {
+        planComp: {
+          plan: 'enterprise',
+          uncapped: true,
+          reason: 'other',
+          note: 'Internal workspace',
+          grantedBy: 'staff-1',
+        },
+      },
+    }
+    const quiet = fakeSweep({ org: internal, assistUsd: 4_000, guards: MARGIN_ALREADY_SPOKEN })
+    await evaluateAiUsageAlerts(quiet.context)
+    expect(quiet.recorded).toEqual([])
+    expect(quiet.sent).toEqual([])
+
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '200'
+    const over = fakeSweep({ org: internal, assistUsd: 250, guards: MARGIN_ALREADY_SPOKEN })
+    await evaluateAiUsageAlerts(over.context)
+    expect(over.sent.map((alert) => alert.title)).toEqual([
+      'Assist is REFUSING acme — the $200 monthly spend ceiling is crossed',
+    ])
+  })
+
+  it('the margin guard names an uncapped comp as the reason there is no band (AGL-3049)', async () => {
+    const { context, sent } = fakeSweep({
+      assistUsd: 30,
+      org: {
+        plan: 'enterprise',
+        entitlements: {
+          planComp: { plan: 'enterprise', uncapped: true, reason: 'other', grantedBy: 'staff-1' },
+        },
+      },
+    })
+    await evaluateAiUsageAlerts(context)
+    expect(sent[0].body).toContain(
+      `The ${aiAddonName()} add-on is off, with no AI credit band (an uncapped staff comp).`,
+    )
+  })
+})
+
 describe('one org, both alerts (AGL-2984)', () => {
   it('evaluates the margin guard before the hard ceiling', async () => {
-    const { context, recorded, sent } = fakeSweep({ assistUsd: 41 })
+    const { context, recorded, sent } = fakeSweep({ org: NO_BAND_ORG, assistUsd: 41 })
     await evaluateAiUsageAlerts(context)
     expect(recorded).toEqual([
       { key: 'assistCogs', threshold: 1 },
@@ -308,7 +402,11 @@ describe('one org, both alerts (AGL-2984)', () => {
   })
 
   it('records both guards and sends nothing on a seeding sweep', async () => {
-    const { context, recorded, sent } = fakeSweep({ assistUsd: 41, seeding: true })
+    const { context, recorded, sent } = fakeSweep({
+      org: NO_BAND_ORG,
+      assistUsd: 41,
+      seeding: true,
+    })
     await evaluateAiUsageAlerts(context)
     expect(recorded).toEqual([
       { key: 'assistCogs', threshold: 1 },
@@ -337,7 +435,11 @@ describe('the server declarations register the contributor (AGL-2984)', () => {
       'ai:provider-spend',
     ])
 
-    const { context, recorded, sent } = fakeSweep({ assistUsd: 41, seeding: true })
+    const { context, recorded, sent } = fakeSweep({
+      org: NO_BAND_ORG,
+      assistUsd: 41,
+      seeding: true,
+    })
     await registered[0].evaluate(context)
     expect(recorded.map((entry) => entry.key)).toEqual(['assistCogs', 'assistCeiling'])
     expect(sent).toEqual([])

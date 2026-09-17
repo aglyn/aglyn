@@ -222,12 +222,18 @@ const ORIGINAL_ENV = process.env
 const MONTH = '2026-07'
 const ROLLUP = `orgs/org-1/usage/${MONTH}`
 
-/** A modest paid org — small enough that Assist is the interesting number. */
-function seedOrg(assistEstCostUsd: number | undefined) {
+/**
+ * A modest paid org — small enough that Assist is the interesting number.
+ * Business unless `billing` names the plan and add-ons the case is about.
+ */
+function seedOrg(
+  assistEstCostUsd: number | undefined,
+  billing: Record<string, unknown> = { plan: 'business' },
+) {
   mockDocs.clear()
   mockDocs.set('hosts/host-1', { orgId: 'org-1', screens: {} })
   mockDocs.set('orgs/org-1', {
-    plan: 'business',
+    ...billing,
     stripeCustomerId: 'cus_org1',
     subscription: { status: 'active' },
   })
@@ -273,8 +279,11 @@ function runRollup(post: (request: Request) => Promise<Response>) {
 }
 
 /** One full sweep for a given Assist bill; returns the rollup it wrote. */
-async function rollupFor(assistEstCostUsd: number | undefined) {
-  seedOrg(assistEstCostUsd)
+async function rollupFor(
+  assistEstCostUsd: number | undefined,
+  billing?: Record<string, unknown>,
+) {
+  seedOrg(assistEstCostUsd, billing)
   meterEvents.length = 0
   const response = await runRollup(loadRoute())
   expect(response.status).toBe(200)
@@ -357,5 +366,46 @@ describe('report-usage records Assist provider spend (AGL-2280)', () => {
     // other metered line — has not absorbed the Assist bill on either side:
     // the overage is its own line, never a markup folded into COGS.
     expect(huge['costUsd']).toBeCloseTo(none['costUsd'], 10)
+  })
+
+  it('Starter WITH the AI add-on is invoiced past the add-on band at the rate its card quotes (AGL-3014)', async () => {
+    /*
+      Starter lists no assist band and no rate. The add-on brings both: a
+      4,000-credit band, and Pro's $3.00 per 1,000 from
+      `resolveAssistOverageRateUsdPer1k` rather than from
+      `PLAN_PRICING.starter`. The overage card, the ceiling, the 100% alert
+      and the refusal sentence all quote that rate, so the invoice line is
+      pinned in plain figures rather than re-derived through the helper it
+      shares with them: $10.50 of billed spend is 10,500 credits, 6,500 past
+      the band, $19.50.
+
+      FORCED RED by answering `null` from the resolver's add-on branch: the
+      rollup recorded no rate and `billedCents` did not move.
+    */
+    const starterWithAi = { plan: 'starter', seatAddons: { aiAddon: 1 } }
+    const none = await rollupFor(undefined, starterWithAi)
+    const over = await rollupFor(10.5, starterWithAi)
+    expect(over).toMatchObject({
+      assistCredits: 10_500,
+      assistCreditsBand: 4_000,
+      assistCreditsOverage: 6_500,
+      assistOverageUsd: 19.5,
+      assistOverageRateUsd: 3,
+      assistOverageMeteredUsd: 19.5,
+    })
+    expect(over['billedCents']).toBe(none['billedCents'] + 1_950)
+
+    // The control: the same workspace and spend without the add-on has no
+    // band to be over, so nothing past one reaches the invoice.
+    const bareNone = await rollupFor(undefined, { plan: 'starter' })
+    const bare = await rollupFor(10.5, { plan: 'starter' })
+    expect(bare).toMatchObject({
+      assistCredits: 10_500,
+      assistCreditsBand: null,
+      assistCreditsOverage: 0,
+      assistOverageUsd: 0,
+      assistOverageRateUsd: null,
+    })
+    expect(bare['billedCents']).toBe(bareNone['billedCents'])
   })
 })

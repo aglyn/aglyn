@@ -104,6 +104,12 @@ sequenceDiagram
   disagreement ships the same build with a feature on in one environment and off in
   another, with neither looking wrong enough to be reported. The spec also fails on a
   registry flag that was never seeded, and on a seeded `release_*` no code declares.
+- **Remote Config refuses a parameter description longer than 256 characters**, and a
+  single one over the limit fails the whole publish. The registry description is
+  written for this page and can run longer, so a publish sends it only when it fits.
+  Otherwise the parameter keeps its live description, or, on a first publish, gets the
+  registry description cut at a word boundary. The spec above also holds every seeded
+  description within the limit, so `firebase deploy --only remoteconfig` never trips it.
 
 ### A flag is not always sufficient on its own
 

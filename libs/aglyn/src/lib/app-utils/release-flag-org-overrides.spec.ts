@@ -85,8 +85,9 @@ describe('per-org release flag overrides (AGL-1635)', () => {
     const on = { enabled: true }
 
     it('grants a globally-off flag to one org — the reported case', () => {
-      // `release_edit_bar` ships dark. Before this, the only way to give one
-      // customer the admin bar was to turn it on for everybody.
+      // `release_edit_bar` shipped dark (it is on for every site since
+      // AGL-3041). Before this, the only way to give one customer the admin
+      // bar was to turn it on for everybody.
       expect(
         isReleaseFlagOnForOrg(
           'release_edit_bar',

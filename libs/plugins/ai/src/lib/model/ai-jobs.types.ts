@@ -176,6 +176,25 @@ export interface AiJobStepTokens {
   latencyMs: number
   /** Runs that reached the provider. */
   runs: number
+  /**
+   * Why the step's latest runs stopped (AGL-3042), oldest first and the last
+   * run last: each run's stop reason and the tokens it generated, so a pass
+   * cut off at its ceiling reads off the job rather than out of the sums. At
+   * most `AI_JOB_STEP_LAST_RUNS` are kept; absent on a step measured before.
+   */
+  lastRuns?: AiJobStepRunStop[]
+}
+
+/** One run of a step, by why it stopped (AGL-3042). */
+export interface AiJobStepRunStop {
+  /**
+   * The stop reason of the run's last model call — `tool_use` or `end_turn`
+   * for an answer, `max_tokens` for one cut off at its ceiling, `refusal` —
+   * and `null` when the provider named none.
+   */
+  stopReason: string | null
+  /** Tokens the run generated, over every model call it made. */
+  output: number
 }
 
 export type AiJobOutputResource =
@@ -192,6 +211,8 @@ export type AiJobOutputResource =
   | 'text'
   | 'theme'
   | 'seo'
+  | 'insight'
+  | 'crm'
 
 /**
  * One thing a job wrote. Addressed by resource and id so the console can
@@ -210,6 +231,11 @@ export type AiJobOutputResource =
  * job never writes it; the values ride on the output as `proposal`, a person
  * puts them in the editor and saves them there, and an audit's content fixes
  * become new versions only when a person applies them.
+ *
+ * A `crm` output is a proposal too (AGL-2917): a record's summary and next
+ * step, an email draft, or an import's column matches. The CRM's own task
+ * form, stage route, composer and import drawer are the writes, and a person
+ * makes each of them, or does not.
  */
 export interface AiJobOutput {
   resource: AiJobOutputResource

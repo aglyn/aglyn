@@ -156,11 +156,12 @@ const SITE_DOORS: Record<string, 'GET' | 'POST' | 'PATCH'> = {
 const HANDLER_GATED_DOORS = ['assist/chat', 'ai/jobs/batch']
 
 /**
- * Doors that name a job rather than a site. Neither spends: reading a job's
- * progress and canceling it stay open, so a job the switch failed can still
- * be read and a queued one stopped. The beat fails the job itself.
+ * Doors that name a job rather than a site. None spends: reading a job's
+ * progress or the answer of an insight or CRM job, and canceling a job, stay
+ * open, so a job the switch failed can still be read and a queued one stopped.
+ * The beat fails the job itself.
  */
-const JOB_DOORS = ['ai/jobs/:jobId/cancel', 'ai/jobs/:jobId/events']
+const JOB_DOORS = ['ai/jobs/:jobId/cancel', 'ai/jobs/:jobId/events', 'ai/insights/:jobId', 'ai/crm/:jobId']
 
 /**
  * The workspace half of AI: billing, credits, feedback and the staff doors.
@@ -278,7 +279,8 @@ describe('the workspace half keeps running whatever a site decided', () => {
   )
 
   it.each(JOB_DOORS)('%s runs: it names a job, not a site', async (path) => {
-    const method = path.endsWith('/events') ? 'GET' : 'POST'
+    const method =
+      path.endsWith('/events') || path.startsWith('ai/insights/') || path.startsWith('ai/crm/') ? 'GET' : 'POST'
     const response = await call(path, method, null)
     expect(response.status).toBe(200)
     expect(mockCalls).toEqual([path])

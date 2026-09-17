@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { describeOrgPlan } from '@aglyn/aglyn'
+import { describeOrgPlan, planCompLabel } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
@@ -223,11 +223,14 @@ const StaffOrgSummaryCard = ({
               variant="outlined"
             />
           ) : null}
+          {/* Says "uncapped" when the comp lifts every band (AGL-3049). */}
           {planState?.comp ? (
             <Chip
-              label={`comp: ${planState.comp.plan}${
-                planState.compInForce ? '' : ' (dormant)'
-              }`}
+              label={`comp: ${planCompLabel(
+                planState.comp,
+                planState.compInForce,
+                planState.comp.plan,
+              )}`}
               size="small"
               color="secondary"
             />

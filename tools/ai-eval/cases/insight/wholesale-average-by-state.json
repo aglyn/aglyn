@@ -1,0 +1,171 @@
+{
+  "id": "insight-wholesale-average-by-state",
+  "kind": "insight",
+  "brief": "What's the average order value by state in our wholesale orders dataset?",
+  "framing": null,
+  "inventory": null,
+  "tables": [
+    {
+      "ref": "t1",
+      "reader": "datasets.breakdown",
+      "days": 0,
+      "scope": "org",
+      "title": "Wholesale orders by State",
+      "source": {
+        "label": "Data",
+        "path": "data"
+      },
+      "period": null,
+      "columns": [
+        {
+          "key": "group",
+          "label": "State",
+          "kind": "text"
+        },
+        {
+          "key": "records",
+          "label": "Records",
+          "kind": "count"
+        },
+        {
+          "key": "value",
+          "label": "Average of Order total",
+          "kind": "number"
+        }
+      ],
+      "rows": [
+        {
+          "group": "TX",
+          "records": 48,
+          "value": 412.35
+        },
+        {
+          "group": "OK",
+          "records": 17,
+          "value": 388.1
+        },
+        {
+          "group": "LA",
+          "records": 9,
+          "value": 296.44
+        },
+        {
+          "group": "Other (4 groups under 3 records)",
+          "records": 6,
+          "value": 510.0
+        }
+      ],
+      "omitted": 0,
+      "notes": [
+        "Groups of fewer than 3 records are counted together as Other."
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand from a dataset breakdown, naming the folded groups as the table does.",
+      "plan": null,
+      "answer": {
+        "insights": [
+          {
+            "text": "Texas orders average the most among the states with enough orders to show: 412.35 across 48 orders.",
+            "cites": [
+              {
+                "table": "t1",
+                "rows": [
+                  0
+                ]
+              }
+            ]
+          },
+          {
+            "text": "Oklahoma averages 388.1 across 17 orders, and Louisiana 296.44 across 9.",
+            "cites": [
+              {
+                "table": "t1",
+                "rows": [
+                  1,
+                  2
+                ]
+              }
+            ]
+          },
+          {
+            "text": "The 6 orders from states with fewer than 3 orders each average 510, higher than any single state, but they are too few to read much into.",
+            "cites": [
+              {
+                "table": "t1",
+                "rows": [
+                  3
+                ]
+              }
+            ]
+          }
+        ],
+        "gap": "The dataset does not say which currency the order totals are in."
+      },
+      "usage": null,
+      "rubric": {
+        "structure": 5,
+        "copy": 4,
+        "reuse": null,
+        "grader": "authored"
+      }
+    }
+  ],
+  "controls": [
+    {
+      "why": "An average across states the model computed, which no row holds.",
+      "answer": {
+        "insights": [
+          {
+            "text": "Across all states the average order is 401.72.",
+            "cites": [
+              {
+                "table": "t1",
+                "rows": [
+                  0,
+                  1,
+                  2,
+                  3
+                ]
+              }
+            ]
+          }
+        ],
+        "gap": null
+      },
+      "fails": [
+        "readable",
+        "rules"
+      ]
+    },
+    {
+      "why": "A gap sentence that carries a number and an insight that names a person by address.",
+      "answer": {
+        "insights": [
+          {
+            "text": "Ask jo.reyes@example.com about the 48 Texas orders.",
+            "cites": [
+              {
+                "table": "t1",
+                "rows": [
+                  0
+                ]
+              }
+            ]
+          }
+        ],
+        "gap": "Only 4 states are shown."
+      },
+      "fails": [
+        "readable",
+        "rules"
+      ]
+    }
+  ]
+}

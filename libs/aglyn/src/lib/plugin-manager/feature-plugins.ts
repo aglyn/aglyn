@@ -51,6 +51,24 @@ import type { Plugin, PluginId } from './plugin-manager'
 import type { HostThemeSource } from '../app-utils/marketplace-theme'
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import type { ComponentType } from 'react'
+// The commerce zones' props live in a type-only module (AGL-2916).
+export type {
+  ConsoleProductCopyValues,
+  ConsoleProductDraft,
+  ConsoleProductEditorZoneProps,
+  ConsoleProductImportZoneProps,
+  ConsoleProductOption,
+  ConsoleProductSummary,
+  ConsoleProductType,
+  ConsoleProductsHubZoneProps,
+  ConsoleProposedDiscount,
+  ConsoleProposedProduct,
+} from './commerce-zone-props'
+export type {
+  ConsoleImportMappingZoneProps,
+  ConsoleRecordEmailZoneProps,
+  ConsoleRecordInsightsZoneProps,
+} from './record-zone-props'
 
 /** The mui bundle id every UI feature bundle depends on. */
 export const MUI_BUNDLE_ID: PluginId = 'mui'
@@ -656,6 +674,12 @@ export const CONSOLE_WIDGET_SLOTS = {
    * published site before that.
    */
   hostSeo: 'hostSeo',
+  /** {@link ConsoleRecordInsightsZoneProps} */
+  recordInsights: 'recordInsights',
+  /** {@link ConsoleRecordEmailZoneProps} */
+  recordEmail: 'recordEmail',
+  /** {@link ConsoleImportMappingZoneProps} */
+  importMapping: 'importMapping',
   /**
    * The besigner's secondary toolbar, after the undo and redo controls
    * (AGL-2984), on every editor the designer opens: screens, layouts,
@@ -673,6 +697,37 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   hostScreens: 'hostScreens',
   /**
+   * A site's Templates page, beside its Create Template action (AGL-3043):
+   * another way to start a template. Props:
+   * {@link ConsoleHostTemplatesZoneProps}. The `hostScreens` contract: a
+   * widget here runs its own flow and writes nothing through the page, and
+   * the template list shows what it makes once it exists.
+   */
+  hostTemplates: 'hostTemplates',
+  /**
+   * A site's Layouts page, beside its Templates and Create New Layout actions
+   * (AGL-3043): another way to start a layout. Props:
+   * {@link ConsoleHostLayoutsZoneProps}, on the `hostScreens` contract.
+   */
+  hostLayouts: 'hostLayouts',
+  /**
+   * The Forms page of a site, beside its Create Form action (AGL-3043):
+   * another way to start a form. Props: {@link ConsoleHostFormsZoneProps}, on
+   * the `hostScreens` contract.
+   *
+   * The Forms page is the forms plugin's own surface, so the plugin HOSTS
+   * this zone: it draws the renderer `useConsoleWidgetSlot` hands down, as
+   * the product editor draws `seoFields`, and every gate a console page's
+   * slot applies applies here too.
+   */
+  hostForms: 'hostForms',
+  /**
+   * A site's Components page, beside its Templates and Create Component
+   * actions (AGL-3051): another way to start a reusable component. Props:
+   * {@link ConsoleHostComponentsZoneProps}, on the `hostScreens` contract.
+   */
+  hostComponents: 'hostComponents',
+  /**
    * The organization's sites page, beside the sites themselves (AGL-2911):
    * an action a member takes across MANY of the org's sites at once, rather
    * than a card totaling them. Props: {@link ConsoleOrgSitesZoneProps}.
@@ -686,6 +741,39 @@ export const CONSOLE_WIDGET_SLOTS = {
    * widget's declared permission.
    */
   orgSites: 'orgSites',
+  /**
+   * The Automation page's Actions, beside Add action and Recipes (AGL-2919):
+   * another way to start an automation. Props:
+   * {@link ConsoleHostAutomationsZoneProps}.
+   *
+   * The Automation page is the workflows plugin's own surface, so the plugin
+   * HOSTS this zone through the renderer `useConsoleWidgetSlot` hands down, as
+   * the product editor hosts `seoFields`, and every gate a console page's slot
+   * applies applies here too. A widget here writes nothing through the page:
+   * the Actions list shows what it makes once it exists, and `openAction`
+   * opens a listed action in the Actions editor.
+   */
+  hostAutomations: 'hostAutomations',
+  /**
+   * The editor of one SAVED automation — an action or a workflow — on the
+   * Automation page (AGL-2919). Props: {@link ConsoleAutomationEditorZoneProps}.
+   * Hosted by the workflows plugin, as `hostAutomations` is. A widget here
+   * reads the automation as it is stored and changes nothing in the editor.
+   */
+  automationEditor: 'automationEditor',
+  /**
+   * One FAILED run in an automation's run history (AGL-2919), drawn once per
+   * failed row. Props: {@link ConsoleAutomationRunZoneProps}. Hosted by the
+   * workflows plugin. A widget here reads the run as it was recorded and
+   * changes nothing.
+   */
+  automationRun: 'automationRun',
+  /** The commerce product editor's fields (AGL-2916). Props: {@link ConsoleProductEditorZoneProps}. */
+  productEditor: 'productEditor',
+  /** Above the commerce products hub's catalog table (AGL-2916). Props: {@link ConsoleProductsHubZoneProps}. */
+  productsHub: 'productsHub',
+  /** Inside the commerce CSV import dialog (AGL-2916). Props: {@link ConsoleProductImportZoneProps}. */
+  productImport: 'productImport',
 } as const
 
 export type ConsoleWidgetSlot =
@@ -698,6 +786,59 @@ export interface ConsoleHostScreensZoneProps {
   orgId: string | undefined
 }
 
+/**
+ * What the `hostTemplates`, `hostLayouts` and `hostForms` zones (AGL-3043) and
+ * the `hostComponents` zone (AGL-3051) hand each widget: the site and its org,
+ * as `hostScreens` hands them.
+ */
+export type ConsoleHostTemplatesZoneProps = ConsoleHostScreensZoneProps
+/** See {@link ConsoleHostTemplatesZoneProps}. */
+export type ConsoleHostLayoutsZoneProps = ConsoleHostScreensZoneProps
+/** See {@link ConsoleHostTemplatesZoneProps}. */
+export type ConsoleHostFormsZoneProps = ConsoleHostScreensZoneProps
+/** See {@link ConsoleHostTemplatesZoneProps}. */
+export type ConsoleHostComponentsZoneProps = ConsoleHostScreensZoneProps
+
+/** What the `hostAutomations` zone hands each widget (AGL-2919). */
+export interface ConsoleHostAutomationsZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+  /**
+   * Opens the Actions editor on a listed action. `false` when the id names no
+   * action the list has read yet, which is how a widget whose draft was just
+   * written tells a list that has not caught up from one that opened it.
+   */
+  openAction: (actionId: string) => boolean
+}
+
+/** One automation on the Automation page: an action, or a workflow (AGL-2919). */
+export interface ConsoleAutomationTarget {
+  type: 'action' | 'workflow'
+  id: string
+  name: string
+}
+
+/** What the `automationEditor` zone hands each widget (AGL-2919). */
+export interface ConsoleAutomationEditorZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** The automation the editor has open, as it is stored. */
+  target: ConsoleAutomationTarget
+}
+
+/** What the `automationRun` zone hands each widget (AGL-2919). */
+export interface ConsoleAutomationRunZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** The automation the run belongs to. */
+  target: ConsoleAutomationTarget
+  /** The run's entry in the site's activity log. */
+  runId: string
+}
+
 /** What the `orgSites` zone hands each widget (AGL-2911). */
 export interface ConsoleOrgSitesZoneProps {
   /** Always `null`: the zone belongs to the organization, not to one site. */
@@ -707,6 +848,7 @@ export interface ConsoleOrgSitesZoneProps {
   /** The sites page's own path, for the links a widget builds. */
   basePath: string
 }
+
 
 /** What the `hostTheme` zone hands each widget (AGL-2938). */
 export interface ConsoleHostThemeZoneProps {

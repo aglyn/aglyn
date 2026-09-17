@@ -299,3 +299,58 @@ describe('a plan that sells nothing past its band never reaches the guards', () 
     expect(['band', 'budget', 'messages', null]).toContain(reservation.refusedBy)
   })
 })
+
+describe('Starter WITH the AI add-on is bounded like every plan that sells past its band (AGL-3014)', () => {
+  /**
+   * Starter lists no rate, so a guard that decided "is there overage to
+   * guard?" off the plan table would skip the one workspace whose overage
+   * rate comes from the add-on: billed past its band, with no unpaid limit.
+   */
+  const STARTER_WITH_AI = {
+    plan: 'starter',
+    subscription: { status: 'active' },
+    seatAddons: { aiAddon: 1 },
+  }
+  /** $50.00 of overage past the add-on's 4,000 credits, at $3.00 per 1,000. */
+  const FIFTY_PAST_THE_ADDON_BAND = (4_000 + (50 / 3) * 1_000) * 0.001
+  /** The top rung of the ladder, so only the unpaid limit can refuse. */
+  const TOP_RUNG = {
+    paymentMethodType: 'card',
+    firstPaidMonth: '2026-06',
+    qualifyingMonths: ['2026-07', '2026-08'],
+  }
+
+  beforeAll(() => {
+    // The band arrives with the plugin's declaration of the add-on, which a
+    // running app registers by a call at boot.
+    const { registerAiDeclarations } = require('../declarations') as typeof import('../declarations')
+    registerAiDeclarations()
+  })
+
+  it('refuses at the unpaid limit with nothing ever paid', async () => {
+    // FORCED RED by deciding whether the guards apply off the plan table:
+    // the reservation was admitted with $50 of overage unpaid.
+    docs.set(USAGE, { month: MONTH, estCostUsd: FIFTY_PAST_THE_ADDON_BAND, messages: 4 })
+    docs.set(STANDING, TOP_RUNG)
+    const reservation = await reserve(STARTER_WITH_AI)
+    expect(reservation.refusedBy).toBe('cap')
+    expect(reservation.capReason).toBe('settling')
+    expect(reservation.overageUnpaidUsd).toBeCloseTo(50, 2)
+    expect(docs.get(USAGE)?.['messages']).toBe(4)
+  })
+
+  it('THE CONTROL: admits the same workspace once the charges settle', async () => {
+    // Past its band and admitted, so the refusal above is the unpaid limit
+    // and not a wall at the add-on's band.
+    docs.set(USAGE, {
+      month: MONTH,
+      estCostUsd: FIFTY_PAST_THE_ADDON_BAND,
+      overagePaidUsd: 50,
+      messages: 4,
+    })
+    docs.set(STANDING, TOP_RUNG)
+    const reservation = await reserve(STARTER_WITH_AI)
+    expect(reservation.allowed).toBe(true)
+    expect(docs.get(USAGE)?.['messages']).toBe(5)
+  })
+})

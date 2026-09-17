@@ -15,16 +15,19 @@
  * limitations under the License.
  */
 
-import { parseMediaCdnScope, type MediaCdnScope } from '@aglyn/aglyn/app-utils/media-cdn-scope'
-import { isMediaCdnPath, MEDIA_CDN_ROUTE, parseMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type {
   AglynOrgBilling,
   OrgBrandingProfile,
 } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { normalizeThemeHex } from '../tools/ai-theme-tool'
 import { AI_THEME_BRAND_BUDGET_MS } from './ai-job-theme-budget'
+import {
+  aiMediaAssetLocation,
+  loadAiMediaSharp,
+  readAiMediaAssetBytes,
+  type AiMediaAssetLocation,
+} from './ai-media-asset'
 
 /**
  * The brand a theme job builds on (AGL-2938): the colors that belong to the
@@ -145,43 +148,16 @@ export function organizationBrandColors(
  * The site logo
  * ------------------------------------------------------------------------ */
 
-export interface AiThemeLogoLocation {
-  scope: MediaCdnScope
-  /** The CDN scope segment, which is also a quarantine key. */
-  scopeSegment: string
-  mediaId: string
-}
+export type AiThemeLogoLocation = AiMediaAssetLocation
 
 /**
  * Where a site's logo lives in a media library: a media reference or a CDN
  * path naming this site's library, or its org's. Anything else — an external
  * URL, an asset of some other site or org — has no location, and the logo is
- * left alone.
+ * left alone. The media library's own rule, shared with every job that reads
+ * an asset (`ai-media-asset.ts`).
  */
-export function logoMediaLocation(
-  logoUrl: unknown,
-  hostId: string,
-  orgId: string,
-): AiThemeLogoLocation | null {
-  let scopeSegment: string
-  let mediaId: string
-  const ref = parseMediaRef(logoUrl)
-  if (ref) {
-    scopeSegment = ref.scope
-    mediaId = ref.mediaId
-  } else if (isMediaCdnPath(logoUrl)) {
-    const rest = logoUrl.slice(`${MEDIA_CDN_ROUTE}/`.length)
-    const slash = rest.indexOf('/')
-    scopeSegment = rest.slice(0, slash)
-    mediaId = rest.slice(slash + 1)
-  } else {
-    return null
-  }
-  const scope = parseMediaCdnScope(scopeSegment)
-  if (!scope) return null
-  const owned = scope.isOrg ? scope.scopeId === orgId : scope.scopeId === hostId
-  return owned ? { scope, scopeSegment, mediaId } : null
-}
+export const logoMediaLocation = aiMediaAssetLocation
 
 /**
  * The dominant colors of an image's pixels: transparent pixels skipped, the
@@ -227,55 +203,22 @@ type SharpPixels = (input: Buffer, options?: { limitInputPixels?: number }) => S
 const LOGO_TYPES = /^image\/(png|jpeg|webp|gif|avif|svg\+xml)$/
 
 /**
- * A library logo's colors, read the way the media CDN would serve it: the
- * document live and not private, an org asset visible to this site, the
- * scope not locked and the asset not quarantined, the object path inside the
- * scope's own media prefix. `null` when any of that does not hold or the
- * bytes cannot be decoded.
+ * A library logo's colors, read the way the media CDN would serve it
+ * (`readAiMediaAssetBytes`). `null` when the asset may not be read or the bytes
+ * cannot be decoded.
  */
 async function readLogoColors(
   firestore: FirebaseFirestore.Firestore,
   location: AiThemeLogoLocation,
   hostId: string,
 ): Promise<string[] | null> {
-  const { scope, mediaId } = location
-  const snapshot = await firestore
-    .collection(scope.isOrg ? 'orgs' : 'hosts')
-    .doc(scope.scopeId)
-    .collection('media')
-    .doc(mediaId)
-    .get()
-  const media = (snapshot.exists ? snapshot.data() : null) as Record<string, unknown> | null
-  if (!media || media['deletedAt'] || media['private']) return null
-  if (scope.isOrg && !visibleToHost(media['visibleTo'] as string[] | undefined, hostId)) return null
-  if (!LOGO_TYPES.test(String(media['contentType'] ?? ''))) return null
-  if (typeof media['sizeBytes'] === 'number' && media['sizeBytes'] > AI_THEME_LOGO_MAX_BYTES) {
-    return null
-  }
-  const { mediaCdnServeBlock, mediaStoragePathInScope, firebaseAdmin, loadSharp } = await import(
-    './ai-theme-brand-server'
-  )
-  const blocked = await mediaCdnServeBlock(scope, {
-    contentSha256: typeof media['contentSha256'] === 'string' ? media['contentSha256'] : undefined,
-    contentHash: typeof media['contentHash'] === 'string' ? media['contentHash'] : undefined,
-    scopeSegment: location.scopeSegment,
-    mediaId,
+  const asset = await readAiMediaAssetBytes(firestore, location, hostId, {
+    maxBytes: AI_THEME_LOGO_MAX_BYTES,
+    types: LOGO_TYPES,
   })
-  if (blocked) return null
-  const objectPath = mediaStoragePathInScope({
-    storagePath: media['storagePath'],
-    base: `${scope.isOrg ? 'orgs' : 'hosts'}/${scope.scopeId}`,
-    mediaId,
-  })
-  const [buffer] = (await firebaseAdmin
-    .app()
-    .storage()
-    .bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || undefined)
-    .file(objectPath)
-    .download()) as [Buffer]
-  if (buffer.length > AI_THEME_LOGO_MAX_BYTES) return null
-  const sharp = (await loadSharp()) as unknown as SharpPixels
-  const { data, info } = await sharp(buffer, { limitInputPixels: 64_000_000 })
+  if (!asset) return null
+  const sharp = (await loadAiMediaSharp()) as SharpPixels
+  const { data, info } = await sharp(asset.buffer, { limitInputPixels: 64_000_000 })
     .resize(48, 48, { fit: 'inside' })
     .ensureAlpha()
     .raw()

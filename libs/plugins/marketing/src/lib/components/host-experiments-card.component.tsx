@@ -25,8 +25,23 @@ import {
   SITE_EVENT_TYPES,
 } from '@aglyn/aglyn'
 import { compareVariants, summarizeVariantStats, validateExperiment, type ExperimentTarget, type ExperimentVariant, type HostExperiment } from '../model'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import {
+  mdiChartBar,
+  mdiDeleteOutline,
+  mdiPause,
+  mdiPencilOutline,
+  mdiPlay,
+} from '@aglyn/shared-data-mdi'
+import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -41,7 +56,6 @@ import {
   MenuItem,
   Stack,
   Switch,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -49,6 +63,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   deleteDoc,
@@ -375,6 +390,82 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
     setResults({ experiment, stats })
   }
 
+  /*
+   * One row per experiment. The row opens its results, the one thing every
+   * experiment has to show; starting, pausing, editing and deleting it are in
+   * the row's menu rather than a row of buttons one mis-click from each other.
+   */
+  const experimentActions = (experiment: ExperimentDraft): RowActionsMenuItem[] => [
+    ...(experiment.status === 'running'
+      ? [
+          {
+            key: 'pause',
+            label: 'Pause',
+            icon: <MdiIcon path={mdiPause.path} size={0.8} />,
+            onClick: () => void setStatus(experiment, 'paused'),
+          },
+        ]
+      : experiment.status !== 'done'
+        ? [
+            {
+              key: 'start',
+              label: 'Start',
+              icon: <MdiIcon path={mdiPlay.path} size={0.8} />,
+              onClick: () => void setStatus(experiment, 'running'),
+            },
+          ]
+        : []),
+    {
+      key: 'edit',
+      label: 'Edit',
+      icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
+      onClick: () => setEditor({ ...experiment }),
+    },
+    {
+      key: 'delete',
+      label: 'Delete',
+      icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
+      destructive: true,
+      onClick: () => void handleDelete(experiment),
+    },
+  ]
+  const experimentColumns: GridColDef<ExperimentDraft>[] = [
+    { field: 'name', headerName: 'Experiment', flex: 1, minWidth: 200 },
+    {
+      field: 'target',
+      headerName: 'Tests',
+      flex: 1,
+      minWidth: 200,
+      valueGetter: (_value, experiment) =>
+        `${experiment.target} · ${(experiment.variants ?? []).length} variants`,
+    },
+    {
+      field: 'status',
+      headerName: 'Status',
+      width: 130,
+      renderCell: ({ row: experiment }) => (
+        <Chip
+          size="small"
+          color={STATUS_COLORS[experiment.status] ?? 'default'}
+          label={experiment.status}
+        />
+      ),
+    },
+    listActionsColumn(
+      (experiment: ExperimentDraft) => (
+        <ListRowActions
+          label={experiment.name || 'this experiment'}
+          quick={{
+            icon: mdiChartBar.path,
+            label: 'Results',
+            onClick: () => void openResults(experiment),
+          }}
+          items={experimentActions(experiment)}
+        />
+      ),
+    ),
+  ]
+
   return (
     <CardDisplay
       header="Experiments"
@@ -407,71 +498,15 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
           </Button>
           {experiments.length === 0 && !hasMoreExperiments ? null : (
             <>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'Experiment'}</TableCell>
-                  <TableCell>{'Tests'}</TableCell>
-                  <TableCell>{'Status'}</TableCell>
-                  <TableCell align="right">{'Actions'}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {experiments.map((experiment) => (
-                  <TableRow key={experiment.$id}>
-                    <TableCell>{experiment.name}</TableCell>
-                    <TableCell>
-                      {experiment.target}
-                      {` · ${(experiment.variants ?? []).length} variants`}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        color={STATUS_COLORS[experiment.status] ?? 'default'}
-                        label={experiment.status}
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      {experiment.status === 'running' ? (
-                        <Button
-                          size="small"
-                          onClick={() => void setStatus(experiment, 'paused')}
-                        >
-                          {'Pause'}
-                        </Button>
-                      ) : experiment.status !== 'done' ? (
-                        <Button
-                          size="small"
-                          color="primary"
-                          onClick={() => void setStatus(experiment, 'running')}
-                        >
-                          {'Start'}
-                        </Button>
-                      ) : null}
-                      <Button
-                        size="small"
-                        onClick={() => void openResults(experiment)}
-                      >
-                        {'Results'}
-                      </Button>
-                      <Button
-                        size="small"
-                        onClick={() => setEditor({ ...experiment })}
-                      >
-                        {'Edit'}
-                      </Button>
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={() => void handleDelete(experiment)}
-                      >
-                        {'Delete'}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <ListTable
+              aria-label="Experiments"
+              rows={experiments}
+              columns={experimentColumns}
+              rowHeight={TABLE_ROW_HEIGHT}
+              onOpen={(_id, experiment) => void openResults(experiment)}
+              // Paged by the footer below, so the grid must not also slice.
+              hideFooter
+            />
             <ListPagination
               page={experimentPage}
               pageSize={experimentPageSize}
@@ -756,7 +791,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
           ) : null}
         </DialogTitle>
         <DialogContent>
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Variant'}</TableCell>
@@ -840,7 +875,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
                 )
               })}
             </TableBody>
-          </Table>
+          </ScrollTable>
         </DialogContent>
         <DialogActions>
           <Button color="inherit" onClick={() => setResults(null)}>

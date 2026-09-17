@@ -201,7 +201,12 @@ describe('readSiteInventory — what is listed', () => {
     docs.set(`hosts/${HOST}/components/cmp-live`, {
       displayName: 'Service card',
       versionId: 'v1',
-      props: [{ name: 'title', type: 'text' }, { name: 'photo', type: 'image' }, { name: '' }],
+      props: [
+        { name: 'title', type: 'text', defaultValue: '[Service] in [town]' },
+        { name: 'photo', type: 'image' },
+        { name: 'price', type: 'text', defaultValue: 'From $90' },
+        { name: '' },
+      ],
     })
     docs.set(`hosts/${HOST}/components/cmp-deleted`, { displayName: 'Old', rootId: 'r', deletedAt: 1 })
     docs.set(`hosts/${HOST}/components/cmp-draft`, { displayName: 'Never published' })
@@ -230,7 +235,15 @@ describe('readSiteInventory — what is listed', () => {
 
     expect(await readSiteInventory(ORG, HOST, { firestore })).toEqual({
       hostId: HOST,
-      components: [{ id: 'cmp-live', name: 'Service card', props: { title: 'text', photo: 'image' } }],
+      // The facts a default holds in square brackets travel with the row, for the member's note (AGL-3056).
+      components: [
+        {
+          id: 'cmp-live',
+          name: 'Service card',
+          props: { title: 'text', photo: 'image', price: 'text' },
+          bracketedDefaults: { title: ['[Service]', '[town]'] },
+        },
+      ],
       layouts: [{ id: 'lay-site', name: 'Site', parentId: 'lay-base' }],
       templates: [{ id: 'tpl-1', name: 'Service page', kind: 'page' }],
       forms: [{ id: 'frm-live', name: 'contact', fields: ['email', 'message'] }],

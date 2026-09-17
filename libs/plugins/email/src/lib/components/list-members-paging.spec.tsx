@@ -199,15 +199,16 @@ const mountPanel = async () => {
   })
 }
 
-const bodyRows = () => Array.from(document.querySelectorAll('tbody tr'))
+/** The grid's data rows, and each row's cells in the columns' order. */
+const bodyRows = () => Array.from(document.querySelectorAll('[role="row"][data-id]'))
 const cellsAt = (row: Element) =>
-  Array.from(row.querySelectorAll('td')).map((cell) => cell.textContent?.trim())
+  Array.from(row.querySelectorAll('[role="gridcell"]')).map((cell) => cell.textContent?.trim())
 const columnIndex = (header: string) =>
-  Array.from(document.querySelectorAll('thead th'))
+  Array.from(document.querySelectorAll('[role="columnheader"]'))
     .map((cell) => cell.textContent)
     .indexOf(header)
 const addressesShown = () =>
-  bodyRows().map((row) => row.querySelector('td')?.textContent?.trim() ?? '')
+  bodyRows().map((row) => row.querySelector('[data-field="email"]')?.textContent?.trim() ?? '')
 
 /**
  * Take the first listed subscriber off the list, through the affordance the

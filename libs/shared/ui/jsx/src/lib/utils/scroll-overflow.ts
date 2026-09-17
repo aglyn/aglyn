@@ -17,13 +17,20 @@
 
 /**
  * The house treatment for a box that scrolls its own content (AGL-1162,
- * AGL-2568).
+ * AGL-2568, AGL-3045).
  *
- * It lives here rather than in the two components that need it because the
- * Markdown table and the Table element are the same block drawn by different
- * code, and they had already drifted: one carried a fade the other did not,
+ * It lives in one module rather than in the components that need it because
+ * they had already drifted: the Markdown table and the Table element are the
+ * same block drawn by different code, one carried a fade the other did not,
  * and neither could actually scroll. A shared shape is what keeps the answer
  * to "how wide may this get" from being decided twice.
+ *
+ * It lives in THIS library rather than in `plugins-mui` because the console's
+ * tables need the same answer (AGL-3045): `ScrollTable` draws every table the
+ * console and its plugins render outside the shared grid, and a plugin may
+ * not import another plugin. Pure style data — no component, no side effect —
+ * so importing it by subpath costs a published page nothing it did not
+ * already pay for.
  */
 
 /** The axis a box scrolls on, named as the `scroll()` timeline names it. */

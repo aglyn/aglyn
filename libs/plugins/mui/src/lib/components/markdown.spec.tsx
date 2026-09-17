@@ -298,10 +298,25 @@ describe('Table of contents element (AGL-1162)', () => {
     host.remove()
   })
 
-  it('says what it needs while authoring and stays quiet once published', () => {
+  it('says what it needs while authoring', () => {
     fillCanvas([{ $id: 'doc1', props: { content: 'prose with no headings' } }])
-    render(<TableOfContents />)
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+        <TableOfContents />
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
     expect(screen.getByText(/add ## headings/i)).toBeTruthy()
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  it('stays quiet once published (AGL-3067)', () => {
+    // The published page is the surface with no editing flag. An article
+    // whose body has no headings publishes no aside, no instruction to the
+    // author, and no empty navigation landmark.
+    fillCanvas([{ $id: 'doc1', props: { content: 'prose with no headings' } }])
+    const { container } = render(<TableOfContents />)
+    expect(container.textContent).toBe('')
+    expect(screen.queryByRole('navigation')).toBeNull()
     expect(screen.queryByRole('link')).toBeNull()
   })
 })

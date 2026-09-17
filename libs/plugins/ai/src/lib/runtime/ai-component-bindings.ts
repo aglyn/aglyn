@@ -74,6 +74,27 @@ export const AI_COMPONENT_VISIBILITY_PROPS: readonly string[] = [
 /** Kinds whose value reads as copy, which copy may carry inside a sentence. */
 export const AI_COMPONENT_COPY_KINDS: ReadonlySet<string> = new Set(['text', 'richText', 'number'])
 
+/**
+ * Where a property of each offered kind is bound, in the words a re-ask gives
+ * a model that declared one and bound it nowhere (AGL-3054): the fields
+ * `aiComponentPropBindsToField` admits for the kind, by an example.
+ */
+const AI_COMPONENT_KIND_BINDS_TO: Readonly<Record<string, string>> = {
+  text: 'copy, such as a Typography’s children or a Button’s label',
+  richText: 'copy, such as a Typography’s children',
+  number: 'copy, or a number setting',
+  image: 'an Image’s src',
+  href: 'a screenId or an href',
+  icon: 'an Icon element’s iconId',
+  boolean: 'a switch setting such as a Button’s fullWidth, or hideIf on the part it hides',
+  choice: 'a setting with fixed options, such as a Button’s variant',
+}
+
+/** Where a property of a kind is bound, for a finding that names it; copy for a kind with no entry. */
+export function aiComponentKindBindsTo(type: string): string {
+  return AI_COMPONENT_KIND_BINDS_TO[type] ?? AI_COMPONENT_KIND_BINDS_TO['text']
+}
+
 /** Whether a value is exactly one component property token. */
 export function isAiComponentPropToken(value: unknown): value is string {
   return matchComponentPropToken(value) !== null

@@ -1,0 +1,73 @@
+{
+  "id": "workflow-explain-welcome-new-lead",
+  "kind": "workflow",
+  "brief": "Explain the automation “Welcome a new lead”.",
+  "framing": null,
+  "inventory": null,
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference explanation written by hand of the Welcome a new lead recipe: what starts it, each step in order in the editor's words, and the one thing worth checking.",
+      "plan": null,
+      "answer": {
+        "summary": "When a form on your site makes a new contact, this automation gives them an owner, books a call for the next day, thanks them by email and tags them.",
+        "points": [
+          "It starts when a new contact is created, but only when the contact came in through a form.",
+          "It gives the contact an owner, taking turns among the teammates in the CRM’s round robin.",
+          "It creates a call task due the next day, which goes to that owner.",
+          "It emails the contact a thank-you saying someone will be in touch within a day.",
+          "It tags the contact website."
+        ],
+        "suggestions": [
+          "Check that the round robin under CRM Settings has teammates in it: with nobody in it, the owner step fails and the call task goes to no one."
+        ]
+      },
+      "usage": null,
+      "rubric": {
+        "structure": 5,
+        "copy": 4,
+        "reuse": null,
+        "grader": "authored"
+      }
+    }
+  ],
+  "controls": [
+    {
+      "why": "No summary, so a person reads nothing first.",
+      "answer": {
+        "summary": "",
+        "points": [
+          "It starts when a new contact is created, but only when the contact came in through a form.",
+          "It gives the contact an owner, taking turns among the teammates in the CRM’s round robin.",
+          "It creates a call task due the next day, which goes to that owner.",
+          "It emails the contact a thank-you saying someone will be in touch within a day.",
+          "It tags the contact website."
+        ],
+        "suggestions": []
+      },
+      "fails": [
+        "readable"
+      ]
+    },
+    {
+      "why": "Names an email address, which nothing it was shown holds.",
+      "answer": {
+        "summary": "It thanks each new contact, such as jane@example.com, by email.",
+        "points": [
+          "It starts when a new contact is created, but only when the contact came in through a form.",
+          "It gives the contact an owner, taking turns among the teammates in the CRM’s round robin.",
+          "It creates a call task due the next day, which goes to that owner.",
+          "It emails the contact a thank-you saying someone will be in touch within a day.",
+          "It tags the contact website."
+        ],
+        "suggestions": []
+      },
+      "fails": [
+        "rules"
+      ]
+    }
+  ]
+}

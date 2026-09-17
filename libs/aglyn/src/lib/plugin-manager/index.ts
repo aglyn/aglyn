@@ -28,6 +28,8 @@ export * from './plugin-jobs'
 export * from './plugin-permissions'
 export * from './plugin-services'
 export * from './plugin-resource-drafts'
+// `plugin-figures` is imported by its own path, never from here: it serves
+// server-side readers only, and this barrel is on every published page.
 export * from './plugin-activity-actions'
 export * from './plugin-entitlements'
 export * from './plugin-events'

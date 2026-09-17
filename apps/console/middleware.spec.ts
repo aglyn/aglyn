@@ -847,3 +847,56 @@ describe('the reserved /.well-known namespace (AGL-3016)', () => {
     expect(response.status).toBe(200)
   })
 })
+
+describe('Cross-Origin-Opener-Policy (AGL-3046)', () => {
+  /*
+   * The published site's admin bar opens `/edit-access` in a popup and reads
+   * the edit token back through `window.opener`. Any isolating COOP on that
+   * response moves the popup to a new browsing context group and nulls the
+   * opener — measured in Chrome with the exact pair production sends — so the
+   * page said "Connected" to a site that never received anything. The page's
+   * own spec mocks `window.opener`, which is why only this header can pin it.
+   */
+  const coop = async (host: string, path: string) =>
+    (await middleware(request(host, path))).headers.get(
+      'Cross-Origin-Opener-Policy',
+    )
+
+  it('leaves /edit-access its opener, so the popup can hand the token back', async () => {
+    expect(
+      await coop(
+        'app.aglyn.com',
+        '/edit-access?hostId=host-1&origin=https%3A%2F%2Fwww.example.com',
+      ),
+    ).toBe('unsafe-none')
+  })
+
+  it.each([
+    ['app.aglyn.com', '/signin'],
+    ['app.aglyn.com', '/'],
+    ['app.aglyn.com', '/zgover/hosts'],
+    ['zgover.aglyn.com', '/hosts'],
+    ['console.acme-agency.com', '/hosts'],
+  ])('isolates every other page from its opener — %s%s', async (host, path) => {
+    expect(await coop(host, path)).toBe('same-origin-allow-popups')
+  })
+
+  it('is an exact path, not a prefix', async () => {
+    // A page whose path merely begins with the name keeps its isolation.
+    expect(await coop('app.aglyn.com', '/edit-access-log')).toBe(
+      'same-origin-allow-popups',
+    )
+    expect(await coop('app.aglyn.com', '/zgover/edit-access')).toBe(
+      'same-origin-allow-popups',
+    )
+  })
+
+  it('keeps the rest of the page policy on /edit-access', async () => {
+    // Only the opener policy moves. The page still refuses to be framed by
+    // anything but first-party hosts, and still runs under the nonce'd CSP.
+    const response = await middleware(request('app.aglyn.com', '/edit-access'))
+    const policy = response.headers.get('Content-Security-Policy') ?? ''
+    expect(policy).toContain('frame-ancestors')
+    expect(policy).toMatch(/script-src [^;]*'nonce-/)
+  })
+})

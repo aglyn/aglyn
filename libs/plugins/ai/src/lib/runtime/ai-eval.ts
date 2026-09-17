@@ -16,7 +16,14 @@
  */
 
 import type { HostTheme } from '@aglyn/shared-data-types'
+import { validateHostAction } from '@aglyn/aglyn/app-utils/actions'
 import type { HostThemeSource } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import {
+  aiAutomationDraft,
+  emptyAiAutomationRecords,
+  type AiAutomationRecords,
+} from '../model/ai-automation-draft'
+import type { ConsoleImportColumn } from '@aglyn/aglyn/plugin-manager/record-zone-props'
 import { AI_BUILD_PLAN_CREATE_KINDS, type AiBuildPlanCreateKind } from '../model/ai-build-plan'
 import {
   aiUnrestrictedPlanCapabilities,
@@ -24,10 +31,44 @@ import {
   type AiPlanCreation,
 } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
+import type { AiAutomationCapabilities } from '../model/ai-workflow-job'
 import type { AiStepKind } from '../providers/catalog'
 import type { AiEffort, AiUsage } from '../providers/contract'
+import { aiComponentCheck } from '../jobs/ai-job-component-checks'
+import {
+  aiProductMerchantWords,
+  type AiProductCategory,
+  type AiProductFacts,
+} from '../model/ai-products'
+import { checkAiCatalog, checkAiCategories, checkAiProductCopy } from '../tools/ai-products-tool'
+import type { AiCrmRecordKind, AiCrmTask } from '../model/ai-crm'
+import {
+  aiCrmEmailMergeFields,
+  aiCrmImportFields,
+  aiCrmRecordCheckContext,
+  checkAiCrmEmail,
+  checkAiCrmMapping,
+  checkAiCrmRecord,
+} from '../tools/ai-crm-tool'
 import { parseAiThemeToolInput } from '../tools/ai-theme-tool'
-import { aiDoctrinePlanCheck, aiDoctrineTreeCheck, aiDoctrineTreeContext } from './ai-doctrine'
+import {
+  AI_AUTOMATION_OVERSIZE_CODES,
+  AI_AUTOMATION_UNREADABLE_CODES,
+  readAiAutomationAnswer,
+  readAiWorkflowExplanation,
+} from '../tools/ai-workflow-tool'
+import type { AiInsightTable } from '../model/ai-insight'
+import { parseAiInsightAnswer } from '../tools/ai-insight-tool'
+import { checkAiInsightAnswer } from './ai-insight-check'
+import { aiDeviceAuditFindings, type AiDeviceAudit } from './ai-device-audit'
+import {
+  aiAnswerTree,
+  aiDoctrinePlanCheck,
+  aiDoctrineTreeCheck,
+  aiDoctrineTreeContext,
+  type AiGenerationCheckResult,
+  type AiValidatedTree,
+} from './ai-doctrine'
 import {
   AI_SEO_DESCRIPTION_MAX,
   AI_SEO_TITLE_MAX,
@@ -38,6 +79,7 @@ import {
   type AiDoctrineViolation,
 } from './ai-doctrine-validators'
 import { AI_TEXT_LIMITS, type AiOutputKind } from './ai-palette'
+import { expandAiRepeatedItems } from './ai-repeated-items'
 
 /**
  * THE EVAL HARNESS (AGL-2937): the measure that gates every token lever.
@@ -61,6 +103,13 @@ import { AI_TEXT_LIMITS, type AiOutputKind } from './ai-palette'
  *  - **rubric** — a grade against the brief for structure, copy fit and
  *    reuse decisions, recorded from a stronger model on a live run.
  *
+ * A document of a kind a site renders is also held to **responsive** (AGL-3020):
+ * rendered at every device of the besigner's switcher, nothing runs past the
+ * screen and no band keeps its desktop columns on a phone. It is measured in a
+ * browser by `tools/scripts/record-ai-page-axe.mts` and read back from that
+ * recording, so it gates a pass without moving a score: a page that only works
+ * on desktop does not pass, whatever its checks and grade average to.
+ *
  * A planned kind's answer also carries the plan, held to the plan rules and
  * to the case's expected shape.
  *
@@ -82,11 +131,17 @@ export type AiEvalKind =
   | 'email'
   | 'section'
   | 'seo'
+  | 'product'
+  | 'catalog'
+  | 'categories'
   | 'theme'
   | 'element'
   | 'blog'
   | 'text'
   | 'chat'
+  | 'workflow'
+  | 'insight'
+  | 'crm'
 
 export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'page',
@@ -97,11 +152,17 @@ export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'email',
   'section',
   'seo',
+  'product',
+  'catalog',
+  'categories',
   'theme',
   'element',
   'blog',
   'text',
   'chat',
+  'workflow',
+  'insight',
+  'crm',
 ]
 
 /** The document kind a tree kind is held to; a section rewrite is one reusable block. */
@@ -115,8 +176,25 @@ export const AI_EVAL_TREE_OUTPUT: Partial<Record<AiEvalKind, AiOutputKind>> = {
   section: 'component',
 }
 
+/**
+ * Whether a kind's answer is a document a site renders, and so is held to
+ * every device width (AGL-3020). An email is not: its column is fixed at 600px
+ * by the medium, which rule 12 exempts it for.
+ */
+export function aiEvalRendersAtDeviceWidths(kind: AiEvalKind): boolean {
+  const output = AI_EVAL_TREE_OUTPUT[kind]
+  return output !== undefined && output !== 'email'
+}
+
+/**
+ * The recorded device audit of an answer, or `null` when none was recorded
+ * from it. The spec that scores the cases reads the recordings and answers
+ * this; a scorer given none holds nothing to its widths.
+ */
+export type AiEvalAudits = (evalCase: AiEvalCase, answer: unknown) => AiDeviceAudit | null
+
 /** The checks an answer is scored on, beside its rubric. */
-export type AiEvalCheck = 'readable' | 'rules' | 'budget' | 'plan' | 'rubric'
+export type AiEvalCheck = 'readable' | 'rules' | 'budget' | 'plan' | 'responsive' | 'rubric'
 
 /** A grade against the brief, each criterion from 1 (fails) to 5 (excellent). */
 export interface AiEvalRubric {
@@ -212,9 +290,33 @@ export interface AiEvalCase {
   /** Copy ceilings the brief sets, beside the kind's own. */
   maxChars?: number
   maxWords?: number
+  /**
+   * For an insight brief (AGL-2915): the tables the readers returned, which
+   * every insight an answer writes is traced against.
+   */
+  tables?: AiInsightTable[]
+  /**
+   * For a product copy brief (AGL-2916): the product as its editor handed it
+   * over, and the site's categories the request lists.
+   */
+  product?: { facts: AiProductFacts; categories: AiProductCategory[] }
+  /** For a categories brief: the names of the categories the store already has. */
+  existingCategoryNames?: string[]
   /** For a theme brief: the site's current theme and where it comes from. */
   siteTheme?: HostTheme
   themeSource?: HostThemeSource
+  /**
+   * For an automation brief (AGL-2919): what the workspace can run, and the
+   * site's records the answer's words are looked up among. Absent, the
+   * workspace runs everything and the site holds nothing.
+   */
+  automationCapabilities?: AiAutomationCapabilities
+  automationRecords?: AiAutomationRecords
+  /**
+   * For a CRM brief (AGL-2917): what the job was asked, about which kind of
+   * record, the facts the CRM reported for it, and a mapping's columns.
+   */
+  crm?: AiEvalCrmContext
   /**
    * What the workspace may create on the case's site (AGL-3030): a brief
    * for a workspace that keeps no reusable components is held to the inline
@@ -225,6 +327,17 @@ export interface AiEvalCase {
   expected?: { plan?: AiEvalPlanShape }
   candidates: AiEvalCandidate[]
   controls: AiEvalControl[]
+}
+
+/** What a CRM brief's answer is checked against, as the `crm` step checks it. */
+export interface AiEvalCrmContext {
+  task: AiCrmTask
+  /** The record a `record` or `email` brief is about. */
+  record?: AiCrmRecordKind
+  /** The facts the CRM's reader reported: a record's, or an import's field catalog. */
+  facts?: Record<string, unknown>
+  /** A mapping brief's columns: each header and its shape. */
+  columns?: ConsoleImportColumn[]
 }
 
 /** A kind's floor: the pass rate and the mean score its candidates may not fall below. */
@@ -249,11 +362,17 @@ export const AI_EVAL_FLOORS: Readonly<Record<AiEvalKind, AiEvalFloor>> = {
   email: { passRate: 1, meanScore: 0.9 },
   section: { passRate: 1, meanScore: 0.9 },
   seo: { passRate: 1, meanScore: 0.9 },
+  product: { passRate: 1, meanScore: 0.9 },
+  catalog: { passRate: 1, meanScore: 0.9 },
+  categories: { passRate: 1, meanScore: 0.9 },
   theme: { passRate: 1, meanScore: 0.9 },
   element: { passRate: 1, meanScore: 0.9 },
   blog: { passRate: 1, meanScore: 0.9 },
   text: { passRate: 1, meanScore: 0.9 },
   chat: { passRate: 1, meanScore: 0.9 },
+  workflow: { passRate: 1, meanScore: 0.9 },
+  insight: { passRate: 1, meanScore: 0.9 },
+  crm: { passRate: 1, meanScore: 0.9 },
 }
 
 /** A rubric passes at this mean, with no criterion below three. */
@@ -300,23 +419,69 @@ const codes = (violations: readonly AiDoctrineViolation[]) =>
 
 // ── The kinds ─────────────────────────────────────────────────────────────
 
-function checkTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknown): Checked {
+interface ReadTree {
+  /** The answer as the check reads it: a page's repeated items drawn. */
+  input: Record<string, unknown>
+  declaresProps: boolean
+  /** Why a page's repeated item could not be drawn; the tree is not read then. */
+  undrawn: AiDoctrineViolation[] | null
+  result: AiGenerationCheckResult<AiValidatedTree> | null
+}
+
+function readTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknown): ReadTree {
+  const inline = evalCase.capabilities?.reusableComponents === false
+  let input = isRecord(answer) ? answer : { tree: answer }
+  // A component answer that declares its properties binds them in its tree,
+  // and is held to the component step's own checks as that step holds it
+  // (AGL-3054).
+  const declaresProps = evalCase.kind === 'component' && Array.isArray(input['props'])
   const check = aiDoctrineTreeCheck(
     outputKind,
     aiDoctrineTreeContext(evalCase.inventory, {
       ...(evalCase.assets ? { assets: evalCase.assets } : {}),
       framing: evalCase.framing,
-      ...(evalCase.capabilities?.reusableComponents === false ? { reusableComponents: false } : {}),
+      ...(inline ? { reusableComponents: false } : {}),
+      ...(declaresProps ? { definesComponent: true } : {}),
     }),
   )
-  const result = check(isRecord(answer) ? answer : { tree: answer })
-  const budget = result.violations.filter((violation) => violation.rule === 17)
-  const rules = result.violations.filter((violation) => violation.rule !== 17)
+  // A page's repeated item written once is drawn into its copies first, as the
+  // page step draws it, and refused as the page step refuses it (AGL-3053).
+  if (evalCase.kind === 'page') {
+    const drawn = expandAiRepeatedItems(aiAnswerTree(input), { inline, noun: 'page' })
+    if (drawn.ok === false) return { input, declaresProps, undrawn: drawn.violations, result: null }
+    if (drawn.items) input = { tree: drawn.tree }
+  }
+  return { input, declaresProps, undrawn: null, result: check(input) }
+}
+
+/**
+ * The tree an answer of a tree kind is checked as — a page's repeated items
+ * drawn into their copies — or `null` when it cannot be read as one. The
+ * device audit renders exactly this tree (AGL-3020).
+ */
+export function aiEvalAnswerTree(evalCase: AiEvalCase, answer: unknown): AiValidatedTree | null {
+  const outputKind = AI_EVAL_TREE_OUTPUT[evalCase.kind]
+  return outputKind ? (readTree(evalCase, outputKind, answer).result?.value ?? null) : null
+}
+
+function checkTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknown): Checked {
+  const { input, declaresProps, undrawn, result } = readTree(evalCase, outputKind, answer)
+  if (undrawn || !result) {
+    return { readable: false, rules: false, budget: false, findings: codes(undrawn ?? []) }
+  }
+  const violations = [
+    ...result.violations,
+    ...(declaresProps && result.value
+      ? aiComponentCheck({ inventory: evalCase.inventory, plan: null, onProps: () => undefined })(result.value, input)
+      : []),
+  ]
+  const budget = violations.filter((violation) => violation.rule === 17)
+  const rules = violations.filter((violation) => violation.rule !== 17)
   return {
     readable: result.value !== null,
     rules: result.value !== null && rules.length === 0,
     budget: result.value !== null && budget.length === 0,
-    findings: codes(result.violations),
+    findings: codes(violations),
   }
 }
 
@@ -421,6 +586,43 @@ function checkSeo(evalCase: AiEvalCase, answer: unknown): Checked {
   }
 }
 
+/** What a products check refuses an answer for, by the check it fails. */
+const PRODUCTS_UNREADABLE = new Set(['type', 'missing', 'option-count'])
+const PRODUCTS_OVER_BUDGET = new Set(['too-long', 'too-many', 'product-count'])
+
+/**
+ * A products answer (AGL-2916), held by the check its generation is held by:
+ * a product's copy, a catalog, or categories with discounts. A finding about
+ * the answer's shape makes it unreadable, one about a length or a count is
+ * over its budget, and every other one — a claim, a price, markup, a category
+ * the request did not list — breaks a rule.
+ */
+function checkProducts(evalCase: AiEvalCase, answer: unknown): Checked {
+  if (!isRecord(answer)) {
+    return { readable: false, rules: false, budget: false, findings: ['products-not-a-call'] }
+  }
+  const result =
+    evalCase.kind === 'product'
+      ? checkAiProductCopy(answer, {
+          categoryIds: (evalCase.product?.categories ?? []).map((category) => category.id),
+          optionCount: evalCase.product?.facts.options.length ?? 0,
+          merchantWords: evalCase.product ? aiProductMerchantWords(evalCase.product.facts) : evalCase.brief,
+        })
+      : evalCase.kind === 'catalog'
+        ? checkAiCatalog(answer, { merchantWords: evalCase.brief })
+        : checkAiCategories(answer, {
+            existingCategoryNames: evalCase.existingCategoryNames ?? [],
+            merchantWords: evalCase.brief,
+          })
+  const found = [...codes(result.violations), ...codes(detectPublishIntent(answer))]
+  return {
+    readable: !found.some((code) => PRODUCTS_UNREADABLE.has(code)),
+    rules: !found.some((code) => !PRODUCTS_UNREADABLE.has(code) && !PRODUCTS_OVER_BUDGET.has(code)),
+    budget: !found.some((code) => PRODUCTS_OVER_BUDGET.has(code)),
+    findings: found,
+  }
+}
+
 function checkTheme(evalCase: AiEvalCase, answer: unknown): Checked {
   if (!isRecord(answer)) {
     return { readable: false, rules: false, budget: false, findings: ['theme-not-a-call'] }
@@ -439,12 +641,135 @@ function checkTheme(evalCase: AiEvalCase, answer: unknown): Checked {
   }
 }
 
+/**
+ * An automation (AGL-2919), or an explanation of one: read through the tool's
+ * own reader, and an automation also made into the document the workflows
+ * plugin stores and held to the Actions editor's validator.
+ */
+function checkWorkflow(evalCase: AiEvalCase, answer: unknown): Checked {
+  if (!isRecord(answer)) {
+    return { readable: false, rules: false, budget: false, findings: ['workflow-not-a-call'] }
+  }
+  const publish = codes(detectPublishIntent(answer))
+  if ('summary' in answer) {
+    const read = readAiWorkflowExplanation(answer)
+    const lines = [
+      String(answer['summary'] ?? ''),
+      ...(Array.isArray(answer['points']) ? answer['points'] : []),
+      ...(Array.isArray(answer['suggestions']) ? answer['suggestions'] : []),
+    ].map(String)
+    const offVoice = codes(
+      detectOffVoiceCopy(lines.map((text, index) => ({ at: `line[${index}]`, text })), evalCase.framing),
+    )
+    const found = codes(read.violations)
+    return {
+      readable: !found.includes('explanation-shape'),
+      rules: read.value !== null && publish.length === 0 && offVoice.length === 0,
+      budget: true,
+      findings: [...found, ...publish, ...offVoice],
+    }
+  }
+  const capabilities = evalCase.automationCapabilities ?? { crm: true, webhooks: true, bookings: true }
+  const read = readAiAutomationAnswer(answer, capabilities)
+  const found = codes(read.violations)
+  const unreadable = found.filter((code) => AI_AUTOMATION_UNREADABLE_CODES.includes(code))
+  const oversize = found.filter((code) => AI_AUTOMATION_OVERSIZE_CODES.includes(code))
+  const broken = found.filter((code) => !unreadable.includes(code) && !oversize.includes(code))
+  const invalid =
+    read.value && !read.value.unsupported
+      ? validateHostAction(aiAutomationDraft(read.value, evalCase.automationRecords ?? emptyAiAutomationRecords()).action)
+      : null
+  return {
+    readable: unreadable.length === 0,
+    rules: broken.length === 0 && publish.length === 0 && invalid === null,
+    budget: oversize.length === 0,
+    findings: [...found, ...publish, ...(invalid ? [`workflow-invalid:${invalid}`] : [])],
+  }
+}
+
+/**
+ * An insight answer held to the trace (AGL-2915): readable when it is a
+ * `submit_insights` call that keeps an insight, within the rules when no
+ * insight is left out for its numbers, its citations or its words, and within
+ * the budget when no insight runs long and there are no more than five.
+ */
+function checkInsight(evalCase: AiEvalCase, answer: unknown): Checked {
+  const parsed = parseAiInsightAnswer(answer)
+  if (!parsed || !parsed.insights.length) {
+    return { readable: false, rules: false, budget: false, findings: ['insight-no-answer'] }
+  }
+  const check = checkAiInsightAnswer(parsed, evalCase.tables ?? [])
+  const findings = check.findings.map((finding) => finding.split(':')[0])
+  const over = findings.filter((code) => code === 'insight-too-long' || code === 'insight-too-many')
+  return {
+    readable: check.kept.length > 0,
+    rules: findings.length === over.length,
+    budget: over.length === 0,
+    findings: check.findings,
+  }
+}
+
+/** The CRM findings that mean the answer could not be read as one, and the ones over a length. */
+const CRM_UNREADABLE = new Set(['type', 'missing'])
+const CRM_OVER = new Set(['too-long'])
+
+/**
+ * A CRM answer, held by the checks the `crm` step holds it to (AGL-2917),
+ * with rule 13 and the site's voice on everything a person reads.
+ */
+function checkCrm(evalCase: AiEvalCase, answer: unknown): Checked {
+  const context = evalCase.crm
+  if (!context || !isRecord(answer)) {
+    return { readable: false, rules: false, budget: false, findings: ['crm-not-a-call'] }
+  }
+  const facts = context.facts ?? {}
+  const kind = context.record ?? 'contact'
+  const result =
+    context.task === 'mapping'
+      ? checkAiCrmMapping(answer, { columns: context.columns ?? [], fields: aiCrmImportFields(facts) })
+      : context.task === 'email'
+        ? checkAiCrmEmail(answer, { mergeFields: aiCrmEmailMergeFields(kind) })
+        : checkAiCrmRecord(answer, aiCrmRecordCheckContext(kind, facts))
+  const own = codes(result.violations)
+  const read = (path: string[]): string => {
+    let value: unknown = answer
+    for (const key of path) value = isRecord(value) ? value[key] : undefined
+    return typeof value === 'string' ? value : ''
+  }
+  const samples = [
+    ['summary'],
+    ['standing'],
+    ['nextStep', 'title'],
+    ['nextStep', 'reason'],
+    ['stage', 'reason'],
+    ['subject'],
+    ['body'],
+  ]
+    .map((path) => ({ at: path.join('.'), text: read(path) }))
+    .filter((sample) => sample.text)
+  const broken = [
+    ...codes(detectPublishIntent(answer)),
+    ...codes(detectOffVoiceCopy(samples, evalCase.framing)),
+    ...own.filter((code) => !CRM_UNREADABLE.has(code) && !CRM_OVER.has(code)),
+  ]
+  return {
+    readable: !own.some((code) => CRM_UNREADABLE.has(code)),
+    rules: broken.length === 0,
+    budget: !own.some((code) => CRM_OVER.has(code)),
+    findings: [...new Set([...own, ...broken])],
+  }
+}
+
 function checkAnswer(evalCase: AiEvalCase, answer: unknown): Checked {
   const outputKind = AI_EVAL_TREE_OUTPUT[evalCase.kind]
   if (outputKind) return checkTree(evalCase, outputKind, answer)
   switch (evalCase.kind) {
     case 'seo':
       return checkSeo(evalCase, answer)
+    case 'product':
+    case 'catalog':
+    case 'categories':
+      return checkProducts(evalCase, answer)
     case 'theme':
       return checkTheme(evalCase, answer)
     case 'element':
@@ -455,6 +780,12 @@ function checkAnswer(evalCase: AiEvalCase, answer: unknown): Checked {
       return checkCopy(evalCase, answer, { maxWords: AI_EVAL_TEXT_MAX_WORDS })
     case 'chat':
       return checkCopy(evalCase, answer, { maxChars: AI_EVAL_CHAT_MAX_CHARS }, chatLinks(evalCase))
+    case 'workflow':
+      return checkWorkflow(evalCase, answer)
+    case 'insight':
+      return checkInsight(evalCase, answer)
+    case 'crm':
+      return checkCrm(evalCase, answer)
     default:
       return { readable: false, rules: false, budget: false, findings: ['kind-unknown'] }
   }
@@ -516,10 +847,34 @@ export function aiEvalRubricVerdict(rubric: AiEvalRubric | null | undefined): {
   return { mean, pass: mean >= AI_EVAL_RUBRIC_PASS_MEAN && Math.min(...grades) >= 3 }
 }
 
+/**
+ * The widths a readable document of a rendered kind is held to, from its
+ * recorded device audit: `null` when the answer is not such a document or no
+ * audits were given; failing, with `widths-unrecorded`, when none was recorded
+ * from this answer.
+ */
+function checkWidths(
+  evalCase: AiEvalCase,
+  answer: unknown,
+  checked: Checked | null,
+  audits: AiEvalAudits | undefined,
+): { pass: boolean; findings: string[] } | null {
+  if (!audits || !checked?.readable || !aiEvalRendersAtDeviceWidths(evalCase.kind)) return null
+  const audit = audits(evalCase, answer)
+  if (!audit) return { pass: false, findings: ['widths-unrecorded'] }
+  const findings = aiDeviceAuditFindings(audit)
+  return { pass: findings.length === 0, findings }
+}
+
 /** One answer to one golden brief, scored. */
-export function scoreAiEvalCandidate(evalCase: AiEvalCase, candidate: AiEvalCandidate): AiEvalScore {
+export function scoreAiEvalCandidate(
+  evalCase: AiEvalCase,
+  candidate: AiEvalCandidate,
+  audits?: AiEvalAudits,
+): AiEvalScore {
   const scope = candidate.scope ?? 'full'
   const checked = scope === 'full' ? checkAnswer(evalCase, candidate.answer) : null
+  const widths = checkWidths(evalCase, candidate.answer, checked, audits)
   const plan = evalCase.expected?.plan ? checkAiEvalPlan(evalCase, candidate.plan) : null
   const rubric = aiEvalRubricVerdict(candidate.rubric)
   const rubricScore = (rubric.mean - 1) / 4
@@ -541,19 +896,28 @@ export function scoreAiEvalCandidate(evalCase: AiEvalCase, candidate: AiEvalCand
       rules: checked ? checked.rules : null,
       budget: checked ? checked.budget : null,
       plan: plan ? plan.pass : null,
+      responsive: widths ? widths.pass : null,
       rubric: rubric.pass,
     },
     rubricScore: Math.round(rubricScore * 10_000) / 10_000,
     score,
     // A plan answer to a brief with no expected plan has nothing to pass.
-    pass: documentPasses && (plan?.pass ?? scope === 'full') && rubric.pass,
-    findings: [...(checked?.findings ?? []), ...(plan?.findings ?? [])],
+    pass: documentPasses && (widths?.pass ?? true) && (plan?.pass ?? scope === 'full') && rubric.pass,
+    findings: [...(checked?.findings ?? []), ...(widths?.findings ?? []), ...(plan?.findings ?? [])],
   }
 }
 
-/** The checks a control failed; the harness requires every one it names. */
-export function scoreAiEvalControl(evalCase: AiEvalCase, control: AiEvalControl): AiEvalCheck[] {
+/**
+ * The checks a control failed; the harness requires every one it names. A
+ * control whose widths were never recorded fails none of them.
+ */
+export function scoreAiEvalControl(
+  evalCase: AiEvalCase,
+  control: AiEvalControl,
+  audits?: AiEvalAudits,
+): AiEvalCheck[] {
   const checked = checkAnswer(evalCase, control.answer)
+  const widths = audits?.(evalCase, control.answer) ? checkWidths(evalCase, control.answer, checked, audits) : null
   const plan =
     control.plan !== undefined && evalCase.expected?.plan
       ? checkAiEvalPlan(evalCase, control.plan)
@@ -563,6 +927,7 @@ export function scoreAiEvalControl(evalCase: AiEvalCase, control: AiEvalControl)
     ...(checked.rules ? [] : (['rules'] as const)),
     ...(checked.budget ? [] : (['budget'] as const)),
     ...(plan && !plan.pass ? (['plan'] as const) : []),
+    ...(widths && !widths.pass ? (['responsive'] as const) : []),
   ]
 }
 

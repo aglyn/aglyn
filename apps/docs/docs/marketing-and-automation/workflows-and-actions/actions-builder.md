@@ -42,6 +42,14 @@ An organization with several sites can also install a recipe on any of them, wit
 the editor, from the organization's
 [CRM → Settings → Recipes](../../content-and-data/crm/settings.md#recipes).
 
+### Describe it with AI {#describe-it}
+
+Beside **Recipes**, **Describe it** drafts an automation from a sentence, using only the
+triggers and steps your plan includes. The draft arrives in the list switched off, with
+anything your site is missing left in square brackets for you to fill in. A saved
+automation's editor also has **Explain it**, and a failed run has **Why did this fail?**.
+See [Draft and explain automations with AI](../../ai/automations-with-ai.md).
+
 ## Triggers
 
 Beyond server events (form submissions, page views, sign-ins, leads, bookings), actions

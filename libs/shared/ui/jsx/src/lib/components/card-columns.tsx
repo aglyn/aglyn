@@ -18,6 +18,7 @@
 
 import { Box } from '@mui/material'
 import type { ReactNode } from 'react'
+import { EMPTY_FRAME_SELECTOR } from './grid-items'
 
 export interface CardColumnsProps {
   /** The cards, in reading order. */
@@ -106,42 +107,60 @@ export function CardColumns({
   spacing = 3,
 }: CardColumnsProps) {
   return (
-    <Box
-      sx={{
-        columnCount: { xs: 1, md: columns },
-        columnGap: spacing,
-        // A card is never sawn across the boundary. The `-webkit-` and legacy
-        // page-break aliases are still what older WebKit reads.
-        '& > *': {
-          breakInside: 'avoid',
-          WebkitColumnBreakInside: 'avoid',
-          pageBreakInside: 'avoid',
-          // The gutter BETWEEN stacked cards. A multicol child cannot use the
-          // parent's row gap — there are no rows — so the spacing is its own
-          // bottom margin, and the last one in a column keeps it too, which
-          // is why the container carries no extra padding.
-          mb: spacing,
-          // Multicol boxes are fragment containers; a card that establishes
-          // its own block formatting context is the reliably-measured one.
-          display: 'block',
-          // A wide child (a table, a long unbroken id) must not push the
-          // column track past the edge.
-          minWidth: 0,
-        },
-        // A card that renders NOTHING must not weigh on the balance. A plugin
-        // widget slot renders an empty fragment when no plugin is entitled for
-        // it, leaving a wrapper that carries only its bottom margin — which
-        // multicol counts as real content and balances the columns around.
-        // `:empty` is exact here: the wrapper has no element and no text node
-        // in that case and only in that case.
-        // More specific than the `& > *` above (`:empty` adds a class-level
-        // component), so `display: none` wins over `display: block`.
-        '& > *:empty': { display: 'none' },
-      }}
-    >
-      {items.map((item, index) => (
-        <Box key={item.key ?? index}>{item.children}</Box>
-      ))}
+    // The run's own box, which ends at its last card (AGL-3059). Every column
+    // of the flow inside ends in one gutter (below), which would otherwise
+    // sit under the run as a gap of its own and double the space to whatever
+    // follows: a grid band's gap, a Stack's spacing. Multicol cannot say which
+    // card ends a column, so the flow gives that gutter back with a negative
+    // bottom margin, and this box contains it: a block formatting context
+    // ends at its last child's margin edge. The margin sits on the flow, not
+    // on this box, because a `Stack` parent resets its children's margins.
+    <Box sx={{ display: 'flow-root' }}>
+      <Box
+        sx={{
+          columnCount: { xs: 1, md: columns },
+          columnGap: spacing,
+          mb: -spacing,
+          // A card is never sawn across the boundary. The `-webkit-` and legacy
+          // page-break aliases are still what older WebKit reads.
+          '& > *': {
+            breakInside: 'avoid',
+            WebkitColumnBreakInside: 'avoid',
+            pageBreakInside: 'avoid',
+            // The gutter BETWEEN stacked cards. A multicol child cannot use
+            // the parent's row gap — there are no rows — so the spacing is its
+            // own. Padding, not a margin: a margin at the foot of a column is
+            // truncated at the column break, so only the LAST column would end
+            // in a gutter, and the negative margin above would pull what
+            // follows up against a first column taller than the last. Padding
+            // stays with its card, so every column ends in exactly one.
+            pb: spacing,
+            // Multicol boxes are fragment containers; a card that establishes
+            // its own block formatting context is the reliably-measured one.
+            display: 'block',
+            // A wide child (a table, a long unbroken id) must not push the
+            // column track past the edge.
+            minWidth: 0,
+          },
+          // A card that renders NOTHING must not weigh on the balance. A plugin
+          // widget slot renders nothing when no plugin is entitled for it,
+          // leaving a wrapper that carries only its gutter — which multicol
+          // counts as real content and balances the columns around. `:empty`
+          // is exact here: the wrapper has no element and no text node in that
+          // case and only in that case.
+          // More specific than the `& > *` above (`:empty` adds a class-level
+          // component), so `display: none` wins over `display: block`.
+          '& > *:empty': { display: 'none' },
+          // A wrapper whose one element is a marked frame with nothing drawn
+          // in it weighs the same (AGL-3050): a widget zone whose widgets all
+          // rendered nothing is that frame.
+          [`& > *:has(> ${EMPTY_FRAME_SELECTOR})`]: { display: 'none' },
+        }}
+      >
+        {items.map((item, index) => (
+          <Box key={item.key ?? index}>{item.children}</Box>
+        ))}
+      </Box>
     </Box>
   )
 }

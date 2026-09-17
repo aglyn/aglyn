@@ -38,6 +38,7 @@ import {
   type ConsolePluginOrgMount,
   type OrgPermission,
 } from '@aglyn/aglyn'
+import { ABSENT_WHEN_EMPTY_ATTRIBUTE } from '@aglyn/shared-ui-jsx/components/grid-items'
 import { render } from '@testing-library/react'
 
 /** What the hooks answer, set per case. */
@@ -180,5 +181,52 @@ describe('OrgDashboardWidgets', () => {
   it('holds until the workspace has resolved into a mount', () => {
     const { container } = draw(undefined)
     expect(container.innerHTML).toBe('')
+  })
+
+  it('keeps the page\'s card gap from the site grid beneath it, and adds none above when it leads (AGL-3044)', () => {
+    // The row's gap from its neighbors is the one every stacked widget zone
+    // keeps, not a margin of its own: a stacked zone after it collapses into
+    // the same 24px instead of adding a second gap.
+    const { getByTestId } = render(
+      <main>
+        <OrgDashboardWidgets orgMount={MOUNT} basePath="/acme/crm" />
+        <section>{'site grid'}</section>
+      </main>,
+    )
+    const row = getByTestId('probe').parentElement as HTMLElement
+    expect(getComputedStyle(row).display).toBe('grid')
+    // jsdom answers '' for a margin no rule sets; its initial value is 0.
+    expect(getComputedStyle(row).marginTop || '0px').toBe('0px')
+    expect(getComputedStyle(row).marginBottom).toBe('24px')
+  })
+
+  it('draws no room and no gap when every card in the row rendered nothing (AGL-3044)', () => {
+    // A card passes every gate and then has nothing to say. The row is drawn,
+    // with nothing in it, and an empty grid left in the page would keep its
+    // margin: a gap above the site grid where no card is.
+    function NothingCard() {
+      return null
+    }
+    NothingCard.displayName = 'NothingCard'
+    unregisterConsoleExtension('probe' as never)
+    registerConsoleExtension({
+      pluginId: 'probe' as never,
+      displayName: 'Probe',
+      widgets: [
+        { slot: CONSOLE_WIDGET_SLOTS.orgDashboard, widgetId: 'probe-card', Component: NothingCard },
+      ],
+    })
+    const { container } = render(
+      <main>
+        <OrgDashboardWidgets orgMount={MOUNT} basePath="/acme/crm" />
+        <section>{'site grid'}</section>
+      </main>,
+    )
+    const row = (container.querySelector('main') as HTMLElement).firstElementChild as HTMLElement
+    expect(row.tagName).toBe('DIV')
+    expect(row.childNodes).toHaveLength(0)
+    expect(getComputedStyle(row).display).toBe('none')
+    // Marked as a frame, so a card grid's item holding the row hides too.
+    expect(row.hasAttribute(ABSENT_WHEN_EMPTY_ATTRIBUTE)).toBe(true)
   })
 })

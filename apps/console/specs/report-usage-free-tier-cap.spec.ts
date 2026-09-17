@@ -409,6 +409,10 @@ describe('report-usage: a free org blowing every band posts NO meter event (AGL-
     // with nothing to bill the route never reaches Stripe — not the meter
     // event, and not the subscription lookup before it. Both shapes a comp
     // takes: over a canceled subscription, and where none ever existed.
+    //
+    // And an UNCAPPED comp (AGL-3049), the internal workspace's shape: every
+    // band lifted to unlimited, so nothing is past a band either — and even
+    // if something were, the comp's price list sells none of it.
     for (const org of [
       {
         plan: 'starter',
@@ -416,6 +420,19 @@ describe('report-usage: a free org blowing every band posts NO meter event (AGL-
         entitlements: { planComp: { plan: 'business', reason: 'beta', grantedBy: 'staff-1' } },
       },
       { entitlements: { planComp: { plan: 'agency', reason: 'trial', grantedBy: 'staff-1' } } },
+      {
+        plan: 'enterprise',
+        enterprise: true,
+        entitlements: {
+          planComp: {
+            plan: 'enterprise',
+            uncapped: true,
+            reason: 'other',
+            note: 'Internal workspace',
+            grantedBy: 'staff-1',
+          },
+        },
+      },
     ]) {
       seedOrg('starter')
       mockDocs.set('orgs/org-1', org)

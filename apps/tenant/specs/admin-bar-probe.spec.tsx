@@ -38,7 +38,9 @@
  *   bar renders, with the token persisted for the next pageview;
  * - the console origin's explicit "no" tears everything down to nothing;
  * - the probe times out to nothing rather than hanging;
- * - manual arming still shows the connect pill and never a probe iframe.
+ * - manual arming still shows the connect pill and never a probe iframe;
+ * - the pill's popup is closed by the SITE once the console's token arrives
+ *   (AGL-3046), and never on a message from any other origin.
  */
 
 import { act, render, screen, waitFor } from '@testing-library/react'
@@ -199,5 +201,35 @@ describe('AdminBar silent probe (AGL-1829)', () => {
         name: 'Connect edit access for this site',
       }),
     ).toBeTruthy()
+  })
+
+  it("closes the pill's popup once the console's token arrives (AGL-3046)", async () => {
+    // The console page no longer closes itself — a close that happens only
+    // on success is readable by any opener — so the site does it, and only
+    // for a token from the console origin.
+    const popup = { close: jest.fn() }
+    const open = jest
+      .spyOn(window, 'open')
+      .mockImplementation(() => popup as unknown as Window)
+    renderBar(false)
+    act(() => {
+      screen
+        .getByRole('button', { name: 'Connect edit access for this site' })
+        .click()
+    })
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining(`${CONSOLE_ORIGIN}/edit-access?hostId=${HOST}`),
+      'aglyn-edit-access',
+      expect.any(String),
+    )
+    postFromOrigin('https://evil.example', TOKEN_MESSAGE)
+    expect(popup.close).not.toHaveBeenCalled()
+    postFromOrigin(CONSOLE_ORIGIN, TOKEN_MESSAGE)
+    expect(popup.close).toHaveBeenCalledTimes(1)
+    await waitFor(() =>
+      expect(
+        screen.getByRole('region', { name: 'Aglyn admin bar' }),
+      ).toBeTruthy(),
+    )
   })
 })
