@@ -85,6 +85,7 @@ import {
 } from '../tools/ai-workflow-tool'
 import { registerAiJobAdmission, type AiJobAdmission, type AiJobAdmissionRefusal } from './ai-job-admission'
 import { aiJobStepBudget } from './ai-job-budget'
+import { aiJobDraftId } from './ai-job-draft-ids'
 import { aiDoctrineReview, aiGenerationSpent, aiLimitReview, aiUnspentOutcome } from './ai-job-generation'
 import {
   aiPluginDraftAdmissionRefusal,
@@ -410,8 +411,9 @@ export function createAiJobWorkflowStep(deps: AiJobWorkflowStepDeps = {}): AiJob
       const writer = writerFor(AI_AUTOMATION_RESOURCE)
       if (!writer) return unspent(AI_WORKFLOW_UNAVAILABLE_COPY)
       const place = { hostId, hostSubdomain }
-      // What an earlier run of this same job already wrote.
-      const written = await writer.read({ hostId, id: job.$id })
+      // What an earlier run of this same job already wrote, under the id the job recorded.
+      const draftId = aiJobDraftId(job, 'workflow')
+      const written = await writer.read({ hostId, id: draftId })
       if (written) {
         return aiUnspentOutcome(model, {
           outputs: [draftOutput(written.id, written.name, place, 'It is off until you switch it on.')],
@@ -444,7 +446,7 @@ export function createAiJobWorkflowStep(deps: AiJobWorkflowStepDeps = {}): AiJob
       const draft = aiAutomationDraft(answer, records)
       const write = await writer.write({
         ...context,
-        id: job.$id,
+        id: draftId,
         name: draft.action.name,
         content: { action: draft.action },
       })

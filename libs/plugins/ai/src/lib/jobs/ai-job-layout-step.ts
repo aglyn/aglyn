@@ -36,6 +36,7 @@ import type { AiLoadEstimate } from '../runtime/ai-palette'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
+import { aiJobDraftId } from './ai-job-draft-ids'
 import {
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
@@ -212,8 +213,9 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
     // The switch's answer for this job, else the routing table's (AGL-2942).
     const model = modelFor?.('job.layout') ?? aiModelForStep('job.layout')
 
-    // A run cut off after its draft was written reports that draft.
-    const written = await readAiDraft(firestore, { kind: 'layout', hostId, id: job.$id })
+    // A run cut off after its draft was written reports that draft, found by the id the job recorded.
+    const draftId = aiJobDraftId(job, 'layout')
+    const written = await readAiDraft(firestore, { kind: 'layout', hostId, id: draftId })
     if (written) return aiUnspentOutcome(model, { outputs: [output(written)] })
 
     const [inventory, orgSnapshot] = await Promise.all([
@@ -271,7 +273,7 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
     const draft = await writeAiDraft(firestore, {
       kind: 'layout',
       hostId,
-      id: job.$id,
+      id: draftId,
       uid: job.createdBy,
       org,
       name,

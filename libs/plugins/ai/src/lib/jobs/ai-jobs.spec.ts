@@ -250,6 +250,7 @@ import {
 } from './ai-jobs'
 import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
 import type { AiJob } from '../model/ai-jobs.types'
+import { aiJobDraftId } from './ai-job-draft-ids'
 import { AI_JOB_INLINE_BUDGET_MS } from './ai-job-budget'
 import { aiDoctrineReview, aiGenerationSpent } from './ai-job-generation'
 import {
@@ -351,6 +352,74 @@ describe('createAiJob', () => {
       createAiJob(firestore, { orgId: ORG, kind: 'text', brief: '   ', createdBy: 'u' }),
     ).rejects.toThrow('brief')
     expect([...mockDocs.keys()].some((path) => path.includes('/aiJobs/'))).toBe(false)
+  })
+})
+
+describe('the ids a job and its drafts are named by (AGL-3079)', () => {
+  /** A console resource id: `createResourceUid()`'s nanoid. */
+  const RESOURCE_ID = /^[A-Za-z0-9_-]{10}$/
+  const ZERO = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
+  const draftRunner = jest.fn()
+
+  // A kind no other test in this file creates, so its runner changes no other kind's path.
+  beforeAll(() => registerAiJobStep('workflow', (context) => draftRunner(context)))
+  beforeEach(() => draftRunner.mockReset())
+
+  it('names a new job, and every draft its kind always writes, by a console resource id before any step runs', async () => {
+    const job = await createAiJob(
+      firestore,
+      { orgId: ORG, hostId: 'host-1', kind: 'campaign', brief: 'A spring sale email.', createdBy: 'uid-1' },
+      NOW,
+    )
+    expect(job.$id).toMatch(RESOURCE_ID)
+    const stored = await getAiJob(firestore, ORG, job.$id)
+    const draftIds = stored?.steps[0].draftIds ?? {}
+    expect(draftIds).toEqual({ email: expect.stringMatching(RESOURCE_ID), campaign: expect.stringMatching(RESOURCE_ID) })
+    // Each draft is its own resource, never the job and never the other draft.
+    expect(new Set([job.$id, draftIds.email, draftIds.campaign]).size).toBe(3)
+    // A kind that writes no draft names none.
+    expect((await newTextJob()).steps.map((step) => step.draftIds)).toEqual([undefined])
+  })
+
+  it('finds the draft a run cut off after its write left, under the id the job recorded, and writes no second', async () => {
+    const written: string[] = []
+    draftRunner.mockImplementation(async ({ job, firestore: db }) => {
+      const id = aiJobDraftId(job, 'workflow')
+      const ref = db.collection('hosts').doc('host-1').collection('automations').doc(id)
+      if (!(await ref.get()).exists) {
+        await ref.set({ name: 'Welcome' })
+        written.push(id)
+        // Cut off after the write, before the machine recorded the step.
+        throw new AiUpstreamError(529, true, 'req-draft')
+      }
+      return {
+        outputs: [{ resource: 'workflow', id, hostId: 'host-1', label: 'Welcome' }],
+        usage: ZERO,
+        estCostUsd: 0,
+        model: 'claude-sonnet-5',
+        stopReason: null,
+      }
+    })
+    const job = await createAiJob(
+      firestore,
+      { orgId: ORG, hostId: 'host-1', kind: 'workflow', brief: 'Welcome new contacts.', createdBy: 'uid-1' },
+      NOW,
+    )
+    const recorded = job.steps[0].draftIds?.workflow
+    expect(recorded).toMatch(RESOURCE_ID)
+
+    expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })).outcome).toBe('requeued')
+    const again = await runAiJobStep(firestore, ORG, job.$id, { owner: 'beat-1', now: NOW })
+
+    expect(again.outcome).toBe('done')
+    expect(written).toEqual([recorded])
+    expect([...mockDocs.keys()].filter((path) => path.startsWith('hosts/host-1/automations/'))).toEqual([
+      `hosts/host-1/automations/${recorded}`,
+    ])
+    if (again.outcome !== 'done') throw new Error('unreachable')
+    expect(again.job.outputs).toEqual([expect.objectContaining({ resource: 'workflow', id: recorded })])
+    // The claim and the record kept the id the job was created with.
+    expect((await getAiJob(firestore, ORG, job.$id))?.steps[0].draftIds).toEqual({ workflow: recorded })
   })
 })
 
@@ -1281,6 +1350,14 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
     expect(aiJobStepNames('page')).toEqual(['generate'])
     expect(aiJobStepNames('seo')).toEqual(['generate'])
     expect(aiJobStepNames('text')).toEqual(['draft'])
+  })
+
+  it('names a scaffold’s welcome email on the step that builds it, never on the plan step (AGL-3079)', async () => {
+    const job = await newSiteJob()
+    expect(job.steps.map((step) => [step.name, step.draftIds ?? null])).toEqual([
+      [AI_JOB_PLAN_STEP, null],
+      ['generate', { email: expect.stringMatching(/^[A-Za-z0-9_-]{10}$/) }],
+    ])
   })
 
   it('parks a proposed plan for review in the write that records the step, and the beat never picks it up', async () => {

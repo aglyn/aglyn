@@ -258,6 +258,9 @@ const INVENTORY: AiSiteInventory = {
   ],
 }
 
+/** The id the job recorded for its design when it was created (AGL-3079). */
+const DESIGN_ID = 'drftEmailD'
+
 function job(patch: Partial<AiJob> = {}): AiJob {
   return {
     $id: 'job-1',
@@ -269,7 +272,7 @@ function job(patch: Partial<AiJob> = {}): AiJob {
     inputs: { emailType: 'welcome' },
     steps: [
       { name: 'plan', status: 'done', creditsSpent: 3 },
-      { name: 'generate', status: 'running', creditsSpent: 0 },
+      { name: 'generate', status: 'running', creditsSpent: 0, draftIds: { email: DESIGN_ID } },
     ],
     outputs: [],
     creditsReserved: 50,
@@ -366,7 +369,7 @@ describe('the email step', () => {
       expect(outcome.outputs).toHaveLength(1)
       expect(outcome.outputs[0]).toMatchObject({
         resource: 'emailScreen',
-        id: 'job-1',
+        id: DESIGN_ID,
         hostId: 'host-1',
         hostSubdomain: 'brightside',
       })
@@ -453,6 +456,8 @@ describe('the email step', () => {
     expect(again.estCostUsd).toBe(0)
     expect(again.outputs).toHaveLength(1)
     expect(designs).toHaveLength(1)
+    // Found under the id the job recorded, which the first run wrote it under (AGL-3079).
+    expect([designs[0].id, again.outputs[0].id]).toEqual([DESIGN_ID, DESIGN_ID])
   })
 
   it('stops for a person when the site has no room, and spends nothing', async () => {

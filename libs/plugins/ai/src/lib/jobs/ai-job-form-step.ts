@@ -48,6 +48,7 @@ import { AI_PALETTE } from '../runtime/ai-palette.generated'
 import type { AiSystemBlock, AiTool } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
+import { aiJobDraftId } from './ai-job-draft-ids'
 import {
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
@@ -475,8 +476,9 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
     // The switch's answer for this job, else the routing table's (AGL-2942).
     const model = modelFor?.('job.form') ?? aiModelForStep('job.form')
 
-    // A run cut off after its draft was written reports that draft.
-    const written = await readAiDraft(firestore, { kind: 'form', hostId, id: job.$id })
+    // A run cut off after its draft was written reports that draft, found by the id the job recorded.
+    const draftId = aiJobDraftId(job, 'form')
+    const written = await readAiDraft(firestore, { kind: 'form', hostId, id: draftId })
     if (written) return aiUnspentOutcome(model, { outputs: [output(written)] })
 
     const [inventory, orgSnapshot] = await Promise.all([
@@ -514,7 +516,7 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
     const allowance = await aiDraftAllowanceRefusal(firestore, { kind: 'form', hostId, org })
     if (allowance) return aiUnspentOutcome(model, { review: aiLimitReview(allowance) })
 
-    const check = aiFormDraftCheck({ formId: job.$id, name })
+    const check = aiFormDraftCheck({ formId: draftId, name })
     const result = await runValidatedGeneration('form', {
       step: 'job.form',
       model,
@@ -536,7 +538,7 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
     const write = await writeAiDraft(firestore, {
       kind: 'form',
       hostId,
-      id: job.$id,
+      id: draftId,
       uid: job.createdBy,
       org,
       name,

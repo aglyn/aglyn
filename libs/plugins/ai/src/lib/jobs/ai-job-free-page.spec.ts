@@ -173,6 +173,8 @@ const toolAnswer = (name: string, input: unknown) => ({
   stopReason: 'tool_use',
 })
 
+const SCREEN_ID = 'freeAbout1'
+
 function job(): AiJob {
   return {
     $id: 'job-free-page',
@@ -184,7 +186,8 @@ function job(): AiJob {
     inputs: { pageType: FIXTURE.pageType },
     steps: [
       { name: 'plan', status: 'running', creditsSpent: 0 },
-      { name: 'generate', status: 'pending', creditsSpent: 0 },
+      // The id the job recorded for its page when it was created (AGL-3079).
+      { name: 'generate', status: 'pending', creditsSpent: 0, draftIds: { screen: SCREEN_ID } },
     ],
     outputs: [],
     creditsReserved: 100,
@@ -271,8 +274,8 @@ async function replay(answers: Readonly<Record<number, readonly unknown[]>> = {}
     outcomes.push(await pageStep({ job: confirmed, stepIndex: 1, now: NOW, firestore: site.firestore }))
   }
   outcomes.push(await pageStep({ job: confirmed, stepIndex: 1, now: NOW, firestore: site.firestore }))
-  const screen = site.docs.get(`hosts/${HOST}/screens/${confirmed.$id}`) ?? {}
-  const version = site.docs.get(`hosts/${HOST}/screens/${confirmed.$id}/versions/${String(screen['versionId'])}`)
+  const screen = site.docs.get(`hosts/${HOST}/screens/${SCREEN_ID}`) ?? {}
+  const version = site.docs.get(`hosts/${HOST}/screens/${SCREEN_ID}/versions/${String(screen['versionId'])}`)
   return {
     planRequest,
     planOutcome,

@@ -31,6 +31,7 @@ import {
   suggestAiCampaignList,
 } from './ai-email-bindings'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
+import { aiJobDraftId } from './ai-job-draft-ids'
 import { aiSiteSubdomain } from './ai-job-drafts'
 import {
   aiConfirmedPlan,
@@ -220,10 +221,11 @@ export function createAiJobCampaignStep(deps: AiJobCampaignStepDeps = {}): AiJob
     if (typeof found === 'string') return { ...aiUnspentOutcome(model), failure: found }
     const { design, campaign } = found
 
-    // What an earlier run of this same job already wrote.
+    // What an earlier run of this same job already wrote, under the ids the job recorded.
+    const designId = aiJobDraftId(job, 'email')
     const [writtenDesign, writtenCampaign, hostSubdomain] = await Promise.all([
-      design.read({ hostId, id: job.$id }),
-      campaign.read({ hostId, id: job.$id }),
+      design.read({ hostId, id: designId }),
+      campaign.read({ hostId, id: aiJobDraftId(job, 'campaign') }),
       aiSiteSubdomain(firestore, hostId),
     ])
     const place = { hostId, hostSubdomain }
@@ -299,7 +301,7 @@ export function createAiJobCampaignStep(deps: AiJobCampaignStepDeps = {}): AiJob
     const name = aiCampaignName(job, copy)
     const write = await design.write({
       ...context,
-      id: job.$id,
+      id: designId,
       name,
       content: aiEmailDesignContent(generated.nodes, copy),
     })
@@ -344,7 +346,7 @@ interface AiCampaignDraftInput {
 async function draftCampaign(input: AiCampaignDraftInput): Promise<AiJobStepOutcome> {
   const write = await input.campaign.write({
     ...input.context,
-    id: input.job.$id,
+    id: aiJobDraftId(input.job, 'campaign'),
     name: aiCampaignName(input.job, input.copy),
     content: aiCampaignDraftContent(input.designId, input.copy),
   })
