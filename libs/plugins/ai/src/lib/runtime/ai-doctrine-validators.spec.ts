@@ -931,7 +931,7 @@ describe('rule 10 — a link that goes nowhere (AGL-3072)', () => {
         rule: 10,
         code: 'link-without-destination',
         message:
-          '"Request a Consultation" goes nowhere. Give it the "screenId" of a screen the site has, or an "href" that is a path on this site or an https: address the brief gives. When the site has no page for it, take it out: a form on this page is sent by its own button, and no element can be reached by an anchor.',
+          '"Request a Consultation" goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. When the site has no page for it, take it out: a form on this page is sent by its own button, and no element can be reached by an anchor.',
         nodeIds: ['n2'],
       },
     ])

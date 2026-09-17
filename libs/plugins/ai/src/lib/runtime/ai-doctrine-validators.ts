@@ -1327,7 +1327,7 @@ export function detectLinksWithoutDestination(tree: AiDoctrineTree, outputKind: 
     {
       rule: 10,
       code: 'link-without-destination',
-      message: `${words} goes nowhere. Give it the "screenId" of a screen the site has, or an "href" that is a path on this site or an https: address the brief gives.${instead}`,
+      message: `${words} goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives.${instead}`,
       nodeIds: unique(dead.map((entry) => entry.id)),
     },
   ]

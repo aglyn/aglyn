@@ -219,7 +219,7 @@ describe('a section that breaks the page’s rules', () => {
     expect(Object.keys(result.offending ?? {}).sort()).toEqual(['a10', 'a2', 'a3'])
     const reask = aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)
     expect(reask).toContain(
-      '"Request a quote" goes nowhere. Give it the "screenId" of a screen the site has, or an "href" that is a path on this site or an https: address the brief gives.',
+      '"Request a quote" goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives.',
     )
     expect(reask).toContain('its last word, "with", leaves the sentence unfinished. Finish the sentence, or end the line before "with". (nodes a2)')
     expect(reask).toContain('Write the words of its List Item Text, or take the item out. (nodes a10)')

@@ -1622,8 +1622,10 @@ model's own nodes and says what to write instead:
   the button the Form draws from its own `submitLabel`, the elements a page places carry
   no id an anchor could name (AGL-2867, so a bare `#fragment` is dropped), and a
   generated node sets no interaction. So a link with neither is refused; the re-ask names
-  its words and both destinations, and says to take it out when the site has no page
-  for it, or, inside a Form, to set the form's `submitLabel` instead. An email's buttons
+  its words and both destinations, a screen that does what those words say, so the answer
+  it asks for is not sent home for `link-unrelated-screen` to refuse next, and says to take
+  it out when the site has no page for it, or, inside a Form, to set the form's
+  `submitLabel` instead. An email's buttons
   stay the email door's (`email-button-link`).
 - **Rule 14, `copy-cut-at-ceiling`** (`detectCutLines`, AGL-3076). The live subhead was
   not written that way: it is a Typography in the h5 style, and the palette validator
