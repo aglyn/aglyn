@@ -146,6 +146,7 @@ export const DOCS_HELP_EXCERPTS = {
   pluginManagerApi: 'Every public registration and loading API a plugin can use, from `@aglyn/aglyn` and `@aglyn/aglyn/server`.',
   plugins: 'Extend Aglyn with sandboxed plugins — install from the marketplace, configure them, and publish your own.',
   pos: 'Sell in person from the console register and take date-range reservations with deposits.',
+  productsWithAi: 'Have Aglyn AI write product copy, write copy for many products or an import, propose a first catalog, and propose categories and discounts, as proposals you review before anything is saved.',
   publishAPlugin: 'Ship your own plugin to the marketplace with version pinning.',
   publisherHandbook: 'Publishing to the Aglyn marketplace — from profile setup through listing authoring, review, updates, and getting paid.',
   publishYourFirstScreen: 'Create a screen, design it in the Besigner, and publish it live.',

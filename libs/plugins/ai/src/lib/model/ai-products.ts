@@ -417,3 +417,22 @@ export function aiProductGaps(...texts: readonly string[]): string[] {
   }
   return [...found].filter(Boolean)
 }
+
+/* ------------------------------------------------------------------------ *
+ * The console's cards
+ * ------------------------------------------------------------------------ */
+
+/** The option the import zone sets to write the imported products' copy. */
+export const AI_PRODUCTS_IMPORT_WRITE_COPY = 'ai.writeCopy'
+
+/** The brief a bulk copy job carries, which the jobs list shows and a card recognizes it by. */
+export const aiProductsBulkBrief = (count: number): string =>
+  `Write storefront copy for ${count} ${count === 1 ? 'product' : 'products'}`
+
+const BULK_BRIEF = /^Write storefront copy for (\d+) products?$/
+
+/** How many products a bulk copy job was asked for, read from its brief; `null` for any other job. */
+export function aiProductsBulkCount(job: Pick<AiJobSummary, 'brief'> | null | undefined): number | null {
+  const match = BULK_BRIEF.exec(job?.brief ?? '')
+  return match ? Number(match[1]) : null
+}

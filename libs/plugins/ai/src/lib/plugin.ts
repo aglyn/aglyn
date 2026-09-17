@@ -72,6 +72,9 @@ import {
   AiExplainAutomation,
   AiExplainRunFailure,
 } from './components/ai-explain-automation.component'
+import AiProductCopyCard from './components/ai-product-copy-card.component'
+import AiProductImportOption from './components/ai-product-import-option.component'
+import AiProductsHubCard from './components/ai-products-hub-card.component'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
 
@@ -415,6 +418,35 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiSiteBatchCard,
+      },
+      // Commerce by AI (AGL-2916): product copy in the product editor, the
+      // catalog, categories and discounts on the products hub, and copy for
+      // an import as it lands. The commerce plugin hosts the zones and makes
+      // every write; each card asks the jobs route about the release flag
+      // before it shows anything.
+      {
+        slot: 'productEditor',
+        widgetId: 'ai-product-copy',
+        title: 'Product copy assistant',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiProductCopyCard,
+      },
+      {
+        slot: 'productsHub',
+        widgetId: 'ai-products-hub',
+        title: 'Build your catalog with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiProductsHubCard,
+      },
+      {
+        slot: 'productImport',
+        widgetId: 'ai-product-import',
+        title: 'Write imported product copy with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiProductImportOption,
       },
     ],
   })

@@ -83,6 +83,10 @@ const SITE_ZONES: readonly string[] = [
   CONSOLE_WIDGET_SLOTS.hostAutomations,
   CONSOLE_WIDGET_SLOTS.automationEditor,
   CONSOLE_WIDGET_SLOTS.automationRun,
+  // The commerce zones a site's products pages host (AGL-2916).
+  CONSOLE_WIDGET_SLOTS.productEditor,
+  CONSOLE_WIDGET_SLOTS.productsHub,
+  CONSOLE_WIDGET_SLOTS.productImport,
 ]
 
 /** Zones drawn on the WORKSPACE's pages, where no site's switch reaches. */
