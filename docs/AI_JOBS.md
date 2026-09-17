@@ -1162,10 +1162,10 @@ is one thing to build and a plan over it would be a plan of one.
   scheduled processor queries `status == 'scheduled'`, which a draft never is,
   and no send function is reachable from either step; `ai-job-campaign-step.spec.ts`
   holds both halves.
-- **What the model is NOT shown** (`src/lib/jobs/ai-email-bindings.ts`). The
-  published disclosure covers the brief, the site summary and the content
-  being worked on — not lists, contacts, CRM records, product records or
-  engagement statistics. So each of those runs in code and reaches the model
+- **What the model is NOT shown** (`src/lib/jobs/ai-email-bindings.ts`). For
+  a campaign email, the published disclosure covers the brief, the site summary
+  and the content being worked on — not lists, contacts, CRM records, product
+  records or engagement statistics. So each of those runs in code and reaches the model
   at most as a count:
   - **Products** are bound by id from `inputs.productIds`, else from products
     the brief names verbatim. The prompt carries how many cards to place; the
@@ -2109,9 +2109,10 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
 - **The published disclosure.** Drafting sends the brief and the names and
   field names of the site's forms and datasets, which the published Anthropic
   row names for a generation job. Explaining sends an automation's settings
-  and a run's recorded errors, which it does not name, so the doors stay behind
-  `release_ai_generative` until wording that names them is published;
-  `assist-anthropic-subprocessor-gate.spec.ts` records both.
+  and a run's recorded errors, which the Anthropic row and the Privacy Policy
+  name since September 17, 2026 (legal v8, AGL-3069). Both doors stay behind
+  `release_ai_generative`; `assist-anthropic-subprocessor-gate.spec.ts`
+  records both.
 
 ## The insight kind
 
@@ -2369,7 +2370,7 @@ from the job, and the step writes no CRM record.
   number, a long subject, an email column matched to a name, one field matched
   twice and a column the file lacks.
 - **The published disclosure.** A CRM record's facts, a member's email request
-  and an import's headers are customer content the published Anthropic row
-  does not name, so the doors stay behind `release_ai_generative` until
-  wording that names them is published. `assist-anthropic-subprocessor-gate.spec.ts`
+  and an import's headers are named by the Anthropic row and the Privacy Policy
+  since September 17, 2026 (legal v8, AGL-3069). The doors stay behind
+  `release_ai_generative`. `assist-anthropic-subprocessor-gate.spec.ts`
   records the flow.
