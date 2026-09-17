@@ -36,8 +36,10 @@ import {
   registerPluginConfigSchema,
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured } from '@aglyn/shared-util-email'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { commerceBillingWebhookHandler } from './server/billing-webhook'
+import { registerOrderFigureReaders } from './server/order-figures'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
 import { COMMERCE_CONFIG_SCHEMA } from './plugin-config'
 import { commerceSitePageEnricher } from './server/site-page-enricher'
@@ -323,6 +325,10 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/process-restock', processRestockHandler)
   registerPluginApiRoute('commerce/refund', refundHandler)
   registerPluginApiRoute('commerce/supplier-update', supplierUpdateHandler)
+  // The store's sales as figure tables (AGL-2915), for the AI plugin's
+  // insights to read by id rather than by reading orders. The console runs
+  // insight jobs, so the console surface registers them.
+  registerOrderFigureReaders(() => firebaseAdmin.app().firestore())
 }
 
 // Shared with the (still app-side) membership/account route.

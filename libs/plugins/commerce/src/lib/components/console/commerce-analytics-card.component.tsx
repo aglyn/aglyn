@@ -118,22 +118,17 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
     const now = Date.now()
     // The range predicate admits only documents that carry `createdAtMs`, so
     // the figures below read it directly.
+    // What counts as a sale, and what one brought in, are the model's rules
+    // (`order-figures.ts`), which the insight readers sum by too: a pending or
+    // canceled order is not money, a rehearsal checkout is not revenue, and a
+    // refund comes off.
     const orders = orderWindow.rows
+      .filter((order: any) => CommerceModel.orderCountsAsSale(order))
       .map((order: any) => ({
         ...CommerceModel.liftLegacyOrder(order),
         createdAtMs: order.createdAtMs,
       }))
-      .filter(
-        (order: any) =>
-          !['pending', 'cancelled'].includes(order.status) &&
-          // A rehearsal is not revenue. A smoke-test checkout writes
-          // a real order document that Stripe never moved money for, and every
-          // surface summing paid orders counted it.
-          !CommerceModel.orderIsTestMode(order),
-      )
-    const paidCents = (order: any) =>
-      (order.totals?.totalCents ?? order.amountCents ?? 0) -
-      (order.refundedCents ?? 0)
+    const paidCents = (order: any) => CommerceModel.orderPaidCents(order)
     const window30 = orders.filter(
       (order: any) => now - order.createdAtMs < 30 * DAY_MS,
     )
