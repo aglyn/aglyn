@@ -2307,6 +2307,95 @@ export function detectPlanRepeats(
   return violations
 }
 
+/** Sections of one item, side by side and of one kind, that are one list split apart. */
+export const AI_SPLIT_LIST_MIN_SECTIONS = 2
+
+/** A section name's label: what comes before a colon or a spaced dash, as "practice area" in "practice area: family law". */
+const SECTION_LABEL = /^(.+?)\s*(?::|\s[-–—])\s*\S/
+
+/** A name for many of what a name names one of. */
+function pluralOf(name: string): string {
+  const words = name.trim()
+  if (/s$/i.test(words)) return words
+  return /[^aeiou]y$/i.test(words) ? `${words.slice(0, -1)}ies` : `${words}s`
+}
+
+/**
+ * What kind of item a section of one item shows, for telling a list split
+ * into sections apart from sections that each show one different thing: the
+ * components it places, else the label its name gives the item. `null` when
+ * neither says, or when the section binds its item to data.
+ */
+function sectionItemKind(
+  section: AiBuildPlanSection,
+  plan: AiBuildPlan,
+  kinds: Map<string, RecordKind>,
+  inventory: AiSiteInventory | null,
+): { key: string; name: string; components: string[] } | null {
+  if (section.uses.some((ref) => ['dataset', 'collection'].includes(String(refKind(ref, plan, kinds))))) return null
+  const label = SECTION_LABEL.exec(section.name)?.[1]?.trim() ?? ''
+  const components = section.uses.filter((ref) => refKind(ref, plan, kinds) === 'component')
+  if (components.length) {
+    const [first] = components
+    const named = isAiPlanNewRef(first)
+      ? aiPlanCreateFor(plan, first)?.name
+      : inventory?.components.find((row) => row.id === first)?.name
+    return {
+      key: `component:${components.map((ref) => ref.toLowerCase()).sort().join('|')}`,
+      name: pluralOf(label || named || first),
+      components,
+    }
+  }
+  const words = nameTokens(label).join(' ')
+  return words ? { key: `label:${words}`, name: pluralOf(label), components: [] } : null
+}
+
+/**
+ * Rule 1 (plan): a list is one section whose items repeat (AGL-3071). A
+ * section's `items` counts what it repeats, so two or more sections side by
+ * side that each show one item of the same kind — the same component, or a
+ * name that labels the same kind of item — are one list split apart. A live
+ * Free About page planned "the four areas we practice" as four sections of one
+ * item: none was drawn from the one written-once item a repeated section is
+ * built from, and the four came out in three different shapes. The re-ask
+ * names the sections and gives the one section to plan instead.
+ *
+ * Sections of several items are never joined: two lists that share a card
+ * are two lists, and rule 8 counts each within its own section (AGL-3061).
+ */
+export function detectPlanSplitLists(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+): AiDoctrineViolation[] {
+  const kinds = inventoryKinds(inventory)
+  const violations: AiDoctrineViolation[] = []
+  plan.screens.forEach((screen, screenIndex) => {
+    let run: Array<{ index: number; kind: NonNullable<ReturnType<typeof sectionItemKind>> }> = []
+    const close = () => {
+      if (run.length >= AI_SPLIT_LIST_MIN_SECTIONS) {
+        const names = run.map(({ index }) => `"${screen.sections[index].name}"`)
+        const listed = `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+        const [{ kind }] = run
+        const section = { name: kind.name, uses: kind.components, items: run.length }
+        violations.push({
+          rule: 1,
+          code: 'plan-split-list',
+          message: `The sections ${listed} each show one item of the same kind, so they are one list split apart. Plan them as one section whose ${run.length} items repeat: ${JSON.stringify(section)}.`,
+          paths: run.map(({ index }) => `screens[${screenIndex}].sections[${index}]`),
+        })
+      }
+      run = []
+    }
+    screen.sections.forEach((section, index) => {
+      const kind = section.items === 1 ? sectionItemKind(section, plan, kinds, inventory) : null
+      if (!kind || (run.length && run[0].kind.key !== kind.key)) close()
+      if (kind) run.push({ index, kind })
+    })
+    close()
+  })
+  return violations
+}
+
 /** Where the plan's sections place a record of one kind, as `screens[0].sections[1].uses[0]`. */
 function placementsOf(
   plan: AiBuildPlan,
@@ -2824,6 +2913,7 @@ export function validateAiBuildPlan(
 ): AiDoctrineViolation[] {
   return [
     ...detectPlanRepeats(plan, inventory, capabilities),
+    ...detectPlanSplitLists(plan, inventory),
     ...detectPlanLayoutRegions(plan, inventory, capabilities),
     ...detectPlanInlineForms(plan, inventory, capabilities),
     ...detectUntemplatedSimilarPages(plan, inventory),

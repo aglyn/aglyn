@@ -44,8 +44,8 @@ before you confirm anything and tells you what to create first and where.
 
 On a plan without reusable components or saved forms, such as Free, the page is built from
 what that plan can make: a block that repeats, such as a row of service cards, is built into
-the page each time, and a form is part of the page, with its fields, collecting submissions
-into your inbox like any form.
+the page each time, in one section, and a form is part of the page, with its fields,
+collecting submissions into your inbox like any form.
 
 ## How the page is built
 

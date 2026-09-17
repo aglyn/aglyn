@@ -112,6 +112,52 @@ export const AI_FREE_PAGE_STOPPED_RECORDING: AiEvalRecording = {
 }
 
 /**
+ * RECORDED, NOT GOLDEN: the plan the third live recording of the Free page
+ * brief kept (`page-free-law-firm-about`, 2026-09-17), exactly as recorded. It
+ * asked for eight sections beside the layout it creates, where the Free
+ * wall's worst case fits six (AGL-3070), and it split "the four areas we
+ * practice" into four sections of one item each (AGL-3071).
+ */
+export const AI_FREE_PAGE_BUILT_PLAN: AiBuildPlan = {
+  reuse: [],
+  create: [
+    {
+      kind: 'layout',
+      name: 'main-layout',
+      why: 'Site has no layout yet; header, navigation and footer must live in a layout rather than on the page.',
+      duplicateOf: null,
+      fields: [
+        'header: logo + nav links (Home, About, Practice Areas, Contact)',
+        'footer: firm name, address, phone, copyright',
+      ],
+    },
+  ],
+  screens: [
+    {
+      title: 'About Brightwater Law',
+      slug: '/about',
+      layout: 'new:main-layout',
+      template: null,
+      duplicateOf: null,
+      nav: true,
+      seoTitle: 'About Brightwater Law | Our Firm & Practice Areas',
+      seoDescription:
+        'Learn who Brightwater Law is, the four areas we practice, how we work with clients, and request a consultation.',
+      sections: [
+        { name: 'hero', uses: [], items: 0 },
+        { name: 'who we are', uses: [], items: 0 },
+        { name: 'practice area: business & corporate law', uses: [], items: 1 },
+        { name: 'practice area: real estate law', uses: [], items: 1 },
+        { name: 'practice area: family law', uses: [], items: 1 },
+        { name: 'practice area: estate planning', uses: [], items: 1 },
+        { name: 'how we work with clients', uses: [], items: 3 },
+        { name: 'request a consultation form', uses: [], items: 0 },
+      ],
+    },
+  ],
+}
+
+/**
  * RECORDED, NOT GOLDEN: two sections of the page the third live recording of
  * the Free page brief built (`page-free-law-firm-about`, 2026-09-17), copied
  * by hand exactly as the page stored them, under the page's own root. The

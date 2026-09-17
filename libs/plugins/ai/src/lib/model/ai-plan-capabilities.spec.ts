@@ -95,7 +95,7 @@ describe('what a plan may create', () => {
     // What the workspace keeps no reusable components for is drawn on the page.
     expect(aiPlanUncreatableKind({ create: [] }, 'component', FREE)).toEqual({
       reason: "this workspace's plan does not include reusable components",
-      instead: 'Draw the item in its own section instead.',
+      instead: "Draw a list's repeated items in one section instead.",
     })
     expect(aiPlanUncreatableKind({ create: [layout] }, 'layout', aiUnrestrictedPlanCapabilities())).toBeNull()
   })

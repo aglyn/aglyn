@@ -491,6 +491,36 @@ describe('the plan step — what the job may create (AGL-3030)', () => {
     expect(outcome.plan).toMatchObject({ create: [], screens: [{ sections: INLINE_PLAN.screens[0].sections }] })
   })
 
+  it('asks a Free plan that splits a list into one-item sections for one repeated section, and keeps the section the re-ask plans (AGL-3071)', async () => {
+    const split: AiBuildPlan = {
+      ...INLINE_PLAN,
+      screens: [
+        {
+          ...INLINE_PLAN.screens[0],
+          sections: [
+            { name: 'hero', uses: [], items: 0 },
+            { name: 'tier: basic', uses: [], items: 1 },
+            { name: 'tier: standard', uses: [], items: 1 },
+            { name: 'tier: premium', uses: [], items: 1 },
+          ],
+        },
+      ],
+    }
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(split)).mockResolvedValueOnce(planAnswer(INLINE_PLAN))
+    const outcome = await planStep({ readCapabilities: async () => FREE })({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    const [first] = mockRunAiRequest.mock.calls[0]
+    expect(first.messages[0].content).toContain(
+      "This workspace keeps no reusable components or saved forms: draw a list's repeated items in one section, and a form as a Form element holding its Form Fields.",
+    )
+    const reask = mockRunAiRequest.mock.calls[1][0].messages.at(-1).content as string
+    expect(reask).toContain(
+      `Rule 1 (${AI_DOCTRINE_RULES[1]}): The sections "tier: basic", "tier: standard" and "tier: premium" each show one item of the same kind, so they are one list split apart. Plan them as one section whose 3 items repeat: {"name":"tiers","uses":[],"items":3}. (at screens[0].sections[1], screens[0].sections[2], screens[0].sections[3])`,
+    )
+    expect(outcome.review).toEqual({ reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] })
+    expect(outcome.plan).toMatchObject({ screens: [{ sections: [{ name: 'hero', uses: [], items: 0 }, { name: 'tiers', uses: [], items: 3 }] }] })
+  })
+
   it('asks once more for a page plan of two pages, in the page job’s own sentence', async () => {
     const twoPages: AiBuildPlan = { ...INLINE_PLAN, screens: [INLINE_PLAN.screens[0], { ...INLINE_PLAN.screens[0], slug: '/pricing-2' }] }
     mockRunAiRequest.mockResolvedValueOnce(planAnswer(twoPages)).mockResolvedValueOnce(planAnswer(INLINE_PLAN))

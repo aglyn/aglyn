@@ -472,7 +472,7 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
 - **Inline, where the workspace keeps no reusable components.** A workspace whose plan
   lacks `reusableComponents` can place no component and save no form, so there — and
   only there — the doctrine builds inline: a form is a Form element the page carries,
-  with its Form Fields inside it, and a repeated item is drawn in its own section.
+  with its Form Fields inside it, and a list's repeated items are drawn in one section.
   Rules 1 and 3 state that exception, the plan rules accept it on those capabilities,
   and the tree rules accept it where `AiDoctrineTreeContext.reusableComponents` is
   `false`, which the page step sets from the org's entitlement. Loose fields and a
@@ -482,6 +482,20 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   within the plan's `formSubmissionsPerMonth`. A section's answer writes that
   repeated item once and lists its copies' values, and the page step draws the copies
   ([A repeated item written once](#a-repeated-item-written-once)).
+- **A list is one section whose items repeat (AGL-3071).** A live Free plan read the
+  inline sentence's old words, "draw a repeated item in its own section", as a section an
+  item, and planned "the four areas we practice" as four sections of one item: none was
+  built from the one item a repeated section writes once (AGL-3053), and the four came
+  out in three shapes. The sentence (`AI_PLAN_INLINE_SENTENCE`, in the plan's user turn)
+  now says "draw a list's repeated items in one section", four characters longer, and
+  rule 1's `detectPlanSplitLists` refuses two or more sections side by side that each show
+  one item of the same kind: they place the same components, or their names give the item
+  the same label before a colon or a dash ("practice area: family law"). The re-ask names
+  the sections and gives the section to plan instead, as JSON:
+  `{"name":"practice areas","uses":[],"items":4}`. It holds on every workspace, since one
+  component placed once a section is the same split. Sections of several items are never
+  joined, so two lists that share a card stay two lists, as rule 8 counts them. No credit
+  figure the Free arithmetic quotes moves.
 - **A typed list is counted within its section (AGL-3061).** Rule 8's tree check
   (`detectTypedData`) refuses `AI_TYPED_LIST_MIN_ITEMS` (8) or more same-shaped items
   typed out by hand, counted within the Section they sit in: the unit the plan rule

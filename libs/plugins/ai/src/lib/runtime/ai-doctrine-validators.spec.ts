@@ -23,7 +23,11 @@
 import { formatMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
 import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import { AI_FREE_PAGE_BUILT_SECTIONS, AI_FREE_PAGE_RECORDED_PLAN } from '../jobs/fixtures/ai-free-page-recording'
+import {
+  AI_FREE_PAGE_BUILT_PLAN,
+  AI_FREE_PAGE_BUILT_SECTIONS,
+  AI_FREE_PAGE_RECORDED_PLAN,
+} from '../jobs/fixtures/ai-free-page-recording'
 import type { AiBuildPlan, AiBuildPlanScreen } from '../model/ai-build-plan'
 import { AI_PAGE_CREATE_KINDS } from '../model/ai-page-job'
 import {
@@ -63,6 +67,7 @@ import {
   detectPlanLayoutRegions,
   detectPlanLiteralColors,
   detectPlanRepeats,
+  detectPlanSplitLists,
   detectPlanTypedData,
   detectPlanUncreatable,
   detectPlanUndeclaredCreations,
@@ -267,6 +272,51 @@ describe('rule 1 — repeats become one reusable component', () => {
     expect(codes(detectPlanRepeats(repeated, INVENTORY, aiUnrestrictedPlanCapabilities()))).toEqual([
       'plan-repeated-items',
     ])
+  })
+})
+
+describe('rule 1 — a list is one section whose items repeat (AGL-3071)', () => {
+  const sections = (...entries: Array<[string, string[], number]>) =>
+    planOf({ screens: [screen({ sections: entries.map(([name, uses, items]) => ({ name, uses, items })) })] })
+
+  it('refuses the live Free plan’s four practice areas, each planned as a section of one item, and gives the one section to plan', () => {
+    expect(detectPlanSplitLists(AI_FREE_PAGE_BUILT_PLAN, emptyAiSiteInventory('host-brightwater-law'))).toEqual([
+      {
+        rule: 1,
+        code: 'plan-split-list',
+        message:
+          'The sections "practice area: business & corporate law", "practice area: real estate law", "practice area: family law" and "practice area: estate planning" each show one item of the same kind, so they are one list split apart. Plan them as one section whose 4 items repeat: {"name":"practice areas","uses":[],"items":4}.',
+        paths: ['screens[0].sections[2]', 'screens[0].sections[3]', 'screens[0].sections[4]', 'screens[0].sections[5]'],
+      },
+    ])
+  })
+
+  it('refuses one-item sections that place the same component, naming the component’s items and keeping it placed', () => {
+    const found = detectPlanSplitLists(sections(['hero', [], 0], ['Roofs', ['cmp-card'], 1], ['Gutters', ['cmp-card'], 1], ['Siding', ['cmp-card'], 1]), INVENTORY)
+    expect(found).toMatchObject([
+      {
+        code: 'plan-split-list',
+        message: expect.stringContaining('Plan them as one section whose 3 items repeat: {"name":"Service cards","uses":["cmp-card"],"items":3}.'),
+        paths: ['screens[0].sections[1]', 'screens[0].sections[2]', 'screens[0].sections[3]'],
+      },
+    ])
+    const created = planOf({
+      create: [{ kind: 'component', name: 'Attorney card', why: 'The site has no card for a person.', duplicateOf: null, fields: ['name:text'] }],
+      screens: [screen({ sections: [{ name: 'Jane Doe', uses: ['new:Attorney card'], items: 1 }, { name: 'John Roe', uses: ['new:attorney card'], items: 1 }] })],
+    })
+    expect(detectPlanSplitLists(created, INVENTORY)).toMatchObject([
+      { message: expect.stringContaining('{"name":"Attorney cards","uses":["new:Attorney card"],"items":2}') },
+    ])
+  })
+
+  it('passes two lists of several items that share a card, one-item sections of different kinds or apart, and a lone one (AGL-3061)', () => {
+    expect(detectPlanSplitLists(sections(['practice areas', [], 4], ['how we work', [], 4]), INVENTORY)).toEqual([])
+    expect(detectPlanSplitLists(sections(['services', ['cmp-card'], 4], ['more services', ['cmp-card'], 6]), INVENTORY)).toEqual([])
+    expect(detectPlanSplitLists(sections(['team: Jane', [], 1], ['office: Main Street', [], 1]), INVENTORY)).toEqual([])
+    expect(detectPlanSplitLists(sections(['team: Jane', [], 1], ['our story', [], 0], ['team: John', [], 1]), INVENTORY)).toEqual([])
+    expect(detectPlanSplitLists(sections(['featured testimonial', [], 1], ['call to action', [], 1]), INVENTORY)).toEqual([])
+    expect(detectPlanSplitLists(sections(['practice area: family law', [], 1]), INVENTORY)).toEqual([])
+    expect(detectPlanSplitLists(sections(['team: Jane', ['ds-team'], 1], ['team: John', ['ds-team'], 1]), INVENTORY)).toEqual([])
   })
 })
 
@@ -666,7 +716,7 @@ describe('rule 7 — a plan creates only what the job may create on its site (AG
       [7, 'plan-create-not-allowed', ['create[1]']],
     ])
     expect(found[0].message).toBe(
-      'The plan creates a component named "Service card", and this workspace\'s plan does not include reusable components. Draw the item in its own section instead.',
+      'The plan creates a component named "Service card", and this workspace\'s plan does not include reusable components. Draw a list\'s repeated items in one section instead.',
     )
     expect(found[1].message).toContain('Draw the form on the page instead')
     // Narrowed to what a job builds, a creation outside it says so.
@@ -1595,7 +1645,7 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
       detectPlanUndeclaredCreations(plan, INVENTORY, aiPlanCapabilitiesForJob(FREE, PAGE_JOB)).map((found) => found.message),
     ).toEqual([
       'The "quote request" section places a creation named "Quote form", but the plan never creates it, and this workspace\'s plan does not include saved forms. Draw the form on the page instead, as a Form element holding its Form Fields. Take it out of the section\'s uses.',
-      'The "services grid" section places a creation named "Service tile", but the plan never creates it, and this workspace\'s plan does not include reusable components. Draw the item in its own section instead. Take it out of the section\'s uses.',
+      'The "services grid" section places a creation named "Service tile", but the plan never creates it, and this workspace\'s plan does not include reusable components. Draw a list\'s repeated items in one section instead. Take it out of the section\'s uses.',
     ])
   })
 

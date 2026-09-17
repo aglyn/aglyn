@@ -551,6 +551,47 @@
         }
       },
       "fails": ["rules"]
+    },
+    {
+      "why": "A plan that splits the four practice areas into four sections of one item each, as a live Free plan did, so no section repeats its items (AGL-3071).",
+      "plan": {
+        "reuse": [],
+        "create": [
+          { "kind": "layout", "name": "Site layout", "why": "The site has no layout yet, so its pages would otherwise carry their own header and footer.", "duplicateOf": null, "fields": [] }
+        ],
+        "screens": [
+          {
+            "title": "About Brightwater Law",
+            "slug": "/about",
+            "layout": "new:Site layout",
+            "template": null,
+            "duplicateOf": null,
+            "nav": true,
+            "seoTitle": "About Brightwater Law",
+            "seoDescription": "A small firm for families and small businesses: estate planning, real estate, business formation and landlord-tenant matters.",
+            "sections": [
+              { "name": "hero", "uses": [], "items": 0 },
+              { "name": "practice area: estate planning", "uses": [], "items": 1 },
+              { "name": "practice area: real estate", "uses": [], "items": 1 },
+              { "name": "practice area: business formation", "uses": [], "items": 1 },
+              { "name": "practice area: landlord and tenant", "uses": [], "items": 1 },
+              { "name": "consultation request form", "uses": [], "items": 0 }
+            ]
+          }
+        ]
+      },
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } }
+          }
+        }
+      },
+      "fails": ["plan"]
     }
   ]
 }

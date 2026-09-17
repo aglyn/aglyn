@@ -115,7 +115,7 @@ import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import type { AiEvalCandidate, AiEvalRecording } from '../runtime/ai-eval'
 import type { generateSeoFields } from '../runtime/seo-fields'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
-import { AI_PAGE_SECTION_INLINE_LINE, aiPageCheckContext } from './ai-job-page-sections'
+import { AI_PAGE_SECTION_INLINE_LINE, AI_PAGE_SECTION_REPEAT_LINE, aiPageCheckContext } from './ai-job-page-sections'
 import { AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED, createAiJobPageStep } from './ai-job-page-step'
 import { AI_JOB_PLAN_REVIEW_COPY, AI_JOB_PLAN_SCOPES, createAiJobPlanStep } from './ai-job-plan-step'
 import { AI_FREE_PAGE_STOPPED_RECORDING } from './fixtures/ai-free-page-recording'
@@ -343,6 +343,42 @@ describe('a Free workspace builds its first page', () => {
     const cards = Object.values(page).filter((node) => node.componentId === 'muiCard')
     expect(cards.map((card) => (page[(card.nodes ?? [])[0]].nodes ?? []).map((id) => page[id].props?.['children']))).toEqual(written)
     expect(JSON.stringify(page)).not.toMatch(/\{\{|"repeat"/)
+  })
+
+  it('plans the four practice areas as one section whose items repeat when a first answer splits them, and builds it from one item written once (AGL-3071)', async () => {
+    const [hero, areas, ...rest] = FIXTURE.plan.screens[0].sections
+    const titles = (FIXTURE.answers[1].nodes['b5'].repeat ?? []).map(([title]) => String(title).toLowerCase())
+    expect([areas.name, areas.items, titles.length]).toEqual(['practice areas', 4, 4])
+    // How a live Free plan split the brief's four practice areas: a section of one item each.
+    const split = {
+      ...FIXTURE.plan,
+      screens: [{ ...FIXTURE.plan.screens[0], sections: [hero, ...titles.map((title) => ({ name: `practice area: ${title}`, uses: [], items: 1 })), ...rest] }],
+    }
+    mockRunAiRequest.mockReset()
+    mockRunAiRequest
+      .mockResolvedValueOnce(toolAnswer(AI_BUILD_PLAN_TOOL.name, split))
+      .mockResolvedValueOnce(toolAnswer(AI_BUILD_PLAN_TOOL.name, FIXTURE.plan))
+    const planOutcome = await createAiJobPlanStep({
+      readInventory: async () => FIXTURE.inventory,
+      findPlansByKey: null,
+      readCapabilities: async () => FREE,
+      admissionRefusal: async () => null,
+    })({ job: job(), stepIndex: 0, now: NOW, firestore: aiEvalMemoryFirestore({}).firestore, org: FREE_ORG })
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    expect(String(mockRunAiRequest.mock.calls[1][0].messages.at(-1).content)).toContain(
+      `Plan them as one section whose 4 items repeat: {"name":"practice areas","uses":[],"items":4}.`,
+    )
+    expect((planOutcome.plan as AiJobPlan).screens[0].sections).toEqual(FIXTURE.plan.screens[0].sections)
+
+    // The kept plan's practice areas section is asked for its item written once, and the page draws four cards from it.
+    const { passRequests, page } = await replay()
+    expect(passRequests.map((request) => String(request.messages[0].content).includes(AI_PAGE_SECTION_REPEAT_LINE))).toEqual([
+      false,
+      true,
+      false,
+      false,
+    ])
+    expect(Object.values(page).filter((node) => node.componentId === 'muiCard')).toHaveLength(4)
   })
 })
 

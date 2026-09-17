@@ -61,7 +61,8 @@ generated until you confirm.
    a reusable component and placed as instances. The AI looks for a component you
    already have first, and never makes a second copy of one. On a plan without
    reusable components, such as Free, the block is built into the page each time it
-   repeats instead.
+   repeats instead. Either way, a list of such blocks is one section of the page, never a
+   section for each block.
 2. **Site-wide regions live in the layout.** Headers, navigation, footers,
    announcement bars and cookie notices belong to the site's layout. A generated
    page sits in your layout and never carries its own copy of them.
