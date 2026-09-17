@@ -23,6 +23,7 @@ import {
   emptyAiAutomationRecords,
   type AiAutomationRecords,
 } from '../model/ai-automation-draft'
+import type { ConsoleImportColumn } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { AI_BUILD_PLAN_CREATE_KINDS, type AiBuildPlanCreateKind } from '../model/ai-build-plan'
 import {
   aiUnrestrictedPlanCapabilities,
@@ -40,6 +41,15 @@ import {
   type AiProductFacts,
 } from '../model/ai-products'
 import { checkAiCatalog, checkAiCategories, checkAiProductCopy } from '../tools/ai-products-tool'
+import type { AiCrmRecordKind, AiCrmTask } from '../model/ai-crm'
+import {
+  aiCrmEmailMergeFields,
+  aiCrmImportFields,
+  aiCrmRecordCheckContext,
+  checkAiCrmEmail,
+  checkAiCrmMapping,
+  checkAiCrmRecord,
+} from '../tools/ai-crm-tool'
 import { parseAiThemeToolInput } from '../tools/ai-theme-tool'
 import {
   AI_AUTOMATION_OVERSIZE_CODES,
@@ -131,6 +141,7 @@ export type AiEvalKind =
   | 'chat'
   | 'workflow'
   | 'insight'
+  | 'crm'
 
 export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'page',
@@ -151,6 +162,7 @@ export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'chat',
   'workflow',
   'insight',
+  'crm',
 ]
 
 /** The document kind a tree kind is held to; a section rewrite is one reusable block. */
@@ -301,6 +313,11 @@ export interface AiEvalCase {
   automationCapabilities?: AiAutomationCapabilities
   automationRecords?: AiAutomationRecords
   /**
+   * For a CRM brief (AGL-2917): what the job was asked, about which kind of
+   * record, the facts the CRM reported for it, and a mapping's columns.
+   */
+  crm?: AiEvalCrmContext
+  /**
    * What the workspace may create on the case's site (AGL-3030): a brief
    * for a workspace that keeps no reusable components is held to the inline
    * doctrine, and its plan to what the workspace may create. Absent, the
@@ -310,6 +327,17 @@ export interface AiEvalCase {
   expected?: { plan?: AiEvalPlanShape }
   candidates: AiEvalCandidate[]
   controls: AiEvalControl[]
+}
+
+/** What a CRM brief's answer is checked against, as the `crm` step checks it. */
+export interface AiEvalCrmContext {
+  task: AiCrmTask
+  /** The record a `record` or `email` brief is about. */
+  record?: AiCrmRecordKind
+  /** The facts the CRM's reader reported: a record's, or an import's field catalog. */
+  facts?: Record<string, unknown>
+  /** A mapping brief's columns: each header and its shape. */
+  columns?: ConsoleImportColumn[]
 }
 
 /** A kind's floor: the pass rate and the mean score its candidates may not fall below. */
@@ -344,6 +372,7 @@ export const AI_EVAL_FLOORS: Readonly<Record<AiEvalKind, AiEvalFloor>> = {
   chat: { passRate: 1, meanScore: 0.9 },
   workflow: { passRate: 1, meanScore: 0.9 },
   insight: { passRate: 1, meanScore: 0.9 },
+  crm: { passRate: 1, meanScore: 0.9 },
 }
 
 /** A rubric passes at this mean, with no criterion below three. */
@@ -680,6 +709,57 @@ function checkInsight(evalCase: AiEvalCase, answer: unknown): Checked {
   }
 }
 
+/** The CRM findings that mean the answer could not be read as one, and the ones over a length. */
+const CRM_UNREADABLE = new Set(['type', 'missing'])
+const CRM_OVER = new Set(['too-long'])
+
+/**
+ * A CRM answer, held by the checks the `crm` step holds it to (AGL-2917),
+ * with rule 13 and the site's voice on everything a person reads.
+ */
+function checkCrm(evalCase: AiEvalCase, answer: unknown): Checked {
+  const context = evalCase.crm
+  if (!context || !isRecord(answer)) {
+    return { readable: false, rules: false, budget: false, findings: ['crm-not-a-call'] }
+  }
+  const facts = context.facts ?? {}
+  const kind = context.record ?? 'contact'
+  const result =
+    context.task === 'mapping'
+      ? checkAiCrmMapping(answer, { columns: context.columns ?? [], fields: aiCrmImportFields(facts) })
+      : context.task === 'email'
+        ? checkAiCrmEmail(answer, { mergeFields: aiCrmEmailMergeFields(kind) })
+        : checkAiCrmRecord(answer, aiCrmRecordCheckContext(kind, facts))
+  const own = codes(result.violations)
+  const read = (path: string[]): string => {
+    let value: unknown = answer
+    for (const key of path) value = isRecord(value) ? value[key] : undefined
+    return typeof value === 'string' ? value : ''
+  }
+  const samples = [
+    ['summary'],
+    ['standing'],
+    ['nextStep', 'title'],
+    ['nextStep', 'reason'],
+    ['stage', 'reason'],
+    ['subject'],
+    ['body'],
+  ]
+    .map((path) => ({ at: path.join('.'), text: read(path) }))
+    .filter((sample) => sample.text)
+  const broken = [
+    ...codes(detectPublishIntent(answer)),
+    ...codes(detectOffVoiceCopy(samples, evalCase.framing)),
+    ...own.filter((code) => !CRM_UNREADABLE.has(code) && !CRM_OVER.has(code)),
+  ]
+  return {
+    readable: !own.some((code) => CRM_UNREADABLE.has(code)),
+    rules: broken.length === 0,
+    budget: !own.some((code) => CRM_OVER.has(code)),
+    findings: [...new Set([...own, ...broken])],
+  }
+}
+
 function checkAnswer(evalCase: AiEvalCase, answer: unknown): Checked {
   const outputKind = AI_EVAL_TREE_OUTPUT[evalCase.kind]
   if (outputKind) return checkTree(evalCase, outputKind, answer)
@@ -704,6 +784,8 @@ function checkAnswer(evalCase: AiEvalCase, answer: unknown): Checked {
       return checkWorkflow(evalCase, answer)
     case 'insight':
       return checkInsight(evalCase, answer)
+    case 'crm':
+      return checkCrm(evalCase, answer)
     default:
       return { readable: false, rules: false, budget: false, findings: ['kind-unknown'] }
   }

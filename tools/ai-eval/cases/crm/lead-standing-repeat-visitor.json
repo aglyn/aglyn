@@ -1,0 +1,56 @@
+{
+  "id": "crm-lead-standing-repeat-visitor",
+  "kind": "crm",
+  "brief": "Explain this lead",
+  "framing": null,
+  "inventory": null,
+  "crm": {
+    "task": "record",
+    "record": "lead",
+    "facts": {
+      "record": "lead",
+      "name": "Priya Natarajan",
+      "status": "New",
+      "sources": ["Booking", "Form"],
+      "captures": 3,
+      "firstSeen": "2026-08-30",
+      "lastSeen": "2026-09-14",
+      "assigned": false,
+      "converted": false,
+      "unqualifiedReason": "",
+      "notes": "",
+      "timeline": []
+    }
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: the lead's standing from its status, how it came in and how recently it was active, with no score.",
+      "plan": null,
+      "answer": {
+        "summary": "Priya came in through a form and a booking, three captures between 2026-08-30 and 2026-09-14. Nobody has logged anything with her yet.",
+        "standing": "Priya is still New and unassigned, but she has been active three times in two weeks, most recently on 2026-09-14, so she is worth working before she cools."
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 5, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "Filler in place of the lead's standing.",
+      "answer": {
+        "summary": "Priya came in through a form and a booking.",
+        "standing": "Lorem ipsum dolor sit amet, your text here."
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "No standing at all.",
+      "answer": { "summary": "Priya came in through a form and a booking.", "standing": "" },
+      "fails": ["readable"]
+    }
+  ]
+}

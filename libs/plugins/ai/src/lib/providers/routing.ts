@@ -204,6 +204,18 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       "the ceiling the layout and template steps keep, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
     eval: { kinds: ['component'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
   },
+  'job.crm': {
+    // CRM by AI (AGL-2917): short answers through a strict tool, written from
+    // the facts the CRM reports about the record the member opened, with no
+    // thinking. The ceiling fits an inline door, so a member is answered in
+    // the request that asked.
+    thinking: null,
+    effort: null,
+    maxTokens: 700,
+    maxTokensBasis:
+      "the largest answer a CRM tool accepts: sixty columns matched to fields by number, or an email draft at its length limits, at three characters a token with room, as ai-job-crm-step.spec.ts measures it",
+    eval: { kinds: ['crm'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9938 },
+  },
   'job.form': {
     // A form's two halves in one answer: the field declaration and the design
     // that renders it, as JSON, with no extended thinking (AGL-2913). The step

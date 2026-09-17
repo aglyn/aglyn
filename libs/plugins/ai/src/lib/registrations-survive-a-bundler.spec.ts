@@ -309,6 +309,7 @@ describe('the AI plugin, loaded through a bundler that honors sideEffects', () =
     )
     expect(steps.filter(({ minimumMs }) => !(minimumMs > 0))).toEqual([])
     expect(steps.filter(({ minimumMs }) => minimumMs <= AI_JOB_INLINE_BUDGET_MS).map(({ kind, step }) => `${kind}/${step}`)).toEqual([
+      'crm/generate',
       'text/draft',
     ])
     expect(bundled.creationPass).toBe(bundled.layout)

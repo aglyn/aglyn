@@ -1698,7 +1698,9 @@ this table to the figures the code computes.
 | `seo`, a batch of fixes | fast | 0 | 4,000 / 2,400 / 1,600 | 2 × 3 s + 2 × 40,000 ms + 3 s + 10 s = 99,000 ms |
 | `text` | balanced | 0 | 1,024 / 1,024 / 682 | 1 × 3 s + 1 × 17,067 ms + 3 s = 23,067 ms |
 
-- **Only a `text` job runs at an inline door.** Its one request — no re-ask, and
+- **Only a `text` job and a `crm` job run at an inline door.** A `crm` step's
+  answer and re-ask fit at its ceiling (see [The `crm` kind](#the-crm-kind)).
+  A text job's one request — no re-ask, and
   no inventory to look anything up in — at its routing ceiling fits the door's
   25 s, as the helper computes it. Every other step needs more, so both doors
   leave it for the beat.
@@ -2249,3 +2251,89 @@ asks for its own (`aiProductsRunMinimumMs`):
 | step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
 | -- | -- | -- | -- | -- |
 | `products`, a product’s copy | balanced | 0 | 1,500 / 1,500 / 1,000 | 2 × 3 s + 2 × 25,000 ms + 3 s + 6 s = 65,000 ms |
+
+## The `crm` kind
+
+CRM by AI (AGL-2917): `src/lib/jobs/ai-job-crm-step.ts`, its strict tools and
+answer checks in `src/lib/tools/ai-crm-tool.ts`, and the request and proposal
+shapes the step and the console widgets share in `src/lib/model/ai-crm.ts`.
+`inputs.task` names the question:
+
+- `record` (`record`, `recordId`): a contact, company, deal or lead. A summary
+  of at most two sentences, of when the record was last in touch and what is
+  still open; for a contact, a company or a deal, the next step as a task (a
+  title, a kind, a priority, the days until it is due and a reason), or none
+  when an open task covers it; for a deal, an open stage the timeline shows it
+  moved to; for a lead, why it stands where it does. The CRM keeps no lead
+  score, and the step invents none.
+- `email` (`record`, `recordId`, with the member's request as the brief): a
+  subject and a plain-text message for the CRM composer, greeted and signed
+  with the merge fields the record can fill, and never an address.
+- `mapping` (`collection`, `columns`): which of a file's columns fill which
+  fields of a contacts, companies, deals or leads import. `columns` is JSON:
+  each header and the shape of its values (`email`, `phone`, `number`,
+  `date`, `yes-no`, `url`, `text` or `empty`), read from the cells in the
+  browser. No cell leaves the browser.
+
+Every output is `resource: 'crm'` with a `proposal`, and the step writes
+nothing.
+
+- **The CRM decides what is read.** The step never reads a CRM document. It
+  asks the CRM's readers on the core's record-facts seam
+  (`libs/aglyn/src/lib/plugin-manager/plugin-record-facts.ts`) for
+  `crm.contact`, `crm.company`, `crm.deal`, `crm.lead` and `crm.import`, which
+  the CRM's console API surface registers
+  (`libs/plugins/crm/src/lib/server/record-facts.ts`). A reader applies the
+  CRM's own rules to the job's creator: the site is the org's; the member is
+  org-wide at the organization level, or reaches the site under it; the member
+  holds `data.manage`; the plan carries the CRM; and the record, with every
+  activity, task and deal hanging off it, is visible to the site. It reports
+  the facts its builders list (`libs/plugins/crm/src/lib/model/record-facts.ts`),
+  which never include an email address, a phone number, a postal address,
+  consent, a custom field value, a team member or a record id. The step writes
+  into a prompt only the facts it names, whatever else a reader reports.
+- **Why a seam, and not a contract in either plugin.** The package map forbids
+  the AI plugin to import the CRM and the CRM to import the AI plugin, and keeps
+  CRM shapes out of the core. `plugin-resource-drafts` is the seam a plugin
+  writes another plugin's resource through; `plugin-record-facts` is its
+  reading twin, generic and keyed by resource name, with every rule the
+  owner's.
+- **Admission.** An in-process read skips the plugin API dispatcher's gates,
+  so `aiCrmAdmissionRefusal` re-establishes them before the job exists: the
+  inputs name a record or an import; a named site is the job's org's; the CRM
+  is past `release_crm`, switched on where the job runs (the site, or the
+  workspace at the organization level) and has registered its reader in this
+  process; and the reader admits the member, in the CRM's own words. The step
+  asks the reader again, as the creator, before it spends.
+- **A summary is asked once per timeline.** A record answer's `key` hashes the
+  record, the site, the model, the rules, the tool and the prompt, which is the
+  facts. The step finds finished jobs about the same `inputs.recordId` (one
+  equality, so no composite index) and reuses an answer with the same key from
+  the last 30 days at no cost. Nothing is stored for it beyond the job.
+- **Routing and time.** `job.crm` runs on the fast tier with no thinking and a
+  700-token ceiling: sixty columns matched to fields by number, or an email
+  draft at its limits, at three characters a token with room. It sends no site
+  inventory and so makes no lookup; its reads are the declared 1.5 s,
+  `AI_CRM_FACTS_READS_MS`. Its worst case fits the 25 s inline budget, so the
+  create door answers with the proposal. Its three generation kinds are
+  scoped to the doctrine's field rules (`AI_DOCTRINE_KIND_SCOPE`), which send
+  rule 13 and the acceptable-use block rather than the building rules; the
+  prompts come to 650 to 913 tokens, under the fast tier's minimum, and the
+  ledger records them as not caching.
+
+| step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
+| --- | --- | --- | --- | --- |
+| `crm` | fast | 0 | 700 / 420 / 280 | 2 × 3 s + 2 × 7,000 ms + 3 s + 1.5 s = 24,500 ms |
+
+- **Evals.** `tools/ai-eval/cases/crm` holds a contact's summary and next step,
+  a deal's stage after a call, a lead's standing, a follow-up email and a
+  contacts import, with controls that fail: a summary past its length, a next
+  step due in 90 days, a deal marked won, a next step an open task covers, a
+  stage the pipeline lacks, filler, a merge field no contact fills, a phone
+  number, a long subject, an email column matched to a name, one field matched
+  twice and a column the file lacks.
+- **The published disclosure.** A CRM record's facts, a member's email request
+  and an import's headers are customer content the published Anthropic row
+  does not name, so the doors stay behind `release_ai_generative` until
+  wording that names them is published. `assist-anthropic-subprocessor-gate.spec.ts`
+  records the flow.

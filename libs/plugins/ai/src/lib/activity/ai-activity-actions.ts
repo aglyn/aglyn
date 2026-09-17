@@ -171,6 +171,8 @@ const AI_OUTPUT_TARGET_TYPES: Record<AiJobOutputResource, AiOutputTargetType> = 
   // An insight answer (AGL-2915) is about the site's figures; the feed row
   // names it and never what it says.
   insight: 'content',
+  // A CRM proposal (AGL-2917) writes nothing; the feed files it with content.
+  crm: 'content',
 }
 
 export function aiOutputTargetType(resource: AiJobOutputResource): AiOutputTargetType {

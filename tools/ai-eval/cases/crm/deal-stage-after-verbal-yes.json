@@ -1,0 +1,91 @@
+{
+  "id": "crm-deal-stage-after-verbal-yes",
+  "kind": "crm",
+  "brief": "Summarize this deal",
+  "framing": null,
+  "inventory": null,
+  "crm": {
+    "task": "record",
+    "record": "deal",
+    "facts": {
+      "record": "deal",
+      "title": "Gutter replacement, 14 Elm Street",
+      "pipeline": "Residential",
+      "stages": [
+        { "id": "qualified", "name": "Qualified", "kind": "open" },
+        { "id": "proposal-sent", "name": "Proposal sent", "kind": "open" },
+        { "id": "negotiation", "name": "Negotiation", "kind": "open" },
+        { "id": "won", "name": "Won", "kind": "won" },
+        { "id": "lost", "name": "Lost", "kind": "lost" }
+      ],
+      "stageId": "proposal-sent",
+      "stage": "Proposal sent",
+      "status": "open",
+      "amount": "USD 3200.00",
+      "expectedClose": "2026-09-30",
+      "inStageSince": "2026-09-01",
+      "lostReason": "",
+      "contact": "Marco Ruiz",
+      "company": "",
+      "products": 2,
+      "since": "2026-08-20",
+      "notes": "",
+      "timeline": [
+        { "on": "2026-09-12", "kind": "Call", "text": "Marco wants the seamless option but asked whether we can take 10% off if he pays upfront.", "outcome": "Asked for a discount" },
+        { "on": "2026-09-01", "kind": "Email", "direction": "outbound", "subject": "Your gutter replacement proposal", "delivery": "Clicked" }
+      ],
+      "openTasks": [
+        { "title": "Send revised proposal with upfront discount", "kind": "Email", "priority": "high", "due": "2026-09-17", "overdue": false }
+      ]
+    }
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: the stage the call shows, and no next step, because an open task already covers the revised proposal.",
+      "plan": null,
+      "answer": {
+        "summary": "Marco asked for 10% off for paying upfront on a call on 2026-09-12, after clicking the proposal emailed on 2026-09-01. A revised proposal with the discount is due on 2026-09-17.",
+        "nextStep": null,
+        "stage": {
+          "stageId": "negotiation",
+          "reason": "On the 2026-09-12 call Marco chose the seamless option and asked for a discount."
+        }
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": null, "grader": "authored", "notes": "The summary could say the deal's amount; everything it says is in the facts." }
+    }
+  ],
+  "controls": [
+    {
+      "why": "Marks the deal won, which is the team's call, never a proposal.",
+      "answer": {
+        "summary": "Marco asked for a discount on 2026-09-12.",
+        "nextStep": null,
+        "stage": { "stageId": "won", "reason": "Marco agreed on the call." }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "Proposes the next step the open task already covers.",
+      "answer": {
+        "summary": "Marco asked for a discount on 2026-09-12.",
+        "nextStep": { "title": "Send revised proposal with upfront discount", "kind": "email", "priority": "high", "dueInDays": 1, "reason": "Marco asked for 10% off on 2026-09-12." },
+        "stage": null
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A stage the pipeline does not have.",
+      "answer": {
+        "summary": "Marco asked for a discount on 2026-09-12.",
+        "nextStep": null,
+        "stage": { "stageId": "contract-out", "reason": "Marco asked for a discount." }
+      },
+      "fails": ["rules"]
+    }
+  ]
+}

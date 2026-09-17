@@ -118,6 +118,14 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // answer — its tree and declared props as JSON — is about 1,700 characters.
   // The component step's spec measures the prefix and the answer against this.
   'job.component': { inputTokens: 700, outputTokens: 600, cacheReadTokens: 5_800, cacheWriteTokens: 0 },
+  // The CRM step's exchange (AGL-2917). NOTHING is cached: the step runs on
+  // the fast tier, whose cacheable minimum is far above what its prompt
+  // reaches — the doctrine's field rules, the CRM rules and the tool come to
+  // 650 to 913 tokens, as `runtime/ai-prompt-cache.spec.ts` measures — so
+  // every byte is billed as input. A record's facts ride with them, a
+  // timeline cut to its newest twelve entries, and the typical answer is a
+  // summary and a next step of a few sentences, with no thinking.
+  'job.crm': { inputTokens: 1_800, outputTokens: 250, cacheReadTokens: 0, cacheWriteTokens: 0 },
   'job.layout': { inputTokens: 700, outputTokens: 1_000, cacheReadTokens: 5_600, cacheWriteTokens: 0 },
   'job.template': { inputTokens: 1_200, outputTokens: 700, cacheReadTokens: 6_400, cacheWriteTokens: 0 },
   // One page section's exchange (AGL-2907), from the modules' own text: the

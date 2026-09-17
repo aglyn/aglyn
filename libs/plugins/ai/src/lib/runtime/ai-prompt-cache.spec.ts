@@ -45,6 +45,12 @@ import {
 } from './ai-doctrine'
 import { detectPublishIntent } from './ai-doctrine-validators'
 import { AI_JOB_COMPONENT_INSTRUCTIONS } from '../jobs/ai-job-component-step'
+import {
+  AI_CRM_EMAIL_INSTRUCTIONS,
+  AI_CRM_GENERATION_KINDS,
+  AI_CRM_MAPPING_INSTRUCTIONS,
+  aiCrmRecordInstructions,
+} from '../jobs/ai-job-crm-step'
 import { AI_JOB_EMAIL_INSTRUCTIONS, AI_JOB_EMAIL_TOOL } from '../jobs/ai-job-email-step'
 import { AI_JOB_FORM_INSTRUCTIONS } from '../jobs/ai-job-form-step'
 import { AI_JOB_INSIGHT_SYSTEM } from '../jobs/ai-job-insight-step'
@@ -63,6 +69,7 @@ import { AI_SEO_FIXES_INSTRUCTIONS, AI_SEO_SITE_INSTRUCTIONS } from '../jobs/ai-
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
 import { aiComponentTool } from '../tools/ai-component-tool'
 import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
+import { AI_CRM_EMAIL_TOOL, AI_CRM_MAPPING_TOOL, aiCrmRecordTool } from '../tools/ai-crm-tool'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_SEO_FIELDS_INSTRUCTIONS, aiSeoFieldsInstructions } from './seo-fields'
 import {
@@ -197,6 +204,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     step: 'job.component',
     caches: true,
     why: 'the doctrine, the component rules and the component palette',
+  },
+  'jobs/ai-job-crm-step.ts': {
+    step: 'job.crm',
+    caches: false,
+    why: "a record's, an email's and an import's rules are far under the fast tier's minimum; the prompts are kept short instead",
   },
   'server/ai-generate-component.ts': {
     step: 'job.component',
@@ -433,6 +445,48 @@ const REQUESTS: Record<string, Composed> = {
     blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_CATEGORIES_INSTRUCTIONS }),
     tools: () => [AI_CATEGORIES_TOOL],
   },
+  // CRM by AI (AGL-2917): the lightest record shape, a contact's, and the
+  // heaviest, a deal's with its stage; an email draft; an import's columns.
+  'crm-record-contact': {
+    door: 'jobs/ai-job-crm-step.ts',
+    step: 'job.crm',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: aiCrmRecordInstructions('contact'),
+        scope: aiDoctrineScopeFor(AI_CRM_GENERATION_KINDS.record),
+      }),
+    tools: () => [aiCrmRecordTool('contact')],
+  },
+  'crm-record-deal': {
+    door: 'jobs/ai-job-crm-step.ts',
+    step: 'job.crm',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: aiCrmRecordInstructions('deal'),
+        scope: aiDoctrineScopeFor(AI_CRM_GENERATION_KINDS.record),
+      }),
+    tools: () => [aiCrmRecordTool('deal')],
+  },
+  'crm-email': {
+    door: 'jobs/ai-job-crm-step.ts',
+    step: 'job.crm',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: AI_CRM_EMAIL_INSTRUCTIONS,
+        scope: aiDoctrineScopeFor(AI_CRM_GENERATION_KINDS.email),
+      }),
+    tools: () => [AI_CRM_EMAIL_TOOL],
+  },
+  'crm-mapping': {
+    door: 'jobs/ai-job-crm-step.ts',
+    step: 'job.crm',
+    blocks: () =>
+      aiDoctrineSystemBlocks(undefined, {
+        instructions: AI_CRM_MAPPING_INSTRUCTIONS,
+        scope: aiDoctrineScopeFor(AI_CRM_GENERATION_KINDS.mapping),
+      }),
+    tools: () => [AI_CRM_MAPPING_TOOL],
+  },
   'eval-grade': {
     door: 'runtime/ai-eval-live.ts',
     step: 'job.plan',
@@ -592,6 +646,12 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'product-copy': { prefixTokens: 2_391, minimum: 1_024, caches: true, toolsStable: true },
       catalog: { prefixTokens: 2_446, minimum: 1_024, caches: true, toolsStable: true },
       categories: { prefixTokens: 2_345, minimum: 1_024, caches: true, toolsStable: true },
+      // CRM by AI (AGL-2917), on the fast tier: no shape reaches its minimum,
+      // so each prompt is only the field rules, the kind's own and its tool.
+      'crm-record-contact': { prefixTokens: 768, minimum: 4_096, caches: false, toolsStable: true },
+      'crm-record-deal': { prefixTokens: 913, minimum: 4_096, caches: false, toolsStable: true },
+      'crm-email': { prefixTokens: 650, minimum: 4_096, caches: false, toolsStable: true },
+      'crm-mapping': { prefixTokens: 680, minimum: 4_096, caches: false, toolsStable: true },
       // The text step marks a breakpoint its prompt is far too short to fill.
       // It costs nothing and it caches nothing; the brief is the request.
       text: { prefixTokens: 128, minimum: 1_024, caches: false, toolsStable: true },

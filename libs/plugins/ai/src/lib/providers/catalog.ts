@@ -391,6 +391,7 @@ export type AiStepKind =
   | 'copy.blog'
   | 'generate.section'
   | 'job.component'
+  | 'job.crm'
   | 'job.form'
   | 'job.insight'
   | 'job.layout'
@@ -415,6 +416,11 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   // A reusable component is one structured tree with the typed props it
   // declares, and choosing what becomes a prop is the judgment the step sells.
   'job.component': 'balanced',
+  // CRM by AI (AGL-2917): a record's summary and next step, a deal's stage, a
+  // lead's standing, a one-to-one email draft and an import's column matches.
+  // Short answers through a strict tool, held to the facts the CRM reports
+  // about the record the member opened.
+  'job.crm': 'fast',
   // A form is one small tree held to the building rules and to the contract
   // its submissions are read by; a re-ask costs more than the tier saves.
   'job.form': 'balanced',

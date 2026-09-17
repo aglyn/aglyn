@@ -21,6 +21,7 @@ import { AI_JOBS_BEAT_PATH } from './jobs/ai-jobs-beat'
 import { registerAiJobPlan } from './jobs/ai-job-plan-step'
 import { registerAiJobsPause } from './jobs/ai-jobs-pause'
 import { registerAiComponentJob } from './jobs/ai-job-component-step'
+import { registerAiCrmJob } from './jobs/ai-job-crm-step'
 import { registerAiLayoutJob } from './jobs/ai-job-layout-step'
 import { registerAiTemplateJob } from './jobs/ai-job-template-step'
 import { registerAiFormJob } from './jobs/ai-job-form-step'
@@ -120,6 +121,9 @@ function registerAiJobKinds(): void {
   // plugin's; every other plugin registers its own from its console surface.
   registerAiFigureReaders(() => firebaseAdmin.app().firestore())
   registerAiInsightJob()
+  // CRM by AI (AGL-2917): a record's summary and next step, an email draft
+  // and an import's column matches, read through the CRM's facts readers.
+  registerAiCrmJob()
 }
 
 /**

@@ -274,6 +274,11 @@ export const AI_DOCTRINE_KIND_SCOPE: Readonly<Record<string, AiDoctrineScope>> =
   'seo-fields': 'fields',
   'seo-site': 'fields',
   'seo-fixes': 'fields',
+  // CRM by AI (AGL-2917): a record's summary, an email draft, an import's
+  // column matches — values the CRM's own forms take, composing nothing.
+  'crm-email': 'fields',
+  'crm-mapping': 'fields',
+  'crm-record': 'fields',
 }
 
 /** The scope for a kind; `documents` unless the kind names another. */

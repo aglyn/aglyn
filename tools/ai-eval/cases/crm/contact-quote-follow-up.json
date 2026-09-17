@@ -1,0 +1,79 @@
+{
+  "id": "crm-contact-quote-follow-up",
+  "kind": "crm",
+  "brief": "Summarize this contact",
+  "framing": null,
+  "inventory": null,
+  "crm": {
+    "task": "record",
+    "record": "contact",
+    "facts": {
+      "record": "contact",
+      "name": "Dana Whitfield",
+      "jobTitle": "Facilities manager",
+      "company": "Harbor Cold Storage",
+      "lifecycleStage": "Opportunity",
+      "tags": ["commercial"],
+      "sources": ["Booking", "Form"],
+      "orders": 0,
+      "lastPurchase": null,
+      "since": "2026-07-02",
+      "lastEmailEngagement": "2026-09-09",
+      "notes": "Warehouse roof leaks over the loading dock. Budget approval needed from the owner.",
+      "timeline": [
+        { "on": "2026-09-09", "kind": "Email", "direction": "outbound", "subject": "Your roof inspection report", "text": "Attached is the inspection report and the quote for the loading dock section.", "delivery": "Opened" },
+        { "on": "2026-09-04", "kind": "Meeting", "text": "Walked the roof with Dana. Membrane failing over the dock; flashing fine elsewhere.", "outcome": "Wants a quote" },
+        { "on": "2026-08-28", "kind": "Booking", "text": "Booked \"Commercial roof inspection\"" }
+      ],
+      "openTasks": [],
+      "deals": [
+        { "title": "Loading dock membrane", "stage": "Proposal sent", "status": "open", "amount": "USD 18450.00", "expectedClose": "2026-10-01" }
+      ]
+    }
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: the last touch and what is open, from the facts alone, and one task no open task covers.",
+      "plan": null,
+      "answer": {
+        "summary": "Dana opened the inspection report and quote emailed on 2026-09-09, after walking the roof on 2026-09-04. The Loading dock membrane deal (USD 18450.00) sits at Proposal sent and needs the owner's budget approval.",
+        "nextStep": {
+          "title": "Call Dana about the owner's budget approval",
+          "kind": "call",
+          "priority": "high",
+          "dueInDays": 2,
+          "reason": "Dana opened the quote on 2026-09-09 and the notes say the owner must approve the budget."
+        }
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 5, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A summary far past the length a record card shows.",
+      "answer": {
+        "summary": "Dana Whitfield is the facilities manager at Harbor Cold Storage, came in through a booking and a form, and has been in the CRM since 2026-07-02. On 2026-08-28 she booked a commercial roof inspection, on 2026-09-04 the team walked the roof and found the membrane failing over the loading dock, and on 2026-09-09 the report and quote went out and were opened.",
+        "nextStep": null
+      },
+      "fails": ["budget"]
+    },
+    {
+      "why": "A next step due further out than a follow-up is worth proposing.",
+      "answer": {
+        "summary": "Dana opened the quote on 2026-09-09. The Loading dock membrane deal sits at Proposal sent.",
+        "nextStep": { "title": "Check in with Dana", "kind": "call", "priority": "normal", "dueInDays": 90, "reason": "The quote was opened on 2026-09-09." }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "No summary at all.",
+      "answer": { "summary": "", "nextStep": null },
+      "fails": ["readable"]
+    }
+  ]
+}

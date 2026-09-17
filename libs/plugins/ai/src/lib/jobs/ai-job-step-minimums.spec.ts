@@ -58,6 +58,7 @@ import {
   type AiJobStepBudget,
 } from './ai-job-budget'
 import { AI_JOB_COMPONENT_STEP_BUDGET } from './ai-job-component-step'
+import { AI_CRM_FACTS_READS_MS, AI_JOB_CRM_STEP_BUDGET } from './ai-job-crm-step'
 import { AI_JOB_EMAIL_STEP_BUDGETS } from './ai-job-email-step'
 import { AI_JOB_FORM_STEP_BUDGET } from './ai-job-form-step'
 import { AI_INSIGHT_READS_MS, AI_JOB_INSIGHT_STEP_BUDGET } from './ai-job-insight-budget'
@@ -192,6 +193,15 @@ const STEP_TIMES: readonly StepTime[] = [
     shape: shape({ lookups: 0, ownReadsMs: AI_PRODUCT_IMAGE_READ_MS }),
   },
   {
+    row: '`crm`',
+    kind: 'crm',
+    routing: 'job.crm',
+    budget: AI_JOB_CRM_STEP_BUDGET,
+    ceiling: routed('job.crm'),
+    cap: routed('job.crm'),
+    shape: shape({ lookups: 0, ownReadsMs: AI_CRM_FACTS_READS_MS }),
+  },
+  {
     row: '`text`',
     kind: 'text',
     routing: 'job.text',
@@ -218,19 +228,30 @@ describe('every step the console runs registers the least time it needs (AGL-303
     expect(steps.filter(({ minimumMs }) => !(minimumMs > 0))).toEqual([])
     expect(steps.filter(({ minimumMs }) => minimumMs > AI_JOB_STEP_MAX_MINIMUM_MS)).toEqual([])
     // Every kind with a step module beside the machine is among them.
-    for (const kind of ['text', 'theme', 'seo', 'component', 'layout', 'template', 'form', 'page', 'email', 'campaign', 'site', 'workflow', 'insight', 'products'] as const) {
+    for (const kind of ['text', 'theme', 'seo', 'component', 'layout', 'template', 'form', 'page', 'email', 'campaign', 'site', 'workflow', 'insight', 'products', 'crm'] as const) {
       expect([kind, steps.some((entry) => entry.kind === kind)]).toEqual([kind, true])
     }
   })
 
-  it('leaves every step for the beat but the one whose worst case at its ceiling fits an inline door, proven by the helper', () => {
+  it('leaves every step for the beat but the ones whose worst case at their ceiling fits an inline door, proven by the helper', () => {
     const inline = registeredSteps().filter(({ minimumMs }) => minimumMs <= AI_JOB_INLINE_BUDGET_MS)
-    expect(inline.map(({ kind, step }) => `${kind}/${step}`)).toEqual(['text/draft'])
+    expect(inline.map(({ kind, step }) => `${kind}/${step}`)).toEqual(['crm/generate', 'text/draft'])
     // The text step's one request at the routing ceiling on its own tier is what fits.
     const tier = AI_STEP_TIERS['job.text']
     expect(AI_JOB_TEXT_STEP_BUDGET.maxTokens(modelOn(tier))).toBe(AI_ROUTING_TABLE['job.text'].maxTokens)
     expect(aiJobStepMinimumMs('text', 'draft')).toBe(
       aiGenerationWorstCaseOnTierMs({ tier, maxTokens: AI_ROUTING_TABLE['job.text'].maxTokens, attempts: 1, lookups: 0 }),
+    )
+    // So do the CRM step's answer and its re-ask at its ceiling, after the facts read (AGL-2917).
+    const crmTier = AI_STEP_TIERS['job.crm']
+    expect(AI_JOB_CRM_STEP_BUDGET.maxTokens(modelOn(crmTier))).toBe(AI_ROUTING_TABLE['job.crm'].maxTokens)
+    expect(aiJobStepMinimumMs('crm', 'generate')).toBe(
+      aiGenerationWorstCaseOnTierMs({
+        tier: crmTier,
+        maxTokens: AI_ROUTING_TABLE['job.crm'].maxTokens,
+        lookups: 0,
+        ownReadsMs: AI_CRM_FACTS_READS_MS,
+      }),
     )
   })
 

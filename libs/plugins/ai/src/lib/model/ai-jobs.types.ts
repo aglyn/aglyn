@@ -212,6 +212,7 @@ export type AiJobOutputResource =
   | 'theme'
   | 'seo'
   | 'insight'
+  | 'crm'
 
 /**
  * One thing a job wrote. Addressed by resource and id so the console can
@@ -230,6 +231,11 @@ export type AiJobOutputResource =
  * job never writes it; the values ride on the output as `proposal`, a person
  * puts them in the editor and saves them there, and an audit's content fixes
  * become new versions only when a person applies them.
+ *
+ * A `crm` output is a proposal too (AGL-2917): a record's summary and next
+ * step, an email draft, or an import's column matches. The CRM's own task
+ * form, stage route, composer and import drawer are the writes, and a person
+ * makes each of them, or does not.
  */
 export interface AiJobOutput {
   resource: AiJobOutputResource
