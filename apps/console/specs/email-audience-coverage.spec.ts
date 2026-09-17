@@ -83,6 +83,10 @@ const PLATFORM_SENDERS: Record<string, string> = {
     'DMCA and abuse acknowledgements. The recipient is the REPORTER in ' +
     "Aglyn's own legal process, not the site's customer, and the mail is " +
     'metered as platform rather than to the host.',
+  [join('libs', 'plugins', 'ai', 'src', 'lib', 'server', 'ai-insight-digest-route.ts')]:
+    "Weekly AI insights for a workspace's own members who opted in. The " +
+    "recipient is Aglyn's customer, never a site's visitor or contact, and " +
+    'the send is metered as platform mail, as the console usage alerts are.',
 }
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.next', 'coverage', '.nx', 'tmp'])
