@@ -54,6 +54,8 @@ import { POST as aiAdminOverage } from './server/ai-admin-overage'
 import { GET as aiUsage } from './server/ai-usage'
 import { GET as aiAllotments } from './server/ai-allotments'
 import { GET as aiInsightAnswer } from './server/ai-insight-answer'
+import { POST as runAiInsightsDigest } from './server/ai-insight-digest-route'
+import { AI_INSIGHTS_DIGEST_PATH } from './insights/ai-insight-digest'
 import { GET as aiModels } from './server/ai-models'
 import { GET as billingCredits } from './server/billing-credits'
 import { POST as billingOverage } from './server/billing-overage'
@@ -168,6 +170,10 @@ export function registerAiConsoleApi(): void {
   // minute by the console's scheduler on the cron secret, on the one surface
   // that holds the provider's key.
   registerPluginApiRoute(AI_JOBS_BEAT_PATH, { web: runAiJobsBeat })
+  // The weekly insights (AGL-2915): Monday's digests made for the people who
+  // asked for them, and delivered once the beat has written them. Beside the
+  // beat under `/api/admin/`, where the console's scheduled sweeps live.
+  registerPluginApiRoute(AI_INSIGHTS_DIGEST_PATH, { web: runAiInsightsDigest })
   // A site SEO audit's "Apply all" (AGL-2910): content fixes as new
   // unpublished versions, listing values staged for their SEO cards.
   registerPluginApiRoute('ai/seo/apply', { web: applyAiSeoAudit })

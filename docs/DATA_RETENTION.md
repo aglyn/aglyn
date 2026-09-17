@@ -148,6 +148,18 @@ the customer's brief verbatim and expires at 180 days on the exchange's clock
 (the live TTL table above); the drafts a job creates are ordinary screens,
 components and versions under the host, retained as content is.
 
+**AI insights (AGL-2915) are two more org subcollections and one top-level
+queue.** An insight job's answer is `orgs/{orgId}/aiInsights/{jobId}`, on the
+job's own 180-day clock (the TTL table above). The weekly insights keep
+`orgs/{orgId}/aiInsightDigests/{week}`: the job id, site name and state of each
+site's digest that week and, until a site's digest settles, the ids of the
+members already sent it. Settling replaces the site's entry without them, so a
+settled week names nobody. No TTL; the workspace cascade reaches it.
+`aiInsightDigestQueue/{week}` is top-level and holds only workspace ids, each
+with whether it still owes a delivery; it names no person. A person's opt-in is
+the `insightDigests` map on `users/{uid}`, which the account erasure removes
+with the document.
+
 **AI allotments (AGL-2942) are one more org subcollection**,
 `orgs/{orgId}/aiAllotments/{subject}`: whom an allotment applies to, its
 monthly limit, any models it allows and who set it. No TTL. An allotment lives

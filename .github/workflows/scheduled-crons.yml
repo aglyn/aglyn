@@ -274,6 +274,13 @@ on:
           # a lease, so a manual sweep beside a scheduled one never runs a step
           # twice. It SPENDS: the steps it runs call the AI provider.
           - /api/admin/ai-jobs-beat
+          # The weekly insights (AGL-2915): delivers the digests the beat has
+          # written, and on a Monday makes the week's. POST only. Safe to run by
+          # hand at any time — a workspace's week is made once and each person
+          # is sent a site's digest once — and after a deploy it is how the
+          # first beat is stamped before the first scheduled run. On a Monday
+          # it SPENDS: the jobs it makes call the AI provider on the beat.
+          - /api/admin/ai-insights-digest
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes

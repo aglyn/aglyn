@@ -19,6 +19,8 @@
 import {
   crmDailyDigestEnabled,
   DIGEST_PREFS_FIELD,
+  INSIGHT_DIGESTS_FIELD,
+  insightDigestSubscribed,
   NOTIFICATION_CATEGORY_LABELS,
   type NotificationCategory,
   PLATFORM_BRAND_NAME,
@@ -214,6 +216,9 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   // digest is a schedule a person keeps or drops, not a category.
   const [prefs, setPrefs] = useState<Record<string, boolean>>({})
   const [digestPrefs, setDigestPrefs] = useState<Record<string, boolean>>({})
+  // The workspaces whose weekly insights this person asked for (AGL-2915).
+  // Turned on beside the answers themselves; listed here to turn off.
+  const [insightDigests, setInsightDigests] = useState<Record<string, boolean>>({})
   useEffect(() => {
     if (!uid) return
     let active = true
@@ -227,6 +232,9 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
           )
           setDigestPrefs(
             (snapshot.get(DIGEST_PREFS_FIELD) as Record<string, boolean>) ?? {},
+          )
+          setInsightDigests(
+            (snapshot.get(INSIGHT_DIGESTS_FIELD) as Record<string, boolean>) ?? {},
           )
         }
       } catch {
@@ -254,6 +262,17 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
     void setDoc(
       doc(firestore, 'users', uid),
       { [DIGEST_PREFS_FIELD]: next },
+      { merge: true },
+    ).catch(console.error)
+  }
+
+  const toggleInsightDigest = (orgId: string) => {
+    if (!uid) return
+    const next = !insightDigestSubscribed(insightDigests, orgId)
+    setInsightDigests({ ...insightDigests, [orgId]: next })
+    void setDoc(
+      doc(firestore, 'users', uid),
+      { [INSIGHT_DIGESTS_FIELD]: { [orgId]: next } },
       { merge: true },
     ).catch(console.error)
   }
@@ -407,6 +426,40 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
                   'nobody has worked, here and by email.'}
               </Typography>
             </Stack>
+            {Object.keys(insightDigests).length ? (
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  {'Weekly insights:'}
+                </Typography>
+                {Object.keys(insightDigests)
+                  .sort()
+                  .map((orgId) => (
+                    <FormControlLabel
+                      key={orgId}
+                      control={
+                        <Switch
+                          size="small"
+                          checked={insightDigestSubscribed(insightDigests, orgId)}
+                          onChange={() => toggleInsightDigest(orgId)}
+                        />
+                      }
+                      label={
+                        (orgs ?? []).find((org) => org.$id === orgId)?.name ??
+                        'A workspace you left'
+                      }
+                      slotProps={{ typography: { variant: 'caption' } }}
+                    />
+                  ))}
+                <Typography variant="caption" color="text.secondary">
+                  {'Each Monday: what your sites’ figures showed that week, here ' +
+                    'and by email. Turned on from Ask about your numbers.'}
+                </Typography>
+              </Stack>
+            ) : null}
             <Stack
               direction="row"
               spacing={1}

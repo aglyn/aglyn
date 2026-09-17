@@ -645,6 +645,17 @@ const CONSOLE_DAILY_CRONS = {
     schedule: '0 6 * * *',
     route: '/api/admin/reap-unverified-orgs?dryRun=0',
   },
+  /*
+   * The weekly insights (AGL-2915), served by the AI plugin. Twice a day: the
+   * Monday 06:00 run makes the week's digests, which the AI jobs beat writes
+   * over the next minutes, and the 14:00 run delivers them — as does any later
+   * run, for a digest that finished late. Every other run reads one queue
+   * document and stops.
+   */
+  'ai-insights-digest': {
+    schedule: '0 6,14 * * *',
+    route: '/api/admin/ai-insights-digest',
+  },
 } as const
 
 /**
@@ -692,6 +703,7 @@ export const consoleReportUsageCurrent = consoleDailyCron('report-usage-current'
 export const consoleUsageAlerts = consoleDailyCron('usage-alerts')
 export const consoleReapSendingDomains = consoleDailyCron('reap-sending-domains')
 export const consoleReapUnverifiedOrgs = consoleDailyCron('reap-unverified-orgs')
+export const consoleAiInsightsDigest = consoleDailyCron('ai-insights-digest')
 
 /*==============================================================
  * THE SIGNUPS LOCK, AT ACCOUNT CREATION (AGL-1531)
