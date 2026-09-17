@@ -36,6 +36,7 @@ import { registerAiFigureReaders } from './insights/ai-figure-readers'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { ensureFirstPartyAiProviders } from './providers/registry'
 import { aiAssistHandler } from './server/ai-assist'
+import { GET as aiCrmAnswer } from './server/ai-crm-answer'
 import { POST as runAiJobsBeat } from './server/ai-jobs-beat-route'
 import { POST as cancelAiJob } from './server/ai-jobs-cancel'
 import { GET as aiJobEvents } from './server/ai-jobs-events-route'
@@ -169,6 +170,12 @@ export function registerAiConsoleApi(): void {
   registerPluginApiRoute('ai/insights/:jobId', {
     web: (request, context) =>
       aiInsightAnswer(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
+  })
+  // A CRM job's answer (AGL-2917), which is kept off the job document and
+  // served only to a member the CRM still lets read the record.
+  registerPluginApiRoute('ai/crm/:jobId', {
+    web: (request, context) =>
+      aiCrmAnswer(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
   })
   registerPluginApiRoute('ai/jobs/:jobId/events', {
     web: (request, context) =>

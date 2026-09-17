@@ -65,6 +65,7 @@ the same day (`docs/FIRESTORE_MANUAL_CONFIG.md`).
 | `mediaTombstones` | `expiresAt` | **7 days** | DAM undo records. Each holds a deleted media document **verbatim** — alt text, tags, custom metadata, `visibleTo` scope tokens. Bounded to the bucket's 7-day soft-delete window because a tombstone that outlives the bytes it addresses can only produce a failed restore while still being a copy of customer data. | `media-tombstone.ts:93` (AGL-1467) |
 | `cspViolationDaily` | `expiresAt` | **60 days** | CSP violation counters — one doc per (day × app × directive × disposition × blocked origin). Never report bodies. | `csp-aggregate.ts:101` (AGL-1799) |
 | `rateLimits` | `expiresAt` | window-scoped; degradation markers **30 days**, signup refusals **7 days** | IP-keyed counters and refusal markers. | `rate-limit-store.ts:84,257` |
+| `aiCrmAnswers` | `expiresAt` | **14 days** | A CRM job's answer: a contact's, company's, deal's or lead's summary and proposed next step, a one-to-one email draft, or an import's column matches — written from a person's CRM record, with the record's id and the asking `uid`. Written only by the server and read only through `GET /api/ai/crm/{jobId}`, which asks the CRM again whether the reader may see the record. A person erasure does not sweep it; the door stops serving an erased person's answer at once and the policy removes it. The policy is declared; enabling it in gcloud is owed. | `ai-job-crm-step.ts` stamps `aiCrmAnswerExpiry(now)` (AGL-2917) |
 | `aiJobs` | `expiresAt` | **180 days** — the same clock as an Assist exchange | An AI generation job: the customer's **brief verbatim**, the step ledger with its credit figures, the outputs it named (a `text` output carries its copy on the document), the creating `uid`. Written only by the server; the drafts a job creates are ordinary content and live as long as the workspace does. Enabled and read back `ACTIVE` on 2026-09-14. | `ai-jobs.ts` `createAiJob` stamps `assistExchangeExpiry(now)` (AGL-2904) |
 | `aiInsights` | `expiresAt` | **180 days** — the job's own clock | An insight job's answer: the question verbatim, the tables of aggregates it read (counts, sums, rates and labels, never a record) and the insights written about them. Written only by the server and read only through `GET /api/ai/insights/{jobId}`. The policy is declared; enabling it in gcloud is owed. | `ai-job-insight-step.ts` stamps the job's `expiresAt` (AGL-2915) |
 | `months` (under `aiUsageByUser`) | `expiresAt` | **13 months** past the month the document describes | A person's monthly AI usage in one workspace, keyed by their `uid`: credits, provider spend, request and refusal counts, a split by kind and by site. Integers and an id, no prose. Written only by the server, in the same batch as the workspace's own month. Enabled and read back `ACTIVE` on 2026-09-14. | `ai-usage-by-user.ts` `recordUserAiUsage` stamps `aiUsageByUserExpiry(month)` (AGL-2928) |
@@ -141,6 +142,13 @@ memberships, host memberships, notifications, passkeys, `legalAcceptances`, and
 the Free plan's per-account AI usage count `users/{uid}/aiUsage/{YYYY-MM}`
 (AGL-2925), which has no TTL and is kept with the account — which `eraseUser`
 removes with `recursiveDelete(userRef)` (`erase.ts:938`, AGL-1140).
+
+**AI answers about CRM records (AGL-2917) are one more org subcollection**,
+`orgs/{orgId}/aiCrmAnswers/{jobId}`, so the workspace cascade reaches them. A
+person erasure (AGL-2623) does not: an answer names the record by id, and the
+two-week clock in the TTL table above is what removes a copy written from an
+erased person's record. It is never served in the meantime, because the answer
+door asks the CRM, which no longer finds the record.
 
 **AI generation jobs (AGL-2904) are one more org subcollection**,
 `orgs/{orgId}/aiJobs/{jobId}`, so the cascade reaches them too. Each carries

@@ -2255,8 +2255,10 @@ asks for its own (`aiProductsRunMinimumMs`):
 ## The `crm` kind
 
 CRM by AI (AGL-2917): `src/lib/jobs/ai-job-crm-step.ts`, its strict tools and
-answer checks in `src/lib/tools/ai-crm-tool.ts`, and the request and proposal
-shapes the step and the console widgets share in `src/lib/model/ai-crm.ts`.
+answer checks in `src/lib/tools/ai-crm-tool.ts`, the request, reference and
+answer shapes the step, the answer door and the console widgets share in
+`src/lib/model/ai-crm.ts`, and the access check the admission and the door
+share in `src/lib/jobs/ai-crm-access.ts`.
 `inputs.task` names the question:
 
 - `record` (`record`, `recordId`): a contact, company, deal or lead. A summary
@@ -2275,8 +2277,9 @@ shapes the step and the console widgets share in `src/lib/model/ai-crm.ts`.
   `date`, `yes-no`, `url`, `text` or `empty`), read from the cells in the
   browser. No cell leaves the browser.
 
-Every output is `resource: 'crm'` with a `proposal`, and the step writes
-nothing.
+Every output is `resource: 'crm'`, and its `proposal` names only the question:
+the record's kind and id, or the import's collection. The answer is kept apart
+from the job, and the step writes no CRM record.
 
 - **The CRM decides what is read.** The step never reads a CRM document. It
   asks the CRM's readers on the core's record-facts seam
@@ -2299,21 +2302,36 @@ nothing.
   reading twin, generic and keyed by resource name, with every rule the
   owner's.
 - **Admission.** An in-process read skips the plugin API dispatcher's gates,
-  so `aiCrmAdmissionRefusal` re-establishes them before the job exists: the
-  inputs name a record or an import; a named site is the job's org's; the CRM
+  so `aiCrmAdmissionRefusal` re-establishes them before the job exists, through
+  `aiCrmAccessRefusal`: the inputs name a record or an import; a named site is
+  the job's org's; the CRM
   is past `release_crm`, switched on where the job runs (the site, or the
   workspace at the organization level) and has registered its reader in this
   process; and the reader admits the member, in the CRM's own words. The step
   asks the reader again, as the creator, before it spends.
+- **The answer is kept apart from the job.** Every member of a workspace may
+  read its jobs, and not every member may read every record, so the answer is
+  written to `orgs/{orgId}/aiCrmAnswers/{jobId}` (`AiCrmAnswerRecord`), which
+  no rule lets a client read, with a 14-day `expiresAt` (the TTL policy is
+  declared in `cloud/firebase-firestore.indexes.json`; enabling it is owed).
+  `GET /api/ai/crm/{jobId}?orgId=` (`src/lib/server/ai-crm-answer.ts`) is the
+  one way to it: it climbs `aiJobsGate`, serves a record's summary to any
+  member, and an email draft or an import's matches only to the member who
+  asked (or staff), and in every case asks `aiCrmAccessRefusal` again as the
+  reader. Any refusal is a 404. A keep that fails fails the step as spent. A
+  person erasure does not sweep the collection; the door stops serving an
+  erased person's answer at once, and the two weeks bound the copy.
 - **A summary is asked once per timeline.** A record answer's `key` hashes the
   record, the site, the model, the rules, the tool and the prompt, which is the
-  facts. The step finds finished jobs about the same `inputs.recordId` (one
-  equality, so no composite index) and reuses an answer with the same key from
-  the last 30 days at no cost. Nothing is stored for it beyond the job.
+  facts. The step looks up kept answers with the same key (one equality, so no
+  composite index) and reuses the newest on the same site at no cost, keeping
+  it again under the new job with `reusedFrom`. An answer is reusable for as
+  long as it is kept.
 - **Routing and time.** `job.crm` runs on the fast tier with no thinking and a
   700-token ceiling: sixty columns matched to fields by number, or an email
   draft at its limits, at three characters a token with room. It sends no site
-  inventory and so makes no lookup; its reads are the declared 1.5 s,
+  inventory and so makes no lookup; its own round trips — the facts read, a
+  record's reuse lookup and the answer's write — are the declared 1.5 s,
   `AI_CRM_FACTS_READS_MS`. Its worst case fits the 25 s inline budget, so the
   create door answers with the proposal. Its three generation kinds are
   scoped to the doctrine's field rules (`AI_DOCTRINE_KIND_SCOPE`), which send

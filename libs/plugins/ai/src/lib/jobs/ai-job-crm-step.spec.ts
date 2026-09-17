@@ -19,9 +19,10 @@
  * The `crm` step (AGL-2917), with the CRM's readers faked at the record-facts
  * seam and the provider faked at the runtime's `runAiRequest` seam. What it
  * proves: what each question sends — the CRM's facts and nothing the step read
- * itself — what comes back as a proposal, that an unchanged record is not
- * asked twice, that a refusal is the CRM's own sentence and spends nothing,
- * and that the step writes nothing anywhere.
+ * itself — what comes back as a proposal, that the answer is kept apart from
+ * the job and the job names only the question, that an unchanged record is
+ * not asked twice, and that a refusal is the CRM's own sentence and spends
+ * nothing.
  */
 
 const mockRunAiRequest = jest.fn()
@@ -43,8 +44,15 @@ jest.mock('@aglyn/tenant-data-admin/server/release-flags', () => ({
 }))
 
 import type { PluginRecordFactsRead, PluginRecordFactsRequest } from '@aglyn/aglyn/plugin-manager/plugin-record-facts'
-import { AI_CRM_LIMITS, aiCrmColumnsInput, readAiCrmProposal, type AiCrmRecordProposal } from '../model/ai-crm'
-import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
+import {
+  AI_CRM_LIMITS,
+  aiCrmAnswerExpiry,
+  aiCrmColumnsInput,
+  readAiCrmProposal,
+  type AiCrmAnswerRecord,
+  type AiCrmRecordProposal,
+} from '../model/ai-crm'
+import type { AiJob } from '../model/ai-jobs.types'
 import { AI_STEP_TIERS, AI_MODEL_CATALOG } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import { aiDoctrineSystemBlock } from '../runtime/ai-doctrine'
@@ -57,20 +65,22 @@ import {
   aiCrmRecordTool,
   aiCrmWritesPhoneNumber,
 } from '../tools/ai-crm-tool'
+import { AI_CRM_UNAVAILABLE_COPY, aiCrmAccessRefusal } from './ai-crm-access'
 import { aiJobAdmissionFor } from './ai-job-admission'
 import { AI_JOB_INLINE_BUDGET_MS, aiGenerationWorstCaseOnTierMs } from './ai-job-budget'
 import {
   AI_CRM_EMAIL_INSTRUCTIONS,
   AI_CRM_FACTS_READS_MS,
+  AI_CRM_KEEP_FAILURE_COPY,
   AI_CRM_MAPPING_INSTRUCTIONS,
-  AI_CRM_UNAVAILABLE_COPY,
   AI_JOB_CRM_STEP_BUDGET,
   aiCrmAdmissionRefusal,
   aiCrmRecordInstructions,
   aiReusableCrmRecord,
   createAiJobCrmStep,
+  findAiCrmAnswersByKey,
   registerAiCrmJob,
-  type AiCrmJobCandidate,
+  type AiCrmAnswerCandidate,
 } from './ai-job-crm-step'
 import { aiJobStepMinimumMs, aiJobStepRunnerFor } from './ai-jobs'
 
@@ -140,19 +150,23 @@ const reader = {
 }
 const readerFor = (resource: string) => (resource.startsWith('crm.') ? { pluginId: 'crm', reader } : null)
 
-const writes: string[] = []
-const firestore = {
-  collection: (name: string) => {
-    writes.push(`read:${name}`)
-    return {
-      doc: () => ({
-        get: async () => ({ exists: true, data: () => ({ enabledPlugins: ['crm'] }) }),
-        set: async () => writes.push('set'),
-        update: async () => writes.push('update'),
-      }),
-    }
+/** Every document written, by path. A site document reads as one with the CRM on. */
+const writes: Array<{ path: string; data: Doc }> = []
+let keepFails = false
+const docAt = (path: string): unknown => ({
+  collection: (name: string) => collectionAt(`${path}/${name}`),
+  get: async () => ({ exists: true, data: () => ({ enabledPlugins: ['crm'] }) }),
+  set: async (data: Doc) => {
+    if (keepFails) throw new Error('unavailable')
+    writes.push({ path, data })
   },
-} as unknown as FirebaseFirestore.Firestore
+})
+const collectionAt = (path: string): unknown => ({ doc: (id: string) => docAt(`${path}/${id}`) })
+const firestore = { collection: (name: string) => collectionAt(name) } as unknown as FirebaseFirestore.Firestore
+
+/** The answer a job kept, as written. */
+const keptFor = (jobId = 'job-1') =>
+  writes.find((write) => write.path === `orgs/${ORG}/aiCrmAnswers/${jobId}`)?.data as (AiCrmAnswerRecord & Doc) | undefined
 
 function job(patch: Partial<AiJob> = {}): AiJob {
   return {
@@ -181,8 +195,8 @@ const answer = (name: string, input: Doc) => ({
   stopReason: 'tool_use',
 })
 
-function runStep(patch: Partial<AiJob> = {}, finder: ((orgId: string, id: string) => Promise<AiCrmJobCandidate[]>) | null = null) {
-  const step = createAiJobCrmStep({ readerFor, findJobsByRecord: finder })
+function runStep(patch: Partial<AiJob> = {}, finder: ((orgId: string, key: string) => Promise<AiCrmAnswerCandidate[]>) | null = null) {
+  const step = createAiJobCrmStep({ readerFor, findAnswersByKey: finder })
   return step({ job: job(patch), stepIndex: 0, now: NOW, firestore, org: { plan: 'pro' } as never })
 }
 
@@ -197,6 +211,7 @@ beforeEach(() => {
   mockHostOrgs.set('host-9', 'org-9')
   reads.length = 0
   writes.length = 0
+  keepFails = false
   refusal = null
   facts = { 'contact-1': CONTACT_FACTS, 'deal-1': DEAL_FACTS, contacts: IMPORT_FACTS }
 })
@@ -226,18 +241,39 @@ describe('a record (AGL-2917)', () => {
     expect(prompt).not.toContain('never sent')
     expect(request.maxTokens).toBe(AI_JOB_CRM_STEP_BUDGET.maxTokens(aiModelForStep('job.crm')))
     expect(outcome.failure).toBeUndefined()
-    const proposal = readAiCrmProposal(outcome.outputs[0].proposal) as AiCrmRecordProposal
-    expect(outcome.outputs[0]).toMatchObject({ resource: 'crm', id: 'record:contact:contact-1', hostId: HOST, label: 'CRM summary' })
-    expect(proposal).toMatchObject({
-      kind: 'record',
-      record: { kind: 'contact', id: 'contact-1' },
-      nextStep: { title: 'Call Dana about budget approval', dueInDays: 2 },
-      stage: null,
-      standing: null,
-      asOf: '2026-09-16',
-    })
-    expect(proposal.key).toMatch(/^[0-9a-f]{64}$/)
     expect(outcome.usage).toEqual(USAGE)
+    // The job names the question and nothing of the answer: any member may read a job.
+    expect(outcome.outputs).toEqual([
+      {
+        resource: 'crm',
+        id: 'record:contact:contact-1',
+        hostId: HOST,
+        label: 'CRM summary',
+        proposal: { kind: 'record', record: { kind: 'contact', id: 'contact-1' } },
+      },
+    ])
+    expect(writes.map((write) => write.path)).toEqual([`orgs/${ORG}/aiCrmAnswers/job-1`])
+    expect(keptFor()).toEqual({
+      jobId: 'job-1',
+      orgId: ORG,
+      hostId: HOST,
+      createdBy: 'uid-1',
+      task: 'record',
+      resource: 'crm.contact',
+      recordId: 'contact-1',
+      key: expect.stringMatching(/^[0-9a-f]{64}$/),
+      proposal: {
+        kind: 'record',
+        record: { kind: 'contact', id: 'contact-1' },
+        summary: 'Dana opened the quote on 2026-09-09. The Loading dock membrane deal is at Proposal sent.',
+        nextStep: { title: 'Call Dana about budget approval', kind: 'call', priority: 'high', dueInDays: 2, reason: 'The owner approves budgets.' },
+        stage: null,
+        standing: null,
+        asOf: '2026-09-16',
+      },
+      createdAt: NOW,
+      expiresAt: aiCrmAnswerExpiry(NOW),
+    })
   })
 
   it('re-asks a next step that repeats an open task, and keeps the answer that does not', async () => {
@@ -252,7 +288,8 @@ describe('a record (AGL-2917)', () => {
     const outcome = await runStep()
     expect(sent()).toHaveLength(2)
     expect(sent()[1].messages.at(-1)?.content).toContain('repeats a task that is already open')
-    expect(readAiCrmProposal(outcome.outputs[0].proposal)).toMatchObject({ nextStep: null })
+    expect(outcome.outputs).toHaveLength(1)
+    expect(readAiCrmProposal(keptFor()?.proposal)).toMatchObject({ nextStep: null })
   })
 
   it('proposes an open stage for a deal, and holds a deal to the stages its pipeline lists', async () => {
@@ -264,41 +301,102 @@ describe('a record (AGL-2917)', () => {
     const outcome = await runStep({ inputs: { task: 'record', record: 'deal', recordId: 'deal-1' } })
     expect(sent()[0].messages[0].content).toContain('Stages in order: proposal-sent "Proposal sent" (open); negotiation "Negotiation" (open); won "Won" (won)')
     expect(sent()[1].messages.at(-1)?.content).toContain('Winning or losing a deal is the team’s call')
-    expect(readAiCrmProposal(outcome.outputs[0].proposal)).toMatchObject({
-      stage: { stageId: 'negotiation', stageName: 'Negotiation', reason: 'He asked for a discount on 2026-09-12.' },
+    expect(outcome.outputs[0]).toMatchObject({ id: 'record:deal:deal-1', proposal: { kind: 'record', record: { kind: 'deal', id: 'deal-1' } } })
+    expect(keptFor()).toMatchObject({
+      resource: 'crm.deal',
+      recordId: 'deal-1',
+      proposal: { stage: { stageId: 'negotiation', stageName: 'Negotiation', reason: 'He asked for a discount on 2026-09-12.' } },
     })
   })
 
-  it('reuses a finished answer to the same request at no cost, and asks again when the facts moved', async () => {
+  it('reuses an answer kept for the same request at no cost, keeps it again for the new job, and asks again when the facts moved', async () => {
     mockRunAiRequest.mockResolvedValue(answer(AI_CRM_RECORD_TOOL_NAME, { summary: 'Dana opened the quote.', nextStep: null }))
-    const first = await runStep()
-    const firstProposal = readAiCrmProposal(first.outputs[0].proposal) as AiCrmRecordProposal
-    const candidates: AiCrmJobCandidate[] = [
-      { jobId: 'job-0', status: 'done', hostId: HOST, outputs: first.outputs, updatedAtMs: NOW.getTime() - 60_000 },
+    await runStep({ $id: 'job-0' })
+    const first = keptFor('job-0') as AiCrmAnswerRecord
+    const candidates: AiCrmAnswerCandidate[] = [
+      { jobId: 'job-0', hostId: HOST, task: 'record', key: first.key, createdAtMs: NOW.getTime() - 60_000, proposal: first.proposal },
     ]
+    const asked: string[] = []
+    const finder = async (orgId: string, key: string) => {
+      asked.push(`${orgId}/${key}`)
+      return candidates.filter((candidate) => candidate.key === key)
+    }
     mockRunAiRequest.mockClear()
-    const again = await runStep({ $id: 'job-2' }, async () => candidates)
+    const again = await runStep({ $id: 'job-2' }, finder)
+    expect(asked).toEqual([`${ORG}/${first.key}`])
     expect(mockRunAiRequest).not.toHaveBeenCalled()
-    expect(again.estCostUsd).toBe(0)
-    expect(readAiCrmProposal(again.outputs[0].proposal)).toEqual({ ...firstProposal, reusedFrom: 'job-0' })
+    expect(again).toMatchObject({ estCostUsd: 0, outputs: [{ id: 'record:contact:contact-1' }] })
+    expect(keptFor('job-2')).toMatchObject({ key: first.key, proposal: { ...first.proposal, reusedFrom: 'job-0' } })
 
     facts['contact-1'] = { ...CONTACT_FACTS, notes: 'Owner approved the budget.' }
-    const moved = await runStep({ $id: 'job-3' }, async () => candidates)
+    await runStep({ $id: 'job-3' }, finder)
     expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
-    expect((readAiCrmProposal(moved.outputs[0].proposal) as AiCrmRecordProposal).key).not.toBe(firstProposal.key)
+    expect(keptFor('job-3')?.key).not.toBe(first.key)
+    expect((keptFor('job-3')?.proposal as AiCrmRecordProposal).reusedFrom).toBeUndefined()
   })
 
-  it('reuses only a finished job on the same site, inside the window', () => {
-    const proposal = { kind: 'record', key: 'k', summary: 's' }
-    const output = { resource: 'crm', id: 'record:contact:c', hostId: HOST, label: 'CRM summary', proposal } as AiJobOutput
-    const base = { jobId: 'job-0', status: 'done' as const, hostId: HOST, outputs: [output], updatedAtMs: NOW.getTime() }
+  it('reuses only a record answer kept on the same site for the same key, inside the window', () => {
+    const proposal = { kind: 'record', record: { kind: 'contact', id: 'c' }, summary: 's', nextStep: null, stage: null, standing: null, asOf: '2026-09-16' } as const
+    const base: AiCrmAnswerCandidate = { jobId: 'job-0', hostId: HOST, task: 'record', key: 'k', createdAtMs: NOW.getTime(), proposal }
     const context = { jobId: 'job-1', hostId: HOST, key: 'k', now: NOW }
     expect(aiReusableCrmRecord([base], context)?.jobId).toBe('job-0')
-    expect(aiReusableCrmRecord([{ ...base, status: 'failed' }], context)).toBeNull()
+    expect(aiReusableCrmRecord([{ ...base, task: 'email' }], context)).toBeNull()
+    expect(aiReusableCrmRecord([{ ...base, proposal: null }], context)).toBeNull()
     expect(aiReusableCrmRecord([{ ...base, hostId: null }], context)).toBeNull()
-    expect(aiReusableCrmRecord([{ ...base, updatedAtMs: NOW.getTime() - 31 * 86_400_000 }], context)).toBeNull()
+    expect(aiReusableCrmRecord([{ ...base, createdAtMs: NOW.getTime() - 15 * 86_400_000 }], context)).toBeNull()
     expect(aiReusableCrmRecord([base], { ...context, key: 'other' })).toBeNull()
     expect(aiReusableCrmRecord([base], { ...context, jobId: 'job-0' })).toBeNull()
+    const newer = { ...base, jobId: 'job-5', createdAtMs: NOW.getTime() - 1_000 }
+    const older = { ...base, jobId: 'job-4', createdAtMs: NOW.getTime() - 5_000 }
+    expect(aiReusableCrmRecord([older, newer], context)?.jobId).toBe('job-5')
+  })
+
+  it('looks answers up by the request key, in the org’s kept answers only', async () => {
+    const queries: string[] = []
+    const store = {
+      collection: (root: string) => ({
+        doc: (orgId: string) => ({
+          collection: (name: string) => ({
+            where: (field: string, op: string, value: string) => ({
+              limit: (count: number) => ({
+                get: async () => {
+                  queries.push(`${root}/${orgId}/${name} ${field} ${op} ${value} limit ${count}`)
+                  return {
+                    docs: [
+                      {
+                        id: 'job-0',
+                        data: () => ({
+                          hostId: HOST,
+                          task: 'record',
+                          key: 'k',
+                          createdAt: { toMillis: () => 1_000 },
+                          proposal: { kind: 'record', record: { kind: 'contact', id: 'c-1' }, summary: 'S' },
+                        }),
+                      },
+                      { id: 'job-9', data: () => ({ task: 'mapping', proposal: { kind: 'invoice' } }) },
+                    ],
+                  }
+                },
+              }),
+            }),
+          }),
+        }),
+      }),
+    } as unknown as FirebaseFirestore.Firestore
+    expect(await findAiCrmAnswersByKey(ORG, 'k', store)).toEqual([
+      { jobId: 'job-0', hostId: HOST, task: 'record', key: 'k', createdAtMs: 1_000, proposal: { kind: 'record', record: { kind: 'contact', id: 'c-1' }, summary: 'S' } },
+      { jobId: 'job-9', hostId: null, task: 'mapping', key: null, createdAtMs: null, proposal: null },
+    ])
+    expect(queries).toEqual([`orgs/${ORG}/aiCrmAnswers key == k limit 20`])
+    expect(await findAiCrmAnswersByKey(ORG, 'k')).toEqual([])
+  })
+
+  it('fails as spent, naming nothing on the job, when the answer cannot be kept', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(answer(AI_CRM_RECORD_TOOL_NAME, { summary: 'Dana opened the quote.', nextStep: null }))
+    keepFails = true
+    const outcome = await runStep()
+    expect(outcome).toMatchObject({ failure: AI_CRM_KEEP_FAILURE_COPY, outputs: [], usage: USAGE })
+    expect(writes).toEqual([])
   })
 
   it('fails in the CRM’s own words, spending nothing, when the reader refuses', async () => {
@@ -306,6 +404,7 @@ describe('a record (AGL-2917)', () => {
     const outcome = await runStep()
     expect(outcome).toMatchObject({ failure: refusal.error, estCostUsd: 0, outputs: [] })
     expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(writes).toEqual([])
   })
 })
 
@@ -323,8 +422,17 @@ describe('an email draft (AGL-2917)', () => {
     expect(request.messages[0].content).toContain('The team member asks: Follow up on the quote')
     expect(request.messages[0].content).toContain('{{contact.firstName}}')
     expect(request.messages[0].content).not.toContain('{{contact.email}}')
-    expect(outcome.outputs[0]).toMatchObject({ id: 'email:contact:contact-1', label: 'CRM email draft' })
-    expect(readAiCrmProposal(outcome.outputs[0].proposal)).toEqual({
+    expect(outcome.outputs).toEqual([
+      {
+        resource: 'crm',
+        id: 'email:contact:contact-1',
+        hostId: HOST,
+        label: 'CRM email draft',
+        proposal: { kind: 'email', record: { kind: 'contact', id: 'contact-1' } },
+      },
+    ])
+    expect(keptFor()).toMatchObject({ task: 'email', resource: 'crm.contact', recordId: 'contact-1', key: null })
+    expect(readAiCrmProposal(keptFor()?.proposal)).toEqual({
       kind: 'email',
       record: { kind: 'contact', id: 'contact-1' },
       subject: 'Your loading dock quote',
@@ -376,7 +484,17 @@ describe('an import’s columns (AGL-2917)', () => {
         '- 2: Renews, date',
       ].join('\n'),
     )
-    expect(readAiCrmProposal(outcome.outputs[0].proposal)).toEqual({
+    expect(outcome.outputs).toEqual([
+      {
+        resource: 'crm',
+        id: 'mapping:contacts',
+        hostId: HOST,
+        label: 'Import column matches',
+        proposal: { kind: 'mapping', collection: 'contacts' },
+      },
+    ])
+    expect(keptFor()).toMatchObject({ task: 'mapping', resource: 'crm.import', recordId: 'contacts', key: null })
+    expect(readAiCrmProposal(keptFor()?.proposal)).toEqual({
       kind: 'mapping',
       collection: 'contacts',
       columns: 3,
@@ -500,9 +618,19 @@ describe('the admission (AGL-2917)', () => {
     expect(await admit({ uid: null })).toBeNull()
     expect(reads).toEqual([])
   })
+
+  it('asks the reader for a verified staff caller as staff, which only the answer door does', async () => {
+    const access = { firestore, orgId: ORG, hostId: HOST, resource: 'crm.contact', id: 'contact-1', org: { enabledPlugins: ['crm'] }, readerFor, now: NOW }
+    expect(await aiCrmAccessRefusal({ ...access, uid: 'staff-1', staff: true })).toBeNull()
+    expect(await aiCrmAccessRefusal({ ...access, uid: 'uid-1' })).toBeNull()
+    expect(reads).toEqual([
+      { orgId: ORG, hostId: HOST, id: 'contact-1', uid: 'staff-1', staff: true, org: { enabledPlugins: ['crm'] }, now: NOW },
+      { orgId: ORG, hostId: HOST, id: 'contact-1', uid: 'uid-1', org: { enabledPlugins: ['crm'] }, now: NOW },
+    ])
+  })
 })
 
 afterEach(() => {
-  // The step and its admission read; neither writes.
-  expect(writes.filter((entry) => !entry.startsWith('read:'))).toEqual([])
+  // The only thing written anywhere is a kept answer, beside its job.
+  expect(writes.filter((write) => !/^orgs\/org-1\/aiCrmAnswers\/job-\d+$/.test(write.path))).toEqual([])
 })

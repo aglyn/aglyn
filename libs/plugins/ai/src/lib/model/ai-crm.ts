@@ -23,8 +23,8 @@ import type { AiJobOutput, AiJobSummary } from './ai-jobs.types'
 
 /**
  * CRM by AI (AGL-2917): what a `crm` job is asked, and the proposals it
- * answers with, in the shape the job step writes and the console widgets
- * read. Pure data and readers, with no server import.
+ * answers with, in the shape the job step keeps and the console widgets read.
+ * Pure data and readers, with no server import.
  *
  * ## Three questions, all proposals
  *
@@ -44,6 +44,13 @@ import type { AiJobOutput, AiJobSummary } from './ai-jobs.types'
  * The CRM decides it: the facts its readers report on the core's record-facts
  * seam, never a document the AI plugin read itself. For an import, the
  * columns' headers and shapes — never a cell of the file.
+ *
+ * ## Where an answer is kept
+ *
+ * Not on the job: every member of a workspace may read its jobs, and a
+ * summary of a contact is the contact's to show. The job's output names the
+ * question ({@link AiCrmOutputRef}); the answer is kept apart, and the answer
+ * door serves it only to a member the CRM still lets read the record.
  */
 
 /** The plugin that owns every record a `crm` job reads, as `plugins.config.json` names it. */
@@ -139,8 +146,6 @@ export interface AiCrmRecordProposal {
   standing: string | null
   /** The UTC day the facts were read. */
   asOf: string
-  /** The request the answer was produced for; a later job whose request keys the same reuses it. */
-  key: string
   /** The job the answer was reused from, when it was not asked for again. */
   reusedFrom?: string
 }
@@ -265,43 +270,89 @@ export function readAiCrmProposal(raw: unknown): AiCrmProposal | null {
   return null
 }
 
-/** The `crm` proposals a job's outputs carry. */
-export function aiCrmProposalsOf(job: Pick<AiJobSummary, 'outputs'> | null | undefined): AiCrmProposal[] {
-  return (job?.outputs ?? [])
-    .filter((output: AiJobOutput) => output.resource === 'crm')
-    .map((output) => readAiCrmProposal(output.proposal))
-    .filter((proposal): proposal is AiCrmProposal => proposal !== null)
+/**
+ * What a `crm` job's output says about its answer (AGL-2917): which question,
+ * about which record or import. The answer itself is not on the job — every
+ * member of a workspace may read a job, and not every member may read the
+ * record — so it is kept in {@link AI_CRM_ANSWERS_COLLECTION} and read through
+ * the answer door, which asks the CRM again whether this member may read it.
+ */
+export type AiCrmOutputRef =
+  | { kind: 'record' | 'email'; record: { kind: AiCrmRecordKind; id: string } }
+  | { kind: 'mapping'; collection: AiCrmImportCollection }
+
+/** An output's reference read back, or `null` when it is not one a `crm` job writes. */
+export function readAiCrmOutputRef(raw: unknown): AiCrmOutputRef | null {
+  if (!isRecord(raw)) return null
+  if (raw['kind'] === 'record' || raw['kind'] === 'email') {
+    const record = raw['record']
+    return isRecord(record) && oneOf(AI_CRM_RECORD_KINDS, record['kind']) && typeof record['id'] === 'string'
+      ? { kind: raw['kind'], record: { kind: record['kind'], id: record['id'] } }
+      : null
+  }
+  if (raw['kind'] === 'mapping') {
+    return oneOf(AI_CRM_IMPORT_COLLECTIONS, raw['collection']) ? { kind: 'mapping', collection: raw['collection'] } : null
+  }
+  return null
 }
 
-/** A job's proposal about one record, of one kind of question, or `null`. */
-export function aiCrmRecordProposalOf(
-  job: Pick<AiJobSummary, 'outputs'> | null | undefined,
-  record: { kind: string; id: string },
-): AiCrmRecordProposal | null {
-  const found = aiCrmProposalsOf(job).find(
-    (proposal) => proposal.kind === 'record' && proposal.record.kind === record.kind && proposal.record.id === record.id,
-  )
-  return (found as AiCrmRecordProposal | undefined) ?? null
+/** What a widget looks for among a workspace's jobs: one question about one record, or one import. */
+export type AiCrmAnswerWanted =
+  | { kind: 'record' | 'email'; record: { kind: string; id: string } }
+  | { kind: 'mapping'; collection: string }
+
+/** Whether a job answered the question a widget asks. */
+export function aiCrmJobAnswers(job: Pick<AiJobSummary, 'kind' | 'outputs'> | null | undefined, wanted: AiCrmAnswerWanted): boolean {
+  if (job?.kind !== 'crm') return false
+  return (job.outputs ?? []).some((output: AiJobOutput) => {
+    if (output.resource !== 'crm') return false
+    const ref = readAiCrmOutputRef(output.proposal)
+    if (!ref || ref.kind !== wanted.kind) return false
+    if (ref.kind === 'mapping') return wanted.kind === 'mapping' && ref.collection === wanted.collection
+    return wanted.kind !== 'mapping' && ref.record.kind === wanted.record.kind && ref.record.id === wanted.record.id
+  })
 }
 
-/** A job's email draft for one record, or `null`. */
-export function aiCrmEmailProposalOf(
-  job: Pick<AiJobSummary, 'outputs'> | null | undefined,
-  record: { kind: string; id: string },
-): AiCrmEmailProposal | null {
-  const found = aiCrmProposalsOf(job).find(
-    (proposal) => proposal.kind === 'email' && proposal.record.kind === record.kind && proposal.record.id === record.id,
-  )
-  return (found as AiCrmEmailProposal | undefined) ?? null
+/** The org collection a `crm` job's answer is kept in, which no client may read. */
+export const AI_CRM_ANSWERS_COLLECTION = 'aiCrmAnswers'
+
+/**
+ * How long an answer is kept: two weeks, far shorter than the job's own clock.
+ * An answer is written from a person's record, and erasing a person from a
+ * workspace does not sweep this collection, so the copy has to be gone on its
+ * own well inside the month an erasure request is answered in. The answer
+ * door stops serving it at once, because the CRM no longer finds the record.
+ */
+export const AI_CRM_ANSWER_RETENTION_DAYS = 14
+
+/** When an answer written at `now` expires: a `Date`, which a TTL policy keys on. */
+export function aiCrmAnswerExpiry(now = new Date()): Date {
+  return new Date(now.getTime() + AI_CRM_ANSWER_RETENTION_DAYS * 86_400_000)
 }
 
-/** A job's column matches for one import, or `null`. */
-export function aiCrmMappingProposalOf(
-  job: Pick<AiJobSummary, 'outputs'> | null | undefined,
-  collection: string,
-): AiCrmMappingProposal | null {
-  const found = aiCrmProposalsOf(job).find(
-    (proposal) => proposal.kind === 'mapping' && proposal.collection === collection,
-  )
-  return (found as AiCrmMappingProposal | undefined) ?? null
+/** An answer as it is kept at `orgs/{orgId}/aiCrmAnswers/{jobId}`. */
+export interface AiCrmAnswerRecord {
+  jobId: string
+  orgId: string
+  /** The site the record was read on, or `null` at the organization level. */
+  hostId: string | null
+  /** The member who asked. */
+  createdBy: string
+  task: AiCrmTask
+  /** The record an answer is about, by the resource its facts were read from; `null` for a mapping. */
+  resource: string
+  recordId: string
+  proposal: AiCrmProposal
+  /** A record answer's request key, which a later job reuses it by; `null` for any other. */
+  key: string | null
+  createdAt: unknown
+  expiresAt?: unknown
+}
+
+/** What the answer door serves. */
+export interface AiCrmAnswerWire {
+  jobId: string
+  hostId: string | null
+  createdBy: string
+  proposal: AiCrmProposal
 }

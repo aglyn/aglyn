@@ -89,6 +89,14 @@ export const TTL_POLICIES = Object.freeze([
     why: 'verbatim Assist exchanges, 180 days',
   },
   {
+    collection: 'aiCrmAnswers',
+    field: 'expiresAt',
+    // AGL-2917 — a CRM job's answer under `orgs/{orgId}/aiCrmAnswers/{jobId}`:
+    // a record's summary, an email draft or an import's matches, written from a
+    // person's CRM record. The step stamps a two-week expiry.
+    why: 'AI answers written from CRM records, 14 days',
+  },
+  {
     collection: 'aiJobs',
     field: 'expiresAt',
     // AGL-2904 — an AI generation job holds the customer's brief verbatim, the

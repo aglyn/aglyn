@@ -16,26 +16,23 @@
  */
 
 import { createHash } from 'node:crypto'
-import { isHostPluginEnabled, isPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
+import { pluginRecordFactsReader } from '@aglyn/aglyn/plugin-manager/plugin-record-facts'
 import {
-  pluginRecordFactsReader,
-  type ResolvedPluginRecordFactsReader,
-} from '@aglyn/aglyn/plugin-manager/plugin-record-facts'
-import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
-import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin/server/release-flags'
-import {
-  AI_CRM_FACTS_RESOURCES,
-  AI_CRM_IMPORT_FACTS_RESOURCE,
+  AI_CRM_ANSWER_RETENTION_DAYS,
+  AI_CRM_ANSWERS_COLLECTION,
   AI_CRM_OUTPUT_IDS,
   AI_CRM_PLUGIN_ID,
+  aiCrmAnswerExpiry,
   parseAiCrmRequest,
+  readAiCrmProposal,
+  type AiCrmAnswerRecord,
   type AiCrmEmailProposal,
   type AiCrmMappingProposal,
+  type AiCrmOutputRef,
+  type AiCrmProposal,
   type AiCrmRecordKind,
   type AiCrmRecordProposal,
-  type AiCrmRequest,
 } from '../model/ai-crm'
-import type { AiJob, AiJobOutput, AiJobStatus } from '../model/ai-jobs.types'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import type { AiTool } from '../providers/contract'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
@@ -56,11 +53,17 @@ import {
   checkAiCrmRecord,
   type AiCrmImportField,
 } from '../tools/ai-crm-tool'
+import {
+  AI_CRM_UNAVAILABLE_COPY,
+  aiCrmAccessRefusal,
+  aiCrmFactsResource,
+  type AiCrmReaderLookup,
+} from './ai-crm-access'
 import { registerAiJobAdmission, type AiJobAdmission, type AiJobAdmissionRefusal } from './ai-job-admission'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiGenerationSpent, aiUnspentOutcome } from './ai-job-generation'
 import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
-import { AI_JOBS_COLLECTION, registerAiJobStep } from './ai-jobs'
+import { registerAiJobStep } from './ai-jobs'
 
 /**
  * The `crm` step (AGL-2917): CRM by AI, as proposals.
@@ -85,23 +88,35 @@ import { AI_JOBS_COLLECTION, registerAiJobStep } from './ai-jobs'
  * runs. A mapping sends the file's headers and each column's shape, never a
  * cell.
  *
- * ## It writes nothing
+ * ## It writes no CRM record
  *
- * Like every runner, this reads, asks and returns. The proposals ride on the
- * job's outputs; the CRM's task form, stage route, composer and import drawer
- * are the writes, and a member makes each one. No email is sent by a job.
+ * The CRM's task form, stage route, composer and import drawer are the
+ * writes, and a member makes each one. No email is sent by a job.
+ *
+ * ## The answer is kept apart from the job
+ *
+ * Every member of a workspace may read its jobs, and not every member may
+ * read every record. So a job's output names only the question — which
+ * record, which import — and the answer is kept at
+ * `orgs/{orgId}/aiCrmAnswers/{jobId}`, which no client may read, for two
+ * weeks (`AI_CRM_ANSWER_RETENTION_DAYS`). The answer door
+ * (`server/ai-crm-answer.ts`) serves it to a member the CRM still lets read
+ * the record, asking the same reader again.
  *
  * ## A summary is asked once per timeline
  *
  * A record answer is keyed on the whole request — the record, the site, the
  * model, the rules, the tool and the facts as the CRM reported them — and a
- * later job whose key matches a finished job's answer reuses it and spends
- * nothing. The facts change exactly when something the model was told
- * changes, so an unchanged record is never asked twice, and nothing is stored
- * for it beyond the job document.
+ * later job whose key matches a kept answer reuses it and spends nothing.
+ * The facts change exactly when something the model was told changes, so an
+ * unchanged record is never asked twice while its answer is kept.
  */
 
-/** ASSUMED: the facts read — the record and its three windowed queries, in parallel. */
+/**
+ * ASSUMED: the step's own round trips — the facts read (the record and its
+ * three windowed queries, in parallel), a record's reuse lookup, and the
+ * answer's write.
+ */
 export const AI_CRM_FACTS_READS_MS = 1_500
 
 /**
@@ -123,14 +138,14 @@ export const AI_JOB_CRM_STEP_MINIMUM_MS = AI_JOB_CRM_STEP_BUDGET.minimumMs
 /** How much of the member's request an email draft carries. */
 export const AI_CRM_EMAIL_REQUEST_MAX_CHARS = 600
 
-/** Jobs about one record a reuse lookup reads. */
+/** Kept answers to one request a reuse lookup reads. */
 export const AI_CRM_REUSE_CANDIDATES = 20
 
-/** How long a record answer stays reusable, beside its facts being unchanged. */
-export const AI_CRM_REUSE_WINDOW_MS = 30 * 24 * 60 * 60_000
+/** How long a record answer stays reusable, beside its facts being unchanged: as long as it is kept. */
+export const AI_CRM_REUSE_WINDOW_MS = AI_CRM_ANSWER_RETENTION_DAYS * 24 * 60 * 60_000
 
-export const AI_CRM_UNAVAILABLE_COPY = 'Turn on the CRM for this site before using AI with it.'
 export const AI_CRM_FACTS_FAILURE_COPY = 'The CRM record could not be read. Try again.'
+export const AI_CRM_KEEP_FAILURE_COPY = 'The answer could not be kept. Try again.'
 
 /** The generation kinds the step asks under, which the doctrine states only its field rules to. */
 export const AI_CRM_GENERATION_KINDS = {
@@ -428,25 +443,26 @@ export function aiCrmRecordKey(input: {
     ...input.system.map((block) => block.text),
     JSON.stringify(input.tool),
   ]) {
-    digest.update(`${part.length}:${part} `)
+    digest.update(`${part.length}:${part}\u0000`)
   }
   return digest.digest('hex')
 }
 
-/** A job about a record, as the reuse lookup reads it. */
-export interface AiCrmJobCandidate {
+/** A kept answer about a record, as the reuse lookup reads it. */
+export interface AiCrmAnswerCandidate {
   jobId: string
-  status: AiJobStatus
   hostId: string | null
-  outputs: AiJobOutput[]
-  updatedAtMs: number | null
+  task: string
+  key: string | null
+  createdAtMs: number | null
+  proposal: AiCrmProposal | null
 }
 
-export type AiCrmJobFinder = (
+export type AiCrmAnswerFinder = (
   orgId: string,
-  recordId: string,
+  key: string,
   firestore?: FirebaseFirestore.Firestore,
-) => Promise<AiCrmJobCandidate[]>
+) => Promise<AiCrmAnswerCandidate[]>
 
 const millis = (value: unknown): number | null => {
   if (value instanceof Date) return value.getTime()
@@ -455,49 +471,47 @@ const millis = (value: unknown): number | null => {
 }
 
 /**
- * The finder the step uses in production: one equality on the record id the
- * job's inputs carry, inside the org's own jobs. Firestore's automatic
- * single-field index answers it, so no composite index is deployed; the kind,
- * the site, the status and the window are applied in memory.
+ * The finder the step uses in production: one equality on the request key
+ * inside the org's kept answers. Firestore's automatic single-field index
+ * answers it, so no composite index is deployed; the site and the window are
+ * applied in memory.
  */
-export const findAiCrmJobsByRecord: AiCrmJobFinder = async (orgId, recordId, firestore) => {
+export const findAiCrmAnswersByKey: AiCrmAnswerFinder = async (orgId, key, firestore) => {
   if (!firestore) return []
   const snapshot = await firestore
     .collection('orgs')
     .doc(orgId)
-    .collection(AI_JOBS_COLLECTION)
-    .where('inputs.recordId', '==', recordId)
+    .collection(AI_CRM_ANSWERS_COLLECTION)
+    .where('key', '==', key)
     .limit(AI_CRM_REUSE_CANDIDATES)
     .get()
-  return snapshot.docs
-    .map((doc) => ({ doc, data: (doc.data() ?? {}) as Partial<AiJob> }))
-    .filter(({ data }) => data.kind === 'crm')
-    .map(({ doc, data }) => ({
+  return snapshot.docs.map((doc) => {
+    const data = (doc.data() ?? {}) as Partial<AiCrmAnswerRecord>
+    return {
       jobId: doc.id,
-      status: data.status ?? 'queued',
       hostId: data.hostId ?? null,
-      outputs: data.outputs ?? [],
-      updatedAtMs: millis(data.updatedAt),
-    }))
+      task: String(data.task ?? ''),
+      key: data.key ?? null,
+      createdAtMs: millis(data.createdAt),
+      proposal: readAiCrmProposal(data.proposal),
+    }
+  })
 }
 
-/** The newest finished answer another job produced for the same key, inside the window. */
+/** The newest answer another job kept for the same request, inside the window. */
 export function aiReusableCrmRecord(
-  candidates: readonly AiCrmJobCandidate[],
+  candidates: readonly AiCrmAnswerCandidate[],
   context: { jobId: string; hostId: string | null; key: string; now: Date },
 ): { jobId: string; proposal: AiCrmRecordProposal } | null {
   const floor = context.now.getTime() - AI_CRM_REUSE_WINDOW_MS
   let best: { jobId: string; proposal: AiCrmRecordProposal; at: number } | null = null
   for (const candidate of candidates) {
-    if (candidate.jobId === context.jobId || candidate.status !== 'done') continue
-    if (candidate.hostId !== context.hostId) continue
-    const at = candidate.updatedAtMs ?? 0
+    if (candidate.jobId === context.jobId || candidate.task !== 'record') continue
+    if (candidate.hostId !== context.hostId || candidate.key !== context.key) continue
+    if (candidate.proposal?.kind !== 'record') continue
+    const at = candidate.createdAtMs ?? 0
     if (at < floor) continue
-    for (const output of candidate.outputs) {
-      const proposal = output.resource === 'crm' ? (output.proposal as unknown as AiCrmRecordProposal | undefined) : undefined
-      if (proposal?.kind !== 'record' || proposal.key !== context.key) continue
-      if (!best || at > best.at) best = { jobId: candidate.jobId, proposal, at }
-    }
+    if (!best || at > best.at) best = { jobId: candidate.jobId, proposal: candidate.proposal, at }
   }
   return best ? { jobId: best.jobId, proposal: best.proposal } : null
 }
@@ -506,28 +520,15 @@ export function aiReusableCrmRecord(
  * Admission
  * ------------------------------------------------------------------------ */
 
-/** How a resource's reader is found; the core's registry by default. */
-export type AiCrmReaderLookup = (resource: string) => ResolvedPluginRecordFactsReader | null
-
-const factsResource = (request: AiCrmRequest): { resource: string; id: string } =>
-  request.task === 'mapping'
-    ? { resource: AI_CRM_IMPORT_FACTS_RESOURCE, id: request.collection }
-    : { resource: AI_CRM_FACTS_RESOURCES[request.record.kind], id: request.record.id }
-
 export interface AiCrmAdmissionDeps {
   readerFor?: AiCrmReaderLookup
   now?: () => Date
 }
 
 /**
- * Whether a `crm` job may start here for this member; `null` admits it.
- *
- * What an in-process read of the CRM would otherwise skip, in order: the
- * inputs name a record or an import; a named site is the job's org's; the CRM
- * is released for the org, switched on where the job runs and has registered
- * its reader in this process; and the CRM's own reader admits this member to
- * this record — its reach, `data.manage`, the plan and the record's
- * visibility, in the CRM's words. Asked at the create door before the job
+ * Whether a `crm` job may start here for this member; `null` admits it: its
+ * inputs name a record or an import, and the CRM would let the member read it
+ * ({@link aiCrmAccessRefusal}). Asked at the create door before the job
  * exists, so a refusal spends nothing. A door that names no member asks
  * nothing of the reader.
  */
@@ -537,33 +538,16 @@ export async function aiCrmAdmissionRefusal(
 ): Promise<AiJobAdmissionRefusal | null> {
   const request = parseAiCrmRequest(context.inputs)
   if (typeof request === 'string') return { status: 400, error: request }
-  const org = context.org as { enabledPlugins?: string[] } | null
-  const { hostId } = context
-  let host: Record<string, unknown> | null = null
-  if (hostId) {
-    const owner = await resolveOrgIdForHost(hostId)
-    if (!owner || owner !== context.orgId) return { status: 404, error: 'Unknown site' }
-    host = (await context.firestore.collection('hosts').doc(hostId).get()).data() ?? null
-  }
-  const { resource, id } = factsResource(request)
-  const found = (deps.readerFor ?? pluginRecordFactsReader)(resource)
-  const released = (
-    await filterEnabledPluginsByReleaseFlags([AI_CRM_PLUGIN_ID], { orgId: context.orgId, authorization: null })
-  ).includes(AI_CRM_PLUGIN_ID)
-  const enabled = hostId ? isHostPluginEnabled(org, host, AI_CRM_PLUGIN_ID) : isPluginEnabled(org, AI_CRM_PLUGIN_ID)
-  if (!found || found.pluginId !== AI_CRM_PLUGIN_ID || !released || !enabled) {
-    return { status: 403, error: AI_CRM_UNAVAILABLE_COPY }
-  }
-  if (!context.uid) return null
-  const read = await found.reader.read({
+  return aiCrmAccessRefusal({
+    firestore: context.firestore,
     orgId: context.orgId,
-    hostId: hostId ?? null,
-    id,
+    hostId: context.hostId ?? null,
+    ...aiCrmFactsResource(request),
+    org: context.org,
     uid: context.uid,
-    org: (context.org as Record<string, unknown> | null) ?? null,
+    ...(deps.readerFor ? { readerFor: deps.readerFor } : {}),
     now: deps.now?.() ?? new Date(),
   })
-  return read.ok === false ? { status: read.status, error: read.error } : null
 }
 
 export const aiCrmJobAdmission: AiJobAdmission = (context) => aiCrmAdmissionRefusal(context)
@@ -575,24 +559,49 @@ export const aiCrmJobAdmission: AiJobAdmission = (context) => aiCrmAdmissionRefu
 export interface AiJobCrmStepDeps {
   readerFor?: AiCrmReaderLookup
   /** The reuse lookup; specs hand in a fake, and `null` turns reuse off. */
-  findJobsByRecord?: AiCrmJobFinder | null
+  findAnswersByKey?: AiCrmAnswerFinder | null
 }
 
 function modelOf(context: AiJobStepContext): string {
   return context.modelFor?.('job.crm') ?? aiModelForStep('job.crm')
 }
 
+/** An answer as the step hands it to be kept; the job's ids and the clock are added. */
+type AiCrmAnswerToKeep = Pick<AiCrmAnswerRecord, 'task' | 'resource' | 'recordId' | 'proposal' | 'key'>
+
+/** What a step spent, whatever outputs it goes on to name. */
+type AiCrmSpent = Omit<AiJobStepOutcome, 'outputs'>
+
+/**
+ * Keeps an answer at `orgs/{orgId}/aiCrmAnswers/{jobId}`, which no client may
+ * read, on its own clock.
+ */
+async function keepAiCrmAnswer(context: AiJobStepContext, answer: AiCrmAnswerToKeep): Promise<void> {
+  const { job, now, firestore } = context
+  const record = JSON.parse(
+    JSON.stringify({ jobId: job.$id, orgId: job.orgId, hostId: job.hostId ?? null, createdBy: job.createdBy, ...answer }),
+  ) as AiCrmAnswerRecord
+  await firestore
+    .collection('orgs')
+    .doc(job.orgId)
+    .collection(AI_CRM_ANSWERS_COLLECTION)
+    .doc(job.$id)
+    .set({ ...record, createdAt: now, expiresAt: aiCrmAnswerExpiry(now) })
+}
+
 export function createAiJobCrmStep(deps: AiJobCrmStepDeps = {}): AiJobStepRunner {
   const readerFor = deps.readerFor ?? pluginRecordFactsReader
-  const findJobsByRecord = deps.findJobsByRecord === undefined ? findAiCrmJobsByRecord : deps.findJobsByRecord
+  const findAnswersByKey = deps.findAnswersByKey === undefined ? findAiCrmAnswersByKey : deps.findAnswersByKey
   return async (context): Promise<AiJobStepOutcome> => {
     const { job, now, signal, firestore } = context
     const model = modelOf(context)
     const request = parseAiCrmRequest(job.inputs)
     if (typeof request === 'string') return { ...aiUnspentOutcome(model), failure: request }
-    const { resource, id } = factsResource(request)
+    const { resource, id } = aiCrmFactsResource(request)
     const found = readerFor(resource)
-    if (!found || found.pluginId !== AI_CRM_PLUGIN_ID) return { ...aiUnspentOutcome(model), failure: AI_CRM_UNAVAILABLE_COPY }
+    if (!found || found.pluginId !== AI_CRM_PLUGIN_ID) {
+      return { ...aiUnspentOutcome(model), failure: AI_CRM_UNAVAILABLE_COPY }
+    }
     let facts: Facts
     try {
       const read = await found.reader.read({
@@ -613,6 +622,25 @@ export function createAiJobCrmStep(deps: AiJobCrmStepDeps = {}): AiJobStepRunner
     const maxTokens = AI_JOB_CRM_STEP_BUDGET.maxTokens(model)
     const hostId = job.hostId ?? null
 
+    // Keeps the answer, then names it on the job. A keep that fails fails the
+    // step as spent: the tokens were used, and there is nothing to show.
+    const keep = async (
+      spent: AiCrmSpent,
+      answer: AiCrmAnswerToKeep,
+      output: { id: string; label: string; ref: AiCrmOutputRef },
+    ): Promise<AiJobStepOutcome> => {
+      try {
+        await keepAiCrmAnswer(context, answer)
+      } catch (error) {
+        console.error('ai crm answer keep failed', { orgId: job.orgId, jobId: job.$id, error })
+        return { ...spent, outputs: [], failure: AI_CRM_KEEP_FAILURE_COPY }
+      }
+      return {
+        ...spent,
+        outputs: [{ resource: 'crm', id: output.id, hostId, label: output.label, proposal: { ...output.ref } }],
+      }
+    }
+
     if (request.task === 'record') {
       const { kind } = request.record
       if (facts['record'] !== kind) return { ...aiUnspentOutcome(model), failure: AI_CRM_FACTS_FAILURE_COPY }
@@ -631,18 +659,11 @@ export function createAiJobCrmStep(deps: AiJobCrmStepDeps = {}): AiJobStepRunner
         }),
         tool,
       })
-      const asOf = now.toISOString().slice(0, 10)
-      const output = (proposal: AiCrmRecordProposal): AiJobOutput => ({
-        resource: 'crm',
-        id: AI_CRM_OUTPUT_IDS.record(kind, id),
-        hostId,
-        label: OUTPUT_LABELS.record,
-        proposal: JSON.parse(JSON.stringify(proposal)) as Record<string, unknown>,
-      })
-      // Reuse before asking: a finished answer to the same key is the same
+      const output = { id: AI_CRM_OUTPUT_IDS.record(kind, id), label: OUTPUT_LABELS.record, ref: { kind: 'record', record: { kind, id } } } as const
+      // Reuse before asking: an answer kept for the same key is the same
       // request, so the member reads it again at no cost.
-      const reused = findJobsByRecord
-        ? aiReusableCrmRecord(await findJobsByRecord(job.orgId, id, firestore).catch(() => []), {
+      const reused = findAnswersByKey
+        ? aiReusableCrmRecord(await findAnswersByKey(job.orgId, key, firestore).catch(() => []), {
             jobId: job.$id,
             hostId,
             key,
@@ -650,9 +671,11 @@ export function createAiJobCrmStep(deps: AiJobCrmStepDeps = {}): AiJobStepRunner
           })
         : null
       if (reused) {
-        return aiUnspentOutcome(model, {
-          outputs: [output({ ...reused.proposal, reusedFrom: reused.jobId })],
-        })
+        return keep(
+          aiUnspentOutcome(model),
+          { task: 'record', resource, recordId: id, key, proposal: { ...reused.proposal, reusedFrom: reused.jobId } },
+          output,
+        )
       }
       const generation = await runValidatedGeneration(AI_CRM_GENERATION_KINDS.record, {
         step: 'job.crm',
@@ -667,22 +690,16 @@ export function createAiJobCrmStep(deps: AiJobCrmStepDeps = {}): AiJobStepRunner
       const spent = aiGenerationSpent(generation)
       if (generation.status === 'refused') return { ...spent, refused: true }
       if (generation.status === 'needs_input') return { ...spent, failure: generation.message }
-      const value = generation.value
-      return {
-        ...spent,
-        outputs: [
-          output({
-            kind: 'record',
-            record: { kind, id },
-            summary: value.summary,
-            nextStep: value.nextStep,
-            stage: value.stage,
-            standing: value.standing,
-            asOf,
-            key,
-          }),
-        ],
+      const proposal: AiCrmRecordProposal = {
+        kind: 'record',
+        record: { kind, id },
+        summary: generation.value.summary,
+        nextStep: generation.value.nextStep,
+        stage: generation.value.stage,
+        standing: generation.value.standing,
+        asOf: now.toISOString().slice(0, 10),
       }
+      return keep(spent, { task: 'record', resource, recordId: id, key, proposal }, output)
     }
 
     if (request.task === 'email') {
@@ -708,18 +725,11 @@ export function createAiJobCrmStep(deps: AiJobCrmStepDeps = {}): AiJobStepRunner
         subject: generation.value.subject,
         body: generation.value.body,
       }
-      return {
-        ...spent,
-        outputs: [
-          {
-            resource: 'crm',
-            id: AI_CRM_OUTPUT_IDS.email(kind, id),
-            hostId,
-            label: OUTPUT_LABELS.email,
-            proposal: { ...proposal },
-          },
-        ],
-      }
+      return keep(
+        spent,
+        { task: 'email', resource, recordId: id, key: null, proposal },
+        { id: AI_CRM_OUTPUT_IDS.email(kind, id), label: OUTPUT_LABELS.email, ref: { kind: 'email', record: { kind, id } } },
+      )
     }
 
     const fields = aiCrmImportFields(facts)
@@ -750,18 +760,15 @@ export function createAiJobCrmStep(deps: AiJobCrmStepDeps = {}): AiJobStepRunner
       matches: generation.value,
       columns: request.columns.length,
     }
-    return {
-      ...spent,
-      outputs: [
-        {
-          resource: 'crm',
-          id: AI_CRM_OUTPUT_IDS.mapping(request.collection),
-          hostId,
-          label: OUTPUT_LABELS.mapping,
-          proposal: JSON.parse(JSON.stringify(proposal)) as Record<string, unknown>,
-        },
-      ],
-    }
+    return keep(
+      spent,
+      { task: 'mapping', resource, recordId: request.collection, key: null, proposal },
+      {
+        id: AI_CRM_OUTPUT_IDS.mapping(request.collection),
+        label: OUTPUT_LABELS.mapping,
+        ref: { kind: 'mapping', collection: request.collection },
+      },
+    )
   }
 }
 

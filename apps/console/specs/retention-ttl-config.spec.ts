@@ -138,6 +138,13 @@ const POLICIES: Array<{
     writers: ['libs/plugins/ai/src/lib/usage/assist-usage.ts'],
     stamp: 'expiresAt: assistExchangeExpiry(now)',
   },
+  // AGL-2917: an answer a CRM job wrote from a person's record, kept two
+  // weeks, apart from the job, by the step that wrote it.
+  {
+    collectionGroup: 'aiCrmAnswers',
+    writers: ['libs/plugins/ai/src/lib/jobs/ai-job-crm-step.ts'],
+    stamp: 'expiresAt: aiCrmAnswerExpiry(now)',
+  },
   // AGL-2904: an AI generation job carries the customer's brief verbatim,
   // so it expires on the exchange's clock, stamped by the one writer.
   {

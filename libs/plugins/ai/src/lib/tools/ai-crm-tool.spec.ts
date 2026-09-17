@@ -16,12 +16,14 @@
  */
 
 import {
+  AI_CRM_ANSWER_RETENTION_DAYS,
   AI_CRM_MAX_COLUMNS,
+  aiCrmAnswerExpiry,
   aiCrmColumnsInput,
-  aiCrmEmailProposalOf,
-  aiCrmMappingProposalOf,
-  aiCrmRecordProposalOf,
+  aiCrmJobAnswers,
   parseAiCrmRequest,
+  readAiCrmOutputRef,
+  readAiCrmProposal,
 } from '../model/ai-crm'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import {
@@ -33,8 +35,8 @@ import {
 } from './ai-crm-tool'
 
 /**
- * The CRM tools' schemas and checks (AGL-2917), and the request and proposal
- * readers the step and the widgets share. The step spec drives these through
+ * The CRM tools' schemas and checks (AGL-2917), and the request, reference
+ * and answer readers the step, the answer door and the widgets share. The step spec drives these through
  * a generation; this one pins each refusal on its own.
  */
 
@@ -191,19 +193,46 @@ describe('the request and the proposals', () => {
     expect(parseAiCrmRequest({})).toBe('This CRM request does not say what it is for')
   })
 
-  it('finds each proposal on a job by the record or the import it is about', () => {
+  it('finds the job that answered a question by the reference its output names, and nothing else', () => {
     const job = {
+      kind: 'crm',
       outputs: [
-        { resource: 'crm', id: 'record:contact:c-1', hostId: null, label: 'CRM summary', proposal: { kind: 'record', record: { kind: 'contact', id: 'c-1' }, summary: 'S' } },
-        { resource: 'crm', id: 'email:lead:l-1', hostId: 'h', label: 'CRM email draft', proposal: { kind: 'email', record: { kind: 'lead', id: 'l-1' }, subject: 'S', body: 'B' } },
-        { resource: 'crm', id: 'mapping:deals', hostId: 'h', label: 'Import column matches', proposal: { kind: 'mapping', collection: 'deals', matches: [], columns: 2 } },
-        { resource: 'seo', id: 'fields', hostId: 'h', label: 'SEO', proposal: { kind: 'record', record: { kind: 'contact', id: 'c-1' }, summary: 'Not a CRM output' } },
+        { resource: 'crm', id: 'record:contact:c-1', hostId: null, label: 'CRM summary', proposal: { kind: 'record', record: { kind: 'contact', id: 'c-1' } } },
+        { resource: 'crm', id: 'email:lead:l-1', hostId: 'h', label: 'CRM email draft', proposal: { kind: 'email', record: { kind: 'lead', id: 'l-1' } } },
+        { resource: 'crm', id: 'mapping:deals', hostId: 'h', label: 'Import column matches', proposal: { kind: 'mapping', collection: 'deals' } },
+        { resource: 'seo', id: 'fields', hostId: 'h', label: 'SEO', proposal: { kind: 'record', record: { kind: 'company', id: 'x-1' } } },
       ],
     } as unknown as AiJobSummary
-    expect(aiCrmRecordProposalOf(job, { kind: 'contact', id: 'c-1' })?.summary).toBe('S')
-    expect(aiCrmRecordProposalOf(job, { kind: 'deal', id: 'c-1' })).toBeNull()
-    expect(aiCrmEmailProposalOf(job, { kind: 'lead', id: 'l-1' })?.body).toBe('B')
-    expect(aiCrmMappingProposalOf(job, 'deals')?.columns).toBe(2)
-    expect(aiCrmMappingProposalOf(null, 'deals')).toBeNull()
+    expect(aiCrmJobAnswers(job, { kind: 'record', record: { kind: 'contact', id: 'c-1' } })).toBe(true)
+    expect(aiCrmJobAnswers(job, { kind: 'email', record: { kind: 'contact', id: 'c-1' } })).toBe(false)
+    expect(aiCrmJobAnswers(job, { kind: 'record', record: { kind: 'deal', id: 'c-1' } })).toBe(false)
+    expect(aiCrmJobAnswers(job, { kind: 'email', record: { kind: 'lead', id: 'l-1' } })).toBe(true)
+    expect(aiCrmJobAnswers(job, { kind: 'mapping', collection: 'deals' })).toBe(true)
+    expect(aiCrmJobAnswers(job, { kind: 'mapping', collection: 'leads' })).toBe(false)
+    // Another output's resource is not a CRM answer, and nor is another kind's job.
+    expect(aiCrmJobAnswers(job, { kind: 'record', record: { kind: 'company', id: 'x-1' } })).toBe(false)
+    expect(aiCrmJobAnswers({ ...job, kind: 'seo' }, { kind: 'mapping', collection: 'deals' })).toBe(false)
+    expect(aiCrmJobAnswers(null, { kind: 'mapping', collection: 'deals' })).toBe(false)
+  })
+
+  it('reads a reference as only the question, whatever else an output carries', () => {
+    expect(readAiCrmOutputRef({ kind: 'record', record: { kind: 'deal', id: 'd-1', name: 'x' }, summary: 'S' })).toEqual({
+      kind: 'record',
+      record: { kind: 'deal', id: 'd-1' },
+    })
+    expect(readAiCrmOutputRef({ kind: 'mapping', collection: 'contacts', matches: [] })).toEqual({ kind: 'mapping', collection: 'contacts' })
+    expect(readAiCrmOutputRef({ kind: 'record', record: { kind: 'invoice', id: 'i-1' } })).toBeNull()
+    expect(readAiCrmOutputRef({ kind: 'mapping', collection: 'invoices' })).toBeNull()
+    expect(readAiCrmOutputRef('record')).toBeNull()
+  })
+
+  it('reads back only a whole answer, and keeps it for its own days', () => {
+    expect(readAiCrmProposal({ kind: 'record', record: { kind: 'contact', id: 'c-1' }, summary: 'S' })).toMatchObject({ summary: 'S' })
+    expect(readAiCrmProposal({ kind: 'record', record: { kind: 'contact', id: 'c-1' } })).toBeNull()
+    expect(readAiCrmProposal({ kind: 'email', record: { kind: 'lead', id: 'l-1' }, subject: 'S' })).toBeNull()
+    expect(readAiCrmProposal({ kind: 'mapping', collection: 'deals', matches: [], columns: 2 })).toMatchObject({ columns: 2 })
+    expect(readAiCrmProposal([])).toBeNull()
+    const now = new Date('2026-09-16T15:00:00.000Z')
+    expect(aiCrmAnswerExpiry(now).getTime() - now.getTime()).toBe(AI_CRM_ANSWER_RETENTION_DAYS * 86_400_000)
   })
 })
