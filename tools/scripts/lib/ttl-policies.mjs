@@ -97,6 +97,14 @@ export const TTL_POLICIES = Object.freeze([
     why: 'AI generation jobs (verbatim brief), 180 days',
   },
   {
+    collection: 'aiInsights',
+    field: 'expiresAt',
+    // AGL-2915 — an insight job's answer under `orgs/{orgId}/aiInsights/{jobId}`:
+    // the question verbatim and the tables of figures it was written from. The
+    // step stamps the job's own 180-day expiry.
+    why: 'AI insight answers (verbatim question, figure tables), 180 days',
+  },
+  {
     collection: 'months',
     field: 'expiresAt',
     // AGL-2928 — a person's monthly AI usage rollup under
