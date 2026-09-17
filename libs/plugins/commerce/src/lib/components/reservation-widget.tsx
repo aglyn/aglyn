@@ -28,7 +28,14 @@ import Button from '@mui/material/Button'
 import Divider from '@mui/material/Divider'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -60,6 +67,7 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
+    const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
     const siteFetch = Aglyn.useSiteFetch()
     const [availability, setAvailability] = useState<Availability | null>(null)
     const [checkIn, setCheckIn] = useState('')
@@ -224,6 +232,9 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
       )
     }
     if (!resourceId) {
+      // The instruction is for the author, so only editing surfaces draw it;
+      // a published page renders the bare element.
+      if (!suppressNavigation) return <Box ref={ref} {...rest} />
       return (
         <Box ref={ref} {...rest} sx={[{ p: 2 }, ...nodeSx]}>
           <Typography variant="body2" color="text.secondary">
