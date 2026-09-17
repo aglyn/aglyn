@@ -47,6 +47,11 @@ export const PLUGIN_DOCS = {
     title: 'Draft and explain automations with AI',
     excerpt: 'Describe an automation and Aglyn AI drafts it switched off, from only the triggers and steps your plan includes. It can also explain an automation, and why one of its runs failed.',
   },
+  aiCrm: {
+    path: '/ai/crm-by-ai',
+    title: 'CRM by AI',
+    excerpt: 'A short summary and a suggested next step on a contact, company, deal or lead, a one-to-one email drafted into the composer, and an import\'s columns matched to fields. Aglyn AI suggests; you save, send and import.',
+  },
   aiMonitoring: {
     path: '/staff-console/ai-monitoring',
     title: 'AI monitoring',
@@ -250,6 +255,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   actionsBuilder: ['#create-an-action', '#recipes', '#describe-it', '#triggers', '#crm-events', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#crm-steps', '#step-conditions', '#sequences', '#run-history', '#what-is-and-isnt-recorded', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
   aglynAssist: ['#what-it-can-do', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#edits-in-the-besigner', '#where-an-answer-came-from', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
   aiAutomations: ['#draft', '#what-a-draft-uses', '#placeholders', '#explain', '#why-a-run-failed', '#what-is-sent', '#who-can-use-it', '#related'],
+  aiCrm: ['#summarize-a-record', '#summaries-are-reused-until-the-record-changes', '#draft-an-email', '#match-columns', '#what-is-sent', '#who-can-use-it', '#related'],
   aiMonitoring: ['#the-ai-card', '#where-else', '#one-account', '#the-spend-leaderboard', '#alerts', '#related'],
   aiProducts: ['#write-a-products-copy', '#write-copy-for-many-products', '#when-you-import-products', '#propose-a-first-catalog', '#propose-categories-and-discounts', '#what-the-copy-never-says', '#what-is-sent-to-the-ai-provider', '#who-can-use-it', '#related'],
   aiSeo: ['#write-a-pages-listing', '#write-a-products-listing', '#audit-the-whole-site', '#target-keywords', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],

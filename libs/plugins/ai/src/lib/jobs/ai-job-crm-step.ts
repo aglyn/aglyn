@@ -20,6 +20,7 @@ import { pluginRecordFactsReader } from '@aglyn/aglyn/plugin-manager/plugin-reco
 import {
   AI_CRM_ANSWER_RETENTION_DAYS,
   AI_CRM_ANSWERS_COLLECTION,
+  AI_CRM_EMAIL_REQUEST_MAX_CHARS,
   AI_CRM_OUTPUT_IDS,
   AI_CRM_PLUGIN_ID,
   aiCrmAnswerExpiry,
@@ -134,9 +135,6 @@ export const AI_JOB_CRM_STEP_BUDGET = aiJobStepBudget({
 
 /** The least time one CRM step needs before it starts. */
 export const AI_JOB_CRM_STEP_MINIMUM_MS = AI_JOB_CRM_STEP_BUDGET.minimumMs
-
-/** How much of the member's request an email draft carries. */
-export const AI_CRM_EMAIL_REQUEST_MAX_CHARS = 600
 
 /** Kept answers to one request a reuse lookup reads. */
 export const AI_CRM_REUSE_CANDIDATES = 20

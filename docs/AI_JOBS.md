@@ -2331,6 +2331,19 @@ from the job, and the step writes no CRM record.
   composite index) and reuses the newest on the same site at no cost, keeping
   it again under the new job with `reusedFrom`. An answer is reusable for as
   long as it is kept.
+- **Where a member asks.** Three console widgets, each held by the shell to
+  `aiGenerative` and `ai.generate` and by the jobs route's verdict, sharing
+  `src/lib/components/use-ai-crm-answer.ts`:
+  `ai-crm-record-card.component.tsx` in the CRM's `recordInsights` zone on a
+  contact's, company's, deal's or lead's page; `ai-crm-email-draft.component.tsx`
+  in `recordEmail`, in the one-to-one composer; and
+  `ai-crm-import-mapping.component.tsx` in `importMapping`, in the four import
+  drawers. A record card recalls the newest summary any member asked for on
+  the same site; a draft and a matching are asked afresh. A brief names no
+  record (`Summarize this contact`), except a draft's, which is the member's
+  request. Each hands its proposal to the zone's own door — `proposeTask`,
+  `proposeStage`, `proposeDraft`, `proposeMapping` — and none writes. The
+  customer page is `apps/docs/docs/ai/crm-by-ai.md` (`aiCrm`).
 - **Routing and time.** `job.crm` runs on the fast tier with no thinking and a
   700-token ceiling: sixty columns matched to fields by number, or an email
   draft at its limits, at three characters a token with room. It sends no site

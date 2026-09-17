@@ -107,6 +107,9 @@ export const AI_CRM_MAX_COLUMNS = 60
 /** How much of a column header is sent. */
 export const AI_CRM_HEADER_MAX_CHARS = 60
 
+/** How much of the member's request an email draft carries. */
+export const AI_CRM_EMAIL_REQUEST_MAX_CHARS = 600
+
 /** Lengths the CRM tools hold an answer to. */
 export const AI_CRM_LIMITS = {
   summary: 320,

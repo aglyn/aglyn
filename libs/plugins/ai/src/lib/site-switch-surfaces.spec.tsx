@@ -87,6 +87,13 @@ const SITE_ZONES: readonly string[] = [
   CONSOLE_WIDGET_SLOTS.productEditor,
   CONSOLE_WIDGET_SLOTS.productsHub,
   CONSOLE_WIDGET_SLOTS.productImport,
+  // The CRM's record pages, composer and imports (AGL-2917). Under a site
+  // they are listed from the site's set; at the organization level, from the
+  // workspace's, where a job still names the record's site when it has one
+  // and the jobs route refuses a site that switched AI off.
+  CONSOLE_WIDGET_SLOTS.recordInsights,
+  CONSOLE_WIDGET_SLOTS.recordEmail,
+  CONSOLE_WIDGET_SLOTS.importMapping,
 ]
 
 /** Zones drawn on the WORKSPACE's pages, where no site's switch reaches. */

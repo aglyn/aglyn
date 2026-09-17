@@ -61,6 +61,9 @@ import AiSeoAuditCard from './components/ai-seo-audit-card.component'
 import AiSiteBatchCard from './components/ai-site-batch-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
 import AiDescribeAutomationButton from './components/ai-describe-automation.component'
+import AiCrmEmailDraft from './components/ai-crm-email-draft.component'
+import AiCrmImportMapping from './components/ai-crm-import-mapping.component'
+import AiCrmRecordCard from './components/ai-crm-record-card.component'
 import AiDescribePageButton from './components/ai-describe-page.component'
 import {
   AiDescribeComponentButton,
@@ -405,6 +408,36 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiExplainRunFailure,
+      },
+      // CRM by AI (AGL-2917): a record's summary and next step on its page,
+      // a draft in the one-to-one composer, and an import's column matches.
+      // The CRM hosts each zone, so it is drawn only where the CRM is; the
+      // shell holds the plan and `ai.generate`, each card asks the jobs route
+      // about the release flag before it shows anything, and none writes what
+      // it proposes.
+      {
+        slot: 'recordInsights',
+        widgetId: 'ai-crm-record',
+        title: 'AI summary',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiCrmRecordCard,
+      },
+      {
+        slot: 'recordEmail',
+        widgetId: 'ai-crm-email',
+        title: 'Draft with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiCrmEmailDraft,
+      },
+      {
+        slot: 'importMapping',
+        widgetId: 'ai-crm-import-mapping',
+        title: 'Match columns with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiCrmImportMapping,
       },
       // The agency batch (AGL-2911): one brief across many of the org's
       // sites, from the page that lists them. The card asks the jobs route

@@ -205,6 +205,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/content-and-data/crm/overview',
     title: 'CRM',
   },
+  crmByAi: {
+    path: '/ai/crm-by-ai',
+    title: 'CRM by AI',
+  },
   customDomains: {
     path: '/building-sites/custom-domains/overview',
     title: 'Custom Domains',
@@ -728,6 +732,7 @@ export const DOCS_HELP_ANCHORS = {
   copyPaste: ['#copy', '#paste', '#between-documents', '#copy--paste-vs-duplicate-vs-reusable-components', '#shortcuts', '#related'],
   createARedirect: ['#add-a-rule', '#read-hit-metrics', '#related'],
   crm: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-from-csv', '#segments', '#everywhere-the-crm-shows-up', '#capture-replies', '#at-the-organization-level', '#who-can-open-the-crm', '#related'],
+  crmByAi: ['#summarize-a-record', '#summaries-are-reused-until-the-record-changes', '#draft-an-email', '#match-columns', '#what-is-sent', '#who-can-use-it', '#related'],
   customDomains: ['#connect-a-domain', '#related'],
   customFields: ['#define-a-field', '#fields-per-record', '#where-values-show', '#save-a-form-field', '#over-the-api', '#retire-restore-delete', '#recompute-next-activity', '#related'],
   customRoles: ['#create-a-custom-role', '#ai-permissions', '#effective-permissions', '#per-member-overrides', '#tips', '#related'],

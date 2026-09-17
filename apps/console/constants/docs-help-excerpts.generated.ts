@@ -78,6 +78,7 @@ export const DOCS_HELP_EXCERPTS = {
   copyPaste: 'Copy any element — with its children — and paste it elsewhere, including into a different screen, layout or component.',
   createARedirect: 'Add a redirect rule and read its hit metrics.',
   crm: 'One place for the people who interact with your sites — contacts captured from forms, members, orders and bookings, with leads, companies, a deals pipeline, tasks, a timeline, reports and custom fields.',
+  crmByAi: 'A short summary and a suggested next step on a contact, company, deal or lead, a one-to-one email drafted into the composer, and an import\'s columns matched to fields. Aglyn AI suggests; you save, send and import.',
   customDomains: 'Connect your own domain — subdomain or bare apex — with one-click DNS verification.',
   customFields: 'Define your own properties on contacts, companies and deals — text, number, date, choice, checkbox or link — show them on every record and its list, and save form answers straight into a contact\'s.',
   customRoles: 'Define roles with unique permission sets and fine-tune access per member.',
