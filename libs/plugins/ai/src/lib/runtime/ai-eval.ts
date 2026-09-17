@@ -254,6 +254,12 @@ export interface AiEvalCandidate {
    * Absent on an authored answer, and on a recording of a single exchange.
    */
   steps?: AiEvalRecordedStep[]
+  /**
+   * What a recorded page was built as beside its tree (AGL-3073): its
+   * screen's address and listing, and the layout it renders inside. Absent
+   * on an authored answer, and on a recording made before it was kept.
+   */
+  screen?: AiEvalRecordedScreen
   rubric: AiEvalRubric
   note?: string
 }
@@ -266,6 +272,34 @@ export interface AiEvalRecordedStep {
   estCostUsd: number
   /** What the machine meters it as: the billed cost in credits, rounded up per exchange. */
   credits: number
+}
+
+/**
+ * A recorded page's screen, as the page step stored its draft. None of it is
+ * a node of the page's tree: the address and the listing are fields of the
+ * screen, the navigation entry is a proposal beside it, and the header, the
+ * footer and the main landmark belong to the layout it renders inside.
+ */
+export interface AiEvalRecordedScreen {
+  /** The draft's one-segment address, as the draft writer stored it. */
+  slug: string
+  /** The search title and description the draft holds; `null` where it holds none. */
+  seoTitle: string | null
+  seoDescription: string | null
+  /** Whether a navigation entry for the page travels with it as a proposal. */
+  nav: boolean
+  /** The layout the draft renders inside; `null` for a page that renders inside none. */
+  layout: AiEvalRecordedLayout | null
+}
+
+/** The layout a recorded page renders inside. */
+export interface AiEvalRecordedLayout {
+  id: string
+  name: string
+  /** `true` for a layout the job built before the page; `false` for one the site already had. */
+  built: boolean
+  /** Its tree as stored; `null` for a layout the case's site lists by name alone. */
+  tree: { rootId: string; nodes: Record<string, unknown> } | null
 }
 
 /** An answer that must fail, and the checks it must fail. */

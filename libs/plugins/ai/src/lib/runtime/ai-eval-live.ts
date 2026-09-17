@@ -16,6 +16,8 @@
  */
 
 import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+import { LAYOUT_SLOT_COMPONENT_ID } from '@aglyn/aglyn/app-utils/compose-layout-nodes'
+import { stampDocumentLandmark } from '@aglyn/aglyn/app-utils/document-landmark'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import { createAiJobComponentStep } from '../jobs/ai-job-component-step'
@@ -38,6 +40,7 @@ import {
   type AiEvalCandidate,
   type AiEvalCase,
   type AiEvalKind,
+  type AiEvalRecordedScreen,
   type AiEvalRecordedStep,
   type AiEvalRubric,
 } from './ai-eval'
@@ -69,7 +72,10 @@ import { aiEvalMemoryFirestore, aiEvalMemoryInventory } from './ai-eval-memory-f
  * step's runner against a site kept in memory — the layout, forms and
  * components its plan creates built first by their own steps (AGL-3031) —
  * each exchange's spend kept as the machine meters it. That is what proves
- * what one page costs, on the workspace the case describes.
+ * what one page costs, on the workspace the case describes. Beside the page's
+ * tree it keeps the draft's screen — its address, its listing and the layout
+ * it renders inside — which the page's grader is shown with the plan
+ * (AGL-3073).
  */
 
 /** The environment variable a live run must be named by. */
@@ -365,12 +371,10 @@ const recordPage: AiEvalRecorder = async (evalCase, options) => {
     if (!outcome.continue) break
   }
 
-  const screen = site.docs.get(`hosts/${hostId}/screens/${job.$id}`)
-  const version = screen
-    ? site.docs.get(`hosts/${hostId}/screens/${job.$id}/versions/${String(screen['versionId'])}`)
-    : undefined
-  const nodes = version ? decodeStoredNodes<Record<string, unknown>>(version['nodes']) : null
+  const screenPath = `hosts/${hostId}/screens/${job.$id}`
+  const nodes = storedTree(site.docs, screenPath)
   const built = outputs.some((output) => output.resource === 'screen')
+  const screen = built && nodes ? recordedScreen(evalCase, site.docs, screenPath, outputs) : undefined
   return {
     source: 'recorded',
     scope: built && nodes ? 'full' : 'plan',
@@ -381,7 +385,58 @@ const recordPage: AiEvalRecorder = async (evalCase, options) => {
     answer: built && nodes ? { tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes } } : null,
     usage: totalUsage(steps),
     steps,
+    ...(screen ? { screen } : {}),
     ...(stopped ? { note: `stopped: ${stopped}` } : {}),
+  }
+}
+
+/** A string a stored document holds, trimmed; `null` for none. */
+function storedText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+/** The node map a versioned draft's first version holds, decoded; `null` when there is none. */
+function storedTree(docs: ReadonlyMap<string, Record<string, unknown>>, draftPath: string): Record<string, unknown> | null {
+  const draft = docs.get(draftPath)
+  const version = draft ? docs.get(`${draftPath}/versions/${String(draft['versionId'])}`) : undefined
+  return version ? decodeStoredNodes<Record<string, unknown>>(version['nodes']) : null
+}
+
+/**
+ * The draft screen a page job wrote, as its grader reads it beside the tree
+ * (AGL-3073): the address and listing the draft holds, whether its output
+ * proposes a navigation entry, and the layout its version renders inside —
+ * one this job built, with its tree, or one the case's site lists by name.
+ */
+function recordedScreen(
+  evalCase: AiEvalCase,
+  docs: ReadonlyMap<string, Record<string, unknown>>,
+  screenPath: string,
+  outputs: readonly AiJobOutput[],
+): AiEvalRecordedScreen | undefined {
+  const screen = docs.get(screenPath)
+  const version = screen ? docs.get(`${screenPath}/versions/${String(screen['versionId'])}`) : undefined
+  if (!screen || !version) return undefined
+  const seo = (screen['seo'] ?? {}) as Record<string, unknown>
+  const layoutId = storedText(version['layoutId'])
+  const layoutPath = `${screenPath.split('/').slice(0, 2).join('/')}/layouts/${layoutId}`
+  const built = layoutId ? docs.get(layoutPath) : undefined
+  const listed = layoutId ? evalCase.inventory?.layouts.find((row) => row.id === layoutId) : undefined
+  const nodes = built ? storedTree(docs, layoutPath) : null
+  return {
+    slug: String(screen['slug'] ?? ''),
+    seoTitle: storedText(seo['title']),
+    seoDescription: storedText(seo['description']),
+    nav: outputs.some((output) => output.resource === 'screen' && output.proposal?.['navigation'] != null),
+    layout:
+      layoutId && (built || listed)
+        ? {
+            id: layoutId,
+            name: storedText(built?.['displayName']) ?? listed?.name ?? layoutId,
+            built: Boolean(built),
+            tree: nodes ? { rootId: CANVAS_ROOT_ELEMENT_ID, nodes } : null,
+          }
+        : null,
   }
 }
 
@@ -565,19 +620,221 @@ export function aiEvalGraderCapabilities(evalCase: AiEvalCase): string | null {
 }
 
 /**
+ * What the grader of a built page is told beside it (AGL-3073).
+ *
+ * A page's tree holds only what the page adds. The site's header, navigation
+ * and footer are its layout's; the one main landmark is placed when the page
+ * is composed (`stampDocumentLandmark`), on the layout's slot where the page
+ * renders, or on the page's root when it renders inside none; and its address
+ * and listing are fields of its screen. A grader shown the tree alone marks a
+ * page down for a layout, a landmark and a listing the page has.
+ */
+export const AI_EVAL_PAGE_GRADER_NOTE =
+  'A page is built inside its layout and published as a screen, so its tree holds only what the page adds: ' +
+  "the site's header, navigation and footer are the layout's; the page's one main landmark is placed when it is " +
+  "published, on the layout's slot where the page renders, or on the page's root when it has no layout; and its " +
+  'address, search title and description are fields of its screen. Grade the page as built with all of them, as ' +
+  'listed above, and never mark it down for a layout, a landmark, an address or a listing its tree does not repeat.'
+
+/** The most elements a layout's outline lists; the rest are counted. */
+export const AI_EVAL_LAYOUT_OUTLINE_MAX_LINES = 40
+
+/** The most characters of an element's own text an outline quotes. */
+const AI_EVAL_OUTLINE_TEXT_MAX_CHARS = 48
+
+type Loose = Record<string, unknown>
+
+const isLoose = (value: unknown): value is Loose =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const looseList = (value: unknown): Loose[] => (Array.isArray(value) ? value.filter(isLoose) : [])
+
+const looseText = (value: unknown): string => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '')
+
+/** An element of an outline: what it renders as, its component, and its own text, quoted short. */
+function outlineLine(node: Loose): string {
+  const props = isLoose(node['props']) ? node['props'] : {}
+  const element = looseText(props['component']) || looseText(props['element'])
+  const text = looseText(props['children'])
+  const quoted = text
+    ? ` "${text.length > AI_EVAL_OUTLINE_TEXT_MAX_CHARS ? `${text.slice(0, AI_EVAL_OUTLINE_TEXT_MAX_CHARS)}…` : text}"`
+    : ''
+  const slot = node['componentId'] === LAYOUT_SLOT_COMPONENT_ID ? ' ← the page renders here' : ''
+  return `${element ? `${element} · ` : ''}${String(node['componentId'] ?? '?')}${quoted}${slot}`
+}
+
+/**
+ * A layout as its page's grader reads it (AGL-3073): an element a line,
+ * indented by depth, named by the element it renders as and its component,
+ * with its own text quoted short. The main landmark is placed where a
+ * published page places it, by the function that places it there.
+ */
+export function aiEvalLayoutOutline(tree: { rootId: string; nodes: Record<string, unknown> }): string {
+  const nodes = stampDocumentLandmark(tree.nodes as never) as Record<string, unknown>
+  const lines: string[] = []
+  const seen = new Set<string>()
+  let unlisted = 0
+  const visit = (id: string, depth: number): void => {
+    const node = nodes[id]
+    if (!isLoose(node) || seen.has(id)) return
+    seen.add(id)
+    if (lines.length < AI_EVAL_LAYOUT_OUTLINE_MAX_LINES) lines.push(`${'  '.repeat(depth)}${outlineLine(node)}`)
+    else unlisted += 1
+    for (const child of Array.isArray(node['nodes']) ? node['nodes'] : []) {
+      if (typeof child === 'string') visit(child, depth + 1)
+    }
+  }
+  visit(tree.rootId, 0)
+  return [...lines, ...(unlisted ? [`… and ${unlisted} more elements`] : [])].join('\n')
+}
+
+/**
+ * The plan a built answer came from, as its grader reads it (AGL-3073): what
+ * it reuses and creates, and each screen's sections in order, with what each
+ * places and how many items it shows. `null` for an answer with no plan.
+ */
+export function aiEvalPlanOutline(plan: unknown): string | null {
+  if (!isLoose(plan)) return null
+  const lines = ['The plan it was built from, as the member confirmed it:']
+  for (const entry of looseList(plan['reuse'])) {
+    lines.push(`- reuses the ${looseText(entry['kind'])} ${looseText(entry['id'])}: ${looseText(entry['purpose'])}`)
+  }
+  for (const entry of looseList(plan['create'])) {
+    const fields = Array.isArray(entry['fields']) ? entry['fields'].map(looseText).filter(Boolean) : []
+    lines.push(
+      `- creates the ${looseText(entry['kind'])} "${looseText(entry['name'])}": ${looseText(entry['why'])}${
+        fields.length ? ` Holds: ${fields.join('; ')}.` : ''
+      }`,
+    )
+  }
+  for (const screen of looseList(plan['screens'])) {
+    lines.push(`- the screen "${looseText(screen['title'])}", its sections in order:`)
+    looseList(screen['sections']).forEach((section, index) => {
+      const uses = Array.isArray(section['uses']) ? section['uses'].map(looseText).filter(Boolean) : []
+      const items = Number(section['items'])
+      lines.push(
+        `  ${index + 1}. ${looseText(section['name'])}${uses.length ? `, placing ${uses.join(', ')}` : ''}${
+          items > 0 ? `, ${items} ${items === 1 ? 'item' : 'items'}` : ''
+        }`,
+      )
+    })
+  }
+  return lines.length > 1 ? lines.join('\n') : null
+}
+
+/** A screen's address as a visitor reads it. */
+function addressOf(slug: string): string {
+  return slug.startsWith('/') ? slug : `/${slug}`
+}
+
+/** A listing value quoted, or said to be missing. */
+function listingValue(value: string | null | undefined): string {
+  return value ? `"${value}"` : 'none'
+}
+
+/**
+ * A built page's screen and layout, as its grader reads them (AGL-3073). A
+ * recording that kept the draft's screen gives its stored address and listing
+ * and the layout it renders inside, outlined from its tree. One made before
+ * that was kept gives its plan's screen instead, which is what the page step
+ * builds from, and says so.
+ */
+export function aiEvalBuiltPage(answer: AiEvalRecordedAnswer): string | null {
+  const recorded = answer.screen
+  const plan = isLoose(answer.plan) ? answer.plan : null
+  const planned = looseList(plan?.['screens'])[0]
+  if (!recorded && !planned) return null
+  if (recorded) {
+    const layout = recorded.layout
+    return [
+      'The page as built:',
+      `- address: ${addressOf(recorded.slug)}`,
+      `- search title: ${listingValue(recorded.seoTitle)}`,
+      `- search description: ${listingValue(recorded.seoDescription)}`,
+      `- navigation: ${recorded.nav ? 'an entry for the page is proposed' : 'no entry is proposed'}`,
+      !layout
+        ? "- layout: none, so the page's root is its main landmark"
+        : layout.tree
+          ? `- layout: "${layout.name}", ${layout.built ? 'built by this job before the page' : 'which the site already had'}. Its outline:\n${aiEvalLayoutOutline(layout.tree)
+              .split('\n')
+              .map((line) => `  ${line}`)
+              .join('\n')}`
+          : `- layout: "${layout.name}", which the site already has; the page renders in its slot`,
+    ].join('\n')
+  }
+  const reference = looseText(planned['layout'])
+  const created = reference.startsWith('new:')
+    ? looseList(plan?.['create']).find(
+        (entry) => entry['kind'] === 'layout' && looseText(entry['name']) === reference.slice('new:'.length),
+      )
+    : undefined
+  const builtByJob = (answer.steps ?? []).some((step) => step.step === 'job.layout')
+  // What the layout holds is on the plan's own line above; it is not repeated.
+  const layout = !reference
+    ? "- layout: none, so the page's root is its main landmark"
+    : created
+      ? `- layout: "${looseText(created['name'])}", which the plan creates${
+          builtByJob ? ' and this job built before the page' : ''
+        }. A layout this job builds holds one Layout Slot, where the page renders, and the slot is the page's main landmark; the recording kept no tree of it`
+      : `- layout: ${reference}, which the site already has; the page renders in its slot`
+  return [
+    "The page as its plan built it (the recording kept no record of the draft's screen):",
+    `- address: ${addressOf(looseText(planned['slug']))}`,
+    `- search title, as planned: ${listingValue(looseText(planned['seoTitle']))}`,
+    `- search description, as planned: ${listingValue(looseText(planned['seoDescription']))}`,
+    `- navigation: ${planned['nav'] === true ? 'an entry for the page is proposed' : 'no entry is proposed'}`,
+    layout,
+  ].join('\n')
+}
+
+/** Keys a stored node keeps for the store: its own id, its parent, its node type and its plugin. */
+function graderNode(id: string, node: unknown): unknown {
+  if (!isLoose(node)) return node
+  const kept: Loose = {}
+  for (const [key, value] of Object.entries(node)) {
+    if (key === 'parentId' || key === 'pluginId') continue
+    if (key === '$id' && value === id) continue
+    if (key === 'type' && value === 'node') continue
+    kept[key] = value
+  }
+  return kept
+}
+
+/**
+ * An answer's output as its grader reads it: copy as written, and anything
+ * else as JSON, a tree's nodes without the keys the store keeps for itself
+ * (AGL-3073). Those are about a third of a recorded page, and a grade reads
+ * none of them: a node's id is its key and its parent is the node that lists
+ * it.
+ */
+export function aiEvalGraderOutput(output: unknown): string {
+  if (typeof output === 'string') return output
+  const tree = isLoose(output) && isLoose(output['tree']) ? output['tree'] : null
+  if (!isLoose(output) || !tree || !isLoose(tree['nodes'])) return JSON.stringify(output)
+  const nodes = Object.fromEntries(Object.entries(tree['nodes']).map(([id, node]) => [id, graderNode(id, node)]))
+  return JSON.stringify({ ...output, tree: { ...tree, nodes } })
+}
+
+/**
  * The grader's user turn: the brief, its site, the workspace where the case
- * describes one, and the answer — copy as written, anything else as JSON.
+ * describes one, the plan a built answer came from, the screen and layout a
+ * built page was built as, and the answer.
  */
 export function aiEvalGraderPrompt(evalCase: AiEvalCase, answer: AiEvalRecordedAnswer): string {
-  const output = answer.scope === 'plan' ? answer.plan : answer.answer
+  const planScope = answer.scope === 'plan'
+  const output = planScope ? answer.plan : answer.answer
   const workspace = aiEvalGraderCapabilities(evalCase)
+  const plan = planScope ? null : aiEvalPlanOutline(answer.plan)
+  const page = !planScope && evalCase.kind === 'page' ? aiEvalBuiltPage(answer) : null
   return [
-    `Output kind: ${evalCase.kind}${answer.scope === 'plan' ? ' (its build plan)' : ''}`,
-    ...(answer.scope === 'plan' ? [AI_EVAL_PLAN_GRADER_NOTE] : []),
+    `Output kind: ${evalCase.kind}${planScope ? ' (its build plan)' : ''}`,
+    ...(planScope ? [AI_EVAL_PLAN_GRADER_NOTE] : []),
     `Brief: ${evalCase.brief}`,
     aiSiteInventoryBlock(evalCase.inventory),
     ...(workspace ? [workspace] : []),
-    `Output:\n${typeof output === 'string' ? output : JSON.stringify(output)}`,
+    ...(plan ? [plan] : []),
+    ...(page ? [page, AI_EVAL_PAGE_GRADER_NOTE] : []),
+    `Output:\n${aiEvalGraderOutput(output)}`,
   ].join('\n\n')
 }
 

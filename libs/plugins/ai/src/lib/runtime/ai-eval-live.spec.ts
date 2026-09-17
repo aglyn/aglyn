@@ -47,6 +47,7 @@ import { join } from 'node:path'
 import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
 import { AI_PAGE_SECTION_INLINE_LINE, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
 import { AI_JOB_PLAN_INSTRUCTIONS, AI_JOB_PLAN_SCOPES } from '../jobs/ai-job-plan-step'
+import { AI_FREE_PAGE_BUILT_RECORDING } from '../jobs/fixtures/ai-free-page-built-recording'
 import { AI_FREE_PAGE_RECORDED_PLAN } from '../jobs/fixtures/ai-free-page-recording'
 import { AI_FREE_PAGE_FIXTURE } from '../jobs/fixtures/ai-page-briefs'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
@@ -63,11 +64,15 @@ import { readAiEvalCase, scoreAiEvalCandidate, type AiEvalCase } from './ai-eval
 import {
   AI_EVAL_CAPABILITIES_GRADER_NOTE,
   AI_EVAL_INLINE_GRADER_NOTE,
+  AI_EVAL_LAYOUT_OUTLINE_MAX_LINES,
+  AI_EVAL_PAGE_GRADER_NOTE,
   AI_EVAL_PLAN_GRADER_NOTE,
   AI_EVAL_RUBRIC_TOOL,
   AiEvalLiveRefusedError,
   aiEvalCasesNamed,
+  aiEvalGraderOutput,
   aiEvalGraderPrompt,
+  aiEvalLayoutOutline,
   readAiEvalGrade,
   recordAiEvalLive,
 } from './ai-eval-live'
@@ -203,7 +208,7 @@ describe('the live run', () => {
     for (const step of candidate.steps ?? []) {
       expect(step.credits).toBe(assistCreditsFromUsd(step.estCostUsd))
     }
-    const plan = candidate.plan as { screens: Array<{ title: string }> }
+    const plan = candidate.plan as { screens: Array<{ title: string }>; create: Array<{ name: string }> }
     expect(plan.screens.map((screen) => screen.title)).toEqual(['About Brightwater Law'])
     // The page it answers is the draft the step wrote, held to the Free workspace's doctrine.
     const score = scoreAiEvalCandidate(freePage, candidate)
@@ -211,6 +216,34 @@ describe('the live run', () => {
       checks: { readable: true, rules: true, budget: true, plan: true, responsive: null, rubric: true },
       findings: [],
     })
+    // Beside the tree, the screen as the draft stores it (AGL-3073): its
+    // address, the listing the last pass wrote, the navigation it proposes,
+    // and the layout it renders inside, which the job built first.
+    expect(candidate.screen).toEqual({
+      slug: 'about',
+      seoTitle: AI_FREE_PAGE_FIXTURE.seo.title,
+      seoDescription: AI_FREE_PAGE_FIXTURE.seo.description,
+      nav: true,
+      layout: {
+        id: expect.any(String),
+        name: plan.create[0].name,
+        built: true,
+        tree: { rootId: '_@_', nodes: expect.objectContaining({ '_@_': expect.anything() }) },
+      },
+    })
+    // …and the grader reads all of it before the page.
+    const graded = String(sent.find((request) => request.tools?.[0]?.name === AI_EVAL_RUBRIC_TOOL.name).messages[0].content)
+    for (const line of [
+      '- address: /about',
+      `- search title: "${AI_FREE_PAGE_FIXTURE.seo.title}"`,
+      `- search description: "${AI_FREE_PAGE_FIXTURE.seo.description}"`,
+      '- navigation: an entry for the page is proposed',
+      `- layout: "${plan.create[0].name}", built by this job before the page. Its outline:`,
+      '  main · layoutSlot ← the page renders here',
+      AI_EVAL_PAGE_GRADER_NOTE,
+    ]) {
+      expect([line, graded.indexOf(line) >= 0 && graded.indexOf(line) < graded.indexOf('Output:\n')]).toEqual([line, true])
+    }
   })
 
   it('re-asks a page plan that places a creation it never declares, as the first live recording’s plan did, and records the page the re-ask plans (AGL-3040)', async () => {
@@ -332,6 +365,122 @@ describe('aiEvalGraderPrompt', () => {
       ])
     }
     expect(AI_EVAL_PLAN_GRADER_NOTE).toContain('never a new form')
+  })
+})
+
+describe('the grader of a built page (AGL-3073)', () => {
+  const { rubric: recordedGrade, ...recorded } = AI_FREE_PAGE_BUILT_RECORDING.candidate
+  const plannedScreen = (recorded.plan as { screens: Array<{ seoTitle: string; seoDescription: string }> }).screens[0]
+
+  it('is shown the recorded About page’s plan, address, listing and layout, which its tree alone never showed it', () => {
+    // The grade this recording carries marks the page down for all three.
+    expect(recordedGrade.notes).toContain('no layout is declared or created')
+    expect(recordedGrade.notes).toContain('there is no `main` landmark')
+    expect(recordedGrade.notes).toContain('no slug, search title/description or nav entry')
+
+    const prompt = aiEvalGraderPrompt(freePage, recorded)
+    const beforeOutput = (line: string) => prompt.indexOf(line) >= 0 && prompt.indexOf(line) < prompt.indexOf('Output:\n')
+    for (const line of [
+      // The plan: the layout it creates, and every section in order.
+      '- creates the layout "main-layout": Site has no layout yet; header, navigation and footer must live in a layout rather than on the page. Holds: header: logo + nav links (Home, About, Practice Areas, Contact); footer: firm name, address, phone, copyright.',
+      '  1. hero',
+      '  7. how we work with clients, 3 items',
+      '  8. request a consultation form',
+      // The page as its plan built it: a recording made before the draft's
+      // screen was kept says so, and gives what the page step built from.
+      "The page as its plan built it (the recording kept no record of the draft's screen):",
+      '- address: /about',
+      `- search title, as planned: "${plannedScreen.seoTitle}"`,
+      `- search description, as planned: "${plannedScreen.seoDescription}"`,
+      '- navigation: an entry for the page is proposed',
+      // The layout: created by the plan, built by the job's layout pass, and
+      // where the main landmark is.
+      `- layout: "main-layout", which the plan creates and this job built before the page. A layout this job builds holds one Layout Slot, where the page renders, and the slot is the page's main landmark; the recording kept no tree of it`,
+      AI_EVAL_PAGE_GRADER_NOTE,
+    ]) {
+      expect([line, beforeOutput(line)]).toEqual([line, true])
+    }
+    // The page's tree still follows, and whole.
+    expect(prompt).toContain('"children":"About Brightwater Law","variant":"h1","component":"h1"')
+  })
+
+  it('says a layout it only planned was not built when no layout pass ran', () => {
+    const unbuilt = { ...recorded, steps: recorded.steps?.filter((step) => step.step !== 'job.layout') }
+    expect(aiEvalGraderPrompt(freePage, unbuilt)).toContain('- layout: "main-layout", which the plan creates. A layout')
+  })
+
+  it('outlines the layout a page renders inside, with the main landmark where the published page places it', () => {
+    const layout = {
+      rootId: '_@_',
+      nodes: {
+        '_@_': { componentId: 'div', nodes: ['header', 'slot', 'footer'] },
+        header: { componentId: 'muiAppBar', props: { component: 'header' }, nodes: ['brand', 'home'] },
+        brand: { componentId: 'muiTypography', props: { component: 'p', children: 'Brightwater Law' } },
+        home: { componentId: 'muiScreenLink', props: { screenId: 'scr-home', children: 'Home' } },
+        slot: { componentId: 'layoutSlot' },
+        footer: { componentId: 'section', props: { element: 'footer', children: `Brightwater Law, ${'x'.repeat(60)}` } },
+      },
+    }
+    expect(aiEvalLayoutOutline(layout)).toBe(
+      [
+        'div',
+        '  header · muiAppBar',
+        '    p · muiTypography "Brightwater Law"',
+        '    muiScreenLink "Home"',
+        '  main · layoutSlot ← the page renders here',
+        `  footer · section "Brightwater Law, ${'x'.repeat(31)}…"`,
+      ].join('\n'),
+    )
+    // A slot an author made something else leaves the landmark to the root.
+    const chosen = { ...layout, nodes: { ...layout.nodes, slot: { componentId: 'layoutSlot', props: { component: 'section' } } } }
+    expect(aiEvalLayoutOutline(chosen).split('\n').slice(0, 1)).toEqual(['main · div'])
+    // A long layout lists its first elements and counts the rest.
+    const long = {
+      rootId: '_@_',
+      nodes: {
+        '_@_': { componentId: 'div', nodes: Array.from({ length: 50 }, (_, index) => `n${index}`) },
+        ...Object.fromEntries(Array.from({ length: 50 }, (_, index) => [`n${index}`, { componentId: 'muiDivider' }])),
+      },
+    }
+    const lines = aiEvalLayoutOutline(long).split('\n')
+    expect(lines).toHaveLength(AI_EVAL_LAYOUT_OUTLINE_MAX_LINES + 1)
+    expect(lines.at(-1)).toBe(`… and ${51 - AI_EVAL_LAYOUT_OUTLINE_MAX_LINES} more elements`)
+  })
+
+  it('sends a page’s tree without the keys the store keeps for itself, and anything else as it was', () => {
+    const sentText = aiEvalGraderOutput(recorded.answer)
+    const output = JSON.parse(sentText) as { tree: { rootId: string; nodes: Record<string, Record<string, unknown>> } }
+    const stored = (recorded.answer as { tree: { nodes: Record<string, Record<string, unknown>> } }).tree.nodes
+    expect(Object.keys(output.tree.nodes)).toEqual(Object.keys(stored))
+    const storeKeys = new Set(['$id', 'parentId', 'type', 'pluginId'])
+    for (const [id, node] of Object.entries(output.tree.nodes)) {
+      const kept = Object.fromEntries(Object.entries(stored[id]).filter(([key]) => !storeKeys.has(key)))
+      expect([id, node]).toEqual([id, kept])
+    }
+    expect(sentText).not.toMatch(/"\$id"|"parentId"|"pluginId"|"type":"node"/)
+    expect(sentText.length).toBeLessThan(JSON.stringify(recorded.answer).length * 0.75)
+    // An id that is not the node's key, and a type that is not a node's, say something, and stay.
+    expect(JSON.parse(aiEvalGraderOutput({ tree: { rootId: 'a', nodes: { a: { $id: 'b', type: 'text' } } } }))).toEqual({
+      tree: { rootId: 'a', nodes: { a: { $id: 'b', type: 'text' } } },
+    })
+    expect(aiEvalGraderOutput('Fresh bread.')).toBe('Fresh bread.')
+    expect(aiEvalGraderOutput({ reuse: [], parentId: 'kept' })).toBe('{"reuse":[],"parentId":"kept"}')
+  })
+
+  it('tells the grader of a page with no layout that its root is the landmark, and quotes a listing it lacks as none', () => {
+    const screen = { slug: 'about', seoTitle: null, seoDescription: 'Who we are.', nav: false, layout: null }
+    const prompt = aiEvalGraderPrompt(freePage, { ...recorded, screen })
+    expect(prompt).toContain(
+      [
+        'The page as built:',
+        '- address: /about',
+        '- search title: none',
+        '- search description: "Who we are."',
+        '- navigation: no entry is proposed',
+        "- layout: none, so the page's root is its main landmark",
+      ].join('\n'),
+    )
+    expect(prompt).not.toContain('as planned')
   })
 })
 

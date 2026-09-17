@@ -369,7 +369,16 @@ live answer.
   describes its workspace, the grader is told it the way the plan was — the
   capability lines — and that on a workspace without reusable components or saved
   forms, an item drawn where it repeats and a form drawn on the page are the correct
-  build rather than a missed reuse (`aiEvalGraderCapabilities`, AGL-3040).
+  build rather than a missed reuse (`aiEvalGraderCapabilities`, AGL-3040). A built
+  page's grader is shown what its tree does not hold (AGL-3073): the plan's
+  creations and sections (`aiEvalPlanOutline`), and the screen as the draft stored
+  it, which a page recording keeps under `candidate.screen` — its address, search
+  title and description, its navigation proposal, and an outline of the layout it
+  renders inside, with the main landmark placed by `stampDocumentLandmark`
+  (`aiEvalBuiltPage`). A recording made before the screen was kept gives the plan's
+  screen and says so. The tree it grades goes without the keys the store keeps for
+  itself (`aiEvalGraderOutput`), which leaves the recorded About page's grader input
+  at 18,372 characters, from 23,600.
 
 ## The routing table
 
