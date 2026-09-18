@@ -9,6 +9,34 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.128 — 2026-09-18
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.127...v1.0.0-beta.128)
+
+### Fixed
+
+- **console:** an unknown workspace path 404s instead of rendering ([AGL-3017](https://linear.app/aglyn/issue/AGL-3017), [AGL-3090](https://linear.app/aglyn/issue/AGL-3090), [AGL-3016](https://linear.app/aglyn/issue/AGL-3016))
+- **console:** the auth origin serves only its own family, not the console ([AGL-3090](https://linear.app/aglyn/issue/AGL-3090), [AGL-462](https://linear.app/aglyn/issue/AGL-462), [AGL-1919](https://linear.app/aglyn/issue/AGL-1919), [AGL-3016](https://linear.app/aglyn/issue/AGL-3016), [AGL-3017](https://linear.app/aglyn/issue/AGL-3017))
+- **ai:** a Free page's grader is told a list's items belong in one section ([AGL-3073](https://linear.app/aglyn/issue/AGL-3073))
+- **ai:** the live eval records automation and product briefs, a photo included ([AGL-3074](https://linear.app/aglyn/issue/AGL-3074))
+- **ai:** a recorded page's listing names the site only as its case does ([AGL-3077](https://linear.app/aglyn/issue/AGL-3077))
+- **ai:** the eval grader reads a built page with its plan, screen and layout ([AGL-3073](https://linear.app/aglyn/issue/AGL-3073))
+- **ai:** a link with no destination is told to link a screen that does what it says ([AGL-3072](https://linear.app/aglyn/issue/AGL-3072))
+- **ai:** a split list on a workspace with components is joined around one it places ([AGL-3071](https://linear.app/aglyn/issue/AGL-3071))
+- **ai:** a Free plan asks for no more sections than the wall's worst case pays for ([AGL-3070](https://linear.app/aglyn/issue/AGL-3070), [AGL-3030](https://linear.app/aglyn/issue/AGL-3030))
+- **ai:** a Free plan draws a list's items in one section, and a split list is re-asked ([AGL-3071](https://linear.app/aglyn/issue/AGL-3071), [AGL-3053](https://linear.app/aglyn/issue/AGL-3053), [AGL-3061](https://linear.app/aglyn/issue/AGL-3061))
+- **ai:** a line the validator cut at its ceiling is refused, with the ceiling named ([AGL-3076](https://linear.app/aglyn/issue/AGL-3076))
+- **ai:** a section is refused for a line cut short, an empty item or a link to nowhere ([AGL-3072](https://linear.app/aglyn/issue/AGL-3072))
+
+<details>
+<summary>Also in this release: 1 test, 2 chore</summary>
+
+- **tools:** the Linear ceiling is 3093, read from the workspace ([AGL-3093](https://linear.app/aglyn/issue/AGL-3093), [AGL-3086](https://linear.app/aglyn/issue/AGL-3086), [AGL-3089](https://linear.app/aglyn/issue/AGL-3089))
+- **ai:** every products case records the request its step sends for the store ([AGL-3074](https://linear.app/aglyn/issue/AGL-3074))
+- **tools:** the Linear ceiling is 3077, read from the workspace ([AGL-3077](https://linear.app/aglyn/issue/AGL-3077), [AGL-3070](https://linear.app/aglyn/issue/AGL-3070), [AGL-3071](https://linear.app/aglyn/issue/AGL-3071), [AGL-3072](https://linear.app/aglyn/issue/AGL-3072), [AGL-3076](https://linear.app/aglyn/issue/AGL-3076), [AGL-3075](https://linear.app/aglyn/issue/AGL-3075))
+
+</details>
+
 ## v1.0.0-beta.127 — 2026-09-17
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.126...v1.0.0-beta.127)
