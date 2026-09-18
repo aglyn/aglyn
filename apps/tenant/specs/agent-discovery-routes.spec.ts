@@ -239,15 +239,33 @@ describe('GET /.well-known/api-catalog (AGL-2750)', () => {
     )
   })
 
-  it('names both APIs, anchored at the catalog itself', async () => {
+  it('names every API, anchored at the catalog itself', async () => {
     const { body } = await read()
     expect(body.linkset[0].anchor).toBe(
       'https://demo.example.com/.well-known/api-catalog',
     )
+    // Three, since AGL-3091: the site's own anonymous read API, the keyed
+    // platform API, and that same platform API offered as MCP tools. An agent
+    // that arrives looking for tools and finds only endpoints concludes there
+    // are none, which is the failure the catalog exists to end.
     expect(body.linkset[0].item.map((link: any) => link.href)).toEqual([
       'https://demo.example.com/',
       'https://app.aglyn.com/api/v1',
+      'https://app.aglyn.com/api/mcp',
     ])
+  })
+
+  it('gives the MCP entry a doc but no spec — the tool list is the spec', async () => {
+    const mcp = contextFor(
+      await read().then((r) => r.body),
+      'https://app.aglyn.com/api/mcp',
+    )
+    expect(mcp['service-doc']).toEqual([
+      { href: 'https://docs.aglyn.com/api', type: 'text/html' },
+    ])
+    // `service-desc` would name a description of the ENDPOINTS to a client
+    // that is not calling them; `tools/list` is where a tool client asks.
+    expect(mcp['service-desc']).toBeUndefined()
   })
 
   it("points the site's entry at this site's own origin, not the request's", async () => {

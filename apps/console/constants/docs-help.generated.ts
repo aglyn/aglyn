@@ -848,7 +848,7 @@ export const DOCS_HELP_ANCHORS = {
   webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],
   whiteLabel: ['#where', '#fields', '#where-you-see-it', '#email', '#merge-tokens', '#email-logo', '#sending-address', '#custom-console-domain', '#platform-brand', '#related'],
   workflows: ['#workflows', '#actions-builder', '#webhooks', '#run-history', '#related'],
-  yourFirstApiCall: ['#step-1-create-a-key', '#step-2-check-the-key', '#step-3-your-first-request', '#in-javascript', '#step-4-write-something', '#idempotency', '#step-5-page-through-everything', '#the-four-errors-you-will-hit', '#where-to-go-next', '#related'],
+  yourFirstApiCall: ['#step-1-create-a-key', '#step-2-check-the-key', '#step-3-your-first-request', '#in-javascript', '#step-4-write-something', '#idempotency', '#step-5-page-through-everything', '#the-four-errors-you-will-hit', '#mcp', '#where-to-go-next', '#related'],
 } as const satisfies Partial<
   Record<DocsHelpTopicKey, readonly `#${string}`[]>
 >
