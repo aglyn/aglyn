@@ -28,6 +28,7 @@ import {
   checkDatasetQuota,
   checkEntitlement,
   checkQuota,
+  resolveEffectivePlan,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
@@ -334,6 +335,11 @@ function countsRows(kind: AiPlanDraftKind, org: Partial<AglynOrgBilling> | null)
  * against nothing. A dataset is org data that no job writes; a plan may name
  * one only where the workspace's plan includes datasets at all. An email
  * design is written by the email plugin, whose own gate decides.
+ *
+ * A workspace on the Free plan spends the Free taste, a wall of monthly
+ * credits, so its plan is held to the sections that wall pays for (AGL-3070).
+ * The effective plan decides, as it decides the taste's own allowance: a
+ * workspace whose subscription died is Free again.
  */
 export function aiPlanCapabilitiesFrom(
   org: Partial<AglynOrgBilling> | null,
@@ -353,6 +359,7 @@ export function aiPlanCapabilitiesFrom(
         ? unrestricted.create.dataset
         : { allowed: false, left: 0, reason: "this workspace's plan does not include datasets" },
     },
+    ...(resolveEffectivePlan(org) === 'free' ? { freeTaste: true } : {}),
   }
 }
 

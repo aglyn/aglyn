@@ -44,8 +44,8 @@ before you confirm anything and tells you what to create first and where.
 
 On a plan without reusable components or saved forms, such as Free, the page is built from
 what that plan can make: a block that repeats, such as a row of service cards, is built into
-the page each time, and a form is part of the page, with its fields, collecting submissions
-into your inbox like any form.
+the page each time, in one section, and a form is part of the page, with its fields,
+collecting submissions into your inbox like any form.
 
 ## How the page is built
 
@@ -88,6 +88,10 @@ opens it in the Besigner.
 
 Each step of a page job counts toward your AI usage, including a section the job had to ask
 for again. **AI jobs** shows what each job used. A page with more sections uses more.
+
+On Free, a page's plan asks for no more sections than your monthly AI credits can always
+build, even when every step uses the most it can: nine sections, or six when the job also
+builds your site's layout.
 
 ## Who can use it
 

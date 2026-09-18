@@ -20,7 +20,7 @@
             "cta": { "componentId": "muiStack", "props": { "direction": "column", "alignItems": "center" }, "sx": { "py": 6, "gap": 2, "bgcolor": "background.paper" }, "nodes": ["cta-title", "cta-body", "cta-button"] },
             "cta-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "Found a leak after the storm?" } },
             "cta-body": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Tell us where the water is showing and we will have a crew out within the week." } },
-            "cta-button": { "componentId": "muiButton", "props": { "variant": "contained", "color": "primary", "children": "Request a quote" } }
+            "cta-button": { "componentId": "muiButton", "props": { "variant": "contained", "color": "primary", "children": "Request a quote", "href": "/quote" } }
           }
         }
       },

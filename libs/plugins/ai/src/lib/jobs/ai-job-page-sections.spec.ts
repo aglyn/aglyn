@@ -197,6 +197,57 @@ describe('a section that breaks the page’s rules', () => {
     )
   })
 
+  it('is refused for a subhead cut short, an empty list item and a button that goes nowhere, each named by the model’s own id with what to write instead (AGL-3072)', () => {
+    // The live Free About hero's three defects, written into this brief's hero.
+    const answer = structuredClone(fixture.answers[0])
+    answer.nodes['a2'].props = { variant: 'h5', component: 'p', children: 'A licensed roofer checks shingles, flashing and gutters, with' }
+    answer.nodes['a3'].props = { children: 'Request a quote', variant: 'contained' }
+    answer.nodes['a7'] = { componentId: 'muiList', nodes: ['a8', 'a10'] }
+    answer.nodes['a8'] = { componentId: 'muiListItem', nodes: ['a9'] }
+    answer.nodes['a9'] = { componentId: 'muiListItemText', props: { primary: 'Shingles and flashing' } }
+    answer.nodes['a10'] = { componentId: 'muiListItem', nodes: ['a11'] }
+    answer.nodes['a11'] = { componentId: 'muiListItemText', props: {} }
+    answer.nodes['a5'].nodes = [...(answer.nodes['a5'].nodes ?? []), 'a7']
+    const result = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, uses: [], inventory: fixture.inventory })({
+      tree: JSON.stringify(answer),
+    })
+    expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
+      { rule: 10, code: 'link-without-destination', nodeIds: ['a3'] },
+      { rule: 14, code: 'dangling-word', nodeIds: ['a2'] },
+      { rule: 16, code: 'empty-item', nodeIds: ['a10'] },
+    ])
+    expect(Object.keys(result.offending ?? {}).sort()).toEqual(['a10', 'a2', 'a3'])
+    const reask = aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)
+    expect(reask).toContain(
+      '"Request a quote" goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives.',
+    )
+    expect(reask).toContain('its last word, "with", leaves the sentence unfinished. Finish the sentence, or end the line before "with". (nodes a2)')
+    expect(reask).toContain('Write the words of its List Item Text, or take the item out. (nodes a10)')
+  })
+
+  it('is refused for a subhead the palette validator cut at 120 characters, naming the model’s node and the ceiling before the cut words (AGL-3076)', () => {
+    // The live hero subhead as the model most likely wrote it; the page stored its first 120 characters.
+    const answer = structuredClone(fixture.answers[0])
+    answer.nodes['a2'].props = {
+      variant: 'h5',
+      component: 'p',
+      children:
+        'We are a client-focused law firm guiding individuals, families and businesses through the moments that matter most, with clear advice and steady support.',
+    }
+    const result = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, uses: fixture.plan.screens[0].sections[0].uses, inventory: fixture.inventory })({
+      tree: JSON.stringify(answer),
+    })
+    expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
+      { rule: 14, code: 'copy-cut-at-ceiling', nodeIds: ['a2'] },
+      { rule: 14, code: 'dangling-word', nodeIds: ['a2'] },
+    ])
+    // The re-ask quotes the line whole, as the model wrote it, and says where it was cut.
+    expect(result.offending?.['a2']).toEqual(answer.nodes['a2'])
+    expect(aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)).toContain(
+      'A line in a heading style holds at most 120 characters, and "We are a client-focused law firm guiding individuals,…" runs past them, so it was cut off where they end. Write it whole within 120 characters, or give a longer line a subtitle or body style. (nodes a2)',
+    )
+  })
+
   it('is unreadable unless it is exactly one Section inside the document wrapper', () => {
     const two = {
       rootId: 'root',
@@ -503,6 +554,20 @@ describe('a repeated item written once (AGL-3053)', () => {
       { rule: 11, code: 'skipped-heading', nodeIds: ['b1'] },
     ])
     expect(Object.keys(result.offending ?? {})).toEqual(['b1'])
+  })
+
+  it('names the item the model wrote once when one copy’s heading runs past its ceiling (AGL-3076)', () => {
+    const long = 'Real estate purchases, title reviews and closings for homes, rental property and small commercial buildings across the county'
+    const result = checkCards(
+      cardsWith('b5', (node) => ({
+        ...node,
+        repeat: (node['repeat'] as string[][]).map((copy, index) => (index === 1 ? [long, copy[1]] : copy)),
+      })),
+    )
+    expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
+      { rule: 14, code: 'copy-cut-at-ceiling', nodeIds: ['b1'] },
+    ])
+    expect(result.violations[0].message).toContain('"Real estate purchases, title reviews and closings for…" runs past them')
   })
 
   it('names the node the model wrote when the palette validator refuses the item, never a copy', () => {

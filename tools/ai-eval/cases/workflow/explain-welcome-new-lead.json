@@ -4,6 +4,28 @@
   "brief": "Explain the automation “Welcome a new lead”.",
   "framing": null,
   "inventory": null,
+  "automation": {
+    "action": {
+      "recipe": "welcomeNewLead",
+      "name": "Welcome a new lead",
+      "trigger": {
+        "event": "contactCreated",
+        "conditions": [{ "field": "source", "op": "equals", "value": "form" }],
+        "combinator": "and"
+      },
+      "steps": [
+        { "type": "assignContactOwner", "roundRobin": true },
+        { "type": "createCrmTask", "title": "Call the new lead", "kind": "call", "dueInDays": 1 },
+        {
+          "type": "sendEmail",
+          "subject": "Thanks for getting in touch",
+          "body": "Thanks for reaching out — we have your message, and someone from our team will be in touch within a day."
+        },
+        { "type": "addContactTag", "tag": "website" }
+      ],
+      "enabled": true
+    }
+  },
   "candidates": [
     {
       "source": "authored",

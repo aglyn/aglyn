@@ -21,9 +21,13 @@
  */
 
 import { formatMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
-import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { ESTIMATED_PAGE_TRANSFER_BYTES, FREE_AI_TASTE_CREDITS_PER_MONTH } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import { AI_FREE_PAGE_RECORDED_PLAN } from '../jobs/fixtures/ai-free-page-recording'
+import {
+  AI_FREE_PAGE_BUILT_PLAN,
+  AI_FREE_PAGE_BUILT_SECTIONS,
+  AI_FREE_PAGE_RECORDED_PLAN,
+} from '../jobs/fixtures/ai-free-page-recording'
 import type { AiBuildPlan, AiBuildPlanScreen } from '../model/ai-build-plan'
 import { AI_PAGE_CREATE_KINDS } from '../model/ai-page-job'
 import {
@@ -35,19 +39,26 @@ import { aiHomeScreenIds, emptyAiSiteInventory, type AiSiteInventory } from '../
 import {
   AI_DOCTRINE_RULE_NUMBERS,
   AI_DOCTRINE_RULES,
+  AI_FREE_PAGE_WORST_CASE_CREDITS,
   AI_TYPED_LIST_MIN_ITEMS,
   aiBracketedFacts,
+  aiDanglingWord,
   aiDoctrineViolationText,
+  aiFreePageSectionsWithin,
   aiNamesMatch,
   aiTreeCopy,
   detectAdHocWidths,
   detectCreateBeforeReuse,
+  detectCutLines,
+  detectDanglingWords,
   detectDocumentStructure,
+  detectEmptyItems,
   detectHeavyDocument,
   detectImageSources,
   detectInlineForms,
   detectInvisibleLinks,
   detectLayoutRegions,
+  detectLinksWithoutDestination,
   detectLiteralStyles,
   detectMissedDuplicate,
   detectMissingNavAndSeo,
@@ -57,7 +68,9 @@ import {
   detectPlanInlineForms,
   detectPlanLayoutRegions,
   detectPlanLiteralColors,
+  detectPlanOverFreeWall,
   detectPlanRepeats,
+  detectPlanSplitLists,
   detectPlanTypedData,
   detectPlanUncreatable,
   detectPlanUndeclaredCreations,
@@ -262,6 +275,123 @@ describe('rule 1 — repeats become one reusable component', () => {
     expect(codes(detectPlanRepeats(repeated, INVENTORY, aiUnrestrictedPlanCapabilities()))).toEqual([
       'plan-repeated-items',
     ])
+  })
+})
+
+describe('rule 1 — a list is one section whose items repeat (AGL-3071)', () => {
+  const sections = (...entries: Array<[string, string[], number]>) =>
+    planOf({ screens: [screen({ sections: entries.map(([name, uses, items]) => ({ name, uses, items })) })] })
+
+  it('refuses the live Free plan’s four practice areas, each planned as a section of one item, and gives the one section to plan', () => {
+    expect(detectPlanSplitLists(AI_FREE_PAGE_BUILT_PLAN, emptyAiSiteInventory('host-brightwater-law'), FREE)).toEqual([
+      {
+        rule: 1,
+        code: 'plan-split-list',
+        message:
+          'The sections "practice area: business & corporate law", "practice area: real estate law", "practice area: family law" and "practice area: estate planning" each show one item of the same kind, so they are one list split apart. Plan them as one section whose 4 items repeat: {"name":"practice areas","uses":[],"items":4}.',
+        paths: ['screens[0].sections[2]', 'screens[0].sections[3]', 'screens[0].sections[4]', 'screens[0].sections[5]'],
+      },
+    ])
+  })
+
+  it('asks a workspace that keeps components to place one for a split list long enough for rule 1, and a Free one only to join the sections', () => {
+    const tiers = sections(['tier: basic', [], 1], ['tier: standard', [], 1], ['tier: premium', [], 1])
+    const paid = detectPlanSplitLists(tiers, INVENTORY, aiUnrestrictedPlanCapabilities())
+    expect(paid).toMatchObject([
+      {
+        message:
+          'The sections "tier: basic", "tier: standard" and "tier: premium" each show one item of the same kind, so they are one list split apart. Plan them as one section whose 3 items repeat, placing one reusable component for the item: reuse one the site has by its id, or declare one in create and place it as new:<name>, as in {"name":"tiers","uses":["new:<name>"],"items":3}.',
+      },
+    ])
+    expect(detectPlanSplitLists(tiers, INVENTORY)).toEqual(paid)
+    expect(detectPlanSplitLists(tiers, INVENTORY, FREE)).toMatchObject([
+      { message: expect.stringContaining('Plan them as one section whose 3 items repeat: {"name":"tiers","uses":[],"items":3}.') },
+    ])
+    // Two items are fewer than rule 1 asks a component for.
+    expect(detectPlanSplitLists(sections(['tier: basic', [], 1], ['tier: premium', [], 1]), INVENTORY)).toMatchObject([
+      { message: expect.stringContaining('Plan them as one section whose 2 items repeat: {"name":"tiers","uses":[],"items":2}.') },
+    ])
+  })
+
+  it('refuses one-item sections that place the same component, naming the component’s items and keeping it placed', () => {
+    const found = detectPlanSplitLists(sections(['hero', [], 0], ['Roofs', ['cmp-card'], 1], ['Gutters', ['cmp-card'], 1], ['Siding', ['cmp-card'], 1]), INVENTORY)
+    expect(found).toMatchObject([
+      {
+        code: 'plan-split-list',
+        message: expect.stringContaining('Plan them as one section whose 3 items repeat: {"name":"Service cards","uses":["cmp-card"],"items":3}.'),
+        paths: ['screens[0].sections[1]', 'screens[0].sections[2]', 'screens[0].sections[3]'],
+      },
+    ])
+    const created = planOf({
+      create: [{ kind: 'component', name: 'Attorney card', why: 'The site has no card for a person.', duplicateOf: null, fields: ['name:text'] }],
+      screens: [screen({ sections: [{ name: 'Jane Doe', uses: ['new:Attorney card'], items: 1 }, { name: 'John Roe', uses: ['new:attorney card'], items: 1 }] })],
+    })
+    expect(detectPlanSplitLists(created, INVENTORY)).toMatchObject([
+      { message: expect.stringContaining('{"name":"Attorney cards","uses":["new:Attorney card"],"items":2}') },
+    ])
+  })
+
+  it('passes two lists of several items that share a card, one-item sections of different kinds or apart, and a lone one (AGL-3061)', () => {
+    expect(detectPlanSplitLists(sections(['practice areas', [], 4], ['how we work', [], 4]), INVENTORY)).toEqual([])
+    expect(detectPlanSplitLists(sections(['services', ['cmp-card'], 4], ['more services', ['cmp-card'], 6]), INVENTORY)).toEqual([])
+    expect(detectPlanSplitLists(sections(['team: Jane', [], 1], ['office: Main Street', [], 1]), INVENTORY)).toEqual([])
+    expect(detectPlanSplitLists(sections(['team: Jane', [], 1], ['our story', [], 0], ['team: John', [], 1]), INVENTORY)).toEqual([])
+    expect(detectPlanSplitLists(sections(['featured testimonial', [], 1], ['call to action', [], 1]), INVENTORY)).toEqual([])
+    expect(detectPlanSplitLists(sections(['practice area: family law', [], 1]), INVENTORY)).toEqual([])
+    expect(detectPlanSplitLists(sections(['team: Jane', ['ds-team'], 1], ['team: John', ['ds-team'], 1]), INVENTORY)).toEqual([])
+  })
+})
+
+describe('the Free wall — a Free plan asks for no more sections than its credits pay for at their worst (AGL-3070)', () => {
+  const FREE_TASTE: AiPlanCapabilities = { ...FREE, freeTaste: true }
+  /** A Free site with no layout yet, where the job may create the one its plan includes. */
+  const BARE: AiSiteInventory = { ...INVENTORY, layouts: [] }
+  const FREE_BARE: AiPlanCapabilities = { ...FREE_TASTE, create: { ...FREE.create, layout: { allowed: true, left: 1, reason: null } } }
+  const sections = (count: number) => Array.from({ length: count }, (_, index) => ({ name: `part ${index + 1}`, uses: [], items: 0 }))
+  const LAYOUT = { kind: 'layout' as const, name: 'Site layout', why: 'The site has no layout yet.', duplicateOf: null, fields: [] }
+
+  it('fits nine sections beside the plan, the first pass and the listing, and six when the job builds the layout first', () => {
+    const { plan, layout, firstSection, laterSection, listing } = AI_FREE_PAGE_WORST_CASE_CREDITS
+    expect(aiFreePageSectionsWithin({ layouts: 0 })).toBe(1 + Math.floor((FREE_AI_TASTE_CREDITS_PER_MONTH - plan - firstSection - listing) / laterSection))
+    expect([aiFreePageSectionsWithin({ layouts: 0 }), aiFreePageSectionsWithin({ layouts: 1 })]).toEqual([9, 6])
+    expect(aiFreePageSectionsWithin({ layouts: 1, pages: 3 })).toBe(
+      1 + Math.floor((FREE_AI_TASTE_CREDITS_PER_MONTH - plan - layout - 3 * listing - firstSection) / laterSection),
+    )
+    expect(aiFreePageSectionsWithin({ layouts: 4 })).toBe(0)
+  })
+
+  it('refuses a plan past the wall, saying how many sections to plan and how to get there', () => {
+    expect(detectPlanOverFreeWall(planOf({ screens: [screen({ sections: sections(10) })] }), INVENTORY, FREE_TASTE)).toEqual([
+      {
+        rule: null,
+        code: 'plan-over-free-wall',
+        message: `This plan asks for 10 sections, and a Free page fits 9 in the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits a Free workspace has a month. Plan at most 9: draw a list's repeated items in one section, and leave out a section the brief does not ask for.`,
+        paths: ['screens[0].sections'],
+      },
+    ])
+    expect(detectPlanOverFreeWall(planOf({ create: [LAYOUT], screens: [screen({ layout: 'new:Site layout', sections: sections(7) })] }), BARE, FREE_BARE)).toMatchObject([
+      { code: 'plan-over-free-wall', message: expect.stringContaining('This plan asks for 7 sections, and a Free page that creates its layout fits 6 in the') },
+    ])
+    // A plan that has not yet declared the layout its bare site needs is held to the layout rule 2 asks it for.
+    expect(detectPlanOverFreeWall(planOf({ reuse: [], screens: [screen({ layout: null, sections: sections(7) })] }), BARE, FREE_BARE)).toMatchObject([
+      { message: expect.stringContaining('a Free page that creates its layout fits 6') },
+    ])
+    const twoPages = planOf({ screens: [screen({ sections: sections(5) }), screen({ title: 'Team', slug: '/team', sections: sections(5) })] })
+    expect(detectPlanOverFreeWall(twoPages, INVENTORY, FREE_TASTE)).toMatchObject([
+      {
+        message: expect.stringContaining(`This plan asks for 10 sections, and a Free plan of 2 pages fits ${aiFreePageSectionsWithin({ layouts: 0, pages: 2 })} in the`),
+        paths: ['screens[0].sections', 'screens[1].sections'],
+      },
+    ])
+  })
+
+  it('admits what the wall fits, counts no layout the workspace may not make, and holds no workspace but a Free one', () => {
+    expect(detectPlanOverFreeWall(planOf({ screens: [screen({ sections: sections(9) })] }), INVENTORY, FREE_TASTE)).toEqual([])
+    expect(detectPlanOverFreeWall(planOf({ create: [LAYOUT], screens: [screen({ layout: 'new:Site layout', sections: sections(6) })] }), BARE, FREE_BARE)).toEqual([])
+    // Its one layout is the site's already, so a layout the plan still names is refused by rule 7 and never built.
+    expect(detectPlanOverFreeWall(planOf({ create: [LAYOUT], screens: [screen({ sections: sections(9) })] }), INVENTORY, FREE_TASTE)).toEqual([])
+    expect(detectPlanOverFreeWall(planOf({ screens: [screen({ sections: sections(16) })] }), INVENTORY, FREE)).toEqual([])
+    expect(detectPlanOverFreeWall(planOf({ screens: [screen({ sections: sections(16) })] }), INVENTORY, null)).toEqual([])
   })
 })
 
@@ -661,7 +791,7 @@ describe('rule 7 — a plan creates only what the job may create on its site (AG
       [7, 'plan-create-not-allowed', ['create[1]']],
     ])
     expect(found[0].message).toBe(
-      'The plan creates a component named "Service card", and this workspace\'s plan does not include reusable components. Draw the item in its own section instead.',
+      'The plan creates a component named "Service card", and this workspace\'s plan does not include reusable components. Draw a list\'s repeated items in one section instead.',
     )
     expect(found[1].message).toContain('Draw the form on the page instead')
     // Narrowed to what a job builds, a creation outside it says so.
@@ -789,6 +919,68 @@ describe('rule 10 — a link goes to a screen that does what its words say, or i
   })
 })
 
+describe('rule 10 — a link that goes nowhere (AGL-3072)', () => {
+  const button = (props: Record<string, unknown> = {}): Nested => ({
+    componentId: 'muiButton',
+    props: { children: 'Request a Consultation', variant: 'contained', ...props },
+  })
+
+  it('refuses the live hero’s button with no destination, naming its words and every destination it may take', () => {
+    expect(detectLinksWithoutDestination(tree(page(section(button()))), 'page')).toEqual([
+      {
+        rule: 10,
+        code: 'link-without-destination',
+        message:
+          '"Request a Consultation" goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. When the site has no page for it, take it out: a form on this page is sent by its own button, and no element can be reached by an anchor.',
+        nodeIds: ['n2'],
+      },
+    ])
+    const unlabeled = { componentId: 'muiScreenLink', props: { renderAs: 'link' } }
+    expect(detectLinksWithoutDestination(tree(page(section(unlabeled))), 'layout')).toMatchObject([
+      { code: 'link-without-destination', message: expect.stringMatching(/^A Screen Link goes nowhere\./), nodeIds: ['n2'] },
+    ])
+  })
+
+  it('tells a button drawn inside a Form that the Form draws its own send button from its submitLabel', () => {
+    const form: Nested = {
+      componentId: 'form',
+      props: { formName: 'Consultation request' },
+      children: [{ componentId: 'formField', props: { fieldName: 'email', label: 'Email', fieldType: 'email' } }, button({ children: 'Send' })],
+    }
+    expect(detectLinksWithoutDestination(tree(page(section(form))), 'page')).toMatchObject([
+      {
+        code: 'link-without-destination',
+        message: expect.stringContaining('A Form draws its own send button from its "submitLabel", so take out a button drawn inside one and set that label instead.'),
+        nodeIds: ['n4'],
+      },
+    ])
+  })
+
+  it('passes a link to a screen the site has, a path on the site, an https address and a bound one, and leaves an email’s buttons to the email door', () => {
+    const linked = tree(
+      page(
+        section(
+          button({ screenId: 'scr-about' }),
+          button({ href: '/contact' }),
+          button({ href: 'https://calendly.com/brightwater' }),
+          { componentId: 'muiScreenLink', props: { children: 'Read more', href: '{{prop.link}}' } },
+        ),
+      ),
+    )
+    expect(detectLinksWithoutDestination(linked, 'component')).toEqual([])
+    expect(detectLinksWithoutDestination(tree(page(section(button()))), 'email')).toEqual([])
+  })
+
+  it('refuses a link whose only destination was an anchor, which the palette validator drops and no element on a page could answer', () => {
+    const anchored = tree(page(section(text('h1', 'About Brightwater Law', 'h1'), button({ href: '#consultation' }))))
+    const report = validateAiDoctrineTree(anchored, 'page')
+    expect(report.tree?.repairs).toEqual(['n3.href is neither an https: URL nor a path on this site; dropped'])
+    expect(report.violations.map((violation) => [violation.code, violation.nodeIds])).toEqual([
+      ['link-without-destination', [Object.keys(report.tree?.sourceIds ?? {}).find((id) => report.tree?.sourceIds[id] === 'n3')]],
+    ])
+  })
+})
+
 describe('rule 14 — the facts in square brackets a draft asks the member to fill (AGL-3056)', () => {
   it('reads each fact once whatever its case, in the order it first appears, and nothing that is not one', () => {
     expect(
@@ -799,6 +991,148 @@ describe('rule 14 — the facts in square brackets a draft asks the member to fi
         '[Office phone number]',
       ]),
     ).toEqual(['[Office address]', '[Office hours]', '[office phone number]', '[nested]'])
+  })
+})
+
+describe('rule 14 — a line cut short (AGL-3072)', () => {
+  it('reads a line as unfinished on an article or a joining conjunction, and on a word that opens a phrase after a comma or a dash', () => {
+    expect(
+      [
+        'We are a client-focused law firm guiding individuals, families and businesses through the moments that matter most, with',
+        'Wills, trusts and',
+        'Meet the',
+        'We are a',
+        'Business &',
+        'Serving [city] families, from',
+        'Plain answers — about',
+        'Plain answers - for',
+      ].map(aiDanglingWord),
+    ).toEqual(['with', 'and', 'the', 'a', '&', 'from', 'about', 'for'])
+  })
+
+  it('reads a line as finished when it closes, strands a word a title may end on, ends on a name, a hyphenated word, a bracketed fact or a binding', () => {
+    expect(
+      [
+        'What we help with',
+        'Who we work for',
+        'Plan A',
+        'Drop-in hours',
+        'Check-in',
+        'We work with families.',
+        'Our services include:',
+        'Call us at [Office phone number]',
+        'Hi {{contact.firstName}}',
+        'Estate planning and wills',
+        '',
+      ].map(aiDanglingWord),
+    ).toEqual([null, null, null, null, null, null, null, null, null, null, null])
+  })
+
+  it('refuses a heading, a subhead or a body line cut short, naming each node and quoting the first line’s end', () => {
+    const found = detectDanglingWords(
+      tree(
+        page(
+          section(
+            text('h1', 'About Brightwater Law and', 'h1'),
+            text('h5', 'Guiding families through the moments that matter most, with', 'p'),
+            { componentId: 'muiList', children: [{ componentId: 'muiListItem', children: [{ componentId: 'muiListItemText', props: { primary: 'Wills', secondary: 'Written so your family knows the' } }] }] },
+            { componentId: 'muiCard', children: [{ componentId: 'muiCardHeader', props: { title: 'Real estate', subheader: 'Closings, leases and' } }] },
+          ),
+        ),
+      ),
+    )
+    expect(found).toEqual([
+      {
+        rule: 14,
+        code: 'dangling-word',
+        message:
+          '"About Brightwater Law and" has no closing punctuation, and its last word, "and", leaves the sentence unfinished. Finish the sentence, or end the line before "and".',
+        nodeIds: ['n2', 'n3', 'n6', 'n8'],
+      },
+    ])
+  })
+
+  it('holds no button, link, label, caption or run of inline text to how it ends', () => {
+    const labels = tree(
+      page(
+        section(
+          text('h1', 'Contact', 'h1'),
+          { componentId: 'muiButton', props: { children: 'Sign up for', href: '/signup' } },
+          { componentId: 'muiScreenLink', props: { children: 'Read about', screenId: 'scr-about' } },
+          text('caption', 'Photo by the'),
+          text('overline', 'Serving families and'),
+          { componentId: 'formField', props: { fieldName: 'topic', label: 'Tell us about the', fieldType: 'text' } },
+          { componentId: 'muiInlineText', props: { children: 'We work with the' } },
+        ),
+      ),
+    )
+    expect(detectDanglingWords(labels)).toEqual([])
+  })
+})
+
+describe('rule 14 — a line cut at its ceiling (AGL-3076)', () => {
+  /** The live hero subhead as the model most likely wrote it: the palette validator cut it at 120 characters to what the page stored. */
+  const WHOLE =
+    'We are a client-focused law firm guiding individuals, families and businesses through the moments that matter most, with clear advice and steady support.'
+  const idOf = (report: ReturnType<typeof validateAiDoctrineTree>, source: string) =>
+    Object.keys(report.tree?.sourceIds ?? {}).find((id) => report.tree?.sourceIds[id] === source)
+
+  it('refuses a heading-styled line the palette validator cut at 120 characters, naming the ceiling and a subtitle or body style', () => {
+    const report = validateAiDoctrineTree(tree(page(section(text('h1', 'About Brightwater Law', 'h1'), text('h5', WHOLE, 'p')))), 'page')
+    expect(report.tree?.nodes[idOf(report, 'n3') as string]?.props?.['children']).toBe(
+      'We are a client-focused law firm guiding individuals, families and businesses through the moments that matter most, with',
+    )
+    expect(report.violations.map((violation) => [violation.code, violation.nodeIds])).toEqual([
+      ['copy-cut-at-ceiling', [idOf(report, 'n3')]],
+      ['dangling-word', [idOf(report, 'n3')]],
+    ])
+    expect(report.violations[0]).toMatchObject({
+      rule: 14,
+      message:
+        'A line in a heading style holds at most 120 characters, and "We are a client-focused law firm guiding individuals,…" runs past them, so it was cut off where they end. Write it whole within 120 characters, or give a longer line a subtitle or body style.',
+    })
+  })
+
+  it('refuses a cut that falls inside a word, which no word list can see, and a button label cut at its own ceiling', () => {
+    const report = validateAiDoctrineTree(
+      tree(
+        page(
+          section(
+            text('h1', 'About Brightwater Law', 'h1'),
+            text('h5', 'Plain answers for families, landlords and small businesses across the county, from the first phone call to the final signature.', 'p'),
+            { componentId: 'muiButton', props: { children: 'Request a free consultation with one of our attorneys', href: '/contact' } },
+          ),
+        ),
+      ),
+      'page',
+    )
+    expect(report.violations.map((violation) => [violation.code, violation.nodeIds])).toEqual([
+      ['copy-cut-at-ceiling', [idOf(report, 'n3'), idOf(report, 'n4')]],
+    ])
+    const button = detectCutLines(
+      ['n4.children was over 40 characters; truncated'],
+      { n4: { componentId: 'muiButton', props: { children: 'Request a free consultation with one of our attorneys' } } },
+    )
+    expect(button).toEqual([
+      {
+        rule: 14,
+        code: 'copy-cut-at-ceiling',
+        message:
+          '"Request a free consultation with one of our…" runs past the 40 characters its element holds, so it was cut off where they end. Write it whole within 40 characters.',
+        nodeIds: ['n4'],
+      },
+    ])
+  })
+
+  it('keeps the same line written within its ceiling, and reads no repair of a prop a reader does not read as a line', () => {
+    const whole = 'We are a client-focused law firm guiding families and businesses through the moments that matter most.'
+    expect(validateAiDoctrineTree(tree(page(section(text('h1', 'About Brightwater Law', 'h1'), text('h5', whole, 'p')))), 'page').violations).toEqual([])
+    expect(
+      detectCutLines(
+        ['n2.alt was over 200 characters; truncated', 'n3.href is neither an https: URL nor a path on this site; dropped', 'n9.children was over 120 characters; truncated'],
+        { n2: { componentId: 'image', props: { alt: 'x'.repeat(240) } }, n3: { componentId: 'muiButton', props: { href: 'ftp://x' } } },
+      ),
+    ).toEqual([])
   })
 })
 
@@ -1043,6 +1377,55 @@ describe('rule 16 — the smallest document that does the job', () => {
   })
 })
 
+describe('rule 16 — an item with nothing in it (AGL-3072)', () => {
+  const listItem = (props: Record<string, unknown>): Nested => ({
+    componentId: 'muiListItem',
+    children: [{ componentId: 'muiListItemText', props }],
+  })
+
+  it('refuses the live list’s last item, whose List Item Text has no words, saying to write them or take the item out', () => {
+    const list = tree(page(section({ componentId: 'muiList', children: [listItem({ primary: 'Wills & Trusts' }), listItem({})] })))
+    expect(detectEmptyItems(list)).toEqual([
+      {
+        rule: 16,
+        code: 'empty-item',
+        message: 'A list item holds no words, so its row shows empty. Write the words of its List Item Text, or take the item out.',
+        nodeIds: ['n5'],
+      },
+    ])
+  })
+
+  it('refuses a card that frames only blank words, and names a list item and a card together', () => {
+    const blankCard: Nested = {
+      componentId: 'muiCard',
+      children: [{ componentId: 'muiCardContent', children: [text('h3', '  ', 'h3'), { componentId: 'muiStack', children: [text('body2', '')] }] }],
+    }
+    expect(detectEmptyItems(tree(page(section(blankCard))))).toMatchObject([
+      { code: 'empty-item', message: 'A card holds nothing to read or see. Give it its words, or take the card out.', nodeIds: ['n2'] },
+    ])
+    const both = detectEmptyItems(tree(page(section(blankCard, { componentId: 'muiList', children: [listItem({ primary: '' })] }))))
+    expect(both).toMatchObject([
+      { message: 'A list item and a card hold nothing to read or see. Give each its words, or take it out.', nodeIds: ['n2', 'n8'] },
+    ])
+  })
+
+  it('passes an item with words or a picture, and leaves an item that holds no element at all to the empty-container rule', () => {
+    const filled = tree(
+      page(
+        section(
+          { componentId: 'muiList', children: [listItem({ secondary: 'Probate and trust administration' })] },
+          { componentId: 'muiCard', children: [image({ alt: 'The office on Main Street' })] },
+          { componentId: 'muiCard', children: [{ componentId: 'muiCardHeader', props: { title: 'Family law' } }] },
+        ),
+      ),
+    )
+    expect(detectEmptyItems(filled)).toEqual([])
+    const bare = tree(page(section({ componentId: 'muiCard' })))
+    expect(detectEmptyItems(bare)).toEqual([])
+    expect(codes(detectHeavyDocument(bare, 'page'))).toEqual(['empty-container'])
+  })
+})
+
 describe('rule 17 — a measured budget for every output', () => {
   it('scores what a tree weighs, in the save’s bytes and the library’s recorded sizes', () => {
     const measured = tree(
@@ -1179,6 +1562,23 @@ describe('validateAiDoctrineTree — the palette first, then every rule', () => 
       [5, 'link-color-on-band'],
       [10, 'link-unrelated-screen'],
     ])
+  })
+
+  it('refuses the live Free About page for its three defects and nothing else, by the ids it stored them under (AGL-3072)', () => {
+    const report = validateAiDoctrineTree(AI_FREE_PAGE_BUILT_SECTIONS, 'page', { reusableComponents: false })
+    expect(report.tree?.repairs).toEqual([])
+    expect(
+      report.violations.map((violation) => [
+        violation.rule,
+        violation.code,
+        violation.nodeIds?.map((id) => report.tree?.sourceIds[id]),
+      ]),
+    ).toEqual([
+      [10, 'link-without-destination', ['Jgquy_nSMC']],
+      [14, 'dangling-word', ['IxdLHxS6ds']],
+      [16, 'empty-item', ['Z-lpdjMIZb']],
+    ])
+    expect(report.violations[1].message).toContain('"…the moments that matter most, with" has no closing punctuation')
   })
 
   it('turns a tree the palette refuses into one unreadable-output finding, and still holds rule 13', () => {
@@ -1320,7 +1720,7 @@ describe('what a plan places, it reuses or creates (AGL-3040)', () => {
       detectPlanUndeclaredCreations(plan, INVENTORY, aiPlanCapabilitiesForJob(FREE, PAGE_JOB)).map((found) => found.message),
     ).toEqual([
       'The "quote request" section places a creation named "Quote form", but the plan never creates it, and this workspace\'s plan does not include saved forms. Draw the form on the page instead, as a Form element holding its Form Fields. Take it out of the section\'s uses.',
-      'The "services grid" section places a creation named "Service tile", but the plan never creates it, and this workspace\'s plan does not include reusable components. Draw the item in its own section instead. Take it out of the section\'s uses.',
+      'The "services grid" section places a creation named "Service tile", but the plan never creates it, and this workspace\'s plan does not include reusable components. Draw a list\'s repeated items in one section instead. Take it out of the section\'s uses.',
     ])
   })
 

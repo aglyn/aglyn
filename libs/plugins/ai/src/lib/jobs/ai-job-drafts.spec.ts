@@ -793,6 +793,8 @@ describe('readAiPlanCapabilities — what a plan may create on the site (AGL-303
     const { handle, read } = recording()
     const capabilities = await readAiPlanCapabilities(handle, { hostId: 'host-1', org: FREE_ORG })
     expect(capabilities.reusableComponents).toBe(false)
+    // Its AI credits are the Free taste's wall, which its plan is held to (AGL-3070).
+    expect(capabilities.freeTaste).toBe(true)
     expect(capabilities.create.component).toEqual({
       allowed: false,
       left: 0,
@@ -827,6 +829,9 @@ describe('readAiPlanCapabilities — what a plan may create on the site (AGL-303
     const { handle, read } = recording()
     const capabilities = await readAiPlanCapabilities(handle, { hostId: 'host-1', org: STARTER_ORG })
     expect(capabilities.reusableComponents).toBe(true)
+    expect(capabilities.freeTaste).toBeUndefined()
+    // A subscription that died leaves the workspace on the Free taste again.
+    expect(aiPlanCapabilitiesFrom({ ...STARTER_ORG, billingStatus: 'canceled' }).freeTaste).toBe(true)
     expect(capabilities.create.component).toEqual({ allowed: true, left: null, reason: null })
     expect(capabilities.create.layout).toEqual({ allowed: true, left: 1, reason: null })
     expect(capabilities.create.template).toEqual({ allowed: true, left: 50, reason: null })

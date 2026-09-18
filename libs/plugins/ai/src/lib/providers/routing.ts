@@ -267,7 +267,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       scores: 'answers',
       source: 'authored',
       passRate: 1,
-      meanScore: 0.9896,
+      meanScore: 0.9922,
     },
   },
   'job.email': {

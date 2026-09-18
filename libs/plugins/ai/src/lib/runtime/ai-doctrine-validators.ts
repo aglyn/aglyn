@@ -25,7 +25,10 @@ import {
   MEDIA_CDN_VARIANT_WIDTHS,
   parseMediaRef,
 } from '@aglyn/aglyn/app-utils/media-ref'
-import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  ESTIMATED_PAGE_TRANSFER_BYTES,
+  FREE_AI_TASTE_CREDITS_PER_MONTH,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
@@ -58,6 +61,7 @@ import {
   AI_EMAIL_CLIP_BYTES,
   AI_OUTPUT_BUDGETS,
   AI_OUTPUT_SURFACE,
+  isHeadlineVariant,
   type AiBudgetMetric,
   type AiLoadEstimate,
   type AiOutputKind,
@@ -1282,6 +1286,53 @@ export function detectUnrelatedScreenLinks(
   ]
 }
 
+/** A prop value with something in it: a destination, or words. */
+function isFilled(value: unknown): boolean {
+  return typeof value === 'string' && value.trim() !== ''
+}
+
+/**
+ * Rule 10, for a link that goes nowhere (AGL-3072). A Button or a Screen Link
+ * goes where its `screenId` or its `href` says, and those are the only
+ * destinations either element carries: the palette validator keeps a
+ * `screenId` the site has, and an `href` that is a path on the site, an
+ * `https:` address or a binding the caller admitted. Nothing else can stand
+ * in for one. A form is sent by the button the Form draws from its own
+ * `submitLabel`, the elements a page places carry no id an anchor could name
+ * (AGL-2867), and a generated node sets no interaction. So a link with
+ * neither is a dead control: a live About page's hero carried a "Request a
+ * Consultation" button with no destination. It is refused, with a re-ask
+ * naming its words and what it may link.
+ */
+export function detectLinksWithoutDestination(tree: AiDoctrineTree, outputKind: AiOutputKind): AiDoctrineViolation[] {
+  if (outputKind === 'email' || outputKind === 'form') return []
+  const dead: Array<{ id: string; label: string; inForm: boolean }> = []
+  for (const visit of walkTree(tree)) {
+    const { node } = visit
+    if (!LINK_COMPONENTS.has(node.componentId)) continue
+    if (isFilled(node.props?.['screenId']) || isFilled(node.props?.['href'])) continue
+    dead.push({
+      id: visit.id,
+      label: typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : '',
+      inForm: hasAncestor(tree, visit, (ancestor) => ancestor.componentId === 'form'),
+    })
+  }
+  if (!dead.length) return []
+  const [first] = dead
+  const words = first.label ? `"${first.label}"` : `A ${displayName(tree.nodes[first.id].componentId)}`
+  const instead = dead.some((entry) => entry.inForm)
+    ? ' A Form draws its own send button from its "submitLabel", so take out a button drawn inside one and set that label instead.'
+    : ' When the site has no page for it, take it out: a form on this page is sent by its own button, and no element can be reached by an anchor.'
+  return [
+    {
+      rule: 10,
+      code: 'link-without-destination',
+      message: `${words} goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives.${instead}`,
+      nodeIds: unique(dead.map((entry) => entry.id)),
+    },
+  ]
+}
+
 /** Answer fields that say "publish", wherever the answer put them. */
 const PUBLISH_KEYS = /^(?:publish|published|publishNow|publishAt|goLive|isLive|live|makeLive)$/i
 
@@ -1443,6 +1494,201 @@ export function aiTreeCopy(
   return samples
 }
 
+/**
+ * The props a heading, a subhead or a body text shows as a line a reader
+ * reads, by element. A button's or a link's label, a form field's label, a
+ * run of inline text inside a sentence and every accessible name are not
+ * lines, and how they end is not held.
+ */
+const LINE_PROPS: Readonly<Record<string, readonly string[]>> = {
+  muiTypography: ['children'],
+  muiListItemText: ['primary', 'secondary'],
+  muiCardHeader: ['title', 'subheader'],
+  muiAccordionSummary: ['children'],
+  emailText: ['children'],
+}
+
+/** Text styles that label rather than say: a caption, an overline, a micro label. */
+const LABEL_VARIANTS = new Set(['caption', 'overline', 'micro'])
+
+/**
+ * Words no finished line ends on: an article, or a conjunction that joins two
+ * parts. "a" counts only in lowercase, since "Plan A" ends on a name.
+ */
+const DANGLING_WORDS = new Set(['an', 'the', 'and', 'or', 'but', 'nor', '&'])
+
+/**
+ * Words that open a phrase. A title may end on one it strands, as "What we
+ * help with" does, but a line that ends on one right after a comma or a dash
+ * opened a phrase it never wrote: "…that matter most, with".
+ */
+const OPENING_WORDS = new Set([
+  'about',
+  'across',
+  'after',
+  'against',
+  'along',
+  'among',
+  'as',
+  'at',
+  'because',
+  'before',
+  'between',
+  'by',
+  'for',
+  'from',
+  'if',
+  'in',
+  'into',
+  'like',
+  'of',
+  'on',
+  'onto',
+  'since',
+  'so',
+  'than',
+  'that',
+  'through',
+  'to',
+  'toward',
+  'towards',
+  'unless',
+  'until',
+  'upon',
+  'via',
+  'when',
+  'where',
+  'whereas',
+  'while',
+  'with',
+  'within',
+  'without',
+])
+
+/** A line that closes itself: a sentence's end, a closing quote or bracket, or a colon that introduces what follows. */
+const CLOSED_LINE = /[.!?…:;"'”’»)\]]$/
+
+/**
+ * The word a line ends on when that word leaves it unfinished (AGL-3072), or
+ * `null`. A line that closes itself, ends on a binding or a bracketed fact the
+ * member fills, or ends on any other word, is finished as far as a check can
+ * tell. Exported for the specs that hold the closed list.
+ */
+export function aiDanglingWord(line: string): string | null {
+  const text = line.trim()
+  if (!text || CLOSED_LINE.test(text)) return null
+  const word = /(?:^|[^A-Za-z&'’])([A-Za-z]+|&)$/.exec(text)?.[1]
+  if (!word) return null
+  const lower = word.toLowerCase()
+  if (word === 'a' || DANGLING_WORDS.has(lower)) return word
+  // A comma, a semicolon or a dash breaks the line before the word; the hyphen
+  // of "Drop-in" or "Add-on" joins one word and breaks nothing.
+  const before = text.slice(0, text.length - word.length)
+  return OPENING_WORDS.has(lower) && /(?:[,;—–]|\s-)\s*$/.test(before) ? word : null
+}
+
+/** The last words of a line, as a re-ask quotes them. */
+function lineTail(line: string): string {
+  const words = line.trim().split(/\s+/)
+  return words.length > 6 ? `…${words.slice(-6).join(' ')}` : words.join(' ')
+}
+
+/**
+ * Rule 14, for a line cut short (AGL-3072). Copy in the site's voice is
+ * finished copy: a heading, a subhead or a body text that ends on an article
+ * or a joining conjunction, or on a word that opens a phrase right after a
+ * comma, with no closing punctuation, reads as a sentence cut off mid-thought.
+ * A live About page's hero subhead ended "…that matter most, with". A closed
+ * list of words, on the lines a reader reads, keeps it deterministic: a
+ * label, a button, a caption and a bracketed fact are never held to it.
+ */
+export function detectDanglingWords(tree: AiDoctrineTree): AiDoctrineViolation[] {
+  const found: Array<{ id: string; line: string; word: string }> = []
+  for (const { id, node } of walkTree(tree)) {
+    const props = LINE_PROPS[node.componentId]
+    if (!props) continue
+    if (node.componentId === 'muiTypography' && LABEL_VARIANTS.has(String(node.props?.['variant'] ?? ''))) continue
+    if (node.componentId === 'emailText' && node.props?.['variant'] === 'caption') continue
+    for (const name of props) {
+      const line = node.props?.[name]
+      const word = typeof line === 'string' ? aiDanglingWord(line) : null
+      if (word) found.push({ id, line: line as string, word })
+    }
+  }
+  if (!found.length) return []
+  const [first] = found
+  return [
+    {
+      rule: 14,
+      code: 'dangling-word',
+      message: `"${lineTail(first.line)}" has no closing punctuation, and its last word, "${first.word}", leaves the sentence unfinished. Finish the sentence, or end the line before "${first.word}".`,
+      nodeIds: unique(found.map((entry) => entry.id)),
+    },
+  ]
+}
+
+/** The labels a button or a link shows, beside the lines: cut, they read as broken too. */
+const LABEL_PROPS: Readonly<Record<string, readonly string[]>> = {
+  muiButton: ['children'],
+  muiScreenLink: ['children'],
+  emailButton: ['children'],
+}
+
+/** The line the palette validator writes when it cuts a prop at its ceiling. */
+const CUT_REPAIR = /^(.+)\.([A-Za-z0-9_]+) was over (\d+) characters; truncated$/
+
+/** The first words of a line, as a re-ask quotes them. */
+function lineHead(line: string): string {
+  const words = line.trim().split(/\s+/)
+  return words.length > 8 ? `${words.slice(0, 8).join(' ')}…` : words.join(' ')
+}
+
+/**
+ * Rule 14, for a line cut at its ceiling (AGL-3076). The palette validator
+ * holds copy to a ceiling for its role and cuts what runs past it, and says so
+ * only in its repairs. A cut line is unfinished wherever the cut falls, after
+ * a word or inside one, and a heading style's ceiling of
+ * `AI_TEXT_LIMITS.headline` characters is one the catalog never shows a model:
+ * a live About page's hero subhead, a Typography in the h5 style, was cut at
+ * 120 characters to "…that matter most, with". So a heading, a subhead, a body
+ * line, or a button's or a link's label the validator cut is refused, with a
+ * re-ask naming the ceiling.
+ *
+ * `repairs` are the palette validator's, naming nodes by the ids of the tree
+ * it was given, `written`; `idOf` turns such an id into the id the violation
+ * names.
+ */
+export function detectCutLines(
+  repairs: readonly string[],
+  written: Readonly<Record<string, unknown>>,
+  idOf: (id: string) => string = (id) => id,
+): AiDoctrineViolation[] {
+  const cut: Array<{ id: string; line: string; limit: number; heading: boolean }> = []
+  for (const repair of repairs) {
+    const match = CUT_REPAIR.exec(repair)
+    if (!match) continue
+    const [, nodeId, name, limit] = match
+    const node = written[nodeId]
+    if (!isRecord(node) || typeof node['componentId'] !== 'string') continue
+    const props = isRecord(node['props']) ? node['props'] : {}
+    const shown = LINE_PROPS[node['componentId']] ?? LABEL_PROPS[node['componentId']] ?? []
+    const line = props[name]
+    if (!shown.includes(name) || typeof line !== 'string') continue
+    cut.push({
+      id: idOf(nodeId),
+      line,
+      limit: Number(limit),
+      heading: node['componentId'] === 'muiTypography' && isHeadlineVariant(props['variant']),
+    })
+  }
+  if (!cut.length) return []
+  const [first] = cut
+  const message = first.heading
+    ? `A line in a heading style holds at most ${first.limit} characters, and "${lineHead(first.line)}" runs past them, so it was cut off where they end. Write it whole within ${first.limit} characters, or give a longer line a subtitle or body style.`
+    : `"${lineHead(first.line)}" runs past the ${first.limit} characters its element holds, so it was cut off where they end. Write it whole within ${first.limit} characters.`
+  return [{ rule: 14, code: 'copy-cut-at-ceiling', message, nodeIds: unique(cut.map((entry) => entry.id)) }]
+}
+
 const PURE_CONTAINERS = new Set(['muiBox', 'muiStack', 'muiContainer', 'muiGrid', 'section'])
 const EMBED_COMPONENTS = new Set(['videoEmbed', 'custom-html', 'functionWidget'])
 const DUPLICATE_SX_MIN_KEYS = 2
@@ -1542,6 +1788,70 @@ export function detectHeavyDocument(
     'This embeds a third-party player or script, which loads its own code on every visit. Use a Video from the media library, or name the embed and its cost in the plan.',
   )
   return violations
+}
+
+/** The items a list or a row of cards repeats, as a re-ask names them. */
+const ITEM_NOUNS: Readonly<Record<string, string>> = { muiListItem: 'list item', muiCard: 'card' }
+
+/** Elements that frame or space what they hold and show nothing of their own. */
+const FRAME_COMPONENTS = new Set([
+  'div',
+  'section',
+  'muiBox',
+  'muiStack',
+  'muiContainer',
+  'muiGrid',
+  'muiPaper',
+  'muiCard',
+  'muiCardContent',
+  'muiCardActions',
+  'muiListItem',
+  'muiAccordion',
+  'muiAccordionDetails',
+])
+
+/** Elements that show only their words, by the props that hold them. */
+const WORD_PROPS: Readonly<Record<string, readonly string[]>> = {
+  ...LINE_PROPS,
+  muiList: ['subheader'],
+  muiInlineText: ['children'],
+  muiButton: ['children'],
+  muiScreenLink: ['children'],
+}
+
+/** Whether a node shows anything of its own: its words, or whatever an element that is neither a frame nor words draws. */
+function showsOwn(node: AiDoctrineNode): boolean {
+  const words = WORD_PROPS[node.componentId]
+  if (words) return words.some((name) => isFilled(node.props?.[name]))
+  return !FRAME_COMPONENTS.has(node.componentId)
+}
+
+/**
+ * Rule 16, for an item with nothing in it (AGL-3072). A list item or a card
+ * that holds elements, none of which shows a word, a picture or anything
+ * else, is an empty row or an empty box on the page: a live About page's list
+ * of estate planning services ended on a List Item whose List Item Text had
+ * no words. An item that holds no element at all is `empty-container`'s, and
+ * is not reported twice.
+ */
+export function detectEmptyItems(tree: AiDoctrineTree): AiDoctrineViolation[] {
+  const empty: Array<{ id: string; noun: string }> = []
+  for (const { id, node } of walkTree(tree)) {
+    const noun = ITEM_NOUNS[node.componentId]
+    if (!noun || !(node.nodes ?? []).some((child) => tree.nodes[child])) continue
+    if (!walkTree({ rootId: id, nodes: tree.nodes }).some((inner) => showsOwn(inner.node))) {
+      empty.push({ id, noun })
+    }
+  }
+  if (!empty.length) return []
+  const nouns = unique(empty.map((entry) => entry.noun))
+  const message =
+    nouns.length > 1
+      ? 'A list item and a card hold nothing to read or see. Give each its words, or take it out.'
+      : nouns[0] === 'list item'
+        ? 'A list item holds no words, so its row shows empty. Write the words of its List Item Text, or take the item out.'
+        : 'A card holds nothing to read or see. Give it its words, or take the card out.'
+  return [{ rule: 16, code: 'empty-item', message, nodeIds: empty.map((entry) => entry.id) }]
 }
 
 // ── Rule 17: the budget, measured ────────────────────────────────────────
@@ -1809,6 +2119,9 @@ export function validateAiDoctrineTree(
     rootId: validated.rootId,
     nodes: validated.nodes as unknown as Record<string, AiDoctrineNode>,
   }
+  // The validator's repairs name the nodes as they were written; every finding names the minted ids.
+  const minted = new Map(Object.entries(validated.sourceIds).map(([id, source]) => [source, id]))
+  const written = isRecord(input) && isRecord(input['nodes']) ? input['nodes'] : {}
   const violations = [
     ...publish,
     ...detectRepeatedSubtrees(tree, otherPages, context),
@@ -1820,11 +2133,15 @@ export function validateAiDoctrineTree(
     ...detectTypedData(tree),
     ...detectImageSources(tree, context),
     ...detectUnrelatedScreenLinks(tree, outputKind, context),
+    ...detectLinksWithoutDestination(tree, outputKind),
     ...detectDocumentStructure(tree, outputKind),
     ...detectAdHocWidths(tree, outputKind),
     ...detectUnresponsiveGrids(tree, outputKind),
     ...detectOffVoiceCopy(aiTreeCopy(tree, context), context.framing),
+    ...detectCutLines(validated.repairs, written, (id) => minted.get(id) ?? id),
+    ...detectDanglingWords(tree),
     ...detectHeavyDocument(tree, outputKind, context),
+    ...detectEmptyItems(tree),
   ]
   const score = scoreAiOutput(tree, outputKind, context)
   violations.push(...detectOverBudget(score, outputKind, tree, context))
@@ -1990,6 +2307,104 @@ export function detectPlanRepeats(
       paths: entries.map((entry) => entry.path),
     })
   }
+  return violations
+}
+
+/** The fewest sections of one item, side by side and of one kind, that are one list split apart. */
+export const AI_SPLIT_LIST_MIN_SECTIONS = 2
+
+/** A section name's label: what comes before a colon or a spaced dash, as "practice area" in "practice area: family law". */
+const SECTION_LABEL = /^(.+?)\s*(?::|\s[-–—])\s*\S/
+
+/** A name for many of what a name names one of. */
+function pluralOf(name: string): string {
+  const words = name.trim()
+  if (/s$/i.test(words)) return words
+  return /[^aeiou]y$/i.test(words) ? `${words.slice(0, -1)}ies` : `${words}s`
+}
+
+/**
+ * What kind of item a section of one item shows, for telling a list split
+ * into sections apart from sections that each show one different thing: the
+ * components it places, else the label its name gives the item. `null` when
+ * neither says, or when the section binds its item to data.
+ */
+function sectionItemKind(
+  section: AiBuildPlanSection,
+  plan: AiBuildPlan,
+  kinds: Map<string, RecordKind>,
+  inventory: AiSiteInventory | null,
+): { key: string; name: string; components: string[] } | null {
+  if (section.uses.some((ref) => ['dataset', 'collection'].includes(String(refKind(ref, plan, kinds))))) return null
+  const label = SECTION_LABEL.exec(section.name)?.[1]?.trim() ?? ''
+  const components = section.uses.filter((ref) => refKind(ref, plan, kinds) === 'component')
+  if (components.length) {
+    const [first] = components
+    const named = isAiPlanNewRef(first)
+      ? aiPlanCreateFor(plan, first)?.name
+      : inventory?.components.find((row) => row.id === first)?.name
+    return {
+      key: `component:${components.map((ref) => ref.toLowerCase()).sort().join('|')}`,
+      name: pluralOf(label || named || first),
+      components,
+    }
+  }
+  const words = nameTokens(label).join(' ')
+  return words ? { key: `label:${words}`, name: pluralOf(label), components: [] } : null
+}
+
+/**
+ * Rule 1 (plan): a list is one section whose items repeat (AGL-3071). A
+ * section's `items` counts what it repeats, so two or more sections side by
+ * side that each show one item of the same kind — the same component, or a
+ * name that labels the same kind of item — are one list split apart. A live
+ * Free About page planned "the four areas we practice" as four sections of one
+ * item: none was drawn from the one written-once item a repeated section is
+ * built from, and the four came out in three different shapes. The re-ask
+ * names the sections and gives the one section to plan instead. Where the
+ * workspace keeps reusable components, a list long enough for rule 1 places
+ * one for its item, so the section it gives places one too.
+ *
+ * Sections of several items are never joined: two lists that share a card
+ * are two lists, and rule 8 counts each within its own section (AGL-3061).
+ */
+export function detectPlanSplitLists(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
+): AiDoctrineViolation[] {
+  const kinds = inventoryKinds(inventory)
+  const violations: AiDoctrineViolation[] = []
+  plan.screens.forEach((screen, screenIndex) => {
+    let run: Array<{ index: number; kind: NonNullable<ReturnType<typeof sectionItemKind>> }> = []
+    const close = () => {
+      if (run.length >= AI_SPLIT_LIST_MIN_SECTIONS) {
+        const names = run.map(({ index }) => `"${screen.sections[index].name}"`)
+        const listed = `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+        const [{ kind }] = run
+        // Rule 1 asks a list this long on a workspace that keeps components to place one for its item.
+        const component =
+          !kind.components.length && capabilities?.reusableComponents !== false && run.length >= AI_REPEAT_MIN_COUNT
+        const section = { name: kind.name, uses: component ? ['new:<name>'] : kind.components, items: run.length }
+        const instead = component
+          ? `, placing one reusable component for the item: reuse one the site has by its id, or declare one in create and place it as new:<name>, as in ${JSON.stringify(section)}.`
+          : `: ${JSON.stringify(section)}.`
+        violations.push({
+          rule: 1,
+          code: 'plan-split-list',
+          message: `The sections ${listed} each show one item of the same kind, so they are one list split apart. Plan them as one section whose ${run.length} items repeat${instead}`,
+          paths: run.map(({ index }) => `screens[${screenIndex}].sections[${index}]`),
+        })
+      }
+      run = []
+    }
+    screen.sections.forEach((section, index) => {
+      const kind = section.items === 1 ? sectionItemKind(section, plan, kinds, inventory) : null
+      if (!kind || (run.length && run[0].kind.key !== kind.key)) close()
+      if (kind) run.push({ index, kind })
+    })
+    close()
+  })
   return violations
 }
 
@@ -2497,6 +2912,99 @@ export function detectMissedDuplicate(
   return violations
 }
 
+/** What each exchange of a Free page job comes to at its worst, in credits. */
+export interface AiFreePageWorstCase {
+  /** The page plan. */
+  plan: number
+  /** The one layout a Free plan includes, built first on a site with none (AGL-3031). */
+  layout: number
+  /** The first section pass, which writes the cached prefix. */
+  firstSection: number
+  /** Each later section pass, which reads it. */
+  laterSection: number
+  /** A page's listing. */
+  listing: number
+}
+
+/**
+ * The Free taste's wall at its worst (AGL-3030, AGL-3070): each exchange of a
+ * Free page job in credits, every answer at its ceiling, as
+ * `jobs/ai-job-free-page.spec.ts` derives them from the page plan and the
+ * layout generation measured live and the requests as they stand. The spec
+ * fails when a figure it derives moves and this does not, so the section cap
+ * below cannot drift from the proof.
+ */
+export const AI_FREE_PAGE_WORST_CASE_CREDITS: Readonly<AiFreePageWorstCase> = {
+  plan: 83,
+  layout: 64,
+  firstSection: 44,
+  laterSection: 20,
+  listing: 3,
+}
+
+/**
+ * The most sections a Free job fits in `FREE_AI_TASTE_CREDITS_PER_MONTH` at
+ * its worst: the plan, the layouts it builds first, a listing for each page
+ * and the first section's pass, then as many later passes as the rest pays
+ * for; none when that is already past the wall. A component or a form is never
+ * a Free creation, since rule 7 refuses both on a workspace that keeps no
+ * reusable components, so the wall's proof measures neither.
+ */
+export function aiFreePageSectionsWithin(
+  creations: { layouts: number; pages?: number },
+  credits: Readonly<AiFreePageWorstCase> = AI_FREE_PAGE_WORST_CASE_CREDITS,
+): number {
+  const before =
+    credits.plan + creations.layouts * credits.layout + (creations.pages ?? 1) * credits.listing + credits.firstSection
+  if (before > FREE_AI_TASTE_CREDITS_PER_MONTH) return 0
+  return 1 + Math.floor((FREE_AI_TASTE_CREDITS_PER_MONTH - before) / credits.laterSection)
+}
+
+/**
+ * The layouts a Free plan's job builds before its sections: the ones it
+ * creates that the workspace may make, and on a site with no layout where it
+ * may make one, the one rule 2 asks the plan to create.
+ */
+function freePlanLayouts(plan: AiBuildPlan, inventory: AiSiteInventory | null, capabilities: AiPlanCapabilities): number {
+  const refused = aiPlanUncreatable(plan, capabilities).filter((entry) => entry.kind === 'layout').length
+  const creates = plan.create.filter((entry) => entry.kind === 'layout').length - refused
+  const needs = !(inventory?.layouts.length ?? 0) && capabilities.create.layout.allowed ? 1 : 0
+  return Math.max(creates, needs)
+}
+
+/**
+ * The Free wall (plan): a plan asks for no more sections than the Free taste
+ * pays for at its worst beside what the job builds first (AGL-3070). A live
+ * Free plan asked for eight sections beside its layout, where the wall's worst
+ * case pays for six, and fit only because every exchange ran under its
+ * ceiling; one that does not runs out of credits with its page half built. The
+ * cap only lowers what a plan may ask for, from the same figures the wall is
+ * proven with, so no plan the proof admits is refused. It is no building rule,
+ * so it names none.
+ */
+export function detectPlanOverFreeWall(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null,
+): AiDoctrineViolation[] {
+  if (!capabilities?.freeTaste) return []
+  const asked = plan.screens.reduce((sum, screen) => sum + screen.sections.length, 0)
+  const layouts = freePlanLayouts(plan, inventory, capabilities)
+  const pages = Math.max(plan.screens.length, 1)
+  const fits = aiFreePageSectionsWithin({ layouts, pages })
+  if (asked <= fits) return []
+  const job = pages > 1 ? `a Free plan of ${pages} pages` : 'a Free page'
+  const beside = layouts ? ` that creates ${layouts > 1 ? `${layouts} layouts` : 'its layout'}` : ''
+  return [
+    {
+      rule: null,
+      code: 'plan-over-free-wall',
+      message: `This plan asks for ${asked} sections, and ${job}${beside} fits ${fits} in the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits a Free workspace has a month. Plan at most ${fits}: draw a list's repeated items in one section, and leave out a section the brief does not ask for.`,
+      paths: plan.screens.map((_, index) => `screens[${index}].sections`),
+    },
+  ]
+}
+
 /**
  * Every plan rule, against the site inventory the plan was made from and,
  * where the job read them, what it may create there (AGL-3030). `null`
@@ -2510,6 +3018,8 @@ export function validateAiBuildPlan(
 ): AiDoctrineViolation[] {
   return [
     ...detectPlanRepeats(plan, inventory, capabilities),
+    ...detectPlanSplitLists(plan, inventory, capabilities),
+    ...detectPlanOverFreeWall(plan, inventory, capabilities),
     ...detectPlanLayoutRegions(plan, inventory, capabilities),
     ...detectPlanInlineForms(plan, inventory, capabilities),
     ...detectUntemplatedSimilarPages(plan, inventory),

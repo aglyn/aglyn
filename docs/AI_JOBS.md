@@ -299,9 +299,12 @@ live answer.
   `element`, `blog`, `text` and `chat`. A generator adds its briefs there.
 - **What a case holds.** The brief and its framing; the site `inventory` it is
   built for, in the shape `readSiteInventory` returns, and the media `assets`
-  its images are measured against; for a workspace that lacks something, its
-  `capabilities` (what it may create, and whether it keeps reusable components),
-  which hold the answer to the inline doctrine and the plan to what it may create; for a planned kind, the plan shape a good
+  its images are measured against; the site's `siteName` where the case gives
+  one, which a recording names the site by, and an untitled site where it gives
+  none (AGL-3077); for a workspace that lacks something, its
+  `capabilities` (what it may create, whether it keeps reusable components, and whether
+  it spends the Free taste), which hold the answer to the inline doctrine and the plan to
+  what it may create and to the sections the Free wall pays for; for a planned kind, the plan shape a good
   answer has (`expected.plan`: how many screens, what it must reuse, its
   layout, what it may create); `candidates`, each an answer with its plan, its
   rubric grade, and whether it was `authored` by hand or `recorded` from a
@@ -357,9 +360,27 @@ live answer.
   each exchange's tokens and credits under `candidate.steps`, metered as the
   machine meters a step. Any other planned kind records its plan alone until its
   generator is recorded the same way (a `plan`-scope answer, counted toward the
-  plan step rather than the kind's floor); a kind whose door is a request route
-  (the copy assistant's modes, the chat door) has no recorder yet, and a door
-  that gains one registers it with `registerAiEvalRecorder`.
+  plan step rather than the kind's floor). An automation brief is recorded
+  through the workflow step's own generation call (AGL-3074): a draft from the
+  case's `automationCapabilities` and `automationRecords`, or, for a case whose
+  `automation` holds a saved action, an explanation from that action's outline,
+  and a failed run's diagnosis where it also holds the run. The runner is not
+  driven, because it keeps the tool's input nowhere, and the harness scores that
+  input; `ai-eval-live.spec.ts` holds the recorder's request equal to the one the
+  runner sends for the same site. Product copy, a catalog, and categories with
+  discounts are recorded through the products step's runner against the case's
+  store in memory, named by `siteName`, and read back off the proposal it makes.
+  A case's `media` names the fixture under `tools/ai-eval/fixtures` that holds a
+  photo of its site's library (`media:eval-site/<id>` for a case with no
+  inventory), and only the download is stood in for: the photo is located,
+  turned upright, fitted to 768 pixels and re-encoded by `ai-product-image.ts`,
+  so no camera metadata leaves with it. The run refuses, before any request, a
+  brief whose media it was given no `readFixture` for. A kind no recorder covers
+  is skipped before any request, and `AI_EVAL_UNRECORDED_DOORS` says where
+  production answers it: a request route (the copy assistant's section, element
+  and blog modes, the chat door), or a job step no recorder drives yet (email,
+  SEO, insight and CRM). A door that gains a recorder registers it with
+  `registerAiEvalRecorder` and leaves that table.
   `AI_EVAL_CASES=<id>[,<id>]` records only the briefs it names. The launcher
   marks the jest it starts, so the shared setup's `.env` scrub (AGL-690) keeps
   the provider key the run was handed even where the repo-root `.env` holds
@@ -367,8 +388,21 @@ live answer.
   loses the key and stops before its first request, saying why. Where a case
   describes its workspace, the grader is told it the way the plan was — the
   capability lines — and that on a workspace without reusable components or saved
-  forms, an item drawn where it repeats and a form drawn on the page are the correct
-  build rather than a missed reuse (`aiEvalGraderCapabilities`, AGL-3040).
+  forms, a list's repeated items drawn in one section and a form drawn on the page are
+  the correct build rather than a missed reuse (`aiEvalGraderCapabilities`, AGL-3040). A built
+  page's grader is shown what its tree does not hold (AGL-3073): the plan's
+  creations and sections (`aiEvalPlanOutline`), and the screen as the draft stored
+  it, which a page recording keeps under `candidate.screen` — its address, search
+  title and description, its navigation proposal, and an outline of the layout it
+  renders inside, with the main landmark placed by `stampDocumentLandmark`
+  (`aiEvalBuiltPage`). A recording made before the screen was kept gives the plan's
+  screen and says so. The tree it grades goes without the keys the store keeps for
+  itself (`aiEvalGraderOutput`), which leaves the recorded About page's grader input
+  at 18,372 characters, from 23,600. The grader of an automation, a product's copy
+  or a store's categories is shown the request beyond the brief, built from the
+  case by the step's own prompt builder (`aiEvalGraderRequest`, AGL-3074), and the
+  grader of copy written with its photo in view is sent the same photo where its
+  model reads one, and told so either way.
 
 ## The routing table
 
@@ -472,7 +506,7 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
 - **Inline, where the workspace keeps no reusable components.** A workspace whose plan
   lacks `reusableComponents` can place no component and save no form, so there — and
   only there — the doctrine builds inline: a form is a Form element the page carries,
-  with its Form Fields inside it, and a repeated item is drawn in its own section.
+  with its Form Fields inside it, and a list's repeated items are drawn in one section.
   Rules 1 and 3 state that exception, the plan rules accept it on those capabilities,
   and the tree rules accept it where `AiDoctrineTreeContext.reusableComponents` is
   `false`, which the page step sets from the org's entitlement. Loose fields and a
@@ -482,6 +516,40 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   within the plan's `formSubmissionsPerMonth`. A section's answer writes that
   repeated item once and lists its copies' values, and the page step draws the copies
   ([A repeated item written once](#a-repeated-item-written-once)).
+- **A Free plan fits the Free wall (AGL-3070).** A live Free plan asked for eight sections
+  beside the layout its job creates, where the wall's worst case pays for six, and fit
+  only because every exchange ran under its ceiling; a plan that does not runs out of
+  credits with its page half built. Capabilities read for a workspace whose effective plan
+  is Free carry `freeTaste` (`aiPlanCapabilitiesFrom`), and `detectPlanOverFreeWall`
+  refuses a plan asking for more sections than `aiFreePageSectionsWithin` fits in
+  `FREE_AI_TASTE_CREDITS_PER_MONTH`: the plan, the layouts the job builds first (those it
+  creates and may make, and one on a site with none where it may make one, which rule 2
+  asks for), a listing a page and the first section's pass, then as many later passes as
+  the rest pays for, each at `AI_FREE_PAGE_WORST_CASE_CREDITS`. Those are the figures the
+  wall is proven with ([Evals](#evals)), and `ai-job-free-page.spec.ts` derives them again
+  and fails when one moves, so the cap and the proof cannot drift. So a Free plan asks
+  for at most 9 sections, or 6 when its job creates the layout first. A component or a
+  form is never a Free creation (rule 7), so neither is counted. The finding names no
+  rule (`plan-over-free-wall`), and its re-ask gives the count to plan within and how to
+  get there: a list's repeated items in one section, and no section the brief does not
+  ask for. It only lowers what a plan may ask for, and no prompt line or figure changes.
+- **A list is one section whose items repeat (AGL-3071).** A live Free plan read the
+  inline sentence's old words, "draw a repeated item in its own section", as a section an
+  item, and planned "the four areas we practice" as four sections of one item: none was
+  built from the one item a repeated section writes once (AGL-3053), and the four came
+  out in three shapes. The sentence (`AI_PLAN_INLINE_SENTENCE`, in the plan's user turn)
+  now says "draw a list's repeated items in one section", four characters longer, and
+  rule 1's `detectPlanSplitLists` refuses two or more sections side by side that each show
+  one item of the same kind: they place the same components, or their names give the item
+  the same label before a colon or a dash ("practice area: family law"). The re-ask names
+  the sections and gives the section to plan instead, as JSON:
+  `{"name":"practice areas","uses":[],"items":4}`. It holds on every workspace, since one
+  component placed once a section is the same split; there the section it gives keeps the
+  component, and a list of labeled sections long enough for rule 1's component is told to
+  place one, the site's or one declared in `create`, so the answer it asks for is not
+  refused next. Sections of several items are never
+  joined, so two lists that share a card stay two lists, as rule 8 counts them. No credit
+  figure the Free arithmetic quotes moves.
 - **A typed list is counted within its section (AGL-3061).** Rule 8's tree check
   (`detectTypedData`) refuses `AI_TYPED_LIST_MIN_ITEMS` (8) or more same-shaped items
   typed out by hand, counted within the Section they sit in: the unit the plan rule
@@ -728,7 +796,7 @@ confirmed `job.plan` and builds exactly one draft.
   tokens a caller names, and the palette validator is otherwise unchanged.
 - **Examples.** The template step sends the platform's starter pages as a
   cached block after its instructions (`src/lib/runtime/ai-template-examples.ts`),
-  each brought up to rules 3, 5 and 11 the same way, shown only when the
+  each brought up to rules 3, 5, 10 and 11 the same way, shown only when the
   doctrine accepts it with no repair, one page per shape, within 6,000
   characters.
 - **Drafts.** `src/lib/jobs/ai-job-drafts.ts` writes the document the host
@@ -1554,6 +1622,70 @@ the same way, in a Grid with a row direction and no container.
   moves. A Grid item is an element, so a row of cards takes one more element a card:
   written once, one.
 
+### A finished section
+
+The first live Free About page (AGL-3072) passed every check with three defects a
+reader sees at once: a hero subhead ending "…that matter most, with", a list of estate
+planning services whose last item had no words, and a "Request a Consultation" button
+that went nowhere. Validators in `runtime/ai-doctrine-validators.ts` refuse each on every
+page, template, layout and component tree, and the line the palette validator cut short
+wherever it cuts one (AGL-3076), in the loop every rule uses, with a re-ask that names the
+model's own nodes and says what to write instead:
+
+- **Rule 14, `dangling-word`** (`detectDanglingWords`, `aiDanglingWord`). A line a reader
+  reads — a Typography's text in any style but a caption, an overline or a micro label,
+  a List Item Text's primary and secondary text, a Card Header's title and subheader, an
+  Accordion Summary, an email's text — with no closing punctuation is refused when it
+  ends on an article (`a` in lowercase, `an`, `the`) or a joining conjunction (`and`,
+  `or`, `but`, `nor`, `&`), or on a word that opens a phrase (a closed list of
+  prepositions and subordinating conjunctions such as `with`, `for`, `from` and
+  `because`) right after a comma, a semicolon or a dash. So "What we help with" is a
+  title and "…matter most, with" is a sentence cut short. A button's or a link's label,
+  a form field's label, a run of Inline Text, a bracketed fact and a binding are never
+  held to how they end. The re-ask quotes the line's last words and says to finish the
+  sentence or end it before that word.
+- **Rule 16, `empty-item`** (`detectEmptyItems`). A List Item or a Card that holds
+  elements, none of which shows a word, a picture or anything else, is an empty row or
+  box. One that holds no element at all stays `empty-container`'s. The re-ask says to
+  write the item's words or take it out.
+- **Rule 10, `link-without-destination`** (`detectLinksWithoutDestination`). A Button
+  and a Screen Link carry two destinations, a `screenId` and an `href`, and nothing
+  else: the palette validator keeps a screen the site has and an `href` that is a path
+  on the site, an `https:` address or a binding the caller admitted. A form is sent by
+  the button the Form draws from its own `submitLabel`, the elements a page places carry
+  no id an anchor could name (AGL-2867, so a bare `#fragment` is dropped), and a
+  generated node sets no interaction. So a link with neither is refused; the re-ask names
+  its words and both destinations, a screen that does what those words say, so the answer
+  it asks for is not sent home for `link-unrelated-screen` to refuse next, and says to take
+  it out when the site has no page for it, or, inside a Form, to set the form's
+  `submitLabel` instead. An email's buttons
+  stay the email door's (`email-button-link`).
+- **Rule 14, `copy-cut-at-ceiling`** (`detectCutLines`, AGL-3076). The live subhead was
+  not written that way: it is a Typography in the h5 style, and the palette validator
+  holds a heading style's text to `AI_TEXT_LIMITS.headline`, 120 characters, and cut the
+  sentence there — "…that matter most, with clear advice and steady support." stored
+  as "…that matter most, with". The catalog shows a model `children=text≤2000`, the cut
+  was only a line in the tree's `repairs`, and a cut falls inside a word as readily as
+  after one, where no word list can see it. So a line (as above) or a Button's, Screen
+  Link's or email button's label the validator cut at its ceiling is refused, read from
+  the validator's repairs: in `validateAiDoctrineTree`, and in the page section check,
+  whose page check reads the section as stored and so already cut. The re-ask quotes the
+  line as the model wrote it and names the ceiling, and for a heading style says to write
+  it within 120 characters or give a longer line a subtitle or body style. A line cut on
+  a dangling word is named by both rules, the cut first.
+- **The starter examples a template is shown** (`runtime/ai-template-examples.ts`) leave
+  a Button or Screen Link with no destination out, as they leave out an inline form: the
+  Portfolio starter's hero "Get in touch" points nowhere until a member picks where it
+  goes. The template ledger's prefix moves from 4,987 to 4,956 estimated tokens.
+- **Controls.** The validators spec refuses the live page's hero and estate planning
+  sections, kept by hand as `AI_FREE_PAGE_BUILT_SECTIONS` in
+  `jobs/fixtures/ai-free-page-recording.ts`, for exactly these three findings and
+  nothing else; a section pass names each by the model's own id, and a cut line by the id
+  of the item a copy was drawn from; and the Free About eval case holds a failing control
+  for each of the four. The section eval case's call to action now links a path.
+- **What it costs.** No prompt line: a rule costs nothing until an answer breaks it, and
+  then one re-ask. No credit figure the Free arithmetic quotes moves.
+
 ### The time budget
 
 The beat gives a step what is left of `AI_JOB_SWEEP_BUDGET_MS` (280 s) as its
@@ -1781,7 +1913,11 @@ the element budget its request asks for.
   (AGL-3031), at the layout generation measured live (1,709 input, 6,649 cache read,
   6,649 cache write and 2,057 output), grown with the layout request's cached prefix:
   the same page that creates its layout first comes to at most 254 credits, and a
-  Free page fits 6 sections with its layout. The spec fails when
+  Free page fits 6 sections with its layout. Those two counts are what the plan rules
+  hold a Free plan to (AGL-3070): the spec computes them with the plan rules' own
+  `aiFreePageSectionsWithin` and holds each exchange's figure to
+  `AI_FREE_PAGE_WORST_CASE_CREDITS`, and replays the live plan of eight sections beside
+  its layout through the real plan step to a re-ask that keeps six. The spec fails when
   a doctrine or plan change pushes the figure past the wall or out of step with this
   sentence. When a live run has recorded the Free brief
   (`AI_EVAL_LIVE=1 AI_EVAL_CASES=page-free-law-firm-about npm run eval:ai-live`), the

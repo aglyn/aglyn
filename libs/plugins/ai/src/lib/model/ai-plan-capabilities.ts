@@ -41,8 +41,8 @@ import {
  * saved form on that entitlement. There, and only there, the doctrine builds
  * inline instead — a form is a Form element the page carries with its fields
  * inside it, which the site's submit route collects like any other, and a
- * repeated item is drawn in its own section. `reusableComponents` is the one
- * flag every validator reads for that.
+ * list's repeated items are drawn in one section (AGL-3071).
+ * `reusableComponents` is the one flag every validator reads for that.
  *
  * ── Kept out of the cached prefix ────────────────────────────────────────
  *
@@ -75,11 +75,17 @@ export interface AiPlanCapabilities {
   /**
    * Whether the workspace keeps reusable components and saved forms. Where
    * it does not, the doctrine builds inline: a form is a Form element holding
-   * its fields, and a repeated item is drawn in its own section.
+   * its fields, and a list's repeated items are drawn in one section.
    */
   reusableComponents: boolean
   /** Every creation kind a plan may name, and whether this job may make one here. */
   create: Readonly<Record<AiBuildPlanCreateKind, AiPlanCreation>>
+  /**
+   * Whether the workspace spends the Free taste, whose monthly credits are a
+   * wall (AGL-2925): a plan is then held to the sections the wall's worst
+   * case pays for (AGL-3070). Absent is `false`.
+   */
+  freeTaste?: boolean
 }
 
 /** What a job of one kind builds from its own plan, where it builds only some creations. */
@@ -130,9 +136,15 @@ export function aiCreationNoun(kind: AiBuildPlanCreateKind): string {
   return `${/^[aeiou]/.test(noun) ? 'an' : 'a'} ${noun}`
 }
 
-/** The sentence a request states when the workspace keeps no reusable components. */
+/**
+ * The sentence a request states when the workspace keeps no reusable
+ * components. It says a list's repeated items go in one section (AGL-3071):
+ * "a repeated item in its own section" reads just as well as a section for
+ * each item, which is how a live About page's four practice areas came to be
+ * planned as four sections of one item.
+ */
 export const AI_PLAN_INLINE_SENTENCE =
-  'This workspace keeps no reusable components or saved forms: draw a repeated item in its own section, and a form as a Form element holding its Form Fields.'
+  "This workspace keeps no reusable components or saved forms: draw a list's repeated items in one section, and a form as a Form element holding its Form Fields."
 
 /**
  * What the plan step's user turn says the job may create here: one line a
@@ -160,7 +172,7 @@ function insteadOf(kind: AiBuildPlanCreateKind, capabilities: AiPlanCapabilities
     case 'component':
       return capabilities.reusableComponents
         ? 'Place a component the site already has.'
-        : 'Draw the item in its own section instead.'
+        : "Draw a list's repeated items in one section instead."
     case 'form':
       return capabilities.reusableComponents
         ? 'Place a form the site already has.'

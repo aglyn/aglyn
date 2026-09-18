@@ -35,7 +35,7 @@ import type { AiSystemBlock } from './ai-runtime'
  * shape the tool takes, as one cached block that is the same bytes for every
  * org.
  *
- * Two things about a starter predate the building rules, and every example
+ * Three things about a starter predate the building rules, and every example
  * is brought up to them the same way rather than shown as it stands:
  *
  * - HEADINGS. A starter picks a heading's look with its variant, and rule 11
@@ -44,6 +44,9 @@ import type { AiSystemBlock } from './ai-runtime'
  *   paragraph.
  * - FORMS. A starter draws its contact form inline, and rule 3 places a form
  *   built on the Forms page by id, so the form is left out.
+ * - LINKS. A starter's call to action points nowhere until a member picks
+ *   where it goes, and rule 10 refuses a Button or a Screen Link with no
+ *   destination (AGL-3072), so such a link is left out.
  *
  * Only props the palette declares are kept, since the model is held to the
  * same palette, and none that holds a px, rem or em length, which rule 5
@@ -67,6 +70,16 @@ export const AI_TEMPLATE_EXAMPLES_MAX_CHARS = 6_000
 
 const FORM_COMPONENTS = new Set(['form', 'formField'])
 
+/** The elements a page links with, which go where their `screenId` or `href` says. */
+const LINK_COMPONENTS = new Set(['muiButton', 'muiScreenLink'])
+
+/** Whether a starter node is a link that names nowhere to go. */
+function linksNowhere(componentId: string, props: Record<string, unknown> | undefined): boolean {
+  if (!LINK_COMPONENTS.has(componentId)) return false
+  const named = (value: unknown) => typeof value === 'string' && value.trim() !== ''
+  return !named(props?.['screenId']) && !named(props?.['href'])
+}
+
 /** A CSS length in the units rule 5 forbids. */
 const CSS_LENGTH = /\d(?:\.\d+)?(?:px|rem|em)\b/i
 
@@ -87,7 +100,7 @@ export function aiStarterExampleTree(nodes: Record<string, StarterNode>): AiDoct
   const visit = (id: string): string | null => {
     const node = nodes[id]
     const componentId = String(node?.componentId ?? '')
-    if (!node || FORM_COMPONENTS.has(componentId)) return null
+    if (!node || FORM_COMPONENTS.has(componentId) || linksNowhere(componentId, node.props)) return null
     const root = id === CANVAS_ROOT_ELEMENT_ID
     if (!root && !allowed.has(componentId)) {
       unavailable = true

@@ -101,24 +101,31 @@ import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '@aglyn/aglyn/app-utils/plan-ent
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
-import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
+import { AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
 import { aiDoctrineSystemBlocks, aiDoctrineTreeTool } from '../runtime/ai-doctrine'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from './ai-job-layout-step'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { aiPlanCapabilitiesForJob, aiPlanCapabilityLines } from '../model/ai-plan-capabilities'
+import type { AiSiteInventory } from '../model/ai-site-inventory'
 import { AI_MODEL_CATALOG, AI_STEP_TIERS, estimateAiBilledUsd } from '../providers/catalog'
 import type { AiUsage } from '../providers/contract'
 import { AI_STEP_NOMINAL_USAGE } from '../providers/model-choice'
-import { validateAiBuildPlan, validateAiDoctrineTree } from '../runtime/ai-doctrine-validators'
+import {
+  AI_FREE_PAGE_WORST_CASE_CREDITS,
+  aiFreePageSectionsWithin,
+  validateAiBuildPlan,
+  validateAiDoctrineTree,
+  type AiFreePageWorstCase,
+} from '../runtime/ai-doctrine-validators'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import type { AiEvalCandidate, AiEvalRecording } from '../runtime/ai-eval'
 import type { generateSeoFields } from '../runtime/seo-fields'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
-import { AI_PAGE_SECTION_INLINE_LINE, aiPageCheckContext } from './ai-job-page-sections'
+import { AI_PAGE_SECTION_INLINE_LINE, AI_PAGE_SECTION_REPEAT_LINE, aiPageCheckContext } from './ai-job-page-sections'
 import { AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED, createAiJobPageStep } from './ai-job-page-step'
 import { AI_JOB_PLAN_REVIEW_COPY, AI_JOB_PLAN_SCOPES, createAiJobPlanStep } from './ai-job-plan-step'
-import { AI_FREE_PAGE_STOPPED_RECORDING } from './fixtures/ai-free-page-recording'
+import { AI_FREE_PAGE_BUILT_PLAN, AI_FREE_PAGE_STOPPED_RECORDING } from './fixtures/ai-free-page-recording'
 import { AI_FREE_PAGE_FIXTURE, AI_TWO_PERSON_PAGE_FIXTURE } from './fixtures/ai-page-briefs'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
@@ -344,6 +351,42 @@ describe('a Free workspace builds its first page', () => {
     expect(cards.map((card) => (page[(card.nodes ?? [])[0]].nodes ?? []).map((id) => page[id].props?.['children']))).toEqual(written)
     expect(JSON.stringify(page)).not.toMatch(/\{\{|"repeat"/)
   })
+
+  it('plans the four practice areas as one section whose items repeat when a first answer splits them, and builds it from one item written once (AGL-3071)', async () => {
+    const [hero, areas, ...rest] = FIXTURE.plan.screens[0].sections
+    const titles = (FIXTURE.answers[1].nodes['b5'].repeat ?? []).map(([title]) => String(title).toLowerCase())
+    expect([areas.name, areas.items, titles.length]).toEqual(['practice areas', 4, 4])
+    // How a live Free plan split the brief's four practice areas: a section of one item each.
+    const split = {
+      ...FIXTURE.plan,
+      screens: [{ ...FIXTURE.plan.screens[0], sections: [hero, ...titles.map((title) => ({ name: `practice area: ${title}`, uses: [], items: 1 })), ...rest] }],
+    }
+    mockRunAiRequest.mockReset()
+    mockRunAiRequest
+      .mockResolvedValueOnce(toolAnswer(AI_BUILD_PLAN_TOOL.name, split))
+      .mockResolvedValueOnce(toolAnswer(AI_BUILD_PLAN_TOOL.name, FIXTURE.plan))
+    const planOutcome = await createAiJobPlanStep({
+      readInventory: async () => FIXTURE.inventory,
+      findPlansByKey: null,
+      readCapabilities: async () => FREE,
+      admissionRefusal: async () => null,
+    })({ job: job(), stepIndex: 0, now: NOW, firestore: aiEvalMemoryFirestore({}).firestore, org: FREE_ORG })
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    expect(String(mockRunAiRequest.mock.calls[1][0].messages.at(-1).content)).toContain(
+      `Plan them as one section whose 4 items repeat: {"name":"practice areas","uses":[],"items":4}.`,
+    )
+    expect((planOutcome.plan as AiJobPlan).screens[0].sections).toEqual(FIXTURE.plan.screens[0].sections)
+
+    // The kept plan's practice areas section is asked for its item written once, and the page draws four cards from it.
+    const { passRequests, page } = await replay()
+    expect(passRequests.map((request) => String(request.messages[0].content).includes(AI_PAGE_SECTION_REPEAT_LINE))).toEqual([
+      false,
+      true,
+      false,
+      false,
+    ])
+    expect(Object.values(page).filter((node) => node.componentId === 'muiCard')).toHaveLength(4)
+  })
 })
 
 // ── The arithmetic ───────────────────────────────────────────────────────
@@ -398,6 +441,8 @@ interface FreePageArithmetic {
   passes: number[]
   listing: number
   total: number
+  /** Each exchange at its worst, as the plan rules hold a Free plan's sections to it (AGL-3070). */
+  worstCase: AiFreePageWorstCase
   /** The most sections a Free page fits at every pass's answer ceiling. */
   sectionsWithin: number
   /** The one layout a Free plan includes, built first on a site with none (AGL-3031). */
@@ -442,7 +487,6 @@ function arithmetic(result: FreeReplay): FreePageArithmetic {
   const planCredits = creditsOf(planUsage, PLAN_MODEL)
   const total = planCredits + passes.reduce((sum, credits) => sum + credits, 0) + listing
   const later = Math.max(...passes.slice(1))
-  const sectionsWithin = 1 + Math.floor((FREE_AI_TASTE_CREDITS_PER_MONTH - planCredits - passes[0] - listing) / later)
   // The layout the page job builds first on a site with none, at the layout
   // generation measured live, its cached prefix grown as the layout step's
   // request has grown since: the doctrine, its instructions, the layout
@@ -462,13 +506,16 @@ function arithmetic(result: FreeReplay): FreePageArithmetic {
     LAYOUT_MODEL,
   )
   const totalWithLayout = total + layout
-  const sectionsWithinWithLayout =
-    1 + Math.floor((FREE_AI_TASTE_CREDITS_PER_MONTH - planCredits - layout - passes[0] - listing) / later)
+  // The sections a Free page fits, by the derivation the plan rules cap a Free plan with.
+  const worstCase: AiFreePageWorstCase = { plan: planCredits, layout, firstSection: passes[0], laterSection: later, listing }
+  const sectionsWithin = aiFreePageSectionsWithin({ layouts: 0 }, worstCase)
+  const sectionsWithinWithLayout = aiFreePageSectionsWithin({ layouts: 1 }, worstCase)
   return {
     plan: planCredits,
     passes,
     listing,
     total,
+    worstCase,
     sectionsWithin,
     layout,
     totalWithLayout,
@@ -564,6 +611,65 @@ describe('one Free page fits the Free taste, end to end', () => {
         true,
       ])
     }
+  })
+
+  it('caps a Free plan’s sections from the very figures the wall is proven with, so the cap and the proof cannot drift (AGL-3070)', async () => {
+    const figures = arithmetic(await replay())
+    expect(figures.worstCase).toEqual(AI_FREE_PAGE_WORST_CASE_CREDITS)
+    expect([aiFreePageSectionsWithin({ layouts: 0 }), aiFreePageSectionsWithin({ layouts: 1 })]).toEqual([
+      figures.sectionsWithin,
+      figures.sectionsWithinWithLayout,
+    ])
+    // Each page of a plan brings its own listing; past the wall, not even one section fits.
+    expect(aiFreePageSectionsWithin({ layouts: 1, pages: 2 })).toBe(
+      1 + Math.floor((FREE_AI_TASTE_CREDITS_PER_MONTH - figures.plan - figures.layout - 2 * figures.listing - figures.passes[0]) / Math.max(...figures.passes.slice(1))),
+    )
+    expect(aiFreePageSectionsWithin({ layouts: 5 })).toBe(0)
+    const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
+    expect(notes).toContain(
+      `a Free plan asks for at most ${figures.sectionsWithin} sections, or ${figures.sectionsWithinWithLayout} when its job creates the layout first`,
+    )
+  })
+
+  it('refuses the live Free plan’s eight sections beside its layout and keeps the six the wall fits, re-asked through the real plan step (AGL-3070)', async () => {
+    const bare: AiSiteInventory = { ...FIXTURE.inventory, layouts: [] }
+    const FREE_NO_LAYOUT = aiPlanCapabilitiesFrom(FREE_ORG, { layout: [], template: [] })
+    expect([FREE_NO_LAYOUT.freeTaste, FREE_NO_LAYOUT.create.layout]).toEqual([true, { allowed: true, left: 1, reason: null }])
+    const [hero, areas, work, form] = FIXTURE.plan.screens[0].sections
+    const withLayout = (sections: AiBuildPlan['screens'][number]['sections']): AiBuildPlan => ({
+      reuse: [],
+      create: [{ kind: 'layout', name: 'Site layout', why: 'The site has no layout yet.', duplicateOf: null, fields: [] }],
+      screens: [{ ...FIXTURE.plan.screens[0], layout: 'new:Site layout', sections }],
+    })
+    const six = withLayout([hero, { name: 'who we are', uses: [], items: 0 }, areas, work, { name: 'our values', uses: [], items: 0 }, form])
+    const seven = withLayout([...six.screens[0].sections.slice(0, 5), { name: 'fees', uses: [], items: 0 }, form])
+    const codes = (plan: AiBuildPlan, inventory: AiSiteInventory, capabilities: typeof FREE) =>
+      validateAiBuildPlan(plan, inventory, null, capabilities).map((violation) => violation.code)
+    expect(codes(six, bare, FREE_NO_LAYOUT)).toEqual([])
+    expect(codes(seven, bare, FREE_NO_LAYOUT)).toEqual(['plan-over-free-wall'])
+    expect(codes(AI_FREE_PAGE_BUILT_PLAN, bare, FREE_NO_LAYOUT)).toEqual(['plan-split-list', 'plan-over-free-wall'])
+    // A site with its layout already fits nine, and a paid workspace is held to no wall.
+    const nine = { ...FIXTURE.plan, screens: [{ ...FIXTURE.plan.screens[0], sections: [...seven.screens[0].sections.slice(0, 6), { name: 'our team', uses: [], items: 0 }, { name: 'questions', uses: [], items: 0 }, form] }] }
+    const ten = { ...nine, screens: [{ ...nine.screens[0], sections: [...nine.screens[0].sections.slice(0, 8), { name: 'offices', uses: [], items: 0 }, form] }] }
+    expect([codes(nine, FIXTURE.inventory, FREE), codes(ten, FIXTURE.inventory, FREE)]).toEqual([[], ['plan-over-free-wall']])
+    expect(validateAiBuildPlan(AI_FREE_PAGE_BUILT_PLAN, bare, null, { ...FREE_NO_LAYOUT, freeTaste: undefined }).map((violation) => violation.code)).toEqual(['plan-split-list'])
+
+    mockRunAiRequest.mockReset()
+    mockRunAiRequest
+      .mockResolvedValueOnce(toolAnswer(AI_BUILD_PLAN_TOOL.name, AI_FREE_PAGE_BUILT_PLAN))
+      .mockResolvedValueOnce(toolAnswer(AI_BUILD_PLAN_TOOL.name, six))
+    const outcome = await createAiJobPlanStep({
+      readInventory: async () => bare,
+      findPlansByKey: null,
+      readCapabilities: async () => FREE_NO_LAYOUT,
+      admissionRefusal: async () => null,
+    })({ job: job(), stepIndex: 0, now: NOW, firestore: aiEvalMemoryFirestore({}).firestore, org: FREE_ORG })
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    expect(String(mockRunAiRequest.mock.calls[1][0].messages.at(-1).content)).toContain(
+      `- This plan asks for 8 sections, and a Free page that creates its layout fits ${aiFreePageSectionsWithin({ layouts: 1 })} in the ${FREE_AI_TASTE_CREDITS_PER_MONTH} AI credits a Free workspace has a month. Plan at most ${aiFreePageSectionsWithin({ layouts: 1 })}: draw a list's repeated items in one section, and leave out a section the brief does not ask for. (at screens[0].sections)`,
+    )
+    expect(outcome.review).toEqual({ reason: 'plan', message: AI_JOB_PLAN_REVIEW_COPY, findings: [] })
+    expect((outcome.plan as AiJobPlan).screens[0].sections).toHaveLength(6)
   })
 
   it('takes nothing about the wall from a recording that did not build its page, as the first live one did not (AGL-3040)', () => {

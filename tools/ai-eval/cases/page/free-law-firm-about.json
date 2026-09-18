@@ -5,6 +5,7 @@
   "framing": null,
   "capabilities": {
     "reusableComponents": false,
+    "freeTaste": true,
     "create": {
       "component": { "allowed": false, "left": 0, "reason": "this workspace's plan does not include reusable components" },
       "layout": { "allowed": true, "left": 1, "reason": null },
@@ -467,6 +468,158 @@
               { "name": "practice areas", "uses": [], "items": 4 },
               { "name": "how we work", "uses": [], "items": 0 },
               { "name": "consultation request form", "uses": ["new:Consultation request"], "items": 0 }
+            ]
+          }
+        ]
+      },
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } }
+          }
+        }
+      },
+      "fails": ["plan"]
+    },
+    {
+      "why": "A hero whose subhead ends mid-sentence, as a live About page's did: \"…that matter most, with\" (AGL-3072).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "h5", "component": "p", "children": "A small firm that helps families and small businesses in [city] plan ahead, with" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A list of practice areas whose last item has no words, as a live About page's estate planning list did (AGL-3072).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro", "areas"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } },
+            "areas": { "componentId": "section", "props": { "element": "section" }, "nodes": ["areas-title", "areas-list"] },
+            "areas-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What we help with" } },
+            "areas-list": { "componentId": "muiList", "nodes": ["area-1", "area-2"] },
+            "area-1": { "componentId": "muiListItem", "nodes": ["area-1-text"] },
+            "area-1-text": { "componentId": "muiListItemText", "props": { "primary": "Estate planning", "secondary": "Wills, trusts and powers of attorney, written so your family knows what you wanted." } },
+            "area-2": { "componentId": "muiListItem", "nodes": ["area-2-text"] },
+            "area-2-text": { "componentId": "muiListItemText", "props": {} }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A hero call to action that goes nowhere, as a live About page's \"Request a Consultation\" did (AGL-3072).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead", "cta"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } },
+            "cta": { "componentId": "muiButton", "props": { "variant": "contained", "children": "Request a consultation" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A hero subhead in a heading style past the 120 characters that style holds, which the palette validator cuts off mid-word where they end (AGL-3076).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "h5", "component": "p", "children": "A small firm that helps families, landlords and small businesses in [city] plan ahead and settle disputes before they reach a courtroom." } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A plan that splits the four practice areas into four sections of one item each, as a live Free plan did, so no section repeats its items (AGL-3071).",
+      "plan": {
+        "reuse": [],
+        "create": [
+          { "kind": "layout", "name": "Site layout", "why": "The site has no layout yet, so its pages would otherwise carry their own header and footer.", "duplicateOf": null, "fields": [] }
+        ],
+        "screens": [
+          {
+            "title": "About Brightwater Law",
+            "slug": "/about",
+            "layout": "new:Site layout",
+            "template": null,
+            "duplicateOf": null,
+            "nav": true,
+            "seoTitle": "About Brightwater Law",
+            "seoDescription": "A small firm for families and small businesses: estate planning, real estate, business formation and landlord-tenant matters.",
+            "sections": [
+              { "name": "hero", "uses": [], "items": 0 },
+              { "name": "practice area: estate planning", "uses": [], "items": 1 },
+              { "name": "practice area: real estate", "uses": [], "items": 1 },
+              { "name": "practice area: business formation", "uses": [], "items": 1 },
+              { "name": "practice area: landlord and tenant", "uses": [], "items": 1 },
+              { "name": "consultation request form", "uses": [], "items": 0 }
+            ]
+          }
+        ]
+      },
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } }
+          }
+        }
+      },
+      "fails": ["plan"]
+    },
+    {
+      "why": "A plan that asks for eight sections beside the layout its job creates, where the Free wall's worst case pays for six (AGL-3070).",
+      "plan": {
+        "reuse": [],
+        "create": [
+          { "kind": "layout", "name": "Site layout", "why": "The site has no layout yet, so its pages would otherwise carry their own header and footer.", "duplicateOf": null, "fields": [] }
+        ],
+        "screens": [
+          {
+            "title": "About Brightwater Law",
+            "slug": "/about",
+            "layout": "new:Site layout",
+            "template": null,
+            "duplicateOf": null,
+            "nav": true,
+            "seoTitle": "About Brightwater Law",
+            "seoDescription": "A small firm for families and small businesses: estate planning, real estate, business formation and landlord-tenant matters.",
+            "sections": [
+              { "name": "hero", "uses": [], "items": 0 },
+              { "name": "who we are", "uses": [], "items": 0 },
+              { "name": "practice areas", "uses": [], "items": 4 },
+              { "name": "how we work", "uses": [], "items": 0 },
+              { "name": "our values", "uses": [], "items": 0 },
+              { "name": "fees", "uses": [], "items": 0 },
+              { "name": "our office", "uses": [], "items": 0 },
+              { "name": "consultation request form", "uses": [], "items": 0 }
             ]
           }
         ]

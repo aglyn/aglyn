@@ -74,7 +74,7 @@ describe('the starter template examples (AGL-2909)', () => {
       stack: {
         componentId: 'muiStack',
         props: { spacing: 2, notAProp: 'dropped' },
-        nodes: ['title', 'subtitle', 'heading', 'picture', 'form'],
+        nodes: ['title', 'subtitle', 'heading', 'picture', 'form', 'touch', 'work'],
       },
       title: { componentId: 'muiTypography', props: { variant: 'h2', children: 'Our story' } },
       subtitle: { componentId: 'muiTypography', props: { variant: 'h6', children: 'Since 1998' } },
@@ -82,6 +82,8 @@ describe('the starter template examples (AGL-2909)', () => {
       picture: { componentId: 'image', props: { alt: 'The shop', height: '220px', objectFit: 'cover' } },
       form: { componentId: 'form', props: { formName: 'Contact' }, nodes: ['field'] },
       field: { componentId: 'formField', props: { fieldName: 'email' } },
+      touch: { componentId: 'muiButton', props: { variant: 'contained', children: 'Get in touch' } },
+      work: { componentId: 'muiButton', props: { variant: 'outlined', children: 'See the work', href: '/work' } },
     })
     expect(tree).toEqual({
       rootId: ROOT,
@@ -93,11 +95,12 @@ describe('the starter template examples (AGL-2909)', () => {
           sx: { paddingTop: 6 },
           nodes: ['stack'],
         },
-        // A prop the palette does not declare, and the inline form, are left out.
+        // A prop the palette does not declare, the inline form and the button
+        // that goes nowhere are left out; a button that goes somewhere is kept.
         stack: {
           componentId: 'muiStack',
           props: { spacing: 2 },
-          nodes: ['title', 'subtitle', 'heading', 'picture'],
+          nodes: ['title', 'subtitle', 'heading', 'picture', 'work'],
         },
         // The first heading is the page's h1, a later one an h2, a subtitle a paragraph.
         title: {
@@ -114,6 +117,7 @@ describe('the starter template examples (AGL-2909)', () => {
         },
         // Rule 5 names no px length, so the example carries none.
         picture: { componentId: 'image', props: { alt: 'The shop', objectFit: 'cover' } },
+        work: { componentId: 'muiButton', props: { variant: 'outlined', children: 'See the work', href: '/work' } },
       },
     })
   })

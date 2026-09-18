@@ -37,6 +37,9 @@ const KNOWN: Record<string, { known: boolean; movedTo: string | null }> = {
   zgover: { known: true, movedTo: null },
   'aglyn-org': { known: true, movedTo: null },
   'zach-gover': { known: true, movedTo: 'zgover' },
+  // Only the negative-TTL test uses this one. `slugCache` is module state that
+  // outlives each test, so a slug another test warmed would start cached.
+  'ttl-known-slug': { known: true, movedTo: null },
 }
 
 /**
@@ -836,8 +839,11 @@ describe('the reserved /.well-known namespace (AGL-3016)', () => {
   it('is anchored at the root, so a segment spelled the same way is served', async () => {
     // `/acme/.well-known/x` is an org path whose surface happens to be spelled
     // like the namespace. Nothing discovers a protocol endpoint there.
+    // A KNOWN workspace, deliberately: since AGL-3017 an unknown first
+    // segment answers 404 on its own, which would pass this for the wrong
+    // reason.
     const response = await middleware(
-      request('app.aglyn.com', '/acme/.well-known/x'),
+      request('app.aglyn.com', '/zgover/.well-known/x'),
     )
     expect(response.status).toBe(200)
   })
@@ -882,13 +888,17 @@ describe('Cross-Origin-Opener-Policy (AGL-3046)', () => {
   })
 
   it('is an exact path, not a prefix', async () => {
-    // A page whose path merely begins with the name keeps its isolation.
-    expect(await coop('app.aglyn.com', '/edit-access-log')).toBe(
-      'same-origin-allow-popups',
-    )
+    // A workspace page whose path merely ENDS with the name keeps its
+    // isolation.
     expect(await coop('app.aglyn.com', '/zgover/edit-access')).toBe(
       'same-origin-allow-popups',
     )
+    // A top-level path that merely begins with the name is not the page — and
+    // since AGL-3017 it names no route and no workspace, so it never reaches
+    // the page policy at all.
+    expect(
+      (await middleware(request('app.aglyn.com', '/edit-access-log'))).status,
+    ).toBe(404)
   })
 
   it('keeps the rest of the page policy on /edit-access', async () => {
@@ -898,5 +908,183 @@ describe('Cross-Origin-Opener-Policy (AGL-3046)', () => {
     const policy = response.headers.get('Content-Security-Policy') ?? ''
     expect(policy).toContain('frame-ancestors')
     expect(policy).toMatch(/script-src [^;]*'nonce-/)
+  })
+})
+
+describe('the auth origin serves only its own family (AGL-3090)', () => {
+  /*
+   * These are the paths an agent-readiness scanner walks looking for an
+   * authorization server. Every one of them rendered the console shell with a
+   * 200, because `auth.aglyn.com` is a console domain and `[orgSlug]` binds to
+   * anything. Closing `/.well-known/*` alone (AGL-3016) only moved the scanner
+   * to the next name on its list, which is why the rule here is about the HOST
+   * rather than about any particular path.
+   */
+  it.each([
+    '/oauth/authorize',
+    '/oauth/token',
+    '/oauth/jwks',
+    '/authorize',
+    '/connect/authorize',
+    '/openid/authorize',
+    '/saml/metadata',
+  ])('answers 404 for %s on the auth host', async (path) => {
+    const response = await middleware(request('auth.aglyn.com', path))
+    expect(response.status).toBe(404)
+  })
+
+  it('refuses an org path there too — it is not a console', async () => {
+    expect(
+      (await middleware(request('auth.aglyn.com', '/acme/hosts/site'))).status,
+    ).toBe(404)
+  })
+
+  it.each([
+    '/',
+    '/signin',
+    '/signup',
+    '/signout',
+    '/verify-email',
+    '/account-recovery',
+    '/auth/handoff/start',
+    '/auth/handoff/continue',
+  ])('still serves %s, which is what the host is for', async (path) => {
+    const response = await middleware(request('auth.aglyn.com', path))
+    expect(response.status).toBe(200)
+  })
+
+  it('spends no verdict lookup refusing a path the host does not serve', async () => {
+    await middleware(request('auth.aglyn.com', '/oauth/authorize'))
+    expect(fetchCalls).toHaveLength(0)
+  })
+
+  it('still lets the geo refusal answer first', async () => {
+    const response = await middleware(
+      new NextRequest('https://auth.aglyn.com/oauth/authorize', {
+        headers: { host: 'auth.aglyn.com', 'x-vercel-ip-country': 'IR' },
+      }),
+    )
+    expect(response.status).toBe(451)
+  })
+
+  it('refuses without a verdict lookup, unlike the console host', async () => {
+    // The point of the host rule: on the auth origin nothing below the top
+    // level can be a workspace, so no slug has to be resolved to know that.
+    await middleware(request('auth.aglyn.com', '/acme/hosts/site'))
+    expect(fetchCalls).toHaveLength(0)
+    // The console host reaches the same refusal by a different road (AGL-3017)
+    // — it asks first, because there a first segment CAN name a workspace.
+    expect(
+      (await middleware(request('app.aglyn.com', '/acme/hosts/site'))).status,
+    ).toBe(404)
+    expect(fetchCalls).not.toHaveLength(0)
+  })
+})
+
+describe('no console URL is wrong any more (AGL-3017)', () => {
+  /*
+   * `[orgSlug]` binds to anything, so every unmatched console URL rendered the
+   * shell with a 200. These are the probes an agent-readiness audit walks; it
+   * read the 200s as an authorization server we do not run.
+   */
+  it.each([
+    '/oauth/authorize',
+    '/oauth/token',
+    '/authorize',
+    '/connect/authorize',
+    '/notanorg/notasurface',
+    '/definitely-not-a-page-xyz',
+  ])('answers 404 for %s, which names no workspace', async (path) => {
+    expect((await middleware(request('app.aglyn.com', path))).status).toBe(404)
+  })
+
+  it.each(['/zgover', '/zgover/hosts/site', '/aglyn-org/settings'])(
+    'still serves %s, which names a real one',
+    async (path) => {
+      expect((await middleware(request('app.aglyn.com', path))).status).toBe(200)
+    },
+  )
+
+  /*
+   * The list that decides this is `CONSOLE_TOP_LEVEL_SEGMENTS`, and its first
+   * draft was `APEX_PATH_SEGMENTS` — which omits all four of these. Two are
+   * credential flows, so that draft would have answered 404 to a password
+   * reset and to SSO sign-in.
+   */
+  it.each([
+    '/signin',
+    '/signup',
+    '/signout',
+    '/verify-email',
+    '/account-recovery',
+    '/reset-password',
+    '/sso',
+    '/billing',
+    '/edit-access',
+    '/manage',
+    '/admin',
+    '/auth/handoff/start',
+    '/',
+  ])('serves %s without spending a verdict on it', async (path) => {
+    const response = await middleware(request('app.aglyn.com', path))
+    expect(response.status).toBe(200)
+    expect(fetchCalls).toHaveLength(0)
+  })
+
+  it('leaves the framework its own namespace', async () => {
+    // `_next/data` is inside the matcher and is not ours to enumerate.
+    const response = await middleware(request('app.aglyn.com', '/_next/data/x.json'))
+    expect(response.status).toBe(200)
+    expect(fetchCalls).toHaveLength(0)
+  })
+
+  it('does not 404 a renamed workspace — the app still owes it a redirect', async () => {
+    expect(
+      (await middleware(request('app.aglyn.com', '/zach-gover/hosts/site'))).status,
+    ).toBe(200)
+  })
+
+  it('FAILS OPEN when the verdict lookup errors', async () => {
+    globalThis.fetch = jest.fn(async () => {
+      throw new Error('network down')
+    }) as unknown as typeof fetch
+    // A Firestore blip must serve the console, never 404 it.
+    expect(
+      (await middleware(request('app.aglyn.com', '/outage-path-check/hosts/x'))).status,
+    ).toBe(200)
+  })
+
+  it('does not apply where the org comes from the HOST, not the path', async () => {
+    // On a workspace subdomain `/hosts/site` is a page inside that org, not a
+    // slug. Reading it as one would 404 every real page on every subdomain.
+    expect(
+      (await middleware(request('zgover.aglyn.com', '/hosts/site'))).status,
+    ).toBe(200)
+    // Same for a custom console domain, which is rewritten into its one org.
+    expect(
+      (await middleware(request('console.acme-agency.com', '/hosts/site'))).status,
+    ).toBe(200)
+  })
+
+  it('trusts an UNKNOWN verdict for less time than a known one', async () => {
+    // `Date.now` rather than fake timers: the TTL is the only clock in play,
+    // and faking every timer stalls the awaited verdict fetch instead.
+    const now = jest.spyOn(Date, 'now')
+    try {
+      now.mockReturnValue(1_000_000)
+      await middleware(request('app.aglyn.com', '/ttl-unknown-slug/x'))
+      await middleware(request('app.aglyn.com', '/ttl-known-slug/x'))
+      expect(fetchCalls).toHaveLength(2)
+
+      // Six seconds on: past the negative window, well inside the positive
+      // one. An org created moments after something probed its slug must not
+      // stay 404 for the rest of a minute.
+      now.mockReturnValue(1_006_000)
+      await middleware(request('app.aglyn.com', '/ttl-unknown-slug/x'))
+      await middleware(request('app.aglyn.com', '/ttl-known-slug/x'))
+      expect(fetchCalls).toHaveLength(3)
+    } finally {
+      now.mockRestore()
+    }
   })
 })

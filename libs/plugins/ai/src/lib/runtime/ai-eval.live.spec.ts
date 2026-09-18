@@ -21,7 +21,8 @@
  */
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { join, resolve, sep } from 'node:path'
 import { readAiEvalCase, type AiEvalCase } from './ai-eval'
 import { aiEvalCasesNamed, aiEvalLiveAllowed, recordAiEvalLive } from './ai-eval-live'
 import { aiActiveProvider, aiProviderReady } from './ai-runtime'
@@ -38,6 +39,15 @@ import { aiActiveProvider, aiProviderReady } from './ai-runtime'
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
 const CASES_DIR = join(REPO_ROOT, 'tools', 'ai-eval', 'cases')
 const RECORDINGS_DIR = join(REPO_ROOT, 'tools', 'ai-eval', 'recordings')
+/** The files a case's media names, such as a product's photo (AGL-3074). */
+const FIXTURES_DIR = join(REPO_ROOT, 'tools', 'ai-eval', 'fixtures')
+
+/** A fixture's bytes, read only from inside the fixtures folder. */
+async function readFixture(file: string): Promise<Buffer> {
+  const path = resolve(FIXTURES_DIR, file)
+  if (!path.startsWith(`${FIXTURES_DIR}${sep}`)) throw new Error(`${file} is not a file under tools/ai-eval/fixtures`)
+  return readFile(path)
+}
 
 const files = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
@@ -64,7 +74,7 @@ const live = aiEvalLiveAllowed(process.env)
         files(CASES_DIR).map((file) => readAiEvalCase(JSON.parse(readFileSync(file, 'utf8')), file)),
         process.env,
       )
-      const report = await recordAiEvalLive(cases, { env: process.env })
+      const report = await recordAiEvalLive(cases, { env: process.env, readFixture })
       for (const { caseId, kind, candidate } of report.recorded) {
         const dir = join(RECORDINGS_DIR, kind)
         mkdirSync(dir, { recursive: true })

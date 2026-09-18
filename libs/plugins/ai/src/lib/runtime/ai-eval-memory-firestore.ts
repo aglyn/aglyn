@@ -25,10 +25,11 @@
  * that keeps every document in a map instead, for the length of one recording.
  *
  * It answers exactly the calls the draft writer and the generation steps
- * make: a document read, a projection of a collection, and a transaction that
- * reads before it creates or updates. Anything else throws, so a step that
- * starts reading something new fails the recording loudly rather than reading
- * nothing. It never runs in production: nothing a deployment loads imports it.
+ * make: a document read, a projection of a collection with its limit, and a
+ * transaction that reads before it creates or updates. Anything else throws,
+ * so a step that starts reading something new fails the recording loudly
+ * rather than reading nothing. It never runs in production: nothing a
+ * deployment loads imports it.
  */
 
 import type { AiSiteInventory } from '../model/ai-site-inventory'
@@ -76,12 +77,21 @@ export function aiEvalMemoryFirestore(seed: Record<string, Data> = {}): AiEvalMe
     }
   }
 
-  const queryOf = (path: string) => ({
-    kind: 'query' as const,
+  interface Query {
+    kind: 'query'
+    limit: (count: number) => Query
+    get: () => Promise<{ docs: Array<ReturnType<typeof snapshotOf>> }>
+  }
+
+  const queryOf = (path: string, max = Number.POSITIVE_INFINITY): Query => ({
+    kind: 'query',
+    // The products step reads a site's categories a page at a time (AGL-3074).
+    limit: (count) => queryOf(path, Math.min(max, count)),
     get: async () => ({
       docs: [...docs.keys()]
         .filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
         .sort()
+        .slice(0, max)
         .map(snapshotOf),
     }),
   })
