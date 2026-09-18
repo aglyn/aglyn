@@ -53,8 +53,24 @@ type Schema = Record<string, unknown>
 /** The API's own version. Independent of the platform release. */
 export const CUSTOMER_API_VERSION = 'v1'
 
+/**
+ * Where the route is mounted, and therefore the prefix every documented path
+ * hangs off (AGL-3094).
+ *
+ * An OpenAPI URL is `servers[].url` joined to the path, and the paths below
+ * are spelled `/v1/…` because that is what they are relative to the API. The
+ * mount has to come from `servers`, and for as long as it did not, every one
+ * of the 68 operations composed to `https://<origin>/v1/…` — which is a 404.
+ * The route answers at `/api/v1/…`, `/api/v1/openapi.json` said so on the line
+ * below, and only `servers` disagreed.
+ *
+ * Exported and shared rather than written twice: a generated client and the
+ * document that generated it must not be able to drift about where the API is.
+ */
+export const CUSTOMER_API_MOUNT = '/api'
+
 /** Where the description is served. */
-export const CUSTOMER_API_OPENAPI_PATH = '/api/v1/openapi.json'
+export const CUSTOMER_API_OPENAPI_PATH = `${CUSTOMER_API_MOUNT}/${CUSTOMER_API_VERSION}/openapi.json`
 
 const ISO = (description: string): Schema => ({
   type: 'string',
@@ -1224,7 +1240,9 @@ export function buildCustomerApiOpenApi(
         `Full documentation: ${options.documentationUrl}`,
       contact: { name: options.brandName, url: options.documentationUrl },
     },
-    servers: [{ url: origin, description: options.brandName }],
+    servers: [
+      { url: `${origin}${CUSTOMER_API_MOUNT}`, description: options.brandName },
+    ],
     security: [{ apiKey: [] }],
     tags: [
       ...tags,
