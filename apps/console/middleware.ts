@@ -325,6 +325,38 @@ export async function middleware(request: NextRequest) {
     return new NextResponse(null, { status: 404 })
   }
 
+  // THE AUTH ORIGIN IS SINGLE-PURPOSE, AND ONLY ITS OWN FAMILY IS SERVED
+  // THERE (AGL-3090).
+  //
+  // `auth.<workspace domain>` exists to keep the OAuth handshake same-site
+  // (AGL-462, AGL-1919): it reverse-proxies the Firebase helpers under `/__/*`
+  // and it renders the credential prompt. It is not a console. Everything else
+  // that answered on it was the workspace router replying for a host that has
+  // no workspace, and it replied 200 — so `/oauth/authorize`, `/authorize` and
+  // `/connect/authorize` all rendered the console shell, and an
+  // agent-readiness audit read them as an authorization server we do not run.
+  //
+  // The gate above closed `/.well-known/*` and the audit's next scan simply
+  // moved to the next candidate on its list. A path-at-a-time defense cannot
+  // win that: the list belongs to the scanner. What is defensible is the host
+  // answering only for what it actually serves.
+  //
+  // `APEX_PATH_SEGMENTS` is the allowance, reused rather than restated so the
+  // auth family cannot drift from the router's idea of it: the root, the
+  // credential prompt and its siblings, and the `auth/handoff` legs. `/__/*`
+  // sits outside the matcher below, so the Firebase helper never reaches here
+  // and cannot be refused by this.
+  //
+  // Scoped to the auth label alone. `app.<workspace domain>` still answers 200
+  // for an unknown org path, which is the same defect one layer up and needs a
+  // slug verdict in front of every console page load to close — AGL-3017.
+  if (hostnameOf(request.headers.get('host')) === `auth.${WORKSPACE_DOMAIN}`) {
+    const first = pathname.split('/').filter(Boolean)[0] ?? ''
+    if (first && !APEX_PATH_SEGMENTS.has(first)) {
+      return new NextResponse(null, { status: 404 })
+    }
+  }
+
   // CSP script-src: ENFORCING for everyone (AGL-518, AGL-523).
   //
   // The rule everything here follows, found by measurement and documented

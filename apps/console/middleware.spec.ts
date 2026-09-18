@@ -900,3 +900,71 @@ describe('Cross-Origin-Opener-Policy (AGL-3046)', () => {
     expect(policy).toMatch(/script-src [^;]*'nonce-/)
   })
 })
+
+describe('the auth origin serves only its own family (AGL-3090)', () => {
+  /*
+   * These are the paths an agent-readiness scanner walks looking for an
+   * authorization server. Every one of them rendered the console shell with a
+   * 200, because `auth.aglyn.com` is a console domain and `[orgSlug]` binds to
+   * anything. Closing `/.well-known/*` alone (AGL-3016) only moved the scanner
+   * to the next name on its list, which is why the rule here is about the HOST
+   * rather than about any particular path.
+   */
+  it.each([
+    '/oauth/authorize',
+    '/oauth/token',
+    '/oauth/jwks',
+    '/authorize',
+    '/connect/authorize',
+    '/openid/authorize',
+    '/saml/metadata',
+  ])('answers 404 for %s on the auth host', async (path) => {
+    const response = await middleware(request('auth.aglyn.com', path))
+    expect(response.status).toBe(404)
+  })
+
+  it('refuses an org path there too — it is not a console', async () => {
+    expect(
+      (await middleware(request('auth.aglyn.com', '/acme/hosts/site'))).status,
+    ).toBe(404)
+  })
+
+  it.each([
+    '/',
+    '/signin',
+    '/signup',
+    '/signout',
+    '/verify-email',
+    '/account-recovery',
+    '/auth/handoff/start',
+    '/auth/handoff/continue',
+  ])('still serves %s, which is what the host is for', async (path) => {
+    const response = await middleware(request('auth.aglyn.com', path))
+    expect(response.status).toBe(200)
+  })
+
+  it('spends no verdict lookup refusing a path the host does not serve', async () => {
+    await middleware(request('auth.aglyn.com', '/oauth/authorize'))
+    expect(fetchCalls).toHaveLength(0)
+  })
+
+  it('still lets the geo refusal answer first', async () => {
+    const response = await middleware(
+      new NextRequest('https://auth.aglyn.com/oauth/authorize', {
+        headers: { host: 'auth.aglyn.com', 'x-vercel-ip-country': 'IR' },
+      }),
+    )
+    expect(response.status).toBe(451)
+  })
+
+  it('leaves the console host alone — this gate is the auth label only', async () => {
+    // `app.aglyn.com` answering 200 here is AGL-3017, deliberately untouched:
+    // closing it needs a slug verdict in front of every console page load.
+    expect(
+      (await middleware(request('app.aglyn.com', '/oauth/authorize'))).status,
+    ).toBe(200)
+    expect(
+      (await middleware(request('app.aglyn.com', '/acme/hosts/site'))).status,
+    ).toBe(200)
+  })
+})
