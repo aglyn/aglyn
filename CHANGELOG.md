@@ -9,6 +9,25 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.129 — 2026-09-18
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.128...v1.0.0-beta.129)
+
+### Added
+
+- **api:** an MCP server offers the v1 API to agents as tools ([AGL-3091](https://linear.app/aglyn/issue/AGL-3091))
+
+### Fixed
+
+- **api:** the published v1 description names the path the API answers at ([AGL-3094](https://linear.app/aglyn/issue/AGL-3094))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear ceiling is 3094, read from the workspace ([AGL-3094](https://linear.app/aglyn/issue/AGL-3094))
+
+</details>
+
 ## v1.0.0-beta.128 — 2026-09-18
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.127...v1.0.0-beta.128)

@@ -274,6 +274,35 @@ Retry `429` and `500`. Never retry `401`, `403`, or `400` — nothing about them
 change on the second attempt, and a loop that retries them turns a config mistake into
 a rate-limit ban.
 
+## Letting an AI agent call it for you {#mcp}
+
+Everything above is the same API reached with an HTTP client. If what you are
+wiring up is a model — Claude, ChatGPT, or anything else that speaks the Model
+Context Protocol — point it at the MCP server instead and it gets the same
+operations as **tools**, with no client code to write:
+
+```
+https://app.aglyn.com/api/mcp
+```
+
+It is the same API, the same key and the same scopes. A tool call runs through
+the identical pipeline a request does, so an operation your key has no scope
+for is refused there exactly as it is here, with the same error body. The tool
+list is generated from the API description on this site, so it is never out of
+date with the reference.
+
+Authenticate with the key you made in Step 1, as a bearer token:
+
+```
+Authorization: Bearer aglyn_sk_...
+```
+
+The transport is Streamable HTTP, and the server keeps no session between
+calls — every request carries its own key, so there is nothing to resume and
+nothing to expire. Point your client's MCP configuration at the URL above and
+it will discover the tools itself; `/.well-known/api-catalog` on any site
+names it alongside the REST API for clients that look there first.
+
 ## Where to go next
 
 - **[API reference](/api/)** — every resource, every field, every error.
