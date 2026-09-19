@@ -254,9 +254,54 @@ describe('sitemap index (AGL-2520)', () => {
     )
   })
 
-  it('gives an empty collection a child sitemap anyway — the listing is a page', async () => {
+  it('names no child for a collection with nothing published (AGL-3101)', async () => {
+    // A collection is not a page until an entry in it is published: its
+    // listing 404s until then, so a child naming it would submit a dead URL.
     givenSite({
-      collections: [{ id: 'c1', data: { kind: 'content', slug: 'blog' }, entries: [] }],
+      collections: [
+        { id: 'c1', data: { kind: 'content', slug: 'blog' }, entries: [] },
+        {
+          id: 'c2',
+          data: { kind: 'content', slug: 'news' },
+          entries: entryRows(2, 'draft').map((row) => ({
+            ...row,
+            data: { ...row.data, status: 'draft' },
+          })),
+        },
+      ],
+    })
+
+    expect(locsOf(await fetchXml(''))).toEqual([`${BASE}/sitemaps/pages/1.xml`])
+  })
+
+  it('answers a direct fetch of that child with no listing and no categories', async () => {
+    // A crawler that learned this child's URL while the collection had entries
+    // still asks for it; the answer must not hand back addresses that 404.
+    givenSite({
+      collections: [
+        {
+          id: 'c1',
+          data: {
+            kind: 'content',
+            slug: 'blog',
+            categories: [{ id: 'guides', name: 'Guides' }],
+          },
+          entries: [],
+        },
+      ],
+    })
+
+    const xml = await fetchXml('/sitemaps/content-blog/1.xml')
+
+    expect(xml).toContain('<urlset')
+    expect(locsOf(xml)).toEqual([])
+  })
+
+  it('lists that collection with its first published entry', async () => {
+    givenSite({
+      collections: [
+        { id: 'c1', data: { kind: 'content', slug: 'blog' }, entries: entryRows(1) },
+      ],
     })
 
     expect(locsOf(await fetchXml(''))).toContain(
@@ -264,6 +309,7 @@ describe('sitemap index (AGL-2520)', () => {
     )
     expect(locsOf(await fetchXml('/sitemaps/content-blog/1.xml'))).toEqual([
       `${BASE}/blog`,
+      `${BASE}/blog/post-0`,
     ])
   })
 
@@ -296,7 +342,7 @@ describe('sitemap index (AGL-2520)', () => {
       store: { collectionScreenId: 'catalog-tmpl' },
       collections: [
         { id: 'c1', data: { kind: 'catalog', slug: 'sale' } },
-        { id: 'c2', data: { kind: 'content', slug: 'blog' }, entries: [] },
+        { id: 'c2', data: { kind: 'content', slug: 'blog' }, entries: entryRows(1) },
       ],
     })
 

@@ -32,7 +32,12 @@
 // with the sibling activity spec's identical globals under `tsc`.
 export {}
 
-import { decodeStoredNodes } from '@aglyn/aglyn/server'
+import {
+  billableScreenIds,
+  decodeStoredNodes,
+  NON_PAGE_SCREEN_MAX_PER_HOST,
+  nonPageScreenIds,
+} from '@aglyn/aglyn/server'
 
 interface Doc {
   [key: string]: unknown
@@ -283,10 +288,18 @@ describe('a screen', () => {
     expect(hostRows()).toHaveLength(0)
   })
 
-  it('refuses a kind that is not a page', async () => {
+  it('refuses an email design and an error screen, which are not pages', async () => {
     seedScreen('mail', { displayName: 'Welcome', kind: 'email' })
-    const result = await run('screen', { sourceId: 'mail' })
-    expect(result).toMatchObject({ ok: false, status: 400 })
+    seedScreen('oops', { displayName: 'Not found', kind: 'error' })
+    for (const sourceId of ['mail', 'oops']) {
+      expect(await run('screen', { sourceId })).toEqual({
+        ok: false,
+        status: 400,
+        error: 'Only a page or a collection entry template can be duplicated as a screen',
+      })
+    }
+    expect(rowsIn(`hosts/${HOST}/screens`)).toHaveLength(3)
+    expect(hostRows()).toHaveLength(0)
   })
 
   it('answers 404 for a missing or deleted source', async () => {
@@ -334,7 +347,144 @@ describe('a screen', () => {
   })
 })
 
+/** The refusal every non-page screen copy meets at the flat ceiling. */
+const NON_PAGE_CEILING_REFUSAL = {
+  ok: false,
+  status: 403,
+  error:
+    `This site is at its limit of ${NON_PAGE_SCREEN_MAX_PER_HOST} email and ` +
+    'template screens — delete some to make room',
+}
+
+/** `count` live email designs, the commonest non-page screen. */
+const seedEmailDesigns = (count: number) => {
+  for (let index = 0; index < count; index += 1) {
+    seedScreen(`mail-${index}`, { displayName: `Mail ${index}`, kind: 'email' })
+  }
+}
+
+/** The stored screens as the two counts read them. */
+const screenCounts = () => {
+  const rows = rowsIn(`hosts/${HOST}/screens`).map((row) => ({
+    id: row.path.split('/').pop() as string,
+    kind: row['kind'],
+    deletedAt: row['deletedAt'],
+  }))
+  const routing = (store.get(`hosts/${HOST}`) as Doc)['screens'] as never
+  return {
+    pages: [...billableScreenIds(rows, routing)].sort(),
+    nonPages: nonPageScreenIds(rows, routing).size,
+  }
+}
+
+describe('a collection entry template', () => {
+  const ENTRY = 'Blog — Entry Template'
+
+  beforeEach(() => {
+    seedScreen(
+      'src',
+      {
+        displayName: ENTRY,
+        slug: 'blog-post',
+        description: 'One post',
+        seo: { title: '{{entry.title}}' },
+        kind: 'template',
+        versionId: 'v1',
+        publishedAt: '__then__',
+      },
+      [
+        ['v1', { screenId: 'src', nodes: TREE, rootId: 'root', updatedAt: 1 }],
+        ['v2', { screenId: 'src', nodes: { ...TREE, extra: {} }, rootId: 'root', updatedAt: 2 }],
+      ],
+    )
+    // Routed on purpose — publishing is how the compose pipeline picks a
+    // template up — and the collection it renders points at it.
+    seedHost({ screens: { src: 'blog-post' } })
+    store.set(`hosts/${HOST}/collections/blog`, {
+      displayName: 'Blog',
+      slug: 'blog',
+      entryScreenId: 'src',
+    })
+  })
+
+  it('copies it as a template with the newest version as its first, unrouted, unpublished and used by nothing', async () => {
+    const result = await run('screen')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const copy = store.get(`hosts/${HOST}/screens/${result.id}`)
+    expect(copy).toMatchObject({
+      displayName: `Copy of ${ENTRY}`,
+      nameLower: 'copy of blog — entry template',
+      slug: 'blog-post-copy',
+      description: 'One post',
+      seo: { title: '{{entry.title}}' },
+      kind: 'template',
+      versionId: result.versionId,
+      createdBy: PERSON.uid,
+    })
+    expect(copy).not.toHaveProperty('publishedAt')
+    expect((store.get(`hosts/${HOST}`) as Doc)['screens']).toEqual({ src: 'blog-post' })
+    // No collection renders through the copy until somebody picks it.
+    expect(rowsIn(`hosts/${HOST}/collections`)).toEqual([
+      {
+        path: `hosts/${HOST}/collections/blog`,
+        displayName: 'Blog',
+        slug: 'blog',
+        entryScreenId: 'src',
+      },
+    ])
+
+    const version = store.get(
+      `hosts/${HOST}/screens/${result.id}/versions/${result.versionId}`,
+    ) as Doc
+    expect(version).toMatchObject({
+      screenId: result.id,
+      hostId: HOST,
+      displayName: `Duplicated from ${ENTRY} v2`,
+    })
+    expect(decodeStoredNodes(version['nodes'])).toEqual({ ...TREE, extra: {} })
+    expect(hostRows()[0]).toMatchObject({
+      action: 'screen.duplicated',
+      target: { type: 'screen', id: result.id, name: `Copy of ${ENTRY} · from ${ENTRY}` },
+    })
+  })
+
+  it('is not a page: a spent page band does not stop it, and it spends none of it', async () => {
+    seedScreen('home', { displayName: 'Home', slug: 'home', kind: 'page' })
+    seedHost({ screens: { src: 'blog-post', home: '/' } })
+    // Home spends the band of one, so a page copy is refused…
+    expect(await run('screen', { sourceId: 'home', org: ONE_SCREEN })).toMatchObject({
+      ok: false,
+      status: 403,
+    })
+    expect(screenCounts()).toEqual({ pages: ['home'], nonPages: 1 })
+    // …and the template copy is made, counted where a template counts.
+    const result = await run('screen', { org: ONE_SCREEN })
+    expect(result.ok).toBe(true)
+    expect(screenCounts()).toEqual({ pages: ['home'], nonPages: 2 })
+  })
+
+  it('meets the flat ceiling on non-page screens, refused with the email design sentence', async () => {
+    // The source and the designs leave room for exactly one more.
+    seedEmailDesigns(NON_PAGE_SCREEN_MAX_PER_HOST - 2)
+    expect((await run('screen')).ok).toBe(true)
+    expect(screenCounts().nonPages).toBe(NON_PAGE_SCREEN_MAX_PER_HOST)
+
+    expect(await run('screen')).toEqual(NON_PAGE_CEILING_REFUSAL)
+    expect(rowsIn(`hosts/${HOST}/screens`)).toHaveLength(NON_PAGE_SCREEN_MAX_PER_HOST)
+    expect(hostRows()).toHaveLength(1)
+  })
+})
+
 describe('an email design', () => {
+  it('is refused at the flat ceiling on non-page screens, which counts templates too', async () => {
+    seedScreen('src', { displayName: 'Welcome', kind: 'email' })
+    seedScreen('post', { displayName: 'Post', kind: 'template' })
+    seedEmailDesigns(NON_PAGE_SCREEN_MAX_PER_HOST - 2)
+    expect(await run('emailDesign')).toEqual(NON_PAGE_CEILING_REFUSAL)
+    expect(hostRows()).toHaveLength(0)
+  })
+
   it('copies only an email screen, without a slug, onto the non-page ceiling', async () => {
     seedScreen('src', { displayName: 'Welcome', kind: 'email', versionId: 'v1' }, [
       ['v1', { screenId: 'src', nodes: TREE, updatedAt: 1 }],
