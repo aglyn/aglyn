@@ -36,6 +36,16 @@ export interface PluginLoadEntry {
   /** surface → exported register-fn name on the loaded module. */
   register: Partial<Record<string, string>>
   load: () => Promise<Record<string, unknown>>
+  /**
+   * The module a surface loads from, when it is not `load`'s (AGL-3116).
+   *
+   * A package entry imported with `import()` is a namespace the loader reads
+   * by name, so the bundler keeps every export it has: a site surface loaded
+   * from the package root carried the console registrar, its nav objects and
+   * its lazy pages onto every published page that used the plugin. A surface
+   * with a module of its own carries only what that module exports.
+   */
+  loads?: Partial<Record<string, () => Promise<Record<string, unknown>>>>
 }
 
 export type PluginLoadManifest = readonly PluginLoadEntry[]
@@ -68,11 +78,14 @@ export function createPluginLoader(manifest: PluginLoadManifest): PluginLoader {
     for (const prefix of entry.apiPrefixes ?? []) prefixToId.set(prefix, entry.id)
   }
 
-  const loadOnce = (entry: PluginLoadEntry) => {
-    let promise = loads.get(entry.id)
+  /** The module `surface` registers from, loaded once per module. */
+  const loadOnce = (entry: PluginLoadEntry, surface: string) => {
+    const own = entry.loads?.[surface]
+    const key = own ? `${entry.id}:${surface}` : entry.id
+    let promise = loads.get(key)
     if (!promise) {
-      promise = entry.load()
-      loads.set(entry.id, promise)
+      promise = own ? own() : entry.load()
+      loads.set(key, promise)
     }
     return promise
   }
@@ -86,9 +99,12 @@ export function createPluginLoader(manifest: PluginLoadManifest): PluginLoader {
     // Dev-mode load metrics (AGL-436): slow plugins show up in the
     // console instead of hiding inside the gate's total.
     const startedAt = Date.now()
-    const mod = await loadOnce(entry)
+    const modules = await Promise.all(
+      wanted.map((surface) => loadOnce(entry, surface)),
+    )
     const loadMs = Date.now() - startedAt
-    for (const surface of wanted) {
+    for (const [index, surface] of wanted.entries()) {
+      const mod = modules[index]
       const key = `${entry.id}:${surface}`
       if (registered.has(key)) continue
       registered.add(key)
@@ -133,8 +149,8 @@ export function createPluginLoader(manifest: PluginLoadManifest): PluginLoader {
     for (const entry of targets) {
       const wanted = surfaces.filter((surface) => entry.register[surface])
       if (!wanted.length) continue
-      const mod = await loadOnce(entry)
       for (const surface of wanted) {
+        const mod = await loadOnce(entry, surface)
         const key = `${entry.id}:${surface}`
         if (bootstrapped.has(key)) continue
         bootstrapped.add(key)

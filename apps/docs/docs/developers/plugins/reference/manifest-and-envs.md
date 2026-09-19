@@ -173,6 +173,14 @@ declaration surfaces `declarations`, `serverDeclarations` and
 modules that create, transfer or destroy a durable customer object, which
 `check-activity-coverage.mjs` holds to writing an activity entry.
 
+An entry may also name `modules`: the subpath a surface registers from, when
+that surface's code must not ride with the package root's. The loaders read a
+loaded module's register function by name, so a bundler keeps everything the
+module exports; a plugin with both a site and a console surface therefore
+gives the site surface its own module (`"modules": { "site": "site" }` loads
+`@aglyn/plugins-forms/site`), and a published page that uses the plugin
+fetches the canvas half without the console registrar.
+
 Every entry also carries `contributes`, the same declaration a marketplace
 manifest carries (above), and it is required: the generator refuses a plugin
 without a valid one, and `apps/console/specs/plugin-contributions-declared.spec.ts`

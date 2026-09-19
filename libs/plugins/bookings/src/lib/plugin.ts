@@ -18,7 +18,6 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiCalendarClock } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
-import * as Booking from './components/booking'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { BOOKINGS_CONFIG_SCHEMA } from './plugin-config'
 
@@ -26,22 +25,6 @@ import { BOOKINGS_CONFIG_SCHEMA } from './plugin-config'
 const BookingsConsolePage = lazy(
   () => import('./components/bookings-console-page'),
 )
-
-/**
- * Bookings feature plugin (AGL-395): owns both halves of the pattern. The
- * `booking` canvas component moved here from `plugins-mui` — component ids
- * resolve by componentId, so legacy screen nodes persisted with pluginId
- * 'mui' keep rendering; the mui bundle no longer registers it. The console
- * half declares the Bookings nav/page through the ConsoleExtension
- * registry, gated by the `bookings` entitlement.
- */
-export const BOOKINGS_BUNDLE: Aglyn.FeatureBundleEntry[] = [
-  {
-    component: Booking.default,
-    schema: Booking.schema,
-    presets: Booking.presets,
-  },
-]
 
 /**
  * Console half only: registers the Bookings nav item + page. Safe to call
@@ -74,19 +57,4 @@ export function registerBookingsConsole(): void {
   })
 }
 
-export function registerBookingsPlugin(): void {
-  registerBookingsConsole()
-  if (Aglyn.plugins.getDependency(BUNDLE_ID)) return
-  Aglyn.plugins.addDependency(
-    Aglyn.defineUiFeatureBundle(
-      {
-        bundleId: BUNDLE_ID,
-        displayName: 'Bookings',
-        description: 'Service + time picker that books appointments',
-        icon: { path: mdiCalendarClock.path },
-        components: BOOKINGS_BUNDLE,
-      },
-      Aglyn.components,
-    ),
-  )
-}
+export * from './site'

@@ -1,5 +1,5 @@
 {
-  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests — the only files allowed to reference @aglyn/plugins-* outside libs/plugins. Ids must match FIRST_PARTY_PLUGINS in libs/aglyn plugin-manager/enabled-plugins.ts. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry), declarations = the light registrations core reads before any surface loads (`/declarations`, both apps, client and server), serverDeclarations = the same for the server alone (`/declarations.server`, platform-event subscriptions), consoleServerDeclarations = the same for the CONSOLE's server alone (`/declarations.console-server`, never loaded or bundled by the tenant runtime: for registrations that open what only the console holds), subprocessors = the third-party recipients the plugin's code sends data to, and its other hosts and its uses of hosts declared elsewhere (`/subprocessors`, called by the generator rather than at runtime, and written into the console's subprocessors manifest as data for the subprocessor inventory). activityMutationPaths = the plugin's modules that create, transfer or destroy a durable customer object, which `tools/scripts/check-activity-coverage.mjs` holds to logging an activity entry like the platform's own. `alwaysOn` here is the LOADER's meaning — the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead. `contributes` (AGL-3116, required) declares what the plugin adds and where, in the shape a marketplace manifest uses (core `plugin-contributions.ts`): `site.components` = the canvas component ids it registers, `site.features` = the site runtimes it mounts on every page of a site that switched it on, `console.slots` = the widget slots and panels it fills, `console.routes` / `console.orgRoutes` = the console routes it serves, `console.shell` = it draws a nav tab, a provider or a staff tab the shell renders on every screen. The loaders place a plugin by this declaration alone, so `apps/console/specs/plugin-contributions-declared.spec.ts` holds it to what the registrars actually register.",
+  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests — the only files allowed to reference @aglyn/plugins-* outside libs/plugins. Ids must match FIRST_PARTY_PLUGINS in libs/aglyn plugin-manager/enabled-plugins.ts. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry), declarations = the light registrations core reads before any surface loads (`/declarations`, both apps, client and server), serverDeclarations = the same for the server alone (`/declarations.server`, platform-event subscriptions), consoleServerDeclarations = the same for the CONSOLE's server alone (`/declarations.console-server`, never loaded or bundled by the tenant runtime: for registrations that open what only the console holds), subprocessors = the third-party recipients the plugin's code sends data to, and its other hosts and its uses of hosts declared elsewhere (`/subprocessors`, called by the generator rather than at runtime, and written into the console's subprocessors manifest as data for the subprocessor inventory). activityMutationPaths = the plugin's modules that create, transfer or destroy a durable customer object, which `tools/scripts/check-activity-coverage.mjs` holds to logging an activity entry like the platform's own. `alwaysOn` here is the LOADER's meaning — the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead. `modules` (AGL-3116) names the subpath a surface registers from when that surface's code must not ride with the package root's — each site surface has its own module, so a published page never loads a console registrar. `contributes` (AGL-3116, required) declares what the plugin adds and where, in the shape a marketplace manifest uses (core `plugin-contributions.ts`): `site.components` = the canvas component ids it registers, `site.features` = the site runtimes it mounts on every page of a site that switched it on, `console.slots` = the widget slots and panels it fills, `console.routes` / `console.orgRoutes` = the console routes it serves, `console.shell` = it draws a nav tab, a provider or a staff tab the shell renders on every screen. The loaders place a plugin by this declaration alone, so `apps/console/specs/plugin-contributions-declared.spec.ts` holds it to what the registrars actually register.",
   "plugins": [
     {
       "id": "mui",
@@ -82,6 +82,9 @@
         "site": "registerFormsPlugin",
         "console": "registerFormsConsole"
       },
+      "modules": {
+        "site": "site"
+      },
       "contributes": {
         "site": {
           "components": [
@@ -105,6 +108,9 @@
         "console": "registerBookingsConsole",
         "tenantApi": "registerBookingsApi",
         "consoleApi": "registerBookingsConsoleApi"
+      },
+      "modules": {
+        "site": "site"
       },
       "apiPrefixes": [
         "bookings"
@@ -131,6 +137,9 @@
         "console": "registerCommerceConsole",
         "tenantApi": "registerCommerceApi",
         "consoleApi": "registerCommerceConsoleApi"
+      },
+      "modules": {
+        "site": "site"
       },
       "apiPrefixes": [
         "commerce",
@@ -267,6 +276,9 @@
         "tenantApi": "registerEmailApi",
         "consoleApi": "registerEmailConsoleApi"
       },
+      "modules": {
+        "site": "site"
+      },
       "apiPrefixes": [
         "email"
       ],
@@ -299,6 +311,9 @@
         "site": "registerEventsCalendarPlugin",
         "console": "registerEventsCalendarConsole",
         "tenantApi": "registerEventsCalendarApi"
+      },
+      "modules": {
+        "site": "site"
       },
       "apiPrefixes": [
         "events"
@@ -365,6 +380,9 @@
         "tenantApi": "registerMarketingApi",
         "consoleApi": "registerMarketingConsoleApi",
         "site": "registerMarketingPlugin"
+      },
+      "modules": {
+        "site": "site"
       },
       "apiPrefixes": [
         "campaigns",

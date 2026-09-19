@@ -163,3 +163,47 @@ describe('resolveMarketplacePluginVersion — kill switch (AGL-2307)', () => {
     ).toMatchObject({ trust: 'realm' })
   })
 })
+
+/**
+ * Where the loaders may run a version (AGL-3116): its manifest id and its
+ * declared contributions ride with the resolution, because every realm path
+ * — the published page's presence check and the console's — reads them here.
+ */
+describe('resolveMarketplacePluginVersion — declared contributions (AGL-3116)', () => {
+  beforeEach(() => {
+    listings.set('listing1', { reviewStatus: 'listed' })
+  })
+
+  it('carries the manifest id and the declaration it was published with', async () => {
+    versions.set('listing1/1.0.0', {
+      sha256: SHA,
+      signature: 'sig',
+      trust: 'realm',
+      manifest: {
+        id: 'promo-countdown',
+        hostAbi: 1,
+        contributes: { console: { slots: ['hostActivity', 'hostActivity'] } },
+      },
+    })
+    await expect(resolveMarketplacePluginVersion('listing1', '1.0.0')).resolves.toEqual({
+      sha256: SHA,
+      signature: 'sig',
+      trust: 'realm',
+      hostAbi: 1,
+      pluginId: 'promo-countdown',
+      contributes: { console: { slots: ['hostActivity'] } },
+    })
+  })
+
+  it('reads a malformed declaration as none, so the default applies', async () => {
+    versions.set('listing1/1.0.0', {
+      sha256: SHA,
+      signature: 'sig',
+      trust: 'realm',
+      manifest: { id: 'promo-countdown', contributes: { site: 'everywhere' } },
+    })
+    const resolved = await resolveMarketplacePluginVersion('listing1', '1.0.0')
+    expect(resolved).toMatchObject({ pluginId: 'promo-countdown' })
+    expect(resolved && 'contributes' in resolved).toBe(false)
+  })
+})

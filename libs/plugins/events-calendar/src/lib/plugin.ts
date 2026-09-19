@@ -18,7 +18,6 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiCalendarMonthOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
-import * as EventList from './components/event-list'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
@@ -27,23 +26,6 @@ import { BUNDLE_ID } from './constants/bundle-common'
  * the Events page (the shell's plugin route wraps it in Suspense).
  */
 const EventsConsolePage = lazy(() => import('./components/events-console-page'))
-
-/**
- * Events Calendar feature plugin (AGL-313): the reference extraction of
- * the AGL-277 pattern. The `event-list` component moved here from
- * `plugins-mui` — component ids resolve by componentId, so legacy
- * screen nodes persisted with pluginId 'mui' keep rendering; the mui
- * bundle no longer registers it. The console half declares the Events
- * nav/dashboard surface through the ConsoleExtension registry, gated by
- * the `eventCalendar` entitlement.
- */
-export const EVENTS_CALENDAR_BUNDLE: Aglyn.FeatureBundleEntry[] = [
-  {
-    component: EventList.default,
-    schema: EventList.schema,
-    presets: EventList.presets,
-  },
-]
 
 /**
  * Console half only: registers the Events nav item + page + dashboard card
@@ -90,19 +72,4 @@ export function registerEventsCalendarConsole(): void {
   })
 }
 
-export function registerEventsCalendarPlugin(): void {
-  registerEventsCalendarConsole()
-  if (Aglyn.plugins.getDependency(BUNDLE_ID)) return
-  Aglyn.plugins.addDependency(
-    Aglyn.defineUiFeatureBundle(
-      {
-        bundleId: BUNDLE_ID,
-        displayName: 'Events Calendar',
-        description: 'Published events list with schema.org markup',
-        icon: { path: mdiCalendarMonthOutline.path },
-        components: EVENTS_CALENDAR_BUNDLE,
-      },
-      Aglyn.components,
-    ),
-  )
-}
+export * from './site'

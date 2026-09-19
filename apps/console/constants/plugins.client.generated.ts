@@ -21,18 +21,27 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'forms',
     register: {"site":"registerFormsPlugin","console":"registerFormsConsole"},
     load: () => import('@aglyn/plugins-forms'),
+    loads: {
+      site: () => import('@aglyn/plugins-forms/site'),
+    },
   },
   {
     id: 'bookings',
     apiPrefixes: ["bookings"],
     register: {"site":"registerBookingsPlugin","console":"registerBookingsConsole"},
     load: () => import('@aglyn/plugins-bookings'),
+    loads: {
+      site: () => import('@aglyn/plugins-bookings/site'),
+    },
   },
   {
     id: 'commerce',
     apiPrefixes: ["commerce","membership"],
     register: {"site":"registerCommercePlugin","console":"registerCommerceConsole"},
     load: () => import('@aglyn/plugins-commerce'),
+    loads: {
+      site: () => import('@aglyn/plugins-commerce/site'),
+    },
   },
   {
     id: 'marketplace',
@@ -62,12 +71,18 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     apiPrefixes: ["email"],
     register: {"site":"registerEmailPlugin","console":"registerEmailConsole"},
     load: () => import('@aglyn/plugins-email'),
+    loads: {
+      site: () => import('@aglyn/plugins-email/site'),
+    },
   },
   {
     id: 'events-calendar',
     apiPrefixes: ["events"],
     register: {"site":"registerEventsCalendarPlugin","console":"registerEventsCalendarConsole"},
     load: () => import('@aglyn/plugins-events-calendar'),
+    loads: {
+      site: () => import('@aglyn/plugins-events-calendar/site'),
+    },
   },
   {
     id: 'inbox',
@@ -85,6 +100,9 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     apiPrefixes: ["campaigns","experiments"],
     register: {"console":"registerMarketingConsole","site":"registerMarketingPlugin"},
     load: () => import('@aglyn/plugins-marketing'),
+    loads: {
+      site: () => import('@aglyn/plugins-marketing/site'),
+    },
   },
   {
     id: 'redirects',

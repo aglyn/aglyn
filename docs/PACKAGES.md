@@ -59,6 +59,15 @@ by subpath on purpose (AGL-2706) so a page pays for what it uses, and a
 consumer gets the same choice. **Consumer** marks the pieces someone takes on
 their own; the rest are published because those depend on them.
 
+A plugin with both a site half and a console half publishes `./site`
+(`src/lib/site.ts`) and names it in its `plugins.config.json` `modules`
+(AGL-3116). The loader reads a register function off the module it loaded, so
+a bundler keeps everything that module exports: loading the site surface from
+`.` carried the console registrar, its nav entries and its lazy pages onto
+every published page that used the plugin. `./site` is how a published page
+gets the canvas half alone, and it rides the `./*` alias the table already
+lists.
+
 ### Core
 
 | project | npm name | root | tags | consumer | entry points |

@@ -49,7 +49,6 @@ import { DEFAULT_ENABLED_PLUGINS } from '@aglyn/aglyn/plugin-manager/enabled-plu
 import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
 import { listSiteRuntimes } from '@aglyn/aglyn/plugin-manager/site-runtime'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
-import { onFirstNavigationIntent } from '@aglyn/shared-ui-jsx/components/navigation-intent'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import {
@@ -158,30 +157,18 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // `blockingPlugins` is the narrowed set when the server could prove nothing
   // else has work to do on this page (AGL-1289); without it this is the org's
   // whole enabled list, which is what it always was.
+  //
+  // It is also every site plugin this page loads (AGL-3116). A plugin the page
+  // does not use is not fetched ahead of a navigation either: the next page's
+  // props name the plugins IT uses, and this `ensure` holds that navigation
+  // until they have registered. Fetching the rest on link intent (AGL-2710)
+  // loaded every enabled plugin on any visit that reached for a link, for
+  // pages the visitor mostly never opened.
   const enabledPlugins = props.enabledPlugins ?? [
     ...DEFAULT_ENABLED_PLUGINS,
   ]
   use(sitePluginLoader.ensure(props.blockingPlugins ?? enabledPlugins, ['site']))
 
-  // The plugins that did NOT have to block, loaded when the visitor first
-  // reaches for a link (AGL-2710).
-  //
-  // Loading them straight after hydration moved the wait off first render
-  // without taking anything off the wire: the bundles the server just proved
-  // have no work on this page were fetched and evaluated on every page view
-  // anyway, measured at 208.9 KB across 23 requests — more than a quarter of
-  // everything the page transfers. On a surface metered per view, a bundle
-  // fetched at idle costs exactly what one fetched eagerly costs.
-  //
-  // `blockingPlugins` is computed from the FULL composed document, withheld
-  // lazy-panel subtrees included, and narrows only when the server could prove
-  // the rest have nothing to contribute here — so what is deferred is needed
-  // by a LATER page, and link intent is when a later page stops being
-  // hypothetical. It still precedes the click, so the registration lands
-  // before the navigation that wants it; a navigation that outruns it
-  // suspends on `ensure` above exactly as it would have.
-  const [, setLatePluginTick] = useState(0)
-  const blockingKey = props.blockingPlugins?.join(',')
   const enabledKey = enabledPlugins.join(',')
   /**
    * The site's plugin set, as the renderer reads it (AGL-3033): a registered
@@ -193,24 +180,12 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
    * an identical list.
    */
   const renderedPlugins = useMemo(() => enabledKey.split(','), [enabledKey])
-  useEffect(() => {
-    if (blockingKey == null || blockingKey === enabledKey) return
-    let active = true
-    const detach = onFirstNavigationIntent(() => {
-      void sitePluginLoader
-        .ensure(enabledKey.split(','), ['site'])
-        .then(() => active && setLatePluginTick((tick) => tick + 1))
-        .catch(() => undefined)
-    })
-    return () => {
-      active = false
-      detach()
-    }
-  }, [blockingKey, enabledKey])
 
   // Trusted-realm marketplace plugins (AGL-420): additive runtimes loaded
   // AFTER hydration (never blocking first paint); the tick re-renders so a
-  // runtime registered by a remote bundle mounts without a navigation.
+  // runtime registered by a remote bundle mounts without a navigation. The
+  // server sends only the installs this page uses (AGL-3116), so a page that
+  // uses none never loads the realm-plugin host.
   const [, setRealmTick] = useState(0)
   const realmKey = (props.realmPlugins ?? [])
     .map((install) => `${install.listingId}@${install.version}`)

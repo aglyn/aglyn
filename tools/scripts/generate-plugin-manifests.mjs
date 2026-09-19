@@ -72,13 +72,29 @@ import type { PluginLoadManifest } from '@aglyn/aglyn${entryPoint === 'server' ?
 
 `
 
+/**
+ * The module each surface registers from (AGL-3116). A plugin's `modules`
+ * names a subpath for a surface whose code must not ride with the rest: the
+ * loader reads a loaded module by name, so everything a package entry exports
+ * ships with it, and a site surface loaded from the package root carried the
+ * console registrar onto every published page that used the plugin.
+ */
 function entry(plugin, entryPoint, surfaces) {
   const register = Object.fromEntries(
     Object.entries(plugin.register).filter(([key]) => surfaces.includes(key)),
   )
   if (!Object.keys(register).length) return null
-  const specifier =
+  const root =
     entryPoint === 'server' ? `${plugin.package}/server` : plugin.package
+  const moduleOf = (surface) =>
+    plugin.modules?.[surface] ? `${plugin.package}/${plugin.modules[surface]}` : root
+  const specifiers = Object.keys(register).map(moduleOf)
+  // One module for every surface this app loads: that module is `load`.
+  // Otherwise `load` is the root and each surface with its own module gets it.
+  const shared = specifiers.every((specifier) => specifier === specifiers[0])
+  const own = shared
+    ? []
+    : Object.keys(register).filter((surface) => moduleOf(surface) !== root)
   return (
     `  {\n` +
     `    id: '${plugin.id}',\n` +
@@ -87,7 +103,14 @@ function entry(plugin, entryPoint, surfaces) {
       ? `    apiPrefixes: ${JSON.stringify(plugin.apiPrefixes)},\n`
       : '') +
     `    register: ${JSON.stringify(register)},\n` +
-    `    load: () => import('${specifier}'),\n` +
+    `    load: () => import('${shared ? specifiers[0] : root}'),\n` +
+    (own.length
+      ? `    loads: {\n` +
+        own
+          .map((surface) => `      ${surface}: () => import('${moduleOf(surface)}'),\n`)
+          .join('') +
+        `    },\n`
+      : '') +
     `  },`
   )
 }

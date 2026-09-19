@@ -135,7 +135,8 @@ describe('first-party plugins declare what they register (AGL-3116)', () => {
       const name = entry.register['site']
       if (!name) continue
       const before = new Set(Object.keys(components.schemas))
-      ;((await entry.load())[name] as () => void)()
+      const load = entry.loads?.['site'] ?? entry.load
+      ;((await load())[name] as () => void)()
       for (const componentId of Object.keys(components.schemas)) {
         if (!before.has(componentId)) owner.set(componentId, entry.id)
       }

@@ -22,8 +22,8 @@
           "why": "Real-user vitals, measured on every page."
         }
       ],
-      "baselineBytes": 510210,
-      "budgetBytes": 536576
+      "baselineBytes": 506481,
+      "budgetBytes": 532480
     },
     {
       "name": "a site with the marketing plugin",
@@ -31,25 +31,25 @@
       "loads": [
         {
           "from": "apps/tenant/utils/plugins.client.generated.ts",
-          "import": "@aglyn/plugins-marketing",
+          "import": "@aglyn/plugins-marketing/site",
           "why": "Its site runtime (overlays, experiments, client automations) mounts on every page of the site."
         }
       ],
-      "baselineBytes": 18549,
-      "budgetBytes": 20480
+      "baselineBytes": 7483,
+      "budgetBytes": 8192
     },
     {
-      "name": "a site with a realm plugin",
-      "why": "What a trusted realm install adds: the host ABI hands a remote bundle the whole core namespace, so this group grows with every export added to @aglyn/aglyn.",
+      "name": "a page that uses a realm plugin",
+      "why": "What a page adds when it uses a trusted realm install (AGL-3116): the host ABI hands a remote bundle the whole core namespace, so this group grows with every export added to @aglyn/aglyn. A page whose realm installs it does not use loads none of it.",
       "loads": [
         {
           "from": "apps/tenant/utils/realm-plugins.client.ts",
           "import": "./realm-plugin-host.client",
-          "why": "Composes __AGLYN_PLUGIN_HOST__ before any realm bundle runs."
+          "why": "Composes __AGLYN_PLUGIN_HOST__ before any realm bundle the page uses runs."
         }
       ],
-      "baselineBytes": 224891,
-      "budgetBytes": 236544
+      "baselineBytes": 216816,
+      "budgetBytes": 228352
     }
   ]
 }
