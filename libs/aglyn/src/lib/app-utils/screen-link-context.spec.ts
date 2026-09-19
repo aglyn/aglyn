@@ -31,9 +31,11 @@ import {
   parseFeedLinkValue,
   parseScreenLinkValue,
   resolveScreenHref,
+  screenLinkTargetLabel,
   screenLinkTargetOptions,
   screenRoutesAnswerFor,
   splitLinkValue,
+  unavailableScreenLabel,
   unresolvedScreenOption,
 } from './screen-link-context'
 import {
@@ -474,6 +476,67 @@ describe('a collection listing as a link target (AGL-2799)', () => {
 
     it('offers nothing before a map has arrived', () => {
       expect(screenLinkTargetOptions(undefined, LABELS)).toEqual([])
+    })
+
+    /**
+     * A feed and an entry are link targets too (AGL-3118), and the pickers
+     * treat them differently on purpose (AGL-3119): a feed is one more row
+     * per collection, so it is listed; a site's entries are thousands, so
+     * they are searched and never listed — the map holds only the few a page
+     * references, which is not a list of what can be linked.
+     */
+    it('offers each feed after the listings, named after its collection', () => {
+      const withFeeds = { ...ROUTES, 'feed:blog': 'blog/rss.xml' }
+      const options = screenLinkTargetOptions(withFeeds, LABELS)
+      expect(options).toContainEqual({
+        value: 'feed:blog',
+        label: 'Blog (/blog/rss.xml) — RSS feed',
+        kind: 'feed',
+      })
+      expect(options[options.length - 1].value).toBe('feed:blog')
+      expect(
+        screenLinkTargetOptions({ 'feed:blog': 'blog/rss.xml' }, undefined)[0]
+          .label,
+      ).toBe('blog (/blog/rss.xml) — RSS feed')
+    })
+
+    it('offers no entry, even from a map that carries one', () => {
+      const withEntry = { ...ROUTES, 'entry:blog/Hpy49': 'blog/hello' }
+      expect(
+        screenLinkTargetOptions(withEntry, LABELS).map((o) => o.value),
+      ).toEqual(screenLinkTargetOptions(ROUTES, LABELS).map((o) => o.value))
+    })
+
+    it('names one target the way the picker labels it', () => {
+      const withFeeds = { ...ROUTES, 'feed:blog': 'blog/rss.xml' }
+      expect(screenLinkTargetLabel('about', withFeeds, LABELS)).toBe(
+        'About (/company/about)',
+      )
+      expect(screenLinkTargetLabel('collection:blog', withFeeds, LABELS)).toBe(
+        'Blog (/blog) — collection listing',
+      )
+      expect(screenLinkTargetLabel('feed:blog', withFeeds, LABELS)).toBe(
+        'Blog (/blog/rss.xml) — RSS feed',
+      )
+      // Nothing the map does not hold, and no entry at all: an entry is named
+      // by the search seam, which reads the entry itself.
+      expect(screenLinkTargetLabel('gone', withFeeds, LABELS)).toBeUndefined()
+      expect(
+        screenLinkTargetLabel(
+          'entry:blog/Hpy49',
+          { ...withFeeds, 'entry:blog/Hpy49': 'blog/hello' },
+          LABELS,
+        ),
+      ).toBeUndefined()
+    })
+
+    it('says which KIND of target a picker has lost', () => {
+      expect(unavailableScreenLabel('feed:gone', true)).toBe(
+        '⚠ Unavailable RSS feed (gone) — collection deleted or has no slug',
+      )
+      expect(unavailableScreenLabel('entry:blog/gone', true)).toBe(
+        '⚠ Unavailable entry (gone) — unpublished or deleted',
+      )
     })
   })
 })
