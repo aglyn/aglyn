@@ -17,6 +17,7 @@
 
 import {
   buildScreenRouteEntries,
+  collectionFeedRoutePath,
   collectScreenDescendantIds,
   composeScreenRoutePath,
   findScreenIdByRoutePath,
@@ -519,6 +520,84 @@ describe('linkableScreenRoutes — collection listings (AGL-2799)', () => {
   it('gives a site with a blog and no published screen a table to resolve against', () => {
     expect(
       linkableScreenRoutes(undefined, { collectionListings: { blog: 'blog' } }),
-    ).toEqual({ 'collection:blog': 'blog' })
+    ).toEqual({ 'collection:blog': 'blog', 'feed:blog': 'blog/rss.xml' })
+  })
+})
+
+/**
+ * A collection's FEED and its ENTRIES as link targets (AGL-3118).
+ *
+ * A feed hangs off its listing, so it is keyed by the collection id and
+ * follows the same rename. Entries arrive per page, only for the entries the
+ * page's links name, and are keyed by both ids so a slug rename on either the
+ * entry or its collection moves every link to it.
+ */
+describe('linkableScreenRoutes — feeds and entries (AGL-3118)', () => {
+  const raw = { home: '/', pricing: 'pricing' }
+
+  it('adds a feed beside every listing, at the feed route', () => {
+    const routes = linkableScreenRoutes(raw, {
+      collectionListings: { blog: 'blog', yQuEudFcgR: 'newsroom' },
+    })
+    expect(routes?.['feed:blog']).toBe(collectionFeedRoutePath('blog'))
+    expect(resolveScreenHref(routes, 'feed:blog')).toBe('/blog/rss.xml')
+    expect(resolveScreenHref(routes, 'feed:yQuEudFcgR')).toBe(
+      '/newsroom/rss.xml',
+    )
+  })
+
+  it('moves a feed link with a renamed collection', () => {
+    const after = linkableScreenRoutes(raw, {
+      collectionListings: { blog: 'articles' },
+    })
+    expect(resolveScreenHref(after, 'feed:blog')).toBe('/articles/rss.xml')
+  })
+
+  it('has no feed for a collection that is gone, which reads as broken', () => {
+    const routes = linkableScreenRoutes(raw, {
+      collectionListings: { blog: 'blog', drafts: '' },
+    })
+    expect(routes).not.toHaveProperty('feed:drafts')
+    expect(isScreenLinkBroken(routes, 'feed:drafts')).toBe(true)
+    expect(isScreenLinkBroken(routes, 'feed:blog')).toBe(false)
+  })
+
+  it('adds the entries a page references, under their canonical key', () => {
+    const routes = linkableScreenRoutes(raw, {
+      collectionListings: { videos: 'videos' },
+      entryRoutes: {
+        'entry:videos/Hpy49iVFX3': 'videos/every-client-site',
+        ' entry: videos / ZZZ ': '/videos/second-film/',
+      },
+    })
+    expect(resolveScreenHref(routes, 'entry:videos/Hpy49iVFX3')).toBe(
+      '/videos/every-client-site',
+    )
+    expect(routes?.['entry:videos/ZZZ']).toBe('videos/second-film')
+  })
+
+  it('refuses keys that are not entry links, so it cannot plant a screen or a listing', () => {
+    const routes = linkableScreenRoutes(raw, {
+      entryRoutes: {
+        pricing: 'somewhere-else',
+        'collection:blog': 'not-the-blog',
+        'entry:only-one-id': 'x',
+        'entry:a/b/c': 'y',
+        'entry:videos/empty': '   ',
+      },
+    })
+    expect(routes?.pricing).toBe('pricing')
+    expect(routes).not.toHaveProperty('collection:blog')
+    expect(routes).not.toHaveProperty('entry:only-one-id')
+    expect(routes).not.toHaveProperty('entry:a/b/c')
+    expect(routes).not.toHaveProperty('entry:videos/empty')
+  })
+
+  it('gives a page whose only targets are entries a table to resolve against', () => {
+    expect(
+      linkableScreenRoutes(undefined, {
+        entryRoutes: { 'entry:videos/Hpy49iVFX3': 'videos/film' },
+      }),
+    ).toEqual({ 'entry:videos/Hpy49iVFX3': 'videos/film' })
   })
 })

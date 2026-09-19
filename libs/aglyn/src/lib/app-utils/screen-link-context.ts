@@ -278,17 +278,25 @@ export function brokenScreenLinkProps(
  */
 export {
   COLLECTION_LINK_VALUE_PREFIX,
+  ENTRY_LINK_VALUE_PREFIX,
   EXTERNAL_HREF_PATTERN,
+  FEED_LINK_VALUE_PREFIX,
   SAFE_HREF_PATTERN,
   SCREEN_LINK_VALUE_PREFIX,
   formatCollectionLinkValue,
+  formatEntryLinkValue,
+  formatFeedLinkValue,
   formatScreenLinkValue,
+  linkTargetKind,
   nodesReferenceScreen,
   parseCollectionLinkValue,
+  parseEntryLinkValue,
+  parseFeedLinkValue,
   parseScreenLinkValue,
   resolveScreenHref,
   screenRoutesAnswerFor,
   splitLinkValue,
+  type LinkTargetKind,
 } from './screen-link-value'
 
 /** What a linking element renders — see {@link useLinkTarget}. */

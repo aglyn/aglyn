@@ -92,29 +92,121 @@ export function parseCollectionLinkValue(value: unknown): string | undefined {
 }
 
 /**
+ * Prefix marking a stored link value as a content collection ENTRY (AGL-3118):
+ * `entry:<collectionId>/<entryId>` is the page at `/{collectionSlug}/{entrySlug}`.
+ *
+ * Both halves are ids, for the reason a listing is addressed by its
+ * collection's id: an entry's slug and its collection's slug can each be
+ * renamed, and the id pair is the part neither rename moves. A link written
+ * once follows both.
+ *
+ * Like the listing form, the value is the stored form in every slot AND the
+ * entry's key in the linkable routing map, so `resolveScreenHref` resolves an
+ * entry through the same lookup as a screen. Generated ids contain neither a
+ * colon nor a slash, so the key cannot collide with a screen id or a listing.
+ * Entry keys are not in every map: a page carries the ones it references.
+ */
+export const ENTRY_LINK_VALUE_PREFIX = 'entry:'
+
+/** Wraps an entry's ids as a stored entry link — see {@link ENTRY_LINK_VALUE_PREFIX}. */
+export function formatEntryLinkValue(collectionId: string, entryId: string): string {
+  return `${ENTRY_LINK_VALUE_PREFIX}${collectionId.trim()}/${entryId.trim()}`
+}
+
+/**
+ * The collection and entry ids a stored entry link names, or `undefined` for
+ * any value that is not exactly one well-formed entry link.
+ */
+export function parseEntryLinkValue(
+  value: unknown,
+): { collectionId: string; entryId: string } | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (!trimmed.startsWith(ENTRY_LINK_VALUE_PREFIX)) return undefined
+  const parts = trimmed
+    .slice(ENTRY_LINK_VALUE_PREFIX.length)
+    .split('/')
+    .map((part) => part.trim())
+  if (parts.length !== 2) return undefined
+  const [collectionId, entryId] = parts
+  if (!collectionId || !entryId) return undefined
+  return { collectionId, entryId }
+}
+
+/**
+ * Prefix marking a stored link value as a content collection's RSS FEED
+ * (AGL-3118): `feed:<collectionId>` is `/{collectionSlug}/rss.xml`.
+ *
+ * Addressed by the collection's id for the listing's reason, and keyed in the
+ * linkable routing map beside the listing it belongs to, so a feed link
+ * follows a renamed collection exactly as its listing link does.
+ */
+export const FEED_LINK_VALUE_PREFIX = 'feed:'
+
+/** Wraps a collection id as a stored feed link — see {@link FEED_LINK_VALUE_PREFIX}. */
+export function formatFeedLinkValue(collectionId: string): string {
+  return `${FEED_LINK_VALUE_PREFIX}${collectionId.trim()}`
+}
+
+/**
+ * The collection id a stored feed link names, or `undefined` for any value
+ * that is not a feed link.
+ */
+export function parseFeedLinkValue(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (!trimmed.startsWith(FEED_LINK_VALUE_PREFIX)) return undefined
+  const id = trimmed.slice(FEED_LINK_VALUE_PREFIX.length).trim()
+  return id || undefined
+}
+
+/** What a link target key names: a screen, or one of a collection's pages. */
+export type LinkTargetKind = 'screen' | 'collection' | 'entry' | 'feed'
+
+/**
+ * The kind of a routing-map key or stored link value. Anything that is not a
+ * listing, entry or feed reference is a screen, which is what a bare id in
+ * the map always was.
+ */
+export function linkTargetKind(key: string): LinkTargetKind {
+  if (parseCollectionLinkValue(key) !== undefined) return 'collection'
+  if (parseEntryLinkValue(key) !== undefined) return 'entry'
+  if (parseFeedLinkValue(key) !== undefined) return 'feed'
+  return 'screen'
+}
+
+/**
  * Wraps a link target as a stored value — see {@link SCREEN_LINK_VALUE_PREFIX}.
  *
  * Takes what a picker option carries: a screen id, which gains the marker, or
- * a collection listing's key, which is already its own stored form and comes
+ * a listing, entry or feed key, which is already its own stored form and comes
  * back unchanged.
  */
 export function formatScreenLinkValue(screenId: string): string {
   const collectionId = parseCollectionLinkValue(screenId)
-  return collectionId
-    ? formatCollectionLinkValue(collectionId)
-    : `${SCREEN_LINK_VALUE_PREFIX}${screenId}`
+  if (collectionId) return formatCollectionLinkValue(collectionId)
+  const entry = parseEntryLinkValue(screenId)
+  if (entry) return formatEntryLinkValue(entry.collectionId, entry.entryId)
+  const feedCollectionId = parseFeedLinkValue(screenId)
+  if (feedCollectionId) return formatFeedLinkValue(feedCollectionId)
+  return `${SCREEN_LINK_VALUE_PREFIX}${screenId}`
 }
 
 /**
  * The routing-map key a stored link value references — a screen id, or a
- * collection listing's `collection:<id>` — or `undefined` when the value is a
- * literal href (legacy raw string, external URL, or unset).
+ * listing's `collection:<id>`, an entry's `entry:<collectionId>/<entryId>` or
+ * a feed's `feed:<id>` — or `undefined` when the value is a literal href
+ * (legacy raw string, external URL, or unset).
  */
 export function parseScreenLinkValue(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   const collectionId = parseCollectionLinkValue(trimmed)
   if (collectionId) return formatCollectionLinkValue(collectionId)
+  const entry = parseEntryLinkValue(trimmed)
+  if (entry) return formatEntryLinkValue(entry.collectionId, entry.entryId)
+  const feedCollectionId = parseFeedLinkValue(trimmed)
+  if (feedCollectionId) return formatFeedLinkValue(feedCollectionId)
   if (!trimmed.startsWith(SCREEN_LINK_VALUE_PREFIX)) return undefined
   const id = trimmed.slice(SCREEN_LINK_VALUE_PREFIX.length).trim()
   return id || undefined
@@ -122,14 +214,15 @@ export function parseScreenLinkValue(value: unknown): string | undefined {
 
 /**
  * Whether a routing map can say anything about this link target (AGL-1893,
- * AGL-2799).
+ * AGL-2799, AGL-3118).
  *
- * The map holds two kinds of key read from two different places — screens
- * from the host document, collection listings from the host's collections —
- * and either half can be empty while the other is not: a console that has
- * received one subscription and not yet the other, or a site with a blog and
- * no published screen. A map with no key of the target's OWN kind has not
- * heard of that kind at all, so it is no evidence the target is gone.
+ * The map holds several kinds of key read from different places — screens
+ * from the host document, listings and feeds from the host's collections,
+ * entries from whatever a page references — and any half can be empty while
+ * another is not: a console that has received one subscription and not yet
+ * the other, a site with a blog and no published screen, or a page that
+ * references no entry at all. A map with no key of the target's OWN kind has
+ * not heard of that kind, so it is no evidence the target is gone.
  *
  * Compared per kind rather than as "the map is non-empty" because the loading
  * beat is exactly where the difference shows: the first collection to arrive
@@ -143,11 +236,9 @@ export function screenRoutesAnswerFor(
 ): boolean {
   if (!screens || !target) return false
   const key = parseScreenLinkValue(target) ?? target.trim()
-  const wantsListing = parseCollectionLinkValue(key) !== undefined
+  const wanted = linkTargetKind(key)
   for (const candidate in screens) {
-    if ((parseCollectionLinkValue(candidate) !== undefined) === wantsListing) {
-      return true
-    }
+    if (linkTargetKind(candidate) === wanted) return true
   }
   return false
 }

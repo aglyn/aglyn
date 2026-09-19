@@ -20,10 +20,15 @@ import {
   BROKEN_SCREEN_LINK_MESSAGE,
   brokenScreenLinkProps,
   formatCollectionLinkValue,
+  formatEntryLinkValue,
+  formatFeedLinkValue,
   formatScreenLinkValue,
   isScreenLinkBroken,
+  linkTargetKind,
   nodesReferenceScreen,
   parseCollectionLinkValue,
+  parseEntryLinkValue,
+  parseFeedLinkValue,
   parseScreenLinkValue,
   resolveScreenHref,
   screenLinkTargetOptions,
@@ -522,5 +527,138 @@ describe('a bare fragment in a link field (AGL-2867)', () => {
     // Nothing is returned otherwise, so the field's own description stays.
     expect(bareFragmentLinkFieldProps({}, { input: { value: '/pricing' } })).toEqual({})
     expect(bareFragmentLinkFieldProps({}, {})).toEqual({})
+  })
+})
+
+/**
+ * An ENTRY and a collection FEED as link targets (AGL-3118).
+ *
+ * Both are addressed by ids, so a renamed entry slug or collection slug moves
+ * every link to them on the next render, and both ride the one routing map
+ * every linking surface already resolves against.
+ */
+describe('entry and feed links (AGL-3118)', () => {
+  const ROUTES = {
+    home: '/',
+    'collection:videos': 'videos',
+    'feed:videos': 'videos/rss.xml',
+    'entry:videos/Hpy49iVFX3': 'videos/every-client-site',
+  }
+
+  describe('the stored value', () => {
+    it('names an entry by both ids and round-trips', () => {
+      const value = formatEntryLinkValue('videos', 'Hpy49iVFX3')
+      expect(value).toBe('entry:videos/Hpy49iVFX3')
+      expect(parseEntryLinkValue(value)).toEqual({
+        collectionId: 'videos',
+        entryId: 'Hpy49iVFX3',
+      })
+      expect(parseEntryLinkValue(' entry: videos / Hpy49iVFX3 ')).toEqual({
+        collectionId: 'videos',
+        entryId: 'Hpy49iVFX3',
+      })
+    })
+
+    it('reads only one well-formed entry link as an entry', () => {
+      for (const value of [
+        'entry:',
+        'entry:videos',
+        'entry:videos/',
+        'entry:/Hpy49iVFX3',
+        'entry:a/b/c',
+        '/videos/every-client-site',
+        'screen:entry',
+        42,
+        undefined,
+      ]) {
+        expect(parseEntryLinkValue(value)).toBeUndefined()
+      }
+    })
+
+    it('names a feed by its collection id and round-trips', () => {
+      expect(formatFeedLinkValue('videos')).toBe('feed:videos')
+      expect(parseFeedLinkValue(' feed: videos ')).toBe('videos')
+      expect(parseFeedLinkValue('feed:')).toBeUndefined()
+      expect(parseFeedLinkValue('/videos/rss.xml')).toBeUndefined()
+    })
+
+    it('is stored as its own key, never wrapped as a screen reference', () => {
+      expect(formatScreenLinkValue('entry:videos/Hpy49iVFX3')).toBe(
+        'entry:videos/Hpy49iVFX3',
+      )
+      expect(formatScreenLinkValue('feed:videos')).toBe('feed:videos')
+      expect(parseScreenLinkValue(' entry: videos / Hpy49iVFX3 ')).toBe(
+        'entry:videos/Hpy49iVFX3',
+      )
+      expect(parseScreenLinkValue('feed:videos')).toBe('feed:videos')
+    })
+
+    it('arrives as a target from either slot, and beats a typed address', () => {
+      expect(splitLinkValue('entry:videos/Hpy49iVFX3', undefined)).toEqual({
+        screenId: 'entry:videos/Hpy49iVFX3',
+      })
+      expect(splitLinkValue(undefined, 'feed:videos')).toEqual({
+        screenId: 'feed:videos',
+      })
+      expect(splitLinkValue('entry:videos/Hpy49iVFX3', '/videos/old-slug')).toEqual({
+        screenId: 'entry:videos/Hpy49iVFX3',
+      })
+    })
+
+    it('names each key by its kind', () => {
+      expect(linkTargetKind('home')).toBe('screen')
+      expect(linkTargetKind('collection:videos')).toBe('collection')
+      expect(linkTargetKind('entry:videos/Hpy49iVFX3')).toBe('entry')
+      expect(linkTargetKind('feed:videos')).toBe('feed')
+    })
+  })
+
+  describe('resolution', () => {
+    it('resolves an entry and a feed to their addresses', () => {
+      expect(resolveScreenHref(ROUTES, 'entry:videos/Hpy49iVFX3')).toBe(
+        '/videos/every-client-site',
+      )
+      expect(resolveScreenHref(ROUTES, 'feed:videos')).toBe('/videos/rss.xml')
+    })
+
+    it('follows a renamed entry, because the value names the entry', () => {
+      expect(
+        resolveScreenHref(
+          { ...ROUTES, 'entry:videos/Hpy49iVFX3': 'films/one-console' },
+          'entry:videos/Hpy49iVFX3',
+        ),
+      ).toBe('/films/one-console')
+    })
+
+    it('is a broken link once a map that knows entries has lost this one', () => {
+      expect(isScreenLinkBroken(ROUTES, 'entry:videos/unpublished')).toBe(true)
+      expect(isScreenLinkBroken(ROUTES, 'entry:videos/Hpy49iVFX3')).toBe(false)
+    })
+  })
+
+  describe('a map that has not heard of entries', () => {
+    const SITE = {
+      home: '/',
+      'collection:videos': 'videos',
+      'feed:videos': 'videos/rss.xml',
+    }
+
+    it('does not condemn an entry link before the page asked for entries', () => {
+      expect(screenRoutesAnswerFor(SITE, 'entry:videos/Hpy49iVFX3')).toBe(false)
+      expect(isScreenLinkBroken(SITE, 'entry:videos/Hpy49iVFX3')).toBe(false)
+    })
+
+    it('still judges screens, listings and feeds on their own halves', () => {
+      expect(screenRoutesAnswerFor(SITE, 'screen:home')).toBe(true)
+      expect(screenRoutesAnswerFor(SITE, 'collection:videos')).toBe(true)
+      expect(screenRoutesAnswerFor(SITE, 'feed:gone')).toBe(true)
+      expect(isScreenLinkBroken(SITE, 'feed:gone')).toBe(true)
+    })
+
+    it('does not let a map of entries alone condemn a screen link', () => {
+      const entriesOnly = { 'entry:videos/Hpy49iVFX3': 'videos/film' }
+      expect(screenRoutesAnswerFor(entriesOnly, 'screen:home')).toBe(false)
+      expect(isScreenLinkBroken(entriesOnly, 'screen:home')).toBe(false)
+    })
   })
 })
