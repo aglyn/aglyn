@@ -333,6 +333,11 @@ Template screens go through the **normal published pipeline** — site theme, sh
 layout, reusable components, variables — exactly like any other screen (the same
 mechanism as commerce product/collection templates).
 
+A second collection whose entries should look like the first one's starts from a copy:
+choose **Duplicate…** on the first collection's entry template in **Screens**, then pick
+the copy as the new collection's **Entry screen**, under **Template screens**. See
+[Duplicate a screen](../screens-and-layouts/screens.md#duplicate-a-screen).
+
 ### Blog blocks
 
 Besides **Collection Entries** and **Entry Body**, three entry-page blocks are available
