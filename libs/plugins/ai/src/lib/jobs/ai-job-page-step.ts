@@ -56,6 +56,7 @@ import {
   aiDoctrineReview,
   aiGenerationSpent,
   aiLimitReview,
+  aiModelNodeIds,
   aiUnspentOutcome,
 } from './ai-job-generation'
 import {
@@ -408,7 +409,13 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
 
     // The plan starts from a copy of a screen the site has (rule 15): the copy
     // is the draft — unrouted, as every copy is — and nothing is generated.
-    if (!written && screen.duplicateOf && inventory.screens.some((row) => row.id === screen.duplicateOf)) {
+    // Only a page is a page's start: a collection entry template's copy stays
+    // a template, so a plan naming one builds the page instead.
+    if (
+      !written &&
+      screen.duplicateOf &&
+      inventory.screens.some((row) => row.id === screen.duplicateOf && !row.template)
+    ) {
       const copy = await duplicate('screen', {
         orgId: job.orgId,
         hostId,
@@ -435,16 +442,28 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     // A workspace that keeps no reusable components or saved forms builds its
     // page inline, and every pass is held to the rules that way (AGL-3030).
     const reusableComponents = checkEntitlement(org, 'reusableComponents')
-    const context = aiPageCheckContext(inventory, { reusableComponents })
+    // A link may take a visitor to a section of this page, by its name in the plan (AGL-3097).
+    const sections = screen.sections.map((section) => section.name)
+    const context = aiPageCheckContext(inventory, { reusableComponents, sections })
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
     if (index === -1 && written) {
-      const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', context)
+      // A link the page carries to one of its sections goes there, now every section is built.
+      const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', {
+        ...context,
+        scrollTargetIds: sectionIds,
+      })
       if (report.violations.length) {
+        // The check mints its own ids; the review names the nodes by the ids the draft stores them under.
+        const storedIds = report.tree?.sourceIds ?? {}
+        const violations = report.violations.map((violation) =>
+          violation.nodeIds ? { ...violation, nodeIds: aiModelNodeIds(violation.nodeIds, storedIds) } : violation,
+        )
         return aiUnspentOutcome(model, {
           review: aiDoctrineReview({
-            message: aiDoctrineNeedsInputMessage(report.violations),
-            violations: report.violations,
+            message: aiDoctrineNeedsInputMessage(violations),
+            violations,
+            answer: { tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page } },
           }),
         })
       }

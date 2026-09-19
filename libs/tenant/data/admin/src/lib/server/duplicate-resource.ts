@@ -32,6 +32,8 @@
  *   - a screen is reachable only through the host's routing map, so the
  *     copy gets no entry there — it has a slug of its own (`-copy`) but no
  *     address until somebody publishes it;
+ *   - a collection's entry template renders only for the collection that
+ *     points at it, and nothing points at the copy;
  *   - a layout, component or form is served only where a page places it,
  *     and nothing places the copy;
  *   - a workflow runs only when its trigger fires, and the copy's trigger
@@ -39,8 +41,9 @@
  *   - a template is inert until it is used.
  *
  * COUNTED LIKE A CREATE. The copy is one more document in a collection the
- * plan bands, so it meets the same counter the create route meets, and
- * meets it INSIDE the transaction that writes the copy (AGL-2231): a count
+ * plan bands, so it meets the same counter the create route meets — for a
+ * screen that is not a page, the flat platform ceiling rather than a band —
+ * and meets it INSIDE the transaction that writes the copy (AGL-2231): a count
  * taken before the write is a count N concurrent copies all pass. The
  * siblings are read once and answer three questions — the count, the name
  * the copy may take, and the slug — because three reads of one collection
@@ -66,6 +69,7 @@ import {
   NON_PAGE_SCREEN_MAX_PER_HOST,
   nonPageScreenIds,
   SCREEN_KIND_EMAIL,
+  SCREEN_KIND_TEMPLATE,
   screenClaimsToBeAPage,
   type BillableScreenSource,
   type OrgEntitlements,
@@ -351,16 +355,28 @@ async function copy(
     // The two screen kinds share a collection and are told apart by `kind`:
     // an email design copied as a page would land on the Screens list, and
     // the other way round would put a page on the Emails page.
+    //
+    // Of the screens that are not pages, only a collection's entry template
+    // may be copied as a screen (AGL-3102), and the copy stays a template:
+    // `kind` rides across with the recipe's fields, so it composes nothing
+    // until a collection points at it — which is how a second collection
+    // starts from the first one's design. An error screen is refused:
+    // `kind: 'error'` is the slot assignment's to stamp, because that write
+    // is what bounds how many a site holds, and a copy would stamp one
+    // outside it.
+    const sourceKind = data['kind']
+    const nonPageScreen =
+      recipe.collection === 'screens' &&
+      !screenClaimsToBeAPage({ kind: sourceKind as string })
     if (recipe.collection === 'screens') {
-      const isEmail = data['kind'] === SCREEN_KIND_EMAIL
-      if (kind === 'emailDesign' && !isEmail) {
+      if (kind === 'emailDesign' && sourceKind !== SCREEN_KIND_EMAIL) {
         return { ok: false, status: 400, error: 'That screen is not an email design' }
       }
-      if (kind === 'screen' && !screenClaimsToBeAPage({ kind: data['kind'] as string })) {
+      if (kind === 'screen' && nonPageScreen && sourceKind !== SCREEN_KIND_TEMPLATE) {
         return {
           ok: false,
           status: 400,
-          error: 'Only a page can be duplicated as a screen',
+          error: 'Only a page or a collection entry template can be duplicated as a screen',
         }
       }
     }
@@ -378,15 +394,17 @@ async function copy(
     // THE BAND, met inside the transaction (AGL-2231) with the create route's
     // own arithmetic: screens count what the routing map makes billable,
     // templates exclude the platform's starters, everything else counts its
-    // live documents. An email design meets the flat platform ceiling on
-    // non-page screens instead, exactly as its create does.
+    // live documents. A screen copy that is not a page — an email design or
+    // an entry template — meets the flat platform ceiling on non-page screens
+    // instead, the one an email design's create meets and a demoted template
+    // fills, and never the page band: it spends none of it.
     const screenRows: BillableScreenSource[] = siblings.map((row) => ({
       id: row.id,
       kind: row.kind,
       deletedAt: row.deletedAt,
     }))
     const routingMap = hostSnapshot.get('screens') as never
-    if (kind === 'emailDesign') {
+    if (nonPageScreen) {
       if (nonPageScreenIds(screenRows, routingMap).size >= NON_PAGE_SCREEN_MAX_PER_HOST) {
         return {
           ok: false,
@@ -397,8 +415,7 @@ async function copy(
             'delete some to make room',
         }
       }
-    }
-    if (recipe.quotaKey) {
+    } else if (recipe.quotaKey) {
       const used =
         kind === 'screen'
           ? billableScreenIds(screenRows, routingMap).size

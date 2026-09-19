@@ -429,8 +429,20 @@ describe('the layout step', () => {
       message: expect.stringContaining('Rule 7'),
       findings: [
         { rule: 7, code: 'plan-reuse-not-placed', message: expect.stringContaining('"Main navigation"') },
-        { rule: 1, code: 'navigation-rebuilt', message: expect.stringContaining('"Main navigation"') },
+        {
+          rule: 1,
+          code: 'navigation-rebuilt',
+          message: expect.stringContaining('"Main navigation"'),
+          nodeIds: ['home', 'about'],
+        },
       ],
+      outline: ['home', 'about'].map((id) => ({
+        id,
+        depth: 0,
+        componentId: 'muiScreenLink',
+        props: ['screenId', 'children'],
+        children: [],
+      })),
     })
     expect(commits).toEqual([])
   })

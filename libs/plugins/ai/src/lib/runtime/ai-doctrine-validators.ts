@@ -57,6 +57,7 @@ import {
   type AiNodeTreeContext,
   type AiNodeTreeResult,
 } from './ai-node-tree'
+import { AI_PAGE_SCROLL_TO_PROP, aiPageLinkTarget, aiStoredScrollTargets } from './ai-page-links'
 import {
   AI_EMAIL_CLIP_BYTES,
   AI_OUTPUT_BUDGETS,
@@ -210,6 +211,32 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    * to when the site has none for what it promises. Absent: none is known.
    */
   homeScreenIds?: readonly string[]
+  /**
+   * The node as the model wrote it, by the id the checked tree gives it
+   * (AGL-3078), for a tree that was stored before it is checked: a page
+   * section is checked as part of the page, whose props the palette validator
+   * has already read, and a value it could not read is absent there. Absent,
+   * the tree the check is given is what the model wrote.
+   */
+  writtenNode?: (id: string) => unknown
+  /**
+   * The page's sections by their names in its plan, in order, where the tree
+   * is a page a plan lays out (AGL-3097). A Button or a Screen Link may then go
+   * to one of them, by `scrollTo` naming it or an `href` fragment its name's
+   * words make up, which the page step writes as the platform's Scroll to
+   * element interaction. Absent: a link goes only where its `screenId` or
+   * `href` says.
+   */
+  pageSections?: readonly string[]
+  /**
+   * The section roots of the page, by id, where the tree checked is the page as
+   * the page step stores it (AGL-3097): a link there that carries a Scroll to
+   * element interaction to one of them, built or still to come, goes there.
+   * Only a stored page is given them. The palette validator drops every
+   * interaction a model writes before anything is stored, and an answer's own
+   * are never read.
+   */
+  scrollTargetIds?: readonly string[]
 }
 
 /** One node of a walk: its id, its depth, and its ancestors' ids from the root down. */
@@ -1016,10 +1043,27 @@ export function detectAdHocWidths(
 const GRID = 'muiGrid'
 /** A Grid's props that only a container reads; on an item they do nothing. */
 const GRID_CONTAINER_PROPS = ['direction', 'wrap', 'spacing', 'rowSpacing', 'columnSpacing', 'columns']
+/** A container's props that set what it holds side by side, which a group that only stacks never needs. */
+const GRID_ROW_PROPS = ['wrap', 'columns', 'columnSpacing']
+/** The directions the palette keeps for a Grid, which lays out rows. */
+const GRID_ROW_DIRECTIONS = ['row', 'row-reverse']
+/** A direction a Stack has and a Grid does not; the palette validator drops it from a Grid. */
+const GRID_COLUMN_DIRECTION = /^column(?:-reverse)?$/i
+/** The elements an answer wraps a container's items in, where they belong in the container itself. */
+const GRID_ITEM_WRAPPERS = new Set(['muiBox', 'muiStack'])
 /** `sx` keys that space a container's columns outside the widths its items are sized by. */
 const GRID_GAP_SX_KEYS = ['gap', 'columnGap']
 /** The columns a container divides a row into when it names none. */
 const GRID_DEFAULT_COLUMNS = 12
+/** The most characters of a written value a re-ask quotes back. */
+const GRID_QUOTED_MAX_CHARS = 24
+
+/** A value as the model wrote it, as a re-ask quotes it: text in quotes, anything else as JSON, cut short. */
+function writtenValueText(value: unknown): string {
+  const text = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value))
+  const cut = text.length > GRID_QUOTED_MAX_CHARS ? `${text.slice(0, GRID_QUOTED_MAX_CHARS)}…` : text
+  return typeof value === 'string' ? `the text "${cut}"` : cut
+}
 
 /** A Grid's columns: its own `columns` when it names a count, else the renderer's twelve. */
 function gridColumns(node: AiDoctrineNode): number {
@@ -1066,44 +1110,123 @@ function gridItemSizeFor(items: number, columns: number): string {
  * page's practice areas were the first: a Grid with no container holding three
  * items sized "4", one column at every width.
  *
- * - `grid-not-container`: a Grid that is not a container but holds sized Grid
- *   items, sets a prop only a container reads, or holds two or more elements
- *   without being an item of a container.
+ * A Grid that is not a container is told what to do by what it was written as
+ * (AGL-3078), because one sentence does not mend every shape: a live About
+ * page's section was refused twice for rule 12, with a re-ask that only ever
+ * said to make the Grid a container of sized columns.
+ *
+ * - `grid-not-container`: a row that is not a container. A Grid that holds
+ *   sized Grid items, sets a prop only a row reads, or holds two or more
+ *   elements of one shape side by side. The rule's intent: a row of cards is a
+ *   container of sized items.
+ * - `grid-as-stack`: any other Grid that is not a container and sets a prop
+ *   only a container reads, or holds two or more elements without being an
+ *   item: a group that only stacks, such as a heading over its text, or one
+ *   written with a column direction, which a Grid does not have. The re-ask
+ *   offers a Stack or a Box for the group, or a container of sized items.
+ * - `grid-item-outside-container`: a sized Grid item that sits in another
+ *   element, such as a Box inside its container. A container sizes only the
+ *   items directly in it, so the re-ask asks to move the item there. A Box or a
+ *   Stack in a container that holds nothing but sized items is refused through
+ *   its items, not as a child of the container that is no item.
+ * - `grid-container-text`: a Grid whose `container` was written as a value the
+ *   palette validator cannot read as true or false, such as the text "True". The
+ *   re-ask names the value as the fault.
  * - `grid-item-size`: a container's child that is not a Grid item sized full
  *   width on a phone, or a container of several whose items never step down
  *   to columns at a larger width.
  * - `grid-gap`: a container spaced by an `sx` gap rather than its spacing.
  *
  * Each re-ask names the Grid or its items by the model's own ids and says what
- * to write, in the size format the renderer reads.
+ * to write, in the size format the renderer reads. `written` is the node as
+ * the model wrote it, by an id of `tree`, where that is known: the palette
+ * validator reads a `container` it cannot parse, and a column direction, as
+ * absent, and only what was written can name them.
  */
 export function detectUnresponsiveGrids(
   tree: AiDoctrineTree,
   outputKind: AiOutputKind,
+  written: (id: string) => unknown = () => undefined,
 ): AiDoctrineViolation[] {
   if (outputKind === 'email' || outputKind === 'form') return []
-  const notContainers: string[] = []
+  // Shapes are indexed only once a Grid needs its children compared.
+  let shapes: ShapeIndex | null = null
+  const shapeOf = (id: string): string | undefined => (shapes ??= indexShapes(tree)).shapeOf.get(id)
+  const childrenOf = (id: string): string[] => (tree.nodes[id]?.nodes ?? []).filter((child) => tree.nodes[child])
+  const isGrid = (id: string | undefined): boolean => id !== undefined && tree.nodes[id]?.componentId === GRID
+  const isContainer = (id: string | undefined): boolean =>
+    isGrid(id) && tree.nodes[id as string].props?.['container'] === true
+  const isSized = (id: string): boolean => isGrid(id) && tree.nodes[id].props?.['size'] !== undefined
+  const writtenProp = (id: string, name: string): unknown => {
+    const node = written(id)
+    return isRecord(node) && isRecord(node['props']) ? node['props'][name] : undefined
+  }
+  /** A `container` the model wrote that the palette validator could not read as true or false. */
+  const unreadContainer = (id: string): unknown => {
+    const value = writtenProp(id, 'container')
+    return tree.nodes[id].props?.['container'] === undefined && value !== null ? value : undefined
+  }
+  /** A Box or a Stack holding nothing but sized Grid items, which belong directly in a container. */
+  const wrapsItems = (id: string): boolean => {
+    const children = childrenOf(id)
+    return GRID_ITEM_WRAPPERS.has(tree.nodes[id].componentId) && children.length > 0 && children.every(isSized)
+  }
+  /** A direction the model wrote as a column, which the palette validator drops from a Grid. */
+  const writtenColumn = (id: string): boolean => {
+    const direction = writtenProp(id, 'direction')
+    return typeof direction === 'string' && GRID_COLUMN_DIRECTION.test(direction.trim())
+  }
+  /** A Grid set out as a row: a row direction, a prop only a row reads, or elements of one shape. */
+  const setsOutRow = (id: string, children: readonly string[]): boolean =>
+    GRID_ROW_DIRECTIONS.includes(String(tree.nodes[id].props?.['direction'])) ||
+    GRID_ROW_PROPS.some((name) => tree.nodes[id].props?.[name] !== undefined) ||
+    (children.length >= 2 && new Set(children.map(shapeOf)).size === 1)
+
+  const refused = new Set<string>()
+  const rows: string[] = []
+  const stacks: Array<{ id: string; column: boolean }> = []
+  const outside: Array<{ id: string; within: string }> = []
+  const texts: Array<{ id: string; value: unknown }> = []
   const unsized: string[] = []
   const suggested: string[] = []
   const gapped: Array<{ id: string; spacing: unknown }> = []
   for (const visit of walkTree(tree)) {
     const { id, node } = visit
     if (node.componentId !== GRID) continue
-    const children = (node.nodes ?? []).filter((child) => tree.nodes[child])
-    const parent = tree.nodes[visit.ancestors[visit.ancestors.length - 1] ?? '']
-    const isItem = parent?.componentId === GRID && parent.props?.['container'] === true
+    const children = childrenOf(id)
+    const [parentId, grandparentId] = [...visit.ancestors].reverse()
+    const parent = parentId === undefined ? undefined : tree.nodes[parentId]
+    const sized = node.props?.['size'] !== undefined
+    // An item whose container sits one element above it: a Box or a Stack holding only items.
+    const wrappedItem = sized && parentId !== undefined && wrapsItems(parentId) && isContainer(grandparentId)
     if (node.props?.['container'] !== true) {
-      const holdsSizedItems = children.some(
-        (child) => tree.nodes[child].componentId === GRID && tree.nodes[child].props?.['size'] !== undefined,
-      )
+      const holdsSized = children.some(isSized)
+      // An item of a container, or of a Grid refused here for not being the container it is written as.
+      const isItem =
+        parentId !== undefined &&
+        isGrid(parentId) &&
+        (isContainer(parentId) ||
+          childrenOf(parentId).some(isSized) ||
+          (refused.has(parentId) && unreadContainer(parentId) !== undefined))
       const setsContainerProps = GRID_CONTAINER_PROPS.some((name) => node.props?.[name] !== undefined)
-      if (holdsSizedItems || setsContainerProps || (!isItem && children.length >= 2)) notContainers.push(id)
+      if (!holdsSized && !setsContainerProps && (isItem || children.length < 2) && !wrappedItem) continue
+      refused.add(id)
+      const text = unreadContainer(id)
+      if (text !== undefined) texts.push({ id, value: text })
+      else if (holdsSized) rows.push(id)
+      else if (sized && parent && parent.componentId !== GRID) outside.push({ id, within: parent.componentId })
+      else if (writtenColumn(id)) stacks.push({ id, column: true })
+      else if (setsOutRow(id, children)) rows.push(id)
+      else stacks.push({ id, column: false })
       continue
     }
+    if (wrappedItem && parent) outside.push({ id, within: parent.componentId })
     const columns = gridColumns(node)
+    // The items a Box or a Stack holds for it are sized against it, and refused where they sit.
+    const items = children.flatMap((child) => (wrapsItems(child) ? childrenOf(child) : [child]))
     let steps = false
     const offending: string[] = []
-    for (const child of children) {
+    for (const child of items) {
       const item = tree.nodes[child]
       const span = item.componentId === GRID ? gridItemSpan(item.props?.['size'], columns) : null
       if (!span?.phoneFull) offending.push(child)
@@ -1111,24 +1234,56 @@ export function detectUnresponsiveGrids(
     }
     if (offending.length) {
       unsized.push(...offending)
-    } else if (children.length >= 2 && !steps) {
-      unsized.push(...children)
+    } else if (items.length >= 2 && !steps) {
+      unsized.push(...items)
     }
-    if (offending.length || (children.length >= 2 && !steps)) {
-      suggested.push(gridItemSizeFor(children.length, columns))
+    if (offending.length || (items.length >= 2 && !steps)) {
+      suggested.push(gridItemSizeFor(items.length, columns))
     }
     const sx = node.sx ?? {}
     const gap = GRID_GAP_SX_KEYS.find((key) => sx[key] !== undefined)
     if (gap) gapped.push({ id, spacing: sx[gap] })
   }
   const violations: AiDoctrineViolation[] = []
-  if (notContainers.length) {
+  if (rows.length) {
     violations.push({
       rule: 12,
       code: 'grid-not-container',
       message:
         'A Grid lays out columns only as a container: this one is not, so what it holds stacks at every width. Set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4".',
-      nodeIds: unique(notContainers),
+      nodeIds: unique(rows),
+    })
+  }
+  if (stacks.length) {
+    violations.push({
+      rule: 12,
+      code: 'grid-as-stack',
+      message: `${
+        stacks[0].column
+          ? 'A Grid lays out rows and has no "column" direction, so this one only stacks what it holds.'
+          : 'A Grid that is not a container lays nothing out, so this one only stacks what it holds.'
+      } Use a Stack (or a Box) for a group that only stacks, such as a heading over its text, or make it a container of sized items: set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4".`,
+      nodeIds: unique(stacks.map((entry) => entry.id)),
+    })
+  }
+  if (outside.length) {
+    const within = displayName(outside[0].within)
+    violations.push({
+      rule: 12,
+      code: 'grid-item-outside-container',
+      message: `A Grid item is sized only by the Grid container it sits directly in, and this one sits in a ${within}, so its size does nothing and it stacks at every width. Move it directly under its Grid container, or, where it has none, put it and the items beside it in one ("container": true).`,
+      nodeIds: unique(outside.map((entry) => entry.id)),
+    })
+  }
+  if (texts.length) {
+    const [first] = texts
+    violations.push({
+      rule: 12,
+      code: 'grid-container-text',
+      message: `This Grid's "container" is ${writtenValueText(first.value)}, not true, so it is not a container and what it holds stacks at every width. Write "container": true${
+        typeof first.value === 'string' ? ', with no quotes around true' : ''
+      }.`,
+      nodeIds: unique(texts.map((entry) => entry.id)),
     })
   }
   if (unsized.length) {
@@ -1156,6 +1311,12 @@ export function detectUnresponsiveGrids(
 const LINK_COLOR_FAMILIES = new Set(['primary', 'secondary', 'success', 'error', 'info', 'warning'])
 /** The elements a page links with; each draws its words in its `color` unless told otherwise. */
 const LINK_COMPONENTS = new Set(['muiButton', 'muiScreenLink'])
+
+/** Whether an element is one rule 10 holds to a destination: a Button or a Screen Link. */
+export function isAiLinkElement(componentId: unknown): boolean {
+  return typeof componentId === 'string' && LINK_COMPONENTS.has(componentId)
+}
+
 /** Surfaces that paint their own background, whatever band they sit on. */
 const PAPER_COMPONENTS = new Set(['muiCard', 'muiPaper', 'muiAccordion', 'muiDrawer'])
 /** A palette color token of a link family: `primary.main`, `secondary.dark`. */
@@ -1303,34 +1464,96 @@ function isFilled(value: unknown): boolean {
  * neither is a dead control: a live About page's hero carried a "Request a
  * Consultation" button with no destination. It is refused, with a re-ask
  * naming its words and what it may link.
+ *
+ * On a page a plan lays out (`context.pageSections`), a link may also go to a
+ * section of the same page (AGL-3097). A live hero's re-ask was answered with
+ * "#consultation-form", an anchor to the form the plan places last, and the
+ * page stopped at its first section. A link that names a section, by
+ * `scrollTo` or by a fragment that section's name's words make up, goes
+ * there, and the page step writes the platform's Scroll to element
+ * interaction for it. On a page as stored (`context.scrollTargetIds`), a link
+ * carrying that interaction to one of its section roots goes there. Two
+ * faults get a sentence of their own:
+ *
+ * - `link-fragment`: an `href` fragment that names no section. The palette
+ *   validator drops it, so what the link was written with goes nowhere.
+ * - `scroll-target-unknown`: a `scrollTo` naming no section of the page.
+ *
+ * `written` is the node as the model wrote it and `stored` the node as the
+ * check was given it, each by an id of `tree`.
  */
-export function detectLinksWithoutDestination(tree: AiDoctrineTree, outputKind: AiOutputKind): AiDoctrineViolation[] {
+export function detectLinksWithoutDestination(
+  tree: AiDoctrineTree,
+  outputKind: AiOutputKind,
+  context: Pick<AiDoctrineTreeContext, 'pageSections' | 'scrollTargetIds'> = {},
+  written: (id: string) => unknown = () => undefined,
+  stored: (id: string) => unknown = () => undefined,
+): AiDoctrineViolation[] {
   if (outputKind === 'email' || outputKind === 'form') return []
+  const sections = context.pageSections ?? []
+  const targets = new Set(context.scrollTargetIds ?? [])
   const dead: Array<{ id: string; label: string; inForm: boolean }> = []
+  const fragments: Array<{ id: string; label: string; value: string }> = []
+  const unknown: Array<{ id: string; label: string; value: string }> = []
   for (const visit of walkTree(tree)) {
     const { node } = visit
     if (!LINK_COMPONENTS.has(node.componentId)) continue
     if (isFilled(node.props?.['screenId']) || isFilled(node.props?.['href'])) continue
-    dead.push({
-      id: visit.id,
-      label: typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : '',
-      inForm: hasAncestor(tree, visit, (ancestor) => ancestor.componentId === 'form'),
+    if (aiStoredScrollTargets(stored(visit.id)).some((target) => targets.has(target))) continue
+    const label = typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : ''
+    const target = aiPageLinkTarget(written(visit.id), sections)
+    if (target?.kind === 'section') continue
+    if (target?.kind === 'unknown' && target.via === 'href') {
+      fragments.push({ id: visit.id, label, value: target.value })
+    } else if (target?.kind === 'unknown' && context.pageSections) {
+      unknown.push({ id: visit.id, label, value: target.value })
+    } else {
+      dead.push({ id: visit.id, label, inForm: hasAncestor(tree, visit, (ancestor) => ancestor.componentId === 'form') })
+    }
+  }
+  const wordsOf = (entry: { id: string; label: string }): string =>
+    entry.label ? `"${entry.label}"` : `A ${displayName(tree.nodes[entry.id].componentId)}`
+  const names = sections.map((name) => `"${name}"`)
+  const listed = names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}` : names.join('')
+  const toSection = `To take a visitor to a section of this page, set "${AI_PAGE_SCROLL_TO_PROP}" to that section's name in the plan: ${listed}.`
+  const violations: AiDoctrineViolation[] = []
+  if (fragments.length) {
+    const [first] = fragments
+    violations.push({
+      rule: 10,
+      code: 'link-fragment',
+      message: `${wordsOf(first)} links "${first.value}", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. ${
+        context.pageSections
+          ? `${toSection} Otherwise give it the "screenId" of a screen the site has that does what its words say, or take it out.`
+          : 'Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives, or take it out.'
+      }`,
+      nodeIds: unique(fragments.map((entry) => entry.id)),
     })
   }
-  if (!dead.length) return []
-  const [first] = dead
-  const words = first.label ? `"${first.label}"` : `A ${displayName(tree.nodes[first.id].componentId)}`
-  const instead = dead.some((entry) => entry.inForm)
-    ? ' A Form draws its own send button from its "submitLabel", so take out a button drawn inside one and set that label instead.'
-    : ' When the site has no page for it, take it out: a form on this page is sent by its own button, and no element can be reached by an anchor.'
-  return [
-    {
+  if (unknown.length) {
+    const [first] = unknown
+    violations.push({
+      rule: 10,
+      code: 'scroll-target-unknown',
+      message: `${wordsOf(first)} scrolls to "${first.value}", and this page has no section of that name. Set "${AI_PAGE_SCROLL_TO_PROP}" to one of its sections' names in the plan: ${listed}, or take the link out.`,
+      nodeIds: unique(unknown.map((entry) => entry.id)),
+    })
+  }
+  if (dead.length) {
+    const [first] = dead
+    const instead = dead.some((entry) => entry.inForm)
+      ? ' A Form draws its own send button from its "submitLabel", so take out a button drawn inside one and set that label instead.'
+      : context.pageSections
+        ? ` ${toSection} When none of these fits, take it out.`
+        : ' When the site has no page for it, take it out: a form on this page is sent by its own button, and no element can be reached by an anchor.'
+    violations.push({
       rule: 10,
       code: 'link-without-destination',
-      message: `${words} goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives.${instead}`,
+      message: `${wordsOf(first)} goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives.${instead}`,
       nodeIds: unique(dead.map((entry) => entry.id)),
-    },
-  ]
+    })
+  }
+  return violations
 }
 
 /** Answer fields that say "publish", wherever the answer put them. */
@@ -2122,6 +2345,14 @@ export function validateAiDoctrineTree(
   // The validator's repairs name the nodes as they were written; every finding names the minted ids.
   const minted = new Map(Object.entries(validated.sourceIds).map(([id, source]) => [source, id]))
   const written = isRecord(input) && isRecord(input['nodes']) ? input['nodes'] : {}
+  // What the model wrote of a node, by its minted id: the answer this check was
+  // given, or what the caller says was written of a tree it stored first.
+  const writtenOf = (id: string): unknown => {
+    const source = validated.sourceIds[id] ?? id
+    return context.writtenNode ? context.writtenNode(source) : written[source]
+  }
+  // A node as this check was given it, by its minted id: for a page as stored, what the page carries.
+  const storedOf = (id: string): unknown => written[validated.sourceIds[id] ?? id]
   const violations = [
     ...publish,
     ...detectRepeatedSubtrees(tree, otherPages, context),
@@ -2133,10 +2364,10 @@ export function validateAiDoctrineTree(
     ...detectTypedData(tree),
     ...detectImageSources(tree, context),
     ...detectUnrelatedScreenLinks(tree, outputKind, context),
-    ...detectLinksWithoutDestination(tree, outputKind),
+    ...detectLinksWithoutDestination(tree, outputKind, context, writtenOf, storedOf),
     ...detectDocumentStructure(tree, outputKind),
     ...detectAdHocWidths(tree, outputKind),
-    ...detectUnresponsiveGrids(tree, outputKind),
+    ...detectUnresponsiveGrids(tree, outputKind, writtenOf),
     ...detectOffVoiceCopy(aiTreeCopy(tree, context), context.framing),
     ...detectCutLines(validated.repairs, written, (id) => minted.get(id) ?? id),
     ...detectDanglingWords(tree),

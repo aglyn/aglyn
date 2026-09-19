@@ -24,7 +24,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { AiJobSummary } from '../model/ai-jobs.types'
 import { AI_SITE_PASS_CREDITS, aiPlanCreditEstimate } from '../model/ai-site-job'
-import { AiJobPlan } from './ai-job-plan.component'
+import { AiJobPlan, aiJobReviewDetails } from './ai-job-plan.component'
 
 const PLAN = {
   reuse: [],
@@ -151,4 +151,51 @@ it('counts, for a page job, every creation it builds before its page, beside wha
   expect(screen.getByText(new RegExp(`about ${expected.toLocaleString('en-US')} credits`))).toBeTruthy()
   expect(screen.getByText(/Creates the component Price tier/)).toBeTruthy()
   expect(screen.getByText(/Creates the form Quote request/)).toBeTruthy()
+})
+
+describe('where a refused answer broke its rules (AGL-3078)', () => {
+  const REFUSED = job({
+    kind: 'page',
+    plan: { ...PLAN, status: 'confirmed', confirmedBy: 'u1' },
+    review: {
+      reason: 'doctrine',
+      message: 'This could not be built within the building rules.',
+      findings: [
+        { rule: 12, code: 'grid-not-container', message: 'A Grid lays out columns only as a container.', nodeIds: ['areas-grid'] },
+        { rule: 2, code: 'plan-screen-without-layout', message: 'A screen names no layout.', paths: ['screens[0].layout'] },
+        { rule: null, code: 'answer-cut-off', message: 'This section was too large to build in one pass.' },
+      ],
+      outline: [
+        { id: 'areas-grid', depth: 0, componentId: 'muiGrid', props: ['ariaLabel', 'container'], sx: ['gap'], grid: { container: 'True' }, children: ['muiGrid'] },
+        { id: 'cell-1', depth: 1, componentId: 'muiGrid', props: ['size'], grid: { size: '4' }, children: ['muiCard'] },
+      ],
+    },
+  })
+
+  it('reads each finding’s nodes or plan entries, then the outline by depth', () => {
+    expect(aiJobReviewDetails(REFUSED.review)).toEqual([
+      'Rule 12 grid-not-container: nodes areas-grid',
+      'Rule 2 plan-screen-without-layout: at screens[0].layout',
+      'areas-grid muiGrid · container="True" · props ariaLabel, container · sx gap · holds muiGrid',
+      '  cell-1 muiGrid · size="4" · props size · holds muiCard',
+    ])
+    expect(aiJobReviewDetails({ reason: 'plan', message: 'The plan is ready.', findings: [] })).toEqual([])
+    expect(aiJobReviewDetails(null)).toEqual([])
+  })
+
+  it('shows staff what was refused, collapsed until asked for', () => {
+    render(<AiJobPlan job={REFUSED} onResume={jest.fn()} staff />)
+    expect(screen.getByText('A Grid lays out columns only as a container.')).toBeTruthy()
+    expect(screen.queryByLabelText('What was refused')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show what was refused' }))
+    expect(screen.getByLabelText('What was refused').textContent).toBe(aiJobReviewDetails(REFUSED.review).join('\n'))
+    expect(screen.getByRole('button', { name: 'Hide what was refused' })).toBeTruthy()
+  })
+
+  it('shows a member the findings and nothing of what was refused', () => {
+    render(<AiJobPlan job={REFUSED} onResume={jest.fn()} />)
+    expect(screen.getByText('A Grid lays out columns only as a container.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Show what was refused' })).toBeNull()
+    expect(screen.queryByText(/areas-grid/)).toBeNull()
+  })
 })

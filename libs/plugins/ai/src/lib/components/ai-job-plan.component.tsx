@@ -16,9 +16,10 @@
  */
 
 import { AI_BUILD_PLAN_CREATION_NOUNS, isAiPlanNewRef } from '../model/ai-build-plan'
-import type { AiJobSummary } from '../model/ai-jobs.types'
+import type { AiJobReview, AiJobSummary } from '../model/ai-jobs.types'
 import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
-import { Box, Button, Stack, Typography } from '@mui/material'
+import { Box, Button, Collapse, Stack, Typography } from '@mui/material'
+import { useState } from 'react'
 
 /**
  * A job's plan and what it waits for (AGL-2935), inside the AI jobs drawer:
@@ -33,15 +34,54 @@ export interface AiJobPlanProps {
   onResume: (job: AiJobSummary) => void
   /** A resume for this job is in flight. */
   busy?: boolean
+  /**
+   * The viewer is staff (AGL-3078), who can open where a refused answer broke
+   * its rules and the outline of those parts, to tell a shape the rules should
+   * allow from an answer that ignored its re-ask. A member reads the findings.
+   */
+  staff?: boolean
+}
+
+/**
+ * Where a refused answer broke its rules, and the outline of those parts, as
+ * lines staff read (AGL-3078): each finding with the nodes or plan entries it
+ * names, then each outlined node indented by its depth, with its element, a
+ * Grid's layout as written, and the names of what it sets and holds.
+ */
+export function aiJobReviewDetails(review: AiJobReview | null): string[] {
+  if (review?.reason !== 'doctrine') return []
+  const lines = review.findings.flatMap((finding) => {
+    const where = finding.nodeIds?.length
+      ? `nodes ${finding.nodeIds.join(', ')}`
+      : finding.paths?.length
+        ? `at ${finding.paths.join(', ')}`
+        : null
+    return where ? [`${finding.rule === null ? '' : `Rule ${finding.rule} `}${finding.code}: ${where}`] : []
+  })
+  for (const node of review.outline ?? []) {
+    lines.push(
+      [
+        `${'  '.repeat(node.depth)}${node.id} ${node.componentId}`,
+        ...Object.entries(node.grid ?? {}).map(([name, value]) => `${name}=${JSON.stringify(value)}`),
+        ...(node.props.length ? [`props ${node.props.join(', ')}`] : []),
+        ...(node.sx?.length ? [`sx ${node.sx.join(', ')}`] : []),
+        ...(node.children.length ? [`holds ${node.children.join(', ')}`] : []),
+      ].join(' · '),
+    )
+  }
+  return lines
 }
 
 export function AiJobPlan({
   job,
   onResume,
   busy = false,
+  staff = false,
 }: AiJobPlanProps): JSX.Element | null {
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const { plan, review } = job
   if (!plan && !review) return null
+  const details = staff ? aiJobReviewDetails(review) : []
   /** A reference as a person reads it: the record's name, or what the plan creates. */
   const named = (ref: string | null): string =>
     !ref
@@ -104,6 +144,27 @@ export function AiJobPlan({
               {finding.message}
             </Typography>
           ))}
+        </Box>
+      )}
+      {details.length > 0 && (
+        <Box sx={{ mt: 0.5 }}>
+          <Button
+            size="small"
+            aria-expanded={detailsOpen}
+            onClick={() => setDetailsOpen((prior) => !prior)}
+          >
+            {detailsOpen ? 'Hide what was refused' : 'Show what was refused'}
+          </Button>
+          <Collapse in={detailsOpen} unmountOnExit>
+            <Typography
+              variant="caption"
+              component="pre"
+              aria-label="What was refused"
+              sx={{ m: 0, fontFamily: 'monospace', whiteSpace: 'pre', overflowX: 'auto' }}
+            >
+              {details.join('\n')}
+            </Typography>
+          </Collapse>
         </Box>
       )}
       {estimate > 0 && (

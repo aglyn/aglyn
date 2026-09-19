@@ -42,7 +42,10 @@ import { getTemplateScreenRouting } from '@aglyn/tenant-runtime/template-screens
  * underscore says so at a glance.
  */
 export interface AgentSiteFacts {
-  /** Public content collections, list-slug first. */
+  /**
+   * Public content collections, list-slug first — only those with a published
+   * entry, since one with none has no listing or feed yet (AGL-3101).
+   */
   collections: Array<{ slug: string; name?: string; entryCount?: number }>
   /** Top-level pages worth naming in a curated list. */
   pages: Array<{ path: string; title?: string }>
@@ -156,7 +159,15 @@ export async function readAgentSiteFacts(host: AglynHost): Promise<AgentSiteFact
             }
           }),
         )
-        collections = counted.filter((entry): entry is Collection => entry != null)
+        collections = counted.filter(
+          // A collection with nothing published is not public yet
+          // (AGL-3101): its listing and its feed 404 until the first entry
+          // goes live, so naming it would hand an agent two dead links. Only
+          // a count of ZERO drops it — a failed count leaves `entryCount`
+          // unset and keeps the link, as above.
+          (entry): entry is Collection =>
+            entry != null && entry.entryCount !== 0,
+        )
       } catch {
         collections = []
       }

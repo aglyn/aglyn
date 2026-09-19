@@ -98,8 +98,10 @@ generated until you confirm.
     address, a search title and description, and a navigation entry when the brief
     calls for one. A link goes only to a page that does what its words say: when your
     site has no such page yet, the link is left out rather than sent to your home
-    page. Every button and link goes somewhere, to a page of your site or to an
-    address the brief gives, and one with nowhere to go is left out.
+    page. Every button and link goes somewhere: to a page of your site, to an
+    address the brief gives, or to a section of the same page, which it scrolls to
+    with a Scroll to element interaction you can change. One with nowhere to go is
+    left out.
 11. **One main landmark and an ordered outline.** Every page has one main content
     area, one top-level heading, and headings that step down in order, so it reads
     well to screen readers and search engines.

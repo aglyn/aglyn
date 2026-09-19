@@ -516,7 +516,14 @@ describe('the form step', () => {
     expect(outcome.review).toEqual({
       reason: 'doctrine',
       message: expect.stringContaining('Rule 3'),
-      findings: [{ rule: 3, code: 'lead-routing-has-no-email-field', message: expect.any(String) }],
+      findings: [{ rule: 3, code: 'lead-routing-has-no-email-field', message: expect.any(String), nodeIds: ['survey'] }],
+      // The form, and each field under it by the names of what it sets, never a label (AGL-3078).
+      outline: [
+        expect.objectContaining({ id: 'survey', depth: 0, componentId: 'form', children: Array(4).fill('formField') }),
+        ...['satisfaction', 'frequency', 'improve', 'comments'].map((id) =>
+          expect.objectContaining({ id, depth: 1, componentId: 'formField', props: expect.arrayContaining(['fieldName', 'label', 'fieldType']) }),
+        ),
+      ],
     })
     expect(commits).toEqual([])
   })

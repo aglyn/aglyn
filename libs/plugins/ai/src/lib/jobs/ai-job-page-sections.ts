@@ -31,6 +31,7 @@ import {
 } from '../runtime/ai-doctrine'
 import {
   detectCutLines,
+  isAiLinkElement,
   validateAiDoctrineTree,
   walkTree,
   type AiDoctrineNode,
@@ -38,6 +39,7 @@ import {
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
 import { AI_INSTANCE_REF_PROP, validateAiNodeTree } from '../runtime/ai-node-tree'
+import { aiPageLinkTarget, aiPageScrollInteraction } from '../runtime/ai-page-links'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import { AI_REPEAT_KEY, expandAiRepeatedItems } from '../runtime/ai-repeated-items'
@@ -262,18 +264,20 @@ export function aiPageWithSection(
 
 /**
  * What a tree generated against this inventory may reference, the brand it is
- * held to, and — where the workspace keeps no reusable components or saved
- * forms (AGL-3030) — that the page is built inline.
+ * held to, where the workspace keeps no reusable components or saved forms
+ * (AGL-3030) that the page is built inline, and the sections its plan names,
+ * which a link may take a visitor to (AGL-3097).
  */
 export function aiPageCheckContext(
   inventory: AiSiteInventory | null,
-  options: { reusableComponents?: boolean } = {},
+  options: { reusableComponents?: boolean; sections?: readonly string[] } = {},
 ): AiDoctrineTreeContext {
   return {
     brand: inventory?.theme ? { colors: inventory.theme.colors, fonts: inventory.theme.fonts } : null,
     ...aiNodeTreeContextFromInventory(inventory),
     homeScreenIds: aiHomeScreenIds(inventory),
     ...(options.reusableComponents === false ? { reusableComponents: false } : {}),
+    ...(options.sections?.length ? { pageSections: options.sections } : {}),
   }
 }
 
@@ -376,11 +380,37 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
       }
       sectionNodes[id === minted ? sectionId : id] = stored
     }
+    const drawnNodes = isRecord(drawn.tree) && isRecord(drawn.tree['nodes']) ? drawn.tree['nodes'] : {}
+    // What the model wrote of one of the section's nodes, by the id the page stores it under.
+    const drawnIdOf = (stored: string): string =>
+      validated.sourceIds[stored === sectionId ? minted : stored] ?? stored
+    // A link that names a section of this page carries the platform's Scroll to
+    // element interaction to that section's root, whose id is minted from the
+    // plan before the section is built (AGL-3097).
+    const sections = input.context.pageSections ?? []
+    for (const [id, node] of Object.entries(sectionNodes)) {
+      const props = isRecord(node['props']) ? node['props'] : {}
+      if (!isAiLinkElement(node['componentId']) || props['screenId'] || props['href']) continue
+      const target = aiPageLinkTarget(drawnNodes[drawnIdOf(id)], sections)
+      if (target?.kind === 'section') {
+        node['interactions'] = [aiPageScrollInteraction(input.sectionIds[target.section], sections[target.section])]
+      }
+    }
     const section: AiPageSection = { rootId: sectionId, nodes: sectionNodes as unknown as NodesMap, load: null }
 
     const page = aiPageWithSection(input.page, section, input.sectionIds)
-    const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', input.context)
     const own = new Set(Object.keys(sectionNodes))
+    // The page check reads the section as the page stores it, where the palette
+    // validator has already dropped what it could not read, such as a
+    // `container` written as text or a link's `scrollTo`; what the model wrote
+    // of each of the section's nodes is read from the section as it was drawn
+    // (AGL-3078). A link the page already carries to one of its section roots
+    // goes there, whichever pass wrote it (AGL-3097).
+    const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', {
+      ...input.context,
+      writtenNode: (id) => (own.has(id) ? drawnNodes[drawnIdOf(id)] : undefined),
+      scrollTargetIds: input.sectionIds,
+    })
     // The page check mints its ids afresh: its map leads back to the page's
     // ids, and the section's own lead back to the model's.
     const pageIds = report.tree?.sourceIds ?? {}
@@ -390,9 +420,8 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
     }
     // The page check reads the section as it is stored, where a line the
     // palette validator cut is already cut, so the cut is read from the
-    // section's own validation, first (AGL-3076).
-    const drawnNodes = isRecord(drawn.tree) && isRecord(drawn.tree['nodes']) ? drawn.tree['nodes'] : {}
-    // Copies of one item name one node the model wrote, once.
+    // section's own validation, first (AGL-3076). Copies of one item name one
+    // node the model wrote, once.
     const violations: AiDoctrineViolation[] = [
       ...detectCutLines(validated.repairs, drawnNodes, written),
       ...report.violations.map((violation) =>

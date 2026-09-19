@@ -192,3 +192,23 @@ export const AI_FREE_PAGE_BUILT_SECTIONS: AiDoctrineTree = {
     p2GOnWVIgq: { componentId: 'muiListItemText' },
   },
 }
+
+/**
+ * RECORDED, NOT GOLDEN: the two answers the fourth live recording of the Free
+ * page brief gave its first section, "hero introduction"
+ * (`page-free-law-firm-about`, 2026-09-17 06:54Z, claude-sonnet-5), exactly
+ * as the tool received them (AGL-3097). The first left its "Request a
+ * Consultation" button with no destination and wrote a subhead past the 120
+ * characters its heading style holds. The re-ask was answered with the button
+ * sent to "#consultation-form", an anchor to the form section the plan places
+ * last. The palette validator drops a bare anchor, rule 10 refused the answer
+ * again, and the page stopped at its first section.
+ */
+export const AI_FREE_PAGE_HERO_ANSWERS: readonly [{ tree: string }, { tree: string }] = [
+  {
+    tree: '{"rootId":"root","nodes":{\n"root":{"componentId":"div","props":{},"nodes":["section1"]},\n"section1":{"componentId":"section","props":{"element":"section","ariaLabel":"Introduction"},"nodes":["container1"]},\n"container1":{"componentId":"muiContainer","props":{"maxWidth":"md"},"nodes":["stack1"]},\n"stack1":{"componentId":"muiStack","props":{"direction":"column","alignItems":"flex-start","justifyContent":"center"},"sx":{"gap":3,"py":8},"nodes":["eyebrow","h1","subtitle","ctaStack"]},\n"eyebrow":{"componentId":"muiTypography","props":{"children":"Brightwater Law","variant":"subtitle1","component":"p"},"sx":{"color":"secondary.main"}},\n"h1":{"componentId":"muiTypography","props":{"children":"Counsel you can trust, from people who listen first","variant":"h1","component":"h1"}},\n"subtitle":{"componentId":"muiTypography","props":{"children":"We\'re a client-focused firm built on plain talk, careful strategy, and steady advocacy — for individuals and businesses facing decisions that matter.","variant":"h5","component":"p"},"sx":{"color":"text.secondary","fontWeight":400}},\n"ctaStack":{"componentId":"muiStack","props":{"direction":"row","alignItems":"center"},"sx":{"gap":2,"pt":1},"nodes":["ctaButton"]},\n"ctaButton":{"componentId":"muiButton","props":{"children":"Request a Consultation","color":"primary","variant":"contained","size":"large","target":"_self"}}\n}}',
+  },
+  {
+    tree: '{"rootId":"root","nodes":{"root":{"componentId":"div","nodes":["section1"]},"section1":{"componentId":"section","props":{"element":"section","ariaLabel":"Hero introduction"},"nodes":["container1"]},"container1":{"componentId":"muiContainer","props":{"maxWidth":"md"},"sx":{"paddingY":8},"nodes":["stack1"]},"stack1":{"componentId":"muiStack","props":{"direction":"column","alignItems":"center"},"sx":{"gap":3,"textAlign":"center"},"nodes":["eyebrow","h1","subtitle","ctaLink"]},"eyebrow":{"componentId":"muiTypography","props":{"children":"Brightwater Law","variant":"subtitle1","component":"p"},"sx":{"color":"secondary.main","fontWeight":600}},"h1":{"componentId":"muiTypography","props":{"children":"Plain talk. Careful strategy. Steady advocacy.","variant":"h1","component":"h1"}},"subtitle":{"componentId":"muiTypography","props":{"children":"A client-focused firm for individuals and businesses facing decisions that matter.","variant":"h5","component":"p"},"sx":{"color":"text.secondary","fontWeight":400}},"ctaLink":{"componentId":"muiButton","props":{"children":"Request a Consultation","color":"primary","variant":"contained","size":"large","href":"#consultation-form"}}}}',
+  },
+]

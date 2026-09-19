@@ -427,9 +427,15 @@ describe('the template step', () => {
       reason: 'doctrine',
       message: expect.stringContaining('Rule 8'),
       findings: [
-        { rule: 8, code: 'unknown-binding', message: expect.stringContaining('{{product.sku}}') },
-        { rule: 8, code: 'typed-title', message: expect.stringContaining('{{product.name}}') },
-        { rule: 8, code: 'foreign-block', message: expect.stringContaining('a collection entry’s page') },
+        { rule: 8, code: 'unknown-binding', message: expect.stringContaining('{{product.sku}}'), nodeIds: ['sku'] },
+        { rule: 8, code: 'typed-title', message: expect.stringContaining('{{product.name}}'), nodeIds: ['title'] },
+        { rule: 8, code: 'foreign-block', message: expect.stringContaining('a collection entry’s page'), nodeIds: ['body'] },
+      ],
+      // Each node a finding names, by what it is and the names of what it sets (AGL-3078).
+      outline: [
+        { id: 'sku', depth: 0, componentId: 'muiTypography', props: ['variant', 'children'], children: [] },
+        { id: 'title', depth: 0, componentId: 'muiTypography', props: ['variant', 'component', 'children'], children: [] },
+        { id: 'body', depth: 0, componentId: 'collectionEntryBody', props: [], children: [] },
       ],
     })
     expect(commits).toEqual([])

@@ -85,6 +85,7 @@ import {
   validateAiBuildPlan,
   validateAiDoctrineTree,
   type AiDoctrineTree,
+  type AiDoctrineTreeContext,
   type AiDoctrineViolation,
 } from './ai-doctrine-validators'
 import { AI_OUTPUT_BUDGETS } from './ai-palette'
@@ -971,13 +972,87 @@ describe('rule 10 — a link that goes nowhere (AGL-3072)', () => {
     expect(detectLinksWithoutDestination(tree(page(section(button()))), 'email')).toEqual([])
   })
 
-  it('refuses a link whose only destination was an anchor, which the palette validator drops and no element on a page could answer', () => {
+  it('refuses a link whose only destination was an anchor, which the palette validator drops and no element on a page could answer, naming the anchor as the fault (AGL-3097)', () => {
     const anchored = tree(page(section(text('h1', 'About Brightwater Law', 'h1'), button({ href: '#consultation' }))))
     const report = validateAiDoctrineTree(anchored, 'page')
     expect(report.tree?.repairs).toEqual(['n3.href is neither an https: URL nor a path on this site; dropped'])
-    expect(report.violations.map((violation) => [violation.code, violation.nodeIds])).toEqual([
-      ['link-without-destination', [Object.keys(report.tree?.sourceIds ?? {}).find((id) => report.tree?.sourceIds[id] === 'n3')]],
+    expect(report.violations.map(({ code, message, nodeIds }) => ({ code, message, nodeIds }))).toEqual([
+      {
+        code: 'link-fragment',
+        message:
+          '"Request a Consultation" links "#consultation", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives, or take it out.',
+        nodeIds: [Object.keys(report.tree?.sourceIds ?? {}).find((id) => report.tree?.sourceIds[id] === 'n3')],
+      },
     ])
+  })
+})
+
+describe('rule 10 — a link to a section of its own page (AGL-3097)', () => {
+  // The live Free About page's plan, whose hero's re-ask was answered with "#consultation-form".
+  const SECTIONS = ['hero introduction', 'who we are', 'practice areas', 'how we work with clients', 'consultation request form']
+  const LISTED = '"hero introduction", "who we are", "practice areas", "how we work with clients" or "consultation request form"'
+  const button = (props: Record<string, unknown> = {}): Nested => ({
+    componentId: 'muiButton',
+    props: { children: 'Request a Consultation', variant: 'contained', ...props },
+  })
+  /** A page's rule 10 findings, as the whole-tree check makes them with the plan's sections. */
+  const found = (props: Record<string, unknown>, context: AiDoctrineTreeContext = { pageSections: SECTIONS }) =>
+    validateAiDoctrineTree(tree(page(section(text('h1', 'About Brightwater Law', 'h1'), button(props)))), 'page', context)
+      .violations.filter((violation) => violation.rule === 10)
+      .map(({ code, message }) => ({ code, message }))
+
+  it('lets a link go to a section of the page by its name in the plan, or by an anchor its words make up', () => {
+    expect(found({ scrollTo: 'consultation request form' })).toEqual([])
+    expect(found({ scrollTo: '  Consultation-Request-Form ' })).toEqual([])
+    // The live answer: an anchor whose words are all the form section's own.
+    expect(found({ href: '#consultation-form' })).toEqual([])
+    expect(found({ scrollTo: 'practice areas', href: '#nowhere' })).toEqual([])
+  })
+
+  it('refuses a scrollTo that names no section of the page, and an anchor none makes up, each with what it may name', () => {
+    expect(found({ scrollTo: 'contact form' })).toEqual([
+      {
+        code: 'scroll-target-unknown',
+        message: `"Request a Consultation" scrolls to "contact form", and this page has no section of that name. Set "scrollTo" to one of its sections' names in the plan: ${LISTED}, or take the link out.`,
+      },
+    ])
+    expect(found({ href: '#contact' })).toEqual([
+      {
+        code: 'link-fragment',
+        message: `"Request a Consultation" links "#contact", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. To take a visitor to a section of this page, set "scrollTo" to that section's name in the plan: ${LISTED}. Otherwise give it the "screenId" of a screen the site has that does what its words say, or take it out.`,
+      },
+    ])
+    // A scrollTo that names a section is read before an anchor that names none, and one that names none is the fault.
+    expect(found({ scrollTo: 'our fees', href: '#consultation-form' }).map(({ code }) => code)).toEqual(['scroll-target-unknown'])
+  })
+
+  it('tells a link that goes nowhere on a page of a plan that it may go to one of the page’s sections', () => {
+    expect(found({})).toEqual([
+      {
+        code: 'link-without-destination',
+        message: `"Request a Consultation" goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. To take a visitor to a section of this page, set "scrollTo" to that section's name in the plan: ${LISTED}. When none of these fits, take it out.`,
+      },
+    ])
+    // With no plan to name sections, a scrollTo goes nowhere, and says nothing of sections.
+    expect(found({ scrollTo: 'consultation request form' }, {})).toEqual([
+      { code: 'link-without-destination', message: expect.stringContaining('When the site has no page for it, take it out') },
+    ])
+  })
+
+  it('reads a Scroll to element interaction to a section root on a page as stored, and never one an answer wrote', () => {
+    const stored = (interactions: unknown): unknown =>
+      tree(page(section(text('h1', 'About Brightwater Law', 'h1'), { ...button(), interactions } as Nested)))
+    const scrollTo = (id: string, enabled = true) => [
+      { id: 'ai-scroll-to-section', name: 'Scroll', enabled, trigger: { event: 'elementClick', everyTime: true }, steps: [{ type: 'scrollTo', selector: `[data-aglyn="leaf:${id}"]` }] },
+    ]
+    const rule10 = (input: unknown, context: AiDoctrineTreeContext) =>
+      validateAiDoctrineTree(input, 'page', context).violations.filter((violation) => violation.rule === 10).map(({ code }) => code)
+    const roots = { pageSections: SECTIONS, scrollTargetIds: ['s1', 's2', 's3', 's4', 's5'] }
+    expect(rule10(stored(scrollTo('s5')), roots)).toEqual([])
+    // Disabled, to a node no section roots, or on an answer whose own interactions are dropped: it goes nowhere.
+    expect(rule10(stored(scrollTo('s5', false)), roots)).toEqual(['link-without-destination'])
+    expect(rule10(stored(scrollTo('n2')), roots)).toEqual(['link-without-destination'])
+    expect(rule10(stored(scrollTo('s5')), { pageSections: SECTIONS })).toEqual(['link-without-destination'])
   })
 })
 
@@ -1277,6 +1352,122 @@ describe('rule 12 — a Grid of columns is a container of items sized for every 
     const answer = tree(page(section(text('h1', 'About', 'h1')), section(text('h2', 'What we help with', 'h2'), grid({ container: 'true', spacing: 3 }, cells(4)))))
     const report = validateAiDoctrineTree(answer, 'page', { reusableComponents: false })
     expect(report.violations.map((violation) => violation.code)).toEqual(['grid-item-size'])
+  })
+})
+
+describe('rule 12 — each Grid that is not a container is told what its own shape needs (AGL-3078)', () => {
+  const grid = (props: Record<string, unknown>, children: Nested[]): Nested => ({ componentId: 'muiGrid', props, children })
+  const cells = (size: string) =>
+    ['Estate planning', 'Real estate', 'Business formation'].map((title) => grid({ size }, [card(title, 'What it covers.')]))
+  const group = [text('h3', 'How we work', 'h3'), text('body1', 'Plain advice and fixed fees.')]
+  const found = (root: Nested) =>
+    detectUnresponsiveGrids(tree(page(section(root))), 'page').map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))
+  /** A page's rule 12 findings as the whole-tree check makes them, named by the ids the fixture wrote. */
+  const checked = (root: Nested) => {
+    const report = validateAiDoctrineTree(tree(page(section(text('h1', 'About', 'h1')), section(root))), 'page', { reusableComponents: false })
+    return report.violations
+      .filter((violation) => violation.rule === 12)
+      .map((violation) => ({ ...violation, nodeIds: violation.nodeIds?.map((id) => report.tree?.sourceIds[id]) }))
+  }
+
+  it('tells a Grid that only stacks a group to use a Stack or a Box, or to become a container of sized items, and passes either', () => {
+    expect(detectUnresponsiveGrids(tree(page(section(grid({ spacing: '2' }, group)))), 'page')).toEqual([
+      {
+        rule: 12,
+        code: 'grid-as-stack',
+        message:
+          'A Grid that is not a container lays nothing out, so this one only stacks what it holds. Use a Stack (or a Box) for a group that only stacks, such as a heading over its text, or make it a container of sized items: set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4".',
+        nodeIds: ['n2'],
+      },
+    ])
+    // A bare Grid holding the group, and an item of a container spacing its own group, are the same shape.
+    expect(found(grid({}, group))).toEqual([{ rule: 12, code: 'grid-as-stack', nodeIds: ['n2'] }])
+    expect(found(grid({ container: true }, [grid({ size: 'xs:12 md:6', spacing: '2' }, group)]))).toEqual([
+      { rule: 12, code: 'grid-as-stack', nodeIds: ['n3'] },
+    ])
+    // A row keeps the container re-ask: cards of one shape, or a row direction, are columns.
+    expect(found(grid({}, cells('4').map((cell) => (cell.children ?? [])[0])))).toEqual([
+      { rule: 12, code: 'grid-not-container', nodeIds: ['n2'] },
+    ])
+    expect(found(grid({ direction: 'row' }, group))).toEqual([{ rule: 12, code: 'grid-not-container', nodeIds: ['n2'] }])
+    // Mended either way, the group passes.
+    expect(found({ componentId: 'muiStack', props: { spacing: '2' }, children: group })).toEqual([])
+    expect(found(grid({ container: true, spacing: '3' }, [grid({ size: 'xs:12 md:6' }, group)]))).toEqual([])
+  })
+
+  it('reads a column direction the palette validator drops from what the model wrote, and tells it a Grid has none', () => {
+    const [stack, ...others] = checked(grid({ direction: 'column' }, group))
+    expect(others).toEqual([])
+    expect(stack).toEqual({
+      rule: 12,
+      code: 'grid-as-stack',
+      message:
+        'A Grid lays out rows and has no "column" direction, so this one only stacks what it holds. Use a Stack (or a Box) for a group that only stacks, such as a heading over its text, or make it a container of sized items: set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4".',
+      nodeIds: ['n4'],
+    })
+    // A column of cards is a group that only stacks too; the Stack it asks for passes.
+    expect(checked(grid({ direction: 'column-reverse' }, cells('xs:12 md:4').map((cell) => (cell.children ?? [])[0])))).toEqual([
+      expect.objectContaining({ code: 'grid-as-stack', message: expect.stringContaining('no "column" direction') }),
+    ])
+    expect(checked({ componentId: 'muiStack', props: { direction: 'column' }, children: group })).toEqual([])
+  })
+
+  it('tells a sized item in a Box or a Stack inside its container to move directly under it, where the wrapper was refused as no item', () => {
+    const boxed = detectUnresponsiveGrids(
+      tree(page(section(grid({ container: true, spacing: '3' }, [{ componentId: 'muiBox', children: cells('xs:12 md:4') }])))),
+      'page',
+    )
+    expect(boxed).toEqual([
+      {
+        rule: 12,
+        code: 'grid-item-outside-container',
+        message:
+          'A Grid item is sized only by the Grid container it sits directly in, and this one sits in a Box, so its size does nothing and it stacks at every width. Move it directly under its Grid container, or, where it has none, put it and the items beside it in one ("container": true).',
+        nodeIds: ['n4', 'n9', 'n14'],
+      },
+    ])
+    // Items that hold a group, in a Stack, are the same shape.
+    const inStack = grid({ container: true }, [{ componentId: 'muiStack', children: [grid({ size: 'xs:12 md:6' }, group), grid({ size: 'xs:12 md:6' }, group)] }])
+    expect(found(inStack)).toEqual([{ rule: 12, code: 'grid-item-outside-container', nodeIds: ['n4', 'n7'] }])
+    // Their sizes are read against the container they belong in.
+    expect(found(grid({ container: true }, [{ componentId: 'muiBox', children: cells('4') }]))).toEqual([
+      { rule: 12, code: 'grid-item-outside-container', nodeIds: ['n4', 'n9', 'n14'] },
+      { rule: 12, code: 'grid-item-size', nodeIds: ['n4', 'n9', 'n14'] },
+    ])
+    // A Box holding anything but items is still no item of its container.
+    expect(found(grid({ container: true }, [{ componentId: 'muiBox', children: [text('h3', 'Areas', 'h3'), ...cells('xs:12 md:4')] }]))).toEqual([
+      { rule: 12, code: 'grid-item-size', nodeIds: ['n3'] },
+    ])
+    // Sized items that hold a group in a Box with no container at all are told the same, and nothing new is refused.
+    expect(found({ componentId: 'muiBox', children: [grid({ size: 'xs:12 md:6' }, group), grid({ size: 'xs:12 md:6' }, group)] })).toEqual([
+      { rule: 12, code: 'grid-item-outside-container', nodeIds: ['n3', 'n6'] },
+    ])
+    expect(found({ componentId: 'muiBox', children: cells('xs:12 md:4') })).toEqual([])
+    // Moved under the container, they pass.
+    expect(found(grid({ container: true, spacing: '3' }, cells('xs:12 md:4')))).toEqual([])
+  })
+
+  it('names a container written as a value the palette cannot read as the fault, and passes the switch it reads', () => {
+    expect(checked(grid({ container: 'True', spacing: '3' }, cells('xs:12 md:4')))).toEqual([
+      {
+        rule: 12,
+        code: 'grid-container-text',
+        message:
+          'This Grid\'s "container" is the text "True", not true, so it is not a container and what it holds stacks at every width. Write "container": true, with no quotes around true.',
+        nodeIds: ['n4'],
+      },
+    ])
+    expect(checked(grid({ container: 1, spacing: '3' }, cells('xs:12 md:4')))).toEqual([
+      expect.objectContaining({
+        code: 'grid-container-text',
+        message: 'This Grid\'s "container" is 1, not true, so it is not a container and what it holds stacks at every width. Write "container": true.',
+      }),
+    ])
+    // The text "true" is read as the switch, and a switch the model wrote passes.
+    expect(checked(grid({ container: 'true', spacing: '3' }, cells('xs:12 md:4')))).toEqual([])
+    expect(checked(grid({ container: true, spacing: '3' }, cells('xs:12 md:4')))).toEqual([])
+    // With nothing written to read, the same Grid is a row that is not a container.
+    expect(found(grid({ spacing: '3' }, cells('xs:12 md:4')))).toEqual([{ rule: 12, code: 'grid-not-container', nodeIds: ['n2'] }])
   })
 })
 

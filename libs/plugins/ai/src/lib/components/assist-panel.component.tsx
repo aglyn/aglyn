@@ -954,6 +954,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
               orgSlug={billingSlug}
               user={user}
               visible={generativeVisible}
+              isStaff={isStaff}
               hostId={hostId}
               // A question about the figures, where the page reports them
               // (AGL-2915); hidden with the rest of AI jobs, and refused by

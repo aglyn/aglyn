@@ -76,7 +76,7 @@ rules deny every client write). Fields:
 | `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`. |
 | `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. A page's document carries its estimated first-visit `load`. An output may carry a customer-safe `note`: what the person decides next about it, and the facts in square brackets its draft holds ([below](#what-a-draft-asks-the-member-to-fill)). |
 | `plan` | The plan a planned kind builds from: `reuse`, `create`, `screens`, the inventory `labels` it references, and `status` `proposed` → `confirmed` with who confirmed it and when. |
-| `review` | While the job is `needs_review`: the `reason` (`plan`, `doctrine` or `limit`), the customer-safe `message`, and the rules the last answer broke. |
+| `review` | While the job is `needs_review`: the `reason` (`plan`, `doctrine` or `limit`), the customer-safe `message`, and the rules the last answer broke, each with the node ids or plan paths it names, beside an `outline` of those parts of the refused answer ([below](#what-a-refused-answer-leaves-on-the-job)). |
 | `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step while the job can run — zero while it waits for a person, and a confirmed page or site plan's whole-job estimate where that is more — and the real spend at the plan's credit rate. |
 | `lease` | `{ owner, until }` while a step runs — see below. |
 | `expiresAt` | 180 days from creation, the assist exchange's clock: the brief is verbatim customer text (`docs/DATA_RETENTION.md`). |
@@ -681,6 +681,52 @@ real section check: a cut-off `tree` then a small section is kept on the re-ask,
 which asks for it smaller and quotes no shape error; cut off twice, the section
 ends as `answer-cut-off`, never `tree-invalid-input`. `ai-job-page-step.spec.ts`
 holds the same two through the page step, with the review a member reads.
+
+### What a refused answer leaves on the job
+
+A job that stops `needs_review` for a broken rule keeps where the rule was broken
+(AGL-3078). A live About page's section was refused twice for rule 12, and the job kept
+only the finding's sentence: nothing said which Grid it named or how the answer was
+built, so nobody could tell a model that ignored its re-ask from a check that refused a
+shape it should allow.
+
+- **Where each finding was broken.** `review.findings[]` keeps each finding's `nodeIds`,
+  by the ids the refused answer wrote, or a plan finding's `paths`, as
+  `screens[0].layout`: at most 24 node ids or plan paths a finding, each cut at 64
+  characters, and `?` for one that is no identifier, such as a sentence or an address.
+  The page's last pass names the nodes by the ids its draft stores them under.
+- **An outline of those parts.** `review.outline[]` holds the nodes the findings name,
+  in the order they name them and each once, each with the nodes below it in document
+  order, to 2 levels below each node a finding names, at most 40 nodes and 4,096 bytes as
+  JSON. A node keeps its `id`, its `depth` under the node a finding names, its
+  `componentId`, the names of its `props` and `sx` keys, and its `children` by element
+  id. A Grid also keeps the values of its layout props, `grid: { container, size, offset,
+  direction, wrap, spacing, rowSpacing, columnSpacing, columns }`, as written when a value
+  is a number, a switch, a binding token, or text of at most 40 characters made only of
+  layout words and numbers: breakpoints, `auto` and `grow`, switch words, directions,
+  wraps, and numbers with a CSS length unit. So a switch written as the text `"True"`
+  and a size written as `"{ xs: 12, md: 4 }"` read as written, and anything else, such as
+  a sentence or an address, reads `<text>`. No copy and no address is kept.
+- **Built from the answer, once it is gone.** `runValidatedGeneration` returns the answer
+  its violations were found in on `needs_input`, in memory only, and `aiDoctrineReview`
+  (`jobs/ai-job-generation.ts`) outlines it. Every step that stops for a broken rule goes
+  through it, the plan step included, so every doctrine review has the same shape.
+- **Stored as the review is.** The machine writes the review through the Admin SDK in
+  `recordStep`'s transaction, the rules deny every client write to `aiJobs`, and the
+  document keeps its 180-day clock, so neither the rules nor who may read a job change.
+  The wire summary carries the review as it did.
+- **Read by staff.** The AI jobs drawer lists each finding's sentence to a member, as
+  before. Staff (the panel's `isStaff`) also get **Show what was refused**, which opens
+  the findings' nodes and the outline, indented by depth (`aiJobReviewDetails` in
+  `components/ai-job-plan.component.tsx`).
+
+`jobs/ai-job-generation.spec.ts` holds the review's bounds and that it keeps no copy,
+even a sentence written into a Grid's layout props or its children;
+`ai-job-page-step.spec.ts` stops the page's last pass naming the draft's own nodes, with
+their outline, and a section refused twice for rule 12 with its node ids and the
+outline of the refused section; and `ai-jobs.spec.ts` parks a job for the live About
+page's shape through the real section check and machine and reads the review back from
+the stored job.
 
 ### The inventory, and "more on request"
 
@@ -1592,12 +1638,35 @@ the same way, in a Grid with a row direction and no container.
   page prefix.
 - **Held by `detectUnresponsiveGrids`** (`runtime/ai-doctrine-validators.ts`, rule 12) on
   every page, template, layout and component tree, with each re-ask naming the Grid or
-  its items by the model's own ids:
-  - `grid-not-container`: a Grid that is not a container but holds sized Grid items, sets
-    a prop only a container reads (`direction`, `wrap`, `spacing`, `rowSpacing`,
-    `columnSpacing`, `columns`), or holds two or more elements without being an item of a
-    container. The re-ask: set `"container": true`, and put each column in a Grid item
-    sized like `"xs:12 md:4"`.
+  its items by the model's own ids. A Grid that is not a container is refused when it
+  holds sized Grid items, sets a prop only a container reads (`direction`, `wrap`,
+  `spacing`, `rowSpacing`, `columnSpacing`, `columns`), holds two or more elements
+  without being an item of a container, or sits, sized, in a Box or a Stack inside its
+  container. Since AGL-3078 it is told what its own shape needs, under one of the first
+  four codes: one sentence for every shape left a live About page's section refused
+  twice, because a Grid used to stack a heading over its text was only ever told to
+  become a container of sized columns.
+  - `grid-not-container`: a row. The Grid holds sized Grid items, sets a prop only a row
+    reads (a `row` direction, `wrap`, `columns` or `columnSpacing`), or holds two or more
+    elements of one shape, such as three cards. The rule's intent holds: a row of cards is
+    a container of sized items. The re-ask: set `"container": true`, and put each column
+    in a Grid item sized like `"xs:12 md:4"`.
+  - `grid-as-stack`: any other such Grid, a group that only stacks, such as a heading
+    over its text, or one written with a `column` direction, which a Grid does not have and
+    the palette validator drops. The re-ask: use a Stack (or a Box) for a group that only
+    stacks, or make it a container of sized items. A column direction is named as such.
+  - `grid-item-outside-container`: a sized Grid item refused in an element that is no
+    Grid, where its size does nothing: one in a Box or a Stack inside its container, or
+    one elsewhere that holds two or more elements or sets a prop only a container reads.
+    The re-ask names that element and asks to move the item directly under its Grid
+    container, or, where it has none, to put it and the items beside it in one. A Box or a
+    Stack in a container that holds only sized items is refused through its items, whose
+    sizes are also held to that container, rather than as a child of the container that
+    is no item.
+  - `grid-container-text`: a Grid whose `container` was written as a value the palette
+    validator cannot read as a switch, such as the text `"True"` or `1`, so it is no
+    container. The re-ask names the value as the fault: write `"container": true`, with no
+    quotes around true. The text `"true"` is read as the switch and passes.
   - `grid-item-size`: a container's child that is not a Grid item whose size is full
     width on a phone (`xs` at the container's columns, or a bare full span), or a
     container of two or more whose items never step down to columns at a larger width.
@@ -1607,6 +1676,11 @@ the same way, in a Grid with a row direction and no container.
   - `grid-gap`: a container spaced by an `sx` `gap` or `columnGap`. MUI sizes a container's
     items by its `spacing`, so a gap on top of it pushes the last column onto a row of its
     own. The re-ask: remove the sx gap and set `"spacing"` to its value.
+- **Read from what was written (AGL-3078).** The palette validator drops a `container` it
+  cannot read and a column direction, so the check reads both from the answer as the model
+  wrote it: the tree check from the answer it was given, and the page section check from
+  the section as it was drawn, since its page check sees the section as the page stores it
+  (`writtenNode` on the check's context).
 - **The goldens are real rows.** `ai-page-briefs.ts` draws every row of cards as a Grid
   container (`"spacing": 3`) of items sized for the row (`span`): the ten briefs'
   component cards, the Free pages' inline cards written out and written once (the
@@ -1615,12 +1689,20 @@ the same way, in a Grid with a row direction and no container.
   whose direction turns from a column into a row at md. The Free About eval case holds its
   page written out and written once the same way, with a failing control for each
   refusal: the goldens' old shape and the live page's shape (`grid-not-container`), items
-  sized `"4"` at every width (`grid-item-size`) and a container spaced by an sx gap
-  (`grid-gap`).
+  sized `"4"` at every width (`grid-item-size`), a container spaced by an sx gap
+  (`grid-gap`), a heading and its lead grouped in a Grid and an intro stacked in a Grid
+  with a column direction (`grid-as-stack`), items wrapped in a Box inside their container
+  (`grid-item-outside-container`) and a container written as the text `"True"`
+  (`grid-container-text`). `ai-eval.spec.ts` holds each Grid control to its own finding.
 - **What it costs.** The page instructions grow by 72 characters (18 estimated tokens of
   the page-section ledger's prefix), and no credit figure the Free arithmetic quotes
   moves. A Grid item is an element, so a row of cards takes one more element a card:
-  written once, one.
+  written once, one. The shapes AGL-3078 tells apart cost nothing until a rule is broken:
+  they are re-ask sentences, and no system block, tool or cached prefix changes.
+  `ai-job-free-page.spec.ts` re-asks the Free page's practice areas for each of the four
+  shapes through the real page step: a section re-asked for any of them costs at most 21
+  credits, less than the 44 of the largest pass, which the room the arithmetic keeps for
+  a re-asked section must exceed.
 
 ### A finished section
 
@@ -1658,7 +1740,8 @@ model's own nodes and says what to write instead:
   its words and both destinations, a screen that does what those words say, so the answer
   it asks for is not sent home for `link-unrelated-screen` to refuse next, and says to take
   it out when the site has no page for it, or, inside a Form, to set the form's
-  `submitLabel` instead. An email's buttons
+  `submitLabel` instead. On a page a plan lays out, it may also go to a section of the
+  same page ([below](#a-link-to-a-section-of-the-same-page)). An email's buttons
   stay the email door's (`email-button-link`).
 - **Rule 14, `copy-cut-at-ceiling`** (`detectCutLines`, AGL-3076). The live subhead was
   not written that way: it is a Typography in the h5 style, and the palette validator
@@ -1685,6 +1768,64 @@ model's own nodes and says what to write instead:
   for each of the four. The section eval case's call to action now links a path.
 - **What it costs.** No prompt line: a rule costs nothing until an answer breaks it, and
   then one re-ask. No credit figure the Free arithmetic quotes moves.
+
+### A link to a section of the same page
+
+A live recording of the Free About page (AGL-3097) stopped at its first section, 148
+credits in. Its hero's "Request a Consultation" button went nowhere, and the re-ask was
+answered with `"href": "#consultation-form"`, an anchor to the consultation form the plan
+places last. The palette validator drops a bare fragment, rule 10 refused the answer
+again, and the page's other four sections were never built. The model meant the right
+thing, a call to action that takes the visitor to the form further down. The platform
+does that with the Scroll to element interaction (AGL-2867), never with an anchor, but a
+generated node may not write an interaction, and the form's section did not exist yet
+when the hero was written.
+
+- **A link names a section by its name in the plan.** On a page a plan lays out, a Button
+  or a Screen Link with no `screenId` or `href` may carry `"scrollTo"` naming one of the
+  page's sections, or an `href` fragment made of a section's words. `aiPageLinkTarget`
+  (`runtime/ai-page-links.ts`) matches a name with the same words in any case and
+  spacing, or else the one section whose name holds every word of it, so
+  `#consultation-form` names "consultation request form". A name no section has, or one
+  two sections hold, names nothing.
+- **The page step writes the interaction.** Every section's root id is minted from the job
+  and its place in the plan before any section is built (`aiPageSectionNodeId`), so the
+  section check writes the link's interaction on the pass that writes the link, even to a
+  section still to come. `aiPageScrollInteraction` stores it in the shape the interactions
+  editor stores on a node: a click, every time, scrolling to `[data-aglyn="leaf:<section
+  root id>"]` smoothly and with no offset, the editor's own defaults. The palette validator
+  has already dropped the `scrollTo` and the fragment, so the button keeps its words and
+  no address, and a member edits or removes the interaction in the besigner like one an
+  author wrote.
+- **Rule 10 reads it.** `detectLinksWithoutDestination` takes a link that names a section
+  as going there. On the page as stored, which every later pass and the last pass check
+  with its section roots (`scrollTargetIds`), a link carrying that interaction to one of
+  them goes there too. An answer's own interactions are never read: the palette validator
+  drops them before anything is stored, and only the page step's checks are given section
+  roots.
+- **Two faults get a sentence of their own.** `link-fragment` is an `href` fragment that
+  names no section: "…links "#contact", an anchor, and no element on a page carries an id
+  an anchor could name, so it goes nowhere.", followed on a page by the page's sections and
+  how to name one. `scroll-target-unknown` is a `scrollTo` naming no section of the page,
+  with the page's sections listed. On a page, `link-without-destination`'s re-ask lists the
+  sections a link may go to in place of its last sentence. A tree that is no page, such as
+  a layout, a template or a component, has no sections: its dead link is told what it was
+  told before, its anchor is named as the fault with a screen or an address offered in
+  place of a section, and a `scrollTo` there goes nowhere.
+- **Taught by the re-ask alone.** No prompt line and no cached prefix changes: a model
+  learns a link may go to a section of the page only when rule 10 refuses one.
+- **Controls.** `ai-job-free-page.spec.ts` runs the recording's two hero answers, kept as
+  `AI_FREE_PAGE_HERO_ANSWERS` in `jobs/fixtures/ai-free-page-recording.ts`, through the
+  real page step: the first is re-asked, the second is kept, and the page completes with
+  the button's interaction to the form section's root. The validators spec, the page
+  section spec and `runtime/ai-page-links.spec.ts` hold each match, each refusal and the
+  interaction, which the platform's own `collectNodeInteractions` collects and
+  `validateHostAction` keeps. The Free About eval case holds a failing control for each
+  new code, and the harness reads a page answer's links against the sections of the plan
+  it was built from.
+- **What it costs.** The hero's re-ask names the page's four sections, and the Free page's
+  hero re-asked costs 22 credits, within the 44 of the largest pass the room the arithmetic
+  keeps for a re-asked section must exceed.
 
 ### The time budget
 
@@ -2018,7 +2159,9 @@ model, which honors the creator's model pick within the plan and the
 allotments. The runner writes its drafts and returns `{ outputs, usage,
 estCostUsd, model, stopReason }` — with `refused` for a model decline,
 `failure` (a customer-safe sentence) for an answer it could not use, or
-`review` when the doctrine gave up or the site had no room for the draft. It
+`review` when the doctrine gave up or the site had no room for the draft. A
+doctrine review is `aiDoctrineReview(result)`, which keeps where the refused
+answer broke its rules ([above](#what-a-refused-answer-leaves-on-the-job)). It
 must not write the job document, take a reservation, or publish anything.
 Registering a runner for a planned kind is what turns on its plan step; a
 generation runner reads the confirmed plan from `job.plan`. A kind that cannot

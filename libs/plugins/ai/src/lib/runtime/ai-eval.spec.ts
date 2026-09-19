@@ -38,6 +38,7 @@ import {
   summarizeAiEvalPlans,
   type AiEvalAudits,
   type AiEvalCase,
+  type AiEvalControl,
 } from './ai-eval'
 
 /**
@@ -172,6 +173,42 @@ describe('the floors', () => {
       .flatMap((evalCase) => evalCase.candidates.map((entry) => scoreAiEvalCandidate(evalCase, entry, audits)))
     const floor = (scores: typeof pages) => summarizeAiEval(scores).find((kind) => kind.kind === 'page')?.belowFloor
     expect([floor(pages), floor([...pages, score])]).toEqual([false, true])
+  })
+
+  it('refuses each Grid control of the Free About case for its own shape, so each re-ask says what that shape needs (AGL-3055, AGL-3078)', () => {
+    const about = cases.find((evalCase) => evalCase.id === 'page-free-law-firm-about') as AiEvalCase
+    const [reference] = about.candidates
+    const grids = about.controls
+      .map((control) => scoreAiEvalCandidate(about, { ...reference, answer: control.answer }, audits).findings)
+      .filter((findings) => findings.some((finding) => finding.startsWith('grid-')))
+      .map((findings) => findings.filter((finding) => finding.startsWith('grid-')))
+    expect(grids).toEqual([
+      ['grid-not-container'],
+      ['grid-not-container'],
+      ['grid-item-size'],
+      ['grid-gap'],
+      ['grid-as-stack'],
+      ['grid-as-stack'],
+      ['grid-item-outside-container'],
+      ['grid-container-text'],
+    ])
+  })
+
+  it('refuses each link control of the Free About case for its own fault, and passes its call to action sent to a section of the page (AGL-3072, AGL-3097)', () => {
+    const about = cases.find((evalCase) => evalCase.id === 'page-free-law-firm-about') as AiEvalCase
+    const codes = ['link-without-destination', 'link-fragment', 'scroll-target-unknown']
+    const links = about.controls
+      .map((control) => scoreAiEvalCandidate(about, { ...about.candidates[0], answer: control.answer }, audits).findings)
+      .map((findings) => findings.filter((finding) => codes.includes(finding)))
+      .filter((findings) => findings.length)
+    expect(links).toEqual([['link-without-destination'], ['link-fragment'], ['scroll-target-unknown']])
+    // The dead call to action, sent to the plan's form section by its name or by an anchor of its words, keeps the rules.
+    const dead = about.controls.find((control) => control.why.startsWith('A hero call to action that goes nowhere')) as AiEvalControl
+    for (const props of [{ scrollTo: 'consultation request form' }, { href: '#consultation-form' }]) {
+      const answer = structuredClone(dead.answer) as { tree: { nodes: Record<string, { props?: Record<string, unknown> }> } }
+      answer.tree.nodes['cta'].props = { ...answer.tree.nodes['cta'].props, ...props }
+      expect([props, scoreAiEvalControl(about, { why: 'sent to the form', answer, fails: [] })]).toEqual([props, []])
+    }
   })
 
   it('holds every plan a brief expects to its shape', () => {

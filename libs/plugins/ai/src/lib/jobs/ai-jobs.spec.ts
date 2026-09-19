@@ -251,6 +251,17 @@ import {
 import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
 import type { AiJob } from '../model/ai-jobs.types'
 import { AI_JOB_INLINE_BUDGET_MS } from './ai-job-budget'
+import { aiDoctrineReview, aiGenerationSpent } from './ai-job-generation'
+import {
+  AI_JOB_PAGE_INSTRUCTIONS,
+  AI_PAGE_SECTION_TOOL,
+  aiEmptyPage,
+  aiPageCheckContext,
+  aiPageSectionCheck,
+  aiPageSectionNodeId,
+  type AiPageSection,
+} from './ai-job-page-sections'
+import { runValidatedGeneration } from '../runtime/ai-doctrine'
 import { AI_JOB_SEO_STEP_MINIMUM_MS } from './ai-job-seo-budget'
 import { AI_JOB_TEXT_STEP_MINIMUM_MS } from './ai-job-text-step'
 import { AI_JOB_THEME_STEP_MINIMUM_MS } from './ai-job-theme-budget'
@@ -1425,6 +1436,92 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
       plan: { status: 'proposed' },
       review: { reason: 'plan' },
     })
+  })
+
+  it('parks a section refused twice for rule 12 with the node ids its finding names and an outline of the refused answer, never its copy (AGL-3078)', async () => {
+    planRunner.mockResolvedValue(proposedOutcome())
+    const job = await newSiteJob()
+    await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
+    await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, LATER)
+
+    // A live About page's practice areas: a Grid with no container, holding items sized 4.
+    const areas = ['Estate planning', 'Real estate', 'Business formation']
+    const section = {
+      rootId: 'root',
+      nodes: {
+        root: { componentId: 'div', nodes: ['areas'] },
+        areas: { componentId: 'section', props: { element: 'section' }, nodes: ['title', 'grid'] },
+        title: { componentId: 'muiTypography', props: { variant: 'h1', component: 'h1', children: 'Practice areas' } },
+        grid: { componentId: 'muiGrid', props: { ariaLabel: 'Practice areas' }, nodes: areas.map((_, index) => `cell-${index}`) },
+        ...Object.fromEntries(
+          areas.flatMap((title, index) => [
+            [`cell-${index}`, { componentId: 'muiGrid', props: { size: '4' }, nodes: [`card-${index}`] }],
+            [`card-${index}`, { componentId: 'muiCard', props: { variant: 'outlined' }, nodes: [`card-${index}-title`] }],
+            [`card-${index}-title`, { componentId: 'muiTypography', props: { variant: 'h2', component: 'h2', children: title } }],
+          ]),
+        ),
+      },
+    }
+    mockRunAiRequest.mockResolvedValue({
+      kind: 'completion',
+      text: '',
+      toolUse: [{ name: AI_PAGE_SECTION_TOOL.name, input: { tree: JSON.stringify(section) } }],
+      usage: USAGE,
+      estCostUsd: 0.006,
+      stopReason: 'tool_use',
+    })
+    // A section pass, as the page step runs one on a workspace that keeps no reusable components.
+    siteRunner.mockImplementationOnce(async () => {
+      const result = await runValidatedGeneration<AiPageSection>('page-section', {
+        model: 'claude-sonnet-5',
+        instructions: AI_JOB_PAGE_INSTRUCTIONS,
+        inventory: null,
+        messages: [{ role: 'user', content: 'Build section 1 of 1: "practice areas".' }],
+        tool: AI_PAGE_SECTION_TOOL,
+        thinking: 'off',
+        check: aiPageSectionCheck({
+          page: aiEmptyPage(),
+          sectionIds: [aiPageSectionNodeId(job.$id, 0)],
+          index: 0,
+          context: aiPageCheckContext(null, { reusableComponents: false }),
+          uses: [],
+          inventory: null,
+        }),
+      })
+      const spent = aiGenerationSpent(result)
+      return result.status === 'needs_input' ? { ...spent, review: aiDoctrineReview(result) } : { ...spent, continue: true }
+    })
+
+    expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-2', now: LATER })).outcome).toBe('needs_review')
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    const parked = await getAiJob(firestore, ORG, job.$id)
+    expect(parked?.status).toBe('needs_review')
+    expect(parked?.review).toEqual({
+      reason: 'doctrine',
+      message: expect.stringContaining('Rule 12'),
+      findings: [
+        {
+          rule: 12,
+          code: 'grid-not-container',
+          message:
+            'A Grid lays out columns only as a container: this one is not, so what it holds stacks at every width. Set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4".',
+          nodeIds: ['grid'],
+        },
+      ],
+      outline: [
+        { id: 'grid', depth: 0, componentId: 'muiGrid', props: ['ariaLabel'], children: ['muiGrid', 'muiGrid', 'muiGrid'] },
+        ...areas.flatMap((_, index) => [
+          { id: `cell-${index}`, depth: 1, componentId: 'muiGrid', props: ['size'], grid: { size: '4' }, children: ['muiCard'] },
+          { id: `card-${index}`, depth: 2, componentId: 'muiCard', props: ['variant'], children: ['muiTypography'] },
+        ]),
+      ],
+    })
+    // The job keeps the shape of what was refused, and none of its words.
+    for (const copy of ['Practice areas', ...areas]) {
+      expect([copy, JSON.stringify(parked).includes(copy)]).toEqual([copy, false])
+    }
+    // The member's wire form carries the same review.
+    expect(aiJobSummary(parked as AiJob).review).toEqual(parked?.review)
   })
 
   it('hands back a step stopped at a site allowance with its sentence, and trying again runs it once more (AGL-2909)', async () => {

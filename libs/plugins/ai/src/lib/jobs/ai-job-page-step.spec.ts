@@ -94,7 +94,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { findScreenIdByRoutePath } from '@aglyn/aglyn/app-utils/screen-route'
 import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fields'
-import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
+import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import { AI_BUILD_PLAN_LIMITS } from '../model/ai-build-plan'
@@ -558,6 +558,34 @@ describe('the passes', () => {
     })
   })
 
+  it('stops the last pass for review naming the draft’s own nodes, with their outline, when the stored page breaks a rule (AGL-3078)', async () => {
+    await buildSections()
+    mockRunAiRequest.mockReset()
+    // A member's edit takes the container off the second section's row of cards.
+    const versionPath = `${DRAFT}/versions/${mockDocs.get(DRAFT)?.['versionId']}`
+    const nodes = storedPage() as Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }>
+    const [rowId] = Object.entries(nodes).find(([, node]) => node.props?.['container'] === true) ?? []
+    nodes[rowId as string].props = { ariaLabel: 'What the inspection covers' }
+    mockDocs.set(versionPath, { ...mockDocs.get(versionPath), nodes: encodeStoredNodes(nodes) })
+
+    const outcome = await step()(context())
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(outcome.outputs).toEqual([])
+    const cells = nodes[rowId as string].nodes ?? []
+    expect(outcome.review).toEqual({
+      reason: 'doctrine',
+      message: expect.stringContaining('Rule 12'),
+      findings: [expect.objectContaining({ rule: 12, code: 'grid-not-container', nodeIds: [rowId] })],
+      outline: [
+        { id: rowId, depth: 0, componentId: 'muiGrid', props: ['ariaLabel'], children: cells.map(() => 'muiGrid') },
+        ...cells.flatMap((cell) => [
+          expect.objectContaining({ id: cell, depth: 1, componentId: 'muiGrid', grid: { size: 'xs:12 md:4' } }),
+          expect.objectContaining({ id: nodes[cell].nodes?.[0], depth: 2, componentId: 'reusableInstance' }),
+        ]),
+      ],
+    })
+  })
+
   it('names a placed component’s bracketed defaults once, where the page sets nothing of its own (AGL-3056)', () => {
     const area = (title: string, summary?: string) => ({
       componentId: 'reusableInstance',
@@ -646,6 +674,43 @@ describe('when a pass stops', () => {
     const outcome = await step()(context())
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     expect(outcome.review).toEqual(expect.objectContaining({ reason: 'doctrine', findings: [expect.objectContaining({ rule: 11, code: 'missing-h1' })] }))
+    expect(outcome.continue).toBeUndefined()
+    expect(commits).toEqual([])
+  })
+
+  it('stops a section refused twice for rule 12 with the node ids its finding names and an outline of the refused section, never its copy (AGL-3078)', async () => {
+    // The hero's column Stack written as a Grid with a column direction, which a Grid does not have.
+    const answer = structuredClone(FIXTURE.answers[0])
+    answer.nodes['a5'] = { ...answer.nodes['a5'], componentId: 'muiGrid' }
+    mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(answer)).mockResolvedValueOnce(sectionAnswer(answer))
+    const outcome = await step()(context())
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    expect(String(mockRunAiRequest.mock.calls[1][0].messages.at(-1).content)).toContain(
+      'Use a Stack (or a Box) for a group that only stacks, such as a heading over its text',
+    )
+    expect(outcome.review).toEqual({
+      reason: 'doctrine',
+      message: expect.stringContaining('Rule 12'),
+      findings: [{ rule: 12, code: 'grid-as-stack', message: expect.stringContaining('no "column" direction'), nodeIds: ['a5'] }],
+      outline: [
+        {
+          id: 'a5',
+          depth: 0,
+          componentId: 'muiGrid',
+          props: ['direction', 'alignItems'],
+          sx: ['gap'],
+          grid: { direction: 'column' },
+          children: ['muiTypography', 'muiTypography', 'muiButton', 'image'],
+        },
+        { id: 'a1', depth: 1, componentId: 'muiTypography', props: ['variant', 'children', 'component'], children: [] },
+        { id: 'a2', depth: 1, componentId: 'muiTypography', props: ['variant', 'children'], children: [] },
+        { id: 'a3', depth: 1, componentId: 'muiButton', props: ['children', 'variant', 'screenId'], children: [] },
+        { id: 'a4', depth: 1, componentId: 'image', props: ['alt'], children: [] },
+      ],
+    })
+    for (const copy of ['Spring roof inspections', 'Request a quote', 'A roofer inspecting shingles']) {
+      expect([copy, JSON.stringify(outcome.review).includes(copy)]).toEqual([copy, false])
+    }
     expect(outcome.continue).toBeUndefined()
     expect(commits).toEqual([])
   })
@@ -749,6 +814,23 @@ describe('when a pass stops', () => {
     expect(outcome.outputs).toEqual([
       { resource: 'screen', id: 'scr-copy', versionId: 'v-copy', hostId: 'host-1', hostSubdomain: 'acme', label: 'Home copy' },
     ])
+  })
+
+  it('builds the page rather than copying a collection entry template the plan names', async () => {
+    mockReadInventory.mockResolvedValue({
+      ...FIXTURE.inventory,
+      screens: [
+        ...FIXTURE.inventory.screens,
+        { id: 'scr-post', name: 'Blog — Entry Template', slug: 'blog-post', layoutId: 'lay-site', template: true },
+      ],
+    })
+    // What core answers for a template: a copy that is a template, not a page.
+    duplicate.mockResolvedValueOnce({ ok: true, id: 'scr-post-copy', versionId: 'v-copy', name: 'Copy of Blog — Entry Template' })
+    mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(FIXTURE.answers[0]))
+    const outcome = await step()(context({ plan: { ...PLAN, screens: [{ ...SCREEN, duplicateOf: 'scr-post' }] } }))
+    expect(duplicate).not.toHaveBeenCalled()
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect(outcome).toMatchObject({ continue: true, outputs: [] })
   })
 })
 
