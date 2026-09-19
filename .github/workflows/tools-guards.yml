@@ -960,6 +960,12 @@ jobs:
       - run: npm run test:page-view-rate
       - run: npm run check:page-view-rate
 
+      # The same page as the bytes it is DOWNLOADED as (AGL-3082): the chunks
+      # a published page loads before it settles, read from a tenant
+      # production build. The gate runs where CI builds the tenant; these are
+      # its forced reds, over a synthetic build.
+      - run: npm run test:tenant-wire-weight
+
       # NEXT_PUBLIC access form (AGL-2037, AGL-2172). Next substitutes only the
       # dot form, so a bracket read in a client-reachable module is `undefined`
       # in the browser and the value silently falls back to Aglyn's default —

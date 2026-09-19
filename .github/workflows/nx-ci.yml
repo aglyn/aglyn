@@ -491,6 +491,10 @@ jobs:
       # published page grows back into that headroom.
       - run: npm run test:page-view-rate
       - run: npm run check:page-view-rate
+      # The same page as the bytes it is DOWNLOADED as (AGL-3082). The gate
+      # itself reads a production build and runs in `build`; its forced reds
+      # read a synthetic one and run here. ~1s.
+      - run: npm run test:tenant-wire-weight
 
   # ~2m15s. Affected-scoped, so its cost tracks the range.
   lint:
@@ -805,6 +809,13 @@ jobs:
           cache-scope: build
 
       - run: npx nx affected -t build --parallel=3
+
+      # The published page's before-settle JavaScript, read from the tenant
+      # production build this job just made (AGL-3082): the bytes the
+      # page-view rate is priced on, which the source-weight gates cannot see
+      # through tree shaking and `import()`. Affected-scoped like the build,
+      # so when the tenant was not built it skips and says so. ~1s.
+      - run: node tools/scripts/check-tenant-wire-weight.mjs --if-built
 
   # ONE CHECK NAME FOR BRANCH PROTECTION TO REQUIRE (AGL-1777, AGL-2505).
   #
