@@ -273,7 +273,8 @@ describe('the plan step', () => {
     expect(outcome.review).toEqual({
       reason: 'doctrine',
       message: expect.stringContaining(`Rule 2 (${AI_DOCTRINE_RULES[2]})`),
-      findings: [{ rule: 2, code: 'plan-screen-without-layout', message: expect.any(String) }],
+      // A plan's finding keeps the entry it names (AGL-3078); a plan has no nodes to outline.
+      findings: [{ rule: 2, code: 'plan-screen-without-layout', message: expect.any(String), paths: ['screens[0].layout'] }],
     })
   })
 

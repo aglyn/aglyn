@@ -56,6 +56,7 @@ import {
   aiDoctrineReview,
   aiGenerationSpent,
   aiLimitReview,
+  aiModelNodeIds,
   aiUnspentOutcome,
 } from './ai-job-generation'
 import {
@@ -447,10 +448,16 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     if (index === -1 && written) {
       const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', context)
       if (report.violations.length) {
+        // The check mints its own ids; the review names the nodes by the ids the draft stores them under.
+        const storedIds = report.tree?.sourceIds ?? {}
+        const violations = report.violations.map((violation) =>
+          violation.nodeIds ? { ...violation, nodeIds: aiModelNodeIds(violation.nodeIds, storedIds) } : violation,
+        )
         return aiUnspentOutcome(model, {
           review: aiDoctrineReview({
-            message: aiDoctrineNeedsInputMessage(report.violations),
-            violations: report.violations,
+            message: aiDoctrineNeedsInputMessage(violations),
+            violations,
+            answer: { tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page } },
           }),
         })
       }

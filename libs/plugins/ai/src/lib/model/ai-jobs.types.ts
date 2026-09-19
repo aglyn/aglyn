@@ -292,12 +292,42 @@ export type AiJobReviewReason =
    */
   | 'limit'
 
-/** A building rule an answer broke, as the job keeps it: the number, the code, the sentence. */
+/**
+ * A building rule an answer broke, as the job keeps it: the number, the code,
+ * the sentence, and where in the answer it was broken (AGL-3078).
+ */
 export interface AiJobRuleFinding {
   rule: number | null
   code: string
   /** Customer-safe. */
   message: string
+  /** The nodes the finding names, by the ids the refused answer gave them. Absent when it names none. */
+  nodeIds?: string[]
+  /** The plan entries or answer fields it names, as `screens[0].sections[2]`. Absent when it names none. */
+  paths?: string[]
+}
+
+/**
+ * One node of the parts of a refused answer its findings name (AGL-3078), as
+ * the review keeps it: the node's place, its element and the names of what it
+ * sets, and never its copy. A Grid keeps the values of its layout props as
+ * they were written, so a review can tell a shape the rules refuse from one
+ * the model was asked to mend and did not.
+ */
+export interface AiJobReviewOutlineNode {
+  /** The node's id, as the refused answer wrote it. */
+  id: string
+  /** How far below a node a finding names it sits: 0 for that node. */
+  depth: number
+  componentId: string
+  /** The props it sets, by name only. */
+  props: string[]
+  /** The `sx` keys it sets, by name only; absent when it sets none. */
+  sx?: string[]
+  /** A Grid's layout props, `container`, `size`, `direction`, `spacing` and the rest, as written. */
+  grid?: Record<string, string | number | boolean | null>
+  /** Its children's element ids, in order. */
+  children: string[]
 }
 
 export interface AiJobReview {
@@ -306,6 +336,12 @@ export interface AiJobReview {
   message: string
   /** The rules the last answer broke; empty for a plan. */
   findings: AiJobRuleFinding[]
+  /**
+   * The parts of the refused answer its findings name, each node with the
+   * nodes below it (AGL-3078); absent when they name none. Kept with the job
+   * for diagnosis, and shown to staff.
+   */
+  outline?: AiJobReviewOutlineNode[]
 }
 
 export type AiJobPlanStatus = 'proposed' | 'confirmed'

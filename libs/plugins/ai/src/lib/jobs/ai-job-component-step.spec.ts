@@ -401,12 +401,22 @@ describe('the component step', () => {
     expect(reask).toContain('(nodes quote)')
     expect(outcome.outputs).toEqual([])
     expect(outcome.usage.inputTokens).toBe(6_000)
+    // The review keeps where the answer broke the rule, and the node's shape without its copy (AGL-3078).
     expect(outcome.review).toEqual({
       reason: 'doctrine',
       message: expect.stringContaining('Rule 1'),
       findings: [
-        { rule: 1, code: 'binding-field', message: expect.stringContaining('{{prop.photo}}') },
+        { rule: 1, code: 'binding-field', message: expect.stringContaining('{{prop.photo}}'), nodeIds: ['quote'] },
         { rule: 1, code: 'prop-unbound', message: expect.stringContaining('{{prop.quote}}, {{prop.badge}}') },
+      ],
+      outline: [
+        {
+          id: 'quote',
+          depth: 0,
+          componentId: 'muiTypography',
+          props: ['variant', 'component', 'gutterBottom', 'children'],
+          children: [],
+        },
       ],
     })
     expect(commits).toEqual([])

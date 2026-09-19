@@ -46,7 +46,7 @@ import {
   type AiJobStepRunner,
 } from './ai-job-text-step'
 import { aiJobStepBudget } from './ai-job-budget'
-import { aiUnspentOutcome } from './ai-job-generation'
+import { aiDoctrineReview, aiUnspentOutcome } from './ai-job-generation'
 import { AI_JOBS_COLLECTION, registerAiJobPlanStep } from './ai-jobs'
 
 /**
@@ -484,16 +484,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       ...(result.effort ? { effort: result.effort } : {}),
     }
     if (result.status === 'refused') return { ...spent, refused: true }
-    if (result.status === 'needs_input') {
-      return {
-        ...spent,
-        review: {
-          reason: 'doctrine',
-          message: result.message,
-          findings: result.violations.map(({ rule, code, message }) => ({ rule, code, message })),
-        },
-      }
-    }
+    if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
     const plan: AiJobPlan = {
       ...result.value,
       status: 'proposed',

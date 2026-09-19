@@ -76,7 +76,7 @@ rules deny every client write). Fields:
 | `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`. |
 | `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. A page's document carries its estimated first-visit `load`. An output may carry a customer-safe `note`: what the person decides next about it, and the facts in square brackets its draft holds ([below](#what-a-draft-asks-the-member-to-fill)). |
 | `plan` | The plan a planned kind builds from: `reuse`, `create`, `screens`, the inventory `labels` it references, and `status` `proposed` → `confirmed` with who confirmed it and when. |
-| `review` | While the job is `needs_review`: the `reason` (`plan`, `doctrine` or `limit`), the customer-safe `message`, and the rules the last answer broke. |
+| `review` | While the job is `needs_review`: the `reason` (`plan`, `doctrine` or `limit`), the customer-safe `message`, and the rules the last answer broke, each with the node ids or plan paths it names, beside an `outline` of those parts of the refused answer ([below](#what-a-refused-answer-leaves-on-the-job)). |
 | `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step while the job can run — zero while it waits for a person, and a confirmed page or site plan's whole-job estimate where that is more — and the real spend at the plan's credit rate. |
 | `lease` | `{ owner, until }` while a step runs — see below. |
 | `expiresAt` | 180 days from creation, the assist exchange's clock: the brief is verbatim customer text (`docs/DATA_RETENTION.md`). |
@@ -681,6 +681,50 @@ real section check: a cut-off `tree` then a small section is kept on the re-ask,
 which asks for it smaller and quotes no shape error; cut off twice, the section
 ends as `answer-cut-off`, never `tree-invalid-input`. `ai-job-page-step.spec.ts`
 holds the same two through the page step, with the review a member reads.
+
+### What a refused answer leaves on the job
+
+A job that stops `needs_review` for a broken rule keeps where the rule was broken
+(AGL-3078). A live About page's section was refused twice for rule 12, and the job kept
+only the finding's sentence: nothing said which Grid it named or how the answer was
+built, so nobody could tell a model that ignored its re-ask from a check that refused a
+shape it should allow.
+
+- **Where each finding was broken.** `review.findings[]` keeps each finding's `nodeIds`,
+  by the ids the refused answer wrote, or a plan finding's `paths`, as
+  `screens[0].layout`: at most 24 node ids or plan paths a finding, each cut at 64
+  characters, and `?` for one that is no identifier, such as a sentence or an address.
+  The page's last pass names the nodes by the ids its draft stores them under.
+- **An outline of those parts.** `review.outline[]` holds the nodes the findings name,
+  in the order they name them and each once, each with the nodes below it in document
+  order, to 2 levels below each node a finding names, at most 40 nodes and 4,096 bytes as
+  JSON. A node keeps its `id`, its `depth` under the node a finding names, its
+  `componentId`, the names of its `props` and `sx` keys, and its `children` by element
+  id. A Grid also keeps the values of its layout props, `grid: { container, size, offset,
+  direction, wrap, spacing, rowSpacing, columnSpacing, columns }`, as written when a value
+  is a number, a switch, a binding token, or text of at most 40 characters made only of
+  layout words and numbers: breakpoints, `auto` and `grow`, switch words, directions,
+  wraps, and numbers with a CSS length unit. So a switch written as the text `"True"`
+  and a size written as `"{ xs: 12, md: 4 }"` read as written, and anything else, such as
+  a sentence or an address, reads `<text>`. No copy and no address is kept.
+- **Built from the answer, once it is gone.** `runValidatedGeneration` returns the answer
+  its violations were found in on `needs_input`, in memory only, and `aiDoctrineReview`
+  (`jobs/ai-job-generation.ts`) outlines it. Every step that stops for a broken rule goes
+  through it, the plan step included, so every doctrine review has the same shape.
+- **Stored as the review is.** The machine writes the review through the Admin SDK in
+  `recordStep`'s transaction, the rules deny every client write to `aiJobs`, and the
+  document keeps its 180-day clock, so neither the rules nor who may read a job change.
+  The wire summary carries the review as it did.
+- **Read by staff.** The AI jobs drawer lists each finding's sentence to a member, as
+  before. Staff (the panel's `isStaff`) also get **Show what was refused**, which opens
+  the findings' nodes and the outline, indented by depth (`aiJobReviewDetails` in
+  `components/ai-job-plan.component.tsx`).
+
+`jobs/ai-job-generation.spec.ts` holds the review's bounds and that it keeps no copy,
+even a sentence written into a Grid's layout props or its children;
+`ai-job-page-step.spec.ts` stops the page's last pass naming the draft's own nodes, with
+their outline; and `ai-jobs.spec.ts` parks a job for the live About page's shape through
+the real section check and machine and reads the review back from the stored job.
 
 ### The inventory, and "more on request"
 
@@ -2018,7 +2062,9 @@ model, which honors the creator's model pick within the plan and the
 allotments. The runner writes its drafts and returns `{ outputs, usage,
 estCostUsd, model, stopReason }` — with `refused` for a model decline,
 `failure` (a customer-safe sentence) for an answer it could not use, or
-`review` when the doctrine gave up or the site had no room for the draft. It
+`review` when the doctrine gave up or the site had no room for the draft. A
+doctrine review is `aiDoctrineReview(result)`, which keeps where the refused
+answer broke its rules ([above](#what-a-refused-answer-leaves-on-the-job)). It
 must not write the job document, take a reservation, or publish anything.
 Registering a runner for a planned kind is what turns on its plan step; a
 generation runner reads the confirmed plan from `job.plan`. A kind that cannot

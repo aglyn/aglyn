@@ -94,7 +94,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { findScreenIdByRoutePath } from '@aglyn/aglyn/app-utils/screen-route'
 import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fields'
-import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
+import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import { AI_BUILD_PLAN_LIMITS } from '../model/ai-build-plan'
@@ -555,6 +555,34 @@ describe('the passes', () => {
     expect(mockDocs.get(DRAFT)?.['seo']).toEqual({
       title: 'Spring Roof Inspections in Springfield',
       description: 'A licensed roofer checks shingles, flashing and gutters.',
+    })
+  })
+
+  it('stops the last pass for review naming the draft’s own nodes, with their outline, when the stored page breaks a rule (AGL-3078)', async () => {
+    await buildSections()
+    mockRunAiRequest.mockReset()
+    // A member's edit takes the container off the second section's row of cards.
+    const versionPath = `${DRAFT}/versions/${mockDocs.get(DRAFT)?.['versionId']}`
+    const nodes = storedPage() as Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }>
+    const [rowId] = Object.entries(nodes).find(([, node]) => node.props?.['container'] === true) ?? []
+    nodes[rowId as string].props = { ariaLabel: 'What the inspection covers' }
+    mockDocs.set(versionPath, { ...mockDocs.get(versionPath), nodes: encodeStoredNodes(nodes) })
+
+    const outcome = await step()(context())
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(outcome.outputs).toEqual([])
+    const cells = nodes[rowId as string].nodes ?? []
+    expect(outcome.review).toEqual({
+      reason: 'doctrine',
+      message: expect.stringContaining('Rule 12'),
+      findings: [expect.objectContaining({ rule: 12, code: 'grid-not-container', nodeIds: [rowId] })],
+      outline: [
+        { id: rowId, depth: 0, componentId: 'muiGrid', props: ['ariaLabel'], children: cells.map(() => 'muiGrid') },
+        ...cells.flatMap((cell) => [
+          expect.objectContaining({ id: cell, depth: 1, componentId: 'muiGrid', grid: { size: 'xs:12 md:4' } }),
+          expect.objectContaining({ id: nodes[cell].nodes?.[0], depth: 2, componentId: 'reusableInstance' }),
+        ]),
+      ],
     })
   })
 

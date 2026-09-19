@@ -516,6 +516,31 @@ describe('a job waiting for a person (AGL-2935)', () => {
     expect(screen.queryByText('Try again')).toBeNull()
   })
 
+  it('shows staff where a refused answer broke its rules, and a member only the rules (AGL-3078)', async () => {
+    const refused = waiting({
+      error: 'This could not be built within the building rules.',
+      review: {
+        reason: 'doctrine',
+        message: 'This could not be built within the building rules.',
+        findings: [{ rule: 12, code: 'grid-not-container', message: 'A Grid lays out columns only as a container.', nodeIds: ['areas-grid'] }],
+        outline: [{ id: 'areas-grid', depth: 0, componentId: 'muiGrid', props: ['ariaLabel'], children: ['muiGrid'] }],
+      },
+    })
+    armResume(refused, { job: refused }, [])
+    const member = renderDrawer()
+    fireEvent.click(screen.getByLabelText('Show AI jobs'))
+    expect(await screen.findByText('A Grid lays out columns only as a container.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Show what was refused' })).toBeNull()
+    member.unmount()
+
+    renderDrawer({ isStaff: true })
+    fireEvent.click(screen.getByLabelText('Show AI jobs'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Show what was refused' }))
+    expect(screen.getByLabelText('What was refused').textContent).toBe(
+      'Rule 12 grid-not-container: nodes areas-grid\nareas-grid muiGrid · props ariaLabel · holds muiGrid',
+    )
+  })
+
   it('shows the route’s refusal when a resume is refused, and leaves the job waiting', async () => {
     const posts: Array<[string, unknown]> = []
     armResume(
