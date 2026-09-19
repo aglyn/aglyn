@@ -77,6 +77,9 @@ function given(options: {
   /** `hosts/{id}/collections` docs, read for both the template-screen
    * exclusion (AGL-1267) and the content-collection URLs. */
   collectionDocs?: Array<Record<string, unknown>>
+  /** The `entries` of every collection above. A content collection with no
+   * published entry submits no URL at all (AGL-3101). */
+  entryDocs?: Array<Record<string, unknown>>
   /** `hosts/{id}/settings/store`, read for the commerce template-screen
    * exclusion (AGL-1270) and the catalog URLs. Absent = no store doc. */
   storeSettings?: Record<string, unknown>
@@ -123,6 +126,13 @@ function given(options: {
       data: () => fields,
     })),
   }
+  const entrySnapshot = {
+    docs: (options.entryDocs ?? []).map((fields) => ({
+      id: String(fields['slug'] ?? 'entry'),
+      get: (field: string) => fields[field],
+      data: () => fields,
+    })),
+  }
   const storeDoc = {
     docs: [],
     exists: options.storeSettings != null,
@@ -146,7 +156,9 @@ function given(options: {
             ? collectionSnapshot
             : name === 'products'
               ? productSnapshot
-              : emptySnapshot
+              : name === 'entries'
+                ? entrySnapshot
+                : emptySnapshot
       if (!filter) return snapshot
       const [field, value] = filter
       return {
@@ -319,19 +331,20 @@ describe('sitemap.xml (AGL-1263)', () => {
         },
       ],
       collectionDocs: [{ slug: 'blog' }],
+      entryDocs: [{ slug: 'hello', status: 'published' }],
     })
 
     const locs = await allLocs()
 
-    expect(locs).toEqual(['https://acme.aglyn.app/', 'https://acme.aglyn.app/blog'])
+    expect(locs).toEqual([
+      'https://acme.aglyn.app/',
+      'https://acme.aglyn.app/blog',
+      'https://acme.aglyn.app/blog/hello',
+    ])
   })
 
-  it('drops a collection list/entry template screen (AGL-1267)', async () => {
-    // Publishing the blog's entry template put it in the routing map, so the
-    // sitemap submitted `/blog-entry-template` — a URL whose body is raw
-    // `{{entry.*}}` tokens, sitting next to the real `/blog` it duplicates.
-    // The de-dupe at `sitemapResponse` cannot see that: different paths, same
-    // page. The router 404s it now, so listing it would submit a dead URL.
+  /** A blog whose list and entry templates are both published and routed. */
+  const givenTemplatedBlog = (entryDocs: Array<Record<string, unknown>>) =>
     given({
       screens: {
         home: '/',
@@ -350,14 +363,36 @@ describe('sitemap.xml (AGL-1263)', () => {
           entryScreenId: 'blogEntryTmpl',
         },
       ],
+      entryDocs,
     })
+
+  it('drops a collection list/entry template screen (AGL-1267)', async () => {
+    // Publishing the blog's entry template put it in the routing map, so the
+    // sitemap submitted `/blog-entry-template` — a URL whose body is raw
+    // `{{entry.*}}` tokens, sitting next to the real `/blog` it duplicates.
+    // The de-dupe at `sitemapResponse` cannot see that: different paths, same
+    // page. The router 404s it now, so listing it would submit a dead URL.
+    givenTemplatedBlog([{ slug: 'hello', status: 'published' }])
 
     const locs = await allLocs()
 
     expect(locs).not.toContain('https://acme.aglyn.app/blog-entry-template')
     // The collection itself still has a URL — contributed by the collection
     // loop, not by the list template's routing entry.
-    expect(locs).toEqual(['https://acme.aglyn.app/', 'https://acme.aglyn.app/blog'])
+    expect(locs).toEqual([
+      'https://acme.aglyn.app/',
+      'https://acme.aglyn.app/blog',
+      'https://acme.aglyn.app/blog/hello',
+    ])
+  })
+
+  it('does not let a routed list template submit a listing with nothing published (AGL-3101)', async () => {
+    // The listing 404s until the collection's first entry is published, and
+    // the list template routed at `/blog` must not bring the URL back through
+    // the pages section while the collection section holds it back.
+    givenTemplatedBlog([{ slug: 'hello', status: 'draft' }])
+
+    expect(await allLocs()).toEqual(['https://acme.aglyn.app/'])
   })
 
   it('drops the commerce PDP and collection templates, keeping the real catalog URLs (AGL-1270)', async () => {

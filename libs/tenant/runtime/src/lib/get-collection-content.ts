@@ -848,6 +848,10 @@ function applyCategoryAndPagination(
  * (Content Collections & Blog): `/{collectionSlug}` returns the published
  * entry list, `/{collectionSlug}/{entrySlug}` one entry. Fail-open — errors
  * resolve to `collection: null` and the caller 404s.
+ *
+ * A listing resolves only for a collection with a live entry (AGL-3101); one
+ * with nothing live answers `collection: null` as well, so its listing, feed
+ * and markdown twin are not public until its first entry is.
  */
 export async function getCollectionContent(options: {
   hostId: string
@@ -891,6 +895,21 @@ export async function getCollectionContent(options: {
         collectionSlug,
       })
       if (!source.collection) return data
+      // A collection is not a PAGE until something in it is live (AGL-3101).
+      // Without this, creating one publishes `/{slug}` at once — an empty
+      // listing with a feed and a markdown twin, before a word of it is
+      // written. Answering it as no collection makes every listing address
+      // 404 the way an unknown slug does, until the first entry is published
+      // or its schedule comes due.
+      //
+      // Read off the UNFILTERED live set, before the category narrows it, so
+      // an empty category of a live collection still renders. A read that
+      // stopped at its bound cannot prove the collection empty — the live
+      // entries may be past it — so that one keeps its listing. The rule
+      // lives here and not in the source above: the source also feeds the
+      // Collection entries block and the author page, and to them an empty
+      // collection is an empty list, not a missing one.
+      if (!source.entries.length && !source.reachedBound) return data
       data.collection = source.collection
       data.entries = source.entries
       data.entriesReachedBound = source.reachedBound
