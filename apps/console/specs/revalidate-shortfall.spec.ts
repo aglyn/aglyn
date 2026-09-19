@@ -28,7 +28,13 @@
  * it, and then the one publish it was written for is ignored too.
  */
 
-import {
+const mockAuthorizedFetch = jest.fn()
+
+jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
+  authorizedFetch: (...args: unknown[]) => mockAuthorizedFetch(...args),
+}))
+
+import revalidateLivePages, {
   describeRevalidateShortfall,
   type RevalidateLivePagesResult,
 } from '../utils/revalidate-live-pages'
@@ -108,5 +114,87 @@ describe('describeRevalidateShortfall on a refused drop', () => {
 
   it('still says nothing on an ordinary complete drop', () => {
     expect(describeRevalidateShortfall(result({ reason: 'ok' }))).toBeNull()
+  })
+})
+
+/**
+ * A drop the CONSOLE route refused (AGL-2934).
+ *
+ * The route answers a caller it will not serve — a role that cannot write, a
+ * locked site — before the tenant is ever asked, and the helper used to turn
+ * every such answer into `null`, the value its callers read as nothing to
+ * report. An author's save refused that way left the live page stale for the
+ * whole window without a word.
+ */
+describe('revalidateLivePages on a refusal from the console route', () => {
+  /** The fields `revalidateLivePages` reads off a response. */
+  const answer = (status: number, body: unknown) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  })
+
+  const announce = () =>
+    revalidateLivePages({
+      user: { getIdToken: async () => 'token' },
+      hostId: 'host-1',
+      screenId: 'screen-1',
+    })
+
+  beforeEach(() => mockAuthorizedFetch.mockReset())
+
+  it('reports the refusal, and the warning says what it means', async () => {
+    mockAuthorizedFetch.mockResolvedValueOnce(
+      answer(404, { error: 'Unknown site' }),
+    )
+
+    const refused = await announce()
+
+    expect(refused).toEqual({
+      revalidated: 0,
+      pathsDropped: 0,
+      scanTruncated: false,
+      reason: 'console-404',
+    })
+    expect(describeRevalidateShortfall(refused, 'Saved.')).toBe(
+      'Saved. The live pages could not be refreshed just now, so they may ' +
+        'show the previous version for up to an hour.',
+    )
+  })
+
+  it("never takes a refusal's reason from its body", async () => {
+    // The two answers the warning stays silent for, arriving on a refusal:
+    // read from the body, either would hide it again.
+    for (const reason of ['ok', 'not-routed']) {
+      mockAuthorizedFetch.mockResolvedValueOnce(
+        answer(423, { error: 'locked', reason }),
+      )
+
+      const refused = await announce()
+
+      expect(refused?.reason).toBe('console-423')
+      expect(describeRevalidateShortfall(refused)).toContain(
+        'could not be refreshed',
+      )
+    }
+  })
+
+  it('still answers null for a request that got no answer at all', async () => {
+    mockAuthorizedFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+
+    expect(await announce()).toBeNull()
+  })
+
+  it('passes an accepted drop through as the route reported it', async () => {
+    mockAuthorizedFetch.mockResolvedValueOnce(
+      answer(200, { revalidated: ['/pricing'], reason: 'ok' }),
+    )
+
+    expect(await announce()).toEqual({
+      revalidated: 1,
+      pathsDropped: 0,
+      scanTruncated: false,
+      reason: 'ok',
+    })
   })
 })

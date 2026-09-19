@@ -20,7 +20,7 @@
  * limitations under the License.
  */
 
-import { hostRoleCanPublish as mockHostRoleCanPublish } from '@aglyn/aglyn'
+import { hostRoleCanWrite as mockHostRoleCanWrite } from '@aglyn/aglyn'
 
 /**
  * AGL-1326: who may drop a site's cached pages through /api/screens/revalidate.
@@ -36,6 +36,13 @@ import { hostRoleCanPublish as mockHostRoleCanPublish } from '@aglyn/aglyn'
  * and its mirror: an unrelated signed-in user, who must still be refused. A
  * fix that reached for "any signed-in caller" would pass the first and fail
  * the second, which is why they are written together.
+ *
+ * The AUTHOR cases are the same pair along the role axis (AGL-2934). The rules
+ * let an author write what the tenant renders — a live screen's SEO, its
+ * password — so the drop after that write has to be admitted, or the live
+ * page serves the old copy for the whole window. A viewer, who can write
+ * nothing, is the mirror, and is refused through both the projection and the
+ * roster.
  *
  * The last two pin the message rather than the verdict. `hostId` is a doc id
  * while every console URL names a site by subdomain, so the common caller
@@ -122,12 +129,12 @@ jest.mock('@aglyn/aglyn/server', () => ({
   decodeStoredNodes: () => [],
   /**
    * The REAL predicate, not a copy (AGL-2350). The route asks
-   * `hostRoleCanPublish` rather than a private role set, and a mock that
-   * hard-coded `['admin','editor']` here would re-create the very duplication
-   * the route was changed to remove — it would keep passing after
-   * `HOST_PUBLISH_ROLES` changed, which is the drift this guards.
+   * `hostRoleCanWrite` rather than a private role set, and a mock that
+   * hard-coded `['admin','editor','author']` here would re-create the very
+   * duplication the route was changed to remove — it would keep passing after
+   * `HOST_CONTENT_WRITE_ROLES` changed, which is the drift this guards.
    */
-  hostRoleCanPublish: (role: unknown) => mockHostRoleCanPublish(role),
+  hostRoleCanWrite: (role: unknown) => mockHostRoleCanWrite(role),
 }))
 
 import { POST } from '../app/api/screens/revalidate/route'
@@ -227,7 +234,7 @@ describe('/api/screens/revalidate authorization (AGL-1326)', () => {
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it('404s an org VIEWER — reading a site is not publishing one', async () => {
+  it('404s an org VIEWER — reading a site is not writing it', async () => {
     state.hosts['host-1']['memberRoles'] = {}
     signedInAs('org-viewer')
     mockResolveOrgPermissions.mockResolvedValue({ hostRole: 'viewer' })
@@ -236,30 +243,59 @@ describe('/api/screens/revalidate authorization (AGL-1326)', () => {
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  /**
-   * The AUTHOR host role (AGL-2334) may write content and may NOT publish,
-   * and busting a cache is a publish-side power. Asserted here because this
-   * route reads `HOST_PUBLISH_ROLES` through `hostRoleCanPublish` rather than
-   * a private set (AGL-2350): the day that set changes, this route changes
-   * with it, which a local copy would not have done.
-   */
-  it('404s an AUTHOR — writing content is not publishing it', async () => {
-    state.hosts['host-1']['memberRoles'] = {}
-    signedInAs('site-author')
-    mockResolveOrgPermissions.mockResolvedValue({ hostRole: 'author' })
+  it('404s a viewer named in the memberRoles PROJECTION', async () => {
+    // The fast path must not admit what the roster would refuse: a projected
+    // role that cannot write falls through to the roster, which says the same.
+    state.hosts['host-1']['memberRoles'] = { 'site-viewer': 'viewer' }
+    signedInAs('site-viewer')
+    mockResolveOrgPermissions.mockResolvedValue({ hostRole: 'viewer' })
 
     expect((await post()).status).toBe(404)
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it('404s an author named only in the memberRoles PROJECTION', async () => {
-    // The fast path, which had its own copy of the role set.
+  /**
+   * The AUTHOR host role (AGL-2334) writes content and may not publish it,
+   * and the rules draw that line at the version pointer and the routing map,
+   * not at the fields the tenant renders. An author may save a live screen's
+   * SEO or its password, so the drop after that save is theirs to ask for
+   * (AGL-2934): a drop moves no pointer and registers no route, and refusing
+   * it left the live page serving the old copy for the whole window.
+   *
+   * Asserted through both ways in, because each had its own role check: the
+   * projection is the one a real author arrives by — the rules only let their
+   * write land because `memberRoles` names them — and the roster is the
+   * fallback an org-level author reaches.
+   */
+  it('revalidates for an AUTHOR named in the memberRoles PROJECTION', async () => {
     state.hosts['host-1']['memberRoles'] = { 'site-author': 'author' }
+    signedInAs('site-author')
+
+    const response = await post()
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ reason: 'ok' })
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    const [, init] = mockFetch.mock.calls[0]
+    // The screen the author saved, resolved through the routing map.
+    expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({
+      hostId: 'host-1',
+      paths: ['/pricing'],
+    })
+    expect(mockResolveOrgPermissions).not.toHaveBeenCalled()
+  })
+
+  it('revalidates for an author the ROSTER names, with no projection entry', async () => {
+    state.hosts['host-1']['memberRoles'] = {}
     signedInAs('site-author')
     mockResolveOrgPermissions.mockResolvedValue({ hostRole: 'author' })
 
-    expect((await post()).status).toBe(404)
-    expect(mockFetch).not.toHaveBeenCalled()
+    const response = await post()
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ reason: 'ok' })
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(mockResolveOrgPermissions).toHaveBeenCalledWith('site-author', {
+      hostId: 'host-1',
+    })
   })
 
   it('404s an unknown host id', async () => {
