@@ -115,8 +115,8 @@ publish ──▶ submitted ──▶ in_review ──▶ listed ──▶ verif
 
 The single source mapping plugin ids to packages, register entry points
 per surface (`site`, `console`, `staff`, `tenantApi`, `consoleApi`, the
-two declaration surfaces `declarations` and `serverDeclarations`, and
-`subprocessors`), `apiPrefixes`, and `activityMutationPaths` — the plugin's
+declaration surfaces `declarations`, `serverDeclarations` and
+`consoleServerDeclarations`, and `subprocessors`), `apiPrefixes`, and `activityMutationPaths` — the plugin's
 modules that create, transfer or destroy a durable customer object, which
 `check-activity-coverage.mjs` holds to writing an activity entry.
 `node tools/scripts/generate-plugin-manifests.mjs` turns it into the four
@@ -131,9 +131,14 @@ server) is a light module that registers what core must know before any
 surface of the plugin has loaded — billing and access keys, activity
 actions, a config schema — and a **serverDeclarations** entry
 (`/declarations.server`, server only) adds platform-event subscriptions.
-The apps run them once per process: at boot from `instrumentation.ts`, and
-with the console's plugin loader module, whose plugins gate holds the first
-paint on them. Anything heavy stays behind a lazy import inside a handler.
+A **consoleServerDeclarations** entry (`/declarations.console-server`) is the
+same for the console's server alone: the tenant runtime never loads or
+bundles it, so it is where a registration belongs that opens something only
+the console holds — an eraser that revokes a provider grant with a key the
+console keeps. The apps run them once per process: at boot from
+`instrumentation.ts`, and with the console's plugin loader module, whose
+plugins gate holds the first paint on them. Anything heavy stays behind a
+lazy import inside a handler.
 
 A **subprocessors** entry names a function in
 `@aglyn/plugins-x/subprocessors` that returns the third parties the plugin's

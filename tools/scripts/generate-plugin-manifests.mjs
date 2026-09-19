@@ -152,17 +152,26 @@ function describeDrift(expected, actual) {
  * plugin, which the package map refuses (AGL-2941). The function resolves
  * once the declarations are registered, in catalog order, and the apps
  * hold their first render on it.
+ *
+ * A `consoleServerDeclarations` entry (`/declarations.console-server`,
+ * AGL-2978) is written into the CONSOLE's server manifest alone: what it
+ * registers opens something only the console holds — an eraser that
+ * revokes a provider grant with the console's key — and the tenant runtime,
+ * which serves the public internet, must not so much as bundle it.
  */
+const DECLARATION_MODULES = {
+  declarations: 'declarations',
+  serverDeclarations: 'declarations.server',
+  consoleServerDeclarations: 'declarations.console-server',
+}
+
 function declarationsContent(surfaces, constName, entryPoint) {
   const calls = []
   for (const plugin of config.plugins) {
     for (const surface of surfaces) {
       const fn = plugin.register?.[surface]
       if (!fn) continue
-      const specifier =
-        surface === 'serverDeclarations'
-          ? `${plugin.package}/declarations.server`
-          : `${plugin.package}/declarations`
+      const specifier = `${plugin.package}/${DECLARATION_MODULES[surface]}`
       calls.push(`    ;(await import('${specifier}')).${fn}()`)
     }
   }
@@ -195,7 +204,7 @@ const DECLARATION_MANIFESTS = [
   },
   {
     file: 'apps/console/constants/plugins.declarations.server.generated.ts',
-    surfaces: ['declarations', 'serverDeclarations'],
+    surfaces: ['declarations', 'serverDeclarations', 'consoleServerDeclarations'],
     constName: 'registerPluginServerDeclarations',
     entryPoint: 'server',
   },
