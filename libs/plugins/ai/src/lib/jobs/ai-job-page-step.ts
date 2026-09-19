@@ -442,11 +442,17 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     // A workspace that keeps no reusable components or saved forms builds its
     // page inline, and every pass is held to the rules that way (AGL-3030).
     const reusableComponents = checkEntitlement(org, 'reusableComponents')
-    const context = aiPageCheckContext(inventory, { reusableComponents })
+    // A link may take a visitor to a section of this page, by its name in the plan (AGL-3097).
+    const sections = screen.sections.map((section) => section.name)
+    const context = aiPageCheckContext(inventory, { reusableComponents, sections })
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
     if (index === -1 && written) {
-      const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', context)
+      // A link the page carries to one of its sections goes there, now every section is built.
+      const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', {
+        ...context,
+        scrollTargetIds: sectionIds,
+      })
       if (report.violations.length) {
         // The check mints its own ids; the review names the nodes by the ids the draft stores them under.
         const storedIds = report.tree?.sourceIds ?? {}

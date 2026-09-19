@@ -57,6 +57,7 @@ import {
   type AiNodeTreeContext,
   type AiNodeTreeResult,
 } from './ai-node-tree'
+import { AI_PAGE_SCROLL_TO_PROP, aiPageLinkTarget, aiStoredScrollTargets } from './ai-page-links'
 import {
   AI_EMAIL_CLIP_BYTES,
   AI_OUTPUT_BUDGETS,
@@ -218,6 +219,24 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    * the tree the check is given is what the model wrote.
    */
   writtenNode?: (id: string) => unknown
+  /**
+   * The page's sections by their names in its plan, in order, where the tree
+   * is a page a plan lays out (AGL-3097). A Button or a Screen Link may then go
+   * to one of them, by `scrollTo` naming it or an `href` fragment its name's
+   * words make up, which the page step writes as the platform's Scroll to
+   * element interaction. Absent: a link goes only where its `screenId` or
+   * `href` says.
+   */
+  pageSections?: readonly string[]
+  /**
+   * The section roots of the page, by id, where the tree checked is the page as
+   * the page step stores it (AGL-3097): a link there that carries a Scroll to
+   * element interaction to one of them, built or still to come, goes there.
+   * Only a stored page is given them. The palette validator drops every
+   * interaction a model writes before anything is stored, and an answer's own
+   * are never read.
+   */
+  scrollTargetIds?: readonly string[]
 }
 
 /** One node of a walk: its id, its depth, and its ancestors' ids from the root down. */
@@ -1292,6 +1311,12 @@ export function detectUnresponsiveGrids(
 const LINK_COLOR_FAMILIES = new Set(['primary', 'secondary', 'success', 'error', 'info', 'warning'])
 /** The elements a page links with; each draws its words in its `color` unless told otherwise. */
 const LINK_COMPONENTS = new Set(['muiButton', 'muiScreenLink'])
+
+/** Whether an element is one rule 10 holds to a destination: a Button or a Screen Link. */
+export function isAiLinkElement(componentId: unknown): boolean {
+  return typeof componentId === 'string' && LINK_COMPONENTS.has(componentId)
+}
+
 /** Surfaces that paint their own background, whatever band they sit on. */
 const PAPER_COMPONENTS = new Set(['muiCard', 'muiPaper', 'muiAccordion', 'muiDrawer'])
 /** A palette color token of a link family: `primary.main`, `secondary.dark`. */
@@ -1439,34 +1464,96 @@ function isFilled(value: unknown): boolean {
  * neither is a dead control: a live About page's hero carried a "Request a
  * Consultation" button with no destination. It is refused, with a re-ask
  * naming its words and what it may link.
+ *
+ * On a page a plan lays out (`context.pageSections`), a link may also go to a
+ * section of the same page (AGL-3097). A live hero's re-ask was answered with
+ * "#consultation-form", an anchor to the form the plan places last, and the
+ * page stopped at its first section. A link that names a section, by
+ * `scrollTo` or by a fragment that section's name's words make up, goes
+ * there, and the page step writes the platform's Scroll to element
+ * interaction for it. On a page as stored (`context.scrollTargetIds`), a link
+ * carrying that interaction to one of its section roots goes there. Two
+ * faults get a sentence of their own:
+ *
+ * - `link-fragment`: an `href` fragment that names no section. The palette
+ *   validator drops it, so what the link was written with goes nowhere.
+ * - `scroll-target-unknown`: a `scrollTo` naming no section of the page.
+ *
+ * `written` is the node as the model wrote it and `stored` the node as the
+ * check was given it, each by an id of `tree`.
  */
-export function detectLinksWithoutDestination(tree: AiDoctrineTree, outputKind: AiOutputKind): AiDoctrineViolation[] {
+export function detectLinksWithoutDestination(
+  tree: AiDoctrineTree,
+  outputKind: AiOutputKind,
+  context: Pick<AiDoctrineTreeContext, 'pageSections' | 'scrollTargetIds'> = {},
+  written: (id: string) => unknown = () => undefined,
+  stored: (id: string) => unknown = () => undefined,
+): AiDoctrineViolation[] {
   if (outputKind === 'email' || outputKind === 'form') return []
+  const sections = context.pageSections ?? []
+  const targets = new Set(context.scrollTargetIds ?? [])
   const dead: Array<{ id: string; label: string; inForm: boolean }> = []
+  const fragments: Array<{ id: string; label: string; value: string }> = []
+  const unknown: Array<{ id: string; label: string; value: string }> = []
   for (const visit of walkTree(tree)) {
     const { node } = visit
     if (!LINK_COMPONENTS.has(node.componentId)) continue
     if (isFilled(node.props?.['screenId']) || isFilled(node.props?.['href'])) continue
-    dead.push({
-      id: visit.id,
-      label: typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : '',
-      inForm: hasAncestor(tree, visit, (ancestor) => ancestor.componentId === 'form'),
+    if (aiStoredScrollTargets(stored(visit.id)).some((target) => targets.has(target))) continue
+    const label = typeof node.props?.['children'] === 'string' ? node.props['children'].trim() : ''
+    const target = aiPageLinkTarget(written(visit.id), sections)
+    if (target?.kind === 'section') continue
+    if (target?.kind === 'unknown' && target.via === 'href') {
+      fragments.push({ id: visit.id, label, value: target.value })
+    } else if (target?.kind === 'unknown' && context.pageSections) {
+      unknown.push({ id: visit.id, label, value: target.value })
+    } else {
+      dead.push({ id: visit.id, label, inForm: hasAncestor(tree, visit, (ancestor) => ancestor.componentId === 'form') })
+    }
+  }
+  const wordsOf = (entry: { id: string; label: string }): string =>
+    entry.label ? `"${entry.label}"` : `A ${displayName(tree.nodes[entry.id].componentId)}`
+  const names = sections.map((name) => `"${name}"`)
+  const listed = names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}` : names.join('')
+  const toSection = `To take a visitor to a section of this page, set "${AI_PAGE_SCROLL_TO_PROP}" to that section's name in the plan: ${listed}.`
+  const violations: AiDoctrineViolation[] = []
+  if (fragments.length) {
+    const [first] = fragments
+    violations.push({
+      rule: 10,
+      code: 'link-fragment',
+      message: `${wordsOf(first)} links "${first.value}", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. ${
+        context.pageSections
+          ? `${toSection} Otherwise give it the "screenId" of a screen the site has that does what its words say, or take it out.`
+          : 'Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives, or take it out.'
+      }`,
+      nodeIds: unique(fragments.map((entry) => entry.id)),
     })
   }
-  if (!dead.length) return []
-  const [first] = dead
-  const words = first.label ? `"${first.label}"` : `A ${displayName(tree.nodes[first.id].componentId)}`
-  const instead = dead.some((entry) => entry.inForm)
-    ? ' A Form draws its own send button from its "submitLabel", so take out a button drawn inside one and set that label instead.'
-    : ' When the site has no page for it, take it out: a form on this page is sent by its own button, and no element can be reached by an anchor.'
-  return [
-    {
+  if (unknown.length) {
+    const [first] = unknown
+    violations.push({
+      rule: 10,
+      code: 'scroll-target-unknown',
+      message: `${wordsOf(first)} scrolls to "${first.value}", and this page has no section of that name. Set "${AI_PAGE_SCROLL_TO_PROP}" to one of its sections' names in the plan: ${listed}, or take the link out.`,
+      nodeIds: unique(unknown.map((entry) => entry.id)),
+    })
+  }
+  if (dead.length) {
+    const [first] = dead
+    const instead = dead.some((entry) => entry.inForm)
+      ? ' A Form draws its own send button from its "submitLabel", so take out a button drawn inside one and set that label instead.'
+      : context.pageSections
+        ? ` ${toSection} When none of these fits, take it out.`
+        : ' When the site has no page for it, take it out: a form on this page is sent by its own button, and no element can be reached by an anchor.'
+    violations.push({
       rule: 10,
       code: 'link-without-destination',
-      message: `${words} goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives.${instead}`,
+      message: `${wordsOf(first)} goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives.${instead}`,
       nodeIds: unique(dead.map((entry) => entry.id)),
-    },
-  ]
+    })
+  }
+  return violations
 }
 
 /** Answer fields that say "publish", wherever the answer put them. */
@@ -2264,6 +2351,8 @@ export function validateAiDoctrineTree(
     const source = validated.sourceIds[id] ?? id
     return context.writtenNode ? context.writtenNode(source) : written[source]
   }
+  // A node as this check was given it, by its minted id: for a page as stored, what the page carries.
+  const storedOf = (id: string): unknown => written[validated.sourceIds[id] ?? id]
   const violations = [
     ...publish,
     ...detectRepeatedSubtrees(tree, otherPages, context),
@@ -2275,7 +2364,7 @@ export function validateAiDoctrineTree(
     ...detectTypedData(tree),
     ...detectImageSources(tree, context),
     ...detectUnrelatedScreenLinks(tree, outputKind, context),
-    ...detectLinksWithoutDestination(tree, outputKind),
+    ...detectLinksWithoutDestination(tree, outputKind, context, writtenOf, storedOf),
     ...detectDocumentStructure(tree, outputKind),
     ...detectAdHocWidths(tree, outputKind),
     ...detectUnresponsiveGrids(tree, outputKind, writtenOf),

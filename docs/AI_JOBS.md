@@ -1740,7 +1740,8 @@ model's own nodes and says what to write instead:
   its words and both destinations, a screen that does what those words say, so the answer
   it asks for is not sent home for `link-unrelated-screen` to refuse next, and says to take
   it out when the site has no page for it, or, inside a Form, to set the form's
-  `submitLabel` instead. An email's buttons
+  `submitLabel` instead. On a page a plan lays out, it may also go to a section of the
+  same page ([below](#a-link-to-a-section-of-the-same-page)). An email's buttons
   stay the email door's (`email-button-link`).
 - **Rule 14, `copy-cut-at-ceiling`** (`detectCutLines`, AGL-3076). The live subhead was
   not written that way: it is a Typography in the h5 style, and the palette validator
@@ -1767,6 +1768,64 @@ model's own nodes and says what to write instead:
   for each of the four. The section eval case's call to action now links a path.
 - **What it costs.** No prompt line: a rule costs nothing until an answer breaks it, and
   then one re-ask. No credit figure the Free arithmetic quotes moves.
+
+### A link to a section of the same page
+
+A live recording of the Free About page (AGL-3097) stopped at its first section, 148
+credits in. Its hero's "Request a Consultation" button went nowhere, and the re-ask was
+answered with `"href": "#consultation-form"`, an anchor to the consultation form the plan
+places last. The palette validator drops a bare fragment, rule 10 refused the answer
+again, and the page's other four sections were never built. The model meant the right
+thing, a call to action that takes the visitor to the form further down. The platform
+does that with the Scroll to element interaction (AGL-2867), never with an anchor, but a
+generated node may not write an interaction, and the form's section did not exist yet
+when the hero was written.
+
+- **A link names a section by its name in the plan.** On a page a plan lays out, a Button
+  or a Screen Link with no `screenId` or `href` may carry `"scrollTo"` naming one of the
+  page's sections, or an `href` fragment made of a section's words. `aiPageLinkTarget`
+  (`runtime/ai-page-links.ts`) matches a name with the same words in any case and
+  spacing, or else the one section whose name holds every word of it, so
+  `#consultation-form` names "consultation request form". A name no section has, or one
+  two sections hold, names nothing.
+- **The page step writes the interaction.** Every section's root id is minted from the job
+  and its place in the plan before any section is built (`aiPageSectionNodeId`), so the
+  section check writes the link's interaction on the pass that writes the link, even to a
+  section still to come. `aiPageScrollInteraction` stores it in the shape the interactions
+  editor stores on a node: a click, every time, scrolling to `[data-aglyn="leaf:<section
+  root id>"]` smoothly and with no offset, the editor's own defaults. The palette validator
+  has already dropped the `scrollTo` and the fragment, so the button keeps its words and
+  no address, and a member edits or removes the interaction in the besigner like one an
+  author wrote.
+- **Rule 10 reads it.** `detectLinksWithoutDestination` takes a link that names a section
+  as going there. On the page as stored, which every later pass and the last pass check
+  with its section roots (`scrollTargetIds`), a link carrying that interaction to one of
+  them goes there too. An answer's own interactions are never read: the palette validator
+  drops them before anything is stored, and only the page step's checks are given section
+  roots.
+- **Two faults get a sentence of their own.** `link-fragment` is an `href` fragment that
+  names no section: "…links "#contact", an anchor, and no element on a page carries an id
+  an anchor could name, so it goes nowhere.", followed on a page by the page's sections and
+  how to name one. `scroll-target-unknown` is a `scrollTo` naming no section of the page,
+  with the page's sections listed. On a page, `link-without-destination`'s re-ask lists the
+  sections a link may go to in place of its last sentence. A tree that is no page, such as
+  a layout, a template or a component, has no sections: its dead link is told what it was
+  told before, its anchor is named as the fault with a screen or an address offered in
+  place of a section, and a `scrollTo` there goes nowhere.
+- **Taught by the re-ask alone.** No prompt line and no cached prefix changes: a model
+  learns a link may go to a section of the page only when rule 10 refuses one.
+- **Controls.** `ai-job-free-page.spec.ts` runs the recording's two hero answers, kept as
+  `AI_FREE_PAGE_HERO_ANSWERS` in `jobs/fixtures/ai-free-page-recording.ts`, through the
+  real page step: the first is re-asked, the second is kept, and the page completes with
+  the button's interaction to the form section's root. The validators spec, the page
+  section spec and `runtime/ai-page-links.spec.ts` hold each match, each refusal and the
+  interaction, which the platform's own `collectNodeInteractions` collects and
+  `validateHostAction` keeps. The Free About eval case holds a failing control for each
+  new code, and the harness reads a page answer's links against the sections of the plan
+  it was built from.
+- **What it costs.** The hero's re-ask names the page's four sections, and the Free page's
+  hero re-asked costs 22 credits, within the 44 of the largest pass the room the arithmetic
+  keeps for a re-asked section must exceed.
 
 ### The time budget
 

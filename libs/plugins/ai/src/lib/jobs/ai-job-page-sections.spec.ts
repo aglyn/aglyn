@@ -269,6 +269,52 @@ describe('a section that breaks the page’s rules', () => {
     expect(reask).toContain('Write the words of its List Item Text, or take the item out. (nodes a10)')
   })
 
+  it('writes a link to a section of its page as the platform’s Scroll to element interaction, and refuses one to a section the plan lacks (AGL-3097)', () => {
+    // This brief's plan: "hero", "what the inspection covers", "customer quotes" and "quote request form".
+    const names = screen.sections.map((section) => section.name)
+    const planned = { ...context, pageSections: names }
+    const hero = (props: Record<string, unknown>) => {
+      const answer = structuredClone(fixture.answers[0])
+      answer.nodes['a3'].props = { children: 'Request a quote', variant: 'contained', ...props }
+      return aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context: planned, uses: [], inventory: fixture.inventory })({
+        tree: JSON.stringify(answer),
+      })
+    }
+    const buttonOf = (section: AiPageSection | null) =>
+      Object.values((section?.nodes ?? {}) as unknown as Record<string, { componentId: string; props?: Record<string, unknown>; interactions?: unknown }>).find(
+        (node) => node.componentId === 'muiButton',
+      )
+    const scrollToForm = [
+      {
+        id: 'ai-scroll-to-section',
+        name: 'Scroll to the quote request form section',
+        enabled: true,
+        trigger: { event: 'elementClick', everyTime: true },
+        steps: [{ type: 'scrollTo', selector: `[data-aglyn="leaf:${sectionIds[3]}"]` }],
+      },
+    ]
+    // By the section's name, and by an anchor made of its words, on the pass that writes the hero, before the form exists.
+    for (const props of [{ scrollTo: 'quote request form' }, { href: '#quote-form' }]) {
+      const result = hero(props)
+      expect([props, result.violations]).toEqual([props, []])
+      // The button keeps its words and no address; the interaction is where it goes.
+      const button = buttonOf(result.value)
+      expect([button?.props, button?.interactions]).toEqual([{ children: 'Request a quote', variant: 'contained' }, scrollToForm])
+    }
+    // A section the plan lacks is refused by the model's id, and nothing is written.
+    const unknown = hero({ scrollTo: 'our fees' })
+    expect(unknown.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
+      { rule: 10, code: 'scroll-target-unknown', nodeIds: ['a3'] },
+    ])
+    expect(buttonOf(unknown.value)?.interactions).toBeUndefined()
+    // A later pass reads the hero's stored interaction as where its button goes.
+    const page = aiPageWithSection(aiEmptyPage(), hero({ scrollTo: 'quote request form' }).value as AiPageSection, sectionIds)
+    const next = aiPageSectionCheck({ page, sectionIds, index: 1, context: planned, uses: screen.sections[1].uses, inventory: fixture.inventory })({
+      tree: JSON.stringify(fixture.answers[1]),
+    })
+    expect(next.violations).toEqual([])
+  })
+
   it('is refused for a subhead the palette validator cut at 120 characters, naming the model’s node and the ceiling before the cut words (AGL-3076)', () => {
     // The live hero subhead as the model most likely wrote it; the page stored its first 120 characters.
     const answer = structuredClone(fixture.answers[0])

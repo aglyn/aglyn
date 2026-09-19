@@ -38,6 +38,7 @@ import {
   summarizeAiEvalPlans,
   type AiEvalAudits,
   type AiEvalCase,
+  type AiEvalControl,
 } from './ai-eval'
 
 /**
@@ -191,6 +192,23 @@ describe('the floors', () => {
       ['grid-item-outside-container'],
       ['grid-container-text'],
     ])
+  })
+
+  it('refuses each link control of the Free About case for its own fault, and passes its call to action sent to a section of the page (AGL-3072, AGL-3097)', () => {
+    const about = cases.find((evalCase) => evalCase.id === 'page-free-law-firm-about') as AiEvalCase
+    const codes = ['link-without-destination', 'link-fragment', 'scroll-target-unknown']
+    const links = about.controls
+      .map((control) => scoreAiEvalCandidate(about, { ...about.candidates[0], answer: control.answer }, audits).findings)
+      .map((findings) => findings.filter((finding) => codes.includes(finding)))
+      .filter((findings) => findings.length)
+    expect(links).toEqual([['link-without-destination'], ['link-fragment'], ['scroll-target-unknown']])
+    // The dead call to action, sent to the plan's form section by its name or by an anchor of its words, keeps the rules.
+    const dead = about.controls.find((control) => control.why.startsWith('A hero call to action that goes nowhere')) as AiEvalControl
+    for (const props of [{ scrollTo: 'consultation request form' }, { href: '#consultation-form' }]) {
+      const answer = structuredClone(dead.answer) as { tree: { nodes: Record<string, { props?: Record<string, unknown> }> } }
+      answer.tree.nodes['cta'].props = { ...answer.tree.nodes['cta'].props, ...props }
+      expect([props, scoreAiEvalControl(about, { why: 'sent to the form', answer, fails: [] })]).toEqual([props, []])
+    }
   })
 
   it('holds every plan a brief expects to its shape', () => {

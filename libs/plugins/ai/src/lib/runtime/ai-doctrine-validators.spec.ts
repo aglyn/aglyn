@@ -85,6 +85,7 @@ import {
   validateAiBuildPlan,
   validateAiDoctrineTree,
   type AiDoctrineTree,
+  type AiDoctrineTreeContext,
   type AiDoctrineViolation,
 } from './ai-doctrine-validators'
 import { AI_OUTPUT_BUDGETS } from './ai-palette'
@@ -971,13 +972,87 @@ describe('rule 10 — a link that goes nowhere (AGL-3072)', () => {
     expect(detectLinksWithoutDestination(tree(page(section(button()))), 'email')).toEqual([])
   })
 
-  it('refuses a link whose only destination was an anchor, which the palette validator drops and no element on a page could answer', () => {
+  it('refuses a link whose only destination was an anchor, which the palette validator drops and no element on a page could answer, naming the anchor as the fault (AGL-3097)', () => {
     const anchored = tree(page(section(text('h1', 'About Brightwater Law', 'h1'), button({ href: '#consultation' }))))
     const report = validateAiDoctrineTree(anchored, 'page')
     expect(report.tree?.repairs).toEqual(['n3.href is neither an https: URL nor a path on this site; dropped'])
-    expect(report.violations.map((violation) => [violation.code, violation.nodeIds])).toEqual([
-      ['link-without-destination', [Object.keys(report.tree?.sourceIds ?? {}).find((id) => report.tree?.sourceIds[id] === 'n3')]],
+    expect(report.violations.map(({ code, message, nodeIds }) => ({ code, message, nodeIds }))).toEqual([
+      {
+        code: 'link-fragment',
+        message:
+          '"Request a Consultation" links "#consultation", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives, or take it out.',
+        nodeIds: [Object.keys(report.tree?.sourceIds ?? {}).find((id) => report.tree?.sourceIds[id] === 'n3')],
+      },
     ])
+  })
+})
+
+describe('rule 10 — a link to a section of its own page (AGL-3097)', () => {
+  // The live Free About page's plan, whose hero's re-ask was answered with "#consultation-form".
+  const SECTIONS = ['hero introduction', 'who we are', 'practice areas', 'how we work with clients', 'consultation request form']
+  const LISTED = '"hero introduction", "who we are", "practice areas", "how we work with clients" or "consultation request form"'
+  const button = (props: Record<string, unknown> = {}): Nested => ({
+    componentId: 'muiButton',
+    props: { children: 'Request a Consultation', variant: 'contained', ...props },
+  })
+  /** A page's rule 10 findings, as the whole-tree check makes them with the plan's sections. */
+  const found = (props: Record<string, unknown>, context: AiDoctrineTreeContext = { pageSections: SECTIONS }) =>
+    validateAiDoctrineTree(tree(page(section(text('h1', 'About Brightwater Law', 'h1'), button(props)))), 'page', context)
+      .violations.filter((violation) => violation.rule === 10)
+      .map(({ code, message }) => ({ code, message }))
+
+  it('lets a link go to a section of the page by its name in the plan, or by an anchor its words make up', () => {
+    expect(found({ scrollTo: 'consultation request form' })).toEqual([])
+    expect(found({ scrollTo: '  Consultation-Request-Form ' })).toEqual([])
+    // The live answer: an anchor whose words are all the form section's own.
+    expect(found({ href: '#consultation-form' })).toEqual([])
+    expect(found({ scrollTo: 'practice areas', href: '#nowhere' })).toEqual([])
+  })
+
+  it('refuses a scrollTo that names no section of the page, and an anchor none makes up, each with what it may name', () => {
+    expect(found({ scrollTo: 'contact form' })).toEqual([
+      {
+        code: 'scroll-target-unknown',
+        message: `"Request a Consultation" scrolls to "contact form", and this page has no section of that name. Set "scrollTo" to one of its sections' names in the plan: ${LISTED}, or take the link out.`,
+      },
+    ])
+    expect(found({ href: '#contact' })).toEqual([
+      {
+        code: 'link-fragment',
+        message: `"Request a Consultation" links "#contact", an anchor, and no element on a page carries an id an anchor could name, so it goes nowhere. To take a visitor to a section of this page, set "scrollTo" to that section's name in the plan: ${LISTED}. Otherwise give it the "screenId" of a screen the site has that does what its words say, or take it out.`,
+      },
+    ])
+    // A scrollTo that names a section is read before an anchor that names none, and one that names none is the fault.
+    expect(found({ scrollTo: 'our fees', href: '#consultation-form' }).map(({ code }) => code)).toEqual(['scroll-target-unknown'])
+  })
+
+  it('tells a link that goes nowhere on a page of a plan that it may go to one of the page’s sections', () => {
+    expect(found({})).toEqual([
+      {
+        code: 'link-without-destination',
+        message: `"Request a Consultation" goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. To take a visitor to a section of this page, set "scrollTo" to that section's name in the plan: ${LISTED}. When none of these fits, take it out.`,
+      },
+    ])
+    // With no plan to name sections, a scrollTo goes nowhere, and says nothing of sections.
+    expect(found({ scrollTo: 'consultation request form' }, {})).toEqual([
+      { code: 'link-without-destination', message: expect.stringContaining('When the site has no page for it, take it out') },
+    ])
+  })
+
+  it('reads a Scroll to element interaction to a section root on a page as stored, and never one an answer wrote', () => {
+    const stored = (interactions: unknown): unknown =>
+      tree(page(section(text('h1', 'About Brightwater Law', 'h1'), { ...button(), interactions } as Nested)))
+    const scrollTo = (id: string, enabled = true) => [
+      { id: 'ai-scroll-to-section', name: 'Scroll', enabled, trigger: { event: 'elementClick', everyTime: true }, steps: [{ type: 'scrollTo', selector: `[data-aglyn="leaf:${id}"]` }] },
+    ]
+    const rule10 = (input: unknown, context: AiDoctrineTreeContext) =>
+      validateAiDoctrineTree(input, 'page', context).violations.filter((violation) => violation.rule === 10).map(({ code }) => code)
+    const roots = { pageSections: SECTIONS, scrollTargetIds: ['s1', 's2', 's3', 's4', 's5'] }
+    expect(rule10(stored(scrollTo('s5')), roots)).toEqual([])
+    // Disabled, to a node no section roots, or on an answer whose own interactions are dropped: it goes nowhere.
+    expect(rule10(stored(scrollTo('s5', false)), roots)).toEqual(['link-without-destination'])
+    expect(rule10(stored(scrollTo('n2')), roots)).toEqual(['link-without-destination'])
+    expect(rule10(stored(scrollTo('s5')), { pageSections: SECTIONS })).toEqual(['link-without-destination'])
   })
 })
 

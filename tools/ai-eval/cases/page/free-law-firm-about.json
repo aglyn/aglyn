@@ -651,6 +651,38 @@
       "fails": ["rules"]
     },
     {
+      "why": "A hero call to action linked to \"#contact\", an anchor no element on the page carries and no section of its plan is named by, which the palette validator drops (AGL-3097).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead", "cta"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } },
+            "cta": { "componentId": "muiButton", "props": { "variant": "contained", "children": "Request a consultation", "href": "#contact" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A hero call to action sent by \"scrollTo\" to a \"contact form\" section the page's plan does not have (AGL-3097).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead", "cta"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } },
+            "cta": { "componentId": "muiButton", "props": { "variant": "contained", "children": "Request a consultation", "scrollTo": "contact form" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
       "why": "A hero subhead in a heading style past the 120 characters that style holds, which the palette validator cuts off mid-word where they end (AGL-3076).",
       "answer": {
         "tree": {
