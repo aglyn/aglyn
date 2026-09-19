@@ -604,9 +604,11 @@ function BesignerPage(props) {
         // does for "the tenant refused the call", and only the second leaves
         // the live page stale for the rest of its window. Discarding the
         // result is how a publish came to report itself complete over a page
-        // that kept serving the old HTML.
+        // that kept serving the old HTML. A shortfall leads with "Saved.", not
+        // "Published.": this is a save, and an author, who cannot publish, may
+        // make it.
         void revalidateLivePages({ user, hostId, screenId }).then((result) => {
-          const shortfall = describeRevalidateShortfall(result)
+          const shortfall = describeRevalidateShortfall(result, 'Saved.')
           if (shortfall) {
             enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
           }
@@ -888,9 +890,10 @@ function BesignerPage(props) {
         } as any)
         if (versionId && versionId === screenResult?.data?.versionId) {
           // The live version: the published page renders the new values from
-          // the next request, so drop what is cached.
+          // the next request, so drop what is cached. A save, so a shortfall
+          // leads with "Saved.", as every Screen Properties save's does.
           void revalidateLivePages({ user, hostId, screenId }).then((outcome) => {
-            const shortfall = describeRevalidateShortfall(outcome)
+            const shortfall = describeRevalidateShortfall(outcome, 'Saved.')
             if (shortfall) {
               enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
             }

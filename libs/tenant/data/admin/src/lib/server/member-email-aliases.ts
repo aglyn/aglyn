@@ -42,9 +42,13 @@ import { safeEqual } from './safe-equal'
  *
  * ## Every write is here
  *
- * The rules deny the collection to every client, reads included, so the
- * one way `verifiedAtMs` is ever set is {@link confirmMemberEmailAlias}
- * running behind a verified session. A client that could write the
+ * The rules deny the collection to every client, reads included, so
+ * `verifiedAtMs` is only ever set here, by one of two writers, each running
+ * behind the member's own verified session:
+ * {@link confirmMemberEmailAlias}, for a member who opened the link mailed
+ * to the address, and {@link confirmMemberEmailAliasesByProvider}, for a
+ * member whose connected mail account lists the address as one its provider
+ * has already verified they may send as. A client that could write the
  * document could mark any address it liked as its own, and the capture
  * webhook would then file a stranger's mail as the member's.
  *
@@ -356,6 +360,64 @@ export async function confirmMemberEmailAlias(
     )
     tx.set(ref, { uid: claims.uid, aliases: next, updatedAtMs: nowMs })
     return { ok: true, orgId: claims.orgId, address: entry.address, alreadyConfirmed: false }
+  })
+}
+
+export type MemberEmailAliasesConfirmedByProvider =
+  | {
+      ok: true
+      /** The addresses this call confirmed, normalized, in list order. */
+      confirmed: string[]
+    }
+  | MemberEmailAliasRefused
+
+/**
+ * Confirms a member's PENDING addresses that their connected mail account
+ * already proves are theirs (AGL-2978).
+ *
+ * The confirmation link proves an address receives mail and asks the member
+ * to open it. A provider's verified send-as list proves more: the provider
+ * confirmed the account may send as the address, and the member proved they
+ * hold that account by connecting it under their own session. So an address
+ * the member added and has not yet confirmed counts as confirmed once it
+ * appears in that list.
+ *
+ * Only addresses the member ALREADY added are touched — this never adds one,
+ * because an address the member did not ask for is not a claim they made —
+ * and an address already confirmed keeps its original `verifiedAtMs`. The
+ * caller passes only the provider's VERIFIED addresses; which of a
+ * provider's listings count as verified is the caller's rule, not this
+ * store's. Nothing is written when nothing changes.
+ */
+export async function confirmMemberEmailAliasesByProvider(
+  firestore: FirebaseFirestore.Firestore,
+  input: { orgId: string; uid: string; addresses: readonly unknown[]; nowMs?: number },
+): Promise<MemberEmailAliasesConfirmedByProvider> {
+  const nowMs = input.nowMs ?? Date.now()
+  const proven = new Set(
+    input.addresses
+      .map((address) => normalizeMemberEmailAlias(address))
+      .filter((address): address is string => Boolean(address)),
+  )
+  if (!input.orgId || !input.uid) return refused('not-a-member', NOT_A_MEMBER)
+  if (!proven.size) return { ok: true, confirmed: [] }
+  const ref = aliasesRef(firestore, input.orgId, input.uid)
+  const roster = memberRef(firestore, input.orgId, input.uid)
+  return firestore.runTransaction<MemberEmailAliasesConfirmedByProvider>(async (tx) => {
+    const member = await tx.get(roster)
+    if (!member.exists) return refused('not-a-member', NOT_A_MEMBER)
+    const stored = await tx.get(ref)
+    const aliases = readMemberEmailAliases(stored.exists ? stored.data() : null)
+    const confirmed: string[] = []
+    const next = aliases.map((alias) => {
+      if (isVerifiedMemberEmailAlias(alias) || !proven.has(alias.address)) return alias
+      confirmed.push(alias.address)
+      return { ...alias, verifiedAtMs: nowMs }
+    })
+    if (confirmed.length) {
+      tx.set(ref, { uid: input.uid, aliases: next, updatedAtMs: nowMs })
+    }
+    return { ok: true, confirmed }
   })
 }
 

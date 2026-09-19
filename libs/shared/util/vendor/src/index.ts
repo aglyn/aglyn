@@ -40,13 +40,15 @@ export * from './lib/change-case'
 // `hoistNonReactStatics` — so a matcher no visitor runs was downloaded and
 // parsed by every visitor to every customer site.
 //
-// All four real consumers are off the published page's CLIENT path, which is
-// what makes the removal safe rather than merely tidy:
+// The four real consumers, and where each puts the matcher:
 //   - `use-mdi-icons-fuzzy` → the icon picker, console-only,
 //   - `media-search.ts` → the console DAM,
-//   - `plugins-mui/collection.tsx` → tenant, but behind the LAZY
-//     `import('@aglyn/plugins-mui')` in `plugins.client.generated.ts`, so it
-//     arrives only on a page that actually mounts a collection,
+//   - `plugins-mui/collection.tsx` → EVERY published page. It sits behind
+//     `import('@aglyn/plugins-mui')`, but that is the always-on site plugin,
+//     loaded on every page before it settles, and it registers the collection
+//     components statically — so `fuse.js` arrives one dynamic import later
+//     whether or not the page has a collection (25.9 KB raw, AGL-3082). Only
+//     a split of that plugin's component registry takes it off those pages,
 //   - `apps/tenant/utils/search-content.ts` → tenant, but SERVER-only: it
 //     imports `@aglyn/aglyn/server` and `tenant-data-admin`, and
 //     `search-facets.ts` exists precisely so the `'use client'` results page

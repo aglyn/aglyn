@@ -249,7 +249,7 @@ describe('Consent preview — the advertising question (AGL-2486)', () => {
 
     // This is the surface in the screenshot: he saw the analytics row and
     // nothing else.
-    expect(screen.queryByRole('switch', { name: /Analytics/ })).not.toBeNull()
+    expect(await screen.findByRole('switch', { name: /Analytics/ })).not.toBeNull()
     expect(screen.queryByRole('switch', { name: /Advertising/ })).not.toBeNull()
   })
 
@@ -269,7 +269,7 @@ describe('Consent preview — the advertising question (AGL-2486)', () => {
     await simulateRegion('EU visitor')
     fireEvent.click(await screen.findByRole('button', { name: 'Preferences' }))
 
-    const ads = screen.getByRole('switch', { name: /Advertising/ })
+    const ads = await screen.findByRole('switch', { name: /Advertising/ })
     const analytics = screen.getByRole('switch', { name: /Analytics/ })
     fireEvent.click(analytics)
     fireEvent.click(ads)
@@ -296,7 +296,7 @@ describe('Consent preview — the advertising question (AGL-2486)', () => {
     // "always show advertising". A banner offering a choice the site never
     // asked for would be its own legal defect — and this is the assertion
     // that would catch it.
-    expect(screen.queryByRole('switch', { name: /Analytics/ })).not.toBeNull()
+    expect(await screen.findByRole('switch', { name: /Analytics/ })).not.toBeNull()
     expect(screen.queryByRole('switch', { name: /Advertising/ })).toBeNull()
     expect(consentPanel()?.textContent).toMatch(/Advertising: not asked/)
   })

@@ -136,8 +136,10 @@ PROJECTS=(
   libs/tenant/data/admin
   libs/tenant/runtime
   libs/tenant/feature/instance
-  # The automation engine's `updateDataset` index check, which lives beside
-  # the engine in its plugin.
+  # Plugins own emulator specs too: Outreach proves its Google mailbox connect
+  # against the real emulator, and the automation engine its `updateDataset`
+  # index check, beside the engine in the Workflows plugin.
+  libs/plugins/outreach
   libs/plugins/workflows
 )
 

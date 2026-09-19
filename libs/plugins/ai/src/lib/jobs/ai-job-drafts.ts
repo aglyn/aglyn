@@ -103,11 +103,13 @@ import type { AiJobAdmissionRefusal } from './ai-job-admission'
  * `publishedAt` or a publish schedule. What the job hands back is a link to
  * the draft, never a binding.
  *
- * ── One draft per job ────────────────────────────────────────────────────
+ * ── One draft per recorded id ────────────────────────────────────────────
  *
- * The caller names the document id, one per job. A step run again after its
- * draft was written — a process cut off before the machine recorded the step
- * — finds that draft and reports it, rather than writing a second.
+ * The caller names the document id: the console resource id the job recorded
+ * for the draft before its first write (`ai-job-draft-ids.ts`). A step run
+ * again after its draft was written — a process cut off before the machine
+ * recorded the step — reads the same id, finds that draft and reports it,
+ * rather than writing a second.
  */
 
 type Firestore = FirebaseFirestore.Firestore
@@ -489,7 +491,7 @@ export async function readAiDraftNodes(
 export interface AiDraftInput {
   kind: AiDraftKind
   hostId: string
-  /** The draft's document id: one per job. */
+  /** The draft's document id: the id the job recorded for this draft. */
   id: string
   /** Whose work the draft is: the job's creator, whose brief it built. */
   uid: string

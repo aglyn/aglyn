@@ -509,8 +509,26 @@ describe('conditions, as the dialog edits them (AGL-2893)', () => {
     expect(errors.map((error) => error.condition)).toEqual([
       'A rule reads a property this component does not declare',
       'A property cannot depend on itself',
-      '"(" is not a pattern that can be matched',
+      '"(" is not a pattern that can be matched: unbalanced "("',
       'Compare with a number',
+    ])
+  })
+
+  it('refuses a pattern no page can match, and takes any a page matches in linear time (AGL-2893)', () => {
+    const errors = componentPropErrors([
+      { name: 'a', type: 'text' },
+      { name: 'b', type: 'text', condition: { when: 'a', pattern: 'x(?=y)' } },
+      { name: 'c', type: 'text', condition: { when: 'a', pattern: 'x', flags: 'gg' } },
+      { name: 'd', type: 'text', condition: { when: 'a', pattern: '(?<word>x)' } },
+      // Hangs a backtracking matcher; the page matches it in linear time.
+      { name: 'e', type: 'text', condition: { when: 'a', pattern: '^(a+)+$' } },
+    ])
+    expect(errors.map((error) => error.condition)).toEqual([
+      '',
+      '"x(?=y)" is not a pattern that can be matched: lookahead is not supported',
+      '"x" is not a pattern that can be matched: the g flag is repeated',
+      '"(?<word>x)" is not a pattern that can be matched: named groups are not supported',
+      '',
     ])
   })
 })

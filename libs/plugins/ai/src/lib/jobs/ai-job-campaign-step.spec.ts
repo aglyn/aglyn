@@ -288,6 +288,10 @@ const INVENTORY: AiSiteInventory = {
   ],
 }
 
+/** The ids the job recorded for its design and its campaign when it was created (AGL-3079). */
+const DESIGN_ID = 'drftEmailD'
+const CAMPAIGN_ID = 'drftCampgn'
+
 function job(patch: Partial<AiJob> = {}): AiJob {
   return {
     $id: 'job-1',
@@ -297,7 +301,9 @@ function job(patch: Partial<AiJob> = {}): AiJob {
     status: 'running',
     brief: GOLDENS['launch'].brief,
     inputs: {},
-    steps: [{ name: 'generate', status: 'running', creditsSpent: 0 }],
+    steps: [
+      { name: 'generate', status: 'running', creditsSpent: 0, draftIds: { email: DESIGN_ID, campaign: CAMPAIGN_ID } },
+    ],
     outputs: [],
     creditsReserved: 50,
     creditsSpent: 0,
@@ -372,6 +378,9 @@ describe('the campaign step', () => {
     expect(campaigns).toHaveLength(1)
     expect(campaigns[0].name).toBe('Box launch')
     expect(campaigns[0].content['templateScreenId']).toBe(designs[0].id)
+    // Each draft under the id the job recorded for it, never the job's own (AGL-3079).
+    expect([designs[0].id, campaigns[0].id]).toEqual([DESIGN_ID, CAMPAIGN_ID])
+    expect(outcome.outputs.map((output) => output.id)).toEqual([DESIGN_ID, CAMPAIGN_ID])
   })
 
   it('names the campaign after its strongest subject line when the job names none', async () => {

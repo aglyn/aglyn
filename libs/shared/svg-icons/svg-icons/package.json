@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-svg-icons",
-  "version": "1.0.0-beta.129",
+  "version": "1.0.0-beta.130",
   "main": "./index.js",
   "types": "./index.d.ts",
   "exports": {

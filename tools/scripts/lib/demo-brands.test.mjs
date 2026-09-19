@@ -20,7 +20,7 @@
  *
  *   node --test tools/scripts/lib/demo-brands.test.mjs
  *
- * The founding demo (`Design-Partner-Outreach.md` §4) spends minutes 3–10 —
+ * The 30-minute demo (`Design-Partner-Outreach.md` §4) spends minutes 3–10 —
  * its largest block, and the one the GTM doc calls *"the wedge, proven
  * visually"* — switching between several sites in one org. The seeder used to
  * stamp a single hard-coded bakery, so N hosts produced N identical bakeries

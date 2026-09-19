@@ -1,0 +1,797 @@
+{
+  "note": "Every place tracked source names a Firestore document with an id the platform did not mint, and why (AGL-3079). Read by tools/scripts/check-id-minting.mjs, which is red for a site missing here, for a row no site matches, and for a list whose size is not ID_MINTING_CEILING in tools/scripts/lib/id-minting.mjs. This list may shrink and must never grow: a new document is named by createResourceUid(), or by a named key function where its id must mean something. RESOURCE rows are debts, each under the area issue that fixes it (to fix); RECORD rows are internal rows nobody addresses; DELIBERATE rows are keys whose meaning is the point. A row that only moved takes the new site.",
+  "sites": [
+    {
+      "site": "libs/plugins/crm/src/lib/components/contacts-section.tsx: addDoc(collection(firestore, dataScope[0], dataScope[1], 'contactSegments'), …)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a CRM segment, deal, activity, pipeline or saved view created in the console; its id is routed by the console and the public API and referenced by other records."
+    },
+    {
+      "site": "libs/plugins/crm/src/lib/components/deal-edit-drawer.tsx: addDoc(collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals), …)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a CRM segment, deal, activity, pipeline or saved view created in the console; its id is routed by the console and the public API and referenced by other records."
+    },
+    {
+      "site": "libs/plugins/crm/src/lib/components/log-activity-dialog.tsx: addDoc(collection(firestore, dataScope[0], dataScope[1], Aglyn.CRM_COLLECTIONS.activities), …)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a CRM segment, deal, activity, pipeline or saved view created in the console; its id is routed by the console and the public API and referenced by other records."
+    },
+    {
+      "site": "libs/plugins/crm/src/lib/components/pipelines-dialog.tsx: addDoc(collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.pipelines), …)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a CRM segment, deal, activity, pipeline or saved view created in the console; its id is routed by the console and the public API and referenced by other records."
+    },
+    {
+      "site": "libs/plugins/crm/src/lib/hooks/use-crm-saved-view.ts: addDoc(collection(firestore, scope[0], scope[1], CRM_COLLECTIONS.views), …)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a CRM segment, deal, activity, pipeline or saved view created in the console; its id is routed by the console and the public API and referenced by other records."
+    },
+    {
+      "site": "libs/plugins/crm/src/lib/server/companies-import.ts: companies.add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a company, deal or task an import or the task route creates; routed at /v1/companies/{companyId}, /v1/deals/{dealId}, /v1/tasks/{taskId} and in the console."
+    },
+    {
+      "site": "libs/plugins/crm/src/lib/server/contacts-import.ts: companies.add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a company, deal or task an import or the task route creates; routed at /v1/companies/{companyId}, /v1/deals/{dealId}, /v1/tasks/{taskId} and in the console."
+    },
+    {
+      "site": "libs/plugins/crm/src/lib/server/deals-import.ts: deals.add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a company, deal or task an import or the task route creates; routed at /v1/companies/{companyId}, /v1/deals/{dealId}, /v1/tasks/{taskId} and in the console."
+    },
+    {
+      "site": "libs/plugins/crm/src/lib/server/task-routes.ts: tasks.doc()",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a company, deal or task an import or the task route creates; routed at /v1/companies/{companyId}, /v1/deals/{dealId}, /v1/tasks/{taskId} and in the console."
+    },
+    {
+      "site": "libs/plugins/crm/src/lib/server/tasks-import.ts: tasks.doc()",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a company, deal or task an import or the task route creates; routed at /v1/companies/{companyId}, /v1/deals/{dealId}, /v1/tasks/{taskId} and in the console."
+    },
+    {
+      "site": "libs/plugins/workflows/src/lib/engine/crm-action-steps.ts: orgRef.collection(CRM_COLLECTIONS.activities).add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
+    },
+    {
+      "site": "libs/plugins/workflows/src/lib/engine/crm-action-steps.ts: orgRef.collection(CRM_COLLECTIONS.tasks).add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/contact-merge.ts: orgRef.collection(CRM_COLLECTIONS.activities).add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a CRM contact, task or activity written by merges, bookings, email events or form captures; routed at /v1/contacts/{contactId}, /v1/tasks/{taskId}, /v1/activities/{activityId}."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/crm-booking-activity.ts: activities.add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a CRM contact, task or activity written by merges, bookings, email events or form captures; routed at /v1/contacts/{contactId}, /v1/tasks/{taskId}, /v1/activities/{activityId}."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/crm-booking-activity.ts: orgRef.collection(CRM_COLLECTIONS.tasks).add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a CRM contact, task or activity written by merges, bookings, email events or form captures; routed at /v1/contacts/{contactId}, /v1/tasks/{taskId}, /v1/activities/{activityId}."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/crm-email-activity.ts: firestore.collection('orgs').doc(orgId).collection(CRM_COLLECTIONS.activities).doc()",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a CRM contact, task or activity written by merges, bookings, email events or form captures; routed at /v1/contacts/{contactId}, /v1/tasks/{taskId}, /v1/activities/{activityId}."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/host-visitor-records.ts: leadsRef.doc()",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: the lead captured against an unusable address (a usable one is keyed by personKey); the console's leads view addresses it by id."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/upsert-contact.ts: contactsRef.add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a CRM contact, task or activity written by merges, bookings, email events or form captures; routed at /v1/contacts/{contactId}, /v1/tasks/{taskId}, /v1/activities/{activityId}."
+    },
+    {
+      "site": "libs/tenant/runtime/src/lib/associate-company-by-domain.ts: companiesRef.doc()",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
+    },
+    {
+      "site": "libs/tenant/runtime/src/lib/convert-host-lead.ts: orgRef.collection(CRM_COLLECTIONS.companies).add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
+    },
+    {
+      "site": "libs/tenant/runtime/src/lib/convert-host-lead.ts: orgRef.collection(CRM_COLLECTIONS.deals).add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
+    },
+    {
+      "site": "libs/tenant/runtime/src/lib/convert-host-lead.ts: pipelinesRef.add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
+    },
+    {
+      "site": "tools/scripts/backfills/backfill-agl1753-contact-ltv.mjs: db.collection('orgs').doc(orgId).collection('contacts').doc()",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a contact the backfill creates; routed at /v1/contacts/{contactId}. Needs a nanoid of the resource-id shape in the .mjs."
+    },
+    {
+      "site": "libs/plugins/commerce/src/lib/server/draft-order.ts: hostRef.collection('orders').doc()",
+      "class": "RESOURCE",
+      "issue": "AGL-3084",
+      "reason": "To fix: a draft or POS order; its id is in the console's ?order= link, /v1/sites/{siteId}/orders/{orderId} and the stock ledger's orderId. Customers read its number, never its id."
+    },
+    {
+      "site": "libs/plugins/commerce/src/lib/server/member-post.ts: hostRef.collection('memberPosts').add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3084",
+      "reason": "To fix: a member post; the feed API returns its id and the console deletes by it."
+    },
+    {
+      "site": "libs/plugins/commerce/src/lib/server/membership-register.ts: membersRef.doc()",
+      "class": "RESOURCE",
+      "issue": "AGL-3084",
+      "reason": "To fix: a site member; the id is the console drawer's target and part of the member's session and reset tokens."
+    },
+    {
+      "site": "libs/plugins/commerce/src/lib/server/pos-order.ts: hostRef.collection('orders').doc()",
+      "class": "RESOURCE",
+      "issue": "AGL-3084",
+      "count": 2,
+      "reason": "To fix: a draft or POS order; its id is in the console's ?order= link, /v1/sites/{siteId}/orders/{orderId} and the stock ledger's orderId. Customers read its number, never its id."
+    },
+    {
+      "site": "libs/plugins/commerce/src/lib/server/reviews.ts: hostRef.collection('reviews').add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3084",
+      "reason": "To fix: a product review; the public reviews API returns its id and moderation updates by it."
+    },
+    {
+      "site": "apps/console/app/api/support/forum/route.ts: threadsRef.doc()",
+      "class": "RESOURCE",
+      "issue": "AGL-3085",
+      "reason": "To fix: a forum thread; its id is returned as threadId and is the forum page's ?threadId= and a reply's key."
+    },
+    {
+      "site": "apps/console/app/api/support/tickets/route.ts: ticketsRef.doc()",
+      "class": "RESOURCE",
+      "issue": "AGL-3085",
+      "reason": "To fix: a support ticket; its id is in the staff link /admin/support?ticketId=, the success manager's email and the staff page's URL."
+    },
+    {
+      "site": "apps/console/app/api/hosts/members/route.ts: firestore.collection('orgs').doc(orgId).collection('invites').add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3086",
+      "reason": "To fix: an org invite from a site's members page; accept, revoke and resend address it by id, and the org invite route already names invites with createResourceUid()."
+    },
+    {
+      "site": "apps/console/components/media/media-library.component.tsx: doc(collection(firestore, scopeCollection, scopeId, 'mediaFolders'))",
+      "class": "RESOURCE",
+      "issue": "AGL-3087",
+      "count": 2,
+      "reason": "To fix: a media folder (made by a member or by the legacy-name migration); media carry it as folderId, child folders as parentId, and the public API accepts and returns it."
+    },
+    {
+      "site": "apps/tenant/app/api/forms/submit/route.ts: datasetDoc.ref.collection('records').add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3088",
+      "reason": "To fix: a dataset record a form or an automation appends; routed at /v1/datasets/{datasetId}/records/{recordId} and referenced by other records and by the submission."
+    },
+    {
+      "site": "apps/tenant/app/api/forms/submit/route.ts: hostRef.collection('formSubmissions').add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3088",
+      "reason": "To fix: a form submission; routed at /v1/sites/{siteId}/form-submissions/{submissionId}, linked from the inbox as ?submission=, and referenced by contact interactions and campaign conversions."
+    },
+    {
+      "site": "libs/plugins/workflows/src/lib/engine/run-event-actions.ts: datasetDoc.ref.collection('records').add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3088",
+      "count": 2,
+      "reason": "To fix: a dataset record a form or an automation appends; routed at /v1/datasets/{datasetId}/records/{recordId} and referenced by other records and by the submission."
+    },
+    {
+      "site": "tools/scripts/place-demo-plugin-node.mjs: screenRef.collection('versions').doc()",
+      "class": "RESOURCE",
+      "issue": "AGL-3089",
+      "reason": "To fix: a screen version; its id is in the besigner URL /screens/[screenId]/versions/[versionId] and on the screen's versionId."
+    },
+    {
+      "site": "apps/console/app/api/_lib/success-manager.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/account/close/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/account/export/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/abuse-reports/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "count": 2,
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/broadcast/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/contact-suppressions/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/coupons/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "count": 2,
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/email-send-rate/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/emails/import-history/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/emails/test/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/enterprise-billing/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/firestore-export/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/flags/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/free-workspace-cap/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/host/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "count": 2,
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/impersonate/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/lockdown/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/marketplace-reports/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/media-quarantine/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/org-discount/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "count": 2,
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/org-notes/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/org-notes/route.ts: notesRef.add(…)",
+      "class": "RECORD",
+      "reason": "A staff note on an org: listed in order by the notes route, which has no per-note address."
+    },
+    {
+      "site": "apps/console/app/api/admin/org-override/route.ts: firestore.collection('adminAudit').doc()",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/org-refund/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/plugin-reviews/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "count": 6,
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/reap-plugin-artifacts/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/reap-sending-domains/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/reap-unverified-orgs/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/reverify-plugin-versions/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/reverify-sso-domains/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/run-erasures/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/sign-plugin/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/tax-filing/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "count": 2,
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/tax-purchases/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "count": 2,
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/admin/users/manage/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "count": 6,
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/auth/sso-jit/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/billing/collaborator-allocations/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/billing/register-allocations/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/billing/retention/route.ts: retention.doc()",
+      "class": "RECORD",
+      "reason": "A retention funnel marker (a churn survey, a cancel or a delete request): read in aggregate by the funnel, never addressed by its id."
+    },
+    {
+      "site": "apps/console/app/api/billing/storage-overage/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/billing/subscription/route.ts: firebaseAdmin.app().firestore().collection('orgs').doc(orgId).collection(RETENTION_COLLECTION).doc()",
+      "class": "RECORD",
+      "reason": "A retention funnel marker (a churn survey, a cancel or a delete request): read in aggregate by the funnel, never addressed by its id."
+    },
+    {
+      "site": "apps/console/app/api/billing/usage-alerts/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/billing/usage-budget/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/billing/webhook/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/billing/webhook/route.ts: observed().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "count": 2,
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/crm/export/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/hosts/delete/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/hosts/import/route.ts: hostRef.collection('activity').add(…)",
+      "class": "RECORD",
+      "reason": "A site or org activity-feed entry: listed by query in the feed and never addressed by its id."
+    },
+    {
+      "site": "apps/console/app/api/hosts/rename/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/orgs/datasets/export/route.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/orgs/delete/route.ts: orgRef.collection(RETENTION_COLLECTION).doc()",
+      "class": "RECORD",
+      "reason": "A retention funnel marker (a churn survey, a cancel or a delete request): read in aggregate by the funnel, never addressed by its id."
+    },
+    {
+      "site": "apps/console/app/api/orgs/export-data/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/app/api/support/forum/route.ts: threadsRef.doc(threadId).collection('replies').add(…)",
+      "class": "RECORD",
+      "reason": "A message in a ticket or a reply in a thread: a row inside its parent, listed in order and never addressed by its own id."
+    },
+    {
+      "site": "apps/console/app/api/support/tickets/route.ts: ticketRef.collection('messages').add(…)",
+      "class": "RECORD",
+      "reason": "A message in a ticket or a reply in a thread: a row inside its parent, listed in order and never addressed by its own id."
+    },
+    {
+      "site": "apps/console/app/api/support/tickets/route.ts: ticketsRef.doc(ticketId).collection('messages').add(…)",
+      "class": "RECORD",
+      "reason": "A message in a ticket or a reply in a thread: a row inside its parent, listed in order and never addressed by its own id."
+    },
+    {
+      "site": "apps/console/components/staff-org-actions.component.tsx: doc(collection(firestore, 'adminAudit'))",
+      "class": "RECORD",
+      "reason": "An admin audit row written from the staff console: append-only, read by query, never addressed by its id."
+    },
+    {
+      "site": "apps/console/constants/screen-publishing.ts: doc(collection(firestore, PUBLISH_OUTBOX_COLLECTION))",
+      "class": "RECORD",
+      "reason": "A publish outbox entry: a transient queue row the tab deletes once its announce lands, and the drain ages; never addressed from outside."
+    },
+    {
+      "site": "apps/console/utils/remote-server-bundles.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/utils/server/maintenance-actor.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/tenant/utils/remote-server-bundles.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "libs/plugins/ai/src/lib/jobs/ai-jobs.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "libs/plugins/ai/src/lib/server/ai-allotments.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "libs/plugins/ai/src/lib/server/ai-usage.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "libs/plugins/ai/src/lib/server/billing-overage.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "count": 2,
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "libs/plugins/ai/src/lib/usage/assist-free-taste.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "libs/plugins/ai/src/lib/usage/assist-usage.ts: orgRef.collection('assistExchanges').doc()",
+      "class": "RECORD",
+      "reason": "AI usage telemetry that expires: an exchange and its metering signal, joined by id. The exchange id reaches the assist panel only as an opaque feedback handle."
+    },
+    {
+      "site": "libs/plugins/ai/src/lib/usage/assist-usage.ts: orgRef.collection('assistSignals').doc()",
+      "class": "RECORD",
+      "reason": "AI usage telemetry that expires: an exchange and its metering signal, joined by id. The exchange id reaches the assist panel only as an opaque feedback handle."
+    },
+    {
+      "site": "libs/plugins/commerce/src/lib/components/console/products-hub-card.component.tsx: addDoc(collection(firestore, 'hosts', hostId, 'inventoryAdjustments'), …)",
+      "class": "RECORD",
+      "reason": "A stock-ledger row: an internal line of the inventory ledger, read in aggregate and never addressed by its id."
+    },
+    {
+      "site": "libs/plugins/commerce/src/lib/components/console/products-hub-card.component.tsx: addDoc(collection(firestore, 'hosts', hostId, 'licenseKeys'), …)",
+      "class": "RECORD",
+      "reason": "A license key in the merchant's pool: the webhook hands out the key's text, and no person or URL uses the row's id."
+    },
+    {
+      "site": "libs/plugins/commerce/src/lib/server/cancel-order.ts: hostRef.collection('inventoryAdjustments').doc()",
+      "class": "RECORD",
+      "reason": "A stock-ledger row: an internal line of the inventory ledger, read in aggregate and never addressed by its id."
+    },
+    {
+      "site": "libs/plugins/commerce/src/lib/server/notify-restock.ts: firebaseAdmin.app().firestore().collection('hosts').doc(hostId).collection('restockAlerts').add(…)",
+      "class": "RECORD",
+      "reason": "A back-in-stock request: a queue row the restock job reads by query and marks notified; no person or URL uses its id."
+    },
+    {
+      "site": "libs/plugins/commerce/src/lib/server/reserve-stock.ts: hostRef.collection('inventoryAdjustments').doc()",
+      "class": "RECORD",
+      "reason": "A stock-ledger row: an internal line of the inventory ledger, read in aggregate and never addressed by its id."
+    },
+    {
+      "site": "libs/plugins/crm/src/lib/server/erase-person.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "libs/plugins/inbox/src/lib/server.ts: context.submissionRef.collection(LIST_ASSIGNMENTS_SUBCOLLECTION).add(…)",
+      "class": "RECORD",
+      "reason": "A reply or a list assignment logged under a form submission: the submission's own history, read only by the inbox module."
+    },
+    {
+      "site": "libs/plugins/inbox/src/lib/server.ts: submissionRef.collection(REPLIES_SUBCOLLECTION).add(…)",
+      "class": "RECORD",
+      "reason": "A reply or a list assignment logged under a form submission: the submission's own history, read only by the inbox module."
+    },
+    {
+      "site": "libs/plugins/workflows/src/lib/engine/run-event-actions.ts: hostRef.collection('activity').add(…)",
+      "class": "RECORD",
+      "count": 3,
+      "reason": "A site or org activity-feed entry: listed by query in the feed and never addressed by its id."
+    },
+    {
+      "site": "libs/plugins/workflows/src/lib/engine/run-event-workflows.ts: hostRef.collection('activity').add(…)",
+      "class": "RECORD",
+      "reason": "A site or org activity-feed entry: listed by query in the feed and never addressed by its id."
+    },
+    {
+      "site": "libs/plugins/workflows/src/lib/server.ts: hostRef.collection('activity').add(…)",
+      "class": "RECORD",
+      "reason": "A site or org activity-feed entry: listed by query in the feed and never addressed by its id."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/admin-audit.ts: collection.doc()",
+      "class": "RECORD",
+      "reason": "The shared admin audit writer's new row: append-only, read by query, never addressed by its id."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/erase-person.ts: db.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/erase.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/erase.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "count": 2,
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/notifications.ts: db.collection('users').doc(userDoc.id).collection('notifications').doc()",
+      "class": "RECORD",
+      "reason": "A notification in a user's own feed: listed by query and marked read in place from its row; never shown, routed or referenced by another document."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/organizations.ts: firestore().collection('hosts').doc(hostId).collection('activity').add(…)",
+      "class": "RECORD",
+      "reason": "A site or org activity-feed entry: listed by query in the feed and never addressed by its id."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/organizations.ts: firestore().collection('orgs').doc(orgId).collection('activity').add(…)",
+      "class": "RECORD",
+      "reason": "A site or org activity-feed entry: listed by query in the feed and never addressed by its id."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/replay-erasures.ts: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/sso-enforcement.ts: db.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "libs/tenant/feature/instance/src/lib/hooks/use-host-activity-logger.ts: addDoc(collection(firestore, 'hosts', hostId, 'activity'), …)",
+      "class": "RECORD",
+      "reason": "A site activity-feed entry written by the console's logger hook: listed by query and never addressed by its id."
+    },
+    {
+      "site": "tools/scripts/attest-sso-domain.mjs: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "tools/scripts/migrate-enterprise-plan.mjs: firestore.collection('adminAudit').add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
+    },
+    {
+      "site": "apps/console/components/analytics/screen-analytics-card.component.tsx: doc(firestore, 'hosts', hostId, 'screenAnalytics', `${screenId}:${id}`)",
+      "class": "DELIBERATE",
+      "reason": "A screen's daily analytics counter, keyed <screenId>:<day> so every view that day increments one document."
+    },
+    {
+      "site": "apps/tenant/app/api/analytics/collect/route.ts: firebaseAdmin.app().firestore().collection('hosts').doc(hostId).collection('screenAnalytics').doc(`${screenId}:${day}`)",
+      "class": "DELIBERATE",
+      "reason": "A screen's daily analytics counter, keyed <screenId>:<day> so every view that day increments one document."
+    },
+    {
+      "site": "apps/tenant/app/api/analytics/collect/route.ts: firebaseAdmin.app().firestore().collection('hosts').doc(hostId).collection('screenAnalytics').doc(`${screenId}:${new Date().toISOString().slice(0, 10)}`)",
+      "class": "DELIBERATE",
+      "reason": "A screen's daily analytics counter, keyed <screenId>:<day> so every view that day increments one document."
+    },
+    {
+      "site": "apps/tenant/app/api/edit-context/route.ts: firestore.collection('hosts').doc(claims.hostId).collection('screenAnalytics').doc(`${screenId}:${todayId}`)",
+      "class": "DELIBERATE",
+      "reason": "A screen's daily analytics counter, keyed <screenId>:<day> so every view that day increments one document."
+    },
+    {
+      "site": "cloud/functions/src/index.ts: firestore().collection(REFUSAL_COLLECTION).doc(`${REFUSAL_DOC_PREFIX}${bucketStart}`)",
+      "class": "DELIBERATE",
+      "reason": "The refusal counter's window, keyed by its prefix and window start so every refusal in the window meets the same document."
+    },
+    {
+      "site": "libs/plugins/bookings/src/lib/server.ts: bookingsRef.doc()",
+      "class": "DELIBERATE",
+      "reason": "A booking's id is the guest's 'Reference:' in their emails and Stripe's idempotency key (booking-<id>), a format guests and Stripe already hold."
+    },
+    {
+      "site": "libs/plugins/commerce/src/lib/server/billing-webhook.ts: hostRef.collection('giftCards').doc(code)",
+      "class": "DELIBERATE",
+      "reason": "A gift card is named by its redemption code (GC- and 12 hex of an HMAC over the Stripe object), which the buyer types at checkout."
+    },
+    {
+      "site": "libs/plugins/commerce/src/lib/server/manual-tax-rate.ts: hostRef.collection('stripeTaxRates').doc(cacheKey)",
+      "class": "DELIBERATE",
+      "reason": "A cache of one Stripe TaxRate per rate and label, keyed p<rate>-<label> so the same rate is never created twice."
+    },
+    {
+      "site": "libs/plugins/commerce/src/lib/server/reserve.ts: hostRef.collection('reservations').doc()",
+      "class": "DELIBERATE",
+      "reason": "A reservation's id is the guest's 'Reference:' in the confirmation email, a format guests already hold."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/account-emails.ts: firestore().collection(EMAIL_VERIFICATIONS_COLLECTION).doc(tokenId)",
+      "class": "DELIBERATE",
+      "reason": "An email verification token: the id is the 128-bit random lookup half of the {tokenId}.{secret} link, whose secret is stored only as a hash."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/auth-handoff.ts: firestore().collection(AUTH_HANDOFFS_COLLECTION).doc(requestId)",
+      "class": "DELIBERATE",
+      "reason": "A pending console auth handoff: a random request id paired with a verifier secret, redeemed once before a short TTL; not a resource."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/rate-limit-store.ts: firestore.collection(RATE_LIMIT_COLLECTION).doc(`${BEACON_HEARTBEAT_DOC_PREFIX}${service}`)",
+      "class": "DELIBERATE",
+      "count": 2,
+      "reason": "A fixed-window rate counter keyed by its prefix and window start (or service), so every request in the window meets the same document."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/rate-limit-store.ts: firestore.collection(RATE_LIMIT_COLLECTION).doc(`${DEGRADATION_DOC_PREFIX}${bucketStart}`)",
+      "class": "DELIBERATE",
+      "reason": "A fixed-window rate counter keyed by its prefix and window start (or service), so every request in the window meets the same document."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/rate-limit-store.ts: firestore.collection(RATE_LIMIT_COLLECTION).doc(`${SERVER_ERROR_DOC_PREFIX}${bucketStart}`)",
+      "class": "DELIBERATE",
+      "reason": "A fixed-window rate counter keyed by its prefix and window start (or service), so every request in the window meets the same document."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/rate-limit-store.ts: firestore.collection(RATE_LIMIT_COLLECTION).doc(`${SIGNUP_ATTEMPT_DOC_PREFIX}${bucketStart}`)",
+      "class": "DELIBERATE",
+      "reason": "A fixed-window rate counter keyed by its prefix and window start (or service), so every request in the window meets the same document."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/rate-limit-store.ts: firestore.collection(RATE_LIMIT_COLLECTION).doc(`${SIGNUP_REFUSAL_DOC_PREFIX}${bucketStart}`)",
+      "class": "DELIBERATE",
+      "reason": "A fixed-window rate counter keyed by its prefix and window start (or service), so every request in the window meets the same document."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/rate-limit-store.ts: firestore.collection(RATE_LIMIT_COLLECTION).doc(`${SIGNUP_SERVED_DOC_PREFIX}${bucketStart}`)",
+      "class": "DELIBERATE",
+      "reason": "A fixed-window rate counter keyed by its prefix and window start (or service), so every request in the window meets the same document."
+    },
+    {
+      "site": "tools/scripts/backfill-reconstructed-activity.mjs: activityRef.doc(entryId)",
+      "class": "DELIBERATE",
+      "reason": "A reconstructed activity row keyed recon-<sub>-<artifactId>, so running the backfill again overwrites rather than duplicates."
+    },
+    {
+      "site": "tools/scripts/lib/seed-demo.mjs: orgRef.collection('invites').doc(`seed-invite-${brand.id}`)",
+      "class": "DELIBERATE",
+      "reason": "Seed data keyed by its place or slug (seed-<n>, seed-invite-<brandId>, cl-<slug>), so seeding again overwrites rather than duplicates."
+    },
+    {
+      "site": "tools/scripts/lib/seed-demo.mjs: ref.collection('records').doc(`seed-${index}`)",
+      "class": "DELIBERATE",
+      "reason": "Seed data keyed by its place or slug (seed-<n>, seed-invite-<brandId>, cl-<slug>), so seeding again overwrites rather than duplicates."
+    },
+    {
+      "site": "tools/scripts/seed-changelog.mjs: changelog.collection('entries').doc(`cl-${entry.slug}`)",
+      "class": "DELIBERATE",
+      "reason": "Seed data keyed by its place or slug (seed-<n>, seed-invite-<brandId>, cl-<slug>), so seeding again overwrites rather than duplicates."
+    },
+    {
+      "site": "tools/scripts/seed-e2e.mjs: teamDataset.collection('records').doc(`seed-${index}`)",
+      "class": "DELIBERATE",
+      "reason": "Seed data keyed by its place or slug (seed-<n>, seed-invite-<brandId>, cl-<slug>), so seeding again overwrites rather than duplicates."
+    }
+  ]
+}

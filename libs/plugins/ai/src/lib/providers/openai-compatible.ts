@@ -27,6 +27,7 @@ import {
   type AiProviderRequest,
   type AiResult,
   type AiStreamEvent,
+  type AiToolSchemaLimits,
   type AiToolUse,
   type AiUsage,
 } from './contract'
@@ -68,6 +69,17 @@ export function openAiCompatibleHost(): string {
   } catch {
     return ''
   }
+}
+
+/**
+ * What the strict function shape this adapter sends compiles: every property
+ * of every object listed in `required`, so no optional parameter at all — an
+ * optional field is a union with `null` instead. No other bound is stated:
+ * the endpoint is whatever `AI_OPENAI_COMPAT_BASE_URL` names, and no one
+ * count of tools or unions holds for every endpoint that speaks the shape.
+ */
+export const OPENAI_COMPATIBLE_TOOL_SCHEMA_LIMITS: AiToolSchemaLimits = {
+  optionalParameters: 0,
 }
 
 export function openAiCompatibleFailureIsRetryable(status: number | null): boolean {
@@ -325,6 +337,7 @@ export const openAiCompatibleProvider: AiProvider = {
   get endpointHost() {
     return openAiCompatibleHost()
   },
+  toolSchemaLimits: OPENAI_COMPATIBLE_TOOL_SCHEMA_LIMITS,
   models(): readonly AiModelDescriptor[] {
     return aiModelIdsForProvider(OPENAI_COMPATIBLE_PROVIDER_ID)
       .map((id) => aiCatalogEntry(id))

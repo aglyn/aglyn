@@ -77,6 +77,18 @@ const mockRevalidateLivePages = jest.fn(
 
 const mockCreateResource = jest.fn(async () => ({ id: 'created-id' }))
 
+/**
+ * The host role the page reads. One held object per role, swapped per case:
+ * the page destructures it, and a double rebuilt per call is the shape that
+ * turns a hook into a silent re-render loop.
+ */
+const OWNER_ROLE = { hostRole: 'owner', canPublish: true, loaded: true }
+const AUTHOR_ROLE = { hostRole: 'author', canPublish: false, loaded: true }
+const mockHostRole = { current: OWNER_ROLE as typeof OWNER_ROLE }
+
+/** The options the page hands its document hook, `onSaved` among them. */
+const mockBesignerDocument = { options: undefined as unknown }
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: mockUser }),
@@ -218,20 +230,25 @@ jest.mock('@aglyn/besigner-ui', () => ({
   useAddElementDrawerCallback: () => () => undefined,
   useClearCanvasCallback: () => async () => undefined,
   useRepairDocumentCallback: () => async () => undefined,
-  useBesignerDocument: () => ({
-    saveAvailable: false,
-    remoteChanged: false,
-    draft: { available: false, sharedDraftUnopened: false },
-    handleSave: () => undefined,
-    refuseOverUnopenedDraft: () => false,
-    jsonOpen: false,
-    openJsonEditor: () => undefined,
-    closeJsonEditor: () => undefined,
-    handleJsonSave: () => undefined,
-    hasError: false,
-    notFound: false,
-    status: 'success',
-  }),
+  useBesignerDocument: (options: unknown) => {
+    // Kept so a case can play the canvas save's `onSaved` the way the hook
+    // does once a write lands.
+    mockBesignerDocument.options = options
+    return {
+      saveAvailable: false,
+      remoteChanged: false,
+      draft: { available: false, sharedDraftUnopened: false },
+      handleSave: () => undefined,
+      refuseOverUnopenedDraft: () => false,
+      jsonOpen: false,
+      openJsonEditor: () => undefined,
+      closeJsonEditor: () => undefined,
+      handleJsonSave: () => undefined,
+      hasError: false,
+      notFound: false,
+      status: 'success',
+    }
+  },
   useLayoutChromeCanvas: () => ({ chromeCanvas: null }),
   useRenderedCanvasElements: () => ({ elements: { current: {} } }),
   withBesignerContext: (component: unknown) => component,
@@ -306,9 +323,19 @@ jest.mock('../components/host-id-provider', () => ({
   useHostSubdomain: () => 'shop',
 }))
 jest.mock('../components/screen-social-image-field.component', () => nullComponent)
+// Reduced to the one act the page wires it to: saving this version's values
+// for a layout's properties.
 jest.mock('../components/screen-layout-properties.component', () => ({
   __esModule: true,
-  default: () => null,
+  default: ({
+    onSave,
+  }: {
+    onSave: (layoutId: string, values: Record<string, unknown>) => unknown
+  }) => (
+    <button onClick={() => onSave('layout-1', { tagline: 'Now hiring' })}>
+      Save layout values
+    </button>
+  ),
   useLayoutChainProperties: () => [],
 }))
 jest.mock('../hooks/use-plugin-drawer-registration', () => ({
@@ -357,11 +384,12 @@ jest.mock('../hooks/use-current-org', () => {
   const useCurrentOrg = () => currentOrg
   return { __esModule: true, useCurrentOrg, default: useCurrentOrg }
 })
-// At the owner's answer: none of these saves is gated by the host role, and
-// the owner's standing leaves the routing map the only thing deciding.
+// At the owner's answer unless a case says otherwise: none of these saves is
+// gated by the host role, and the owner's standing leaves the routing map the
+// only thing deciding. The author cases below prove the first half.
 jest.mock('../hooks/use-host-role', () => ({
   __esModule: true,
-  default: () => ({ hostRole: 'owner', canPublish: true, loaded: true }),
+  default: () => mockHostRole.current,
 }))
 jest.mock('../constants/app-setup', () => ({}))
 jest.mock('../constants/preview-state', () => ({
@@ -421,6 +449,8 @@ beforeEach(() => {
   }
   mockScreenDoc.fromCache = false
   mockScreenDoc.status = 'success'
+  mockHostRole.current = OWNER_ROLE
+  mockBesignerDocument.options = undefined
 })
 
 /** Take the screen off the site: no entry in the routing map. */
@@ -653,5 +683,81 @@ describe('the layout binding announces only on the version the site serves (AGL-
 
     await waitFor(() => expect(snackbarsOf('error')).toHaveLength(1))
     expect(mockRevalidateLivePages).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * An AUTHOR's saves reach the live page too (AGL-2934).
+ *
+ * The rules let an author write every field below on a live screen, so the
+ * page must not start asking the host role before it announces — hiding the
+ * announce from an author would be a fix for the route's refusal that leaves
+ * the live page exactly as stale. Whether the route then ADMITS the author is
+ * `screens-revalidate-authz.spec.ts` and `author-live-save-revalidates.spec.ts`;
+ * what is pinned here is that the page asks.
+ *
+ * A shortfall on any of them leads with "Saved.". These are saves, and the
+ * person making them may be an author, who cannot publish at all.
+ */
+describe("an AUTHOR's saves on a live screen (AGL-2934)", () => {
+  /** The route answering an author on a locked site: nothing was dropped. */
+  const REFUSED = {
+    revalidated: 0,
+    pathsDropped: 0,
+    scanTruncated: false,
+    reason: 'console-423',
+  }
+
+  beforeEach(() => {
+    mockHostRole.current = AUTHOR_ROLE
+  })
+
+  it('Save SEO announces the published screen', async () => {
+    render(<ScreenBesigner />)
+
+    editDescriptionAndSave()
+
+    await waitFor(() => expect(mockRevalidateLivePages).toHaveBeenCalledTimes(1))
+    expect(mockRevalidateLivePages).toHaveBeenCalledWith(THIS_SCREEN)
+  })
+
+  it('the password Save announces the published screen', async () => {
+    render(<ScreenBesigner />)
+
+    typePasswordAndSave('hunter2')
+
+    await waitFor(() => expect(mockRevalidateLivePages).toHaveBeenCalledTimes(1))
+    expect(mockRevalidateLivePages).toHaveBeenCalledWith(THIS_SCREEN)
+  })
+
+  it("this version's layout values announce, and a shortfall says SAVED", async () => {
+    mockRevalidateLivePages.mockResolvedValueOnce(REFUSED)
+    render(<ScreenBesigner />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save layout values' }))
+
+    await waitFor(() => expect(snackbarsOf('warning')).toHaveLength(1))
+    expect(mockUpdateVersionDoc).toHaveBeenCalledWith({
+      'layoutPropValues.layout-1': { tagline: 'Now hiring' },
+    })
+    expect(mockRevalidateLivePages).toHaveBeenCalledWith(THIS_SCREEN)
+    const [[message]] = snackbarsOf('warning')
+    expect(message).toMatch(/^Saved\. The live pages could not be refreshed/)
+  })
+
+  it('a canvas save of the live version says SAVED when its drop falls short', async () => {
+    mockRevalidateLivePages.mockResolvedValueOnce(REFUSED)
+    render(<ScreenBesigner />)
+
+    // What the document hook calls once a save of this version has landed.
+    const { onSaved } = mockBesignerDocument.options as { onSaved: () => unknown }
+    await act(async () => {
+      onSaved()
+    })
+
+    await waitFor(() => expect(snackbarsOf('warning')).toHaveLength(1))
+    expect(mockRevalidateLivePages).toHaveBeenCalledWith(THIS_SCREEN)
+    const [[message]] = snackbarsOf('warning')
+    expect(message).toMatch(/^Saved\. The live pages could not be refreshed/)
   })
 })

@@ -79,6 +79,6 @@ describe('sharp module-shape resolution (AGL-1468)', () => {
     })
 
     expect(outcome.error).toBeUndefined()
-    expect(outcome.variants).toEqual([320, 640])
+    expect(outcome.variants).toEqual([320, 640, 1280, 1920])
   })
 })

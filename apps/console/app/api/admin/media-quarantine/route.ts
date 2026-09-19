@@ -38,14 +38,14 @@
  *   A click is a request, and a request that never left the pointer looks
  *   exactly like one that succeeded.
  *
- * What this route must never do, and does not: touch the media document,
- * the object in Storage, or `counters/media`. The storage counter is a
- * BILLING input — the file still exists and still belongs to the org. It is
- * suppressed, not erased, and quietly re-billing a customer while refusing
- * their file would be a worse bug than the one quarantine fixes. The only
- * two collections this route writes are `mediaQuarantines` and
- * `adminAudit`. It READS one media document in `by: "media"` mode, and
- * only to derive keys from it.
+ * What this route must never do, and does not: touch the object in Storage,
+ * `counters/media`, or any media field describing the file. The storage
+ * counter is a BILLING input — the file still exists and still belongs to the
+ * org. It is suppressed, not erased, and quietly re-billing a customer while
+ * refusing their file would be a worse bug than the one quarantine fixes. It
+ * writes `mediaQuarantines` and `adminAudit`, and on a media document only
+ * clears the delivery copy record (AGL-2824). It READS one media document in
+ * `by: "media"` mode to derive keys.
  *
  * ## `by: "media"` — the mode the staff form uses (AGL-1687)
  *
@@ -126,6 +126,10 @@ import {
   rotateDownloadTokenForObject,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import {
+  scheduleMediaDeliveryCopies,
+  takeDownAssetDeliveryCopies,
+} from '../../../../utils/server/media-delivery-copies'
 import { FieldValue } from 'firebase-admin/firestore'
 
 export const dynamic = 'force-dynamic'
@@ -186,6 +190,13 @@ const QUARANTINE_KEY =
  */
 interface ResolvedAsset {
   scopeSegment: string
+  /** The library the document is in, which names its delivery copies. */
+  collection: 'hosts' | 'orgs'
+  scopeId: string
+  /** The library document, for the copy a release schedules. */
+  scopeRef: FirebaseFirestore.DocumentReference
+  /** The media document, for the one field a takedown clears on it. */
+  ref: FirebaseFirestore.DocumentReference
   mediaId: string
   fileName: string | null
   contentSha256: string | null
@@ -226,7 +237,8 @@ async function resolveAsset(
   const scopeRef = orgId
     ? firestore.collection('orgs').doc(orgId)
     : firestore.collection('hosts').doc(hostId)
-  const snapshot = await scopeRef.collection('media').doc(mediaId).get()
+  const mediaRef = scopeRef.collection('media').doc(mediaId)
+  const snapshot = await mediaRef.get()
   if (!snapshot.exists) {
     // 404 rather than a silent empty answer: an operator acting on a media
     // id they misread must be told, not handed a form that quietly
@@ -240,6 +252,10 @@ async function resolveAsset(
   return {
     asset: {
       scopeSegment: orgId ? `org:${orgId}` : hostId,
+      collection: orgId ? 'orgs' : 'hosts',
+      scopeId: orgId || hostId,
+      scopeRef,
+      ref: mediaRef,
       mediaId,
       fileName: value('fileName'),
       contentSha256: value('contentSha256'),
@@ -734,6 +750,43 @@ async function handler(request: Request): Promise<Response> {
           })
         : { rotated: false, reason: 'skipped' as const }
 
+    /**
+     * THE DELIVERY PROVIDER'S COPIES (AGL-2824) — the other place a video's
+     * bytes can be fetched from without this platform's CDN route.
+     *
+     * The deny list already stops new delivery URLs, since the CDN refuses a
+     * quarantined asset before it redirects. What that leaves is the URLs it
+     * minted before, which live for their short lifetime. Removing the copies
+     * ends those too, and the provider keeps no cache of its own to purge.
+     *
+     * Same scope as the raw-URL revocation: the one asset the operator named.
+     * Unlike it, this is reversible — a release copies the video again — so
+     * it needs no opt-out. The copy record on the media document is the one
+     * field this route clears there, because it would otherwise name objects
+     * that are gone. Nothing runs when no provider is configured to store.
+     */
+    const deliveryCopies =
+      action === 'quarantine' && asset
+        ? await takeDownAssetDeliveryCopies({
+            asset: {
+              collection: asset.collection,
+              scopeId: asset.scopeId,
+              mediaId: asset.mediaId,
+            },
+            docRef: asset.ref,
+          })
+        : null
+    if (action === 'release' && asset) {
+      scheduleMediaDeliveryCopies({
+        scope: {
+          collection: asset.collection,
+          scopeId: asset.scopeId,
+          scopeRef: asset.scopeRef,
+        },
+        mediaId: asset.mediaId,
+      })
+    }
+
     // One row PER KEY. A release that cleared two entries is two facts, and
     // collapsing them would leave the second one with no record that it was
     // ever in force.
@@ -757,6 +810,8 @@ async function handler(request: Request): Promise<Response> {
         // nobody can explain a year later (AGL-1615).
         rawUrlRevoked: revocation.rotated,
         rawUrlRevocation: revocation.reason,
+        // Null when no delivery provider was involved (AGL-2824).
+        deliveryCopiesRemoved: deliveryCopies ? deliveryCopies.removed : null,
         at: FieldValue.serverTimestamp(),
       })
     }
@@ -791,6 +846,9 @@ async function handler(request: Request): Promise<Response> {
         // reason travels with it and the console renders the reason.
         rawUrlRevoked: revocation.rotated,
         rawUrlRevocation: revocation.reason,
+        // What the takedown removed at the delivery provider, or null when no
+        // provider is configured (AGL-2824). `failed` means copies may remain.
+        deliveryCopies,
         notice: verified ? mediaQuarantineNotice(verified) : null,
         ...assetPayload(asset, key, assetKeys, entriesAfter),
       },

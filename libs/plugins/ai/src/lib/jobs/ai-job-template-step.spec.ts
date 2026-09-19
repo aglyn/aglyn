@@ -258,6 +258,9 @@ const AUTHOR_TREE = {
   },
 }
 
+/** The id the job recorded for its template when it was created (AGL-3079). */
+const TEMPLATE_ID = 'drftTemplt'
+
 function job(patch: Partial<AiJob> = {}): AiJob {
   return {
     $id: 'job-1',
@@ -269,7 +272,7 @@ function job(patch: Partial<AiJob> = {}): AiJob {
     inputs: { subject: 'entry', collectionId: 'col-blog' },
     steps: [
       { name: 'plan', status: 'done', creditsSpent: 3 },
-      { name: 'generate', status: 'running', creditsSpent: 0 },
+      { name: 'generate', status: 'running', creditsSpent: 0, draftIds: { template: TEMPLATE_ID } },
     ],
     outputs: [],
     creditsReserved: 50,
@@ -353,7 +356,7 @@ describe('the template step', () => {
       outputs: [
         {
           resource: 'template',
-          id: 'job-1',
+          id: TEMPLATE_ID,
           versionId: null,
           hostId: 'host-1',
           hostSubdomain: 'acme',
@@ -395,8 +398,8 @@ describe('the template step', () => {
     expect(prompt).toContain('Title token: {{entry.title}}')
     expect(prompt).toContain('{{entry.coverImage}}')
 
-    expect(commits).toEqual(['hosts/host-1/templates/job-1'])
-    const template = mockDocs.get('hosts/host-1/templates/job-1') ?? {}
+    expect(commits).toEqual([`hosts/host-1/templates/${TEMPLATE_ID}`])
+    const template = mockDocs.get(`hosts/host-1/templates/${TEMPLATE_ID}`) ?? {}
     expect(template).toMatchObject({
       kind: 'page',
       displayName: 'Blog post page',
@@ -448,11 +451,21 @@ describe('the template step', () => {
     expect(outcome.outputs).toEqual([
       expect.objectContaining({ resource: 'template', label: 'Author page template' }),
     ])
-    expect(mockDocs.get('hosts/host-1/templates/job-1')).toMatchObject({
+    expect(mockDocs.get(`hosts/host-1/templates/${TEMPLATE_ID}`)).toMatchObject({
       displayName: 'Author page template',
       slug: 'author-page-template',
     })
     expect(mockRunAiRequest.mock.calls[0][0].messages[0].content).toContain('The page is for an author.')
+  })
+
+  it('reports the template an earlier run wrote under the id the job recorded, without asking the model again (AGL-3079)', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(treeAnswer(AUTHOR_TREE))
+    const first = await createAiJobTemplateStep()(context({ inputs: { subject: 'author' }, plan: null }))
+    const again = await createAiJobTemplateStep()(context({ inputs: { subject: 'author' }, plan: null }))
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect([first.outputs[0].id, again.outputs[0].id]).toEqual([TEMPLATE_ID, TEMPLATE_ID])
+    expect(again).toMatchObject({ estCostUsd: 0 })
+    expect(commits).toEqual([`hosts/host-1/templates/${TEMPLATE_ID}`])
   })
 
   it('stops for the member, spending nothing, when the site has no template to spare', async () => {

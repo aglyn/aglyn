@@ -176,6 +176,9 @@ jobs:
       # historically let a broken build reach production.
       - run: npx nx run console:build:production
       - run: npx nx run tenant:build:production
+      # The published page's before-settle JavaScript, read from the build
+      # above (AGL-3082): the bytes the page-view rate is priced on. ~1s.
+      - run: node tools/scripts/check-tenant-wire-weight.mjs
       - run: npx nx run docs:build
 
   # The aggregator. `success` from every part is the only pass: a part that did

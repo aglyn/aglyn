@@ -171,6 +171,12 @@ const ALLOW_SHARED = {
   AGLYN_TENANT_DEMO: 'the demo site identifier',
   USAGE_EMAIL_FROM: 'the From: address on usage mail, printed in every send',
   NODE_OPTIONS: 'node runtime flags, no credential material',
+  // Video delivery (AGL-2824). The account, the bucket and the Worker's host
+  // name where the copies live; R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and
+  // MEDIA_VIDEO_DELIVERY_SECRET are the credentials, and are absent here.
+  R2_ACCOUNT_ID: 'an account identifier, visible in every R2 endpoint URL',
+  R2_VIDEO_BUCKET: 'a bucket name, which the Worker binding also names',
+  MEDIA_VIDEO_DELIVERY_HOST: 'a hostname in every delivery URL a viewer is handed',
 }
 
 /**

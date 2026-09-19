@@ -191,6 +191,23 @@ export const FLAG_DOC_PAGES: Partial<
       checkNoPriceClaim: true,
     },
   ],
+  // AGL-2824. The flag moves WHERE a stored video's bytes are served from — a
+  // configured delivery provider behind a short-lived signed redirect instead
+  // of this platform's own media route — and changes nothing a customer sees,
+  // chooses or configures, so no customer page describes it. The one page
+  // that names it is the self-hosting environment reference, which documents
+  // the provider's settings and discloses beside them that the flag ships off.
+  release_video_delivery: [
+    {
+      path: 'docs/developers/self-hosting-environment.md',
+      disclosure: [
+        /## Video delivery[\s\S]{0,400}`release_video_delivery`\s+flag\s+on\s+for\s+a\s+workspace\s+\(\*\*off\*\*\s+by\s+default/,
+      ],
+      checkNoPriceClaim: false,
+      priceClaimNote:
+        'The environment reference documents every setting the product reads, and several state dollar defaults (the AI spend ceilings among them). A price claim there belongs to those settings, not to this flag.',
+    },
+  ],
   // AGL-2938. The flag closes the AI job routes, and with them the Theme
   // assistant, which asks the jobs route before it shows anything — the first
   // generative surface a customer page describes, which moved this key out of

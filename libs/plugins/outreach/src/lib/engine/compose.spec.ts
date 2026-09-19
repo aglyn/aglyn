@@ -264,10 +264,10 @@ describe('composeOutreachEmail: threading', () => {
     const result = composeOutreachEmail(
       input({
         enrollment: { ...inThread, stepIndex: 3 },
-        templateBody: 'Hi {{contact.firstName}}, the founding offer ends soon.',
+        templateBody: 'Hi {{contact.firstName}}, closing the loop on my last note.',
       }),
     )
-    expect(result.email?.text).toBe(`Hi Casey, the founding offer ends soon.\n\n${FOOTER}`)
+    expect(result.email?.text).toBe(`Hi Casey, closing the loop on my last note.\n\n${FOOTER}`)
     expect(composeOutreachEmail(input({ enrollment: { ...inThread, stepIndex: 3 } })).error?.code).toBe('missing_body')
   })
 

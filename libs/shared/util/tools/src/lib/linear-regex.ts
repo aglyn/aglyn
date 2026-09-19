@@ -16,8 +16,10 @@
  */
 
 /**
- * A linear-time regular-expression engine (SEC-M8 / AGL-1881), used for host
- * redirect rules.
+ * A linear-time regular-expression engine (SEC-M8 / AGL-1881), for patterns
+ * someone other than the platform wrote that run where every tenant renders:
+ * host redirect rules, and the conditions a component or layout property
+ * declares (AGL-2893).
  *
  * WHY THIS EXISTS
  *
@@ -27,7 +29,10 @@
  * shared by every tenant. `RegExp.prototype.exec` is a backtracking matcher,
  * so a pattern like `(a|a|aa)+` against `"aaaa…a!"` costs exponential time:
  * measured at 59 s for a 9-character pattern and a 27-character path, and it
- * keeps doubling from there. That is a multi-tenant denial of service.
+ * keeps doubling from there. That is a multi-tenant denial of service. A
+ * property condition's pattern is the same hazard with a wider door: it can
+ * arrive from a marketplace listing, and it runs on every page that places
+ * the component and in the console of everyone who installed it.
  *
  * Three heuristics have been tried and bypassed (AGL-505 star height, a
  * length cap, nesting limits). A shape heuristic can never be sound: deciding
@@ -58,13 +63,18 @@
  *
  * It is not a general-purpose RegExp replacement. It implements the subset
  * documented in `UNSUPPORTED_SYNTAX` below and nothing else, and it makes no
- * attempt at unicode mode, sticky/global state, or `lastIndex`.
+ * attempt at unicode mode or `lastIndex`. Of the flags, `i`, `m`, `s` and `y`
+ * mean what they mean to a fresh `RegExp`'s `test` (see {@link FLAG_CHARS});
+ * `g` and `d` change nothing a match answers, so they are accepted and have
+ * no effect; `u` and `v` are refused.
  */
 
 /**
  * Syntax deliberately outside the supported subset. Each entry is a
  * construct that either cannot be simulated in linear time at all
- * (backreferences, lookaround) or that is simply not implemented.
+ * (backreferences, lookaround) or that is simply not implemented. Word
+ * boundaries are the exception `compileLinearTest` makes: it reads them, and
+ * `compileLinearPattern`, which redirect rules are held to, does not.
  */
 export const UNSUPPORTED_SYNTAX = [
   'lookahead `(?=…)` / `(?!…)`',
@@ -111,10 +121,127 @@ type Node =
   | { t: 'any' }
   | { t: 'assertStart' }
   | { t: 'assertEnd' }
+  /** `\b`, or `\B` when negated — parsed only for `compileLinearTest`. */
+  | { t: 'wordBoundary'; negated: boolean }
   | { t: 'group'; index: number; node: Node }
 
 /** Thrown for any pattern outside the supported subset. Never escapes. */
 class PatternError extends Error {}
+
+// ---------------------------------------------------------------------------
+// Flags
+// ---------------------------------------------------------------------------
+
+/** What a pattern's flags ask of a match. */
+interface Flags {
+  /** `i`: characters compare by their case-folded form. */
+  ignoreCase: boolean
+  /** `m`: `^` and `$` also hold beside a line terminator. */
+  multiline: boolean
+  /** `s`: `.` matches a line terminator too. */
+  dotAll: boolean
+  /** `y`: a match starts at the beginning of the input or not at all. */
+  sticky: boolean
+}
+
+/**
+ * The flags a pattern may carry, as the characters `RegExp` spells them.
+ * `g` and `d` are here because a fresh `RegExp`'s `test` answers the same
+ * with them as without; `u` and `v` are not, because unicode mode is not
+ * implemented.
+ */
+export const FLAG_CHARS = 'dgimsy'
+
+/** A pattern with no flags — what every redirect rule is compiled with. */
+const NO_FLAGS: Flags = {
+  ignoreCase: false,
+  multiline: false,
+  dotAll: false,
+  sticky: false,
+}
+
+/** Reads a flags string, refusing what `RegExp` would and what is unsupported. */
+function parseFlags(flags: string): Flags {
+  const seen = new Set<string>()
+  for (const flag of flags) {
+    if (flag === 'u' || flag === 'v') {
+      throw new PatternError(`the ${flag} flag is not supported`)
+    }
+    if (!FLAG_CHARS.includes(flag)) {
+      throw new PatternError(`"${flag}" is not a pattern flag`)
+    }
+    if (seen.has(flag)) throw new PatternError(`the ${flag} flag is repeated`)
+    seen.add(flag)
+  }
+  return {
+    ignoreCase: seen.has('i'),
+    multiline: seen.has('m'),
+    dotAll: seen.has('s'),
+    sticky: seen.has('y'),
+  }
+}
+
+/**
+ * One UTF-16 code unit case-folded the way `RegExp` folds it without the `u`
+ * flag (ECMAScript `Canonicalize`): to its upper case, unless that is more
+ * than one unit, or would carry a non-ASCII character into ASCII.
+ */
+function canonicalize(code: number): number {
+  const upper = String.fromCharCode(code).toUpperCase()
+  if (upper.length !== 1) return code
+  const folded = upper.charCodeAt(0)
+  return code >= 128 && folded < 128 ? code : folded
+}
+
+/**
+ * Every code unit whose case-folded form is another, with that form, as flat
+ * `[unit, folded, …]` pairs in unit order. Built once, on the first pattern
+ * that asks for `i`.
+ */
+let foldedUnits: number[] | undefined
+function unitsThatFold(): number[] {
+  if (!foldedUnits) {
+    foldedUnits = []
+    for (let unit = 0; unit <= 0xffff; unit++) {
+      const folded = canonicalize(unit)
+      if (folded !== unit) foldedUnits.push(unit, folded)
+    }
+  }
+  return foldedUnits
+}
+
+/**
+ * A class's ranges with the case-folded form of every member added, so that
+ * testing an input's folded form against them asks what `RegExp` asks: is
+ * there a member whose folded form this is. Every folded form folds to
+ * itself, so the members left as written are never an input's folded form
+ * unless they already fold to themselves.
+ */
+function foldRanges(ranges: number[]): number[] {
+  const units = unitsThatFold()
+  const added = new Set<number>()
+  for (let i = 0; i < ranges.length; i += 2) {
+    const lo = ranges[i]
+    const hi = Math.min(ranges[i + 1], 0xffff)
+    for (let j = 0; j < units.length; j += 2) {
+      if (units[j] > hi) break
+      const folded = units[j + 1]
+      if (units[j] >= lo && !rangesContain(ranges, folded)) added.add(folded)
+    }
+  }
+  if (!added.size) return ranges
+  // Adjacent folded forms merge into one range, so `[a-z]` gains `A-Z` as
+  // one pair rather than twenty-six.
+  const merged: number[] = []
+  for (const code of [...added].sort((a, b) => a - b)) {
+    if (merged.length && merged[merged.length - 1] === code - 1) {
+      merged[merged.length - 1] = code
+    } else {
+      merged.push(code, code)
+    }
+  }
+  return [...ranges, ...merged]
+}
 
 // ---------------------------------------------------------------------------
 // Character-class helpers
@@ -174,7 +301,15 @@ class Parser {
   /** Group 0 is the whole match, so user groups start at 1. */
   groupCount = 0
 
-  constructor(private readonly src: string) {}
+  /**
+   * `wordBoundaries` admits `\b` and `\B`. A zero-width test of the two
+   * characters around the position is as linear as `^`, so the engine can
+   * run one; redirect rules have always refused it, and still do.
+   */
+  constructor(
+    private readonly src: string,
+    private readonly wordBoundaries = false,
+  ) {}
 
   parse(): Node {
     const node = this.parseAlternation()
@@ -246,6 +381,7 @@ class Parser {
     if (
       atom.t === 'assertStart' ||
       atom.t === 'assertEnd' ||
+      atom.t === 'wordBoundary' ||
       atom.t === 'empty'
     ) {
       throw new PatternError('nothing to repeat')
@@ -366,7 +502,10 @@ class Parser {
     }
     if (ch === 'k') throw new PatternError('backreferences are not supported')
     if (ch === 'b' || ch === 'B') {
-      throw new PatternError('word boundaries are not supported')
+      if (!this.wordBoundaries) {
+        throw new PatternError('word boundaries are not supported')
+      }
+      return { t: 'wordBoundary', negated: ch === 'B' }
     }
     if (ch === 'p' || ch === 'P') {
       throw new PatternError('unicode property escapes are not supported')
@@ -491,9 +630,11 @@ class Parser {
 // ---------------------------------------------------------------------------
 
 type Inst =
+  /** Under `i`, `c` is already case-folded, and so is the input it meets. */
   | { op: 'char'; c: number }
   | { op: 'class'; ranges: number[]; negated: boolean }
-  | { op: 'any' }
+  /** `dotAll` (the `s` flag) lets it take a line terminator too. */
+  | { op: 'any'; dotAll: boolean }
   | { op: 'split'; x: number; y: number }
   | { op: 'jmp'; x: number }
   | { op: 'save'; slot: number }
@@ -503,8 +644,11 @@ type Inst =
   | { op: 'progress'; slot: number }
   /** Resets the captures inside a repeated body at each iteration. */
   | { op: 'clear'; slots: number[] }
-  | { op: 'assertStart' }
-  | { op: 'assertEnd' }
+  /** `multiline` (the `m` flag) lets each hold beside a line terminator. */
+  | { op: 'assertStart'; multiline: boolean }
+  | { op: 'assertEnd'; multiline: boolean }
+  /** Holds where a word character meets a non-word one (`\B`: where not). */
+  | { op: 'assertWordBoundary'; negated: boolean }
   | { op: 'match' }
 
 /** Capture-group indices appearing anywhere inside a subtree. */
@@ -537,6 +681,8 @@ class Compiler {
    */
   markSlots = 0
 
+  constructor(private readonly flags: Flags = NO_FLAGS) {}
+
   /** Group 0 (the whole match) opens the program and closes it. */
   compileProgram(node: Node): void {
     this.emit({ op: 'save', slot: 0 })
@@ -560,23 +706,29 @@ class Compiler {
       case 'empty':
         return
       case 'char':
-        this.emit({ op: 'char', c: node.c })
+        this.emit({
+          op: 'char',
+          c: this.flags.ignoreCase ? canonicalize(node.c) : node.c,
+        })
         return
       case 'class':
         this.emit({
           op: 'class',
-          ranges: node.ranges,
+          ranges: this.flags.ignoreCase ? foldRanges(node.ranges) : node.ranges,
           negated: node.negated,
         })
         return
       case 'any':
-        this.emit({ op: 'any' })
+        this.emit({ op: 'any', dotAll: this.flags.dotAll })
         return
       case 'assertStart':
-        this.emit({ op: 'assertStart' })
+        this.emit({ op: 'assertStart', multiline: this.flags.multiline })
         return
       case 'assertEnd':
-        this.emit({ op: 'assertEnd' })
+        this.emit({ op: 'assertEnd', multiline: this.flags.multiline })
+        return
+      case 'wordBoundary':
+        this.emit({ op: 'assertWordBoundary', negated: node.negated })
         return
       case 'cat':
         for (const item of node.items) this.compile(item)
@@ -705,6 +857,22 @@ interface Thread {
 }
 
 /**
+ * When a scan with no live thread and no match yet gives up.
+ *
+ * - `stopWhenIdle` gives up there. That is `exec`'s answer for every pattern
+ *   a later start could not rescue, and it is what redirect rules have always
+ *   matched with, so it stays theirs. It is NOT `RegExp`'s answer for a
+ *   pattern whose only way to match from a later start is a bare `$`: a
+ *   rule written `/old|` matches every path in JavaScript and only `/old`
+ *   here, and moving a live redirect rule to the other answer would turn a
+ *   typo into a catch-all.
+ * - `searchToEnd` keeps seeding a start at every offset, as `RegExp` does, so
+ *   `(^a)?$`, a bare `$`, and a multiline `^` after a line terminator all
+ *   answer what JavaScript answers. Still one pass: each offset seeds once.
+ */
+type ScanMode = 'stopWhenIdle' | 'searchToEnd'
+
+/**
  * Simulates every live NFA state in lockstep across the input.
  *
  * The `visited` generation array is what makes this linear: within a single
@@ -717,10 +885,21 @@ function run(
   slotCount: number,
   markBase: number,
   input: string,
+  flags: Flags,
+  mode: ScanMode,
 ): number[] | null {
   const visited = new Int32Array(prog.length).fill(-1)
   let generation = 0
   const length = input.length
+  // Under `i` every input unit is compared by its folded form, which the
+  // program's characters and classes were compiled against.
+  let folded: Uint16Array | undefined
+  if (flags.ignoreCase) {
+    folded = new Uint16Array(length)
+    for (let at = 0; at < length; at++) {
+      folded[at] = canonicalize(input.charCodeAt(at))
+    }
+  }
 
   const addThread = (
     list: Thread[],
@@ -762,9 +941,30 @@ function run(
         for (const slot of inst.slots) next[slot] = -1
         stack.push({ pc: entry.pc + 1, caps: next })
       } else if (inst.op === 'assertStart') {
-        if (sp === 0) stack.push({ pc: entry.pc + 1, caps: entry.caps })
+        if (
+          sp === 0 ||
+          (inst.multiline && isLineTerminator(input.charCodeAt(sp - 1)))
+        ) {
+          stack.push({ pc: entry.pc + 1, caps: entry.caps })
+        }
       } else if (inst.op === 'assertEnd') {
-        if (sp === length) stack.push({ pc: entry.pc + 1, caps: entry.caps })
+        if (
+          sp === length ||
+          (inst.multiline && isLineTerminator(input.charCodeAt(sp)))
+        ) {
+          stack.push({ pc: entry.pc + 1, caps: entry.caps })
+        }
+      } else if (inst.op === 'assertWordBoundary') {
+        // Read from the input as written: without the `u` flag a word
+        // character is `[A-Za-z0-9_]`, and case folding does not move it.
+        const before =
+          sp > 0 && rangesContain(WORD_RANGES, input.charCodeAt(sp - 1))
+        const after =
+          sp < length && rangesContain(WORD_RANGES, input.charCodeAt(sp))
+        const boundary = before !== after
+        if (boundary !== inst.negated) {
+          stack.push({ pc: entry.pc + 1, caps: entry.caps })
+        }
       } else {
         list.push({ pc: entry.pc, caps: entry.caps })
       }
@@ -782,8 +982,17 @@ function run(
   let matched: number[] | null = null
 
   for (let sp = 0; sp <= length; sp++) {
-    if (current.length === 0) break
-    const code = sp < length ? input.charCodeAt(sp) : -1
+    // With nothing live, a match found is final and a sticky pattern has
+    // nowhere else to start. Otherwise only `stopWhenIdle` ends the scan
+    // here; see `ScanMode` for what that costs.
+    if (
+      current.length === 0 &&
+      (matched !== null || flags.sticky || mode === 'stopWhenIdle')
+    ) {
+      break
+    }
+    const code =
+      sp < length ? (folded ? folded[sp] : input.charCodeAt(sp)) : -1
     const next: Thread[] = []
     const mark = generation++
     for (let i = 0; i < current.length; i++) {
@@ -802,7 +1011,8 @@ function run(
       if (inst.op === 'char') {
         consumes = code === inst.c
       } else if (inst.op === 'any') {
-        consumes = !isLineTerminator(code)
+        // A line terminator folds to itself, so the folded unit reads true.
+        consumes = inst.dotAll || !isLineTerminator(code)
       } else if (inst.op === 'class') {
         const inRanges = rangesContain(inst.ranges, code)
         consumes = inst.negated ? !inRanges : inRanges
@@ -814,8 +1024,9 @@ function run(
     // `^/a|/b$`. Seeding a fresh start thread *after* the continuing ones
     // keeps it lower priority, so an earlier start always wins (leftmost).
     // Once a match exists no later start could be more leftmost, so seeding
-    // stops — which is also what bounds this to one pass.
-    if (matched === null && sp + 1 <= length) {
+    // stops — which is also what bounds this to one pass. A sticky pattern
+    // (`y`) is only ever tried where the input starts.
+    if (matched === null && sp + 1 <= length && !flags.sticky) {
       addThread(next, 0, initial, sp + 1, mark)
     }
     current = next
@@ -839,28 +1050,82 @@ export interface LinearPattern {
   exec(input: string): Array<string | undefined> | null
 }
 
+/** A pattern compiled to the program `run` executes. */
+interface Compiled {
+  prog: Inst[]
+  flags: Flags
+  groupCount: number
+  markBase: number
+  slotCount: number
+}
+
+/** Which of the two dialects a pattern is compiled in. */
+type Dialect = 'pattern' | 'test'
+
+/**
+ * Compiles a pattern and its flags. Throws `PatternError` for either.
+ *
+ * The `test` dialect ({@link compileLinearTest}) also reads `\b` and `\B`;
+ * the `pattern` dialect is the one redirect rules have always been held to.
+ */
+function compileSource(
+  pattern: string,
+  flags: string,
+  dialect: Dialect,
+): Compiled {
+  const mode = parseFlags(flags)
+  const parser = new Parser(pattern, dialect === 'test')
+  const ast = parser.parse()
+  const compiler = new Compiler(mode)
+  compiler.compileProgram(ast)
+  // Capture slots first, then one scratch slot per optional iteration.
+  const markBase = (parser.groupCount + 1) * 2
+  return {
+    prog: compiler.prog,
+    flags: mode,
+    groupCount: parser.groupCount,
+    markBase,
+    slotCount: markBase + compiler.markSlots,
+  }
+}
+
+/** Why `compileSource` refused, or null when it did not. */
+function explain(pattern: string, flags: string, dialect: Dialect): string | null {
+  try {
+    compileSource(pattern, flags, dialect)
+    return null
+  } catch (error) {
+    if (error instanceof PatternError) return error.message
+    return 'the pattern could not be understood'
+  }
+}
+
 /**
  * Compiles a pattern for linear-time matching, or returns null when it is
  * malformed or uses syntax outside the supported subset.
  *
+ * Takes no flags, and scans as redirect rules always have (see `ScanMode`).
  * Never throws, and never hands the pattern to `new RegExp`.
  */
 export function compileLinearPattern(pattern: string): LinearPattern | null {
   try {
-    const parser = new Parser(pattern)
-    const ast = parser.parse()
-    const compiler = new Compiler()
-    compiler.compileProgram(ast)
-    const prog = compiler.prog
-    const groupCount = parser.groupCount
-    // Capture slots first, then one scratch slot per optional iteration.
-    const markBase = (groupCount + 1) * 2
-    const slotCount = markBase + compiler.markSlots
+    const { prog, flags, groupCount, markBase, slotCount } = compileSource(
+      pattern,
+      '',
+      'pattern',
+    )
     return {
       source: pattern,
       programLength: prog.length,
       exec(input: string) {
-        const caps = run(prog, slotCount, markBase, String(input ?? ''))
+        const caps = run(
+          prog,
+          slotCount,
+          markBase,
+          String(input ?? ''),
+          flags,
+          'stopWhenIdle',
+        )
         if (caps === null) return null
         const result: Array<string | undefined> = []
         for (let group = 0; group <= groupCount; group++) {
@@ -884,17 +1149,70 @@ export function compileLinearPattern(pattern: string): LinearPattern | null {
 }
 
 /**
- * Explains why a pattern was refused, for console-side validation. Returns
- * null when the pattern is fine.
+ * Explains why {@link compileLinearPattern} refuses a pattern, for
+ * console-side validation. Returns null when the pattern is fine.
  */
 export function explainLinearPattern(pattern: string): string | null {
+  return explain(pattern, '', 'pattern')
+}
+
+/** A compiled pattern that answers one question: does the input match. */
+export interface LinearTest {
+  readonly source: string
+  readonly flags: string
+  /** Instruction count — worst-case cost is `input.length × programLength`. */
+  readonly programLength: number
+  /**
+   * What `new RegExp(source, flags).test(input)` answers for a fresh
+   * `RegExp`, in time linear in the input.
+   */
+  test(input: string): boolean
+}
+
+/**
+ * Compiles a pattern and its flags into a {@link LinearTest}, or returns null
+ * when either is malformed or outside the supported subset: the syntax in
+ * `UNSUPPORTED_SYNTAX` except word boundaries, which this reads, and any flag
+ * outside {@link FLAG_CHARS}.
+ *
+ * Unlike {@link compileLinearPattern} it scans to the end of the input (see
+ * `ScanMode`), so every pattern it accepts answers what `RegExp` answers.
+ * Never throws, and never hands the pattern to `new RegExp`.
+ */
+export function compileLinearTest(
+  pattern: string,
+  flags = '',
+): LinearTest | null {
   try {
-    const parser = new Parser(pattern)
-    const ast = parser.parse()
-    new Compiler().compileProgram(ast)
+    const compiled = compileSource(pattern, flags, 'test')
+    return {
+      source: pattern,
+      flags,
+      programLength: compiled.prog.length,
+      test(input: string) {
+        return (
+          run(
+            compiled.prog,
+            compiled.slotCount,
+            compiled.markBase,
+            String(input ?? ''),
+            compiled.flags,
+            'searchToEnd',
+          ) !== null
+        )
+      },
+    }
+  } catch {
+    // A PatternError is a refusal, and a genuinely unexpected fault must
+    // still fail closed rather than let an unvalidated pattern through.
     return null
-  } catch (error) {
-    if (error instanceof PatternError) return error.message
-    return 'the pattern could not be understood'
   }
+}
+
+/**
+ * Explains why {@link compileLinearTest} refuses a pattern or its flags.
+ * Returns null when both are fine.
+ */
+export function explainLinearTest(pattern: string, flags = ''): string | null {
+  return explain(pattern, flags, 'test')
 }

@@ -317,6 +317,8 @@ async function replay(
     confirmedAt: NOW as unknown as AiJobPlan['confirmedAt'],
     confirmedBy: 'uid-1',
   }
+  // The id the job recorded for its page when it was created (AGL-3079).
+  const screenId = `goldenP${String(index + 1).padStart(3, '0')}`
   const job = {
     $id: `job-golden-${index + 1}`,
     orgId: 'org-1',
@@ -327,7 +329,7 @@ async function replay(
     inputs: { pageType: fixture.pageType },
     steps: [
       { name: 'plan', status: 'done', creditsSpent: 0 },
-      { name: 'generate', status: 'running', creditsSpent: 0 },
+      { name: 'generate', status: 'running', creditsSpent: 0, draftIds: { screen: screenId } },
     ],
     outputs: [],
     creditsReserved: 50,
@@ -355,8 +357,8 @@ async function replay(
     expect([label, outcome.continue, outcome.review, outcome.failure]).toEqual([label, true, undefined, undefined])
   }
   const outcome = await run()
-  const screen = mockDocs.get(`hosts/${HOST}/screens/${job.$id}`) ?? {}
-  const version = mockDocs.get(`hosts/${HOST}/screens/${job.$id}/versions/${screen['versionId']}`)
+  const screen = mockDocs.get(`hosts/${HOST}/screens/${screenId}`) ?? {}
+  const version = mockDocs.get(`hosts/${HOST}/screens/${screenId}/versions/${screen['versionId']}`)
   return {
     requests: mockRunAiRequest.mock.calls.map(([request]) => request as SentRequest),
     outcome,
@@ -830,7 +832,7 @@ describe('a golden page whose plan creates what its site lacks (AGL-3031)', () =
           status: 'running',
           brief: FIXTURE.brief,
           inputs: { pageType: FIXTURE.pageType },
-          steps: [],
+          steps: [{ name: 'generate', status: 'running', creditsSpent: 0, draftIds: { screen: FIXTURE.screenId } }],
           outputs,
           creditsReserved: 0,
           creditsSpent: 0,
@@ -853,12 +855,15 @@ describe('a golden page whose plan creates what its site lacks (AGL-3031)', () =
 
     // One pass a creation, one a section, and the last: every creation built before the page.
     expect(passes).toHaveLength(3 + FIXTURE.answers.length + 1)
+    // Every draft under the id the job recorded for it: a console resource id, never the job's own (AGL-3079).
+    const [component, layout, form] = FIXTURE.plan.create.map((entry) => entry.id as string)
     expect(outputs.map((output) => [output.resource, output.id])).toEqual([
-      ['layout', `${FIXTURE.jobId}-c1`],
-      ['form', `${FIXTURE.jobId}-c2`],
-      ['reusableComponent', `${FIXTURE.jobId}-c0`],
-      ['screen', FIXTURE.jobId],
+      ['layout', layout],
+      ['form', form],
+      ['reusableComponent', component],
+      ['screen', FIXTURE.screenId],
     ])
+    for (const output of outputs) expect(output.id).toMatch(/^[A-Za-z0-9_-]{10}$/)
     // What each draft asks the member to fill (AGL-3056): the card's defaults on
     // the card; on the page, the names its quotes leave in brackets, and the
     // role every card leaves to the card's default, said once for three cards.
@@ -874,20 +879,21 @@ describe('a golden page whose plan creates what its site lacks (AGL-3031)', () =
         'Before you publish, replace the facts in square brackets, which the brief did not give: [customer name]. The "Testimonial card" component on this page shows [Role or company] until you replace it.',
       ],
     ])
-    // Each creation is the draft its own step writes, under the job's slot.
-    expect(mockDocs.get(`hosts/${HOST_ID}/layouts/${FIXTURE.jobId}-c1`)).toMatchObject({ displayName: 'Harbor Roofing site' })
-    expect(mockDocs.get(`hosts/${HOST_ID}/forms/${FIXTURE.jobId}-c2`)).toMatchObject({ displayName: 'Roof quote request' })
-    expect(mockDocs.get(`hosts/${HOST_ID}/components/${FIXTURE.jobId}-c0`)).toMatchObject({ displayName: 'Testimonial card' })
+    // Each creation is the draft its own step writes, under the id its plan entry recorded.
+    expect(mockDocs.get(`hosts/${HOST_ID}/layouts/${layout}`)).toMatchObject({ displayName: 'Harbor Roofing site' })
+    expect(mockDocs.get(`hosts/${HOST_ID}/forms/${form}`)).toMatchObject({ displayName: 'Roof quote request' })
+    expect(mockDocs.get(`hosts/${HOST_ID}/components/${component}`)).toMatchObject({ displayName: 'Testimonial card' })
+    expect([...mockDocs.keys()].filter((path) => path.includes(FIXTURE.jobId))).toEqual([])
 
     // The page renders inside the new layout, places the new card and binds the new form.
-    const screen = mockDocs.get(`hosts/${HOST_ID}/screens/${FIXTURE.jobId}`) ?? {}
-    const version = mockDocs.get(`hosts/${HOST_ID}/screens/${FIXTURE.jobId}/versions/${screen['versionId']}`)
-    expect(version).toMatchObject({ layoutId: `${FIXTURE.jobId}-c1` })
+    const screen = mockDocs.get(`hosts/${HOST_ID}/screens/${FIXTURE.screenId}`) ?? {}
+    const version = mockDocs.get(`hosts/${HOST_ID}/screens/${FIXTURE.screenId}/versions/${screen['versionId']}`)
+    expect(version).toMatchObject({ layoutId: layout })
     const nodes = (decodeStoredNodes(version?.['nodes']) ?? {}) as Record<string, StoredNode>
     const cards = Object.values(nodes).filter((node) => node.componentId === 'reusableInstance')
-    expect(cards.map((node) => node.props?.['refId'])).toEqual([0, 1, 2].map(() => `${FIXTURE.jobId}-c0`))
+    expect(cards.map((node) => node.props?.['refId'])).toEqual([0, 1, 2].map(() => component))
     expect(Object.values(nodes).filter((node) => node.componentId === 'form').map((node) => node.props?.['formId'])).toEqual([
-      `${FIXTURE.jobId}-c2`,
+      form,
     ])
     const report = validateAiDoctrineTree(
       { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: nodes as never },

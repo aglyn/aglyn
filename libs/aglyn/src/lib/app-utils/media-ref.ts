@@ -129,15 +129,14 @@ export const MEDIA_CDN_ROUTE = '/api/media/cdn'
  * assets: 335 KB / 305 KB / 164 KB PNG originals against 4 KB / 4 KB / 5 KB
  * WebP at `?w=320` — and ~94% of a media serve is bandwidth (AGL-1442).
  *
- * `mediaVariantWidthsFor` drops any width at or above the source width, so
- * adding 1920 generates a fourth variant only for originals genuinely wider
- * than that, and `serveMediaCdn` serves the original for a width an asset
- * does not have. Both directions degrade to exactly today's bytes.
+ * `mediaVariantWidthsFor` names every width below the source, and for a JPEG
+ * or PNG the rest as WebP at the source's own width; `serveMediaCdn` serves
+ * the original for a width an asset does not have, so a missing variant
+ * degrades to exactly the bytes it served before.
  *
- * ⛔ EXISTING ASSETS HAVE NO 1920 VARIANT until a backfill runs, so they keep
- * answering `?w=1920` with the original — no regression, and no saving on
- * them either. The backfill is a `sharp` pass over the corpus, a script and
- * not a patch (AGL-1442 S7).
+ * ⛔ EXISTING ASSETS KEEP THE VARIANTS THEY WERE UPLOADED WITH until a backfill
+ * runs — no regression, and no saving on them either. The backfill is a
+ * `sharp` pass over the corpus, a script and not a patch (AGL-1442 S7).
  */
 export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280, 1920] as const
 
@@ -148,8 +147,8 @@ export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280, 1920] as const
  * choose. A `<video poster>` attribute and a `thumbnailUrl` in structured data
  * each take a single url, so they have to name a width — and it has to be the
  * SAME width, or a crawler fetching the thumbnail gets different bytes from
- * the visitor looking at the poster. 1280 is the widest generated variant on a
- * 1920 original.
+ * the visitor looking at the poster. 1280 is the widest variant below a 1920
+ * original's own width.
  */
 export const MEDIA_CDN_POSTER_WIDTH = 1280
 

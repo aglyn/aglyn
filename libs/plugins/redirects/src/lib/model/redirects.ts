@@ -27,7 +27,7 @@ import {
   compileLinearPattern,
   explainLinearPattern,
   type LinearPattern,
-} from './linear-regex'
+} from '@aglyn/shared-util-tools/linear-regex'
 
 export interface HostRedirect {
   /**

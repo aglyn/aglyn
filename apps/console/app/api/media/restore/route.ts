@@ -23,6 +23,7 @@ import {
   restoreMediaFromTombstone,
 } from '@aglyn/tenant-data-admin'
 import { resolveMediaScope } from '../../../../utils/server/media-scope'
+import { scheduleMediaDeliveryCopies } from '../../../../utils/server/media-delivery-copies'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
@@ -112,6 +113,11 @@ async function handler(request: Request): Promise<Response> {
       mediaId,
       billing: scope.billing,
     })
+    // The delete removed the asset's delivery copies and the restore does
+    // not bring their record back, so a restored video is copied again after
+    // the response (AGL-2824). The copy reads the document and skips
+    // anything that is not a video; nothing runs without a provider.
+    if (result.ok) scheduleMediaDeliveryCopies({ scope, mediaId })
 
     // The refusals this can answer with are things only the server knows —
     // the window closed, or the bytes would breach the plan — and each one

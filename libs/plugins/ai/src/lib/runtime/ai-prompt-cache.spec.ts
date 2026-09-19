@@ -36,7 +36,7 @@ import { AI_STEP_NOMINAL_USAGE } from '../providers/model-choice'
 import type { AiStepKind } from '../providers/catalog'
 import type { AiSystemBlock, AiTool } from '../providers/contract'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
-import { AI_EVAL_GRADER_INSTRUCTIONS } from './ai-eval-live'
+import { AI_EVAL_GRADER_INSTRUCTIONS, AI_EVAL_RUBRIC_TOOL } from './ai-eval-live'
 import {
   aiDoctrineScopeFor,
   aiDoctrineSystemBlock,
@@ -52,7 +52,7 @@ import {
   aiCrmRecordInstructions,
 } from '../jobs/ai-job-crm-step'
 import { AI_JOB_EMAIL_INSTRUCTIONS, AI_JOB_EMAIL_TOOL } from '../jobs/ai-job-email-step'
-import { AI_JOB_FORM_INSTRUCTIONS } from '../jobs/ai-job-form-step'
+import { AI_JOB_FORM_INSTRUCTIONS, AI_JOB_FORM_TOOL } from '../jobs/ai-job-form-step'
 import { AI_JOB_INSIGHT_SYSTEM } from '../jobs/ai-job-insight-step'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
 import { AI_JOB_PAGE_INSTRUCTIONS, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
@@ -346,7 +346,7 @@ const REQUESTS: Record<string, Composed> = {
     step: 'job.form',
     blocks: (site) =>
       aiDoctrineSystemBlocks(site, { instructions: AI_JOB_FORM_INSTRUCTIONS, surface: 'form' }),
-    tools: () => [aiDoctrineTreeTool('form'), aiInventoryLookupTool()],
+    tools: () => [AI_JOB_FORM_TOOL, aiInventoryLookupTool()],
   },
   // One section pass of a page job. Its instructions carry the screen palette
   // themselves, and it is a custom kind, so the loop adds no catalog of its own.
@@ -491,7 +491,7 @@ const REQUESTS: Record<string, Composed> = {
     door: 'runtime/ai-eval-live.ts',
     step: 'job.plan',
     blocks: () => aiDoctrineSystemBlocks(undefined, { instructions: AI_EVAL_GRADER_INSTRUCTIONS }),
-    tools: () => [],
+    tools: () => [AI_EVAL_RUBRIC_TOOL],
   },
   // An insight's two calls (AGL-2915): the same system block, each with its
   // own tool. The readers' catalog, the question and the tables are the user
@@ -621,10 +621,13 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       template: { prefixTokens: 4_956, minimum: 1_024, caches: true, toolsStable: true },
       component: { prefixTokens: 5_022, minimum: 1_024, caches: true, toolsStable: true },
       email: { prefixTokens: 2_901, minimum: 1_024, caches: true, toolsStable: true },
-      form: { prefixTokens: 2_529, minimum: 1_024, caches: true, toolsStable: true },
+      form: { prefixTokens: 2_730, minimum: 1_024, caches: true, toolsStable: true },
       'page-section': { prefixTokens: 4_598, minimum: 1_024, caches: true, toolsStable: true },
       theme: { prefixTokens: 3_326, minimum: 1_024, caches: true, toolsStable: true },
-      'workflow-draft': { prefixTokens: 4_564, minimum: 1_024, caches: true, toolsStable: true },
+      // The automation tool carries a variant per step type, each with only its
+      // own fields and none a `null` union: the bytes that keep a request
+      // within a provider's union limit (AGL-3096).
+      'workflow-draft': { prefixTokens: 5_015, minimum: 1_024, caches: true, toolsStable: true },
       'workflow-explain': { prefixTokens: 2_212, minimum: 1_024, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
       'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },
@@ -634,7 +637,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // deliberately: on a door that cannot cache either way, a schema that
       // refuses a page outside the batch is worth more than a stable prefix.
       'seo-fixes': { prefixTokens: 921, minimum: 4_096, caches: false, toolsStable: false },
-      'eval-grade': { prefixTokens: 1_802, minimum: 1_024, caches: true, toolsStable: true },
+      'eval-grade': { prefixTokens: 2_003, minimum: 1_024, caches: true, toolsStable: true },
       // An insight's rules are short on purpose: no model caches them, so every
       // byte is billed as input on both calls and on a re-ask.
       'insight-read': { prefixTokens: 883, minimum: 1_024, caches: false, toolsStable: true },

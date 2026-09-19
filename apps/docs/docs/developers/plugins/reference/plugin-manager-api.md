@@ -97,7 +97,8 @@ batch, so read registries lazily rather than snapshotting.
 
 | API | Semantics |
 | --- | --- |
-| `registerPluginApiRoute(path, handler)` | Registers a path under the `[...pluginApi]` dispatchers. Ownership is recorded at registration time for the per-request org gate — a disabled plugin's paths 404 for that workspace. `path` may carry `:name` segments (`ai/jobs/:jobId/cancel`); an exact registration wins over a pattern. |
+| `registerPluginApiRoute(path, handler, options?)` | Registers a path under the `[...pluginApi]` dispatchers. Ownership is recorded at registration time for the per-request org gate — a disabled plugin's paths 404 for that workspace. `path` may carry `:name` segments (`ai/jobs/:jobId/cancel`); an exact registration wins over a pattern. `options.subject` names the organization (and, for a signed tokenless redirect, the account) a request is for when it names no site — see [Naming the subject](../guides/server-apis.md#route-subject). |
+| `resolvePluginApiRequestSubject(path, request)` | What a dispatcher asks before its release gate when no `hostId` was named: the declared resolver's answer, read from a clone, or `null` for an undeclared route, a resolver that threw, or ids that are not plain path segments. |
 | `handler` as `(req, res)` or `{ web }` | The node shape takes `PluginApiRequest` / `PluginApiResponse`. The Web shape, `{ web: (request, { params }) => Response }`, takes the dispatcher's own `Request` and answers a `Response` — the form for a door that streams (server-sent events, a chat answer) or reads the raw body itself; `params` carries the path segments and every `:name` filled. |
 | `PluginApiRequest` | `{ method, query, body, headers, rawBody? }` — `rawBody` carries the unparsed payload for Stripe/Svix signature verification. |
 | `resolvePluginApiMatch(path)` / `runPluginApiMatch(match, request, params, runLegacy)` | What a dispatcher does: the route and its filled `:name` params for a path, then either shape run — the host app supplies `runLegacy` for the node shape. `resolvePluginApiRoute(path)` answers the node handler alone, for the specs that drive one directly. |
@@ -223,6 +224,28 @@ registerPluginService(AI_PROVIDERS, ollamaProvider, { pluginId: 'acme-llm', prio
 const providers = resolvePluginServices(AI_PROVIDERS) // acme-llm first, then ai
 ```
 
+## Media delivery — `media-delivery-provider` (`/server`)
+
+A slot one plugin holds (`core.media-delivery`, built on the service contracts
+above): an object store with its own edge, which serves library video in place
+of the platform's media route. Core keeps every access decision and the copy
+rules; the provider stores copies and mints URLs. Register it from a
+`serverDeclarations` entry, so both apps hold it before the first request.
+
+| API | Semantics |
+| --- | --- |
+| `registerMediaDeliveryProvider(provider, { pluginId? })` | Fills the slot. The same plugin registering again replaces its provider; a second plugin throws naming both. |
+| `mediaDeliveryProvider(capability)` | The provider when it is configured for `'store'` (copies) or `'deliver'` (URLs), else `null`. Synchronous and free of I/O, so a hot path asks it first. |
+
+A provider implements `isConfigured(capability)`, `putObject({ key, body,
+contentLength, contentType })`, `deleteObject(key)`,
+`deleteObjectsWithPrefix(prefix)` and `deliveryUrl({ key, expiresAtMs, claims })`.
+Keys come from core and carry the content hash they were copied from; claims
+carry the org, site, scope and media id a URL was minted for, and grant nothing.
+A video is served from the provider only when the `release_video_delivery` flag,
+off by default, is on for its org and a copy of its current bytes exists;
+everything else serves from the platform exactly as before.
+
 ## Platform events — `plugin-events` (`/server`)
 
 Core raises the events; a plugin that must react to what a core route did
@@ -297,6 +320,36 @@ outlives the data. `null` in a field is a figure the eraser could not
 measure, and a `null` report says the plugin's data may remain — neither
 is zero.
 
+## Workspace erasure — `plugin-org-erasure` (`/server`)
+
+The workspace erasure destroys the organization's document tree, its sites
+and the top-level records keyed to it by a field. A plugin that holds
+something those deletes cannot finish on their own — a grant at a provider
+only the plugin can revoke, a record outside every path and field the
+erasure sweeps — registers an eraser from its declarations:
+
+```ts
+registerPluginOrgEraser(
+  async ({ orgId, dryRun }) => {
+    const { revokeGrantsFor } = await import('./server/grants')
+    return revokeGrantsFor(orgId, { dryRun })
+  },
+  { pluginId: 'acme-mail' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginOrgEraser(eraser, { pluginId? })` | One eraser per plugin, attributed like an event handler; registering again replaces it in place. Check `listPluginOrgErasers()` before registering again after a registry reset. |
+| `runPluginOrgErasers({ orgId, dryRun })` | What the erasure calls BEFORE it deletes anything of its own, so an eraser that acts through a record — opening a stored grant to revoke it — finds the record there. Every eraser in registration order; answers each plugin's report by plugin id, or `null` for an eraser that threw — logged, and never the erasure's failure. |
+
+The report lands under `plugins` on the erasure's result and audit record,
+on the same terms as an account erasure's. A plan (`dryRun: true`) is handed
+to every eraser, which then touches no provider and writes nothing: it
+counts, and a figure it did not measure is `null`. An eraser that opens a
+credential only the console holds registers from `consoleServerDeclarations`,
+which the tenant runtime never loads.
+
 ## Usage alerts — `plugin-manager/usage-alert-contributors`
 
 The usage-alerts sweep walks every org once, reads its usage, and sends core's
@@ -352,6 +405,13 @@ registerPluginActivityActions({
 | `listPluginActivityFilters()` | One chip per group with the codes it keeps: the org feed and the actor table draw their chips from this, and send `action isAnyOf …`. |
 | `pluginStaffAuditActionGroup(action)` / `pluginStaffAuditActionGroupLabel(group)` | The staff audit facet's grouping: a registered group by code or by `staffAuditPrefixes`, else the action's leading namespace. |
 | `isPluginStaffAuditAccess(action)` | Whether a staff audit action is one a plugin's group names in `staffAuditAccessActions` — the actions its staff doors write when staff READ something rather than change it. The audit log files them as accesses. Matched exactly. |
+
+An org activity row names its target, `{ type, id, name }`. Core's target
+types are core's own resources; a plugin files a row about one of ITS
+resources under its own namespace, `pluginId:noun` (`PluginActivityTargetType`,
+e.g. `outreach:mailbox`), which the org log accepts without naming the
+plugin. The feed labels it by the noun (`Mailbox`), prefers the target's
+`name` wherever it has one, and links it nowhere.
 
 ## Billing and access keys — `plugin-entitlements`
 

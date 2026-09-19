@@ -127,6 +127,9 @@ const REPO_WIDE = new Set([
   'check:provider-key-exposure',
   'check:next-public-access',
   'check:contact-addresses',
+  // Parses every tracked source file for a Firestore document named by an id
+  // the platform did not mint (AGL-3079): a new `.doc()` in any lib reds it.
+  'check:id-minting',
   // Compare a GENERATED artifact against a source that is no project's file.
   'check:pricing-tables',
   'generate:docs-help:check',

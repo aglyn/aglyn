@@ -147,7 +147,8 @@ export interface RevalidateLivePagesResult {
   scanTruncated: boolean
   /**
    * Why the drop is not a plain success, or `'ok'` — passed straight through
-   * from the console route.
+   * from the console route, or `console-{status}` when the console route
+   * itself refused the call.
    *
    * Dropping this was its own quiet failure: `revalidated: 0` reads the same
    * for "this screen is not routed, so there was nothing to drop" as it does
@@ -252,7 +253,30 @@ export async function revalidateLivePages(
         ...(paths?.length ? { paths } : {}),
       }),
     })
-    if (!response.ok) return null
+    if (!response.ok) {
+      /**
+       * REFUSED: nothing was dropped, so the live pages go on serving what
+       * they served before the write for the rest of their window.
+       *
+       * A result rather than `null`, because every caller reads `null` as
+       * nothing to say. Answered with `null`, a refusal is invisible: an
+       * author's save refused here with a 404 (AGL-2934) left the live page
+       * stale without a word, and a page they had just password-protected
+       * went on serving publicly. A locked site's 423 and an unconfirmed
+       * sign-in's 401 mean the same to the person who saved — the change is
+       * stored, and the live pages do not show it yet.
+       *
+       * The reason is built from the status and never read from the body, so
+       * no refusal can arrive as `ok` or `not-routed`, the two answers
+       * `describeRevalidateShortfall` stays silent for.
+       */
+      return {
+        revalidated: 0,
+        pathsDropped: 0,
+        scanTruncated: false,
+        reason: `console-${response.status}`,
+      }
+    }
     const body = (await response.json().catch(() => null)) as {
       revalidated?: unknown
       pathsDropped?: unknown
@@ -267,10 +291,10 @@ export async function revalidateLivePages(
       reason: typeof body.reason === 'string' ? body.reason : 'ok',
     }
   } catch {
-    // Best effort by design — see above. A cache hint that could not be sent
+    // Best effort by design — see above. A request that got no answer at all
     // is NOT reported: the revalidate window is still underneath it, and
     // telling someone their successful publish half-failed would be a worse
-    // lie than saying nothing.
+    // lie than saying nothing. A refusal is an answer, and is reported above.
     return null
   }
 }

@@ -27,7 +27,11 @@ import {
   buildComponentDefaultValues,
   evaluateReusablePropCondition,
   readReusablePropValue,
+  REUSABLE_PROP_PATTERN_INPUT_MAX_LENGTH,
+  REUSABLE_PROP_PATTERN_MAX_LENGTH,
   resolveReusablePropValues,
+  reusablePropPatternProblem,
+  withMatchableConditions,
 } from './reusable-prop-values'
 
 /**
@@ -121,6 +125,169 @@ describe('a property condition answers as data-driven-forms does (AGL-2893)', ()
 
   it('holds for a property with no condition at all', () => {
     expect(evaluateReusablePropCondition(undefined, values)).toBe(true)
+  })
+
+  it.each([
+    { when: 'headline', pattern: 'ONCE$', flags: 'i' },
+    { when: 'headline', pattern: '^build\\s+once$', flags: 'im' },
+    { when: 'headline', pattern: 'd.o', flags: 's' },
+    { when: 'headline', pattern: 'uild', flags: 'y' },
+    { when: 'headline', pattern: '(^Build)?$' },
+    { when: 'headline', pattern: '\\bonce\\b' },
+    { when: 'headline', pattern: 'd\\B' },
+    { when: 'headline', pattern: '^(B|b)(u|U)[a-z]+\\s' },
+    { when: 'count', pattern: '^\\d$' },
+    { when: 'answers', pattern: '^a,b$' },
+    { when: 'missing', pattern: '^undefined$' },
+  ] as ReusableComponentPropCondition[])('matches %j as data-driven-forms does', (condition) => {
+    const expected = parseCondition(
+      asSchemaCondition(condition),
+      values,
+      { name: 'field' } as never,
+    ).result
+    expect(evaluateReusablePropCondition(condition, values)).toBe(expected)
+  })
+})
+
+describe('a condition whose pattern cannot be matched safely (AGL-2893)', () => {
+  /** What a publisher can set as a default: long enough to hang a backtracker. */
+  const values = {
+    headline: `${'a'.repeat(28)}!`,
+    title: 'Build once',
+    essay: 'a'.repeat(REUSABLE_PROP_PATTERN_INPUT_MAX_LENGTH + 1),
+  }
+
+  /**
+   * Generous: the linear matcher answers each of these in well under a
+   * millisecond, and a loaded CI box must not turn that into a flake. A
+   * backtracking matcher takes seconds on the first of them.
+   */
+  const BUDGET_MS = 500
+
+  it.each([
+    ['an unbalanced group', { when: 'title', pattern: '(' }],
+    ['a repeated flag', { when: 'title', pattern: 'B', flags: 'gg' }],
+    ['an unknown flag', { when: 'title', pattern: 'B', flags: 'x' }],
+    ['unicode mode', { when: 'title', pattern: 'B', flags: 'u' }],
+    ['lookahead', { when: 'title', pattern: 'B(?=u)' }],
+    ['a backreference', { when: 'title', pattern: '(B)\\1' }],
+    ['a named group', { when: 'title', pattern: '(?<word>B)' }],
+    ['a nothing-to-repeat that only RegExp refuses', { when: 'title', pattern: 'B{1}{2}' }],
+    [
+      'a pattern longer than the bound',
+      { when: 'title', pattern: `B${'u?'.repeat(REUSABLE_PROP_PATTERN_MAX_LENGTH)}` },
+    ],
+    ['a pattern that is not text', { when: 'title', pattern: 7 as unknown as string }],
+  ])('holds nothing for %s, and never throws', (_label, rule) => {
+    const condition = rule as ReusableComponentPropCondition
+    expect(
+      reusablePropPatternProblem(rule.pattern, (rule as { flags?: string }).flags),
+    ).toEqual(expect.any(String))
+    expect(() => evaluateReusablePropCondition(condition, values)).not.toThrow()
+    expect(evaluateReusablePropCondition(condition, values)).toBe(false)
+    // Unmet, whichever way the rule reads its pattern.
+    expect(
+      evaluateReusablePropCondition({ ...condition, notMatch: true } as never, values),
+    ).toBe(false)
+  })
+
+  it.each(['^(a+)+$', '^(a|a)*$', '^a*a*a*a*a*a*a*a*$', '^(\\w+\\s?)+$'])(
+    'answers the catastrophic pattern %s correctly, in bounded time',
+    (pattern) => {
+      const started = Date.now()
+      expect(evaluateReusablePropCondition({ when: 'headline', pattern }, values)).toBe(
+        false,
+      )
+      expect(
+        evaluateReusablePropCondition(
+          { when: 'headline', pattern: pattern.replace('$', '!$') },
+          values,
+        ),
+      ).toBe(true)
+      expect(Date.now() - started).toBeLessThan(BUDGET_MS)
+    },
+  )
+
+  it('holds nothing for a value longer than a pattern is matched against', () => {
+    expect(
+      evaluateReusablePropCondition({ when: 'essay', pattern: '^a' }, values),
+    ).toBe(false)
+    expect(
+      evaluateReusablePropCondition(
+        { when: 'essay', pattern: '^b', notMatch: true },
+        values,
+      ),
+    ).toBe(false)
+  })
+
+  it('switches the property off and leaves every other one on the page', () => {
+    const declared: ReusableComponentProp[] = [
+      { name: 'title', type: 'text', defaultValue: values.headline },
+      { name: 'broken', type: 'text', defaultValue: 'x', condition: { when: 'title', pattern: '(' } },
+      { name: 'flagged', type: 'text', defaultValue: 'x', condition: { when: 'title', pattern: 'a', flags: 'gg' } },
+      { name: 'slow', type: 'text', defaultValue: 'x', condition: { when: 'title', pattern: '^(a+)+$' } },
+      { name: 'plain', type: 'text', defaultValue: 'Kept' },
+    ]
+    const started = Date.now()
+    const resolved = resolveReusablePropValues(declared, {})
+    expect(Date.now() - started).toBeLessThan(BUDGET_MS)
+    expect([...resolved.off].sort()).toEqual(['broken', 'flagged', 'slow'])
+    expect(resolved.tokens['prop.plain']).toBe('Kept')
+    expect(resolved.tokens['prop.broken']).toBe('')
+  })
+
+  it('names nothing wrong with a pattern it can match', () => {
+    for (const [pattern, flags] of [
+      ['^(a+)+$', undefined],
+      ['^build', 'i'],
+      ['^[A-Z][a-z]+$', 'gm'],
+      ['', undefined],
+    ] as const) {
+      expect(reusablePropPatternProblem(pattern, flags)).toBeUndefined()
+    }
+  })
+})
+
+describe('a declared condition as a server stores it (AGL-2893)', () => {
+  it('removes a rule whose pattern cannot be matched, and keeps the rest', () => {
+    expect(
+      withMatchableConditions([
+        { name: 'a', condition: { when: 'b', pattern: '(' } },
+        {
+          name: 'c',
+          condition: [
+            { when: 'b', pattern: '^x', flags: 'i' },
+            { when: 'b', pattern: 'y', flags: 'gg' },
+          ],
+        },
+        {
+          name: 'd',
+          condition: {
+            or: [{ when: 'b', pattern: 'B(?=u)' }, { when: 'b', is: 'x' }],
+          },
+        },
+        { name: 'e', condition: { not: { when: 'b', pattern: '(' } } },
+        { name: 'f', condition: { and: [{ when: 'b', pattern: '(' }] } },
+        { name: 'g', condition: { when: 'b', pattern: '^(a+)+$' } },
+      ]),
+    ).toEqual([
+      { name: 'a' },
+      { name: 'c', condition: [{ when: 'b', pattern: '^x', flags: 'i' }] },
+      { name: 'd', condition: { or: [{ when: 'b', is: 'x' }] } },
+      { name: 'e' },
+      { name: 'f' },
+      { name: 'g', condition: { when: 'b', pattern: '^(a+)+$' } },
+    ])
+  })
+
+  it('hands back a list with nothing to remove as it was', () => {
+    const props = [
+      { name: 'a', type: 'text', condition: { when: 'b', pattern: '^x' } },
+      { name: 'b', type: 'text' },
+    ]
+    expect(withMatchableConditions(props)).toBe(props)
+    expect(withMatchableConditions(undefined)).toBeUndefined()
+    expect(withMatchableConditions('props')).toBe('props')
   })
 })
 

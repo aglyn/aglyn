@@ -17,6 +17,9 @@
 
 import {
   foldPluginSubprocessors,
+  type FoldPluginEgressOptions,
+  type PluginEgressHostDeclaration,
+  type PluginEgressUseDeclaration,
   type PluginSubprocessorDeclaration,
   type PluginSubprocessorManifestEntry,
 } from './plugin-subprocessors'
@@ -25,6 +28,8 @@ import {
 interface Row {
   source: 'base' | 'plugin'
   entity: string
+  disposition?: string
+  reason?: string
 }
 
 const BASE: Readonly<Record<string, Row>> = {
@@ -108,6 +113,143 @@ describe('foldPluginSubprocessors', () => {
     }
     expect(() => foldPluginSubprocessors(BASE, [hostless], toRow)).toThrow(
       "plugin 'maps' declares a subprocessor (Maps Example Ltd.) with no host",
+    )
+  })
+})
+
+describe('foldPluginSubprocessors — hosts that are not recipients, and uses (AGL-2978)', () => {
+  const BASE_WITH_REASON: Readonly<Record<string, Row>> = {
+    'token.example': { source: 'base', entity: 'Token Example LLC', reason: 'Token exchange.' },
+  }
+  const WIDGET: PluginEgressHostDeclaration = {
+    host: 'widgets.example',
+    disposition: 'not-a-subprocessor',
+    reason: "The customer's own widget host.",
+    dataReceived: 'What the customer sends to their own provider.',
+  }
+  const CONSENT: PluginEgressHostDeclaration = {
+    host: 'consent.example',
+    disposition: 'no-request',
+    reason: 'An address handed to the browser.',
+    dataReceived: 'Nothing from our servers.',
+  }
+  const TOKEN_USE: PluginEgressUseDeclaration = {
+    host: 'token.example',
+    reason: 'Also the widgets plugin’s own grant.',
+    dataReceived: 'For widgets: the grant.',
+  }
+  const options: FoldPluginEgressOptions<Row> = {
+    toHostEntry: (declaration) => ({
+      source: 'plugin',
+      entity: '',
+      disposition: declaration.disposition,
+      reason: declaration.reason,
+    }),
+    withUse: (entry, use, pluginId) => ({ ...entry, reason: `${entry.reason} [${pluginId}] ${use.reason}` }),
+  }
+
+  it('folds a plugin’s other hosts in with their dispositions, and adds its use to a declared host', () => {
+    const widgets: PluginSubprocessorManifestEntry = {
+      pluginId: 'widgets',
+      subprocessors: [],
+      hosts: [WIDGET, CONSENT],
+      uses: [TOKEN_USE],
+    }
+    const registry = foldPluginSubprocessors(BASE_WITH_REASON, [widgets], toRow, options)
+    expect(registry).toEqual({
+      'token.example': {
+        source: 'base',
+        entity: 'Token Example LLC',
+        reason: 'Token exchange. [widgets] Also the widgets plugin’s own grant.',
+      },
+      'widgets.example': {
+        source: 'plugin',
+        entity: '',
+        disposition: 'not-a-subprocessor',
+        reason: "The customer's own widget host.",
+      },
+      'consent.example': {
+        source: 'plugin',
+        entity: '',
+        disposition: 'no-request',
+        reason: 'An address handed to the browser.',
+      },
+    })
+    // The base entry the use was added to is a new value; the base is untouched.
+    expect(BASE_WITH_REASON['token.example'].reason).toBe('Token exchange.')
+  })
+
+  it('lets a use name a host a LATER plugin declares', () => {
+    const early: PluginSubprocessorManifestEntry = {
+      pluginId: 'early',
+      subprocessors: [],
+      uses: [{ ...TOKEN_USE, host: 'widgets.example' }],
+    }
+    const late: PluginSubprocessorManifestEntry = { pluginId: 'widgets', subprocessors: [], hosts: [WIDGET] }
+    const registry = foldPluginSubprocessors(BASE_WITH_REASON, [early, late], toRow, options)
+    expect(registry['widgets.example'].reason).toBe(
+      "The customer's own widget host. [early] Also the widgets plugin’s own grant.",
+    )
+  })
+
+  it('refuses a host a recipient or the base already declares, naming both claimants', () => {
+    const clash: PluginSubprocessorManifestEntry = {
+      pluginId: 'widgets',
+      subprocessors: [],
+      hosts: [{ ...WIDGET, host: 'token.example' }],
+    }
+    expect(() => foldPluginSubprocessors(BASE_WITH_REASON, [clash], toRow, options)).toThrow(
+      "token.example is declared by the base registry and by plugin 'widgets'",
+    )
+  })
+
+  it('refuses a use of a host nothing declares, and a use of the plugin’s own host', () => {
+    const orphan: PluginSubprocessorManifestEntry = {
+      pluginId: 'widgets',
+      subprocessors: [],
+      uses: [{ ...TOKEN_USE, host: 'nowhere.example' }],
+    }
+    expect(() => foldPluginSubprocessors(BASE_WITH_REASON, [orphan], toRow, options)).toThrow(
+      "plugin 'widgets' declares a use of nowhere.example, which nothing declares",
+    )
+    const own: PluginSubprocessorManifestEntry = {
+      pluginId: 'widgets',
+      subprocessors: [],
+      hosts: [WIDGET],
+      uses: [{ ...TOKEN_USE, host: 'widgets.example' }],
+    }
+    expect(() => foldPluginSubprocessors(BASE_WITH_REASON, [own], toRow, options)).toThrow(
+      "plugin 'widgets' declares both widgets.example and a use of it",
+    )
+  })
+
+  it('refuses a disposition the registry does not know, and a host with none', () => {
+    const odd: PluginSubprocessorManifestEntry = {
+      pluginId: 'widgets',
+      subprocessors: [],
+      hosts: [{ ...WIDGET, disposition: 'subprocessor' as never }],
+    }
+    expect(() => foldPluginSubprocessors(BASE_WITH_REASON, [odd], toRow, options)).toThrow(
+      "plugin 'widgets' declares widgets.example as 'subprocessor', which is not a disposition a host may carry",
+    )
+    const hostless: PluginSubprocessorManifestEntry = {
+      pluginId: 'widgets',
+      subprocessors: [],
+      hosts: [{ ...WIDGET, host: '' }],
+    }
+    expect(() => foldPluginSubprocessors(BASE_WITH_REASON, [hostless], toRow, options)).toThrow(
+      "plugin 'widgets' declares a not-a-subprocessor host with no host",
+    )
+  })
+
+  it('refuses hosts and uses a consumer gave no way to fold, rather than dropping them', () => {
+    const widgets: PluginSubprocessorManifestEntry = { pluginId: 'widgets', subprocessors: [], hosts: [WIDGET] }
+    expect(() => foldPluginSubprocessors(BASE_WITH_REASON, [widgets], toRow)).toThrow(
+      "plugin 'widgets' declares widgets.example, and this registry folds no hosts",
+    )
+    const using: PluginSubprocessorManifestEntry = { pluginId: 'widgets', subprocessors: [], uses: [TOKEN_USE] }
+    expect(() => foldPluginSubprocessors(BASE_WITH_REASON, [using], toRow)).toThrow(
+      "plugin 'widgets' declares a use of token.example, and this registry folds no uses",
     )
   })
 })

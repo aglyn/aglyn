@@ -18,7 +18,7 @@
 /**
  * Demo brand packs (AGL-1734).
  *
- * The founding demo (`Design-Partner-Outreach.md` §4) spends minutes 3–10 —
+ * The 30-minute demo (`Design-Partner-Outreach.md` §4) spends minutes 3–10 —
  * its largest block, and the one the GTM doc calls "the wedge, proven
  * visually" — on *switching between several sites in one org*. The seeder
  * used to stamp one hard-coded bakery, so N hosts produced N identical

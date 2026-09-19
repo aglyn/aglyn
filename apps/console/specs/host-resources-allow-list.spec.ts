@@ -699,3 +699,71 @@ describe('the sibling route already worked this way (AGL-1377)', () => {
     expect(stored).not.toHaveProperty('deletedAt')
   })
 })
+
+/**
+ * A declared condition's pattern that no page can match is not stored
+ * (AGL-2893). Both routes seed declarations — Use template sends a
+ * component's or layout's properties, and a first version is seeded with
+ * them — and a pattern the Properties dialog would refuse can arrive through
+ * either from a template or a hand-written request. The page would hold such
+ * a rule unmet; the store is where it stops travelling.
+ */
+describe('declared conditions are stored with patterns a page can match (AGL-2893)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    state.memberRoles = { 'user-1': 'admin' }
+    state.org = { plan: 'enterprise' }
+    mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
+  })
+
+  const DECLARED = [
+    { name: 'headline', type: 'text', defaultValue: 'Build once' },
+    { name: 'cta', type: 'text', condition: { when: 'headline', pattern: '(' } },
+    {
+      name: 'note',
+      type: 'text',
+      condition: [
+        { when: 'headline', isNotEmpty: true },
+        { when: 'headline', pattern: 'B', flags: 'gg' },
+      ],
+    },
+    { name: 'slow', type: 'text', condition: { when: 'headline', pattern: '^(a+)+$' } },
+  ]
+  const STORED = [
+    DECLARED[0],
+    { name: 'cta', type: 'text' },
+    { name: 'note', type: 'text', condition: [{ when: 'headline', isNotEmpty: true }] },
+    DECLARED[3],
+  ]
+
+  it.each(['reusableComponent', 'template'])('/api/hosts/resources, for a %s', async (resource) => {
+    const response = await postResource(resource, {
+      displayName: 'Hero',
+      rootId: 'root',
+      nodes: { root: { $id: 'root', componentId: 'div', nodes: [] } },
+      props: DECLARED,
+      ...(resource === 'template' ? { kind: 'component' } : {}),
+    })
+    expect(response.status).toBe(200)
+    const stored = mockWrite.mock.calls[0][0] as Record<string, unknown>
+    expect(stored['props']).toEqual(STORED)
+  })
+
+  it('/api/hosts/versions, for a seeded version', async () => {
+    const response = await VERSIONS_POST(
+      new Request('https://app.aglyn.com/api/hosts/versions', {
+        method: 'POST',
+        headers: { authorization: 'Bearer tok' },
+        body: JSON.stringify({
+          hostId: 'host-1',
+          kind: 'component',
+          parentId: 'component-1',
+          data: { componentId: 'component-1', rootId: 'root', props: DECLARED },
+        }),
+      }),
+    )
+    expect(response.status).toBe(200)
+    const stored = mockWrite.mock.calls[0][0] as Record<string, unknown>
+    expect(stored['props']).toEqual(STORED)
+  })
+})

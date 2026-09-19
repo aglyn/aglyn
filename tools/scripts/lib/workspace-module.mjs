@@ -93,4 +93,26 @@ export async function importWorkspaceModule(relativePath) {
   return loader.import(join(WORKSPACE_ROOT, relativePath))
 }
 
+/**
+ * Register every plugin's server declarations, as both apps do at boot
+ * (`instrumentation.ts`, from the generated server-declarations manifest).
+ *
+ * For a script that calls a function which asks a plugin seam. A seam starts
+ * empty and answers "nothing configured" until a plugin registers on it, so a
+ * script that skips this does not fail — it quietly does less than the served
+ * path. `eraseOrg` run from a script would remove no copies at the media
+ * delivery provider (AGL-2824) and still report success, which is the
+ * divergence this module exists to prevent. Reading the manifest rather than
+ * naming a plugin keeps the script as provider-agnostic as the apps.
+ *
+ * The same side-effect note as `importWorkspaceModule` applies: initialize the
+ * firebase-admin app first.
+ */
+export async function registerWorkspacePluginServerDeclarations() {
+  const { registerPluginServerDeclarations } = await importWorkspaceModule(
+    'apps/console/constants/plugins.declarations.server.generated.ts',
+  )
+  await registerPluginServerDeclarations()
+}
+
 export { WORKSPACE_ROOT }

@@ -166,8 +166,10 @@ describe('the analytics mounts are independent of the plugin gate (AGL-1550)', (
     it('the barrel really does drag the plugin manager in (the rule above is not folklore)', () => {
       const barrel = resolve(__dirname, '../../../libs/aglyn/src/index.ts')
       expect(read(barrel)).toMatch(/from '\.\/lib\/aglyn'/)
+      // …and the whole plugin-manager barrel beside it.
+      expect(read(barrel)).toMatch(/from '\.\/lib\/plugin-manager'/)
       const core = resolve(__dirname, '../../../libs/aglyn/src/lib/aglyn.ts')
-      expect(read(core)).toMatch(/from '\.\/plugin-manager'/)
+      expect(read(core)).toMatch(/from '\.\/plugin-manager\/plugin-manager'/)
     })
   })
 
