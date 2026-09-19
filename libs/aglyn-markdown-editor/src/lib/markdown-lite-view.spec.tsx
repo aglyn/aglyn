@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import { render } from '@testing-library/react'
 import { MarkdownLiteView } from './markdown-lite-view.component'
 
@@ -67,6 +68,48 @@ describe('MarkdownLiteView heading anchors (AGL-1162)', () => {
     )
     expect(container.querySelector('h2')?.id).toBe('notice')
     expect(container.querySelector('h3')?.id).toBe('notice-2')
+  })
+})
+
+/**
+ * A link that names its target by reference (AGL-3118) is not an address, so
+ * this preview cannot make an anchor out of it: `<a href="entry:blog/9fKqR">`
+ * is a control that looks live and goes nowhere. It renders as the text it
+ * is, labeled with where it leads (AGL-3119).
+ */
+describe('MarkdownLiteView link references (AGL-3119)', () => {
+  it('renders a reference as labeled text rather than a dead anchor', () => {
+    const { container } = render(
+      <MarkdownLiteView source={'See [this post](entry:blog/9fKqR) now.'} />,
+    )
+    expect(container.querySelector('a')).toBeNull()
+    const marked = container.querySelector('[data-md-reference]') as HTMLElement
+    expect(marked.textContent).toBe('this post')
+    expect(marked.getAttribute('title')).toBe('Links to an entry on this site')
+  })
+
+  it('names the target where the surface knows the site', () => {
+    const { container } = render(
+      <Aglyn.ScreenLinkContext.Provider
+        value={{ screens: { s1: 'pricing' }, labels: { s1: 'Pricing' } }}
+      >
+        <MarkdownLiteView source={'See [our prices](screen:s1).'} />
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+    expect(container.querySelector('a')).toBeNull()
+    expect(
+      container.querySelector('[data-md-reference]')?.getAttribute('title'),
+    ).toBe('Links to Pricing (/pricing)')
+  })
+
+  it('leaves an ordinary URL the anchor it has always been', () => {
+    const { container } = render(
+      <MarkdownLiteView source={'See [docs](https://example.com).'} />,
+    )
+    expect(container.querySelector('a')?.getAttribute('href')).toBe(
+      'https://example.com',
+    )
+    expect(container.querySelector('[data-md-reference]')).toBeNull()
   })
 })
 

@@ -27,7 +27,11 @@ import {
 import {
   EXTERNAL_HREF_PATTERN,
   SAFE_HREF_PATTERN,
+  formatCollectionLinkValue,
+  linkTargetKind,
   parseCollectionLinkValue,
+  parseEntryLinkValue,
+  parseFeedLinkValue,
   resolveScreenHref,
   screenRoutesAnswerFor,
   splitLinkValue,
@@ -123,10 +127,19 @@ export function unavailableScreenLabel(
   // ignore the warning that matters.
   if (!screensKnown) return screenId
   // A listing has no publish state of its own: its collection is either gone
-  // or no longer has the slug its address is built from.
+  // or no longer has the slug its address is built from. A feed hangs off the
+  // same listing, so it is lost the same two ways (AGL-3118).
   const collectionId = parseCollectionLinkValue(screenId)
-  return collectionId
-    ? `⚠ Unavailable collection listing (${collectionId}) — deleted or has no slug`
+  if (collectionId) {
+    return `⚠ Unavailable collection listing (${collectionId}) — deleted or has no slug`
+  }
+  const feedCollectionId = parseFeedLinkValue(screenId)
+  if (feedCollectionId) {
+    return `⚠ Unavailable RSS feed (${feedCollectionId}) — collection deleted or has no slug`
+  }
+  const entry = parseEntryLinkValue(screenId)
+  return entry
+    ? `⚠ Unavailable entry (${entry.entryId}) — unpublished or deleted`
     : `⚠ Unavailable screen (${screenId}) — unpublished or deleted`
 }
 
@@ -157,18 +170,56 @@ export function unresolvedScreenOption(
 /** One target a link picker offers — see {@link screenLinkTargetOptions}. */
 export interface ScreenLinkTargetOption {
   /**
-   * The routing-map key: a bare screen id, or a collection listing's
-   * `collection:<id>`. Stored as it is in a screen slot, and through
-   * `formatScreenLinkValue` in a `Link`-typed prop.
+   * The routing-map key: a bare screen id, a collection listing's
+   * `collection:<id>`, or its feed's `feed:<id>`. Stored as it is in a screen
+   * slot, and through `formatScreenLinkValue` in a `Link`-typed prop.
    */
   value: string
   label: string
-  kind: 'screen' | 'collection-listing'
+  kind: 'screen' | 'collection-listing' | 'feed'
+}
+
+/**
+ * What a picker calls one routing-map target, or `undefined` for a key the
+ * map does not hold — the label {@link screenLinkTargetOptions} gives it.
+ *
+ * A listing and a feed are labeled with their collection's name and address,
+ * like a screen, and marked as what they are IN the label rather than only by
+ * position: a closed picker shows the chosen label and nothing else, and
+ * "Blog (/blog)" there reads exactly like a screen named Blog. A feed borrows
+ * its collection's name, which is the only name it has (AGL-3119).
+ *
+ * An entry is never named here. A map holds only the entries a page
+ * references, under no label, so an entry is named by the search seam
+ * (`LinkTargetSearchContext`), which reads the entry itself.
+ */
+export function screenLinkTargetLabel(
+  key: string,
+  screens: ScreenRouteMap | undefined,
+  labels: Record<string, string> | undefined,
+): string | undefined {
+  const href = resolveScreenHref(screens, key)
+  if (href === undefined) return undefined
+  const collectionId = parseCollectionLinkValue(key)
+  if (collectionId) {
+    return `${labels?.[key] ?? collectionId} (${href}) — collection listing`
+  }
+  const feedCollectionId = parseFeedLinkValue(key)
+  if (feedCollectionId) {
+    const name =
+      labels?.[key] ??
+      labels?.[formatCollectionLinkValue(feedCollectionId)] ??
+      feedCollectionId
+    return `${name} (${href}) — RSS feed`
+  }
+  if (parseEntryLinkValue(key)) return undefined
+  return `${labels?.[key] ?? key} (${href})`
 }
 
 /**
  * Everything a Screen picker offers, in the order it offers it (AGL-2799):
- * the host's screens, then its content collections' listing pages.
+ * the host's screens, then its content collections' listing pages, then
+ * their RSS feeds (AGL-3119).
  *
  * ONE builder for both pickers — the attributes panel's `SCREEN_SELECT` and
  * the `Link`-typed prop picker. Each used to map the routing map into options
@@ -176,14 +227,13 @@ export interface ScreenLinkTargetOption {
  * neither offered a collection's listing at all, which is how the drawer on
  * aglyn.com came to link its blog as a typed `/blog`.
  *
- * A listing is labeled with its collection's name and address, like a
- * screen, and marked as a listing IN the label rather than only by position:
- * a closed select shows the chosen label and nothing else, and "Blog (/blog)"
- * there reads exactly like a screen named Blog.
+ * Entries are left out even when the map holds some: they are searched, not
+ * listed, because a site's entries are far too many to read into a dropdown
+ * — see `LinkTargetSearchContext`.
  *
  * `order` keeps each picker's established screen order — by path in the
- * attributes panel, by name in the prop picker — and the listings follow the
- * screens in the same order.
+ * attributes panel, by name in the prop picker — and the listings and feeds
+ * follow the screens in the same order.
  */
 export function screenLinkTargetOptions(
   screens: ScreenRouteMap | undefined,
@@ -193,32 +243,28 @@ export function screenLinkTargetOptions(
   type Ranked = ScreenLinkTargetOption & { path: string }
   const pages: Ranked[] = []
   const listings: Ranked[] = []
+  const feeds: Ranked[] = []
   for (const [key, path] of Object.entries(screens ?? {})) {
-    const href = resolveScreenHref(screens, key) ?? ''
-    const collectionId = parseCollectionLinkValue(key)
-    if (collectionId) {
-      listings.push({
-        value: key,
-        label: `${labels?.[key] ?? collectionId} (${href}) — collection listing`,
-        kind: 'collection-listing',
-        path,
-      })
+    const kind = linkTargetKind(key)
+    if (kind === 'entry') continue
+    const label = screenLinkTargetLabel(key, screens, labels) ?? key
+    if (kind === 'collection') {
+      listings.push({ value: key, label, kind: 'collection-listing', path })
+    } else if (kind === 'feed') {
+      feeds.push({ value: key, label, kind: 'feed', path })
     } else {
-      pages.push({
-        value: key,
-        label: `${labels?.[key] ?? key} (${href})`,
-        kind: 'screen',
-        path,
-      })
+      pages.push({ value: key, label, kind: 'screen', path })
     }
   }
   const compare = (a: Ranked, b: Ranked) =>
     order === 'path'
       ? a.path.localeCompare(b.path)
       : a.label.localeCompare(b.label)
-  return [...pages.sort(compare), ...listings.sort(compare)].map(
-    ({ value, label, kind }) => ({ value, label, kind }),
-  )
+  return [
+    ...pages.sort(compare),
+    ...listings.sort(compare),
+    ...feeds.sort(compare),
+  ].map(({ value, label, kind }) => ({ value, label, kind }))
 }
 
 /**

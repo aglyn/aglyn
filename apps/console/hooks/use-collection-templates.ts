@@ -26,6 +26,7 @@ import {
   collectionTemplateScreenIds,
   type CollectionListingTarget,
   type CollectionTemplateRoute,
+  type CollectionTemplateSource,
 } from '../constants/collection-templates'
 
 export interface UseCollectionTemplatesResult {
@@ -70,16 +71,29 @@ export function useCollectionTemplates(
     [firestore, hostId],
     { idField: '$id' },
   )
-  return useMemo(
-    () => ({
-      templateScreenIds: collectionTemplateScreenIds(data),
-      listTemplateScreenIds: collectionListTemplateScreenIds(data),
-      routesByScreenId: collectCollectionTemplateRoutes(data),
-      listRoutesByScreenId: collectionListRoutesByScreenId(data),
-      listingTargets: collectionListingTargets(data),
-    }),
-    [data],
-  )
+  return useMemo(() => collectionTemplatesOf(data), [data])
+}
+
+/**
+ * The same answers from collection documents a surface ALREADY holds.
+ *
+ * The content pages read `hosts/{h}/collections` for their own list, so the
+ * entry editor's link pickers derive this from that subscription instead of
+ * opening a second one for the same documents (AGL-3119).
+ */
+export function collectionTemplatesOf(
+  collections:
+    | ReadonlyArray<CollectionTemplateSource | null | undefined>
+    | null
+    | undefined,
+): UseCollectionTemplatesResult {
+  return {
+    templateScreenIds: collectionTemplateScreenIds(collections),
+    listTemplateScreenIds: collectionListTemplateScreenIds(collections),
+    routesByScreenId: collectCollectionTemplateRoutes(collections),
+    listRoutesByScreenId: collectionListRoutesByScreenId(collections),
+    listingTargets: collectionListingTargets(collections),
+  }
 }
 
 export default useCollectionTemplates
