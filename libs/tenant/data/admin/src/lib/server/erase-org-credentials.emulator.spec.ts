@@ -99,11 +99,6 @@ jest.mock('firebase-admin/storage', () => ({
 
 const describeEmulated = EMULATED ? describe : describe.skip
 
-/** Pending Outreach connects (AGL-2978), keyed by a hash, `orgId` a field. */
-const OAUTH_STATES = 'outreachOAuthStates'
-const ERASED_STATE = 'e2e-erase-credentials-state'
-const BYSTANDER_STATE = 'e2e-erase-credentials-bystander-state'
-
 describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)', () => {
   let db: Firestore
   let erase: typeof import('./erase')
@@ -194,21 +189,6 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
       })
     }
 
-    // A connect each org's member started and never finished (AGL-2978).
-    for (const [orgId, stateId] of [
-      [ORG, ERASED_STATE],
-      [OTHER_ORG, BYSTANDER_STATE],
-    ]) {
-      await db.collection(OAUTH_STATES).doc(stateId).set({
-        orgId,
-        uid: 'e2e-erase-credentials-uid',
-        nonceDigest: 'fixture-digest',
-        redirectUri: 'https://console.example.com/api/outreach/mailboxes/oauth/callback',
-        expiresAtMs: Date.now() + 600_000,
-        createdAtMs: Date.now(),
-      })
-    }
-
     // A plan first: it must count, and touch no provider.
     const plan = await erase.eraseOrg(ORG, {
       dryRun: true,
@@ -216,7 +196,7 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
         revokerLoads += 1
       },
     })
-    expect(plan).toMatchObject({ ok: false, skippedReason: 'dry-run', outreachOAuthStates: 1 })
+    expect(plan).toMatchObject({ ok: false, skippedReason: 'dry-run' })
     expect(revokerCalls).toEqual([])
     expect(revokerLoads).toBe(0)
 
@@ -238,7 +218,6 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
       .get()
     await Promise.all(rows.docs.map((doc) => doc.ref.delete()))
     await db.collection(MAILBOX_CREDENTIALS).doc(BYSTANDER_MAILBOX).delete()
-    await db.collection(OAUTH_STATES).doc(BYSTANDER_STATE).delete()
     await db.recursiveDelete(db.collection('orgs').doc(OTHER_ORG))
     const revokers = await import('./provider-grant-revokers')
     revokers.unregisterProviderGrantRevoker(MAILBOX_CREDENTIALS)
@@ -256,11 +235,6 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
     })
   }, 60_000)
 
-  it('sweeps the erased org’s pending connects and no one else’s (AGL-2978)', async () => {
-    expect((await db.collection(OAUTH_STATES).doc(ERASED_STATE).get()).exists).toBe(false)
-    expect((await db.collection(OAUTH_STATES).doc(BYSTANDER_STATE).get()).exists).toBe(true)
-    expect(result.outreachOAuthStates).toBe(1)
-  }, 60_000)
 
   it('THE DEFECT: no apiKeys document still references the erased org', async () => {
     const rows = await db.collection('apiKeys').where('orgId', '==', ORG).get()

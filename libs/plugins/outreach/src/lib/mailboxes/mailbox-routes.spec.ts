@@ -448,7 +448,7 @@ describe('connect → Google → callback (AGL-2978)', () => {
     expect(url.searchParams.get('prompt')).toBe('consent')
     expect(url.searchParams.get('login_hint')).toBe('avery@rep.example.com')
     expect(url.searchParams.get('redirect_uri')).toBe('https://app.example.com/api/outreach/mailboxes/oauth/callback')
-    const pending = docs.get(`outreachOAuthStates/${outreachOAuthStateDocId(ORG, REP)}`)
+    const pending = docs.get(`orgs/${ORG}/outreachOAuthStates/${outreachOAuthStateDocId(ORG, REP)}`)
     expect(pending).toEqual({
       orgId: ORG,
       uid: REP,
@@ -466,7 +466,7 @@ describe('connect → Google → callback (AGL-2978)', () => {
     expect(code).toBe('code-1')
     // The callback exchanged nothing and consumed nothing.
     expect(googleCalls).toEqual([])
-    expect(docs.has(`outreachOAuthStates/${outreachOAuthStateDocId(ORG, REP)}`)).toBe(true)
+    expect(docs.has(`orgs/${ORG}/outreachOAuthStates/${outreachOAuthStateDocId(ORG, REP)}`)).toBe(true)
   })
 
   it('carries a refusal on the consent screen, an expired state and a forged one', async () => {
@@ -541,7 +541,7 @@ describe('connect/complete (AGL-2978)', () => {
     expect(exchange.get('code_verifier')).toMatch(/^[A-Za-z0-9_-]{43}$/)
     expect(exchange.get('redirect_uri')).toBe('https://app.example.com/api/outreach/mailboxes/oauth/callback')
 
-    expect(docs.has(`outreachOAuthStates/${outreachOAuthStateDocId(ORG, REP)}`)).toBe(false)
+    expect(docs.has(`orgs/${ORG}/outreachOAuthStates/${outreachOAuthStateDocId(ORG, REP)}`)).toBe(false)
     expect(aliasCalls).toEqual([
       { orgId: ORG, uid: REP, addresses: ['avery@rep.example.com', 'sales@rep.example.com'], nowMs: NOW },
     ])
@@ -564,7 +564,7 @@ describe('connect/complete (AGL-2978)', () => {
     expect(stolen.body.reason).toBe('state-user-mismatch')
     // Refused before anything was consumed or exchanged.
     expect(googleCalls).toEqual([])
-    expect(docs.has(`outreachOAuthStates/${outreachOAuthStateDocId(ORG, REP)}`)).toBe(true)
+    expect(docs.has(`orgs/${ORG}/outreachOAuthStates/${outreachOAuthStateDocId(ORG, REP)}`)).toBe(true)
   })
 
   it('refuses a state minted for another organization', async () => {

@@ -179,13 +179,6 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'EXISTENCE ONLY — which connected mailbox a credential authorizes, its provider, granted scopes and dates (AGL-2974), and since AGL-2978 the connected account’s address, its Google account id and the member who connected it: the organization’s own record of whose mailbox it holds. Every token is redacted by name and by shape (see redactSecrets) and never disclosed; the sealed refresh token and the id of the key that sealed it both carry `token` in their names. The document id is the mailbox id, not derived from any secret, so it is disclosed.',
   },
   {
-    collection: 'outreachOAuthStates',
-    keyedBy: 'field',
-    subjects: ['org'],
-    exported: true,
-    note: 'A mailbox connect a member started and has not finished (AGL-2978): the org, the member, the SHA-256 of a one-time nonce, the redirect address and an expiry ten minutes out. One per member per organization, deleted when the connect finishes, so what remains is a connect somebody abandoned. The document id is a hash of the org and member ids, not of any secret, so it is disclosed.',
-  },
-  {
     collection: 'ssoDomains',
     keyedBy: 'field',
     subjects: ['org'],
@@ -964,13 +957,6 @@ export async function exportOrgData(
   data['outreachMailboxCredentials'] = await readByField(
     db,
     'outreachMailboxCredentials',
-    'orgId',
-    orgId,
-  )
-  // Connects a member started and abandoned (AGL-2978); see the source note.
-  data['outreachOAuthStates'] = await readByField(
-    db,
-    'outreachOAuthStates',
     'orgId',
     orgId,
   )

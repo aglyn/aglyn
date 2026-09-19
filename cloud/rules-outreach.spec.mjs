@@ -24,8 +24,9 @@
  * holding `outreach.use`, in an org whose per-org override carries Outreach —
  * no plan grants it. Every one of them is server-written. The top-level
  * `outreachMailboxCredentials` is closed to every client, staff included, and
- * so is `outreachOAuthStates`, the pending record that makes a mailbox
- * connect's OAuth state single-use (AGL-2978).
+ * so is `orgs/{orgId}/outreachOAuthStates`, the pending record that makes a
+ * mailbox connect's OAuth state single-use (AGL-2978), which no rule names:
+ * the org block has no catch-all, so it is refused by default.
  *
  * ⚠️ Half the rows are controls against a lockout. "The revoked admin is
  * refused" also passes against a rule that refuses every admin, and "the
@@ -379,11 +380,13 @@ await check(
 )
 
 // ── A pending mailbox connect is closed to every client (AGL-2978) ──────────
-// Seeded as the connect route writes one, for the member reading it: a rule
-// that let a member read their own pending record would pass the "outsider"
-// row and still expose it, so every row here is the member's own.
+// Seeded as the connect route writes one, under the org, for the member
+// reading it: a rule that let a member read their own pending record would
+// pass the "outsider" row and still expose it, so every row here is the
+// member's own. No rule names the collection; these rows prove the org
+// block's default deny reaches it.
 const PENDING_STATE = 'state-outreach-owner'
-const pendingStateOf = (db, id = PENDING_STATE) => doc(db, 'outreachOAuthStates', id)
+const pendingStateOf = (db, id = PENDING_STATE) => doc(db, 'orgs', ORG, 'outreachOAuthStates', id)
 await env.withSecurityRulesDisabled(async (context) => {
   await setDoc(pendingStateOf(context.firestore()), {
     orgId: ORG,
@@ -399,11 +402,8 @@ await check(
   () => assertFails(getDoc(pendingStateOf(as(OWNER)))),
 )
 await check(
-  'outreachOAuthStates: the member cannot list the org’s pending connects by orgId',
-  () =>
-    assertFails(
-      getDocs(query(collection(as(OWNER), 'outreachOAuthStates'), where('orgId', '==', ORG))),
-    ),
+  'outreachOAuthStates: the member cannot list the org’s pending connects',
+  () => assertFails(getDocs(collection(as(OWNER), 'orgs', ORG, 'outreachOAuthStates'))),
 )
 await check(
   'outreachOAuthStates: the member cannot re-arm or create a pending connect',

@@ -2024,20 +2024,6 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Outreach mailbox connects in progress (AGL-2978): one pending record per
-    // member per organization, holding the digest of the nonce a signed OAuth
-    // `state` carries, the member it was minted for and the redirect address
-    // Google's code was issued to. Finishing a connect consumes the record in
-    // a transaction, which is what makes a state single-use.
-    //
-    // Deny ALL client access. A client that could WRITE one could re-arm a
-    // consumed state and replay a connect; one that could READ one learns
-    // which members have a connect open. Server routes are the only readers.
-    // Org erasure destroys them by the `orgId` field.
-    match /outreachOAuthStates/{stateId} {
-      allow read, write: if false;
-    }
-
     // REST API idempotency records (AGL-618): dedupe POSTs by Idempotency-Key.
     // Written and read by the Admin SDK only.
     match /apiIdempotency/{keyHash} {

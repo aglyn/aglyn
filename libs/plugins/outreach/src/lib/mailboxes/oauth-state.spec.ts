@@ -24,9 +24,11 @@ import {
   OUTREACH_OAUTH_STATE_TTL_MS,
   OUTREACH_OAUTH_STATES_COLLECTION,
   outreachOAuthStateDocId,
+  outreachOAuthStateRef,
   outreachOidcNonce,
   outreachPkceVerifier,
   readOutreachOAuthState,
+  recordOutreachOAuthState,
 } from './oauth-state'
 
 /**
@@ -122,22 +124,39 @@ describe('what the state derives (AGL-2978)', () => {
   })
 })
 
-describe('the pending-record collection is spelled the same everywhere (AGL-2978)', () => {
+describe('the pending record lives under its organization (AGL-2978)', () => {
   const REPO_ROOT = join(__dirname, '../../../../../..')
   const read = (path: string) => readFileSync(join(REPO_ROOT, path), 'utf8')
 
-  it('is closed to every client in the Firestore rules', () => {
-    const rules = read('cloud/firebase-firestore.rules')
-    const block = rules.match(new RegExp(`match /${OUTREACH_OAUTH_STATES_COLLECTION}/\\{[^}]+\\}\\s*\\{([^}]*)\\}`))
-    expect(block?.[1]).toMatch(/allow read, write: if false;/)
+  it('is written to and consumed from orgs/{orgId}/outreachOAuthStates', async () => {
+    const written: string[] = []
+    const ref = (path: string): any => ({
+      path,
+      collection: (name: string) => ({ doc: (id: string) => ref(`${path}/${name}/${id}`) }),
+      set: async () => void written.push(path),
+    })
+    const firestore = { collection: (name: string) => ({ doc: (id: string) => ref(`${name}/${id}`) }) } as never
+    const { claims } = mintOutreachOAuthState({ orgId: 'org-1', uid: 'uid-1', nowMs: 1 })
+    await recordOutreachOAuthState(firestore, { claims, redirectUri: 'https://console.example.com/cb', nowMs: 1 })
+    expect(written).toEqual([
+      `orgs/org-1/${OUTREACH_OAUTH_STATES_COLLECTION}/${outreachOAuthStateDocId('org-1', 'uid-1')}`,
+    ])
+    expect(outreachOAuthStateRef(firestore, 'org-1', 'uid-1').path).toBe(written[0])
   })
 
-  it('is swept by the org erasure and disclosed by the export under the same name', () => {
-    expect(read('libs/tenant/data/admin/src/lib/server/erase.ts')).toContain(
-      `const OUTREACH_OAUTH_STATES_COLLECTION = '${OUTREACH_OAUTH_STATES_COLLECTION}'`,
-    )
-    expect(read('libs/tenant/data/admin/src/lib/server/personal-data-export.ts')).toContain(
-      `collection: '${OUTREACH_OAUTH_STATES_COLLECTION}'`,
-    )
+  it('is named by no Firestore rule, so the org block’s default deny closes it to every client', () => {
+    // The org block has no catch-all (`cloud/rules-outreach.spec.mjs` proves
+    // the refusal against the emulator); a rule naming the collection is the
+    // one way a client could reach a pending record.
+    expect(read('cloud/firebase-firestore.rules')).not.toContain(OUTREACH_OAUTH_STATES_COLLECTION)
+  })
+
+  it('is named by no core library: the org erasure and export reach it through the org tree', () => {
+    for (const path of [
+      'libs/tenant/data/admin/src/lib/server/erase.ts',
+      'libs/tenant/data/admin/src/lib/server/personal-data-export.ts',
+    ]) {
+      expect([path, read(path).includes(OUTREACH_OAUTH_STATES_COLLECTION)]).toEqual([path, false])
+    }
   })
 })

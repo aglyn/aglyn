@@ -143,10 +143,8 @@ describeEmulated('a mailbox connect against Firestore (AGL-2978)', () => {
 
   async function cleanUp() {
     await db.recursiveDelete(db.collection('orgs').doc(ORG))
-    for (const collection of [OUTREACH_OAUTH_STATES_COLLECTION, 'outreachMailboxCredentials']) {
-      const rows = await db.collection(collection).where('orgId', '==', ORG).get()
-      await Promise.all(rows.docs.map((doc) => doc.ref.delete()))
-    }
+    const rows = await db.collection('outreachMailboxCredentials').where('orgId', '==', ORG).get()
+    await Promise.all(rows.docs.map((doc) => doc.ref.delete()))
   }
 
   beforeAll(async () => {
@@ -209,7 +207,7 @@ describeEmulated('a mailbox connect against Firestore (AGL-2978)', () => {
     ).toBe(REFRESH_TOKEN)
     const aliases = await db.collection('orgs').doc(ORG).collection('memberEmailAliases').doc(REP).get()
     expect(aliases.get('aliases')[0].verifiedAtMs).toEqual(expect.any(Number))
-    const pending = await db.collection(OUTREACH_OAUTH_STATES_COLLECTION).where('orgId', '==', ORG).get()
+    const pending = await db.collection('orgs').doc(ORG).collection(OUTREACH_OAUTH_STATES_COLLECTION).get()
     expect(pending.size).toBe(0)
 
     const disconnected = await routes.disconnect(

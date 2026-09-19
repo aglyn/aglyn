@@ -97,19 +97,6 @@ const SUPPLIER_DELIVERY_COLLECTION = 'supplierDeliveries'
 const OUTREACH_MAILBOX_CREDENTIALS_COLLECTION = 'outreachMailboxCredentials'
 
 /**
- * `outreachOAuthStates` — the pending record of a mailbox connect a rep
- * started (AGL-2978): the org, the member, a nonce's digest and the redirect
- * address, one per member per organization, keyed by a hash and carrying
- * `orgId` as a FIELD. A connect that finishes deletes its record; one that is
- * abandoned leaves it, so the erasure sweeps them by field. A literal for the
- * reason the credential collection's name is one: it belongs to
- * `libs/plugins/outreach` (`OUTREACH_OAUTH_STATES_COLLECTION` in
- * `src/lib/mailboxes/oauth-state.ts`), whose spec holds the two spellings
- * together.
- */
-const OUTREACH_OAUTH_STATES_COLLECTION = 'outreachOAuthStates'
-
-/**
  * Destroy the site's DEAD-LETTERED supplier deliveries (AGL-1448).
  *
  * `supplierDeliveries/{id}` is TOP-LEVEL and carries `hostId` as a field, so
@@ -407,17 +394,6 @@ async function eraseOrgOutreachMailboxCredentials(
     dryRun,
   )
   return { deleted, revocations }
-}
-
-/**
- * Delete the org's pending Outreach connects (AGL-2978) — see
- * `OUTREACH_OAUTH_STATES_COLLECTION`. Bounded by the `orgId` field.
- */
-async function eraseOrgOutreachOAuthStates(
-  orgId: string,
-  dryRun = false,
-): Promise<number> {
-  return deleteDocsByOrgId(OUTREACH_OAUTH_STATES_COLLECTION, orgId, dryRun)
 }
 
 /**
@@ -1035,8 +1011,6 @@ export interface EraseOrgResult {
    * the erasing process; `null` on a dry run, which touches no provider.
    */
   outreachGrantRevocations?: ProviderGrantRevocationTally | null
-  /** Pending Outreach mailbox connects destroyed (AGL-2978) — outside the org path. */
-  outreachOAuthStates?: number
   /** Public SSO routing docs destroyed (AGL-1448) — outside the org path. */
   ssoDomains?: number
   /** Custom console domains released (AGL-1448) — outside the org path. */
@@ -1334,7 +1308,6 @@ export async function eraseOrg(
     )
     progress.outreachMailboxCredentials = outreachCredentials.deleted
     progress.outreachGrantRevocations = outreachCredentials.revocations
-    progress.outreachOAuthStates = await eraseOrgOutreachOAuthStates(orgId, dryRun)
     progress.ssoDomains = await eraseOrgSsoDomains(orgId, dryRun)
     progress.consoleDomains = await releaseOrgConsoleDomains(orgId, dryRun)
     progress.apiIdempotency = await eraseOrgIdempotencyKeys(orgId, dryRun)

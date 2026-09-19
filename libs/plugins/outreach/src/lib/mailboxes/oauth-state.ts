@@ -39,12 +39,21 @@ import { createHash, createHmac, randomBytes } from 'node:crypto'
  *
  * A signature proves who minted a state, not that it is fresh. Each connect
  * also writes ONE pending record per member per organization, at
- * `outreachOAuthStates/{sha256(orgId, uid)}`, holding the SHA-256 of the
- * state's nonce, its expiry and the redirect address the code was issued
- * for. Finishing a connect consumes that record in a transaction
+ * `orgs/{orgId}/outreachOAuthStates/{sha256(orgId, uid)}`, holding the
+ * SHA-256 of the state's nonce, its expiry and the redirect address the code
+ * was issued for. Finishing a connect consumes that record in a transaction
  * (`consumeOnce`), so a second use of the same state finds nothing, and
  * starting another connect replaces the record, retiring every earlier state.
- * The collection is closed to every client.
+ *
+ * ## Under the organization
+ *
+ * The record is the organization's, so it lives in the organization's tree:
+ * the workspace erasure's recursive delete and the workspace export's walk
+ * reach it with no sweep of their own, and nothing outside this plugin names
+ * the collection. No Firestore rule names it either, and the org block has no
+ * catch-all, so every client is refused it — a client that could write one
+ * could re-arm a consumed state, and one that could read one would learn
+ * which members have a connect open.
  *
  * ## Derived, not stored
  *
@@ -158,9 +167,22 @@ export function outreachOAuthStateDocId(orgId: string, uid: string): string {
   return createHash('sha256').update(`${orgId}\n${uid}`).digest('hex')
 }
 
+/** `orgs/{orgId}/outreachOAuthStates/{id}` for a member's pending connect. */
+export function outreachOAuthStateRef(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  uid: string,
+): FirebaseFirestore.DocumentReference {
+  return firestore
+    .collection('orgs')
+    .doc(orgId)
+    .collection(OUTREACH_OAUTH_STATES_COLLECTION)
+    .doc(outreachOAuthStateDocId(orgId, uid))
+}
+
 const digest = (nonce: string) => createHash('sha256').update(nonce).digest('base64url')
 
-/** `outreachOAuthStates/{id}` — see the module comment. */
+/** `orgs/{orgId}/outreachOAuthStates/{id}` — see the module comment. */
 export interface OutreachOAuthStateRecord {
   orgId: string
   uid: string
@@ -189,10 +211,7 @@ export async function recordOutreachOAuthState(
     expiresAtMs: claims.exp,
     createdAtMs: input.nowMs,
   }
-  await firestore
-    .collection(OUTREACH_OAUTH_STATES_COLLECTION)
-    .doc(outreachOAuthStateDocId(claims.orgId, claims.uid))
-    .set(record)
+  await outreachOAuthStateRef(firestore, claims.orgId, claims.uid).set(record)
 }
 
 export type OutreachOAuthStateConsumed =
@@ -212,9 +231,7 @@ export async function consumeOutreachOAuthState(
   input: { claims: OutreachOAuthStateClaims; nowMs: number },
 ): Promise<OutreachOAuthStateConsumed> {
   const { claims } = input
-  const ref = firestore
-    .collection(OUTREACH_OAUTH_STATES_COLLECTION)
-    .doc(outreachOAuthStateDocId(claims.orgId, claims.uid))
+  const ref = outreachOAuthStateRef(firestore, claims.orgId, claims.uid)
   const result = await consumeOnce<string>(firestore, ref, (data) => {
     if (data['orgId'] !== claims.orgId || data['uid'] !== claims.uid) {
       return { accept: false, reason: 'state-superseded' }
