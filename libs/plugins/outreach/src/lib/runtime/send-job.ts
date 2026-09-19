@@ -533,7 +533,7 @@ async function runTaskStep(
   const step = sequence.steps[enrollment.stepIndex] as OutreachTaskStep
   if ((await claimStep(deps, firestore, run, enrollment, null)) !== 'claimed') return false
   const nowMs = deps.now()
-  let taskId: string | null = null
+  let taskId: string | null
   try {
     const written = await fileOutreachTask(deps, {
       orgId: run.orgId,
