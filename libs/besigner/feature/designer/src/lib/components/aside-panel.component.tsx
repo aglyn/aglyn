@@ -73,7 +73,11 @@ import ElementStylesForm from './element-styles-form.component'
 import NodeTreeView, { type NodeTreeViewProps } from './node-tree-view'
 import SiteThemeColorTokensProvider from './site-theme-color-tokens-provider.component'
 import { usePublishActiveHostTheme } from '../utils/active-host-theme'
-import { useBesignerInspectorExtras } from '../contexts/inspector-extras-context'
+import { besignerInspected } from '../contexts/inspected-selection'
+import {
+  inspectorExtrasFor,
+  useBesignerInspectorExtras,
+} from '../contexts/inspector-extras-context'
 import { besignerDocsUrl } from '../utils/docs-help'
 import WorkspacePanelComponent, {
   type WorkspacePanelComponentProps,
@@ -237,10 +241,19 @@ const withTabPanelInner = (Component: ComponentType<any>) => (props: any) => {
 /**
  * The Attributes form with the host app's section beneath it (AGL-2940):
  * whatever `BesignerInspectorExtrasContext` carries, drawn under the
- * selected element's own fields and nothing when the host supplied nothing.
+ * selected element's own fields — for that element, when the host supplied
+ * a function — and nothing when the host supplied nothing.
+ *
+ * The selection travels with `editable` (AGL-2908), the same rule the form's
+ * own Save as reusable component and Detach actions are drawn under: the
+ * canvas root and locked layout chrome answer false. It is read here because
+ * a host section has the node and not the editor, and the rule is the drag
+ * manager's.
  */
 const ElementPropsFormWithExtras = (props: any) => {
-  const extras = useBesignerInspectorExtras()
+  const supplied = useBesignerInspectorExtras()
+  const inspected = besignerInspected(props.node)
+  const extras = inspected ? inspectorExtrasFor(supplied, inspected) : null
   return (
     <>
       <ElementPropsForm {...props} />

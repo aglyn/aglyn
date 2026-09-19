@@ -566,31 +566,38 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
     if (!root) return undefined
     return Aglyn.subscribeVideoCommands(root, () => answerVideoCommand(root))
   }, [root, answerVideoCommand])
-  /** The labeled box the element shows when it has nothing it can play. */
-  const placeholder = (label: string) => (
-    <Box
-      ref={rootRef}
-      {...rest}
-      sx={[
-        {
-          width: width || '100%',
-          height: height || 180,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: '1px dashed',
-          borderColor: 'divider',
-          borderRadius: radius != null ? `${radius}px` : undefined,
-          color: 'text.secondary',
-          fontSize: 12,
-          fontFamily: 'system-ui, sans-serif',
-        },
-        ...nodeSx,
-      ]}
-    >
-      {label}
-    </Box>
-  )
+  /**
+   * The labeled box the element shows when it has nothing it can play. The
+   * label is for the author, so only editing surfaces draw it; a published
+   * page renders the bare element.
+   */
+  const placeholder = (label: string) =>
+    suppressNavigation ? (
+      <Box
+        ref={rootRef}
+        {...rest}
+        sx={[
+          {
+            width: width || '100%',
+            height: height || 180,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px dashed',
+            borderColor: 'divider',
+            borderRadius: radius != null ? `${radius}px` : undefined,
+            color: 'text.secondary',
+            fontSize: 12,
+            fontFamily: 'system-ui, sans-serif',
+          },
+          ...nodeSx,
+        ]}
+      >
+        {label}
+      </Box>
+    ) : (
+      <Box ref={rootRef} {...rest} sx={nodeSx} />
+    )
   if (!src) return placeholder('Video — set a source URL')
   /**
    * The reserved box, as a ratio rather than a size.

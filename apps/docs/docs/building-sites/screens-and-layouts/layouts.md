@@ -78,6 +78,29 @@ saved version, named `Copy of <layout>` unless you type another name. No
 screen uses the copy until you assign it, so nothing on the live site changes.
 The copy counts against your shared-layout allowance like a new layout.
 
+## Generate a layout with Aglyn AI
+
+An AI build job can make a layout from a brief: the header, navigation and footer you have in
+mind. The job proposes a plan first, and builds once you confirm it: a header that links your
+screens, the slot each page renders in, and a footer. When your site already has a navigation
+or menu component, the layout places it rather than building another. The layout follows
+[the building rules](../../ai/how-aglyn-ai-builds.md), so it carries no page title of its own
+and takes its colors and type from your theme.
+
+Open **Layouts** for the site and choose **Describe it**, beside **Templates** and **Create New
+Layout**. Write what the header, navigation and footer should hold, then choose **Plan the
+layout**, and open **AI jobs** in the Assist panel to read the plan and confirm it.
+
+A link in the layout goes only to a screen that does what its words say, and one on a colored
+band, such as a footer in your primary color, uses the band's text color. Where the brief leaves
+out a fact, such as your address or opening hours, the footer marks it in square brackets, and
+**AI jobs** lists those gaps beside the draft.
+
+The layout arrives as a new draft in **Layouts**, and **Open draft** on the job opens it in the
+Besigner. No screen uses it until you assign it, so nothing on the live site changes. It counts
+against your shared-layout allowance like a layout you create yourself, and when the site has
+none to spare the job says so before it starts, not after it has spent anything.
+
 ## Used by
 
 A layout's detail page has a **Used by** card listing everything that renders inside it,

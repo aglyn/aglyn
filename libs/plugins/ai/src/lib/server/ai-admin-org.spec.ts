@@ -287,6 +287,7 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
       band: 1,
       cap: 2,
       messages: 0,
+      allotment: 0,
       budget: 0,
       account: 0,
       requests: 0,
@@ -300,6 +301,7 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
       queued: 0,
       running: 1,
       needs_input: 0,
+      needs_review: 0,
       done: 0,
       failed: 1,
       canceled: 0,
@@ -367,11 +369,90 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
     expect(body.pool.usedCredits).toBe(0)
     expect(body.refusals.total).toBe(0)
     expect(body.jobs).toEqual({
-      counts: { queued: 0, running: 0, needs_input: 0, done: 0, failed: 0, canceled: 0 },
+      counts: { queued: 0, running: 0, needs_input: 0, needs_review: 0, done: 0, failed: 0, canceled: 0 },
       recent: [],
       truncated: false,
     })
     expect(body.users).toEqual([])
     expect(body.overage.sellsOverage).toBe(false)
+  })
+
+  it('prices Starter WITH the add-on past its band at the rate the invoice bills (AGL-3014)', async () => {
+    // Starter lists no rate on `PLAN_PRICING`; the add-on's $3.00 per 1,000
+    // comes from the resolver `assistMonthOverage` asks. Staff reading "not
+    // sold past the band" beside a real overage line on the workspace's
+    // invoice would be this issue on the staff surface.
+    staff()
+    mockDocsByPath['orgs/org-1'] = { name: 'Starter AI', plan: 'starter', seatAddons: { aiAddon: 1 } }
+    // $10.50 drawn: 10,500 credits, 6,500 past the add-on's 4,000.
+    mockDocsByPath['orgs/org-1/assistUsage/2026-09'] = {
+      month: '2026-09',
+      estCostUsd: 10.5,
+      messages: 90,
+    }
+    const body = await (await get({ token: 'tok' })).json()
+    expect(body.addon.on).toBe(true)
+    expect(body.pool).toMatchObject({
+      planCredits: 0,
+      addonCredits: AI_ADDON_CREDITS_PER_MONTH.starter,
+      totalCredits: 4_000,
+      usedCredits: 10_500,
+    })
+    expect(body.overage).toMatchObject({
+      overageCredits: 6_500,
+      rateUsdPer1k: 3,
+      accruedUsd: 19.5,
+      sellsOverage: true,
+      bandRefuses: false,
+    })
+  })
+
+  it('reads tokens by kind and the cache hit rate off the month document (AGL-2937)', async () => {
+    staff()
+    mockDocsByPath['orgs/org-1/assistUsage/2026-09'] = {
+      ...mockDocsByPath['orgs/org-1/assistUsage/2026-09'],
+      inputTokens: 3_000,
+      cacheReadTokens: 9_000,
+      cacheWriteTokens: 3_000,
+      outputTokens: 1_500,
+      kinds: {
+        assist: {
+          requests: 30,
+          estCostUsd: 0.3,
+          tokens: { input: 1_000, cached: 9_000, cacheWrite: 0, output: 500 },
+        },
+        page: {
+          requests: 4,
+          estCostUsd: 2.2,
+          tokens: { input: 2_000, cached: 0, cacheWrite: 3_000, output: 1_000 },
+        },
+      },
+    }
+    const body = await (await get({ token: 'tok' })).json()
+    expect(body.tokens.total).toEqual({ input: 3_000, cached: 9_000, cacheWrite: 3_000, output: 1_500 })
+    expect(body.tokens.cacheHitRate).toBeCloseTo(9_000 / 15_000, 9)
+    expect(body.tokens.kinds.map((row: { kind: string }) => row.kind)).toEqual(['page', 'assist'])
+    expect(body.tokens.kinds[0]).toEqual({
+      kind: 'page',
+      requests: 4,
+      estCostUsd: 2.2,
+      // The bucket above carries no provider figure, so it answers with the
+      // billed one — over-reading our bill, never under (AGL-3015).
+      providerCostUsd: 2.2,
+      costPerRequestUsd: 0.55,
+      tokens: { input: 2_000, cached: 0, cacheWrite: 3_000, output: 1_000 },
+      cacheHitRate: 0,
+    })
+    expect(body.tokens.kinds[1]).toMatchObject({ costPerRequestUsd: 0.01, cacheHitRate: 0.9 })
+  })
+
+  it('reads a month written before kinds were kept as its totals and no kinds', async () => {
+    staff()
+    const body = await (await get({ token: 'tok' })).json()
+    expect(body.tokens).toEqual({
+      total: { input: 0, cached: 0, cacheWrite: 0, output: 0 },
+      cacheHitRate: null,
+      kinds: [],
+    })
   })
 })

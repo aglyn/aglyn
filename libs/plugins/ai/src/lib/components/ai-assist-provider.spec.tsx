@@ -24,7 +24,7 @@
  * parses the refusal and then falls through to `AI request failed` anyway —
  * the "computed but not wired" shape — and the coverage spec passes. So this
  * file mounts the provider, opens each of its two doors the way the designer
- * opens them (through `AiAssistContext`), answers `/api/ai/assist` with a
+ * opens them (through `AiAssistActionsContext`), answers `/api/ai/assist` with a
  * real 423, and asserts on the snackbar the user is actually shown.
  *
  * Unlike billing (AGL-1558 moved that surface to an inline `LockdownNotice`),
@@ -81,7 +81,7 @@ jest.mock('@aglyn/aglyn', () => ({
   },
 }))
 
-import { DesignerAssistContext } from '@aglyn/aglyn'
+import { AiAssistActionsContext } from './ai-assist-actions-context'
 import { AiAssistProvider } from './ai-assist-provider.component'
 
 /**
@@ -151,7 +151,7 @@ afterEach(() => {
 
 /** Opens whichever door the designer would open, through the real context. */
 function Doors() {
-  const assist = useContext(DesignerAssistContext) as any
+  const assist = useContext(AiAssistActionsContext) as any
   return (
     <>
       <button onClick={() => assist?.onRewrite({ $id: 'node-1' })}>
@@ -177,9 +177,9 @@ function mountProvider(
   )
 }
 
-/** Whether each door's callback is published into the designer's context. */
+/** Whether each door's callback is published for the besigner controls. */
 function DoorPresence() {
-  const assist = useContext(DesignerAssistContext) as any
+  const assist = useContext(AiAssistActionsContext) as any
   return (
     <div>
       {`rewrite:${assist?.onRewrite ? 'yes' : 'no'} section:${

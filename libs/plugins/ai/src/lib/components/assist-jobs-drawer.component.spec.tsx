@@ -152,6 +152,27 @@ describe('the gate', () => {
   })
 })
 
+/**
+ * A page is described FOR a site (AGL-2907), so the entry point is here only
+ * while the console page the panel is docked to names one — and opening the
+ * brief dialog still asks the route for nothing until a brief is sent.
+ */
+describe('describing a page', () => {
+  it('offers it only on a site’s own routes', () => {
+    expect(screen.queryByRole('button', { name: 'Describe a page' })).toBeNull()
+    renderDrawer({ hostId: 'host-1' })
+    expect(screen.getByRole('button', { name: 'Describe a page' })).toBeTruthy()
+  })
+
+  it('opens the brief dialog, which sends nothing of its own until a brief is written', () => {
+    renderDrawer({ hostId: 'host-1' })
+    fireEvent.click(screen.getByRole('button', { name: 'Describe a page' }))
+    expect(screen.getByLabelText('What is the page for?')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Plan the page' }).hasAttribute('disabled')).toBe(true)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+})
+
 describe('the list', () => {
   it('loads the org’s jobs on expand, with steps, the copy of a text output and an open-draft link', async () => {
     mockFetch.mockImplementation(async (url: string) => {
@@ -166,7 +187,14 @@ describe('the list', () => {
               steps: [{ name: 'draft', status: 'done', startedAt: null, endedAt: null, creditsSpent: 6, error: null }],
               outputs: [
                 { resource: 'text', id: 'draft', hostId: 'host-1', label: 'Draft copy', text: 'Fresh coffee.' },
-                { resource: 'screen', id: 'scr-1', versionId: 'v-1', hostId: 'host-1', label: 'Landing page' },
+                {
+                  resource: 'screen',
+                  id: 'scr-1',
+                  versionId: 'v-1',
+                  hostId: 'host-1',
+                  hostSubdomain: 'shop',
+                  label: 'Landing page',
+                },
               ],
             }),
           ],
@@ -181,10 +209,46 @@ describe('the list', () => {
     expect(screen.getByText('Done')).toBeTruthy()
     const link = screen.getByText('Open draft — Landing page') as HTMLAnchorElement
     expect(link.getAttribute('href')).toBe(
-      '/acme/hosts/host-1/screens/scr-1/versions/v-1/besigner',
+      '/acme/hosts/shop/screens/scr-1/versions/v-1/besigner',
     )
     // A job that arrived finished is not this session's outcome to count.
     expect(mockTrackEvent).not.toHaveBeenCalled()
+  })
+
+  it('links a generated form to its page, and shows what the job says to decide next (AGL-2913)', async () => {
+    const note = 'Forms cannot collect photo upload yet, so this form leaves it out.'
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.startsWith('/api/ai/jobs?orgId=org-1')) {
+        return jsonResponse({
+          jobs: [
+            job({
+              id: 'job-form',
+              kind: 'form',
+              status: 'done',
+              running: false,
+              steps: [{ name: 'generate', status: 'done', startedAt: null, endedAt: null, creditsSpent: 4, error: null }],
+              outputs: [
+                {
+                  resource: 'form',
+                  id: 'job-form',
+                  versionId: null,
+                  hostId: 'host-1',
+                  hostSubdomain: 'shop',
+                  label: 'Roof quote request',
+                  note,
+                },
+              ],
+            }),
+          ],
+        })
+      }
+      throw new Error(`unarmed request to ${url}`)
+    })
+    renderDrawer()
+    fireEvent.click(screen.getByLabelText('Show AI jobs'))
+    const link = (await screen.findByText('Open draft — Roof quote request')) as HTMLAnchorElement
+    expect(link.getAttribute('href')).toBe('/acme/hosts/shop/forms/job-form')
+    expect(screen.getByText(note)).toBeTruthy()
   })
 
   it('shows the route’s refusal rather than an empty list', async () => {
@@ -284,31 +348,187 @@ describe('aiJobOutputHref', () => {
     resource: 'screen',
     id: 'scr-1',
     hostId: 'host-1',
+    hostSubdomain: 'shop',
     label: 'x',
     ...patch,
   })
 
   it('opens a versioned resource in the besigner on the version the job wrote', () => {
     expect(aiJobOutputHref(output({ versionId: 'v-1' }) as never, 'acme')).toBe(
-      '/acme/hosts/host-1/screens/scr-1/versions/v-1/besigner',
+      '/acme/hosts/shop/screens/scr-1/versions/v-1/besigner',
     )
     expect(aiJobOutputHref(output({ resource: 'reusableComponent' }) as never, 'acme')).toBe(
-      '/acme/hosts/host-1/components/scr-1',
+      '/acme/hosts/shop/components/scr-1',
     )
+    // An email design IS a screen (AGL-2912): the Emails page's own Edit
+    // design opens it in the screen besigner, and `/emails/{id}` is the
+    // transactional template route, which opens nothing for a design.
     expect(aiJobOutputHref(output({ resource: 'emailScreen', versionId: 'v-2' }) as never, 'acme')).toBe(
-      '/acme/hosts/host-1/emails/scr-1/versions/v-2/besigner',
+      '/acme/hosts/shop/screens/scr-1/versions/v-2/besigner',
     )
   })
 
-  it('has no page for text, no page without a host or a slug, and a list for products and workflows', () => {
+  it('opens a drafted campaign on its page in the site’s Marketing console (AGL-2912)', () => {
+    expect(aiJobOutputHref(output({ resource: 'campaign', id: 'cmp-1' }) as never, 'acme')).toBe(
+      '/acme/hosts/shop/marketing/campaigns/cmp-1',
+    )
+  })
+
+  it('has no page for text, no page without a host or a slug, and a list for products and automations', () => {
     expect(aiJobOutputHref(output({ resource: 'text' }) as never, 'acme')).toBeNull()
-    expect(aiJobOutputHref(output({ hostId: null }) as never, 'acme')).toBeNull()
+    expect(aiJobOutputHref(output({ hostId: null, hostSubdomain: null }) as never, 'acme')).toBeNull()
     expect(aiJobOutputHref(output({}) as never, '')).toBeNull()
     expect(aiJobOutputHref(output({ resource: 'product' }) as never, 'acme')).toBe(
-      '/acme/hosts/host-1/products',
+      '/acme/hosts/shop/products',
     )
+    // A drafted automation is an action, on the Automation page's Actions (AGL-2919).
     expect(aiJobOutputHref(output({ resource: 'workflow' }) as never, 'acme')).toBe(
-      '/acme/hosts/host-1/automation?tab=workflows',
+      '/acme/hosts/shop/automation/actions',
     )
+  })
+
+  it('names the site by its subdomain, never by the document id the console cannot resolve', () => {
+    // `[host]` resolves by subdomain: a link built from the document id
+    // opened no site at all.
+    expect(aiJobOutputHref(output({ hostSubdomain: undefined }) as never, 'acme')).toBeNull()
+    expect(aiJobOutputHref(output({ versionId: 'v-1' }) as never, 'acme')).not.toContain('host-1')
+  })
+
+  it('opens a theme proposal on the site’s Theme section (AGL-2938)', () => {
+    expect(aiJobOutputHref(output({ resource: 'theme', id: 'proposal' }) as never, 'acme')).toBe(
+      '/acme/hosts/shop/setup/theme',
+    )
+  })
+
+  it('opens a generated form on its own page, which mints its first version (AGL-2913)', () => {
+    expect(aiJobOutputHref(output({ resource: 'form', id: 'form-1' }) as never, 'acme')).toBe(
+      '/acme/hosts/shop/forms/form-1',
+    )
+    expect(
+      aiJobOutputHref(output({ resource: 'form', id: 'form-1', versionId: 'v-3' }) as never, 'acme'),
+    ).toBe('/acme/hosts/shop/forms/form-1')
+  })
+})
+
+describe('a job waiting for a person (AGL-2935)', () => {
+  const PLAN = {
+    reuse: [{ kind: 'layout', id: 'lay-site', purpose: 'the site chrome' }],
+    create: [
+      { kind: 'component', name: 'Service card', why: 'Nothing lists a service.', duplicateOf: null, fields: [] },
+    ],
+    screens: [
+      {
+        title: 'Roof repair',
+        slug: '/services/roof-repair',
+        layout: 'lay-site',
+        template: null,
+        duplicateOf: null,
+        nav: true,
+        seoTitle: 'Roof repair',
+        seoDescription: 'Same-week repair.',
+        sections: [{ name: 'hero', uses: [], items: 0 }],
+      },
+    ],
+    status: 'proposed',
+    labels: { 'lay-site': 'Site layout' },
+    proposedAt: '2026-09-14T10:00:00.000Z',
+    confirmedAt: null,
+    confirmedBy: null,
+  }
+  const waiting = (patch: Record<string, unknown>) =>
+    job({
+      kind: 'site',
+      status: 'needs_review',
+      running: false,
+      steps: [
+        { name: 'plan', status: 'done', startedAt: null, endedAt: null, creditsSpent: 6, error: null },
+        { name: 'generate', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+      ],
+      ...patch,
+    })
+
+  function armResume(
+    list: unknown,
+    answer: unknown,
+    posts: Array<[string, unknown]>,
+    status = 200,
+  ) {
+    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.startsWith('/api/ai/jobs?orgId=org-1')) return jsonResponse({ jobs: [list] })
+      if (url.includes('/events')) return sseResponse([])
+      if (url === '/api/ai/jobs/job-1/resume') {
+        posts.push([url, JSON.parse(String(init?.body))])
+        return jsonResponse(answer, status)
+      }
+      throw new Error(`unarmed request to ${url}`)
+    })
+  }
+
+  it('shows the proposed plan in the site’s own names, and confirms it through the resume route', async () => {
+    const posts: Array<[string, unknown]> = []
+    armResume(
+      waiting({ plan: PLAN, review: { reason: 'plan', message: 'The plan is ready.', findings: [] } }),
+      {
+        job: waiting({
+          status: 'queued',
+          plan: { ...PLAN, status: 'confirmed', confirmedAt: '2026-09-14T10:01:00.000Z', confirmedBy: 'viewer' },
+          review: null,
+        }),
+      },
+      posts,
+    )
+    renderDrawer()
+    fireEvent.click(screen.getByLabelText('Show AI jobs'))
+    expect(await screen.findByText('Needs review')).toBeTruthy()
+    expect(screen.getByText('Reuses the layout Site layout — the site chrome')).toBeTruthy()
+    expect(screen.getByText('Creates the component Service card — Nothing lists a service.')).toBeTruthy()
+    expect(
+      screen.getByText('Builds the screen Roof repair at /services/roof-repair in Site layout: hero'),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByText('Confirm plan'))
+    expect(await screen.findByText('Confirmed plan')).toBeTruthy()
+    expect(posts).toEqual([['/api/ai/jobs/job-1/resume', { orgId: 'org-1', hostId: 'host-1' }]])
+    expect(screen.queryByText('Confirm plan')).toBeNull()
+  })
+
+  it('names the rules a refused answer broke, and tries the step again', async () => {
+    const posts: Array<[string, unknown]> = []
+    const message = 'This could not be built within the building rules.'
+    armResume(
+      waiting({
+        error: message,
+        review: {
+          reason: 'doctrine',
+          message,
+          findings: [{ rule: 2, code: 'plan-screen-without-layout', message: 'A screen names no layout.' }],
+        },
+      }),
+      { job: waiting({ status: 'queued', review: null, error: null }) },
+      posts,
+    )
+    renderDrawer()
+    fireEvent.click(screen.getByLabelText('Show AI jobs'))
+    expect(await screen.findByText('A screen names no layout.')).toBeTruthy()
+    expect(screen.getByText(message)).toBeTruthy()
+    fireEvent.click(screen.getByText('Try again'))
+    expect(await screen.findByText('Queued')).toBeTruthy()
+    expect(posts).toHaveLength(1)
+    expect(screen.queryByText('Try again')).toBeNull()
+  })
+
+  it('shows the route’s refusal when a resume is refused, and leaves the job waiting', async () => {
+    const posts: Array<[string, unknown]> = []
+    armResume(
+      waiting({ plan: PLAN, review: { reason: 'plan', message: 'The plan is ready.', findings: [] } }),
+      { error: 'Your role does not include ai.generate' },
+      posts,
+      403,
+    )
+    renderDrawer()
+    fireEvent.click(screen.getByLabelText('Show AI jobs'))
+    fireEvent.click(await screen.findByText('Confirm plan'))
+    expect(await screen.findByText('Your role does not include ai.generate')).toBeTruthy()
+    expect(screen.getByText('Needs review')).toBeTruthy()
+    expect(posts).toHaveLength(1)
   })
 })

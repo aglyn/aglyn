@@ -69,6 +69,14 @@ on the notice in the editor) if that is not what you want. On a **Both**
 product the stock field stays live, because the one-time sales do
 decrement it.
 
+## Write and propose with AI {#ai}
+
+Aglyn AI can write a product's description, search listing and tags from what it says
+and shows, write copy for many products or a CSV import at once, propose a first catalog
+from a brief, and propose categories and discounts. Every proposal is reviewed before it
+is saved. Proposed products are created as drafts with their prices left empty, and
+proposed discounts are created switched off. See [Products with AI](../../ai/products-with-ai.md).
+
 ## Categories and tags
 
 **Categories** are hierarchical (each may have a parent) and slugged for

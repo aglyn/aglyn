@@ -30,7 +30,8 @@
  * only make sense site-wide withheld rather than rendered inert.
  */
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import { updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import SubmissionsCard from './submissions-card.component'
 
@@ -108,6 +109,13 @@ jest.mock('@aglyn/plugins-marketing/components/conversion-attribution.component'
   __esModule: true,
   default: () => null,
 }))
+// The reader a row opens holds the reply and list controls, which read on
+// their own; this file is about the list, so they draw nothing here.
+jest.mock('./submission-reply.component', () => ({ __esModule: true, default: () => null }))
+jest.mock('./submission-list-assignment.component', () => ({
+  __esModule: true,
+  default: () => null,
+}))
 
 beforeEach(() => {
   queries = []
@@ -173,6 +181,27 @@ describe('scoped to one form', () => {
     // is the same row rendered whole rather than a duplicate row.
     expect(screen.getAllByText(/visitor@example.com/)).toHaveLength(2)
     expect(screen.getByText('email: visitor@example.com')).toBeTruthy()
+  })
+})
+
+describe('the submissions are a record list in the shared grid (AGL-3045)', () => {
+  it('draws the rows in the grid, marks the unread one, and opens a row into the reader', () => {
+    rows = [
+      { $id: 's1', formName: 'Contact', read: false, fields: { email: 'new@example.com' } },
+      { $id: 's2', formName: 'Contact', read: true, fields: { email: 'old@example.com' } },
+    ]
+    const { container } = render(<SubmissionsCard hostId="host-1" formId="form-1" />)
+
+    expect(container.querySelectorAll('table')).toHaveLength(0)
+    const grid = screen.getByRole('grid', { name: 'Submissions to this form' })
+    const rowOf = (address: string) =>
+      within(grid).getAllByText(address)[0].closest('[role="row"]') as HTMLElement
+    expect(rowOf('new@example.com').className).toContain('submission-unread')
+    expect(rowOf('old@example.com').className).not.toContain('submission-unread')
+    expect(within(rowOf('new@example.com')).getByLabelText('Unread')).toBeTruthy()
+
+    fireEvent.click(within(rowOf('new@example.com')).getByText('email: new@example.com'))
+    expect(updateDoc).toHaveBeenCalledWith(expect.anything(), { read: true })
   })
 })
 

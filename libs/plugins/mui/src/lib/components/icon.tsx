@@ -20,7 +20,7 @@ import { getMdiIconPath, mdiShapePlus } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
 import type { SxProps } from '@mui/material/styles'
-import { forwardRef } from 'react'
+import { forwardRef, useContext } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -63,9 +63,13 @@ const Icon = forwardRef<HTMLElement, IconProps>((props, ref) => {
   const { iconId, iconPath, size, color, ...rest } = props
   // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
   const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
+  const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
   const path = iconPath || getMdiIconPath(iconId)
   const icon = path ? { path } : undefined
   if (!icon?.path) {
+    // The labeled box is for the author, so only editing surfaces draw it; a
+    // published page renders the bare element, as the span a picked icon is.
+    if (!suppressNavigation) return <Box ref={ref} component="span" {...rest} />
     return (
       <Box
         ref={ref}

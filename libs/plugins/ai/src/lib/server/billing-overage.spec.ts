@@ -271,6 +271,20 @@ describe('get — what the card reads', () => {
       capLabel: 'Stop AI when this month’s overage reaches',
       minCapUsd: 1,
       maxCapUsd: 100_000,
+      // Aglyn's own limit beside the workspace's (AGL-3011), and every
+      // figure of it absent until `AI_OVERAGE_INVOICED_FROM` names a month.
+      // That is not a missing value: while overage still bills on the
+      // monthly invoice, a ceiling and a "next charge" figure would describe
+      // a mechanism that is not running.
+      overageBillsByInvoice: false,
+      aglynCeilingUsd: null,
+      overageStep: null,
+      overageThresholdUsd: null,
+      overageChargedUsd: null,
+      overageChargeCount: null,
+      overageNextChargeUsd: null,
+      overagePaused: null,
+      overageCardOnFile: null,
     })
   })
 
@@ -302,6 +316,28 @@ describe('get — what the card reads', () => {
     expect(
       (await (await POST(post({ orgId: 'org-1', action: 'get' }))).json()).bandCredits,
     ).toBeGreaterThan(0)
+  })
+
+  it('Starter WITH the add-on sells past its band, at the add-on rate the invoice bills (AGL-3014)', async () => {
+    // Starter's band and rate arrive with the add-on, not from `PLAN_PRICING`,
+    // where a listed rate would advertise a band the plan does not carry
+    // without it. Read from the table this card said "never charged" while
+    // `assistMonthOverage` billed the same workspace $3 per 1,000.
+    mockDocs.set('orgs/org-1', { ...org('starter'), seatAddons: { aiAddon: 1 } })
+    expect(
+      await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
+    ).toMatchObject({ bandCredits: 4_000, overageRateUsdPer1k: 3, sellsOverage: true })
+  })
+
+  it('a dead subscription takes the add-on rate away with the band (AGL-3014)', async () => {
+    mockDocs.set('orgs/org-1', {
+      plan: 'starter',
+      subscription: { status: 'canceled' },
+      seatAddons: { aiAddon: 1 },
+    })
+    expect(
+      await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
+    ).toMatchObject({ overageRateUsdPer1k: null, sellsOverage: false })
   })
 })
 
@@ -393,6 +429,20 @@ describe('setHardCap — the write', () => {
     expect(free.status).toBe(409)
     expect(String((await free.json()).error)).toMatch(/already stops AI assist/i)
     expect(mockAudit).toEqual([])
+  })
+
+  it('Starter WITH the add-on may throw the switch — it has overage to stop (AGL-3014)', async () => {
+    // The refusal is `!sellsOverage`, so reading the rate off `PLAN_PRICING`
+    // 409'd the one plan whose rate lives on the add-on: the workspace was
+    // billed overage and refused the control that stops it.
+    mockDocs.set('orgs/org-1', { ...org('starter'), seatAddons: { aiAddon: 1 } })
+    const response = await POST(
+      post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }),
+    )
+    expect(response.status).toBe(200)
+    expect(mockDocs.get('orgs/org-1')).toMatchObject({
+      assistOverage: { hardCap: true, hardCapSetBy: 'user-1' },
+    })
   })
 
   it('a second write records the previous state as `before`', async () => {
@@ -531,6 +581,34 @@ describe('setCap — the ceiling on overage (AGL-2898)', () => {
       await expect(response.json()).resolves.toMatchObject({ code: 'not_sold' })
       expect(mockDocs.get('orgs/org-1')).toEqual(org(plan))
     }
+    expect(mockAudit).toEqual([])
+  })
+
+  it('Starter WITH the add-on may set a ceiling — it has overage to bound (AGL-3014)', async () => {
+    // The ceiling's refusal is the switch's, `!sellsOverage`, and it misread
+    // the same way: Starter lists no rate on `PLAN_PRICING`, so a workspace
+    // billed $3 per 1,000 past the add-on's band was told there was no
+    // overage to cap. FORCED RED by reading `overageRateUsdPer1k` off the
+    // table again: this answered 409 `not_sold` and wrote nothing.
+    mockDocs.set('orgs/org-1', { ...org('starter'), seatAddons: { aiAddon: 1 } })
+    const response = await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 25 }))
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, capUsd: 25 })
+    expect(mockDocs.get('orgs/org-1')).toMatchObject({
+      assistOverage: { capUsd: 25, capSetBy: 'user-1' },
+    })
+    // The card reads back the ceiling it just set, beside the rate it bounds.
+    const read = await (await POST(post({ orgId: 'org-1', action: 'get' }))).json()
+    expect(read).toMatchObject({ capUsd: 25, overageRateUsdPer1k: 3, sellsOverage: true })
+
+    // The control: the same request on Starter without the add-on has no
+    // band and nothing sold past it, so it is still refused.
+    mockAudit = []
+    mockDocs.set('orgs/org-1', org('starter'))
+    const bare = await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 25 }))
+    expect(bare.status).toBe(409)
+    await expect(bare.json()).resolves.toMatchObject({ code: 'not_sold' })
+    expect(mockDocs.get('orgs/org-1')).toEqual(org('starter'))
     expect(mockAudit).toEqual([])
   })
 

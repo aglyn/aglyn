@@ -233,11 +233,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isServerReleaseFlagOnForOrg: async () => mockFlagOn,
   lockdownRefusal: async () => mockLockdownResponse,
   featureLockdownRefusal: async () => mockFeatureLockdown,
-  memberHasAiPermission: async (...args: unknown[]) => {
+  memberHasPermissionOnHost: async (...args: unknown[]) => {
     mockAiPermissionAsks.push(args)
     return mockAiPermitted
   },
-  aiPermissionRefusal: (permission: string) =>
+  permissionRefusal: (permission: string) =>
     Response.json(
       {
         error: `Your role does not include ${permission}`,
@@ -509,6 +509,47 @@ describe('the gate ladder — every guard forced red once', () => {
     const response = await POST(post(QUESTION_BODY(FREE_ORG)))
     expect(response.status).toBe(404)
     expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('404 when the page’s site switched AI off — nothing reserved, nothing spent (AGL-3028)', async () => {
+    // The site rides in `context`, where the plugin API dispatcher's per-site
+    // gate does not look, so the door asks the site itself.
+    seedOrgs()
+    mockDocs.set('hosts/host-1', { disabledPlugins: ['ai'] })
+    armUpstream()
+    const response = await POST(post(QUESTION_BODY(PRO_ORG)))
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({
+      error: 'AI is switched off for this site.',
+      reason: 'site-off',
+    })
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(mockDocs.has(`orgs/${PRO_ORG}/assistUsage/${MONTH}`)).toBe(false)
+  })
+
+  it('answers on a site whose document never switched AI off — on by default', async () => {
+    seedOrgs()
+    mockDocs.set('hosts/host-1', { disabledPlugins: ['commerce'], enabledPlugins: ['accounts'] })
+    armUpstream()
+    const response = await POST(post(QUESTION_BODY(PRO_ORG)))
+    expect(response.status).toBe(200)
+    await response.text()
+    expect(mockFetch).toHaveBeenCalled()
+  })
+
+  it('answers a workspace question asked off any site, whatever a site switched off', async () => {
+    seedOrgs()
+    mockDocs.set('hosts/host-1', { disabledPlugins: ['ai'] })
+    armUpstream()
+    const response = await POST(
+      post({
+        ...QUESTION_BODY(PRO_ORG),
+        context: { route: '/acme/settings', hostId: '', orgSlug: 'acme' },
+      }),
+    )
+    expect(response.status).toBe(200)
+    await response.text()
+    expect(mockFetch).toHaveBeenCalled()
   })
 
   it('staff pass a released-off flag (preview)', async () => {
@@ -1350,6 +1391,17 @@ describe('the green path', () => {
     expect(done).toBeTruthy()
     expect(done?.exchangeId).toBeTruthy()
     expect(done?.usage).toMatchObject({ inputTokens: 900, outputTokens: 42 })
+    // The usage strip's envelope rides the same event (AGL-2942): this
+    // turn's credits, added to the asker's month the reservation read (none
+    // before it) and to the pool, and the model Auto chose — no read of its
+    // own on the client.
+    const meter = done?.meter as
+      | { last: number; refused: boolean; mine: { used: number; limit: null }; pool: { used: number }; model: { auto: boolean } }
+      | undefined
+    expect(meter).toMatchObject({ refused: false, mine: { limit: null }, model: { auto: true } })
+    expect(meter?.last).toBeGreaterThan(0)
+    expect(meter?.mine.used).toBe(meter?.last)
+    expect(meter?.pool.used).toBeGreaterThanOrEqual(meter?.last ?? 0)
 
     // AGL-2238: the standing the panel renders, pinned against the counter
     // that was actually moved. Nothing asserted this before, which is how
@@ -1814,12 +1866,64 @@ describe('the green path', () => {
     // Everything except the final turn, which is the question itself.
     const history = request.messages.slice(0, -1) as Array<{ content: string }>
     const chars = history.reduce((total, turn) => total + turn.content.length, 0)
-    expect(chars).toBeLessThanOrEqual(8000)
+    // The ceiling was 8,000 while every turn was sent verbatim. Since
+    // AGL-2937 the verbatim window shares 4,000 and the turns behind it are
+    // digested under 1,200 of their own, so the worst case a scripted caller
+    // can reach is about a third lower.
+    expect(chars).toBeLessThanOrEqual(5400)
     // Asserted as a bound AND as a floor: a build that simply dropped the
     // history would satisfy the line above and quietly break the feature,
     // and a conversation the model cannot see is the failure users report
     // as the assistant forgetting what they just said.
-    expect(chars).toBeGreaterThan(7000)
+    expect(chars).toBeGreaterThan(4500)
+    // …and the turns past the verbatim window are DIGESTED rather than
+    // dropped, which is the half of this that is not a saving.
+    expect(history[0].content.startsWith('Earlier in this conversation')).toBe(true)
+  })
+
+  it('folds the turns behind the verbatim window into one labelled digest (AGL-2937)', async () => {
+    // A long answer earlier in the thread used to eat the whole budget and
+    // take the turns behind it with it. Now it contributes an opening line
+    // and the rest of the conversation survives.
+    seedOrgs()
+    armUpstream()
+    const long = 'answers at length. '.repeat(400)
+    await (
+      await POST(
+        post({
+          ...QUESTION_BODY(FREE_ORG),
+          history: [
+            { role: 'user', text: 'how do I connect a domain' },
+            { role: 'assistant', text: `Open settings. ${long}` },
+            { role: 'user', text: 'and a subdomain' },
+            { role: 'assistant', text: 'the same place' },
+            { role: 'user', text: 'what about email' },
+            { role: 'assistant', text: 'under the same tab' },
+            { role: 'user', text: 'and DNS' },
+            { role: 'assistant', text: 'we show the records' },
+          ],
+        }),
+      )
+    ).text()
+    const request = JSON.parse(String(mockFetch.mock.calls[0][1].body))
+    const messages = request.messages as Array<{ role: string; content: string }>
+    // The digest opens the conversation, user-side, and names both halves of
+    // each older exchange without carrying either of them whole.
+    expect(messages[0].role).toBe('user')
+    expect(messages[0].content).toContain('Earlier in this conversation')
+    expect(messages[0].content).toContain('- I asked: how do I connect a domain')
+    expect(messages[0].content).toContain('- You answered: Open settings.')
+    expect(messages[0].content.length).toBeLessThan(1_300)
+    // The six newest turns are still word for word.
+    expect(messages.slice(1, -1).map((turn) => turn.content)).toEqual([
+      'and a subdomain',
+      'the same place',
+      'what about email',
+      'under the same tab',
+      'and DNS',
+      'we show the records',
+    ])
+    expect(messages[messages.length - 1].content).toBe(QUESTION)
   })
 
   it('spends that budget on the NEWEST turns, not the oldest', async () => {

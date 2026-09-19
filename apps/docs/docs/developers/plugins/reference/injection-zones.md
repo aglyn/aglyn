@@ -29,11 +29,28 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `orgBillingOverview` | Billing → Overview, among the plan and add-on cards | `orgId`, `org`, `plan`, `canManage` |
 | `staffOrg` | Staff org page, among its cards (staff-only) | `orgId` |
 | `staffUser` | Staff user page, below the account's activity (staff-only) | `uid` |
+| `staffOrgsListColumn` | A **column** of the staff Organizations list — see [Column zones](#column-zones) (staff-only) | per row: `row`, `orgId`, `orgIds` (every org on the page); its `Header`: `orgIds` |
+| `staffOrgUsageColumn` | The staff org usage table: a column between Forms and Cost when the widget declares `column`, a line above the table otherwise (staff-only) | per month: `month`, `orgId`; above the table: `orgId`, `org` (the org document, where the page holds one) |
 | `orgMember` | Team → member detail, below the member's activity | `orgId`, `uid`, `member`, `canManage` |
 | `orgMembersListColumn` | A **column** of the org Team table — see [Column zones](#column-zones) | per row: `member`, `orgId`, `canManage` |
 | `hostMembers` | The site collaborators card: a column of its table when the widget declares `column`, a card beneath it otherwise | per row: `member`, `hostId`, `canManage`; as a card: `hostId`, `canManage` |
 | `assistPanel` | The console shell's assistant dock, above every route boundary in both the app and editor shells | none — resolve your own scope from the URL |
-| `besignerInspector` | A section at the bottom of the besigner's Attributes panel, under the selected element's fields | `hostId` |
+| `besignerInspector` | A section at the bottom of the besigner's Attributes panel, under the selected element's fields, on every editor the designer opens | `hostId` (`null` on an editor that names no site), `node` (the selected element) |
+| `besignerToolbar` | The besigner's secondary toolbar, after undo and redo, on every editor the designer opens | `hostId` (`null` on an editor that names no site) |
+| `hostScreens` | A site's Screens page, beside Templates and Create New Screen: another way to start a screen | `hostId`, `orgId` (`undefined` while the page resolves it) |
+| `hostTemplates` | A site's Templates page, beside Create Template: another way to start a template | `hostId`, `orgId` |
+| `hostLayouts` | A site's Layouts page, beside Templates and Create New Layout: another way to start a layout | `hostId`, `orgId` |
+| `hostForms` | A site's Forms page, beside Create Form: another way to start a form. The Forms page is the forms plugin's, which hosts the zone — see [Zones a plugin hosts](#zones-a-plugin-hosts) | `hostId`, `orgId` |
+| `hostComponents` | A site's Components page, beside Templates and Create Component: another way to start a reusable component | `hostId`, `orgId` |
+| `hostAutomations` | The Automation page's Actions, beside **Add action** and **Recipes**: another way to start an automation. Hosted by the workflows plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `openAction(actionId)` — opens a listed action in the Actions editor, and answers `false` for one the list has not read yet |
+| `automationEditor` | Inside the editor of one saved automation, an action or a workflow, on the Automation page. Hosted by the workflows plugin | `hostId`, `orgId`, `target` (`{ type: 'action' \| 'workflow', id, name }`, the automation as it is stored) |
+| `automationRun` | On each failed run in an automation's run history. Hosted by the workflows plugin | `hostId`, `orgId`, `target` (as above), `runId` (the run's entry in the site's activity log) |
+| `productEditor` | The commerce product editor, under a product's description, tags and categories: copy proposed for the fields, which Save product writes. Hosted by the commerce plugin | `hostId`, `orgId`, `product` (as the editor holds it), `categories`, `proposeValues(values, key)` — stages copy in the editor as unsaved edits |
+| `productsHub` | The commerce products page, above its catalog table: proposals the hub writes when a member applies them. Hosted by the commerce plugin | `hostId`, `orgId`, `products` (the catalog rows the hub holds), `lastImport` (the products the latest import created, with its options, or `null`), and the hub's writes a widget asks for: `applyProductCopy`, `createProductDrafts`, `createCategories`, `createDiscountDrafts` |
+| `productImport` | Inside the commerce CSV import dialog: options for what happens to the imported products once they land. Hosted by the commerce plugin | `hostId`, `orgId`, `count` (products the import creates), `options`, `setOption(key, on)` |
+| `recordInsights` | A CRM contact's, company's, deal's or lead's page, under its header. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId` (`null` at the organization level), `orgId`, `record` (`{ kind, id, name }`), `proposeTask(task, key)` (opens the CRM's task form filled in; absent on a lead), and on a deal `stages`, `stageId` and `proposeStage(stageId, key)` (asks, then moves the deal through its stage route) |
+| `recordEmail` | Inside the CRM's one-to-one composer, under the message. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `record`, `subject`, `body`, `proposeDraft({ subject, body }, key)` (fills the composer, asking before it replaces a written message; Send is the member's) |
+| `importMapping` | Inside a CRM contacts, companies, deals or leads import, under its column matching. Hosted by the CRM plugin (see [Zones a plugin hosts](#zones-a-plugin-hosts)) | `hostId`, `orgId`, `collection`, `columns` (each `{ header, shape }`, where `shape` is `email`, `phone`, `number`, `date`, `yes-no`, `url`, `text` or `empty`; never a cell), `mapping`, `proposeMapping(mapping, key)` (replaces the drawer's matching; Import is the write) |
 
 Rules of thumb: widgets receive shell-resolved context as props and must
 not reach for console-app hooks; data access goes through
@@ -42,9 +59,60 @@ not reach for console-app hooks; data access goes through
 plugin is enabled and released — the shell never mounts widgets from
 unloaded plugins.
 
+## Zones a plugin hosts
+
+A zone can sit on a plugin's own surface rather than on a console page, such as `hostForms`
+on the forms plugin's Forms page, `hostAutomations`, `automationEditor` and `automationRun`
+on the workflows plugin's Automation page, or `recordInsights`, `recordEmail` and
+`importMapping` on the CRM plugin's record pages, one-to-one composer and import drawers. A plugin cannot import the console's `PluginWidgetSlot`,
+so the shell hands its renderer down: read it with `useConsoleWidgetSlot()` from
+`@aglyn/aglyn` and draw the zone through it.
+
+```tsx
+const Slot = useConsoleWidgetSlot()
+return Slot ? <Slot slot="hostForms" hostId={hostId} orgId={orgId} /> : null
+```
+
+The renderer is the same gated slot a console page mounts, so a widget there passes the
+same enablement, entitlement and permission gates. Outside the console shell it is `null`,
+and the zone draws nothing.
+
+## How a zone spaces your widget
+
+Most zones are a **stack**. The shell draws their widgets one under another,
+with the same gap the page puts between its own cards, and keeps that gap
+between the zone and the page's cards beside it. Render your card with no
+outer margin: the zone spaces it, and a margin on your widget's root is
+reset.
+
+The other zones hand each widget to a layout the page draws itself, and the
+page spaces it there:
+
+- `hostDashboard`, `commerceGlance` and `orgDashboard`: a tile of a dashboard
+  grid.
+- `hostScreens`, `hostTemplates`, `hostLayouts`, `hostForms`,
+  `hostComponents` and `besignerToolbar`: a control in a row.
+- `hostAutomations`, `automationEditor` and `automationRun`: a control the
+  workflows plugin places beside its Actions buttons, in an automation's
+  editor, and on a failed run.
+- `besignerInspector` and `seoFields`: a section among a panel's own fields.
+- `productEditor`, `productsHub` and `productImport`: a section the commerce
+  plugin places among its product editor's fields, above its catalog table,
+  and in its CSV import dialog.
+- `recordEmail` and `importMapping`: a section the CRM plugin places under its
+  one-to-one composer's message and under an import drawer's column matching.
+- `besignerFunctions`, `orgData`, `orgMarketplace`, `orgAddons` and
+  `marketplaceListing`: the body of a dialog or a page.
+- `assistPanel`: a floating dock.
+- `orgMembersListColumn`, `staffOrgsListColumn` and `staffOrgUsageColumn`: a
+  column of a table, or, on `staffOrgUsageColumn`, a line above it.
+
+A widget that renders nothing leaves no gap in either kind of zone.
+
 ## Staff zones
 
-`adminOrgDetail`, `staffOrg` and `staffUser` are on the staff pages, which
+`adminOrgDetail`, `staffOrg`, `staffUser`, `staffOrgsListColumn` and
+`staffOrgUsageColumn` are on the staff pages, which
 name no workspace: a staff page is about an org or an account, not about the
 reader's own. So these zones do not read an org's enabled plugins. The staff
 area loads every plugin whose `plugins.config.json` entry names a `staff`
@@ -57,8 +125,9 @@ loaded on the staff pages, so its widget never renders.
 
 ## Column zones
 
-A zone documented as a **column** (`orgMembersListColumn`, and `hostMembers`
-when you want a column rather than a card) takes a widget with a `column`:
+A zone documented as a **column** (`orgMembersListColumn` and
+`staffOrgsListColumn`, and `hostMembers` and `staffOrgUsageColumn` when you
+want a column rather than a card) takes a widget with a `column`:
 
 ```ts
 widgets: [
@@ -76,6 +145,8 @@ row beside the zone's props; `sortKey` names the row field a sortable table
 orders by (the two member tables render in fetch order today and carry it
 for the ones that will). A widget on a column zone without a `column` is not
 a column and renders nothing there — register a card on a card zone instead.
+On a zone that takes both, a column widget is drawn only in the table, never
+among the cards.
 
 ## `widgetId` is a persisted identifier
 

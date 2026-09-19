@@ -40,7 +40,11 @@ import {
 } from '@mui/material'
 import { usePathname, useRouter } from 'next/navigation'
 import { useMemo, useState, type UIEvent } from 'react'
-import { ENTERPRISE_PLAN_LABEL, isEnterpriseOrg } from '@aglyn/aglyn'
+import {
+  ENTERPRISE_PLAN_LABEL,
+  isEnterpriseOrg,
+  resolveEffectivePlan,
+} from '@aglyn/aglyn'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgPlans } from '../hooks/use-org-plans'
@@ -86,7 +90,9 @@ export function OrgSwitcherNav() {
   const urlNamedOrg = useUrlNamedOrg()
   const { org, ready: orgReady } = useCurrentOrg()
   const logoUrl = (org as any)?.logoUrl as string | undefined
-  const plan = (org as any)?.plan as string | undefined
+  // The plan the workspace GETS, comp and dead subscription included
+  // (AGL-3034) — the badge is a claim about the tier, not about a field.
+  const plan = org ? resolveEffectivePlan(org as never) : undefined
   const router = useRouter()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const [creating, setCreating] = useState(false)

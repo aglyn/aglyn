@@ -91,6 +91,13 @@ export interface AiPaletteEntry {
   propsSchema: AiPropsSchema
   /** Roles of the string props the validator treats specially. */
   propRoles: Record<string, AiPropRole>
+  /**
+   * The attribute field kind each declared prop is edited with, as its
+   * `FieldComponentType` value (`switch`, `select`, `screen-select`, …): what
+   * the editor reads to decide which component properties a field can be
+   * bound to (AGL-2908).
+   */
+  propFields: Record<string, string>
   /** Length ceilings for `text` props, in characters. */
   textLimits: Record<string, number>
   /** Names of the presets that place this component. */
@@ -141,6 +148,144 @@ export const AI_PALETTE_CATALOG_MAX_CHARS = AI_PALETTE_CATALOG_MAX_TOKENS * 4
 /** The model's own token estimate: characters over four. */
 export function estimateCatalogTokens(catalog: string): number {
   return Math.ceil(catalog.length / 4)
+}
+
+/**
+ * The documents a generator emits (AGL-2935). Each is composed on one
+ * surface of the palette and held to its own budget below.
+ */
+export type AiOutputKind =
+  | 'page'
+  | 'template'
+  | 'component'
+  | 'layout'
+  | 'form'
+  | 'email'
+
+export const AI_OUTPUT_KINDS: readonly AiOutputKind[] = [
+  'page',
+  'template',
+  'component',
+  'layout',
+  'form',
+  'email',
+]
+
+/** The surface each output kind is composed on. */
+export const AI_OUTPUT_SURFACE: Record<AiOutputKind, AiSurface> = {
+  page: 'screen',
+  template: 'screen',
+  component: 'component',
+  layout: 'layout',
+  form: 'form',
+  email: 'email',
+}
+
+/**
+ * What the rule-17 scorer measures on an emitted tree:
+ *
+ * - `nodes` — how many elements the tree carries;
+ * - `bytes` — the stored node map, in the unit the save ceiling uses
+ *   (`nodeMapBytes`, msgpack);
+ * - `imageBytes` — what the placed library images request at the slot's
+ *   variant, from each asset's recorded size;
+ * - `embeds` — third-party players and frames the output loads;
+ * - `fontFamilies` — families named beyond the theme's own;
+ * - `emailHtmlBytes` — an email's rendered HTML, which is what a mail
+ *   client clips.
+ */
+export type AiBudgetMetric =
+  | 'nodes'
+  | 'bytes'
+  | 'imageBytes'
+  | 'embeds'
+  | 'fontFamilies'
+  | 'emailHtmlBytes'
+
+export type AiOutputBudget = Record<Exclude<AiBudgetMetric, 'emailHtmlBytes'>, number> & {
+  emailHtmlBytes?: number
+}
+
+/**
+ * The size past which Gmail clips a message and hides the rest behind a
+ * "View entire message" link — the unsubscribe footer included.
+ */
+export const AI_EMAIL_CLIP_BYTES = 102_000
+
+/**
+ * The budget per output kind (AGL-2935, rule 17), beside the catalog budget
+ * above for the same reason: a generator that grows its output past what
+ * its kind is for is caught by a number, not noticed by a reader.
+ *
+ * A page is a few hundred elements and tens of kilobytes of stored map; a
+ * reusable component is one repeated block; a layout is the chrome every
+ * page loads, so it carries the least imagery; a form is fields and a
+ * button; an email is held to the clipping threshold on its rendered HTML.
+ * No kind names a font beyond the theme's.
+ */
+export const AI_OUTPUT_BUDGETS: Record<AiOutputKind, AiOutputBudget> = {
+  page: {
+    nodes: 400,
+    bytes: 60_000,
+    imageBytes: 1_500_000,
+    embeds: 1,
+    fontFamilies: 0,
+  },
+  template: {
+    nodes: 400,
+    bytes: 60_000,
+    imageBytes: 1_500_000,
+    embeds: 1,
+    fontFamilies: 0,
+  },
+  component: {
+    nodes: 80,
+    bytes: 12_000,
+    imageBytes: 500_000,
+    embeds: 1,
+    fontFamilies: 0,
+  },
+  layout: {
+    nodes: 160,
+    bytes: 24_000,
+    imageBytes: 200_000,
+    embeds: 0,
+    fontFamilies: 0,
+  },
+  form: {
+    nodes: 60,
+    bytes: 8_000,
+    imageBytes: 0,
+    embeds: 0,
+    fontFamilies: 0,
+  },
+  email: {
+    nodes: 150,
+    bytes: 24_000,
+    imageBytes: 1_000_000,
+    embeds: 0,
+    fontFamilies: 0,
+    emailHtmlBytes: AI_EMAIL_CLIP_BYTES,
+  },
+}
+
+/**
+ * What a first visit to a generated output is estimated to transfer — the
+ * weight the proposal shows before anything is applied (rule 17). A page
+ * starts from the platform's measured page weight; a component or a layout
+ * reports only what it adds to a page; an email is not a page load.
+ */
+export interface AiLoadEstimate {
+  /** The measured weight of a published page before this output's own bytes; 0 for a fragment. */
+  pageBytes: number
+  /** The stored node map, in the save's own bytes. */
+  documentBytes: number
+  /** What the placed library images request at their slots. */
+  imageBytes: number
+  /** Images the estimate could not size: no recorded size, or not from the library. */
+  imagesUnmeasured: number
+  embeds: number
+  totalBytes: number
 }
 
 /** Typography variants that read as headlines, for the `children` ceiling. */

@@ -18,6 +18,7 @@
 
 import * as CommerceModel from '../../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   checkEntitlement,
@@ -36,7 +37,6 @@ import {
   DialogTitle,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -625,7 +625,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               {'Draft order'}
             </Button>
           </Stack>
-          <Table size="small" aria-label="Orders">
+          <ScrollTable size="small" aria-label="Orders">
             <TableHead>
               <TableRow>
                 {/*
@@ -761,7 +761,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
                 )
               })}
             </TableBody>
-          </Table>
+          </ScrollTable>
           {orderWindow.truncated ? (
             /*
              * Where the filters and the export stop. Both run over what was

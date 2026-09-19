@@ -416,7 +416,7 @@ describe('workflows console read cost (AGL-2501)', () => {
     // that lets the dialog say a picker ran short instead of quietly offering
     // a partial list of targets.
     expect(opened).toEqual([
-      'hosts/site1/campaigns#101',
+      'hosts/site1/emailCampaigns#101',
       'hosts/site1/overlays#101',
       'hosts/site1/webhooks#101',
       'hosts/site1/workflows#101',

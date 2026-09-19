@@ -16,6 +16,9 @@
  */
 
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
+import type { AiEffort } from '../providers/contract'
+import type { AiLoadEstimate } from '../runtime/ai-palette'
+import type { AiBuildPlan } from './ai-build-plan'
 
 /**
  * AI generation jobs (AGL-2904).
@@ -48,10 +51,10 @@ import type { ITimestamp } from '@aglyn/shared-util-timestamp'
  */
 
 /**
- * What a job produces. `text` is the one kind this module ships end to end;
- * every other kind is registered and refuses with "not available yet" until
- * its own issue lands, so a kind's presence in the union says the job model
- * accepts it, not that a runner exists.
+ * What a job produces. `text` and `theme` have runners; every other kind is
+ * registered and refuses with "not available yet" until its own issue lands,
+ * so a kind's presence in the union says the job model accepts it, not that
+ * a runner exists.
  */
 export type AiJobKind =
   | 'page'
@@ -71,6 +74,7 @@ export type AiJobKind =
   | 'onboarding'
   | 'workflow'
   | 'text'
+  | 'theme'
 
 /** The union as a value, so a route can validate a body against it. */
 export const AI_JOB_KINDS: readonly AiJobKind[] = [
@@ -91,18 +95,23 @@ export const AI_JOB_KINDS: readonly AiJobKind[] = [
   'onboarding',
   'workflow',
   'text',
+  'theme',
 ]
 
 /**
  * `queued` — waiting for a runner; `running` — a step holds the lease;
  * `needs_input` — the job stopped for something only the workspace can
- * change (credits, a cap, a switch) and resumes when it does; the last
- * three are terminal.
+ * change (credits, a cap, a switch), and the beat tries it again once that
+ * may have changed; `needs_review` — the job stopped for a person's decision
+ * (AGL-2935): its plan is ready to confirm, or an answer broke a building
+ * rule on its re-ask. No timer can make that decision, so neither the beat
+ * nor anything but that person resumes it. The last three are terminal.
  */
 export type AiJobStatus =
   | 'queued'
   | 'running'
   | 'needs_input'
+  | 'needs_review'
   | 'done'
   | 'failed'
   | 'canceled'
@@ -116,7 +125,7 @@ export const AI_JOB_TERMINAL_STATUSES: readonly AiJobStatus[] = [
 export type AiJobStepStatus = 'pending' | 'running' | 'done' | 'failed'
 
 export interface AiJobStep {
-  /** Stable within the job (`draft`, `generate`), unique per job. */
+  /** Stable within the job (`plan`, `draft`, `generate`), unique per job. */
   name: string
   status: AiJobStepStatus
   startedAt?: ITimestamp | null
@@ -131,6 +140,61 @@ export interface AiJobStep {
    * provider outage re-running a step forever.
    */
   attempts?: number
+  /**
+   * Passes of a step that works through a list (AGL-2910): each one a
+   * recorded, metered exchange that asked to continue. Attempts count again
+   * from zero after a pass; this count is what bounds the step.
+   */
+  passes?: number
+  /**
+   * What the step's model calls cost in tokens and time (AGL-2937), summed
+   * over every run that reached the provider. Absent on a step none has.
+   */
+  tokens?: AiJobStepTokens
+}
+
+/**
+ * A step's measure (AGL-2937): the four token counts the meter prices, the
+ * time spent in the runner, and the model and thinking effort of the last
+ * run. The machine writes it beside `creditsSpent`, so what a kind of step
+ * costs in tokens is read off the job rather than inferred from the month.
+ */
+export interface AiJobStepTokens {
+  /** Prompt tokens sent uncached. */
+  input: number
+  /** Prompt tokens read from the prompt cache. */
+  cachedRead: number
+  /** Prompt tokens written to the prompt cache. */
+  cacheWrite: number
+  /** Tokens generated, thinking included. */
+  output: number
+  /** The model the last run was served by. */
+  model: string | null
+  /** The thinking effort the last run asked for; `null` when it named none. */
+  effort: AiEffort | null
+  /** Milliseconds spent in the runner, summed over runs. */
+  latencyMs: number
+  /** Runs that reached the provider. */
+  runs: number
+  /**
+   * Why the step's latest runs stopped (AGL-3042), oldest first and the last
+   * run last: each run's stop reason and the tokens it generated, so a pass
+   * cut off at its ceiling reads off the job rather than out of the sums. At
+   * most `AI_JOB_STEP_LAST_RUNS` are kept; absent on a step measured before.
+   */
+  lastRuns?: AiJobStepRunStop[]
+}
+
+/** One run of a step, by why it stopped (AGL-3042). */
+export interface AiJobStepRunStop {
+  /**
+   * The stop reason of the run's last model call — `tool_use` or `end_turn`
+   * for an answer, `max_tokens` for one cut off at its ceiling, `refusal` —
+   * and `null` when the provider named none.
+   */
+  stopReason: string | null
+  /** Tokens the run generated, over every model call it made. */
+  output: number
 }
 
 export type AiJobOutputResource =
@@ -145,11 +209,33 @@ export type AiJobOutputResource =
   | 'experiment'
   | 'workflow'
   | 'text'
+  | 'theme'
+  | 'seo'
+  | 'insight'
+  | 'crm'
 
 /**
  * One thing a job wrote. Addressed by resource and id so the console can
  * build the "open draft" link without knowing what the runner did; `text`
  * has no document of its own, so its body rides on the output itself.
+ *
+ * A `theme` output is a proposal rather than a document (AGL-2938). A site's
+ * theme is fields on its host document, and writing those fields is the save
+ * the Theme section's editor performs, which a job never does. So the change
+ * set rides on the output as `proposal`, and a person puts it in the editor
+ * and saves it there, or does not.
+ *
+ * An `seo` output is a proposal rather than a document (AGL-2910): search
+ * listing values for a page or a product, or a site audit's findings and
+ * fixes. A screen's listing is served from the screen document itself, so a
+ * job never writes it; the values ride on the output as `proposal`, a person
+ * puts them in the editor and saves them there, and an audit's content fixes
+ * become new versions only when a person applies them.
+ *
+ * A `crm` output is a proposal too (AGL-2917): a record's summary and next
+ * step, an email draft, or an import's column matches. The CRM's own task
+ * form, stage route, composer and import drawer are the writes, and a person
+ * makes each of them, or does not.
  */
 export interface AiJobOutput {
   resource: AiJobOutputResource
@@ -158,15 +244,92 @@ export interface AiJobOutput {
   versionId?: string | null
   /** `null` for an output that belongs to the org rather than one site. */
   hostId: string | null
+  /**
+   * The site's subdomain, which is what a console URL names a site by: the
+   * `[host]` segment resolves by subdomain, so a link built from `hostId`
+   * names no site the console can open.
+   */
+  hostSubdomain?: string | null
   label: string
   /** The body of a `text` output. Absent on every other resource. */
   text?: string
+  /**
+   * The change set of an output a person applies rather than opens — a
+   * `theme` or `seo` proposal — in the shape its job kind's runner defines.
+   */
+  proposal?: Record<string, unknown>
+  /**
+   * What the person decides next about this output, in customer-safe words:
+   * a routing the draft could not store, or part of the brief it could not
+   * build. Absent when there is nothing to decide.
+   */
+  note?: string | null
+  /**
+   * What a first visit is estimated to transfer, as the doctrine measured
+   * the generated document (AGL-2935) — the weight the proposal shows before
+   * anything is applied. Absent where the output is not a page's document.
+   */
+  load?: AiLoadEstimate | null
 }
 
 export interface AiJobLease {
   /** The process that holds the step: a route request id or a beat id. */
   owner: string
   until: ITimestamp
+}
+
+/** Why a job stopped for a person (AGL-2935). */
+export type AiJobReviewReason =
+  /** The plan step proposed a plan; generation waits for it to be confirmed. */
+  | 'plan'
+  /** An answer broke a building rule, and so did the answer to the re-ask. */
+  | 'doctrine'
+  /**
+   * The site is at an allowance its plan sets for what the step writes, such
+   * as its shared layouts or its templates (AGL-2909). Freeing one, or a plan
+   * that holds more, is the member's decision; trying again runs the step
+   * again.
+   */
+  | 'limit'
+
+/** A building rule an answer broke, as the job keeps it: the number, the code, the sentence. */
+export interface AiJobRuleFinding {
+  rule: number | null
+  code: string
+  /** Customer-safe. */
+  message: string
+}
+
+export interface AiJobReview {
+  reason: AiJobReviewReason
+  /** Customer-safe: what the person is asked to decide. */
+  message: string
+  /** The rules the last answer broke; empty for a plan. */
+  findings: AiJobRuleFinding[]
+}
+
+export type AiJobPlanStatus = 'proposed' | 'confirmed'
+
+/** The plan a job builds from, as the job keeps it once its plan step proposed it. */
+export interface AiJobPlan extends AiBuildPlan {
+  status: AiJobPlanStatus
+  /** Names for the inventory ids the plan references, read when it was made. */
+  labels: Record<string, string>
+  proposedAt: ITimestamp
+  confirmedAt: ITimestamp | null
+  /** The member who confirmed it. */
+  confirmedBy: string | null
+  /**
+   * A digest of the whole request that produced this plan (AGL-2937): the
+   * job's kind, site, brief and scalar inputs, the model that answered, and
+   * the prompt as it was rendered — the site inventory included. A later job
+   * whose request hashes the same reuses this plan rather than paying for the
+   * same answer again. A hash of the request, never of the answer, and no
+   * part of the brief is recoverable from it.
+   */
+  key?: string
+  /** The job this plan was reused from, when it was not asked for again. */
+  reusedFrom?: string
 }
 
 export interface AiJob {
@@ -179,6 +342,12 @@ export interface AiJob {
   brief: string
   /** Kind-specific inputs the runner reads (a screen id to edit, a tone). */
   inputs: Record<string, unknown>
+  /**
+   * The model the creator picked for the job's steps (AGL-2942), or `null`
+   * for Auto. Each step honors it only where the plan and the allotment
+   * allowlists allow it, and runs on the routing table otherwise.
+   */
+  model?: string | null
   steps: AiJobStep[]
   outputs: AiJobOutput[]
   /**
@@ -197,6 +366,40 @@ export interface AiJob {
   /** Customer-safe only. */
   error?: string | null
   lease?: AiJobLease | null
+  /** The plan the job builds from, once its plan step proposed one. */
+  plan?: AiJobPlan | null
+  /** What the person is asked to decide while the job is `needs_review`. */
+  review?: AiJobReview | null
+  /**
+   * What a person applied from the job's outputs (AGL-2910). Written by the
+   * door that applied them, never by a step runner, and absent until then.
+   */
+  applied?: AiJobApplied | null
+}
+
+/**
+ * The record of an apply (AGL-2910): what became a new unpublished version,
+ * and what waits in its editor for a person to save.
+ */
+export interface AiJobApplied {
+  at: ITimestamp
+  /** The member who applied. */
+  by: string
+  /** The new version opened for each resource, by resource id. */
+  versions: Record<string, string>
+  /** Resource ids whose proposed values wait in their editor, unsaved. */
+  staged: string[]
+}
+
+/** The plan on the wire: every instant an ISO string. */
+export interface AiJobPlanSummary extends AiBuildPlan {
+  status: AiJobPlanStatus
+  labels: Record<string, string>
+  proposedAt: string | null
+  confirmedAt: string | null
+  confirmedBy: string | null
+  key?: string
+  reusedFrom?: string
 }
 
 /**
@@ -211,6 +414,14 @@ export interface AiJobSummary {
   kind: AiJobKind
   status: AiJobStatus
   brief: string
+  /**
+   * The batch a door created this job as one of (AGL-2911), read off the
+   * job's inputs; `null` for a job created on its own. The console groups a
+   * run of jobs by it, which is the one thing it cannot do from a list whose
+   * rows carry no inputs — and the only input the wire form carries, because
+   * a batch id names nothing the member wrote.
+   */
+  batch: string | null
   steps: Array<{
     name: string
     status: AiJobStepStatus
@@ -227,4 +438,13 @@ export interface AiJobSummary {
   updatedAt: string
   error: string | null
   running: boolean
+  plan: AiJobPlanSummary | null
+  review: AiJobReview | null
+  /** What a person applied from the outputs (AGL-2910); instants as ISO strings. */
+  applied?: {
+    at: string | null
+    by: string
+    versions: Record<string, string>
+    staged: string[]
+  } | null
 }

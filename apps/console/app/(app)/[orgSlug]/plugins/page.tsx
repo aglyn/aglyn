@@ -18,6 +18,7 @@
 
 import {
   FIRST_PARTY_PLUGINS,
+  isLockedOnForWorkspace,
   resolveUpdateState,
   updateStateLabel,
 } from '@aglyn/aglyn'
@@ -391,13 +392,15 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
                       input: { 'aria-label': `Toggle ${plugin.label}` },
                     }}
                     checked={
-                      plugin.alwaysOn || switchboard.isOn(plugin.id)
+                      isLockedOnForWorkspace(plugin.id) ||
+                      switchboard.isOn(plugin.id)
                     }
                     // Unready means these switch positions are the defaults,
                     // not this workspace's (AGL-1422) — so they are not
-                    // something to act on yet.
+                    // something to act on yet. A plugin locked on for the
+                    // workspace is switched per site instead (AGL-3028).
                     disabled={
-                      plugin.alwaysOn ||
+                      isLockedOnForWorkspace(plugin.id) ||
                       !switchboard.canWrite ||
                       !switchboard.ready
                     }

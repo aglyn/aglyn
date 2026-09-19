@@ -22,6 +22,7 @@ import {
   isWorkspaceDomainHost,
   WORKSPACE_DOMAIN,
 } from './constants/workspace-domain'
+import { isConsoleRouteSegment } from './constants/console-routes'
 import { enforceSanctionsGeo } from './constants/sanctions-geo'
 // One source of truth for the frame-ancestors allowlist, shared with
 // `with-aglyn.nextjs.config.js` so the two cannot drift (AGL-523).
@@ -102,7 +103,62 @@ const AUTH_PATH_SEGMENTS = new Set([
   'verify-email',
   'account-recovery',
 ])
+/**
+ * RFC 8615's reserved discovery namespace, under which this app serves
+ * NOTHING (AGL-3016).
+ *
+ * The RFC's requirement is a 404 when the server does not have the resource,
+ * and the console answered 200 to every path in it. The org-level plugin
+ * catch-all at `/[orgSlug]/[...pluginSlug]` (AGL-2974) claims every unclaimed
+ * org sub-path, so `.well-known` bound to `orgSlug`, the document name bound
+ * to `pluginSlug`, and the page rendered its "not installed" notice — console
+ * shell, 200 status.
+ *
+ * A 200 here is a protocol-level claim, not a cosmetic one. Sign-in lives on
+ * `auth.<workspace domain>`, so the OIDC discovery document — HTML, 200 — on
+ * the auth host asserts that we run an authorization server. It was read as
+ * one: an agent-readiness audit of the marketing site scored it against
+ * authentication checks no surface of ours claims to answer.
+ *
+ * The route cannot decide this itself. It already means to refuse a path
+ * (`segments.length > 1` calls `notFound()`), but it is a client component, so
+ * MEASURED, `/.well-known/a/b` answered 200 all the same: the status is
+ * settled before the render, or not at all.
+ *
+ * Refusing the whole namespace is safe because nothing under it that matters
+ * reaches this app. MEASURED, not assumed: an ACME challenge token under
+ * `acme-challenge` is answered by Vercel's edge with a 404 carrying no
+ * `x-matched-path`, so certificate issuance for a custom console domain never
+ * arrives here to be broken. The cost of the blanket rule is that a well-known
+ * document we ever do serve — a security contact, an app-site association —
+ * must be excepted in the same breath as it is added, or it will 404.
+ */
+const WELL_KNOWN_PREFIX = '/.well-known'
+
+/**
+ * The admin bar's connect page (AGL-3046): the one console page a published
+ * site opens in a popup and expects an answer from. It keeps its opener, so
+ * it is the one page the COOP header in `applyCsp` does not isolate.
+ */
+const EDIT_ACCESS_PATH = '/edit-access'
+
+/** The first path segment, or `''` for the root. */
+function firstSegment(request: NextRequest): string {
+  return request.nextUrl.pathname.split('/').filter(Boolean)[0] ?? ''
+}
+
 const CACHE_TTL_MS = 60_000
+/**
+ * A NEGATIVE verdict is trusted for far less than a positive one (AGL-3017).
+ *
+ * Both used to sit at 60s, which was harmless while an unknown slug only
+ * decided a redirect. It is not harmless now that one answers 404: an org
+ * created seconds after something probed its slug would be unreachable at its
+ * own address for the rest of the window. Five seconds still absorbs a
+ * scanner walking a path list, which is the only thing the cache is load
+ * bearing for.
+ */
+const UNKNOWN_CACHE_TTL_MS = 5_000
 type SlugVerdict = { known: boolean; movedTo: string | null; at: number }
 const slugCache = new Map<string, SlugVerdict>()
 
@@ -147,7 +203,8 @@ async function resolveOrgSlug(
   origin: string,
 ): Promise<Omit<SlugVerdict, 'at'>> {
   const cached = slugCache.get(slug)
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached
+  const ttl = cached?.known ? CACHE_TTL_MS : UNKNOWN_CACHE_TTL_MS
+  if (cached && Date.now() - cached.at < ttl) return cached
   try {
     const response = await fetch(
       `${origin}/api/orgs/slug-verdict?slug=${encodeURIComponent(slug)}`,
@@ -269,6 +326,55 @@ export async function middleware(request: NextRequest) {
   const refused = enforceSanctionsGeo(request.headers, 'page')
   if (refused) return new NextResponse(refused.body, refused)
 
+  // The reserved discovery namespace, SECOND — after the geo refusal, which
+  // decides whether to serve at all, and before everything that decides what.
+  //
+  // Ahead of the nonce and both host gates on purpose: a path that names
+  // nothing must not spend a Firestore-backed verdict lookup to be told so,
+  // the same reasoning the sanctions check states for itself. `pathname` is
+  // already normalized by the time middleware sees it, so a prefix test is the
+  // whole rule — and it is anchored at the root, leaving `/acme/.well-known/x`
+  // to the org routes, where a segment spelled like this one is just a segment.
+  const { pathname } = request.nextUrl
+  if (
+    pathname === WELL_KNOWN_PREFIX ||
+    pathname.startsWith(`${WELL_KNOWN_PREFIX}/`)
+  ) {
+    return new NextResponse(null, { status: 404 })
+  }
+
+  // THE AUTH ORIGIN IS SINGLE-PURPOSE, AND ONLY ITS OWN FAMILY IS SERVED
+  // THERE (AGL-3090).
+  //
+  // `auth.<workspace domain>` exists to keep the OAuth handshake same-site
+  // (AGL-462, AGL-1919): it reverse-proxies the Firebase helpers under `/__/*`
+  // and it renders the credential prompt. It is not a console. Everything else
+  // that answered on it was the workspace router replying for a host that has
+  // no workspace, and it replied 200 — so `/oauth/authorize`, `/authorize` and
+  // `/connect/authorize` all rendered the console shell, and an
+  // agent-readiness audit read them as an authorization server we do not run.
+  //
+  // The gate above closed `/.well-known/*` and the audit's next scan simply
+  // moved to the next candidate on its list. A path-at-a-time defense cannot
+  // win that: the list belongs to the scanner. What is defensible is the host
+  // answering only for what it actually serves.
+  //
+  // `APEX_PATH_SEGMENTS` is the allowance, reused rather than restated so the
+  // auth family cannot drift from the router's idea of it: the root, the
+  // credential prompt and its siblings, and the `auth/handoff` legs. `/__/*`
+  // sits outside the matcher below, so the Firebase helper never reaches here
+  // and cannot be refused by this.
+  //
+  // This is the CHEAP half of the pair. `app.<workspace domain>` reaches the
+  // same refusal further down (AGL-3017), but it has to ASK first, because
+  // there a first segment can legitimately name a workspace. Here it cannot:
+  // the auth origin holds no workspace, so no verdict is worth spending.
+  if (hostnameOf(request.headers.get('host')) === `auth.${WORKSPACE_DOMAIN}`) {
+    if (!isConsoleRouteSegment(firstSegment(request))) {
+      return new NextResponse(null, { status: 404 })
+    }
+  }
+
   // CSP script-src: ENFORCING for everyone (AGL-518, AGL-523).
   //
   // The rule everything here follows, found by measurement and documented
@@ -388,8 +494,24 @@ export async function middleware(request: NextRequest) {
      * sign-in would break as a popup that closes and signs nobody in. The
      * commerce console's `window.open('')` + `document.write` receipt and POS
      * windows are same-origin `about:blank` and unaffected either way.
+     *
+     * ⚠️ EXCEPT `/edit-access`, which answers `unsafe-none` (AGL-3046). A
+     * published site opens that page in a popup so it can hand the edit
+     * token back through `window.opener`, and ANY isolating value severs
+     * that: a popup whose response carries one is moved to a new browsing
+     * context group with its opener nulled, so the page reported "Connected"
+     * to a site that never heard, and a custom domain — where the popup is
+     * the only way in — could not show the admin bar at all. What the page
+     * gives up is small by construction: it holds no credential on screen,
+     * it posts the token only to an origin the server lists for that host,
+     * and it never closes itself (the site closes it on delivery), so a page
+     * that opens it for someone else's host learns nothing from
+     * `popup.closed`.
      */
-    res.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
+    res.headers.set(
+      'Cross-Origin-Opener-Policy',
+      pathname === EDIT_ACCESS_PATH ? 'unsafe-none' : 'same-origin-allow-popups',
+    )
     // ONE policy carrying script-src and the base directives together, so it is
     // self-consistent by construction: the nonce Next stamps on scripts is read
     // from this exact string. Splitting them is what shadowed the nonce — see
@@ -440,6 +562,36 @@ export async function middleware(request: NextRequest) {
   if (hostname === WORKSPACE_DOMAIN) return pass()
   const slug = hostname.slice(0, -(WORKSPACE_DOMAIN.length + 1))
   if (slug.includes('.') || APEX_LABELS.has(slug)) {
+    /*
+      NO URL ON THE CONSOLE IS EVER WRONG, AND THAT IS A DEFECT (AGL-3017).
+
+      This is the only branch where the org lives in the PATH: on
+      `{slug}.<domain>` and on a custom console domain it comes from the HOST
+      and the path is rewritten below, so a first segment there is `hosts` or
+      `settings` and must not be read as a workspace.
+
+      `[orgSlug]` binds to anything, so every unmatched URL rendered the
+      console shell with a 200 — a typo, a dead bookmark and a scanner walking
+      `/oauth/authorize` all answered the same way. Answering 200 at an address
+      that names nothing is how an agent-readiness audit came to believe we run
+      an authorization server: it asked, and the console said yes. AGL-3016
+      closed `/.well-known/*` and AGL-3090 closed the auth origin; the list of
+      paths belongs to whoever is probing, so only the slug itself can settle
+      it.
+
+      The verdict is the same cached lookup the subdomain gate above already
+      makes, and it FAILS OPEN by construction — an unreachable route, a
+      malformed payload or a `degraded` answer all return `known: true`, so a
+      Firestore blip serves the console rather than 404ing it. A moved slug is
+      passed through untouched for the app to redirect, exactly as before.
+    */
+    const first = firstSegment(request)
+    if (!isConsoleRouteSegment(first)) {
+      const verdict = await resolveOrgSlug(first, new URL(request.url).origin)
+      if (!verdict.known && !verdict.movedTo) {
+        return new NextResponse(null, { status: 404 })
+      }
+    }
     return pass()
   }
   const verdict = await resolveOrgSlug(slug, new URL(request.url).origin)

@@ -118,6 +118,25 @@ describe('renderCrmMergeFields', () => {
     expect(crmMergeUnresolvedMessage(['site.name'])).toBe('1 field has no value: {{site.name}}')
     expect(crmMergeUnresolvedMessage([])).toBe('')
   })
+
+  it("fills a caller's own group from `extra`, and never lets it redefine a fixed one", () => {
+    const { text, unresolved } = resolveCrmMergeFields(
+      '{{enrollment.personalLine}} | {{contact.email}} | {{enrollment.missing}} | {{contact.shoeSize}}',
+      {
+        ...CONTEXT,
+        extra: {
+          'enrollment.personalLine': '  Saw the new pricing page.  ',
+          'contact.email': 'someone-else@example.org',
+          'contact.shoeSize': '42',
+        },
+      },
+    )
+    expect(text).toBe('Saw the new pricing page. | ada@example.com |  | ')
+    expect(unresolved).toEqual(['enrollment.missing', 'contact.shoeSize'])
+    // Only the map's own keys answer: nothing on its prototype chain does.
+    expect(renderCrmMergeFields('{{hasOwnProperty.call}}', { extra: {} })).toBe('')
+    expect(renderCrmMergeFields('{{enrollment.personalLine}}', { extra: null })).toBe('')
+  })
 })
 
 describe('the grammar helpers', () => {

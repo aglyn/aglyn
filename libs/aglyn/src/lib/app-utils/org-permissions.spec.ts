@@ -20,6 +20,36 @@ import {
   ORG_PERMISSION_KEYS,
   resolveOrgPermissions,
 } from './org-permissions'
+import { registerPluginEntitlements } from '../plugin-manager/plugin-entitlements'
+
+/**
+ * The AI plugin's two catalog keys, declared as the plugin declares them
+ * (AGL-2984): the catalog is proven here against a declaration shaped like
+ * the real one, and the plugin's own spec proves its declaration.
+ */
+const AI_SITE_ROLES = { admin: true, editor: true, author: true, viewer: false }
+
+beforeAll(() => {
+  registerPluginEntitlements({
+    pluginId: 'ai',
+    orgPermissions: [
+      {
+        key: 'ai.use',
+        label: 'Use AI assistance',
+        description: 'Ask the assistant, rewrite copy with AI, and generate a section.',
+        roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
+        hostRoleDefaults: AI_SITE_ROLES,
+      },
+      {
+        key: 'ai.generate',
+        label: 'Generate with AI',
+        description: 'Run AI generation jobs and AI edits.',
+        roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
+        hostRoleDefaults: AI_SITE_ROLES,
+      },
+    ],
+  })
+})
 
 describe('org permissions (AGL-243)', () => {
   it('maps role defaults: admins everything, editors content-only, viewers nothing', () => {

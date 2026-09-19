@@ -163,6 +163,10 @@ jest.mock('next/server', () => ({
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
+  // The platform's billing events (AGL-3011). The webhook raises them once an
+  // invoice or a dispute resolves to a workspace; what a plugin does with one
+  // is proved in the plugin's own suite, so this only has to exist.
+  runPluginEventHandlers: async () => ({ handled: 0, failed: [] }),
   __esModule: true,
   buildRoute: () => '/acme/manage/billing',
   Route: { MANAGE_BILLING: 'MANAGE_BILLING', ADMIN_OVERVIEW: 'ADMIN_OVERVIEW' },

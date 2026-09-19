@@ -20,9 +20,10 @@ import {
   AI_ADDON_CREDITS_PER_MONTH,
   aiAddonName,
   hasAiAddon,
-  PLAN_PRICING,
+  isUnlimitedQuota,
   resolveEffectivePlan,
   resolveOrgEntitlements,
+  resolvePlanPricing,
   type AglynOrgBilling,
 } from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
@@ -94,7 +95,9 @@ export default function AiCreditsCard(props: AiCreditsCardProps) {
   if (entitlements.assistCreditsPerMonth <= 0) return null
   const plan = resolveEffectivePlan(org)
   const aiAddonCredits = hasAiAddon(org) ? AI_ADDON_CREDITS_PER_MONTH[plan] : 0
-  const aiAddonSold = PLAN_PRICING[plan].aiAddonMonthlyUsd != null
+  // Sold to THIS workspace, not merely on its plan: a staff comp has no
+  // subscription to add the item to, so its price list sells none (AGL-3034).
+  const aiAddonSold = resolvePlanPricing(org).aiAddonMonthlyUsd != null
   return (
     <CardDisplay
       header={'AI credits'}
@@ -107,10 +110,13 @@ export default function AiCreditsCard(props: AiCreditsCardProps) {
       contentGutterX
       contentGutterY
     >
+      {/* An uncapped staff comp (AGL-3049) resolves this band `UNLIMITED`:
+          the meter reads "Unlimited" and draws no bar, never "/ Infinity". */}
       <UsageMeter
         label="AI credits (this month)"
         used={credits ? credits.used : null}
         limit={entitlements.assistCreditsPerMonth}
+        unlimited={isUnlimitedQuota(entitlements.assistCreditsPerMonth)}
         upgradeHref={billingHref ? `${billingHref}#plans` : '#plans'}
       />
       {aiAddonCredits > 0 ? (

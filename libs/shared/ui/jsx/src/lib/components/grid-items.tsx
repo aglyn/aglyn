@@ -210,6 +210,59 @@ function fanOut(band: MasonryColumn[]): MasonryColumn[] {
 }
 
 /**
+ * Marks an element as a frame around content that others draw, such as the
+ * console's widget zone stacking the cards plugins render (AGL-3050).
+ *
+ * `GridItems masonry` and `CardColumns` hide an item that rendered nothing.
+ * An item holding only a frame whose contents all drew nothing is the same
+ * absent card one level down, and the item is not `:empty` while the frame is
+ * in it, so both hide that item too. The mark is what tells a frame apart
+ * from an element that draws something with no children of its own: an item
+ * whose one element is an image, a divider or a loading skeleton is never
+ * mistaken for an absent card.
+ */
+export const ABSENT_WHEN_EMPTY_ATTRIBUTE = 'data-absent-when-empty'
+
+/** The mark, as props to spread onto the frame: `<Stack {...ABSENT_WHEN_EMPTY}>`. */
+export const ABSENT_WHEN_EMPTY = { [ABSENT_WHEN_EMPTY_ATTRIBUTE]: '' } as const
+
+/**
+ * A marked frame that is its parent's only element and drew nothing.
+ *
+ * Attribute last: the selector engine jsdom ships misreads an attribute
+ * selector that opens a compound inside `:has()`, and throws.
+ */
+export const EMPTY_FRAME_SELECTOR = `:only-child:empty[${ABSENT_WHEN_EMPTY_ATTRIBUTE}]`
+
+/**
+ * A column with nothing to draw, hidden wherever it spans the whole row.
+ *
+ * Hiding its item is not enough. The column is a grid item of its own, so a
+ * column whose item is hidden would stay behind as a zero-height grid row with
+ * the grid's `gap` on both sides of it: a double gap between the cards around
+ * an absent full-width band. A full-width item is always the only item in its
+ * column, and it is absent in two shapes: it rendered nothing, or it holds
+ * only a frame that drew nothing.
+ *
+ * Only at the widths where the column spans all twelve tracks. A narrower
+ * column shares its row with the columns beside it, so an empty one adds no
+ * row there, and hiding it would let auto-placement slide the next column into
+ * its tracks.
+ */
+function emptyColumnRules(profile: SpanProfile) {
+  const display = Object.fromEntries(
+    Object.entries(profile).map(([breakpoint, span]) => [
+      breakpoint,
+      span >= FULL_SPAN ? 'none' : 'flex',
+    ]),
+  )
+  return {
+    '&:has(> :only-child:empty)': { display },
+    [`&:has(> :only-child > ${EMPTY_FRAME_SELECTOR})`]: { display },
+  }
+}
+
+/**
  * Items → bands → columns.
  *
  * A band is a maximal run of items that are not full width; a full-width item
@@ -302,13 +355,17 @@ export const GridItems = forwardRef<any, GridItemsProps>((props, ref) => {
               // intrinsic width and the grid track overflows with it.
               minWidth: 0,
               // An item whose children rendered NOTHING must not leave a gap.
-              // A plugin widget slot renders an empty fragment when no plugin
-              // is entitled for it, and the wrapper it leaves behind is still
-              // a flex child — so the column's `gap` is applied on both sides
-              // of a zero-height box, drawing a hole exactly where the absent
-              // card was. `:empty` is exact: the wrapper has no element and no
-              // text node in that case and only in that case.
+              // A plugin widget slot renders nothing when no plugin is
+              // entitled for it, and the wrapper it leaves behind is still a
+              // flex child — so the column's `gap` is applied on both sides of
+              // a zero-height box, drawing a hole exactly where the absent card
+              // was. `:empty` is exact: the wrapper has no element and no text
+              // node in that case and only in that case.
               '& > *:empty': { display: 'none' },
+              // The same absent card one level down: the item's one element is
+              // a marked frame whose contents all drew nothing.
+              [`& > *:has(> ${EMPTY_FRAME_SELECTOR})`]: { display: 'none' },
+              ...emptyColumnRules(column.profile),
             }}
           >
             {column.entries.map(({ item, index }) => {

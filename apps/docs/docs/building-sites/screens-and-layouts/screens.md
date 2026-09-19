@@ -35,7 +35,12 @@ publish.
 - The screens list shows each screen's **Published** date, and the screen's detail page
   shows **Date published**. Both stay empty until the screen goes live, and clear again if
   you unpublish it (including a scheduled unpublish) — so the column tells you what's
-  live, not what exists.
+  live, not what exists. A screen you've just created is a **draft**: it holds its slug
+  but nothing resolves there until you publish it.
+- **Unpublish** takes a live screen off your site. It's in the row's **⋮** menu on the
+  screens list (on published screens), on the screen's detail page under **Publishing**,
+  and on the Besigner toolbar. The screen, its versions and its slug are all kept, so
+  publishing again puts it back at the same address.
 
 ![The screens list](/img/getting-started/screens-list.png)
 

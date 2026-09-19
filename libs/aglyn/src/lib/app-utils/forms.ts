@@ -32,6 +32,7 @@
  */
 
 import type { AglynNodeSchema, NodeId } from '../foundation/definitions/components.types'
+import { FORMS_PLUGIN_ID } from '../plugin-manager/enabled-plugins'
 import type { PlacementKind } from './compose-reusable-components'
 import { submissionMonthKey } from './form-abuse-ceiling'
 
@@ -53,6 +54,39 @@ export const FORM_FIELD_COMPONENT_ID = 'formField'
  * Persisted in screen documents — never rename.
  */
 export const FORM_ID_PROP = 'formId'
+
+/**
+ * What `/api/forms/submit` answers a submission to a site that switched Forms
+ * off (AGL-3029). A visitor reads it, so it names no plugin and no setting.
+ */
+export const FORMS_OFF_FOR_SITE_REFUSAL = 'This site is not accepting form submissions'
+
+/**
+ * The marketing plugin's id, as the submission door below names it. Core
+ * holds no import of the plugin; the catalog is where the string is defined.
+ */
+const MARKETING_PLUGIN_ID = 'marketing'
+
+/**
+ * The plugin whose door a submission to `/api/forms/submit` came through
+ * (AGL-3029) — the plugin that must run on the site for it to be accepted.
+ *
+ * The endpoint is shared. A form element posts to it, and so does a Marketing
+ * popup's email capture, which is a Marketing element rather than a form: a
+ * site that switched Forms off and still shows its popup must not silently
+ * lose every address the popup collects. The popup names its door in the
+ * body; everything else is a form's.
+ *
+ * A body that names a form ENTITY or a dataset binding is a form's, whatever
+ * door it claims. Those are what a form element sends and a popup never does,
+ * so the popup door cannot be used to file rows under a form, or into a
+ * dataset, on a site that switched Forms off.
+ */
+export function formSubmissionDoorPlugin(body: Record<string, unknown> | null | undefined): string {
+  const namesFormData =
+    Boolean(String(body?.['formId'] ?? '').trim()) || Boolean(body?.['datasetBinding'])
+  return body?.['door'] === 'popup' && !namesFormData ? MARKETING_PLUGIN_ID : FORMS_PLUGIN_ID
+}
 
 /**
  * How many forms one query for a site's catalog reads.
@@ -918,23 +952,85 @@ export function matchSubmissionToForm(
  * entity adds is a declared place to look, in place of the closed name list
  * the route has to fall back on when no form is bound.
  *
+ * What counts as the tick is {@link isConsentCheckboxTicked}'s, asked with
+ * the consent field's own declaration from `form.fields`.
+ *
  * Returns `false`, never `undefined`: every writer downstream stores consent
  * absent-or-true and must never write `false` over an opt-in captured
  * elsewhere.
  */
 export function readFormDeclaredConsent(
-  form: { consentFieldName?: string } | null | undefined,
+  form:
+    | {
+        consentFieldName?: string
+        /** The STORED declaration, for the consent field's type and options. */
+        fields?: ReadonlyArray<
+          Pick<FormFieldDecl, 'fieldName' | 'fieldType' | 'options'>
+        > | null
+      }
+    | null
+    | undefined,
   fields: Record<string, unknown> | null | undefined,
 ): boolean {
   const fieldName = String(form?.consentFieldName ?? '').trim()
   if (!fieldName || !fields) return false
-  const value = fields[fieldName]
+  const declaration = Array.isArray(form?.fields)
+    ? form.fields.find((entry) => entry?.fieldName === fieldName)
+    : undefined
+  return isConsentCheckboxTicked(fields[fieldName], declaration)
+}
+
+/**
+ * Whether a posted value ticks a consent checkbox.
+ *
+ * A tick arrives in one of two shapes. A box with no text of its own posts
+ * one of {@link AFFIRMATIVE_CHECKBOX_VALUES}. A Checkboxes field posts the
+ * TEXT of the option that was ticked — which is what lets its option say what
+ * the person agrees to — so when the field's declaration is a checkbox with
+ * exactly one option, that option's text, alone, is a tick too: compared as
+ * the renderer draws it, trimmed, or as a list holding only it. A field with
+ * several options is a question with several answers, and none of them is
+ * the opt-in by its text.
+ *
+ * ⛔ The declaration must come from the STORED form document, never from the
+ * request: a declaration a caller could send would let any submission name
+ * its own words as the opt-in.
+ */
+export function isConsentCheckboxTicked(
+  value: unknown,
+  declaration?: Pick<FormFieldDecl, 'fieldType' | 'options'> | null,
+): boolean {
   if (value === true) return true
-  return AFFIRMATIVE_CHECKBOX_VALUES.has(
-    String(value ?? '')
-      .trim()
-      .toLowerCase(),
-  )
+  if (
+    AFFIRMATIVE_CHECKBOX_VALUES.has(
+      String(value ?? '')
+        .trim()
+        .toLowerCase(),
+    )
+  ) {
+    return true
+  }
+  const option = soleCheckboxOption(declaration)
+  if (!option) return false
+  const posted = Array.isArray(value)
+    ? value.length === 1
+      ? value[0]
+      : undefined
+    : value
+  return typeof posted === 'string' && posted.trim() === option
+}
+
+/** A checkbox declaration's one option, or `null` for any other declaration. */
+function soleCheckboxOption(
+  declaration: Pick<FormFieldDecl, 'fieldType' | 'options'> | null | undefined,
+): string | null {
+  if (declaration?.fieldType !== 'checkbox' || !Array.isArray(declaration.options)) {
+    return null
+  }
+  const options = declaration.options
+    .map((option) => String(option ?? '').trim())
+    .filter(Boolean)
+  return options.length === 1 ? (options[0] as string) : null
 }
 
 /** Checkbox values a browser form actually posts for a ticked box. */
@@ -979,4 +1075,31 @@ export function isMarketingConsentFieldName(name: unknown): boolean {
       .toLowerCase()
       .replace(/[^a-z]/g, ''),
   )
+}
+
+/**
+ * The marketing consent field: the props the Forms editor's **Marketing
+ * consent** preset places on a Form Field, and the ones a form generated from
+ * a brief carries.
+ *
+ * A Checkboxes field with ONE option, unticked and not required. The option
+ * says what the person agrees to, because a Checkboxes field posts the text
+ * of the option that was ticked and {@link isConsentCheckboxTicked} reads that
+ * text as the tick. So the option holds no comma and no line break: the
+ * Options setting starts a new box at each, and a second box is an answer
+ * that is not the opt-in. A site owner may reword the label and the option;
+ * the form names the field as its `consentFieldName` for a tick to count.
+ */
+export const MARKETING_CONSENT_FORM_FIELD: Readonly<{
+  fieldName: string
+  label: string
+  fieldType: FormFieldType
+  options: string
+  required: boolean
+}> = {
+  fieldName: 'marketingConsent',
+  label: 'Marketing emails',
+  fieldType: 'checkbox',
+  options: 'Email me news and offers',
+  required: false,
 }

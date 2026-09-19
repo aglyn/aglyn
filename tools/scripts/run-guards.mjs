@@ -161,6 +161,11 @@ const REPO_WIDE = new Set([
   // project source in the way an affected-scoped run would need.
   'check:docs-screenshots',
   'check:marketing-width-doctrine',
+  // Measures the rules sources in `cloud/`, which belong to no nx project,
+  // against the size their deploys refuse (AGL-3027). The commit that took the
+  // Firestore rules 17 bytes over was green in every project-shaped check, and
+  // this one costs milliseconds, so `npm run precheck` runs it too.
+  'check:rules-size',
 ])
 
 /** Reads the guard names out of the CI workflows. Never hand-maintained. */

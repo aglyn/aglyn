@@ -19,28 +19,40 @@
 import { aiAddonName } from '@aglyn/aglyn'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Chip,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
   Typography,
 } from '@mui/material'
-import { useEffect, useRef, useState } from 'react'
+import type { GridColDef } from '@mui/x-data-grid'
+import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  StaffOrgAiJob,
   StaffOrgAiJobs,
   StaffOrgAiMargin,
   StaffOrgAiOverage,
   StaffOrgAiPool,
   StaffOrgAiRefusals,
   StaffOrgAiResponse,
+  StaffOrgAiTokens,
+  StaffOrgAiUser,
 } from '../usage/staff-org-ai'
 
 /**
@@ -63,6 +75,8 @@ import type {
  *  - **Refusals** — how often, and why, the gate said no this month.
  *  - **Jobs** and **Top users** — the generative and per-person halves,
  *    each of which says plainly when its rollup has nothing yet.
+ *  - **Tokens** — what each kind of request costs per request, what it
+ *    sends and generates, and how much of its prompt the cache served.
  *  - **Margin** — spend against what AI brings in, red when it is over.
  *  - **Actions** — where the override editor and the AI pause live.
  */
@@ -97,8 +111,17 @@ export function poolPartsSentence(pool: StaffOrgAiPool): string {
   return parts.join(' + ')
 }
 
-/** The overage's state as one line: sold, walled, or capped. */
-export function overageStateSentence(overage: StaffOrgAiOverage): string {
+/**
+ * The overage's state as one line: sold, walled, or capped — or, for an
+ * uncapped staff comp (AGL-3049), nothing to sell past at all.
+ */
+export function overageStateSentence(
+  overage: StaffOrgAiOverage,
+  uncapped = false,
+): string {
+  if (uncapped) {
+    return 'Nothing is sold past a band: an uncapped staff comp has none, and bills nothing.'
+  }
   if (overage.hardCap) return 'Stopped at the band — the org’s band switch is on.'
   if (!overage.sellsOverage) return 'Not sold past the band on this plan.'
   const rate =
@@ -124,6 +147,9 @@ function RefusalsRow({ refusals }: { refusals: StaffOrgAiRefusals }) {
     cap: 'ceiling',
     messages: 'messages',
     budget: 'operator backstop',
+    // A hard allotment a manager set on a member, a collaborator or a site
+    // (AGL-2942).
+    allotment: 'allotments',
     // The Free taste's rungs (AGL-2925): only a Free workspace collects these.
     account: 'free account',
     requests: 'free requests/day',
@@ -132,15 +158,21 @@ function RefusalsRow({ refusals }: { refusals: StaffOrgAiRefusals }) {
   }
   return (
     <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-      {(Object.keys(labels) as Array<keyof typeof labels>).map((reason) => (
-        <Chip
-          key={reason}
-          size="small"
-          variant={refusals[reason] > 0 ? 'filled' : 'outlined'}
-          color={refusals[reason] > 0 ? 'warning' : 'default'}
-          label={`${labels[reason]} ${refusals[reason].toLocaleString()}`}
-        />
-      ))}
+      {(Object.keys(labels) as Array<keyof typeof labels>).map((reason) => {
+        // A reason the answering server does not yet count reads as zero,
+        // so a console newer than its route draws the row rather than
+        // failing the card.
+        const count = Number(refusals[reason] ?? 0)
+        return (
+          <Chip
+            key={reason}
+            size="small"
+            variant={count > 0 ? 'filled' : 'outlined'}
+            color={count > 0 ? 'warning' : 'default'}
+            label={`${labels[reason]} ${count.toLocaleString()}`}
+          />
+        )
+      })}
     </Stack>
   )
 }
@@ -164,14 +196,15 @@ function JobsSection({ jobs }: { jobs: StaffOrgAiJobs | null }) {
   return (
     <Stack spacing={1}>
       <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-        {(['queued', 'running', 'needs_input', 'failed'] as const).map((status) => (
+        {(['queued', 'running', 'needs_input', 'needs_review', 'failed'] as const).map((status) => (
           <Chip
             key={status}
             size="small"
             color={
               status === 'failed' && jobs.counts[status] > 0
                 ? 'error'
-                : status === 'needs_input' && jobs.counts[status] > 0
+                : (status === 'needs_input' || status === 'needs_review') &&
+                    jobs.counts[status] > 0
                   ? 'warning'
                   : 'default'
             }
@@ -185,43 +218,241 @@ function JobsSection({ jobs }: { jobs: StaffOrgAiJobs | null }) {
           {'Counted from the newest jobs only — these counts are a floor.'}
         </Typography>
       ) : null}
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>{'Job'}</TableCell>
-            <TableCell>{'Kind'}</TableCell>
-            <TableCell>{'Status'}</TableCell>
-            <TableCell align="right">{'Credits'}</TableCell>
-            <TableCell>{'Started'}</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {jobs.recent.map((job) => (
-            <TableRow key={job.id}>
-              <TableCell sx={{ fontFamily: 'monospace' }}>{job.id}</TableCell>
-              <TableCell>{job.kind || '—'}</TableCell>
-              <TableCell>{job.status.replace('_', ' ')}</TableCell>
-              <TableCell align="right">
-                {`${credits(job.creditsSpent)} / ${credits(job.creditsReserved)}`}
-              </TableCell>
-              <TableCell>
-                {when(job.createdAt)}
-                {job.createdBy ? (
-                  <AppLink
-                    href={buildRoute(Route.ADMIN_USER_DETAIL, { uid: job.createdBy })}
-                    variant="caption"
-                    underline="hover"
-                    sx={{ ml: 1, fontFamily: 'monospace' }}
-                  >
-                    {job.createdBy}
-                  </AppLink>
-                ) : null}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      {/* A record list: the grid scrolls its own columns, so a job id and a
+          starter's uid never push the card's content past its edge. */}
+      <ListTable
+        rows={jobs.recent}
+        columns={JOB_COLUMNS}
+        getRowId={(job: StaffOrgAiJob) => job.id}
+        rowHeight={TABLE_ROW_HEIGHT}
+        noRowsLabel="No recent jobs"
+      />
     </Stack>
+  )
+}
+
+/**
+ * The recent jobs, one column per fact. Who started a job is a column of
+ * its own rather than a link tucked beside the date, so it sorts and filters
+ * like the rest; the credits sort by what was SPENT, which is the figure the
+ * pool was charged.
+ */
+const JOB_COLUMNS: GridColDef<StaffOrgAiJob>[] = [
+  {
+    field: 'id',
+    headerName: 'Job',
+    flex: 1,
+    minWidth: 200,
+    renderCell: ({ row }) => (
+      <Typography variant="body2" noWrap title={row.id} sx={{ fontFamily: 'monospace' }}>
+        {row.id}
+      </Typography>
+    ),
+  },
+  {
+    field: 'kind',
+    headerName: 'Kind',
+    width: 120,
+    valueFormatter: (value: string) => value || '—',
+  },
+  {
+    field: 'status',
+    headerName: 'Status',
+    width: 130,
+    valueFormatter: (value: string) => String(value ?? '').replace('_', ' '),
+  },
+  {
+    field: 'creditsSpent',
+    headerName: 'Credits',
+    type: 'number',
+    align: 'right',
+    headerAlign: 'right',
+    width: 140,
+    valueFormatter: (value: number, row) =>
+      `${credits(value)} / ${credits(row.creditsReserved)}`,
+  },
+  {
+    field: 'createdAt',
+    headerName: 'Started',
+    width: 120,
+    valueFormatter: (value: string | null) => when(value),
+  },
+  {
+    field: 'createdBy',
+    headerName: 'Started by',
+    flex: 1,
+    minWidth: 240,
+    renderCell: ({ row }) =>
+      row.createdBy ? (
+        <AppLink
+          href={buildRoute(Route.ADMIN_USER_DETAIL, { uid: row.createdBy })}
+          variant="body2"
+          underline="hover"
+          noWrap
+          sx={{ fontFamily: 'monospace' }}
+        >
+          {row.createdBy}
+        </AppLink>
+      ) : (
+        '—'
+      ),
+  },
+]
+
+const tokenCount = (value: number): string => Math.round(value).toLocaleString()
+
+const rate = (value: number | null): string =>
+  value == null ? '—' : `${Math.round(value * 100)}%`
+
+/** The month's tokens, and what each kind of request spends of them (AGL-2937). */
+function TokensSection({ tokens }: { tokens: StaffOrgAiTokens }) {
+  const { total } = tokens
+  return (
+    <Stack spacing={1}>
+      <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+        <Typography variant="body2">
+          {`${tokenCount(total.input)} sent · ${tokenCount(total.cached)} read from cache · ${tokenCount(total.cacheWrite)} written to cache · ${tokenCount(total.output)} generated`}
+        </Typography>
+        <Chip
+          size="small"
+          color={tokens.cacheHitRate != null && tokens.cacheHitRate >= 0.5 ? 'success' : 'default'}
+          label={`cache hit rate ${rate(tokens.cacheHitRate)}`}
+        />
+      </Stack>
+      {tokens.kinds.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          {'No model requests recorded by kind this month.'}
+        </Typography>
+      ) : (
+        <ScrollTable size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>{'Kind'}</TableCell>
+              <TableCell align="right">{'Requests'}</TableCell>
+              <TableCell align="right">{'Per request'}</TableCell>
+              <TableCell align="right">{'Sent'}</TableCell>
+              <TableCell align="right">{'From cache'}</TableCell>
+              <TableCell align="right">{'Generated'}</TableCell>
+              <TableCell align="right">{'Cache hit'}</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {tokens.kinds.map((row) => (
+              <TableRow key={row.kind}>
+                <TableCell>{row.kind}</TableCell>
+                <TableCell align="right">{row.requests.toLocaleString()}</TableCell>
+                <TableCell align="right">{usd(row.costPerRequestUsd)}</TableCell>
+                <TableCell align="right">{tokenCount(row.tokens.input)}</TableCell>
+                <TableCell align="right">{tokenCount(row.tokens.cached)}</TableCell>
+                <TableCell align="right">{tokenCount(row.tokens.output)}</TableCell>
+                <TableCell align="right">{rate(row.cacheHitRate)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </ScrollTable>
+      )}
+    </Stack>
+  )
+}
+
+/**
+ * The month's top spenders, one row per person. The row opens the account;
+ * the uid rides beneath the roster's name because two people can share one.
+ */
+function TopUsersSection({ users }: { users: StaffOrgAiUser[] }) {
+  const router = useRouter()
+  const columns = useMemo<GridColDef<StaffOrgAiUser>[]>(
+    () => [
+      {
+        field: 'name',
+        headerName: 'Person',
+        flex: 1,
+        minWidth: 220,
+        renderCell: ({ row }) => (
+          <Stack sx={{ minWidth: 0 }}>
+            <Typography variant="body2" noWrap title={row.name}>
+              {row.name}
+            </Typography>
+            {row.name !== row.uid ? (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                noWrap
+                sx={{ fontFamily: 'monospace' }}
+              >
+                {row.uid}
+              </Typography>
+            ) : null}
+          </Stack>
+        ),
+      },
+      {
+        field: 'credits',
+        headerName: 'Credits',
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+        width: 110,
+        valueFormatter: (value: number) => credits(value),
+      },
+      {
+        field: 'share',
+        headerName: 'Share',
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+        width: 90,
+        valueFormatter: (value: number) => `${Math.round(value * 100)}%`,
+      },
+      {
+        field: 'estCostUsd',
+        headerName: 'Provider $',
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+        width: 120,
+        valueFormatter: (value: number) => usd(value),
+      },
+      {
+        field: 'requests',
+        headerName: 'Requests',
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+        width: 110,
+        valueFormatter: (value: number) => value.toLocaleString(),
+      },
+      {
+        field: 'refusals',
+        headerName: 'Refusals',
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+        width: 110,
+        valueFormatter: (value: number) => value.toLocaleString(),
+      },
+      listActionsColumn((row: StaffOrgAiUser) => (
+        <ListRowActions
+          label={row.name}
+          quick={{
+            icon: mdiOpenInNew.path,
+            label: 'View account',
+            to: buildRoute(Route.ADMIN_USER_DETAIL, { uid: row.uid }),
+          }}
+          items={[]}
+        />
+      )),
+    ],
+    [],
+  )
+  return (
+    <ListTable
+      rows={users}
+      columns={columns}
+      getRowId={(row: StaffOrgAiUser) => row.uid}
+      rowHeight={TABLE_ROW_HEIGHT}
+      onOpen={(uid) => router.push(buildRoute(Route.ADMIN_USER_DETAIL, { uid }))}
+    />
   )
 }
 
@@ -281,7 +512,7 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
       help={pluginDocsHelp('aiMonitoring', {
         anchor: '#the-ai-card',
         excerpt:
-          'The add-on, the credit pool and its parts, this month’s overage and refusals, generation jobs, the people spending the most, and the margin — for this organization.',
+          'The add-on, the credit pool and its parts, this month’s overage and refusals, generation jobs, tokens and the cache hit rate by kind, the people spending the most, and the margin — for this organization.',
       })}
       contentGutterX
       contentGutterY
@@ -333,7 +564,11 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
             <Typography variant="overline" color="text.secondary">
               {`Credit pool · ${data.month}`}
             </Typography>
-            {data.pool.totalCredits === null ? (
+            {data.pool.totalCredits === null && data.pool.uncapped ? (
+              <Typography variant="body2" color="text.secondary">
+                {'Uncapped staff comp — no AI credit band. Bounded only by the message cap and an operator’s explicit spend ceiling.'}
+              </Typography>
+            ) : data.pool.totalCredits === null ? (
               <Typography variant="body2" color="text.secondary">
                 {'No AI credit band on this plan — bounded by the message cap and the operator backstop.'}
               </Typography>
@@ -362,7 +597,7 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
               {`${credits(data.overage.overageCredits)} credits over the band · ${usd(data.overage.accruedUsd)} accrued`}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {overageStateSentence(data.overage)}
+              {overageStateSentence(data.overage, data.pool.uncapped === true)}
             </Typography>
           </Stack>
 
@@ -382,6 +617,16 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
             <JobsSection jobs={data.jobs} />
           </Stack>
 
+          {/* Tokens — absent from a route older than the card */}
+          {data.tokens ? (
+            <Stack spacing={0.5}>
+              <Typography variant="overline" color="text.secondary">
+                {`Tokens · ${data.month}`}
+              </Typography>
+              <TokensSection tokens={data.tokens} />
+            </Stack>
+          ) : null}
+
           {/* Top users */}
           <Stack spacing={0.5}>
             <Typography variant="overline" color="text.secondary">
@@ -392,49 +637,7 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
                 {'No AI usage attributed to a person this month.'}
               </Typography>
             ) : (
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>{'Person'}</TableCell>
-                    <TableCell align="right">{'Credits'}</TableCell>
-                    <TableCell align="right">{'Share'}</TableCell>
-                    <TableCell align="right">{'Provider $'}</TableCell>
-                    <TableCell align="right">{'Requests'}</TableCell>
-                    <TableCell align="right">{'Refusals'}</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {data.users.map((row) => (
-                    <TableRow key={row.uid}>
-                      <TableCell>
-                        <AppLink
-                          href={buildRoute(Route.ADMIN_USER_DETAIL, { uid: row.uid })}
-                          underline="hover"
-                        >
-                          {row.name}
-                        </AppLink>
-                        {/* The uid beside the name, because the name is the
-                            roster's and two people can share one. */}
-                        {row.name !== row.uid ? (
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            component="div"
-                            sx={{ fontFamily: 'monospace' }}
-                          >
-                            {row.uid}
-                          </Typography>
-                        ) : null}
-                      </TableCell>
-                      <TableCell align="right">{credits(row.credits)}</TableCell>
-                      <TableCell align="right">{`${Math.round(row.share * 100)}%`}</TableCell>
-                      <TableCell align="right">{usd(row.estCostUsd)}</TableCell>
-                      <TableCell align="right">{row.requests.toLocaleString()}</TableCell>
-                      <TableCell align="right">{row.refusals.toLocaleString()}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <TopUsersSection users={data.users} />
             )}
           </Stack>
 

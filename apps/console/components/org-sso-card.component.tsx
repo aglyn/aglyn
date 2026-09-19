@@ -18,6 +18,7 @@
 
 import { canManageOrg, checkEntitlement } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -26,7 +27,6 @@ import {
   Chip,
   Divider,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -1075,7 +1075,7 @@ export function OrgSsoCard() {
                       'anything else would look like protection and provide ' +
                       'none.'}
                   </Typography>
-                  <Table size="small">
+                  <ScrollTable size="small">
                     <TableHead>
                       <TableRow>
                         <TableCell padding="checkbox">{'Break-glass'}</TableCell>
@@ -1132,7 +1132,7 @@ export function OrgSsoCard() {
                         )
                       })}
                     </TableBody>
-                  </Table>
+                  </ScrollTable>
                   <Button
                     variant="outlined"
                     size="small"

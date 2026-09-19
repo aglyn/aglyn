@@ -80,7 +80,9 @@ import InteractionsProvider from '../../../../../../../../../../components/inter
 import BesignerMediaPickerProvider from '../../../../../../../../../../components/besigner-media-picker-provider.component'
 import BesignerAppBarComponent from '../../../../../../../../../../components/besigner-app-bar.component'
 import BesignerDocumentSwitcherComponent from '../../../../../../../../../../components/besigner-document-switcher.component'
-import BesignerVersionsComponent from '../../../../../../../../../../components/besigner-versions.component'
+import BesignerVersionsComponent, {
+  type BesignerVersionsActions,
+} from '../../../../../../../../../../components/besigner-versions.component'
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
@@ -102,6 +104,7 @@ import {
 } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
+import useFormsPublishBlock from '../../../../../../../../../../hooks/use-forms-publish-block'
 import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use-plugin-drawer-registration'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
@@ -109,6 +112,7 @@ import PresenceAvatars from '../../../../../../../../../../components/presence-a
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 import ComponentPropsDialog from '../../../../../../../../../../components/component-props-dialog.component'
+import { useEditorSession } from '../../../../../../../../../../hooks/use-editor-session'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
   () =>
@@ -185,6 +189,19 @@ function LayoutBesignerPage(props) {
   const editingLiveVersion = Boolean(
     versionId && versionId === layoutPublishedVersionId,
   )
+  // The versions panel's own actions, for the editor session below.
+  const versionsActions = useRef<BesignerVersionsActions>(null)
+  // The open layout as an editor session (AGL-2906) — see the screen editor:
+  // the selection and the live pointer read when asked, and New version's
+  // own flow.
+  useEditorSession({
+    documentKind: 'layout',
+    documentId: layoutId,
+    versionId,
+    live: editingLiveVersion,
+    selectedNodeId: () => Besigner.focus.getLastSelected()?.$id ?? null,
+    versionsActions,
+  })
   const [draftPending, setDraftPending] = useState(false)
   const { data: screenDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
@@ -505,12 +522,16 @@ function LayoutBesignerPage(props) {
    */
   const livePublished =
     layoutPublishedVersionId === versionId && !draftPending && !draft.available
+  const { refuse: refuseFormsOff } = useFormsPublishBlock()
 
   const handleSaveAndPublish = useCallback(async () => {
     // Publishing a canvas that never took in the saved draft on offer would
     // push the stored layout live and then clear the draft as published
     // (AGL-2874).
     if (refuseOverUnopenedDraft('publish')) return
+    // A layout carrying a form does not go live on a site that switched Forms
+    // off (AGL-3029): every page under it would draw an empty space instead.
+    if (refuseFormsOff(canvas.toJSON().nodes)) return
     savedLandedRef.current = false
     saveRefusedRef.current = false
     await handleSave()
@@ -594,6 +615,7 @@ function LayoutBesignerPage(props) {
   }, [
     firestore,
     refuseOverUnopenedDraft,
+    refuseFormsOff,
     draft.sharedDraftUnopened,
     handleSave,
     livePublished,
@@ -677,6 +699,7 @@ function LayoutBesignerPage(props) {
                           parent={{ kind: 'layout', id: layoutId }}
                           versionId={versionId}
                           publishedVersionId={layoutPublishedVersionId}
+                          actionsRef={versionsActions}
                         />
                       </>
                     }

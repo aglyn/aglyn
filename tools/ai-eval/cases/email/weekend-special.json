@@ -1,0 +1,60 @@
+{
+  "id": "email-weekend-special",
+  "kind": "email",
+  "brief": "An email to our list about this weekend's cardamom buns, with a photo and a button to the weekend menu.",
+  "framing": null,
+  "inventory": {
+    "hostId": "host-tidewater",
+    "components": [],
+    "layouts": [{ "id": "lay-bakery", "name": "Tidewater Bakery site", "parentId": null }],
+    "templates": [],
+    "forms": [],
+    "datasets": [],
+    "collections": [],
+    "screens": [{ "id": "scr-menu", "name": "Weekend menu", "slug": "/menu", "layoutId": "lay-bakery", "template": false }],
+    "theme": { "summary": ["Light scheme only"], "colors": { "primary.main": "#8c3b2e", "secondary.main": "#f4e3c1" }, "fonts": ["Lora"] },
+    "truncated": []
+  },
+  "assets": { "asset-buns": { "sizeBytes": 180000, "width": 1200, "height": 800 } },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: painted with the brand's own two colors, the photo from the media library with its alt text.",
+      "plan": null,
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["band"] },
+            "band": { "componentId": "emailSection", "props": { "backgroundColor": "#f4e3c1", "padding": "24", "align": "center" }, "nodes": ["headline", "body", "photo", "cta"] },
+            "headline": { "componentId": "emailText", "props": { "variant": "heading", "children": "This weekend: cardamom buns" } },
+            "body": { "componentId": "emailText", "props": { "variant": "body", "children": "Fresh from the oven on Saturday and Sunday mornings, while they last. Stop by 14 Harbor Street from 7 am." } },
+            "photo": { "componentId": "emailImage", "props": { "src": "media:host-tidewater/asset-buns", "alt": "A tray of cardamom buns fresh from the oven", "width": "560" } },
+            "cta": { "componentId": "emailButton", "props": { "children": "See the weekend menu", "href": "https://tidewaterbakery.example/menu", "backgroundColor": "#8c3b2e" } }
+          }
+        }
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "Heading text in a green the brand does not have (rule 6).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["band"] },
+            "band": { "componentId": "emailSection", "props": { "backgroundColor": "#f4e3c1" }, "nodes": ["headline"] },
+            "headline": { "componentId": "emailText", "props": { "variant": "heading", "children": "This weekend: cardamom buns", "color": "#00ff00" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    }
+  ]
+}

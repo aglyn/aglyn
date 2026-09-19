@@ -11,7 +11,7 @@
       "defaultValue": {
         "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
       },
-      "description": "Outreach: one-to-one, multi-step email sequences sent from a rep's own connected mailbox and logged in the CRM (AGL-2974). OFF by default and staff preview only; the plugin's console surface and API routes are subtracted for everyone else. An organization also needs the outreach entitlement, which no plan carries, so a customer reaches it only through a per-org entitlement override.",
+      "description": "Outreach (AGL-2974): one-to-one email sequences from a rep's own connected mailbox, logged in the CRM. OFF by default, staff preview only. It also needs the outreach entitlement, which no plan carries, so a customer gets it only by a per-org override.",
       "valueType": "JSON"
     },
     "release_bookings": {
@@ -114,16 +114,16 @@
     },
     "release_edit_bar": {
       "defaultValue": {
-        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+        "value": "{\"enabled\":true,\"rolloutPercent\":0,\"note\":\"Released to every workspace 2026-09-16 (AGL-3041)\"}"
       },
-      "description": "Edit-access admin bar on published sites (admin edit bar, AGL-1302 follow-on). OFF until the cross-origin connect flow is verified on a live tenant domain; flipping off also invalidates outstanding edit tokens.",
+      "description": "Site admin bar on published sites (AGL-1302 follow-on). Released 2026-09-16 (AGL-3041), on for every site. Turning it off hides the bar and revokes every outstanding edit token at the verify site.",
       "valueType": "JSON"
     },
     "release_assist": {
       "defaultValue": {
         "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
       },
-      "description": "Aglyn Assist, the in-console AI chat helper (AGL-1860). OFF by default and blocked on two PUBLISHED legal artifacts (AGL-1909): the privacy-policy disclosure for the org-scoped Q&A the data loop stores, and the Anthropic row on /legal/subprocessors, which was deliberately removed on 2026-08-13 on the premise that no production key existed. Note the real trigger is ANTHROPIC_API_KEY, not this flag: /api/ai/assist (the besigner copy assistant) carries no release flag and sends customer content to Anthropic on the key plus a Pro entitlement alone.",
+      "description": "Aglyn Assist, the in-console AI chat helper (AGL-1860). OFF by default; needs two published legal artifacts (AGL-1909): the privacy-policy Q&A disclosure and the Anthropic row on /legal/subprocessors. The real trigger is ANTHROPIC_API_KEY, not the flag.",
       "valueType": "JSON"
     },
     "release_video_uploads": {
@@ -137,7 +137,7 @@
       "defaultValue": {
         "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
       },
-      "description": "Aglyn AI: generative building and automation behind the AI add-on (AGL-2903). OFF by default and staff preview only; every generative route answers 404 while it is off. Turning it on sends customer briefs and site content to Anthropic on the same ANTHROPIC_API_KEY and under the same subprocessor disclosure as Assist (AGL-1909).",
+      "description": "Aglyn AI: generative building and automation behind the AI add-on (AGL-2903). OFF by default, staff preview only; generative routes answer 404 while off. On, it sends customer briefs and site content to Anthropic under the Assist disclosure (AGL-1909).",
       "valueType": "JSON"
     }
   },

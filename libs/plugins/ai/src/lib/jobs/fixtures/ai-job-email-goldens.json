@@ -1,0 +1,288 @@
+{
+  "welcome": {
+    "brief": "A warm welcome email for someone who has just signed up to the Brightside Bakery mailing list. Point them at the menu and mention that Saturday mornings sell out early.",
+    "emailType": "welcome",
+    "tree": {
+      "rootId": "_@_",
+      "nodes": {
+        "_@_": { "componentId": "div", "nodes": ["band-a", "band-b"] },
+        "band-a": {
+          "componentId": "emailSection",
+          "props": { "padding": "32px 24px", "align": "left" },
+          "nodes": ["hello", "intro", "cta"]
+        },
+        "hello": {
+          "componentId": "emailText",
+          "props": { "variant": "heading", "children": "Welcome, {{contact.firstName}}" }
+        },
+        "intro": {
+          "componentId": "emailText",
+          "props": {
+            "variant": "body",
+            "children": "Thanks for joining us. Everything on the counter is baked the same morning, so the menu changes with the season and with whatever the ovens are in the mood for."
+          }
+        },
+        "cta": {
+          "componentId": "emailButton",
+          "props": { "children": "See this week’s menu", "href": "/menu", "align": "left" }
+        },
+        "band-b": {
+          "componentId": "emailSection",
+          "props": { "padding": "0 24px 32px" },
+          "nodes": ["rule", "tip"]
+        },
+        "rule": { "componentId": "emailDivider" },
+        "tip": {
+          "componentId": "emailText",
+          "props": {
+            "variant": "caption",
+            "children": "One thing worth knowing: Saturday mornings sell out early. We open at [opening time]."
+          }
+        }
+      }
+    },
+    "subjects": [
+      "Your first loaf is on the counter",
+      "What happens at Brightside before you wake up",
+      "Welcome — here is this week’s menu"
+    ],
+    "preheaders": [
+      "Everything is baked the same morning, and the menu moves with the season.",
+      "The ovens start at four. Here is what comes out of them.",
+      "A short tour of the counter, and the one morning that sells out early."
+    ]
+  },
+
+  "newsletter": {
+    "brief": "The September newsletter for Brightside Bakery: the autumn menu is in, the Tuesday bread class is running again, and we are open on the bank holiday.",
+    "emailType": "newsletter",
+    "tree": {
+      "rootId": "_@_",
+      "nodes": {
+        "_@_": { "componentId": "div", "nodes": ["masthead", "stories", "close"] },
+        "masthead": {
+          "componentId": "emailSection",
+          "props": { "padding": "32px 24px 16px" },
+          "nodes": ["title", "standfirst"]
+        },
+        "title": {
+          "componentId": "emailText",
+          "props": { "variant": "heading", "children": "September at Brightside" }
+        },
+        "standfirst": {
+          "componentId": "emailText",
+          "props": {
+            "variant": "subheading",
+            "children": "Hello {{contact.firstName}} — three things this month, and none of them take long to read."
+          }
+        },
+        "stories": {
+          "componentId": "emailSection",
+          "props": { "padding": "0 24px" },
+          "nodes": ["picture", "autumn", "class", "gap", "holiday", "cta"]
+        },
+        "picture": {
+          "componentId": "emailImage",
+          "props": {
+            "src": "",
+            "alt": "A tray of autumn buns cooling on a wire rack",
+            "width": "552",
+            "align": "center"
+          }
+        },
+        "autumn": {
+          "componentId": "emailText",
+          "props": {
+            "variant": "body",
+            "children": "The autumn menu is in. Damson, quince and the brown butter buns that only work once the mornings turn cold."
+          }
+        },
+        "class": {
+          "componentId": "emailText",
+          "props": {
+            "variant": "body",
+            "children": "The Tuesday bread class is running again from [start date]. Six places a week, and they go in the order people ask."
+          }
+        },
+        "gap": { "componentId": "emailSpacer", "props": { "height": "16px" } },
+        "holiday": {
+          "componentId": "emailText",
+          "props": {
+            "variant": "body",
+            "children": "We are open on the bank holiday, normal hours, with the usual smaller Monday bake."
+          }
+        },
+        "cta": {
+          "componentId": "emailButton",
+          "props": { "children": "Book a class", "href": "/classes" }
+        },
+        "close": {
+          "componentId": "emailSection",
+          "props": { "padding": "24px" },
+          "nodes": ["signoff"]
+        },
+        "signoff": {
+          "componentId": "emailText",
+          "props": { "variant": "caption", "children": "See you on the weekend. — everyone at Brightside" }
+        }
+      }
+    },
+    "subjects": [
+      "September at Brightside: quince, classes, and the bank holiday",
+      "What the cold mornings do to a bun",
+      "Three short things from the bakery"
+    ],
+    "preheaders": [
+      "The autumn menu, the Tuesday class, and our bank holiday hours.",
+      "Brown butter only works once the mornings turn. They have turned.",
+      "Read it in under a minute, then come and eat something."
+    ]
+  },
+
+  "launch": {
+    "brief": "Announce the launch of the Brightside subscription box to the autumn list. One box a month, cancel any time, first hundred boxes only.",
+    "emailType": "launch",
+    "name": "Subscription box launch",
+    "tree": {
+      "rootId": "_@_",
+      "nodes": {
+        "_@_": { "componentId": "div", "nodes": ["hero", "detail"] },
+        "hero": {
+          "componentId": "emailSection",
+          "props": { "padding": "40px 24px", "align": "center" },
+          "nodes": ["headline", "sub", "join"]
+        },
+        "headline": {
+          "componentId": "emailText",
+          "props": { "variant": "heading", "align": "center", "children": "The Brightside box is here" }
+        },
+        "sub": {
+          "componentId": "emailText",
+          "props": {
+            "variant": "body",
+            "align": "center",
+            "children": "{{contact.firstName}}, one box a month: the week’s best loaf, whatever the ovens did well, and something we only make when the fruit is right. Cancel any time."
+          }
+        },
+        "join": {
+          "componentId": "emailButton",
+          "props": { "children": "Claim a box", "href": "/subscription", "align": "center" }
+        },
+        "detail": {
+          "componentId": "emailSection",
+          "props": { "padding": "0 24px 32px" },
+          "nodes": ["scarcity", "spacer", "small"]
+        },
+        "scarcity": {
+          "componentId": "emailText",
+          "props": {
+            "variant": "body",
+            "children": "We are opening the first hundred boxes only, so that every one of them is packed by the people who baked it."
+          }
+        },
+        "spacer": { "componentId": "emailSpacer", "props": { "height": "12px" } },
+        "small": {
+          "componentId": "emailText",
+          "props": {
+            "variant": "caption",
+            "children": "Boxes go out on [delivery day]. Pause or stop from the link in any box."
+          }
+        }
+      }
+    },
+    "subjects": [
+      "The Brightside box is here",
+      "One hundred boxes, then we stop",
+      "Your bakery, delivered once a month"
+    ],
+    "preheaders": [
+      "One box a month, cancel any time, and the first hundred only.",
+      "We can pack a hundred well. We cannot pack a thousand well.",
+      "The week’s best loaf, and whatever the ovens did best that morning."
+    ]
+  },
+
+  "controls": {
+    "looseBlock": {
+      "why": "A block outside every section",
+      "tree": {
+        "rootId": "_@_",
+        "nodes": {
+          "_@_": { "componentId": "div", "nodes": ["band", "stray"] },
+          "band": { "componentId": "emailSection", "nodes": ["copy"] },
+          "copy": { "componentId": "emailText", "props": { "variant": "body", "children": "Inside a section." } },
+          "stray": { "componentId": "emailText", "props": { "variant": "body", "children": "Outside every section." } }
+        }
+      }
+    },
+    "unlinkedButton": {
+      "why": "A call to action that links nowhere",
+      "tree": {
+        "rootId": "_@_",
+        "nodes": {
+          "_@_": { "componentId": "div", "nodes": ["band"] },
+          "band": { "componentId": "emailSection", "nodes": ["copy", "cta"] },
+          "copy": { "componentId": "emailText", "props": { "variant": "body", "children": "Come and see us." } },
+          "cta": { "componentId": "emailButton", "props": { "children": "Visit" } }
+        }
+      }
+    },
+    "foreignToken": {
+      "why": "A merge token no send fills",
+      "tree": {
+        "rootId": "_@_",
+        "nodes": {
+          "_@_": { "componentId": "div", "nodes": ["band"] },
+          "band": { "componentId": "emailSection", "nodes": ["copy", "cta"] },
+          "copy": {
+            "componentId": "emailText",
+            "props": { "variant": "body", "children": "Your order total is {{order.total}}." }
+          },
+          "cta": { "componentId": "emailButton", "props": { "children": "Visit", "href": "/orders" } }
+        }
+      }
+    },
+    "productBlock": {
+      "why": "A product card the job binds no product to",
+      "tree": {
+        "rootId": "_@_",
+        "nodes": {
+          "_@_": { "componentId": "div", "nodes": ["band"] },
+          "band": { "componentId": "emailSection", "nodes": ["copy", "card", "cta"] },
+          "copy": { "componentId": "emailText", "props": { "variant": "body", "children": "This week’s pick." } },
+          "card": { "componentId": "emailProduct", "props": { "buttonLabel": "Buy" } },
+          "cta": { "componentId": "emailButton", "props": { "children": "Shop", "href": "/shop" } }
+        }
+      }
+    },
+    "handWrittenHtml": {
+      "why": "Hand-written HTML, which is not on the email surface",
+      "tree": {
+        "rootId": "_@_",
+        "nodes": {
+          "_@_": { "componentId": "div", "nodes": ["band"] },
+          "band": { "componentId": "emailSection", "nodes": ["raw"] },
+          "raw": { "componentId": "emailHtml", "props": { "html": "<h1>Hello</h1>" } }
+        }
+      }
+    }
+  },
+
+  "copyControls": {
+    "twoSubjects": {
+      "why": "Fewer subject lines than asked for",
+      "subjects": ["One", "Two"],
+      "preheaders": ["A", "B", "C"]
+    },
+    "repeatedSubjects": {
+      "why": "Three subject lines that are one subject line",
+      "subjects": ["Same", "Same", "Same"],
+      "preheaders": ["A", "B", "C"]
+    },
+    "tokenInSubject": {
+      "why": "A merge token where no send fills one",
+      "subjects": ["Hello {{contact.firstName}}", "Two", "Three"],
+      "preheaders": ["A", "B", "C"]
+    }
+  }
+}

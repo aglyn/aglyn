@@ -1,0 +1,103 @@
+{
+  "about": "AGL-2908 golden: the component step's answer for the issue's testimonial card (name, role, quote and photo), held by ai-job-component-step.spec.ts to every building rule and to the component's binding checks. Offline: no spec sends it to a provider.",
+  "brief": "A testimonial card with the customer's name, their role, their quote and a photo.",
+  "name": "Testimonial card",
+  "answer": {
+    "tree": {
+      "rootId": "root",
+      "nodes": {
+        "root": { "componentId": "div", "nodes": ["card"] },
+        "card": {
+          "componentId": "muiCard",
+          "props": { "variant": "outlined", "component": "article" },
+          "nodes": ["photo", "content"]
+        },
+        "photo": {
+          "componentId": "image",
+          "props": {
+            "src": "{{prop.photo}}",
+            "alt": "Portrait of {{prop.name}}",
+            "objectFit": "cover",
+            "hideIf": "{{prop.hidePhoto}}"
+          },
+          "sx": { "width": 1, "aspectRatio": "4 / 3" }
+        },
+        "content": { "componentId": "muiCardContent", "nodes": ["quote", "name", "role"] },
+        "quote": {
+          "componentId": "muiTypography",
+          "props": { "variant": "body1", "component": "p", "gutterBottom": true, "children": "{{prop.quote}}" }
+        },
+        "name": {
+          "componentId": "muiTypography",
+          "props": { "variant": "subtitle1", "component": "p", "children": "{{prop.name}}" }
+        },
+        "role": {
+          "componentId": "muiTypography",
+          "props": { "variant": "body2", "component": "p", "children": "{{prop.role}}" },
+          "sx": { "color": "text.secondary" }
+        }
+      }
+    },
+    "props": [
+      {
+        "name": "quote",
+        "type": "richText",
+        "label": "Quote",
+        "description": "What the customer said, in their own words.",
+        "defaultValue": "[What the customer said about working with you]",
+        "options": []
+      },
+      {
+        "name": "name",
+        "type": "text",
+        "label": "Name",
+        "description": "",
+        "defaultValue": "[Customer name]",
+        "options": []
+      },
+      {
+        "name": "role",
+        "type": "text",
+        "label": "Role",
+        "description": "Their role, company or town.",
+        "defaultValue": "[Role or company]",
+        "options": []
+      },
+      {
+        "name": "photo",
+        "type": "image",
+        "label": "Photo",
+        "description": "A portrait from the media library.",
+        "defaultValue": "",
+        "options": []
+      },
+      {
+        "name": "hidePhoto",
+        "type": "boolean",
+        "label": "Hide photo",
+        "description": "",
+        "defaultValue": "false",
+        "options": []
+      }
+    ]
+  },
+  "stored": [
+    {
+      "name": "quote",
+      "type": "richText",
+      "label": "Quote",
+      "description": "What the customer said, in their own words.",
+      "defaultValue": "[What the customer said about working with you]"
+    },
+    { "name": "name", "type": "text", "label": "Name", "defaultValue": "[Customer name]" },
+    {
+      "name": "role",
+      "type": "text",
+      "label": "Role",
+      "description": "Their role, company or town.",
+      "defaultValue": "[Role or company]"
+    },
+    { "name": "photo", "type": "image", "label": "Photo", "description": "A portrait from the media library." },
+    { "name": "hidePhoto", "type": "boolean", "label": "Hide photo", "defaultValue": false }
+  ]
+}

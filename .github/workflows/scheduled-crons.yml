@@ -268,6 +268,19 @@ on:
           # is stamped on the task, so a second run reaches only what the
           # first one did not.
           - /api/crm/task-reminders
+          # The AI jobs beat (AGL-3026): one sweep of the queued AI generation
+          # steps, the same as the every-minute `consoleAiJobsBeat` tick. POST
+          # only. Safe to run by hand at any time — each step is claimed under
+          # a lease, so a manual sweep beside a scheduled one never runs a step
+          # twice. It SPENDS: the steps it runs call the AI provider.
+          - /api/admin/ai-jobs-beat
+          # The weekly insights (AGL-2915): delivers the digests the beat has
+          # written, and on a Monday makes the week's. POST only. Safe to run by
+          # hand at any time — a workspace's week is made once and each person
+          # is sent a site's digest once — and after a deploy it is how the
+          # first beat is stamped before the first scheduled run. On a Monday
+          # it SPENDS: the jobs it makes call the AI provider on the beat.
+          - /api/admin/ai-insights-digest
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes
@@ -397,12 +410,16 @@ jobs:
           # A body only when something asked for one: the scheduled runs send
           # none, and every route here treats a bodyless POST as its normal
           # invocation.
+          #
+          # 330 s rather than the 300 a route may run for: the AI jobs beat
+          # (AGL-3026) declares the full 300, and a wait that ended as the
+          # route did would read a finished sweep as a 000.
           if [ "$FORCE" = "true" ]; then
-            code=$(curl -sS --max-time 300 -o /tmp/cron-body -w '%{http_code}' \
+            code=$(curl -sS --max-time 330 -o /tmp/cron-body -w '%{http_code}' \
               -X POST "$url" -H "x-cron-secret: ${CRON_SECRET}" "${probe[@]}" \
               -H 'content-type: application/json' -d '{"force":true}')
           else
-            code=$(curl -sS --max-time 300 -o /tmp/cron-body -w '%{http_code}' \
+            code=$(curl -sS --max-time 330 -o /tmp/cron-body -w '%{http_code}' \
               -X POST "$url" -H "x-cron-secret: ${CRON_SECRET}" "${probe[@]}")
           fi
           echo "HTTP $code"
@@ -440,7 +457,7 @@ jobs:
               exit 1
             fi
             echo "--- chunk $pages (cursor $cursor) ---"
-            code=$(curl -sS --max-time 300 -o /tmp/cron-body -w '%{http_code}' \
+            code=$(curl -sS --max-time 330 -o /tmp/cron-body -w '%{http_code}' \
               -X POST "$url" -H "x-cron-secret: ${CRON_SECRET}" "${probe[@]}" \
               -H 'content-type: application/json' \
               -d "{\"cursor\":\"${cursor}\"}")

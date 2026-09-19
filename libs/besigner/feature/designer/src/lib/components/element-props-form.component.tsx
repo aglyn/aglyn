@@ -124,7 +124,6 @@ import { Grid } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import * as Besigner from '@aglyn/besigner'
 import { forwardRef, memo, type SyntheticEvent, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { AiAssistContext } from '../contexts/ai-assist-context'
 import { BindingPickerContext } from '../contexts/binding-picker-context'
 import { InsertTokenMenu } from './insert-token-menu.component'
 import {
@@ -2130,10 +2129,8 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         }))
     }, [isInstance, instanceDeclared])
 
-    // AI copy assist (AGL-89, widened by AGL-130): text-editable elements
-    // and any element declaring text attributes, when the host app
-    // provides the rewrite callback.
-    const { onRewrite } = useContext(AiAssistContext)
+    // Text elements (AGL-130): text-editable elements and any element
+    // declaring text attributes.
     const textEditable =
       ((schema?.flags?.textEditable ?? FEATURE_FLAG.DISABLED) &
         FEATURE_FLAG.ENABLED) !==
@@ -2678,18 +2675,6 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                         String((node?.props as any).repeatDataset) +
                         '" — children render once per record on the live site.'}
                     </Alert>
-                  </FormControl>
-                ) : null}
-                {onRewrite && (textEditable || hasTextAttributes) ? (
-                  <FormControl margin="none" fullWidth>
-                    <Button
-                      color="primary"
-                      onClick={() => onRewrite(node)}
-                      sx={{ mt: 2 }}
-                      fullWidth
-                    >
-                      Rewrite with AI
-                    </Button>
                   </FormControl>
                 ) : null}
                 {onPromote && !isInstance && unlocked ? (

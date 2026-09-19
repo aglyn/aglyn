@@ -21,6 +21,7 @@ import {
   ENTERPRISE_PLAN_LABEL,
   isEnterpriseOrg,
   PLAN_LABELS,
+  resolveEffectivePlan,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_HOST_GROUP } from '@aglyn/shared-data-enums'
@@ -54,6 +55,7 @@ import EmptyState from '../../../../components/empty-state.component'
 import HostIcon from '../../../../components/host-icon.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import OrgDashboardWidgets from '../../../../components/org-dashboard-widgets.component'
+import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
 import OrgInvitesBanner from '../../../../components/org-invites-banner.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -161,7 +163,9 @@ function HostsContent() {
     limit: resolveOrgEntitlements(org as never)?.hostLimit,
     planLabel: isEnterpriseOrg(org as never)
       ? ENTERPRISE_PLAN_LABEL
-      : PLAN_LABELS[((org as any)?.plan ?? 'free') as keyof typeof PLAN_LABELS],
+      : // The plan the limit beside it resolved from — a staff comp or a
+        // dead subscription included (AGL-3034) — never the stored field.
+        PLAN_LABELS[resolveEffectivePlan(org as never)],
     // Both reads, not just the org's (AGL-1066). `used` comes from the SITE
     // list, so gating this on the ORG being ready published a count taken
     // from a list that had not loaded — `0 of Unlimited sites · Enterprise
@@ -267,6 +271,17 @@ function HostsContent() {
             orgMount={orgMount}
             basePath={buildRoute(Route.ORG_CRM, { orgSlug })}
           />
+          {/* Actions a plugin takes across many of these sites at once
+              (AGL-2911). Held until the mount resolves, since a widget here
+              acts on the sites the page read. */}
+          {orgMount && (
+            <PluginWidgetSlot
+              slot="orgSites"
+              hostId={null}
+              orgMount={orgMount}
+              basePath={buildRoute(Route.HOST_LIST, { orgSlug })}
+            />
+          )}
         <GridItems
           // Site tiles, all one shape, read left to right. Rows are the point.
           masonry={false}

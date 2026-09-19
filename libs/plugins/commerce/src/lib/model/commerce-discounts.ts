@@ -60,6 +60,49 @@ export interface HostDiscount {
   enabled?: boolean
 }
 
+/** A discount proposed for a store, before anyone has switched it on (AGL-2916). */
+export interface ProposedDiscount {
+  name: string
+  /** The code a shopper types, or `null` for a discount that applies on its own. */
+  code: string | null
+  kind: DiscountKind
+  valuePct: number | null
+  valueCents: number | null
+  minSubtotalCents: number | null
+}
+
+/** A stored discount as the discounts card writes one: an automatic discount's code is `null`. */
+export type StoredDiscount = Omit<HostDiscount, 'code'> & { code: string | null }
+
+/**
+ * The document a proposed discount is created as (AGL-2916): switched OFF,
+ * with no redemptions, its code in the shape the discounts card stores, and
+ * only the value its kind reads. A person switches it on from the discounts
+ * card. `null` for a proposal no discount can be made from: a percentage
+ * outside 1 to 100, or an amount off of nothing.
+ */
+export function switchedOffDiscount(proposal: ProposedDiscount): StoredDiscount | null {
+  const code = (proposal.code ?? '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '')
+  const minimum = Math.round(Number(proposal.minSubtotalCents ?? 0))
+  const base: StoredDiscount = {
+    name: proposal.name.trim().slice(0, 80),
+    code: code || null,
+    kind: proposal.kind,
+    ...(minimum > 0 ? { minSubtotalCents: minimum } : {}),
+    enabled: false,
+    redemptions: 0,
+  }
+  if (proposal.kind === 'percent') {
+    const pct = Math.round(Number(proposal.valuePct))
+    return pct >= 1 && pct <= 100 ? { ...base, valuePct: pct } : null
+  }
+  if (proposal.kind === 'fixed') {
+    const cents = Math.round(Number(proposal.valueCents))
+    return cents > 0 ? { ...base, valueCents: cents } : null
+  }
+  return proposal.kind === 'free_shipping' ? base : null
+}
+
 export interface DiscountContext {
   /** Entered code, if any (case-insensitive). */
   code?: string

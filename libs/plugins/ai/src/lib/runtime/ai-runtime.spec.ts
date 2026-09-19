@@ -18,17 +18,20 @@
  * limitations under the License.
  */
 
-import { estimateAiCostUsd } from '../providers/catalog'
+import { estimateAiBilledUsd } from '../providers/catalog'
 import {
   anthropicFailureIsRetryable,
   anthropicProvider,
   buildAnthropicRequestBody,
 } from '../providers/anthropic'
+import { AI_IMAGE_MAX_BYTES, AI_REQUEST_MAX_IMAGES, type AiMessage } from '../providers/contract'
 import {
   AI_UPSTREAM_FAILURE_COPY,
   AiRequestShapeError,
   AiUpstreamError,
+  aiModelReadsImages,
   runAiRequest,
+  validateAiMessages,
   validateAiSystemBlocks,
   type AiStreamEvent,
 } from './ai-runtime'
@@ -253,6 +256,111 @@ describe('the cache guard (AGL-2352)', () => {
   })
 })
 
+describe('the picture guard (AGL-2916)', () => {
+  /** Four bytes of a JPEG's start, base64. */
+  const PICTURE = '/9j/4AAQ'
+  const pictureTurn = (part: Record<string, unknown> = {}): AiMessage => ({
+    role: 'user',
+    content: [
+      { type: 'image', mediaType: 'image/jpeg', data: PICTURE, ...part } as never,
+      { type: 'text', text: 'Describe this product' },
+    ],
+  })
+  const readsImages = () => true
+
+  it('admits a picture in a user turn for a model that reads pictures, and plain text for any', () => {
+    expect(() => validateAiMessages([pictureTurn()], readsImages)).not.toThrow()
+    expect(() => validateAiMessages([{ role: 'user', content: 'Hello' }], () => false)).not.toThrow()
+  })
+
+  it('asks whether the model reads pictures only when a turn carries one', () => {
+    const asked = jest.fn(() => false)
+    validateAiMessages([{ role: 'user', content: [{ type: 'text', text: 'Hi' }] }], asked)
+    expect(asked).not.toHaveBeenCalled()
+    expect(() => validateAiMessages([pictureTurn()], asked)).toThrow(AiRequestShapeError)
+    expect(asked).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['on an assistant turn', { ...pictureTurn(), role: 'assistant' } as AiMessage],
+    ['of a type no model is promised to read', pictureTurn({ mediaType: 'image/svg+xml' })],
+    ['as a data: URL instead of bare base64', pictureTurn({ data: `data:image/jpeg;base64,${PICTURE}` })],
+    ['with no bytes at all', pictureTurn({ data: '' })],
+    ['over the size one picture may be', pictureTurn({ data: 'A'.repeat(Math.ceil((AI_IMAGE_MAX_BYTES * 4) / 3) + 8) })],
+    ['as a part of a type the contract does not have', { role: 'user', content: [{ type: 'audio' }] } as never],
+    ['as an empty list of parts', { role: 'user', content: [] } as never],
+  ])('refuses a picture %s', (_why, message) => {
+    expect(() => validateAiMessages([message], readsImages)).toThrow(AiRequestShapeError)
+  })
+
+  it('reads a picture of the largest size one may be, and a stray character deep inside it, without the pattern engine giving out', () => {
+    const largest = 'A'.repeat(Math.floor((AI_IMAGE_MAX_BYTES * 4) / 3))
+    expect(() => validateAiMessages([pictureTurn({ data: largest })], readsImages)).not.toThrow()
+    expect(() => validateAiMessages([pictureTurn({ data: `${largest.slice(0, 64)}=` })], readsImages)).not.toThrow()
+    const stray = `${largest.slice(0, -10)}\n${largest.slice(-9)}`
+    expect(() => validateAiMessages([pictureTurn({ data: stray })], readsImages)).toThrow(/not bare base64/)
+    for (const data of ['===', 'QUJD===', 'QU=JD']) {
+      expect(() => validateAiMessages([pictureTurn({ data })], readsImages)).toThrow(/not bare base64/)
+    }
+  })
+
+  it('refuses more pictures than one request carries', () => {
+    const many = Array.from({ length: AI_REQUEST_MAX_IMAGES + 1 }, () => pictureTurn())
+    expect(() => validateAiMessages(many, readsImages)).toThrow(/at most/)
+  })
+
+  it('reads the provider’s own descriptor, and a model it does not describe reads none', () => {
+    expect(aiModelReadsImages(anthropicProvider, 'claude-sonnet-5')).toBe(true)
+    expect(aiModelReadsImages(anthropicProvider, 'not-a-model')).toBe(false)
+    const blind = {
+      ...anthropicProvider,
+      models: () =>
+        anthropicProvider.models().map((model) => ({
+          ...model,
+          capabilities: { ...model.capabilities, vision: undefined },
+        })),
+    }
+    expect(aiModelReadsImages(blind, 'claude-sonnet-5')).toBe(false)
+  })
+
+  it('refuses a picture for a model that does not read pictures before any network is touched', async () => {
+    const blind = {
+      ...anthropicProvider,
+      models: () =>
+        anthropicProvider.models().map((model) => ({
+          ...model,
+          capabilities: { ...model.capabilities, vision: false },
+        })),
+    }
+    await expect(
+      runAiRequest({ ...BASE, provider: blind, messages: [pictureTurn()], stream: false }),
+    ).rejects.toThrow(AiRequestShapeError)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('sends the picture as a base64 image block ahead of the text it came with', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        content: [{ type: 'text', text: 'A brass desk lamp.' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 800, output_tokens: 12 },
+      }),
+    })
+    await runAiRequest({ ...BASE, messages: [pictureTurn()], stream: false })
+    expect(sentBody().messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: PICTURE } },
+          { type: 'text', text: 'Describe this product' },
+        ],
+      },
+    ])
+  })
+})
+
 describe('a non-streaming request', () => {
   it('posts to the Messages API with the key and version headers', async () => {
     mockFetch.mockResolvedValue({
@@ -321,10 +429,10 @@ describe('a non-streaming request', () => {
     // Haiku rates, because that is the model the request named — a runtime
     // that priced every door at Sonnet would report the wrong margin.
     expect(result.estCostUsd).toBe(
-      estimateAiCostUsd(result.usage, 'claude-haiku-4-5'),
+      estimateAiBilledUsd(result.usage, 'claude-haiku-4-5'),
     )
     expect(result.estCostUsd).not.toBe(
-      estimateAiCostUsd(result.usage, 'claude-sonnet-5'),
+      estimateAiBilledUsd(result.usage, 'claude-sonnet-5'),
     )
   })
 
@@ -398,7 +506,7 @@ describe('a streaming request', () => {
           cacheReadTokens: 400,
           cacheWriteTokens: 50,
         },
-        estCostUsd: estimateAiCostUsd(
+        estCostUsd: estimateAiBilledUsd(
           { inputTokens: 900, outputTokens: 42, cacheReadTokens: 400, cacheWriteTokens: 50 },
           'claude-sonnet-5',
         ),

@@ -270,11 +270,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     mockFeatureLockdownAsks.push(options)
     return mockFeatureLockdownRefusal(options)
   },
-  memberHasAiPermission: async (...args: unknown[]) => {
+  memberHasPermissionOnHost: async (...args: unknown[]) => {
     mockAiPermissionAsks.push(args)
     return mockAiPermitted
   },
-  aiPermissionRefusal: (permission: string) =>
+  permissionRefusal: (permission: string) =>
     Response.json(
       {
         error: `Your role does not include ${permission}`,
@@ -286,6 +286,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 const { aiAssistHandler } = require('./ai-assist') as typeof import('./ai-assist')
+const { ASSIST_SECTION_TOOL_NAME } =
+  require('./ai-assist-prompts') as typeof import('./ai-assist-prompts')
 
 // ── Harness ─────────────────────────────────────────────────────────────────
 
@@ -566,6 +568,62 @@ describe('a refund credits the period it RESERVED (AGL-2073)', () => {
   })
 })
 
+// ── The usage strip and the model switch (AGL-2942) ─────────────────────────
+
+describe('the answer carries the strip, and a model pick is bounded (AGL-2942)', () => {
+  const { AI_MODEL_CATALOG } = jest.requireActual('../providers/catalog') as typeof import('../providers/catalog')
+  const { aiModelForStep } = jest.requireActual('../providers/routing') as typeof import('../providers/routing')
+  const onProvider = (tier: string) => {
+    const autoEntry = AI_MODEL_CATALOG.find((entry) => entry.id === aiModelForStep('copy.element'))
+    const found = AI_MODEL_CATALOG.find(
+      (entry) => entry.provider === autoEntry?.provider && entry.tier === tier,
+    )
+    if (!found) throw new Error(`no ${tier} model on the default provider`)
+    return found.id
+  }
+  const signalModels = () =>
+    [...mockDocs.entries()]
+      .filter(([path]) => path.startsWith(`orgs/${ORG}/assistSignals/`))
+      .map(([, data]) => data['model'])
+
+  beforeEach(() => {
+    mockFetch.mockImplementation(async () => anthropicOk('Snappier hello'))
+  })
+
+  it('answers with the strip’s envelope: this request’s credits, and the model Auto chose', async () => {
+    const result = await call(BODY, 'token-strip')
+    expect(result.status).toBe(200)
+    expect(result.body).toMatchObject({
+      text: 'Snappier hello',
+      meter: {
+        last: 1,
+        refused: false,
+        state: 'ok',
+        model: { id: aiModelForStep('copy.element'), auto: true },
+      },
+    })
+  })
+
+  it('a pick the plan offers runs, and is metered, on that model', async () => {
+    const balanced = onProvider('balanced')
+    const result = await call({ ...BODY, model: balanced }, 'token-pick')
+    expect(result.status).toBe(200)
+    expect(result.body.meter.model).toMatchObject({ id: balanced, auto: false })
+    expect(signalModels()).toEqual([balanced])
+  })
+
+  it('a pick the plan does not offer runs on Auto — the request and the meter agree', async () => {
+    const deep = onProvider('deep')
+    const result = await call({ ...BODY, model: deep }, 'token-deep')
+    expect(result.status).toBe(200)
+    expect(result.body.meter.model).toMatchObject({ id: aiModelForStep('copy.element'), auto: true })
+    expect(signalModels()).toEqual([aiModelForStep('copy.element')])
+    // What the provider was sent is what the meter priced.
+    const init = mockFetch.mock.calls[0][1] as { body: string }
+    expect(JSON.parse(init.body).model).toBe(aiModelForStep('copy.element'))
+  })
+})
+
 // ── Metering ────────────────────────────────────────────────────────────────
 
 describe('every answered call is metered per org (AGL-2073)', () => {
@@ -737,6 +795,78 @@ describe('every answered call is metered per org (AGL-2073)', () => {
       },
     ])
     expect(JSON.stringify(mockActivityRows)).not.toContain('Acme')
+  })
+
+  it('asks for a section through the strict tool, and reads the call back (AGL-2937)', async () => {
+    // A section used to be asked for as bare JSON and parsed. When the parse
+    // failed, the request had already been paid for and bought nothing; the
+    // tool is the cheaper shape because the answer arrives validated.
+    mockVerifyIdToken = async () => ({ uid: 'uid-ada', email: 'ada@example.test' })
+    let sent: any = null
+    mockFetch.mockImplementation(async (_url: string, init: { body: string }) => {
+      sent = JSON.parse(init.body)
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_1',
+              name: ASSIST_SECTION_TOOL_NAME,
+              input: {
+                nodes: [
+                  {
+                    id: 'n1',
+                    componentId: 'muiStack',
+                    parentId: '',
+                    children: ['n2'],
+                    props: [{ name: 'direction', value: 'column' }],
+                  },
+                  {
+                    id: 'n2',
+                    componentId: 'muiTypography',
+                    parentId: 'n1',
+                    children: [],
+                    props: [{ name: 'children', value: 'Welcome to Acme' }],
+                  },
+                ],
+              },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 700, output_tokens: 300 },
+        }),
+      }
+    })
+    const result = await call({
+      ...BODY,
+      mode: 'section',
+      hostId: 'host-1',
+      instruction: 'A hero section for Acme',
+    })
+    expect(result.status).toBe(200)
+    expect(result.body.section.rootId).toBe('n1')
+    expect(result.body.section.nodes.n2.props.children).toBe('Welcome to Acme')
+    // On the wire: the strict tool, and the mode's block with its breakpoint.
+    expect(sent.tools.map((tool: { name: string }) => tool.name)).toEqual([
+      ASSIST_SECTION_TOOL_NAME,
+    ])
+    expect(sent.tools[0].input_schema.additionalProperties).toBe(false)
+    expect(sent.system[0].cache_control).toEqual({ type: 'ephemeral' })
+    expect(JSON.stringify(sent.system)).not.toContain(ORG)
+  })
+
+  it('sends no tool on the element and blog modes, which answer as text', async () => {
+    let sent: any = null
+    mockFetch.mockImplementation(async (_url: string, init: { body: string }) => {
+      sent = JSON.parse(init.body)
+      return anthropicOk('Snappier hello')
+    })
+    expect((await call({ ...BODY, mode: 'element' })).status).toBe(200)
+    expect(sent.tools).toBeUndefined()
+    expect((await call({ ...BODY, mode: 'blog', instruction: 'Write a post' })).status).toBe(200)
+    expect(sent.tools).toBeUndefined()
   })
 
   it('an element rewrite writes no feed row — the rollup carries the count', async () => {

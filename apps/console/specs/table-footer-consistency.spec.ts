@@ -80,7 +80,9 @@ const SHARED_FOOTER: Array<[string, string]> = [
   // implementations, and adding a footer to the hand-rolled one would have
   // made them similar rather than the same.
   ['activity table', 'apps/console/components/activity-table.component.tsx'],
-  ['notifications', 'apps/console/app/(app)/manage/notifications/page.tsx'],
+  // The feed's grid and its pager are one component now (AGL-3045); the page
+  // hands it a page of rows and the cursor that turns it.
+  ['notifications', 'apps/console/components/notifications-table.component.tsx'],
   /*
    * The staff audit log, which kept a "Load older" of its own — a fifth
    * grammar that escaped both walks below, because it is a page rather than
@@ -823,8 +825,14 @@ describe('a paged list names its order (AGL-2501)', () => {
  * such file must be classified — converted, or named here with the reason it
  * is not a list. A file in neither list fails, which is what stops the next
  * one arriving unnoticed.
+ *
+ * `ScrollTable` counts as a table, because it is one: it is MUI's `Table` in a
+ * box that scrolls sideways (AGL-3045), the only way a table outside the
+ * shared grid may be drawn at all. A detector that knew only `<Table` would go
+ * blind to every table the moment it gained its scroll box, and each
+ * classification below would read as stale while its table stood unchanged.
  */
-const RENDERS_A_TABLE = /<Table\b/
+const RENDERS_A_TABLE = /<(?:Scroll)?Table\b/
 const MAPS_ROWS_INTO_IT = /\.map\([\s\S]{0,400}?<TableRow/
 /** A grid renders its own footer unless the caller turns it off. */
 const GRID_FOOTER_SWITCHED_OFF = /hideFooter/
@@ -1338,6 +1346,15 @@ const NOT_A_LIST: Array<[string, string]> = [
       'A pager under a search box pages what the box already filters.',
   ],
   [
+    'libs/plugins/ai/src/lib/components/ai-site-batch-card.component.tsx',
+    'The agency batch\u2019s picker (AGL-2911): one row per site the ' +
+      'organization\u2019s Sites page already resolved for this reader, ' +
+      'held as that list moves. It mirrors the page\u2019s own list rather ' +
+      'than reading a collection of its own, so the footer belongs to the ' +
+      'page beneath it; a site the reader cannot use never reaches the ' +
+      'card, and the batch door refuses it again in any case.',
+  ],
+  [
     'libs/plugins/ai/src/lib/components/member-ai-usage-card.component.tsx',
     'One member’s AI usage (AGL-2928): exactly two month rows, this ' +
       'month and last, requested at `limit: 2`, and beneath them one row ' +
@@ -1346,10 +1363,32 @@ const NOT_A_LIST: Array<[string, string]> = [
   ],
   [
     'libs/plugins/ai/src/lib/components/staff-org-ai-card.component.tsx',
-    'Staff previews, each capped by the route (AGL-2930): the ' +
-      '`JOBS_RECENT` (10) most recent generation jobs, and the ' +
-      '`TOP_USERS` (10) dearest members this month. The counts beside the ' +
-      'jobs table are the whole population; the rows are a sample of it.',
+    'The month’s tokens by KIND (AGL-2937): one row per kind of request ' +
+      'the plugin makes — a page, a theme, an answer — read off the one ' +
+      'month document’s `kinds` map, so the count is bounded by what the ' +
+      'plugin can be asked to do, not by the org’s traffic. The recent ' +
+      'jobs and the dearest members beside it are record lists in the ' +
+      'shared grid, which draws their footer (AGL-3045).',
+  ],
+  [
+    'libs/plugins/ai/src/lib/components/ai-products-proposals.component.tsx',
+    'One products job\u2019s proposals (AGL-2916): copy for at most ' +
+      '`AI_PRODUCTS_BULK_MAX` saved products, a catalog of six to twelve ' +
+      'draft products, or a brief\u2019s categories and at most five ' +
+      'discounts. Each table holds one job\u2019s answer, bounded by the job ' +
+      'rather than a collection that grows, and the products hub\u2019s own ' +
+      'catalog table beneath it keeps the footer.',
+  ],
+  [
+    'libs/plugins/ai/src/lib/components/ai-theme-proposal-card.component.tsx',
+    'One theme PROPOSAL, read back as the change it would make (AGL-2938): ' +
+      'a row per control it sets — the editor’s color controls in each ' +
+      'scheme and its few type, shape, spacing and navigation controls — ' +
+      'and at most `AI_THEME_TOOL_MAX_COMPONENT_LEAVES` (40) component ' +
+      'leaves, the ceilings the theme tool holds an answer to before it ' +
+      'becomes a proposal. The count is bounded by the editor’s controls, ' +
+      'not by anything a site accumulates, and the recent proposals above ' +
+      'it are the last `RECENT_PROPOSALS_SHOWN` (3).',
   ],
 ]
 
@@ -1465,6 +1504,12 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     expect(
       unpaginatedTable(`
         <Table><TableBody>{rows.map((row) => (<TableRow key={row.id} />))}</TableBody></Table>
+      `),
+    ).toBe(true)
+    // The same table in its scroll box is the same table with no footer.
+    expect(
+      unpaginatedTable(`
+        <ScrollTable><TableBody>{rows.map((row) => (<TableRow key={row.id} />))}</TableBody></ScrollTable>
       `),
     ).toBe(true)
     // A grid whose own footer was switched off and given nothing in its place.
@@ -1671,7 +1716,22 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // member's two months with the sites beneath them, and the staff org
     // card's ten most recent jobs and ten dearest members, each capped by a
     // constant at the route.
-    expect(NOT_A_LIST).toHaveLength(57)
+    //
+    // 58 since themes by AI (AGL-2938): one proposal read back as the change
+    // it would make, a row per control it sets under the theme tool's own
+    // ceilings — a readout of one act, bounded by the editor's controls.
+    //
+    // 59 since an agency can brief many sites at once (AGL-2911): the batch
+    // picker's rows are the sites the organization's Sites page already
+    // resolved for this reader, mirrored and kept as that list moves. It
+    // opens no read of its own, so the footer it would need is the one the
+    // page beneath it already has.
+    //
+    // 60 since commerce by AI (AGL-2916): one products job's proposals, the
+    // copy for at most `AI_PRODUCTS_BULK_MAX` products, a catalog of six to
+    // twelve drafts, or a brief's categories and at most five discounts —
+    // one answer, bounded by the job that wrote it.
+    expect(NOT_A_LIST).toHaveLength(60)
   })
 })
 

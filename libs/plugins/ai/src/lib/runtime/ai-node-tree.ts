@@ -28,11 +28,24 @@ import {
   AI_SX_TOKENS,
 } from './ai-palette.generated'
 import { linealRelationshipPermits } from '@aglyn/aglyn/app-utils/lineal-order'
-import { NODE_MAP_MAX_BYTES } from '@aglyn/aglyn/app-utils/measure-node-map'
+import {
+  NODE_MAP_MAX_BYTES,
+  nodeMapBytes,
+} from '@aglyn/aglyn/app-utils/measure-node-map'
 import { parseMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
+import {
+  COMPONENT_PROP_NAME_PATTERN,
+  REUSABLE_INSTANCE_COMPONENT_ID,
+  REUSABLE_INSTANCE_PROP_VALUES_KEY,
+} from '@aglyn/aglyn/app-utils/reusable-component-keys'
 import { createIdUrlSafe } from '@aglyn/aglyn/foundation/constants/app'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import { NodeType, type NodesMap } from '@aglyn/aglyn/types/nodes'
+import type { AiComponentPropTypes } from '../model/ai-site-inventory'
+import {
+  AI_COMPONENT_VISIBILITY_PROPS,
+  isAiComponentPropToken,
+} from './ai-component-bindings'
 
 import { sanitizeMarketplaceDefinition } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 
@@ -60,12 +73,26 @@ import { sanitizeMarketplaceDefinition } from '@aglyn/aglyn/app-utils/node-defin
  * - copy length by role — a headline, a paragraph, a button label;
  * - links to a screen the host has, a root-relative path or an `https:` URL,
  *   and media to a DAM reference or an `https:` URL;
- * - the stored-node-map byte ceiling.
+ * - the stored-node-map byte ceiling, measured the way the save measures it.
+ *
+ * ## The site's own records, when the caller names them (AGL-2935)
+ *
+ * A reusable-component instance, a form picked on the Forms page and a
+ * dataset are each "a reference into another document", which is why the
+ * palette leaves them off: from a description alone a model can only invent
+ * an id. A generator that has read the site's inventory can name real ones,
+ * and the building doctrine requires it to — a repeat is placed as
+ * instances of one component, and a form is bound by id rather than drawn
+ * inline. So the three are admitted exactly as screen links are: only
+ * against the ids the caller supplies. With no `componentIds` an instance is
+ * still refused; with no `formIds` or `datasetIds` the binding is dropped.
  *
  * What comes out is the flat `NodesMap` `encodeStoredNodes` takes, with every
  * id minted fresh the way a preset graft mints them, so nothing the model
- * wrote can collide with a node already on the canvas. Every drop is listed
- * in `repairs`; every refusal names its `code`. The function never throws.
+ * wrote can collide with a node already on the canvas. `sourceIds` maps each
+ * minted id back to the id the model wrote, so a caller can quote a refused
+ * subtree in the model's own words. Every drop is listed in `repairs`; every
+ * refusal names its `code`. The function never throws.
  */
 
 export type AiNodeTreeRefusalCode =
@@ -83,9 +110,18 @@ export type AiNodeTreeRefusalCode =
   | 'required-prop'
   /** Over the sanitizer's or the stored-node-map's byte ceiling. */
   | 'too-large'
+  /** A component instance naming a component the site does not have. */
+  | 'reference'
 
 export type AiNodeTreeResult =
-  | { ok: true; rootId: string; nodes: NodesMap; repairs: string[] }
+  | {
+      ok: true
+      rootId: string
+      nodes: NodesMap
+      repairs: string[]
+      /** Each minted id → the id the model wrote for that node. */
+      sourceIds: Record<string, string>
+    }
   | { ok: false; error: string; code: AiNodeTreeRefusalCode }
 
 export interface AiNodeTreeContext {
@@ -93,6 +129,35 @@ export interface AiNodeTreeContext {
   screenIds?: Iterable<string>
   /** DAM media ids a `media` prop may reference. Absent: any well-formed reference. */
   assetIds?: Iterable<string>
+  /**
+   * Reusable components an instance may place. Absent: no instance is
+   * admitted, which is the palette's own rule for a tree nobody grounded.
+   */
+  componentIds?: Iterable<string>
+  /** Declared props per component id, which an instance's values are held to. */
+  componentProps?: Record<string, AiComponentPropTypes>
+  /** Forms on the Forms page a Form element may bind by `formId`. */
+  formIds?: Iterable<string>
+  /** Datasets a Form element may write to by `datasetId`. */
+  datasetIds?: Iterable<string>
+  /**
+   * Binding tokens a `url` or `media` prop may hold whole — an Image whose
+   * `src` is `{{entry.coverImage}}` on a page template, filled per record
+   * when the page renders (AGL-2909). Absent: a token in either role is
+   * dropped like any other value that is not an address.
+   */
+  bindingTokens?: Iterable<string>
+  /**
+   * The tree defines a reusable component (AGL-2908). A field that is not
+   * copy — a switch, a dropdown, a screen, an address, a picture, a number —
+   * and the `hideIf` and `hideUnless` directives may then hold one of the
+   * component's own `{{prop.<name>}}` tokens as their whole value, and a
+   * placed component may be handed one in its `propValues`; each is kept as
+   * written. Which property a token names, and whether its kind binds to that
+   * field, is the component step's check (`ai-component-bindings.ts`).
+   * Absent: such a token is dropped like any value the field cannot hold.
+   */
+  definesComponent?: boolean
 }
 
 /**
@@ -210,8 +275,12 @@ export const AI_SX_ALLOWED_KEYS: ReadonlySet<string> = new Set([
   'placeContent',
 ])
 
-/** Substrings no string a model wrote may carry, in a prop or an `sx` value. */
-const HOSTILE_TEXT =
+/**
+ * Substrings no string a model wrote may carry, in a prop or an `sx` value.
+ * Exported for the theme tool's component style values (AGL-2938), which are
+ * the same kind of CSS value written into a theme instead of a node.
+ */
+export const HOSTILE_TEXT =
   /<\s*\/?\s*(script|iframe|object|embed|svg|style|link|meta|base|frame|form|input|img)\b|javascript:|vbscript:|data:text\/html|expression\s*\(|url\s*\(|@import|!important|\bon[a-z]+\s*=/i
 
 /**
@@ -221,7 +290,7 @@ const HOSTILE_TEXT =
  * semicolons, no braces, no angle brackets, no colons — which is what keeps
  * a `url(`, a selector or a second declaration out.
  */
-const SX_VALUE = /^[A-Za-z0-9#.,%()\s\-_/+*]{1,100}$/
+export const SX_VALUE = /^[A-Za-z0-9#.,%()\s\-_/+*]{1,100}$/
 
 /**
  * Node fields the sanitizer strips that a model has no business writing —
@@ -237,6 +306,8 @@ const STRIPPED_NODE_KEYS = [
 ] as const
 
 const SCREEN_ID = /^[A-Za-z0-9_-]{1,64}$/
+/** The field an icon is picked with; its value carries a drawing no model can write. */
+const ICON_PICKER_FIELD = 'icon-picker'
 const MAX_SX_KEYS = 40
 /** A string prop with no role of its own — a color, a CSS length, an icon id. */
 const PLAIN_STRING_MAX = 500
@@ -249,7 +320,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function isHttpsUrl(value: string): boolean {
+/** An `https:` address that parses as one. */
+export function isHttpsUrl(value: string): boolean {
   if (!/^https:\/\//i.test(value)) return false
   try {
     return new URL(value).protocol === 'https:'
@@ -259,7 +331,7 @@ function isHttpsUrl(value: string): boolean {
 }
 
 /** A path on this site: one leading slash, never a scheme-relative `//`. */
-function isRootRelativePath(value: string): boolean {
+export function isRootRelativePath(value: string): boolean {
   return /^\/(?!\/)[^\s<>"'`\\]*$/.test(value)
 }
 
@@ -382,7 +454,8 @@ function textLimitFor(
 
 /**
  * One string prop against its role. Returns the value to store, or
- * `undefined` with the reason pushed to `repairs`.
+ * `undefined` with the reason pushed to `repairs`. A binding token the
+ * caller admitted passes a `url` or `media` role whole.
  */
 function sanitizeString(
   nodeId: string,
@@ -394,10 +467,18 @@ function sanitizeString(
   screenIds: Set<string> | null,
   assetIds: Set<string> | null,
   repairs: string[],
+  bindingTokens: ReadonlySet<string> | null = null,
 ): string | undefined {
   let value = raw.trim()
   if (HOSTILE_TEXT.test(value)) {
     repairs.push(`${nodeId}.${name} carried markup or script; dropped`)
+    return undefined
+  }
+  // An icon is drawn from the path its picker stores beside the id, which a
+  // model can never supply, so an icon a model names draws nothing where the
+  // page is published (AGL-3054). The site owner picks it.
+  if (entry.propFields[name] === ICON_PICKER_FIELD) {
+    repairs.push(`${nodeId}.${name} is an icon, which the site owner picks from the library; dropped`)
     return undefined
   }
   const role = entry.propRoles[name]
@@ -413,6 +494,7 @@ function sanitizeString(
       break
     }
     case 'url': {
+      if (bindingTokens?.has(value)) break
       if (!isHttpsUrl(value) && !isRootRelativePath(value)) {
         repairs.push(
           `${nodeId}.${name} is neither an https: URL nor a path on this site; dropped`,
@@ -431,6 +513,7 @@ function sanitizeString(
       break
     }
     case 'media': {
+      if (bindingTokens?.has(value)) break
       if (isHttpsUrl(value)) break
       const ref = parseMediaRef(value)
       if (!ref || (assetIds && !assetIds.has(ref.mediaId))) {
@@ -476,6 +559,7 @@ function sanitizeProps(
   screenIds: Set<string> | null,
   assetIds: Set<string> | null,
   repairs: string[],
+  bindingTokens: ReadonlySet<string> | null = null,
 ): { props: Record<string, unknown> } | { missing: string } {
   const source = isRecord(raw) ? raw : {}
   const props: Record<string, unknown> = {}
@@ -548,6 +632,7 @@ function sanitizeProps(
           screenIds,
           assetIds,
           repairs,
+          bindingTokens,
         )
         if (cleaned === undefined) continue
         props[name] = cleaned
@@ -558,6 +643,179 @@ function sanitizeProps(
     if (props[name] === undefined) return { missing: name }
   }
   return { props }
+}
+
+/** Surfaces that compose page elements, and so may place a component instance. */
+const INSTANCE_SURFACES: ReadonlySet<AiSurface> = new Set([
+  'screen',
+  'layout',
+  'component',
+])
+
+const FORM_COMPONENT_ID = 'form'
+
+/** The instance prop naming the component it places; stored on every instance node. */
+export const AI_INSTANCE_REF_PROP = 'refId'
+
+interface ReferenceSets {
+  componentIds: Set<string> | null
+  componentProps: Record<string, AiComponentPropTypes>
+  formIds: Set<string> | null
+  datasetIds: Set<string> | null
+  assetIds: Set<string> | null
+  /** The tree defines a reusable component, which may hand its own property tokens on. */
+  definesComponent: boolean
+}
+
+/**
+ * One value an instance fills in for a declared prop, held to what the
+ * declaration's type can hold: a picture from the library, a link, a number,
+ * a switch, or copy.
+ */
+function instancePropValue(
+  nodeId: string,
+  name: string,
+  type: string,
+  raw: unknown,
+  assetIds: Set<string> | null,
+  repairs: string[],
+): unknown {
+  if (type === 'number') {
+    const parsed = typeof raw === 'number' ? raw : Number(raw)
+    if (raw === '' || !Number.isFinite(parsed)) {
+      repairs.push(`${nodeId}.propValues.${name} is not a number; dropped`)
+      return undefined
+    }
+    return parsed
+  }
+  if (type === 'boolean') {
+    const coerced = coerceBoolean(raw)
+    if (coerced === undefined) {
+      repairs.push(`${nodeId}.propValues.${name} is not a boolean; dropped`)
+    }
+    return coerced
+  }
+  if (type === 'icon') {
+    // A page cannot fill an icon: the pick is an id and the path drawn from
+    // it, and a word in its place draws nothing (AGL-3054). The property is
+    // left for the site owner to pick.
+    repairs.push(`${nodeId}.propValues.${name} is an icon, which the site owner picks from the library; dropped`)
+    return undefined
+  }
+  if (typeof raw !== 'string' && typeof raw !== 'number' && typeof raw !== 'boolean') {
+    repairs.push(`${nodeId}.propValues.${name} is not a value; dropped`)
+    return undefined
+  }
+  const value = String(raw).trim()
+  if (HOSTILE_TEXT.test(value)) {
+    repairs.push(`${nodeId}.propValues.${name} carried markup or script; dropped`)
+    return undefined
+  }
+  if (type === 'image') {
+    if (isHttpsUrl(value)) return value
+    const ref = parseMediaRef(value)
+    if (!ref || (assetIds && !assetIds.has(ref.mediaId))) {
+      repairs.push(
+        `${nodeId}.propValues.${name} is neither a media reference this site holds nor an https: URL; dropped`,
+      )
+      return undefined
+    }
+    return value
+  }
+  if (type === 'href') {
+    if (isHttpsUrl(value) || isRootRelativePath(value)) return value
+    repairs.push(
+      `${nodeId}.propValues.${name} is neither an https: URL nor a path on this site; dropped`,
+    )
+    return undefined
+  }
+  if (value.length > AI_TEXT_LIMITS.body) {
+    repairs.push(
+      `${nodeId}.propValues.${name} was over ${AI_TEXT_LIMITS.body} characters; truncated`,
+    )
+    return value.slice(0, AI_TEXT_LIMITS.body).trimEnd()
+  }
+  return value
+}
+
+/**
+ * The site-record props of one node — an instance's `refId` and
+ * `propValues`, a Form's `formId` and `datasetId` — checked against the ids
+ * the caller supplied. They leave `props` before the palette pass, which
+ * would drop them as undeclared, and come back in `kept` once checked.
+ */
+function sanitizeReferenceProps(
+  nodeId: string,
+  componentId: string,
+  props: Record<string, unknown>,
+  refs: ReferenceSets,
+  repairs: string[],
+): { props: Record<string, unknown>; kept: Record<string, unknown> } | { refusal: string } {
+  const rest: Record<string, unknown> = { ...props }
+  const kept: Record<string, unknown> = {}
+  if (componentId === REUSABLE_INSTANCE_COMPONENT_ID) {
+    const refId = typeof rest[AI_INSTANCE_REF_PROP] === 'string' ? String(rest[AI_INSTANCE_REF_PROP]).trim() : ''
+    delete rest[AI_INSTANCE_REF_PROP]
+    if (!refId || !refs.componentIds?.has(refId)) {
+      return {
+        refusal: `Reusable Component (${nodeId}) names a component this site does not have`,
+      }
+    }
+    kept[AI_INSTANCE_REF_PROP] = refId
+    const rawValues = rest[REUSABLE_INSTANCE_PROP_VALUES_KEY]
+    delete rest[REUSABLE_INSTANCE_PROP_VALUES_KEY]
+    if (rawValues !== undefined && !isRecord(rawValues)) {
+      repairs.push(`${nodeId}.propValues is not an object; dropped`)
+    }
+    const declared = refs.componentProps[refId]
+    const values: Record<string, unknown> = {}
+    for (const [name, raw] of Object.entries(isRecord(rawValues) ? rawValues : {})) {
+      if (raw === undefined || raw === null) continue
+      if (!COMPONENT_PROP_NAME_PATTERN.test(name)) {
+        repairs.push(`${nodeId}.propValues.${name} is not a prop name; dropped`)
+        continue
+      }
+      if (declared && !(name in declared)) {
+        repairs.push(`${nodeId}.propValues.${name} is not a prop of that component; dropped`)
+        continue
+      }
+      if (refs.definesComponent && isAiComponentPropToken(raw)) {
+        // A property of the component being defined, handed on whole; the
+        // component step's check holds it to the kind this prop declares.
+        values[name] = raw.trim()
+        continue
+      }
+      const value = instancePropValue(
+        nodeId,
+        name,
+        declared?.[name] ?? 'text',
+        raw,
+        refs.assetIds,
+        repairs,
+      )
+      if (value !== undefined) values[name] = value
+    }
+    if (Object.keys(values).length) kept[REUSABLE_INSTANCE_PROP_VALUES_KEY] = values
+    return { props: rest, kept }
+  }
+  if (componentId === FORM_COMPONENT_ID) {
+    const bindings: Array<[prop: string, ids: Set<string> | null, record: string]> = [
+      ['formId', refs.formIds, 'form'],
+      ['datasetId', refs.datasetIds, 'dataset'],
+    ]
+    for (const [prop, ids, record] of bindings) {
+      const raw = rest[prop]
+      delete rest[prop]
+      if (raw === undefined || raw === null || raw === '') continue
+      const id = typeof raw === 'string' ? raw.trim() : ''
+      if (id && ids?.has(id)) {
+        kept[prop] = id
+      } else {
+        repairs.push(`${nodeId}.${prop} names a ${record} this site does not have; dropped`)
+      }
+    }
+  }
+  return { props: rest, kept }
 }
 
 function refusalCode(error: string): AiNodeTreeRefusalCode {
@@ -591,6 +849,58 @@ export function validateAiNodeTree(
       code: 'invalid-input',
       error: `The tree could not be read: ${error instanceof Error ? error.message : String(error)}`,
     }
+  }
+}
+
+export type AiNodePatchResult =
+  | {
+      ok: true
+      props: Record<string, unknown>
+      sx: Record<string, unknown> | undefined
+      repairs: string[]
+    }
+  | { ok: false; error: string; code: AiNodeTreeRefusalCode }
+
+/**
+ * One element's prop and style patch, held to the rules `validateAiNodeTree`
+ * holds an element it places — for an edit to an element already on the
+ * canvas, where there is no tree to validate.
+ *
+ * The same passes run: unknown props dropped, enums coerced, every string
+ * held to its role and screened for markup, `sx` held to the key set and the
+ * value grammar. The one difference is `required`: a patch is merged over the
+ * props the element already has, so a required prop the patch does not name
+ * is not missing.
+ */
+export function validateAiNodePatch(
+  componentId: string,
+  patch: { props?: unknown; sx?: unknown },
+  context?: AiNodeTreeContext,
+): AiNodePatchResult {
+  const entry = AI_PALETTE[componentId]
+  if (!entry) {
+    return {
+      ok: false,
+      code: 'component',
+      error: `Component "${componentId}" is not in the palette`,
+    }
+  }
+  const repairs: string[] = []
+  const props = sanitizeProps(
+    componentId,
+    { ...entry, propsSchema: { ...entry.propsSchema, required: [] } },
+    patch.props,
+    context?.screenIds ? new Set(context.screenIds) : null,
+    context?.assetIds ? new Set(context.assetIds) : null,
+    repairs,
+  )
+  const sx =
+    patch.sx === undefined ? undefined : sanitizeSx(componentId, patch.sx, repairs)
+  return {
+    ok: true,
+    props: 'props' in props ? props.props : {},
+    sx,
+    repairs,
   }
 }
 
@@ -659,33 +969,71 @@ function validate(
   // but on the tenant's own page it is exactly what an image should name.
   // Lift those values out before sanitizing and hand them back to the prop
   // pass, which holds them to the asset set the caller supplied.
+  // A binding token the caller admitted (AGL-2909) is lifted the same way:
+  // `{{entry.coverImage}}` is no address the sanitizer knows, and the prop
+  // pass holds it to the tokens the caller named.
+  const bindingTokens = context?.bindingTokens ? new Set(context.bindingTokens) : null
+  // A reusable component's own property tokens (AGL-2908) are lifted too, and
+  // kept as written rather than handed back to the prop pass: `{{prop.variant}}`
+  // is no value a dropdown, a switch, an address or a visibility directive
+  // admits. Copy keeps its tokens without lifting, as the text they are.
+  const definesComponent = context?.definesComponent === true
   const mediaByNodeId = new Map<string, Record<string, string>>()
+  const boundByNodeId = new Map<string, Record<string, string>>()
   const forSanitizer: Record<string, unknown> = {}
   for (const [id, node] of Object.entries(nodes)) {
     if (!isRecord(node) || !isRecord(node.props)) {
       forSanitizer[id] = node
       continue
     }
-    const roles = AI_PALETTE[String(node.componentId)]?.propRoles ?? {}
+    const entry = AI_PALETTE[String(node.componentId)]
+    const roles = entry?.propRoles ?? {}
     const props: Record<string, unknown> = { ...node.props }
     const lifted: Record<string, string> = {}
+    const bound: Record<string, string> = {}
     for (const [key, value] of Object.entries(props)) {
+      if (typeof value !== 'string') continue
+      const role = roles[key]
       if (
-        roles[key] === 'media' &&
-        typeof value === 'string' &&
-        parseMediaRef(value.trim())
+        definesComponent &&
+        isAiComponentPropToken(value) &&
+        (AI_COMPONENT_VISIBILITY_PROPS.includes(key) ||
+          (entry?.propsSchema.properties[key] !== undefined && role !== 'text'))
+      ) {
+        bound[key] = value.trim()
+        delete props[key]
+        continue
+      }
+      if (
+        (role === 'media' && parseMediaRef(value.trim())) ||
+        ((role === 'media' || role === 'url') && bindingTokens?.has(value.trim()))
       ) {
         lifted[key] = value
         delete props[key]
       }
     }
     if (Object.keys(lifted).length) mediaByNodeId.set(id, lifted)
+    if (Object.keys(bound).length) boundByNodeId.set(id, bound)
     forSanitizer[id] = { ...node, props }
   }
 
+  const refs: ReferenceSets = {
+    componentIds: context?.componentIds ? new Set(context.componentIds) : null,
+    componentProps: context?.componentProps ?? {},
+    formIds: context?.formIds ? new Set(context.formIds) : null,
+    datasetIds: context?.datasetIds ? new Set(context.datasetIds) : null,
+    assetIds: context?.assetIds ? new Set(context.assetIds) : null,
+    definesComponent,
+  }
+  // An instance is admitted only where the caller grounded it in the site's
+  // components; the reference itself is checked on the node below.
+  const allow =
+    refs.componentIds && INSTANCE_SURFACES.has(surface)
+      ? [...definition.allow, REUSABLE_INSTANCE_COMPONENT_ID]
+      : definition.allow
   const sanitized = sanitizeMarketplaceDefinition(
     { rootId, nodes: forSanitizer },
-    { componentIds: definition.allow },
+    { componentIds: allow },
   )
   if (sanitized.ok === false) {
     return {
@@ -696,7 +1044,7 @@ function validate(
   }
 
   const screenIds = context?.screenIds ? new Set(context.screenIds) : null
-  const assetIds = context?.assetIds ? new Set(context.assetIds) : null
+  const assetIds = refs.assetIds
   const repairs: string[] = []
   const output: NodesMap = {}
   const rootIsWrapper =
@@ -761,10 +1109,12 @@ function validate(
       }
       if (isRecord(raw.props)) {
         const lifted = mediaByNodeId.get(id) ?? {}
+        const kept = boundByNodeId.get(id) ?? {}
         for (const key of Object.keys(raw.props)) {
           if (
             key !== 'sx' &&
             lifted[key] === undefined &&
+            kept[key] === undefined &&
             node.props?.[key] === undefined &&
             raw.props[key] !== undefined
           ) {
@@ -825,13 +1175,34 @@ function validate(
       queue.push({ id: childId, parentId: newId })
     }
 
+    const reference = sanitizeReferenceProps(
+      id,
+      node.componentId,
+      { ...node.props, ...mediaByNodeId.get(id) },
+      refs,
+      repairs,
+    )
+    if ('refusal' in reference) {
+      return { ok: false, code: 'reference', error: reference.refusal }
+    }
+    // A required prop the component binds is present: its value is the token.
+    const boundProps = boundByNodeId.get(id)
     const propsResult = sanitizeProps(
       id,
-      entry,
-      { ...node.props, ...mediaByNodeId.get(id) },
+      boundProps
+        ? {
+            ...entry,
+            propsSchema: {
+              ...entry.propsSchema,
+              required: entry.propsSchema.required.filter((name) => boundProps[name] === undefined),
+            },
+          }
+        : entry,
+      reference.props,
       screenIds,
       assetIds,
       repairs,
+      bindingTokens,
     )
     if ('missing' in propsResult) {
       return {
@@ -848,13 +1219,16 @@ function validate(
       pluginId: entry.pluginId,
       parentId,
       nodes: children,
-      props: propsResult.props,
+      props: { ...propsResult.props, ...reference.kept, ...boundProps },
       ...(sx ? { sx } : {}),
       ...(hiddenByNodeId.has(id) ? { hidden: true } : {}),
     }
   }
 
-  const bytes = JSON.stringify(output).length
+  // The save's own measurement (msgpack), not a JSON string length: the
+  // ceiling is stated in those bytes, and a UTF-16 length reads multi-byte
+  // copy as smaller than the document the save will refuse.
+  const bytes = nodeMapBytes(output)
   if (bytes > NODE_MAP_MAX_BYTES) {
     return {
       ok: false,
@@ -862,10 +1236,13 @@ function validate(
       error: `The tree is ${bytes} bytes; the stored ceiling is ${NODE_MAP_MAX_BYTES}`,
     }
   }
+  const sourceIds: Record<string, string> = {}
+  for (const [source, fresh] of minted) sourceIds[fresh] = source
   return {
     ok: true,
     rootId: minted.get(rootId) as string,
     nodes: output,
     repairs,
+    sourceIds,
   }
 }

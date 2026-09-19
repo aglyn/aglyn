@@ -16,7 +16,16 @@
  */
 
 import { PLATFORM_BRAND_NAME, registerConsoleExtension } from '@aglyn/aglyn'
-import { AiAssistProvider } from './components/ai-assist-provider.component'
+import { AiCollaboratorPermissionsCell } from './components/ai-collaborator-permissions-column.component'
+import { AiSaveAsComponent } from './components/ai-save-as-component.component'
+import {
+  AiGenerateSectionControl,
+  AiRewriteControl,
+} from './components/besigner-ai-controls.component'
+import {
+  AiAssistProviderOnHost,
+  AssistPanelOnHost,
+} from './components/ai-permissions-on-host.component'
 import AiCreditsCard from './components/ai-credits-card.component'
 import {
   AiCollaboratorCreditsCell,
@@ -24,13 +33,51 @@ import {
   AiMemberCreditsCell,
   AiMemberCreditsHeader,
 } from './components/ai-credits-columns.component'
-import { AssistPanelComponent } from './components/assist-panel.component'
 import { AssistSignalsPage } from './components/assist-signals-page.component'
 import BillingAssistOverageCard from './components/billing-assist-overage-card.component'
 import { AiTopUsersCard } from './components/billing-ai-top-users.component'
+import { AiAllotmentsCard } from './components/billing-ai-allotments.component'
+import {
+  AiCollaboratorAllotmentCell,
+  AiCollaboratorAllotmentHeader,
+  AiSiteAllotmentCard,
+} from './components/host-ai-allotments.component'
+import MemberAiAllotmentCard from './components/member-ai-allotment-card.component'
 import MemberAiUsageCard from './components/member-ai-usage-card.component'
+import AiThemeProposalCard from './components/ai-theme-proposal-card.component'
 import StaffOrgAiCard from './components/staff-org-ai-card.component'
+import {
+  StaffOrgUsageAiCreditsCell,
+  StaffOrgUsageAiOverageCell,
+  StaffOrgUsageAiPool,
+  StaffOrgUsageAssistCell,
+} from './components/staff-org-usage-ai-columns.component'
+import {
+  StaffOrgsAiSpendCell,
+  StaffOrgsAiSpendHeader,
+} from './components/staff-orgs-ai-spend-column.component'
 import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.component'
+import AiSeoAuditCard from './components/ai-seo-audit-card.component'
+import AiSiteBatchCard from './components/ai-site-batch-card.component'
+import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
+import AiDescribeAutomationButton from './components/ai-describe-automation.component'
+import AiCrmEmailDraft from './components/ai-crm-email-draft.component'
+import AiCrmImportMapping from './components/ai-crm-import-mapping.component'
+import AiCrmRecordCard from './components/ai-crm-record-card.component'
+import AiDescribePageButton from './components/ai-describe-page.component'
+import {
+  AiDescribeComponentButton,
+  AiDescribeFormButton,
+  AiDescribeLayoutButton,
+  AiDescribeTemplateButton,
+} from './components/ai-describe-button.component'
+import {
+  AiExplainAutomation,
+  AiExplainRunFailure,
+} from './components/ai-explain-automation.component'
+import AiProductCopyCard from './components/ai-product-copy-card.component'
+import AiProductImportOption from './components/ai-product-import-option.component'
+import AiProductsHubCard from './components/ai-products-hub-card.component'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
 
@@ -53,8 +100,8 @@ export function registerAiConsole(): void {
     pluginId: AI_PLUGIN_ID,
     displayName: 'AI',
     // The besigner copy assistant (AGL-89/419): mounted by the shell around
-    // every console page; the designer reads core's `DesignerAssistContext`.
-    providers: [AiAssistProvider],
+    // every console page, and opened by this plugin's besigner controls.
+    providers: [AiAssistProviderOnHost],
     // The Assist docs-gap and cost board (AGL-1860, AGL-2252), at the staff
     // URL and under the tab it has always had.
     staffPages: [
@@ -75,7 +122,7 @@ export function registerAiConsole(): void {
         slot: 'assistPanel',
         widgetId: 'ai-assist-dock',
         title: 'Assistant',
-        Component: AssistPanelComponent,
+        Component: AssistPanelOnHost,
       },
       {
         slot: 'orgBillingUsage',
@@ -99,11 +146,95 @@ export function registerAiConsole(): void {
         permission: 'billing.view',
         Component: AiTopUsersCard,
       },
+      // The collaborators table's AI column (AGL-2927): whether each person
+      // may open the AI doors on the site, per site, ahead of the columns
+      // that report what they drew.
+      {
+        slot: 'hostMembers',
+        widgetId: 'ai-collaborator-permissions',
+        title: 'AI',
+        column: { header: 'AI' },
+        Component: AiCollaboratorPermissionsCell,
+      },
+      // The copy assistant's besigner controls (AGL-89, AGL-169): Generate a
+      // section on every editor's toolbar, and Rewrite with AI under the
+      // selected element's fields. Each opens the provider's dialog, and is
+      // drawn only while the reader holds the door's permission.
+      {
+        slot: 'besignerToolbar',
+        widgetId: 'ai-generate-section',
+        title: 'Generate a section with AI',
+        Component: AiGenerateSectionControl,
+      },
+      {
+        slot: 'besignerInspector',
+        widgetId: 'ai-rewrite-copy',
+        title: 'Rewrite with AI',
+        Component: AiRewriteControl,
+      },
+      // Save the selection as a reusable component (AGL-2908): the component
+      // job's second entry point, which proposes the properties a section
+      // should declare and applies them as the manual promote does.
+      {
+        slot: 'besignerInspector',
+        widgetId: 'ai-save-as-component',
+        title: 'Make a reusable component with AI',
+        permission: 'ai.generate',
+        Component: AiSaveAsComponent,
+      },
       {
         slot: 'orgMember',
         widgetId: 'ai-member-usage',
         title: 'AI usage',
         Component: MemberAiUsageCard,
+      },
+      // The allotments (AGL-2942): a member's or a site's monthly share of
+      // the pool, set on Billing → Usage, on each member's page and on a
+      // site's collaborators card — each card asks the route what its
+      // reader may see and change.
+      {
+        slot: 'orgBillingUsage',
+        widgetId: 'ai-allotments',
+        title: 'AI allotments',
+        permission: 'billing.view',
+        Component: AiAllotmentsCard,
+      },
+      {
+        slot: 'orgMember',
+        widgetId: 'ai-member-allotment',
+        title: 'AI allotment',
+        Component: MemberAiAllotmentCard,
+      },
+      {
+        slot: 'hostMembers',
+        widgetId: 'ai-collaborator-allotment',
+        title: 'AI allotment',
+        column: {
+          header: 'AI allotment',
+          align: 'right',
+          Header: AiCollaboratorAllotmentHeader,
+        },
+        Component: AiCollaboratorAllotmentCell,
+      },
+      {
+        slot: 'hostMembers',
+        widgetId: 'ai-site-allotment',
+        title: 'Site AI allotment',
+        Component: AiSiteAllotmentCard,
+      },
+      // Themes by AI (AGL-2938): a brief on the site's Theme section, a
+      // proposal previewed before and after, and the editor's own Save to
+      // keep it. Generation is sold as `aiGenerative` and held by
+      // `ai.generate`, so the shell withholds the card from a plan or a
+      // member without either; the card itself asks the route about the
+      // release flag before it shows anything.
+      {
+        slot: 'hostTheme',
+        widgetId: 'ai-theme-proposal',
+        title: 'Theme assistant',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiThemeProposalCard,
       },
       {
         slot: 'staffOrg',
@@ -116,6 +247,47 @@ export function registerAiConsole(): void {
         widgetId: 'ai-account-usage',
         title: 'AI usage across organizations',
         Component: StaffUserAiUsageCard,
+      },
+      // The staff tables' AI figures (AGL-2984): the Organizations list's
+      // spend column, and the usage table's three columns with the credit
+      // pool line the org page draws above it.
+      {
+        slot: 'staffOrgsListColumn',
+        widgetId: 'ai-orgs-spend',
+        title: 'AI spend (month)',
+        column: {
+          header: 'AI spend (month)',
+          align: 'right',
+          Header: StaffOrgsAiSpendHeader,
+        },
+        Component: StaffOrgsAiSpendCell,
+      },
+      {
+        slot: 'staffOrgUsageColumn',
+        widgetId: 'ai-usage-assist-cost',
+        title: 'Assist',
+        column: { header: 'Assist', align: 'right' },
+        Component: StaffOrgUsageAssistCell,
+      },
+      {
+        slot: 'staffOrgUsageColumn',
+        widgetId: 'ai-usage-credits',
+        title: 'AI credits used',
+        column: { header: 'AI credits used', align: 'right' },
+        Component: StaffOrgUsageAiCreditsCell,
+      },
+      {
+        slot: 'staffOrgUsageColumn',
+        widgetId: 'ai-usage-overage',
+        title: 'AI overage billed ($)',
+        column: { header: 'AI overage billed ($)', align: 'right' },
+        Component: StaffOrgUsageAiOverageCell,
+      },
+      {
+        slot: 'staffOrgUsageColumn',
+        widgetId: 'ai-usage-pool',
+        title: 'AI credit pool',
+        Component: StaffOrgUsageAiPool,
       },
       {
         slot: 'orgMembersListColumn',
@@ -134,6 +306,180 @@ export function registerAiConsole(): void {
           Header: AiCollaboratorCreditsHeader,
         },
         Component: AiCollaboratorCreditsCell,
+      },
+      // SEO by AI (AGL-2910): "Write SEO" inside every search listing editor
+      // — a page's SEO card and a product's listing — and the site audit on
+      // the site's SEO section. Generation is sold as `aiGenerative` and held
+      // by `ai.generate`, so the shell withholds both from a plan or a member
+      // without either; each card asks the jobs route about the release flag
+      // before it shows anything, and neither ever writes what it proposes.
+      {
+        slot: 'seoFields',
+        widgetId: 'ai-seo-fields',
+        title: 'SEO assistant',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiSeoFieldsCard,
+      },
+      {
+        slot: 'hostSeo',
+        widgetId: 'ai-seo-audit',
+        title: 'SEO audit',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiSeoAuditCard,
+      },
+      // A page from a brief (AGL-2907): "Describe it" beside Templates and
+      // Create New Screen. Gated as the other generative widgets are, and it
+      // asks the jobs route about the release flag before it shows anything.
+      {
+        slot: 'hostScreens',
+        widgetId: 'ai-describe-page',
+        title: 'Describe a page',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribePageButton,
+      },
+      // The same entry for a page template, a layout and a form (AGL-3043),
+      // beside the create action of the page that lists each: the same
+      // dialog, the same gates, and the same question to the jobs route
+      // before it shows anything.
+      {
+        slot: 'hostTemplates',
+        widgetId: 'ai-describe-template',
+        title: 'Describe a page template',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeTemplateButton,
+      },
+      {
+        slot: 'hostLayouts',
+        widgetId: 'ai-describe-layout',
+        title: 'Describe a layout',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeLayoutButton,
+      },
+      {
+        slot: 'hostForms',
+        widgetId: 'ai-describe-form',
+        title: 'Describe a form',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeFormButton,
+      },
+      // And a reusable component from a brief (AGL-3051), beside Templates
+      // and Create Component: the component job's first entry point, which
+      // had none in the console.
+      {
+        slot: 'hostComponents',
+        widgetId: 'ai-describe-component',
+        title: 'Describe a reusable component',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeComponentButton,
+      },
+      // Automations by AI (AGL-2919), in the zones the workflows plugin hosts
+      // on its Automation page: "Describe it" beside Add action and Recipes,
+      // "Explain it" in the editor of a saved automation, and "Why did this
+      // fail?" on a failed run. Gated as the other generative widgets are;
+      // each asks the jobs route about the release flag before it shows
+      // anything, and none of them changes an automation.
+      {
+        slot: 'hostAutomations',
+        widgetId: 'ai-describe-automation',
+        title: 'Describe an automation',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiDescribeAutomationButton,
+      },
+      {
+        slot: 'automationEditor',
+        widgetId: 'ai-explain-automation',
+        title: 'Explain this automation',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiExplainAutomation,
+      },
+      {
+        slot: 'automationRun',
+        widgetId: 'ai-explain-run-failure',
+        title: 'Why did this run fail?',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiExplainRunFailure,
+      },
+      // CRM by AI (AGL-2917): a record's summary and next step on its page,
+      // a draft in the one-to-one composer, and an import's column matches.
+      // The CRM hosts each zone, so it is drawn only where the CRM is; the
+      // shell holds the plan and `ai.generate`, each card asks the jobs route
+      // about the release flag before it shows anything, and none writes what
+      // it proposes.
+      {
+        slot: 'recordInsights',
+        widgetId: 'ai-crm-record',
+        title: 'AI summary',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiCrmRecordCard,
+      },
+      {
+        slot: 'recordEmail',
+        widgetId: 'ai-crm-email',
+        title: 'Draft with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiCrmEmailDraft,
+      },
+      {
+        slot: 'importMapping',
+        widgetId: 'ai-crm-import-mapping',
+        title: 'Match columns with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiCrmImportMapping,
+      },
+      // The agency batch (AGL-2911): one brief across many of the org's
+      // sites, from the page that lists them. The card asks the jobs route
+      // about the release flag before it shows anything, and its own door
+      // holds the plan band and the caller's permission on every site it is
+      // pointed at.
+      {
+        slot: 'orgSites',
+        widgetId: 'ai-site-batch',
+        title: 'Generate sites with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiSiteBatchCard,
+      },
+      // Commerce by AI (AGL-2916): product copy in the product editor, the
+      // catalog, categories and discounts on the products hub, and copy for
+      // an import as it lands. The commerce plugin hosts the zones and makes
+      // every write; each card asks the jobs route about the release flag
+      // before it shows anything.
+      {
+        slot: 'productEditor',
+        widgetId: 'ai-product-copy',
+        title: 'Product copy assistant',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiProductCopyCard,
+      },
+      {
+        slot: 'productsHub',
+        widgetId: 'ai-products-hub',
+        title: 'Build your catalog with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiProductsHubCard,
+      },
+      {
+        slot: 'productImport',
+        widgetId: 'ai-product-import',
+        title: 'Write imported product copy with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiProductImportOption,
       },
     ],
   })

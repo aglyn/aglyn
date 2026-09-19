@@ -39,7 +39,9 @@ Work the board in this order:
 ## Fleet
 
 Totals across the scanned sample: messages, tokens, estimated cost, the thumbs
-tally, and how turns stopped.
+tally, and how turns stopped. Every dollar on this page is what the models cost
+us, not what the workspaces drew in credits — the two differ wherever a
+marked-up model served, and this page exists to answer the first question.
 
 **Answered free** is the share of turns served with no model call at all —
 either quoted straight from the docs index or replayed from the answer cache —
@@ -71,8 +73,9 @@ per-workspace cost table below says who spent it; if it is red because of a wave
 
 ### The cache-read rate, and what a bad number looks like
 
-The **cache-read rate** is the share of billable prompt tokens served from the prompt
-cache rather than charged at full input rates. It is the single most load-bearing
+The **cache-read rate** is the share of prompt tokens served from the prompt cache, out
+of everything the prompts were billed as: sent at full input rates, read from the
+cache, and written to it. It is the single most load-bearing
 margin number on the board, and it is on the board because it could not be settled any
 other way.
 
@@ -120,6 +123,32 @@ because the questions are money questions that a count cannot answer:
   entire point is that turns and dollars do not move together.
 
 Both lists are ordered dearest first, so the expensive line is the top line.
+
+## Tokens by kind {#tokens-by-kind}
+
+What each kind of model request costs and weighs, one row per kind, dearest first:
+the console assistant (`assist`), the Besigner's copy modes (`element`, `section`,
+`blog`) and each generation job kind. Only turns that reached a model are counted; a
+turn answered from the docs or the answer cache bought nothing and has no tokens to
+split.
+
+- **Per request** is the estimated provider cost divided by that kind's requests. For
+  a generation job a request is one step, so a job that plans and then builds counts
+  two.
+- **In, cache reads, cache writes and out** are the four token counts the provider
+  reports, summed.
+- **p95 out** is the answer size 95 of every 100 requests of that kind stayed within.
+  A kind's output ceiling is sized against it: a ceiling well above it is headroom,
+  and a ceiling at or under it is where answers are cut off — the same thing a rising
+  `max_tokens` stop reason says from the other side.
+- **Cache hit** is the share of that kind's prompt tokens read from the cache, out of
+  everything its prompts were billed as. Writes count against it for the reason given
+  in [the cache-read rate](#the-cache-read-rate-and-what-a-bad-number-looks-like): a
+  prefix written on every other request is the expensive failure, and a rate that
+  left writes out would read it as healthy.
+
+A signal recorded before kinds were kept is read by its route: the Besigner modes name
+themselves, a generation job reads as `job`, and every other turn as `assist`.
 
 ## Docs gaps
 

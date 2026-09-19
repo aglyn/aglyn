@@ -109,6 +109,7 @@ import {
   CRM_EMAIL_TEMPLATE_DUPLICATE_ROUTE,
   crmEmailTemplateDuplicateHandler,
 } from './server/email-template-duplicate'
+import { registerCrmRecordFactsReaders } from './server/record-facts'
 import { crmSuiteRefusal } from './server/suite-gate'
 import {
   CRM_RECIPE_INSTALL_ROUTE,
@@ -624,4 +625,9 @@ export function registerCrmConsoleApi(): void {
     CRM_EMAIL_TEMPLATE_DUPLICATE_ROUTE,
     crmEmailTemplateDuplicateHandler,
   )
+  // The facts of a contact, company, deal or lead, and an import's field
+  // catalog, for another plugin in this process (AGL-2917): read on the core's
+  // record-facts seam under the rules every CRM door applies, and written
+  // nowhere.
+  registerCrmRecordFactsReaders()
 }

@@ -336,6 +336,18 @@ jest.mock('../components/host-id-provider', () => ({
   useIsHostAdmin: () => true,
 }))
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
+// The SEO section hands its `hostSeo` plugin zone the org the site belongs to
+// (AGL-2910). The zone is stubbed above, so an org id is all the page reads
+// here; the real hook opens an org listener this suite does not drive.
+jest.mock('../hooks/use-current-org', () => {
+  const useCurrentOrg = () => ({
+    org: undefined,
+    orgId: 'org-1',
+    ready: true,
+    entitlementsFromCache: false,
+  })
+  return { __esModule: true, useCurrentOrg, default: useCurrentOrg }
+})
 jest.mock('../hooks/use-host-activity-logger', () => ({
   __esModule: true,
   default: () => () => undefined,

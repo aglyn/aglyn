@@ -959,6 +959,98 @@ describe('Aglyn: Screen Manager', () => {
     })
   })
 
+  /**
+   * A change composed of several guarded mutators is one undo step, and a
+   * mutator that refuses part-way leaves nothing behind. The control is what
+   * makes the batch assertions mean something: the same calls outside a
+   * batch record a step each.
+   */
+  describe('batch — several mutators, one undo step, all or nothing', () => {
+    const loaded = () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+      return canvas
+    }
+    const compose = (canvas: CanvasManager) => {
+      canvas.updateNodeProps(canvas.getNode('child1')!, { title: 'renamed' })
+      canvas.updateNodeFields(canvas.getNode('child2')!, { name: 'Footer' })
+      canvas.reparentNode(canvas.getNode('child1-2')!, canvas.getNode('child2')!)
+      canvas.deleteNode(canvas.getNode('child1-1')!)
+    }
+
+    it('one undo takes the whole batch back', () => {
+      const canvas = loaded()
+      const before = JSON.stringify(canvas.toJSON())
+      canvas.batch(() => compose(canvas))
+
+      expect(canvas.getNode('child1-1')).toBeUndefined()
+      expect(canvas.getNode('child2')!.nodes).toEqual(['child1-2'])
+
+      canvas.undo()
+      expect(JSON.stringify(canvas.toJSON())).toBe(before)
+      expect(canvas.canUndo).toBe(false)
+    })
+
+    it('CONTROL — the same mutators outside a batch record one step each', () => {
+      const canvas = loaded()
+      compose(canvas)
+      canvas.undo()
+      // One step back restores only the delete.
+      expect(canvas.getNode('child1-1')).toBeDefined()
+      expect(canvas.canUndo).toBe(true)
+    })
+
+    it('a refusal part-way rolls everything back and leaves no step', () => {
+      const canvas = loaded()
+      canvas.updateNodeProps(canvas.getNode('child2')!, { title: 'kept' })
+      const before = JSON.stringify(canvas.toJSON())
+
+      expect(() =>
+        canvas.batch(() => {
+          canvas.updateNodeProps(canvas.getNode('child1')!, { title: 'half' })
+          // A move into its own subtree: the guard throws.
+          canvas.reparentNode(canvas.getNode('child1')!, canvas.getNode('child1-1')!)
+        }),
+      ).toThrow('Cannot move an element inside itself')
+
+      expect(JSON.stringify(canvas.toJSON())).toBe(before)
+      // The earlier, unrelated edit is still the only step on the stack.
+      canvas.undo()
+      expect(canvas.getNode('child2')!.props).toEqual({})
+      expect(canvas.canUndo).toBe(false)
+      expect(canvas.canRedo).toBe(true)
+    })
+
+    it('a nested batch folds into the outer step', () => {
+      const canvas = loaded()
+      canvas.batch(() => {
+        canvas.updateNodeProps(canvas.getNode('child1')!, { title: 'outer' })
+        canvas.batch(() => {
+          canvas.updateNodeProps(canvas.getNode('child2')!, { title: 'inner' })
+        })
+      })
+      canvas.undo()
+      expect(canvas.getNode('child1')!.props).toEqual({})
+      expect(canvas.getNode('child2')!.props).toEqual({})
+      expect(canvas.canUndo).toBe(false)
+    })
+
+    it('mutators record their own steps again once the batch has ended', () => {
+      const canvas = loaded()
+      canvas.batch(() => {
+        canvas.updateNodeProps(canvas.getNode('child1')!, { title: 'batched' })
+      })
+      canvas.updateNodeProps(canvas.getNode('child2')!, { title: 'alone' })
+      canvas.undo()
+      expect(canvas.getNode('child2')!.props).toEqual({})
+      expect(canvas.getNode('child1')!.props).toEqual({ title: 'batched' })
+    })
+
+    it('returns what the mutation returns', () => {
+      expect(loaded().batch(() => 42)).toBe(42)
+    })
+  })
+
   // Insert-target resolution (AGL-575): the Insert menu hands the current
   // selection in as the target. Containers accept the node as a child; a
   // leaf (no children slot) redirects to its container as the next sibling.

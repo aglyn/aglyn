@@ -55,6 +55,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       heading: 'text',
       successMessage: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+      successMessage: 'text-field',
+    },
     textLimits: {
       heading: 200,
       successMessage: 200,
@@ -95,6 +99,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       checkoutLabel: 'text',
       emptyText: 'text',
     },
+    propFields: {
+      variant: 'select',
+      checkoutLabel: 'text-field',
+      showCoupon: 'checkbox',
+      emptyText: 'text-field',
+    },
     textLimits: {
       checkoutLabel: 200,
       emptyText: 200,
@@ -126,6 +136,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       collectionSlug: 'text',
       allLabel: 'text',
+    },
+    propFields: {
+      collectionSlug: 'text-field',
+      allLabel: 'text-field',
     },
     textLimits: {
       collectionSlug: 200,
@@ -199,6 +213,19 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       searchPlaceholder: 'text',
       spacing: 'text',
     },
+    propFields: {
+      collectionSlug: 'text-field',
+      entriesLimit: 'text-field',
+      filterCategory: 'text-field',
+      filterTag: 'text-field',
+      perPage: 'text-field',
+      page: 'text-field',
+      firstPageOnly: 'switch',
+      search: 'switch',
+      searchMode: 'select',
+      searchPlaceholder: 'text-field',
+      spacing: 'text-field',
+    },
     textLimits: {
       collectionSlug: 200,
       entriesLimit: 200,
@@ -258,6 +285,16 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       pageUrl: 'url',
       url: 'url',
     },
+    propFields: {
+      name: 'text-field',
+      bio: 'textarea',
+      image: 'text-field',
+      pageUrl: 'text-field',
+      url: 'text-field',
+      showLinks: 'switch',
+      showBio: 'switch',
+      showAvatar: 'switch',
+    },
     textLimits: {
       name: 200,
       bio: 2000,
@@ -284,6 +321,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       markdown: 'text',
+    },
+    propFields: {
+      markdown: 'text-field',
     },
     textLimits: {
       markdown: 200,
@@ -356,6 +396,21 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       tags: 'text',
       avatarImage: 'text',
       authorPageUrl: 'url',
+    },
+    propFields: {
+      date: 'text-field',
+      dateFormat: 'select',
+      author: 'text-field',
+      category: 'text-field',
+      tags: 'text-field',
+      avatarImage: 'text-field',
+      showDate: 'switch',
+      showCategory: 'switch',
+      showTags: 'switch',
+      authorPageUrl: 'text-field',
+      linkAuthor: 'switch',
+      showAuthor: 'switch',
+      showAvatar: 'switch',
     },
     textLimits: {
       date: 200,
@@ -459,6 +514,19 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       limit: 'text',
       columns: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+      limit: 'text-field',
+      layout: 'select',
+      columns: 'text-field',
+      showCover: 'switch',
+      headingVariant: 'select',
+      titleVariant: 'select',
+      showDate: 'switch',
+      dateFormat: 'select',
+      showCategory: 'switch',
+      showExcerpt: 'switch',
+    },
     textLimits: {
       heading: 200,
       limit: 200,
@@ -493,6 +561,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       collectionSlug: 'text',
       searchPlaceholder: 'text',
     },
+    propFields: {
+      collectionSlug: 'text-field',
+      searchPlaceholder: 'text-field',
+    },
     textLimits: {
       collectionSlug: 200,
       searchPlaceholder: 200,
@@ -519,6 +591,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       heading: 'text',
+    },
+    propFields: {
+      heading: 'text-field',
     },
     textLimits: {
       heading: 200,
@@ -582,6 +657,18 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       worksFor: 'text',
       url: 'url',
     },
+    propFields: {
+      name: 'text-field',
+      bio: 'textarea',
+      image: 'text-field',
+      jobTitle: 'text-field',
+      worksFor: 'text-field',
+      url: 'text-field',
+      showLinks: 'switch',
+      showBio: 'switch',
+      showRole: 'switch',
+      showAvatar: 'switch',
+    },
     textLimits: {
       name: 200,
       bio: 2000,
@@ -625,6 +712,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       css: 'text',
       embedHeight: 'text',
     },
+    propFields: {
+      html: 'text-field',
+      css: 'text-field',
+      embedMode: 'checkbox',
+      embedHeight: 'text-field',
+    },
     textLimits: {
       html: 200,
       css: 200,
@@ -652,6 +745,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       signedOutHeading: 'text',
+    },
+    propFields: {
+      signedOutHeading: 'text-field',
     },
     textLimits: {
       signedOutHeading: 200,
@@ -682,6 +778,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       emphasizeColumn: 'text',
+    },
+    propFields: {
+      headerRow: 'checkbox',
+      emphasizeColumn: 'text-field',
     },
     textLimits: {
       emphasizeColumn: 200,
@@ -717,6 +817,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      component: 'select',
+    },
     textLimits: {},
     presets: [],
   },
@@ -755,6 +858,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       children: 'text',
       href: 'url',
     },
+    propFields: {
+      children: 'text-field',
+      href: 'text-field',
+      backgroundColor: 'color-picker',
+      color: 'color-picker',
+      align: 'select',
+    },
     textLimits: {
       children: 40,
     },
@@ -778,6 +888,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      color: 'color-picker',
+    },
     textLimits: {},
     presets: ['Email divider'],
   },
@@ -801,6 +914,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       html: 'text',
+    },
+    propFields: {
+      html: 'textarea',
     },
     textLimits: {
       html: 2000,
@@ -845,6 +961,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       width: 'text',
       href: 'url',
     },
+    propFields: {
+      src: 'text-field',
+      alt: 'text-field',
+      width: 'text-field',
+      href: 'text-field',
+      align: 'select',
+    },
     textLimits: {
       alt: 200,
       width: 200,
@@ -872,6 +995,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       buttonLabel: 'text',
     },
+    propFields: {
+      buttonLabel: 'text-field',
+    },
     textLimits: {
       buttonLabel: 40,
     },
@@ -897,6 +1023,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       html: 'text',
+    },
+    propFields: {
+      html: 'textarea',
     },
     textLimits: {
       html: 2000,
@@ -931,6 +1060,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       padding: 'text',
     },
+    propFields: {
+      backgroundColor: 'color-picker',
+      padding: 'text-field',
+      align: 'select',
+    },
     textLimits: {
       padding: 200,
     },
@@ -956,6 +1090,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       height: 'text',
+    },
+    propFields: {
+      height: 'text-field',
     },
     textLimits: {
       height: 200,
@@ -994,6 +1131,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       children: 'text',
     },
+    propFields: {
+      children: 'textarea',
+      variant: 'select',
+      color: 'color-picker',
+      align: 'select',
+    },
     textLimits: {
       children: 2000,
     },
@@ -1029,6 +1172,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       heading: 'text',
       maxItems: 'text',
+    },
+    propFields: {
+      heading: 'text-field',
+      mode: 'select',
+      maxItems: 'text-field',
     },
     textLimits: {
       heading: 200,
@@ -1084,6 +1232,15 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       successMessage: 'text',
       redirectScreenId: 'screen',
       redirectUrl: 'url',
+    },
+    propFields: {
+      formName: 'text-field',
+      datasetName: 'text-field',
+      submitLabel: 'text-field',
+      successMessage: 'text-field',
+      afterSubmit: 'select',
+      redirectScreenId: 'screen-select',
+      redirectUrl: 'text-field',
     },
     textLimits: {
       formName: 200,
@@ -1145,13 +1302,21 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       placeholder: 'text',
       options: 'text',
     },
+    propFields: {
+      fieldName: 'text-field',
+      label: 'text-field',
+      placeholder: 'text-field',
+      fieldType: 'select',
+      options: 'textarea',
+      required: 'switch',
+    },
     textLimits: {
       fieldName: 200,
       label: 200,
       placeholder: 200,
       options: 2000,
     },
-    presets: ['Form Field'],
+    presets: ['Form Field', 'Marketing consent'],
   },
   functionWidget: {
     pluginId: 'mui',
@@ -1189,6 +1354,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       title: 'text',
       buttonLabel: 'text',
       resultLabel: 'text',
+    },
+    propFields: {
+      functionName: 'text-field',
+      title: 'text-field',
+      buttonLabel: 'text-field',
+      resultLabel: 'text-field',
     },
     textLimits: {
       functionName: 200,
@@ -1229,6 +1400,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       ctaLabel: 'text',
       ctaHref: 'text',
     },
+    propFields: {
+      teaserText: 'text-field',
+      ctaLabel: 'text-field',
+      ctaHref: 'text-field',
+    },
     textLimits: {
       teaserText: 200,
       ctaLabel: 200,
@@ -1262,6 +1438,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       videoIndex: 'text',
       lockedText: 'text',
+    },
+    propFields: {
+      videoIndex: 'text-field',
+      lockedText: 'text-field',
     },
     textLimits: {
       videoIndex: 200,
@@ -1297,6 +1477,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       size: 'text',
       color: 'text',
+    },
+    propFields: {
+      iconId: 'icon-picker',
+      size: 'text-field',
+      color: 'text-field',
     },
     textLimits: {
       size: 200,
@@ -1360,6 +1545,18 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       screenId: 'screen',
       href: 'url',
     },
+    propFields: {
+      src: 'text-field',
+      alt: 'text-field',
+      decorative: 'switch',
+      title: 'text-field',
+      objectFit: 'select',
+      width: 'css-dimension',
+      height: 'css-dimension',
+      loading: 'select',
+      screenId: 'screen-select',
+      href: 'text-field',
+    },
     textLimits: {
       alt: 200,
       title: 200,
@@ -1388,6 +1585,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      variant: 'select',
+      uppercase: 'checkbox',
+    },
     textLimits: {},
     presets: ['Language Switcher'],
   },
@@ -1423,6 +1624,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       caption: 'text',
     },
+    propFields: {
+      caption: 'text-field',
+      component: 'select',
+    },
     textLimits: {
       caption: 200,
     },
@@ -1449,6 +1654,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       content: 'text',
     },
+    propFields: {
+      content: 'markdown',
+    },
     textLimits: {
       content: 2000,
     },
@@ -1469,6 +1677,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {},
     textLimits: {},
     presets: ['Plugin'],
   },
@@ -1503,6 +1712,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       emptyText: 'text',
       maxItems: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+      emptyText: 'text-field',
+      maxItems: 'text-field',
+    },
     textLimits: {
       heading: 200,
       emptyText: 200,
@@ -1536,6 +1750,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       heading: 'text',
       signinPath: 'text',
+    },
+    propFields: {
+      heading: 'text-field',
+      signinPath: 'text-field',
     },
     textLimits: {
       heading: 200,
@@ -1579,6 +1797,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       recoveryPath: 'text',
       continueFallback: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+      signupPath: 'text-field',
+      recoveryPath: 'text-field',
+      continueFallback: 'text-field',
+    },
     textLimits: {
       heading: 200,
       signupPath: 200,
@@ -1618,6 +1842,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       signinPath: 'text',
       continueFallback: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+      signinPath: 'text-field',
+      continueFallback: 'text-field',
+    },
     textLimits: {
       heading: 200,
       signinPath: 200,
@@ -1656,6 +1885,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      defaultExpanded: 'switch',
+      disableGutters: 'switch',
+      disabled: 'switch',
+    },
     textLimits: {},
     presets: ['Accordion'],
   },
@@ -1673,6 +1907,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {},
     textLimits: {},
     presets: [],
   },
@@ -1700,6 +1935,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       children: 'text',
       screenId: 'screen',
+    },
+    propFields: {
+      children: 'textarea',
+      screenId: 'screen-select',
     },
     textLimits: {
       children: 2000,
@@ -1755,6 +1994,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       ariaLabel: 'text',
     },
+    propFields: {
+      component: 'select',
+      ariaLabel: 'text-field',
+      color: 'select',
+      position: 'select',
+    },
     textLimits: {
       ariaLabel: 200,
     },
@@ -1788,6 +2033,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      component: 'select',
+    },
     textLimits: {},
     presets: ['Two-tone Statement', 'Box'],
   },
@@ -1836,6 +2084,14 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       itemsAfterCollapse: 'text',
       expandText: 'text',
       ariaLabel: 'text',
+    },
+    propFields: {
+      separator: 'text-field',
+      maxItems: 'text-field',
+      itemsBeforeCollapse: 'text-field',
+      itemsAfterCollapse: 'text-field',
+      expandText: 'text-field',
+      ariaLabel: 'text-field',
     },
     textLimits: {
       separator: 200,
@@ -1922,6 +2178,21 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       href: 'url',
       targetName: 'text',
     },
+    propFields: {
+      children: 'textarea',
+      color: 'select',
+      disabled: 'switch',
+      fullWidth: 'switch',
+      size: 'select',
+      variant: 'select',
+      screenId: 'screen-select',
+      href: 'text-field',
+      target: 'select',
+      targetName: 'text-field',
+      renderAs: 'select',
+      startIconId: 'icon-picker',
+      endIconId: 'icon-picker',
+    },
     textLimits: {
       children: 40,
       targetName: 200,
@@ -1971,6 +2242,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       ariaLabel: 'text',
       elevation: 'text',
     },
+    propFields: {
+      component: 'select',
+      ariaLabel: 'text-field',
+      variant: 'select',
+      elevation: 'text-field',
+    },
     textLimits: {
       ariaLabel: 200,
       elevation: 200,
@@ -1995,6 +2272,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      disableSpacing: 'switch',
+    },
     textLimits: {},
     presets: [],
   },
@@ -2012,6 +2292,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {},
     textLimits: {},
     presets: [],
   },
@@ -2040,6 +2321,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       title: 'text',
       subheader: 'text',
+    },
+    propFields: {
+      title: 'text-field',
+      subheader: 'text-field',
     },
     textLimits: {
       title: 200,
@@ -2090,6 +2375,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       ariaLabel: 'text',
     },
+    propFields: {
+      component: 'select',
+      ariaLabel: 'text-field',
+      fixed: 'switch',
+      disableGutters: 'switch',
+      maxWidth: 'select',
+    },
     textLimits: {
       ariaLabel: 200,
     },
@@ -2117,6 +2409,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      anchor: 'select',
+      width: 'css-dimension',
+    },
     textLimits: {},
     presets: ['Drawer'],
   },
@@ -2140,6 +2436,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       ariaLabel: 'text',
+    },
+    propFields: {
+      ariaLabel: 'text-field',
     },
     textLimits: {
       ariaLabel: 200,
@@ -2216,6 +2515,19 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       columnSpacing: 'text',
       columns: 'text',
     },
+    propFields: {
+      component: 'select',
+      ariaLabel: 'text-field',
+      container: 'switch',
+      size: 'breakpoint-span',
+      offset: 'breakpoint-span',
+      spacing: 'text-field',
+      rowSpacing: 'text-field',
+      columnSpacing: 'text-field',
+      columns: 'text-field',
+      direction: 'select',
+      wrap: 'select',
+    },
     textLimits: {
       ariaLabel: 200,
       spacing: 200,
@@ -2266,6 +2578,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       gap: 'text',
       rowHeight: 'text',
     },
+    propFields: {
+      variant: 'select',
+      cols: 'text-field',
+      gap: 'text-field',
+      rowHeight: 'text-field',
+    },
     textLimits: {
       cols: 200,
       gap: 200,
@@ -2312,6 +2630,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       subtitle: 'text',
       cols: 'text',
       rows: 'text',
+    },
+    propFields: {
+      title: 'text-field',
+      subtitle: 'text-field',
+      barPosition: 'select',
+      cols: 'text-field',
+      rows: 'text-field',
     },
     textLimits: {
       title: 200,
@@ -2369,6 +2694,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       children: 'text',
     },
+    propFields: {
+      children: 'textarea',
+      element: 'select',
+      tone: 'select',
+      weight: 'select',
+      decoration: 'select',
+    },
     textLimits: {
       children: 2000,
     },
@@ -2410,6 +2742,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       href: 'url',
       ariaLabel: 'text',
     },
+    propFields: {
+      screenId: 'screen-select',
+      href: 'text-field',
+      newTab: 'switch',
+      ariaLabel: 'text-field',
+      redundant: 'switch',
+    },
     textLimits: {
       ariaLabel: 200,
     },
@@ -2447,6 +2786,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       subheader: 'text',
+    },
+    propFields: {
+      subheader: 'text-field',
+      dense: 'switch',
+      disablePadding: 'switch',
     },
     textLimits: {
       subheader: 200,
@@ -2490,6 +2834,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      divider: 'switch',
+      alignItems: 'select',
+      dense: 'switch',
+      disableGutters: 'switch',
+      disablePadding: 'switch',
+    },
     textLimits: {},
     presets: ['List Item'],
   },
@@ -2521,6 +2872,11 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       primary: 'text',
       secondary: 'text',
+    },
+    propFields: {
+      primary: 'textarea',
+      secondary: 'textarea',
+      inset: 'switch',
     },
     textLimits: {
       primary: 2000,
@@ -2554,6 +2910,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       label: 'text',
     },
+    propFields: {
+      label: 'text-field',
+      panelWidth: 'select',
+    },
     textLimits: {
       label: 200,
     },
@@ -2579,6 +2939,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       label: 'text',
+    },
+    propFields: {
+      label: 'text-field',
     },
     textLimits: {
       label: 200,
@@ -2652,6 +3015,21 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       siblingCount: 'text',
       boundaryCount: 'text',
     },
+    propFields: {
+      count: 'text-field',
+      defaultPage: 'text-field',
+      variant: 'select',
+      shape: 'select',
+      color: 'select',
+      size: 'select',
+      siblingCount: 'text-field',
+      boundaryCount: 'text-field',
+      showFirstButton: 'switch',
+      showLastButton: 'switch',
+      hidePrevButton: 'switch',
+      hideNextButton: 'switch',
+      disabled: 'switch',
+    },
     textLimits: {
       count: 200,
       defaultPage: 200,
@@ -2704,6 +3082,13 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       ariaLabel: 'text',
       elevation: 'text',
+    },
+    propFields: {
+      component: 'select',
+      ariaLabel: 'text-field',
+      variant: 'select',
+      elevation: 'text-field',
+      square: 'switch',
     },
     textLimits: {
       ariaLabel: 200,
@@ -2775,6 +3160,18 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       screenId: 'screen',
       href: 'url',
       targetName: 'text',
+    },
+    propFields: {
+      children: 'textarea',
+      screenId: 'screen-select',
+      href: 'text-field',
+      target: 'select',
+      targetName: 'text-field',
+      renderAs: 'select',
+      color: 'select',
+      size: 'select',
+      fullWidth: 'switch',
+      variant: 'select',
     },
     textLimits: {
       children: 40,
@@ -2866,6 +3263,20 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       repeatFilter: 'text',
       repeatSort: 'text',
     },
+    propFields: {
+      component: 'select',
+      ariaLabel: 'text-field',
+      direction: 'select',
+      justifyContent: 'select',
+      alignItems: 'select',
+      spacing: 'text-field',
+      useFlexGap: 'switch',
+      flexWrap: 'select',
+      divider: 'select',
+      repeatLimit: 'text-field',
+      repeatFilter: 'text-field',
+      repeatSort: 'text-field',
+    },
     textLimits: {
       ariaLabel: 200,
       spacing: 200,
@@ -2911,6 +3322,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       label: 'text',
+    },
+    propFields: {
+      label: 'text-field',
     },
     textLimits: {
       label: 200,
@@ -3004,6 +3418,24 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       tabLink8: 'screen',
       ariaLabel: 'text',
     },
+    propFields: {
+      labels: 'textarea',
+      tabLink1: 'screen-select',
+      tabLink2: 'screen-select',
+      tabLink3: 'screen-select',
+      tabLink4: 'screen-select',
+      tabLink5: 'screen-select',
+      tabLink6: 'screen-select',
+      tabLink7: 'screen-select',
+      tabLink8: 'screen-select',
+      orientation: 'select',
+      variant: 'select',
+      ssrPanels: 'switch',
+      centered: 'switch',
+      textColor: 'select',
+      indicatorColor: 'select',
+      ariaLabel: 'text-field',
+    },
     textLimits: {
       labels: 2000,
       ariaLabel: 200,
@@ -3056,6 +3488,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       ariaLabel: 'text',
+    },
+    propFields: {
+      component: 'select',
+      ariaLabel: 'text-field',
+      disableGutters: 'switch',
+      variant: 'select',
     },
     textLimits: {
       ariaLabel: 200,
@@ -3118,6 +3556,14 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       children: 'text',
     },
+    propFields: {
+      children: 'textarea',
+      variant: 'select',
+      component: 'select',
+      align: 'select',
+      noWrap: 'switch',
+      gutterBottom: 'switch',
+    },
     textLimits: {
       children: 2000,
     },
@@ -3176,6 +3622,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       successText: 'text',
       listId: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+      buttonLabel: 'text-field',
+      successText: 'text-field',
+      listId: 'text-field',
+    },
     textLimits: {
       heading: 200,
       buttonLabel: 40,
@@ -3232,6 +3684,15 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       imageUrl: 'url',
       buyLabel: 'text',
     },
+    propFields: {
+      productId: 'text-field',
+      name: 'text-field',
+      priceUsd: 'text-field',
+      description: 'text-field',
+      imageUrl: 'text-field',
+      buyLabel: 'text-field',
+      showCoupon: 'checkbox',
+    },
     textLimits: {
       productId: 200,
       name: 200,
@@ -3272,6 +3733,12 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       slug: 'text',
       buyLabel: 'text',
+    },
+    propFields: {
+      slug: 'text-field',
+      buyLabel: 'text-field',
+      hideDescription: 'checkbox',
+      showCoupon: 'checkbox',
     },
     textLimits: {
       slug: 200,
@@ -3357,6 +3824,23 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       emptyText: 'text',
       pageSize: 'text',
     },
+    propFields: {
+      source: 'select',
+      collectionSlug: 'text-field',
+      categorySlug: 'text-field',
+      tag: 'text-field',
+      sort: 'select',
+      columns: 'text-field',
+      maxItems: 'text-field',
+      emptyText: 'text-field',
+      showFilters: 'checkbox',
+      showSearch: 'checkbox',
+      showCategories: 'checkbox',
+      showSort: 'checkbox',
+      showTypeFilter: 'checkbox',
+      showPriceFilter: 'checkbox',
+      pageSize: 'text-field',
+    },
     textLimits: {
       collectionSlug: 200,
       categorySlug: 200,
@@ -3390,6 +3874,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       heading: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+    },
     textLimits: {
       heading: 200,
     },
@@ -3421,6 +3908,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       heading: 'text',
       maxItems: 'text',
+    },
+    propFields: {
+      heading: 'text-field',
+      maxItems: 'text-field',
     },
     textLimits: {
       heading: 200,
@@ -3455,6 +3946,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       resourceId: 'text',
       reserveLabel: 'text',
     },
+    propFields: {
+      resourceId: 'text-field',
+      reserveLabel: 'text-field',
+    },
     textLimits: {
       resourceId: 200,
       reserveLabel: 200,
@@ -3475,6 +3970,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {},
     textLimits: {},
     presets: [],
   },
@@ -3503,6 +3999,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       placeholder: 'text',
       defaultValue: 'text',
+    },
+    propFields: {
+      placeholder: 'text-field',
+      defaultValue: 'text-field',
     },
     textLimits: {
       placeholder: 200,
@@ -3543,6 +4043,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propRoles: {
       ariaLabel: 'text',
+    },
+    propFields: {
+      element: 'select',
+      ariaLabel: 'text-field',
     },
     textLimits: {
       ariaLabel: 200,
@@ -3595,6 +4099,14 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       youtube: 'text',
       github: 'text',
     },
+    propFields: {
+      twitter: 'text-field',
+      instagram: 'text-field',
+      facebook: 'text-field',
+      linkedin: 'text-field',
+      youtube: 'text-field',
+      github: 'text-field',
+    },
     textLimits: {
       twitter: 200,
       instagram: 200,
@@ -3630,6 +4142,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       heading: 'text',
     },
+    propFields: {
+      heading: 'text-field',
+      depth: 'select',
+    },
     textLimits: {
       heading: 200,
     },
@@ -3655,6 +4171,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       additionalProperties: false,
     },
     propRoles: {},
+    propFields: {
+      variant: 'select',
+    },
     textLimits: {},
     presets: ['Theme mode switcher'],
   },
@@ -3748,6 +4267,27 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       captionsLabel: 'text',
       captionsLang: 'text',
     },
+    propFields: {
+      src: 'text-field',
+      poster: 'text-field',
+      title: 'text-field',
+      description: 'textarea',
+      uploadDate: 'text-field',
+      durationSeconds: 'text-field',
+      lightbox: 'switch',
+      loadPlayer: 'switch',
+      preload: 'select',
+      controls: 'checkbox',
+      autoPlay: 'checkbox',
+      loop: 'checkbox',
+      muted: 'checkbox',
+      playsInline: 'checkbox',
+      captionsSrc: 'text-field',
+      captionsLabel: 'text-field',
+      captionsLang: 'text-field',
+      width: 'css-dimension',
+      height: 'css-dimension',
+    },
     textLimits: {
       title: 200,
       description: 2000,
@@ -3782,6 +4322,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       url: 'url',
     },
+    propFields: {
+      url: 'text-field',
+      height: 'css-dimension',
+    },
     textLimits: {},
     presets: ['Video'],
   },
@@ -3810,6 +4354,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       heading: 'text',
       emptyText: 'text',
+    },
+    propFields: {
+      heading: 'text-field',
+      emptyText: 'text-field',
     },
     textLimits: {
       heading: 200,
@@ -3941,6 +4489,7 @@ export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = {
       'dataTable',
       'form',
       'formField',
+      'icon',
       'image',
       'muiAccordion',
       'muiAccordionDetails',
@@ -4083,5 +4632,5 @@ export const AI_PALETTE_CATALOG: Record<AiSurface, string> = {
   layout:
     "Surface: layout. Root: the document wrapper (componentId \"div\", id \"_@_\"); every other node carries an allowed componentId.\nElements (id (name): purpose — children — props; * = required):\n- collectionCategories (Category Pills): A pill per collection category, each filtering the listing. — leaf — collectionSlug=text≤200, allLabel=text≤200\n- collectionEntries (Collection Entries): Repeats its children once per entry in a content collection. — holds any — collectionSlug=text≤200, entriesLimit=text≤200, filterCategory=text≤200, filterTag=text≤200, searchMode=filter|suggest\n- collectionEntryAuthor (Entry Author): The author card for an entry — portrait, byline and bio. — leaf — name=text≤200, bio=text≤2000, image=media, pageUrl=url, url=url\n- collectionEntryBody (Entry Body): The current entry's markdown body, on an entry template. — leaf — markdown=text≤200\n- collectionEntryMeta (Entry Meta): The byline row for an entry — author, date, category and tags. — leaf — date=text≤200, dateFormat=default|monthYear|mediumDate|longDate|iso, author=text≤200, category=text≤200, authorPageUrl=url\n- collectionRelated (Related Posts): Other entries sharing this one's category or tags. — leaf — heading=text≤200, layout=list|cards, headingVariant=displayXl|h1|h2|h3|h4|h5|…, titleVariant=displayXl|h1|h2|h3|h4|h5|…, dateFormat=default|monthYear|mediumDate|longDate|iso\n- collectionSearch (Collection Search): A search box for a content collection, with a suggestions dropdown. — leaf — collectionSlug=text≤200, searchPlaceholder=text≤200\n- collectionShare (Share Bar): Share buttons for the current page, plus a copy link. — leaf — heading=text≤200\n- contentAuthorProfile (Author Profile): Who an author page is about — portrait, name, role, bio and links. — leaf — name=text≤200, bio=text≤2000, image=media, jobTitle=text≤200, url=url\n- dataTable (Table): A grid of rows and columns — a feature matrix, a spec sheet, a comparison. — leaf — headerRow=boolean, emphasizeColumn=text≤200\n- form (Form): Collects its Form Fields and sends the answers to you, or into a dataset. — holds any — formName=text≤200, datasetName=text≤200, afterSubmit=message|redirect|reveal, redirectScreenId=screen, redirectUrl=url\n- formField (Form Field): One input inside a form — text, select, radio, checkbox or rating. — leaf — fieldName=text≤200, label=text≤200, placeholder=text≤200, fieldType=text|email|textarea|select|radio|checkbox|…, options=text≤2000\n- image (Image): A picture from your media library or any URL, with fit, size and an optional link. — leaf — src=media, objectFit=cover|contain|fill|none|scale-down, loading=lazy|eager, screenId=screen, href=url\n- layoutSlot (Layout Slot): Marks where each bound screen's content renders inside this layout. — leaf — caption=text≤200, component=main|div|section|article\n- muiAccordion (Accordion): Header that expands to reveal its details — FAQs, long forms, anything progressive. — holds only muiAccordionSummary|muiAccordionDetails — defaultExpanded=boolean, disableGutters=boolean, disabled=boolean\n- muiAccordionDetails (Accordion Details): The region an accordion reveals when expanded. — holds any — no props\n- muiAccordionSummary (Accordion Summary): The clickable header row of an accordion. — leaf — children=text≤2000, screenId=screen\n- muiAppBar (App Bar): The bar across the top of the site — put a Toolbar Content inside it. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, color=default|inherit|transparent|primary|secondary|tertiary, position=absolute|fixed|relative|static|sticky\n- muiBox (Box): Generic container with no styling of its own — style it from the styles panel. — holds any — component=div|span|p|figure|figcaption|blockquote|…\n- muiBreadcrumbs (Breadcrumbs): Trail showing where a page sits. — holds any — separator=text≤200, maxItems=text≤200, itemsBeforeCollapse=text≤200, itemsAfterCollapse=text≤200, expandText=text≤200\n- muiButton (Button): A button — or a link styled as one, if you point it at a screen or URL. — leaf — children=text≤40, color=inherit|primary|secondary|success|error|info|…, size=inherit|small|medium|large, variant=text|outlined|contained, target=_self|_blank|custom\n- muiCard (Card): Surface that groups a header, content and actions about one subject. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, variant=elevation|outlined, elevation=text≤200\n- muiCardActions (Card Actions): The button row at the bottom of a card. — holds any — disableSpacing=boolean\n- muiCardContent (Card Content): The padded body region of a card. — holds any — no props\n- muiCardHeader (Card Header): The title and subheader at the top of a card. — leaf — title=text≤200, subheader=text≤200\n- muiContainer (Container): Centers your page content and caps how wide it gets. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, fixed=boolean, disableGutters=boolean, maxWidth=xs|sm|md|lg|xl\n- muiGrid (Grid): Responsive 12-column layout. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, size=string, direction=row|row-reverse, wrap=wrap|nowrap|wrap-reverse\n- muiImageList (Image List): Dense grid of images — standard, quilted, masonry or woven. — holds only muiImageListItem — variant=standard|quilted|masonry|woven, cols=text≤200, gap=text≤200, rowHeight=text≤200\n- muiImageListItem (Image List Item): One tile of an image list, with an optional caption bar. — holds any — title=text≤200, subtitle=text≤200, barPosition=bottom|top|below, cols=text≤200, rows=text≤200\n- muiList (List): Vertical list of items, optionally under a sticky heading. — holds only muiListItem — subheader=text≤200, dense=boolean, disablePadding=boolean\n- muiListItem (List Item): One row of a list. — holds only muiListItemText — divider=boolean, alignItems=center|flex-start, dense=boolean, disableGutters=boolean, disablePadding=boolean\n- muiListItemText (List Item Text): The primary and secondary text pair inside a list row. — leaf — primary=text≤2000, secondary=text≤2000, inset=boolean\n- muiScreenLink (Screen Link): Links to another screen by id, so it survives a slug change. — leaf — children=text≤40, target=_self|_blank|custom, renderAs=button|link|linkButton, color=inherit|primary|secondary|success|error|info|…, size=inherit|small|medium|large\n- muiStack (Stack): Lays children out in a row or column with even spacing — the workhorse for most layouts. — holds any — component=div|section|article|aside|nav|header|…, direction=column|column-reverse|row|row-reverse, justifyContent=flex-start|center|flex-end|space-between|space-around|space-evenly, alignItems=stretch|flex-start|center|flex-end|baseline, flexWrap=nowrap|wrap|wrap-reverse\n- muiToolbar (Toolbar Content): The content row inside an App Bar — brand, links, actions. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, disableGutters=boolean, variant=dense|regular\n- muiTypography (Typography): A block of text in one of the theme's type styles. — leaf — children=text≤2000, variant=displayXl|h1|h2|h3|h4|h5|…, component=h1|h2|h3|h4|h5|h6|…, align=inherit|left|center|right|justify, noWrap=boolean\n- searchBox (Search Box): A search field that opens the site's search page. — leaf — placeholder=text≤200, defaultValue=text≤200\n- section (Section): Groups components inside a semantic HTML element (section, article, nav, …). — holds any — element=section|div|article|aside|nav|header|…, ariaLabel=text≤200\n- socialLinks (Social Links): A row of icon links to whichever social profiles you fill in. — leaf — twitter=text≤200, instagram=text≤200, facebook=text≤200, linkedin=text≤200, youtube=text≤200\n- videoEmbed (Video): Embeds a YouTube or Vimeo player from the video's URL. — leaf — url=url, height=string\nNamed blocks to imitate: App Bar (muiAppBar); List (muiList); List Item (muiListItem); Image Gallery (muiStack); Testimonials (muiStack); Pricing Table (muiStack); FAQ (muiStack); Announcement Bar (muiStack); Nav Bar (muiAppBar); Hero (muiStack); Feature Grid (muiStack); Image + Text (muiStack); Call to Action (muiStack); Footer (section); Collection Entries (collectionEntries); Dropdown Panel (muiStack); Grid (muiGrid); Grid Cell (muiGrid); Card (muiCard); Card Outlined (muiCard); Accordion (muiAccordion); FAQ (muiStack); Image List (muiImageList); Image List Masonry (muiImageList); Image List Item (muiImageListItem); Breadcrumbs (muiBreadcrumbs); Contact Form (form); Contact Section (muiStack).",
   component:
-    "Surface: component. Root: the document wrapper (componentId \"div\", id \"_@_\"); every other node carries an allowed componentId.\nElements (id (name): purpose — children — props; * = required):\n- collectionCategories (Category Pills): A pill per collection category, each filtering the listing. — leaf — collectionSlug=text≤200, allLabel=text≤200\n- collectionEntries (Collection Entries): Repeats its children once per entry in a content collection. — holds any — collectionSlug=text≤200, entriesLimit=text≤200, filterCategory=text≤200, filterTag=text≤200, searchMode=filter|suggest\n- collectionEntryAuthor (Entry Author): The author card for an entry — portrait, byline and bio. — leaf — name=text≤200, bio=text≤2000, image=media, pageUrl=url, url=url\n- collectionEntryBody (Entry Body): The current entry's markdown body, on an entry template. — leaf — markdown=text≤200\n- collectionEntryMeta (Entry Meta): The byline row for an entry — author, date, category and tags. — leaf — date=text≤200, dateFormat=default|monthYear|mediumDate|longDate|iso, author=text≤200, category=text≤200, authorPageUrl=url\n- collectionRelated (Related Posts): Other entries sharing this one's category or tags. — leaf — heading=text≤200, layout=list|cards, headingVariant=displayXl|h1|h2|h3|h4|h5|…, titleVariant=displayXl|h1|h2|h3|h4|h5|…, dateFormat=default|monthYear|mediumDate|longDate|iso\n- collectionSearch (Collection Search): A search box for a content collection, with a suggestions dropdown. — leaf — collectionSlug=text≤200, searchPlaceholder=text≤200\n- collectionShare (Share Bar): Share buttons for the current page, plus a copy link. — leaf — heading=text≤200\n- contentAuthorProfile (Author Profile): Who an author page is about — portrait, name, role, bio and links. — leaf — name=text≤200, bio=text≤2000, image=media, jobTitle=text≤200, url=url\n- dataTable (Table): A grid of rows and columns — a feature matrix, a spec sheet, a comparison. — leaf — headerRow=boolean, emphasizeColumn=text≤200\n- form (Form): Collects its Form Fields and sends the answers to you, or into a dataset. — holds any — formName=text≤200, datasetName=text≤200, afterSubmit=message|redirect|reveal, redirectScreenId=screen, redirectUrl=url\n- formField (Form Field): One input inside a form — text, select, radio, checkbox or rating. — leaf — fieldName=text≤200, label=text≤200, placeholder=text≤200, fieldType=text|email|textarea|select|radio|checkbox|…, options=text≤2000\n- image (Image): A picture from your media library or any URL, with fit, size and an optional link. — leaf — src=media, objectFit=cover|contain|fill|none|scale-down, loading=lazy|eager, screenId=screen, href=url\n- muiAccordion (Accordion): Header that expands to reveal its details — FAQs, long forms, anything progressive. — holds only muiAccordionSummary|muiAccordionDetails — defaultExpanded=boolean, disableGutters=boolean, disabled=boolean\n- muiAccordionDetails (Accordion Details): The region an accordion reveals when expanded. — holds any — no props\n- muiAccordionSummary (Accordion Summary): The clickable header row of an accordion. — leaf — children=text≤2000, screenId=screen\n- muiAppBar (App Bar): The bar across the top of the site — put a Toolbar Content inside it. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, color=default|inherit|transparent|primary|secondary|tertiary, position=absolute|fixed|relative|static|sticky\n- muiBox (Box): Generic container with no styling of its own — style it from the styles panel. — holds any — component=div|span|p|figure|figcaption|blockquote|…\n- muiBreadcrumbs (Breadcrumbs): Trail showing where a page sits. — holds any — separator=text≤200, maxItems=text≤200, itemsBeforeCollapse=text≤200, itemsAfterCollapse=text≤200, expandText=text≤200\n- muiButton (Button): A button — or a link styled as one, if you point it at a screen or URL. — leaf — children=text≤40, color=inherit|primary|secondary|success|error|info|…, size=inherit|small|medium|large, variant=text|outlined|contained, target=_self|_blank|custom\n- muiCard (Card): Surface that groups a header, content and actions about one subject. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, variant=elevation|outlined, elevation=text≤200\n- muiCardActions (Card Actions): The button row at the bottom of a card. — holds any — disableSpacing=boolean\n- muiCardContent (Card Content): The padded body region of a card. — holds any — no props\n- muiCardHeader (Card Header): The title and subheader at the top of a card. — leaf — title=text≤200, subheader=text≤200\n- muiContainer (Container): Centers your page content and caps how wide it gets. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, fixed=boolean, disableGutters=boolean, maxWidth=xs|sm|md|lg|xl\n- muiGrid (Grid): Responsive 12-column layout. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, size=string, direction=row|row-reverse, wrap=wrap|nowrap|wrap-reverse\n- muiImageList (Image List): Dense grid of images — standard, quilted, masonry or woven. — holds only muiImageListItem — variant=standard|quilted|masonry|woven, cols=text≤200, gap=text≤200, rowHeight=text≤200\n- muiImageListItem (Image List Item): One tile of an image list, with an optional caption bar. — holds any — title=text≤200, subtitle=text≤200, barPosition=bottom|top|below, cols=text≤200, rows=text≤200\n- muiList (List): Vertical list of items, optionally under a sticky heading. — holds only muiListItem — subheader=text≤200, dense=boolean, disablePadding=boolean\n- muiListItem (List Item): One row of a list. — holds only muiListItemText — divider=boolean, alignItems=center|flex-start, dense=boolean, disableGutters=boolean, disablePadding=boolean\n- muiListItemText (List Item Text): The primary and secondary text pair inside a list row. — leaf — primary=text≤2000, secondary=text≤2000, inset=boolean\n- muiScreenLink (Screen Link): Links to another screen by id, so it survives a slug change. — leaf — children=text≤40, target=_self|_blank|custom, renderAs=button|link|linkButton, color=inherit|primary|secondary|success|error|info|…, size=inherit|small|medium|large\n- muiStack (Stack): Lays children out in a row or column with even spacing — the workhorse for most layouts. — holds any — component=div|section|article|aside|nav|header|…, direction=column|column-reverse|row|row-reverse, justifyContent=flex-start|center|flex-end|space-between|space-around|space-evenly, alignItems=stretch|flex-start|center|flex-end|baseline, flexWrap=nowrap|wrap|wrap-reverse\n- muiToolbar (Toolbar Content): The content row inside an App Bar — brand, links, actions. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, disableGutters=boolean, variant=dense|regular\n- muiTypography (Typography): A block of text in one of the theme's type styles. — leaf — children=text≤2000, variant=displayXl|h1|h2|h3|h4|h5|…, component=h1|h2|h3|h4|h5|h6|…, align=inherit|left|center|right|justify, noWrap=boolean\n- searchBox (Search Box): A search field that opens the site's search page. — leaf — placeholder=text≤200, defaultValue=text≤200\n- section (Section): Groups components inside a semantic HTML element (section, article, nav, …). — holds any — element=section|div|article|aside|nav|header|…, ariaLabel=text≤200\n- socialLinks (Social Links): A row of icon links to whichever social profiles you fill in. — leaf — twitter=text≤200, instagram=text≤200, facebook=text≤200, linkedin=text≤200, youtube=text≤200\n- videoEmbed (Video): Embeds a YouTube or Vimeo player from the video's URL. — leaf — url=url, height=string\nNamed blocks to imitate: App Bar (muiAppBar); List (muiList); List Item (muiListItem); Image Gallery (muiStack); Testimonials (muiStack); Pricing Table (muiStack); FAQ (muiStack); Announcement Bar (muiStack); Nav Bar (muiAppBar); Hero (muiStack); Feature Grid (muiStack); Image + Text (muiStack); Call to Action (muiStack); Footer (section); Collection Entries (collectionEntries); Dropdown Panel (muiStack); Grid (muiGrid); Grid Cell (muiGrid); Card (muiCard); Card Outlined (muiCard); Accordion (muiAccordion); FAQ (muiStack); Image List (muiImageList); Image List Masonry (muiImageList); Image List Item (muiImageListItem); Breadcrumbs (muiBreadcrumbs); Contact Form (form); Contact Section (muiStack).",
+    "Surface: component. Root: the document wrapper (componentId \"div\", id \"_@_\"); every other node carries an allowed componentId.\nElements (id (name): purpose — children — props; * = required):\n- collectionCategories (Category Pills): A pill per collection category, each filtering the listing. — leaf — collectionSlug=text≤200, allLabel=text≤200\n- collectionEntries (Collection Entries): Repeats its children once per entry in a content collection. — holds any — collectionSlug=text≤200, entriesLimit=text≤200, filterCategory=text≤200, filterTag=text≤200, searchMode=filter|suggest\n- collectionEntryAuthor (Entry Author): The author card for an entry — portrait, byline and bio. — leaf — name=text≤200, bio=text≤2000, image=media, pageUrl=url, url=url\n- collectionEntryBody (Entry Body): The current entry's markdown body, on an entry template. — leaf — markdown=text≤200\n- collectionEntryMeta (Entry Meta): The byline row for an entry — author, date, category and tags. — leaf — date=text≤200, dateFormat=default|monthYear|mediumDate|longDate|iso, author=text≤200, category=text≤200, authorPageUrl=url\n- collectionRelated (Related Posts): Other entries sharing this one's category or tags. — leaf — heading=text≤200, layout=list|cards, headingVariant=displayXl|h1|h2|h3|h4|h5|…, titleVariant=displayXl|h1|h2|h3|h4|h5|…, dateFormat=default|monthYear|mediumDate|longDate|iso\n- collectionSearch (Collection Search): A search box for a content collection, with a suggestions dropdown. — leaf — collectionSlug=text≤200, searchPlaceholder=text≤200\n- collectionShare (Share Bar): Share buttons for the current page, plus a copy link. — leaf — heading=text≤200\n- contentAuthorProfile (Author Profile): Who an author page is about — portrait, name, role, bio and links. — leaf — name=text≤200, bio=text≤2000, image=media, jobTitle=text≤200, url=url\n- dataTable (Table): A grid of rows and columns — a feature matrix, a spec sheet, a comparison. — leaf — headerRow=boolean, emphasizeColumn=text≤200\n- form (Form): Collects its Form Fields and sends the answers to you, or into a dataset. — holds any — formName=text≤200, datasetName=text≤200, afterSubmit=message|redirect|reveal, redirectScreenId=screen, redirectUrl=url\n- formField (Form Field): One input inside a form — text, select, radio, checkbox or rating. — leaf — fieldName=text≤200, label=text≤200, placeholder=text≤200, fieldType=text|email|textarea|select|radio|checkbox|…, options=text≤2000\n- icon (Icon): A single icon from the library, at the size and color you pick. — leaf — iconId=string, size=text≤200, color=text≤200\n- image (Image): A picture from your media library or any URL, with fit, size and an optional link. — leaf — src=media, objectFit=cover|contain|fill|none|scale-down, loading=lazy|eager, screenId=screen, href=url\n- muiAccordion (Accordion): Header that expands to reveal its details — FAQs, long forms, anything progressive. — holds only muiAccordionSummary|muiAccordionDetails — defaultExpanded=boolean, disableGutters=boolean, disabled=boolean\n- muiAccordionDetails (Accordion Details): The region an accordion reveals when expanded. — holds any — no props\n- muiAccordionSummary (Accordion Summary): The clickable header row of an accordion. — leaf — children=text≤2000, screenId=screen\n- muiAppBar (App Bar): The bar across the top of the site — put a Toolbar Content inside it. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, color=default|inherit|transparent|primary|secondary|tertiary, position=absolute|fixed|relative|static|sticky\n- muiBox (Box): Generic container with no styling of its own — style it from the styles panel. — holds any — component=div|span|p|figure|figcaption|blockquote|…\n- muiBreadcrumbs (Breadcrumbs): Trail showing where a page sits. — holds any — separator=text≤200, maxItems=text≤200, itemsBeforeCollapse=text≤200, itemsAfterCollapse=text≤200, expandText=text≤200\n- muiButton (Button): A button — or a link styled as one, if you point it at a screen or URL. — leaf — children=text≤40, color=inherit|primary|secondary|success|error|info|…, size=inherit|small|medium|large, variant=text|outlined|contained, target=_self|_blank|custom\n- muiCard (Card): Surface that groups a header, content and actions about one subject. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, variant=elevation|outlined, elevation=text≤200\n- muiCardActions (Card Actions): The button row at the bottom of a card. — holds any — disableSpacing=boolean\n- muiCardContent (Card Content): The padded body region of a card. — holds any — no props\n- muiCardHeader (Card Header): The title and subheader at the top of a card. — leaf — title=text≤200, subheader=text≤200\n- muiContainer (Container): Centers your page content and caps how wide it gets. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, fixed=boolean, disableGutters=boolean, maxWidth=xs|sm|md|lg|xl\n- muiGrid (Grid): Responsive 12-column layout. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, size=string, direction=row|row-reverse, wrap=wrap|nowrap|wrap-reverse\n- muiImageList (Image List): Dense grid of images — standard, quilted, masonry or woven. — holds only muiImageListItem — variant=standard|quilted|masonry|woven, cols=text≤200, gap=text≤200, rowHeight=text≤200\n- muiImageListItem (Image List Item): One tile of an image list, with an optional caption bar. — holds any — title=text≤200, subtitle=text≤200, barPosition=bottom|top|below, cols=text≤200, rows=text≤200\n- muiList (List): Vertical list of items, optionally under a sticky heading. — holds only muiListItem — subheader=text≤200, dense=boolean, disablePadding=boolean\n- muiListItem (List Item): One row of a list. — holds only muiListItemText — divider=boolean, alignItems=center|flex-start, dense=boolean, disableGutters=boolean, disablePadding=boolean\n- muiListItemText (List Item Text): The primary and secondary text pair inside a list row. — leaf — primary=text≤2000, secondary=text≤2000, inset=boolean\n- muiScreenLink (Screen Link): Links to another screen by id, so it survives a slug change. — leaf — children=text≤40, target=_self|_blank|custom, renderAs=button|link|linkButton, color=inherit|primary|secondary|success|error|info|…, size=inherit|small|medium|large\n- muiStack (Stack): Lays children out in a row or column with even spacing — the workhorse for most layouts. — holds any — component=div|section|article|aside|nav|header|…, direction=column|column-reverse|row|row-reverse, justifyContent=flex-start|center|flex-end|space-between|space-around|space-evenly, alignItems=stretch|flex-start|center|flex-end|baseline, flexWrap=nowrap|wrap|wrap-reverse\n- muiToolbar (Toolbar Content): The content row inside an App Bar — brand, links, actions. — holds any — component=div|section|article|aside|nav|header|…, ariaLabel=text≤200, disableGutters=boolean, variant=dense|regular\n- muiTypography (Typography): A block of text in one of the theme's type styles. — leaf — children=text≤2000, variant=displayXl|h1|h2|h3|h4|h5|…, component=h1|h2|h3|h4|h5|h6|…, align=inherit|left|center|right|justify, noWrap=boolean\n- searchBox (Search Box): A search field that opens the site's search page. — leaf — placeholder=text≤200, defaultValue=text≤200\n- section (Section): Groups components inside a semantic HTML element (section, article, nav, …). — holds any — element=section|div|article|aside|nav|header|…, ariaLabel=text≤200\n- socialLinks (Social Links): A row of icon links to whichever social profiles you fill in. — leaf — twitter=text≤200, instagram=text≤200, facebook=text≤200, linkedin=text≤200, youtube=text≤200\n- videoEmbed (Video): Embeds a YouTube or Vimeo player from the video's URL. — leaf — url=url, height=string\nNamed blocks to imitate: App Bar (muiAppBar); List (muiList); List Item (muiListItem); Image Gallery (muiStack); Testimonials (muiStack); Pricing Table (muiStack); FAQ (muiStack); Announcement Bar (muiStack); Nav Bar (muiAppBar); Hero (muiStack); Feature Grid (muiStack); Image + Text (muiStack); Call to Action (muiStack); Footer (section); Collection Entries (collectionEntries); Dropdown Panel (muiStack); Grid (muiGrid); Grid Cell (muiGrid); Card (muiCard); Card Outlined (muiCard); Accordion (muiAccordion); FAQ (muiStack); Image List (muiImageList); Image List Masonry (muiImageList); Image List Item (muiImageListItem); Breadcrumbs (muiBreadcrumbs); Contact Form (form); Contact Section (muiStack).",
 }

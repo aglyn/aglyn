@@ -17,11 +17,17 @@
 'use client'
 
 import {
+  canvas,
   checkEntitlement,
   lockdownRefusalText,
   parseLockdownRefusal,
   type AglynOrgBilling,
 } from '@aglyn/aglyn'
+import {
+  editorSessionsRevision,
+  openEditorSession,
+  subscribeEditorSessions,
+} from '@aglyn/aglyn/plugin-manager/editor-sessions'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import {
   mdiChatQuestionOutline,
@@ -59,10 +65,24 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import {
+  assistEditDocumentOf,
+  isAssistEditProposal,
+  type AssistEditAppliedReport,
+  type AssistEditProposal,
+} from '../model/assist-edit'
+import { applyAssistEdit, describeAssistEditCanvas } from './assist-edit-canvas'
+import { AssistEditCard } from './assist-edit-card.component'
+import { aiInsightSurfaceForPath } from '../model/ai-insight'
 import { AssistJobsDrawer } from './assist-jobs-drawer.component'
+import { AiModelSelector } from './ai-model-selector.component'
+import { AiUsageStrip } from './ai-usage-strip.component'
+import { useAiModelChoice } from './use-ai-model-choice'
+import { usePublishAiUsageMeter } from './use-ai-usage-meter'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
 
@@ -127,6 +147,17 @@ interface AssistMessage {
   proposal?: AssistProposal | null
   /** Set once the user acts on or waves away the card, so it does not linger. */
   proposalResolved?: boolean
+  /**
+   * A level-3 edit proposal, exactly as the server validated it (AGL-2906):
+   * operations for the open canvas, applied only when the author presses
+   * Apply, and never by a request.
+   */
+  edit?: AssistEditProposal | null
+  /** What became of the edit card: applied, waved away, or refused with a reason. */
+  editOutcome?:
+    | { kind: 'applied' }
+    | { kind: 'dismissed' }
+    | { kind: 'failed'; message: string }
 }
 
 interface AssistQuotaInfo {
@@ -483,6 +514,24 @@ export function AssistPanelComponent(props: AssistDockProps) {
   const [messages, setMessages] = useState<AssistMessage[]>([])
   const [quota, setQuota] = useState<AssistQuotaInfo | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // The model switch and the usage strip (AGL-2942): the pick rides the
+  // chat request, and each answer's `meter` moves every strip for the org.
+  const modelChoice = useAiModelChoice({
+    orgId: scopedOrgId,
+    hostId,
+    surface: 'assist',
+    kind: 'assist.chat',
+  })
+  const publishMeter = usePublishAiUsageMeter(scopedOrgId)
+  // The open editor, re-read whenever one opens, closes or reports a change —
+  // so a card raised on a live version offers Apply once its new version is
+  // the one open.
+  useSyncExternalStore(
+    subscribeEditorSessions,
+    editorSessionsRevision,
+    editorSessionsRevision,
+  )
+  const editorSession = openEditorSession()
 
   // Thread is per-org, session-persisted; switching orgs swaps threads.
   // Keyed on the SCOPED org (AGL-1934): gating only the render would still
@@ -500,6 +549,15 @@ export function AssistPanelComponent(props: AssistDockProps) {
   }, [scopedOrgId, messages])
 
   const entitled = orgReady && checkEntitlement(org as never, 'aiAssist')
+  // Whether a question asked from a besigner document carries its canvas
+  // (AGL-2906). A hint, not a grant: the server decides the edit rung again
+  // from its own reads, and drops the outline below it.
+  const editRungHint =
+    generativeVisible &&
+    ai.loaded &&
+    ai.generate &&
+    orgReady &&
+    checkEntitlement(org as never, 'aiGenerative')
 
   const send = useCallback(async () => {
     const question = input.trim()
@@ -533,6 +591,18 @@ export function AssistPanelComponent(props: AssistDockProps) {
       }))
     }
     try {
+      // The canvas outline rides along from the besigner document the open
+      // editor holds — ids, component ids and short values, never the stored
+      // document.
+      const editDocument = editRungHint ? assistEditDocumentOf(pathname ?? '') : null
+      const session = editDocument ? openEditorSession() : undefined
+      const canvasOutline =
+        editDocument &&
+        session &&
+        session.documentKind === editDocument.kind &&
+        session.documentId === editDocument.documentId
+          ? describeAssistEditCanvas(canvas, session.selectedNodeId?.() ?? null)
+          : null
       const response = await authorizedFetch(user, '/api/assist/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -544,6 +614,9 @@ export function AssistPanelComponent(props: AssistDockProps) {
           // (level 2 is Pro+). Sending it is not a grant — the capability
           // decision is server-side.
           context: { route: pathname ?? '', hostId: hostId ?? '', orgSlug },
+          // A pick, when the reader made one; the server decides again.
+          ...(modelChoice.model ? { model: modelChoice.model } : {}),
+          ...(canvasOutline ? { canvas: canvasOutline } : {}),
         }),
       })
       if (!response.ok || !response.body) {
@@ -580,6 +653,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
           // sentence names the switch, and the credit standing beside it is
           // as real as a 429's, so it lands on the same line.
           if (payload.quota) setQuota(payload.quota as AssistQuotaInfo)
+          publishMeter(payload?.meter)
           failAnswer(String(payload?.error ?? 'Message limit reached.'))
         } else {
           failAnswer(String(payload?.error ?? 'The assistant request failed — try again.'))
@@ -613,19 +687,27 @@ export function AssistPanelComponent(props: AssistDockProps) {
             // this client did not choose. Null on every turn that proposed
             // nothing, which is most of them.
             const proposal = (event.proposal as AssistProposal | null) ?? null
+            // The edit proposal (AGL-2906), shape-checked before it can reach
+            // a card whose Apply drives the canvas.
+            const edit = isAssistEditProposal(event.edit) ? event.edit : null
             patchAnswer((message) => ({
               ...message,
               exchangeId: (event.exchangeId as string | null) ?? null,
               docs,
               proposal,
+              edit,
             }))
             if (event.quota) setQuota(event.quota as AssistQuotaInfo)
+            publishMeter(event.meter)
             trackEvent('assistant_message_sent', {
               tier: entitled ? 'entitled' : 'free',
               grounded: docs.length > 0,
             })
             if (proposal) {
               trackEvent('assistant_proposal_shown', { action: proposal.id })
+            }
+            if (edit) {
+              trackEvent('assistant_proposal_shown', { action: edit.id })
             }
           } else if (event.type === 'error') {
             failAnswer(String(event.error ?? 'The assistant stream failed.'))
@@ -641,10 +723,13 @@ export function AssistPanelComponent(props: AssistDockProps) {
   }, [
     ai.use,
     busy,
+    editRungHint,
     entitled,
     hostId,
     input,
     messages,
+    modelChoice.model,
+    publishMeter,
     scopedOrgId,
     orgSlug,
     pathname,
@@ -660,6 +745,71 @@ export function AssistPanelComponent(props: AssistDockProps) {
     setMessages((prior) =>
       prior.map((entry, i) =>
         i === index ? { ...entry, proposalResolved: true } : entry,
+      ),
+    )
+  }, [])
+
+  /**
+   * Land a confirmed edit on the open editor (AGL-2906): through the canvas's
+   * own mutators, as one undo step, unsaved. The only request that follows is
+   * the activity record, and it carries counts, never content.
+   */
+  const applyEdit = useCallback(
+    (index: number) => {
+      const message = messages[index]
+      const proposal = message?.edit
+      if (!proposal || !scopedOrgId) return
+      const session = openEditorSession()
+      const result = applyAssistEdit(canvas, proposal, session)
+      if (result.ok === false) {
+        setMessages((prior) =>
+          prior.map(
+            (entry, i): AssistMessage =>
+              i === index
+                ? { ...entry, editOutcome: { kind: 'failed', message: result.message } }
+                : entry,
+          ),
+        )
+        return
+      }
+      setMessages((prior) =>
+        prior.map(
+          (entry, i): AssistMessage =>
+            i === index ? { ...entry, editOutcome: { kind: 'applied' } } : entry,
+        ),
+      )
+      trackEvent('assistant_proposal_confirmed', { action: proposal.id })
+      enqueueSnackbar('Applied as unsaved changes — undo takes them back', {
+        variant: 'success',
+        persist: false,
+      })
+      if (!message.exchangeId || !session) return
+      const report: AssistEditAppliedReport = {
+        orgId: scopedOrgId,
+        hostId: proposal.target.hostId,
+        exchangeId: message.exchangeId,
+        documentKind: proposal.target.kind,
+        documentId: proposal.target.documentId,
+        versionId: session.versionId,
+        opCounts: result.opCounts,
+      }
+      // Fire and forget: the edit is already on the canvas, and a record that
+      // fails to land must not read as an edit that failed.
+      void authorizedFetch(user, '/api/assist/edit-applied', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(report),
+      }).catch(() => undefined)
+    },
+    [enqueueSnackbar, messages, scopedOrgId, user],
+  )
+
+  /** Wave an edit card away. Nothing to tell the server: nothing happened. */
+  const dismissEdit = useCallback((index: number) => {
+    setMessages((prior) =>
+      prior.map(
+        (entry, i): AssistMessage =>
+          i === index ? { ...entry, editOutcome: { kind: 'dismissed' } } : entry,
       ),
     )
   }, [])
@@ -804,6 +954,11 @@ export function AssistPanelComponent(props: AssistDockProps) {
               orgSlug={billingSlug}
               user={user}
               visible={generativeVisible}
+              hostId={hostId}
+              // A question about the figures, where the page reports them
+              // (AGL-2915); hidden with the rest of AI jobs, and refused by
+              // the jobs door where the member may not generate.
+              insight={ai.generate ? aiInsightSurfaceForPath(pathname) : null}
             />
             {!messages.length && (
               <Alert severity="info" sx={{ mb: 2 }}>
@@ -882,6 +1037,35 @@ export function AssistPanelComponent(props: AssistDockProps) {
                         onDismiss={() => resolveProposal(index)}
                       />
                     )}
+                  {message.role === 'assistant' &&
+                    message.edit &&
+                    message.editOutcome?.kind !== 'dismissed' &&
+                    message.editOutcome?.kind !== 'applied' && (
+                      <AssistEditCard
+                        proposal={message.edit}
+                        brand={productName}
+                        session={editorSession}
+                        failure={
+                          message.editOutcome?.kind === 'failed'
+                            ? message.editOutcome.message
+                            : null
+                        }
+                        onApply={() => applyEdit(index)}
+                        onCreateVersion={() => editorSession?.createVersion?.()}
+                        onDismiss={() => dismissEdit(index)}
+                      />
+                    )}
+                  {message.role === 'assistant' &&
+                    message.editOutcome?.kind === 'applied' && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        component="div"
+                        sx={{ mt: 0.5 }}
+                      >
+                        Applied to the canvas as unsaved changes.
+                      </Typography>
+                    )}
                   {message.role === 'assistant' && message.exchangeId && (
                     <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
                       {/* The span is load-bearing (AGL-2128): a disabled MUI
@@ -950,6 +1134,9 @@ export function AssistPanelComponent(props: AssistDockProps) {
                   'organization admin to grant "Use AI assistance".'}
               </Typography>
             ) : null}
+            {/* The reader's credits while they work (AGL-2942), from the
+                envelope the last answer carried — no read of its own. */}
+            <AiUsageStrip orgId={scopedOrgId} orgSlug={billingSlug} />
             {quota && quota.period === 'day' && (
               <Typography variant="caption" color="text.secondary">
                 {quota.remaining} of {quota.limit} free messages left today
@@ -973,6 +1160,16 @@ export function AssistPanelComponent(props: AssistDockProps) {
                 ) : null}
               </Typography>
             )}
+            {/* The model switch (AGL-2942), for a workspace whose plan
+                answers with a model at all; its options load when opened. */}
+            {entitled ? (
+              <Stack direction="row" sx={{ justifyContent: 'flex-end', mb: -0.5 }}>
+                <AiModelSelector
+                  choice={modelChoice}
+                  disabled={busy || !ai.loaded || !ai.use}
+                />
+              </Stack>
+            ) : null}
             <Stack
               direction="row"
               spacing={1}

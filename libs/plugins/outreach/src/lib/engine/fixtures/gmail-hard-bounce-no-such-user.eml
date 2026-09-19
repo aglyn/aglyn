@@ -1,0 +1,107 @@
+Delivered-To: avery@example.org
+Received: by 2002:a05:7300:5d8c:b0:1a4:0:0 with SMTP id m12csp1203188dyb;
+        Mon, 14 Sep 2026 08:00:03 -0700 (PDT)
+X-Received: by 2002:a17:90b:3848:b0:2d8:0:0 with SMTP id nl8mr1843276pjb.7.1789398003121;
+        Mon, 14 Sep 2026 08:00:03 -0700 (PDT)
+Return-Path: <>
+Received: by 2002:a17:90b:3848:b0:2d8:0:0 with SMTP id nl8mr1843276pjb.7; Mon, 14 Sep 2026 08:00:03 -0700 (PDT)
+Content-Type: multipart/report; boundary="000000000000c41b5a0626f1e8a1"; report-type=delivery-status
+From: Mail Delivery Subsystem <mailer-daemon@googlemail.com>
+To: avery@example.org
+Auto-Submitted: auto-replied
+Subject: Delivery Status Notification (Failure)
+References: <CAOutreachStep1-a1b2c3@mail.gmail.com>
+In-Reply-To: <CAOutreachStep1-a1b2c3@mail.gmail.com>
+X-Failed-Recipients: casey@example.com
+Message-ID: <66e5a0f3.170a0220.3c4d5e.0001.GMR@mx.google.com>
+Date: Mon, 14 Sep 2026 08:00:03 -0700 (PDT)
+
+--000000000000c41b5a0626f1e8a1
+Content-Type: multipart/related; boundary="000000000000c41b5b0626f1e8a2"
+
+--000000000000c41b5b0626f1e8a2
+Content-Type: multipart/alternative; boundary="000000000000c41b5b0626f1e8a3"
+
+--000000000000c41b5b0626f1e8a3
+Content-Type: text/plain; charset="UTF-8"
+
+
+** Address not found **
+
+Your message wasn't delivered to casey@example.com because the address couldn't be found, or is unable to receive mail.
+
+Learn more here: https://support.google.com/mail/?p=NoSuchUser
+
+The response was:
+
+The email account that you tried to reach does not exist. Please try double-checking the recipient's email address for typos or unnecessary spaces. For more information, go to https://support.google.com/mail/?p=NoSuchUser
+
+--000000000000c41b5b0626f1e8a3
+Content-Type: text/html; charset="UTF-8"
+
+
+<html>
+<head>
+<style>
+* {
+font-family:Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+</style>
+</head>
+<body>
+<table cellpadding="0" cellspacing="0" class="email-wrapper" style="padding-top:32px;background-color:#ffffff;"><tbody>
+<tr><td>
+<p style="font-size:24px;">Address not found</p>
+<p>Your message wasn't delivered to <a style='color:#212121;text-decoration:none'><b>casey@example.com</b></a> because the address couldn't be found, or is unable to receive mail.</p>
+</td></tr>
+</tbody></table>
+</body>
+</html>
+
+--000000000000c41b5b0626f1e8a3--
+--000000000000c41b5b0626f1e8a2
+Content-Type: image/png; name="icon.png"
+Content-Disposition: attachment; filename="icon.png"
+Content-Transfer-Encoding: base64
+Content-ID: <icon.png>
+X-Attachment-Id: icon.png
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+--000000000000c41b5b0626f1e8a2--
+--000000000000c41b5a0626f1e8a1
+Content-Type: message/delivery-status
+
+Reporting-MTA: dns; googlemail.com
+Received-From-MTA: dns; avery@example.org
+Arrival-Date: Mon, 14 Sep 2026 08:00:02 -0700 (PDT)
+X-Original-Message-ID: <CAOutreachStep1-a1b2c3@mail.gmail.com>
+
+Final-Recipient: rfc822; casey@example.com
+Action: failed
+Status: 5.1.1
+Remote-MTA: dns; mx.example.com. (192.0.2.10, the server for the domain example.com.)
+Diagnostic-Code: smtp; 550-5.1.1 The email account that you tried to reach does not exist. Please try
+ 550-5.1.1 double-checking the recipient's email address for typos or
+ 550-5.1.1 unnecessary spaces. For more information, go to
+ 550 5.1.1  https://support.google.com/mail/?p=NoSuchUser 98e67ed59e1d1-2db0b7f0c1dsi1893231a91.21 - gsmtp
+Last-Attempt-Date: Mon, 14 Sep 2026 08:00:03 -0700 (PDT)
+
+--000000000000c41b5a0626f1e8a1
+Content-Type: message/rfc822
+
+MIME-Version: 1.0
+From: Avery Quinn <avery@example.org>
+Date: Mon, 14 Sep 2026 10:00:01 -0500
+Message-ID: <CAOutreachStep1-a1b2c3@mail.gmail.com>
+Subject: Example Agency's client sites
+To: casey@example.com
+Content-Type: text/plain; charset="UTF-8"
+
+Hi Casey,
+
+Saw the portfolio launch last week. Worth 20 minutes?
+
+Example Co LLC · PO Box 12345, Anytown, TX 75001
+This is a business solicitation from Example Co. Not relevant? Reply "no" and I won't email again.
+
+--000000000000c41b5a0626f1e8a1--

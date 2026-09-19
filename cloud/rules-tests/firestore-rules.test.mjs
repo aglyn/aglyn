@@ -323,7 +323,8 @@ const hostServerOnlySubcollections = memoize(() => {
  */
 describe('the rules parser reads the whole file (AGL-2002)', () => {
   it('strips a line comment that quotes a wildcard path, without eating the file', () => {
-    // The literal line that caused AGL-2004, still in the rules today.
+    // The literal line that caused AGL-2004. AGL-3027's comment trim took it
+    // out of the rules; any new note that quotes a wildcard path recreates it.
     //
     // The trailing block comment is load-bearing, not scenery: the phantom
     // comment a block-first strip opens at `datasets/*` runs to the NEXT
@@ -9546,6 +9547,48 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
     await mustDeny(
       'the owner creating a task on a legacy unpaid subscription',
       setDoc(record(OWNER, 'crmTasks', 'unpaid'), payload('crmTasks', OWNER)),
+    )
+  })
+
+  it('honors a staff comp while the subscription is dead or absent, and a live one outranks it (AGL-3034)', async () => {
+    /** The org replaced whole, so a comp from one step cannot leak into the next. */
+    const replaceOrg = (fields) =>
+      env.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), 'orgs', ORG), {
+          name: 'Acme', slug: 'acme', ownerUid: OWNER, hosts: { [HOST]: true },
+          ...fields,
+        })
+      })
+    const comp = (plan) => ({ planComp: { plan, reason: 'beta', note: null, grantedBy: 'staff' } })
+    // A canceled customer with the paid plan still stored, and no comp: Free.
+    await replaceOrg({ plan: 'pro', billingStatus: 'canceled' })
+    await mustDeny(
+      'the owner creating a task on a canceled subscription with no comp',
+      setDoc(record(OWNER, 'crmTasks', 'lapsed'), payload('crmTasks', OWNER)),
+    )
+    // The same workspace comped to Pro: the suite opens.
+    await replaceOrg({ plan: 'pro', billingStatus: 'canceled', entitlements: comp('pro') })
+    await mustAllow(
+      'the owner creating a task on a canceled subscription comped to Pro',
+      setDoc(record(OWNER, 'crmTasks', 'comped'), payload('crmTasks', OWNER)),
+    )
+    // No subscription at all, nothing stored, comped.
+    await replaceOrg({ entitlements: comp('business') })
+    await mustAllow(
+      'the owner creating a deal on a never-subscribed workspace comped to Business',
+      setDoc(record(OWNER, 'deals', 'comped'), payload('deals', OWNER)),
+    )
+    // A live subscription on Free outranks a comp.
+    await replaceOrg({ plan: 'free', billingStatus: 'active', entitlements: comp('pro') })
+    await mustDeny(
+      'the owner creating a deal on a live Free subscription with a dormant comp',
+      setDoc(record(OWNER, 'deals', 'dormant'), payload('deals', OWNER)),
+    )
+    // A comp of Free grants nothing.
+    await replaceOrg({ plan: 'free', billingStatus: 'canceled', entitlements: comp('free') })
+    await mustDeny(
+      'the owner creating a deal on a canceled subscription comped to Free',
+      setDoc(record(OWNER, 'deals', 'free-comp'), payload('deals', OWNER)),
     )
   })
 

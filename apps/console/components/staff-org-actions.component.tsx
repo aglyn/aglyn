@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  describeOrgPlan,
   isLockdownReasonCode,
   LOCKDOWN_REASON_CODES,
   normalizeOrgOverrideReason,
@@ -24,9 +25,15 @@ import {
   ORG_OVERRIDE_REASON_CODES,
   ORG_OVERRIDE_REASON_LABELS,
   orgOverrideReasonNeedsNote,
+  orgOverrideReasonSummary,
+  orgPlanDescriptionSentence,
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
+  planCompLabel,
+  planCompPhrase,
+  PRICE_ENTITLEMENT_KEYS,
   RELEASE_FLAGS,
+  resolveEffectivePlan,
   type OrgOverrideReasonCode,
   type OrgPlan,
 } from '@aglyn/aglyn'
@@ -34,12 +41,20 @@ import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Alert,
   Button,
+  Checkbox,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
+  FormControlLabel,
+  FormLabel,
   MenuItem,
+  Radio,
+  RadioGroup,
   Stack,
   TextField,
   Typography,
@@ -190,12 +205,37 @@ export const RELEASE_FLAG_FIELDS: ReadonlyArray<{
   defaultEnabled: definition.defaultEnabled,
 }))
 
-/** Count of explicit overrides on an org doc, for the row chip. */
+/**
+ * Count of explicit overrides on an org doc, for the row chip. A staff plan
+ * comp rides the same map (AGL-3034) and is not counted: it is a plan, shown
+ * beside the plan, not one more quota.
+ */
 export const overrideCount = (org: any): number =>
-  Object.keys(org?.entitlements ?? {}).filter((key) => key !== 'features')
-    .length +
+  Object.keys(org?.entitlements ?? {}).filter(
+    (key) => key !== 'features' && key !== 'planComp',
+  ).length +
   Object.keys(org?.entitlements?.features ?? {}).length +
   Object.keys(org?.releaseFlags ?? {}).length
+
+/**
+ * Every plan a comp may grant (AGL-3034): each plan but Free, which grants
+ * nothing and is what removing a comp is for. Derived from `PLAN_LABELS` like
+ * `PLAN_OPTIONS`, for the same reason.
+ */
+export const COMP_PLAN_OPTIONS: Array<{ value: OrgPlan; label: string }> = (
+  Object.keys(PLAN_LABELS) as OrgPlan[]
+)
+  .filter((plan) => plan !== 'free')
+  .map((plan) => ({ value: plan, label: PLAN_LABELS[plan] }))
+
+/**
+ * What the org resolves as with its comp taken away — the answer "remove the
+ * comp" and "no comp" both have to name (AGL-3034).
+ */
+const planWithoutComp = (org: any): OrgPlan => {
+  const { planComp: _comp, ...entitlements } = org?.entitlements ?? {}
+  return resolveEffectivePlan({ ...(org ?? {}), entitlements } as never)
+}
 
 /**
  * The staff org actions — plan/entitlement OVERRIDE, SUSPEND/unsuspend and
@@ -344,7 +384,29 @@ const StaffOrgActions = ({
 
   const [editor, setEditor] = useState<{
     id: string
+    /**
+     * The STORED plan. Edited only where a live subscription decides the
+     * plan; otherwise it is sent back exactly as it was read, because the
+     * route refuses to change it there (AGL-3034).
+     */
     plan: string
+    /**
+     * The comp plan to hold where no subscription decides the plan
+     * (AGL-3034): the stored comp's plan when one exists, `''` for none.
+     */
+    compPlan: '' | OrgPlan
+    /**
+     * Whether the comp lifts every cap (AGL-3049): the stored comp's flag
+     * when one exists, `false` for none.
+     */
+    compUncapped: boolean
+    /** Remove the stored comp on save — the only thing that removes one. */
+    removeComp: boolean
+    /**
+     * Clear a plan stored directly on a workspace that never subscribed —
+     * the one stored-plan change the route allows without a subscription.
+     */
+    clearStoredPlan: boolean
     quotas: Record<string, string>
     flags: Record<string, '' | 'on' | 'off'>
     releaseFlags: Record<string, '' | 'on' | 'off'>
@@ -365,6 +427,34 @@ const StaffOrgActions = ({
   const overrideReason = editor
     ? normalizeOrgOverrideReason(editor.reason, editor.note)
     : null
+  /**
+   * How the org's plan resolves right now, and what decided it (AGL-3034) —
+   * the same description the route answers with, so the dialog and the
+   * response cannot disagree about which plan is in force.
+   */
+  const planState = editor && org ? describeOrgPlan(org) : null
+  const planGoverned = planState?.subscription === 'live'
+  /** The plan the org would resolve as with the editor saved as it stands. */
+  const savedPlan: OrgPlan | '' =
+    !editor || !planState
+      ? ''
+      : planGoverned
+        ? (editor.plan as OrgPlan | '')
+        : editor.removeComp
+          ? planWithoutComp(org)
+          : editor.compPlan ||
+            (editor.clearStoredPlan ? 'free' : planWithoutComp(org))
+  /**
+   * How the comp will hold the bands once saved (AGL-3049): `null` where no
+   * comp will be in force, else whether it lifts every cap. What the quota
+   * section explains and what its placeholders show.
+   */
+  const savedCompCaps: 'capped' | 'uncapped' | null =
+    !editor || !planState || planGoverned || editor.removeComp || !editor.compPlan
+      ? null
+      : editor.compUncapped
+        ? 'uncapped'
+        : 'capped'
 
   // Suspension (AGL-202, rewired by AGL-1505): reversible, but NOT a flag
   // write — the lockdown core behind /api/admin/lockdown does the org doc,
@@ -607,9 +697,17 @@ const StaffOrgActions = ({
       if (value === true) releaseFlags[field.key] = 'on'
       if (value === false) releaseFlags[field.key] = 'off'
     }
+    const standingComp = describeOrgPlan(org).comp
     setEditor({
       id: org.$id,
       plan: org.plan ?? '',
+      // Opens on the comp that STANDS, never on the stored plan: a canceled
+      // customer's stored plan is what they used to pay for, and a select
+      // pre-filled with it would comp them their old plan on any save.
+      compPlan: standingComp?.plan ?? '',
+      compUncapped: standingComp?.uncapped ?? false,
+      removeComp: false,
+      clearStoredPlan: false,
       quotas,
       flags,
       releaseFlags,
@@ -642,6 +740,29 @@ const StaffOrgActions = ({
       return
     }
     const plan = editor.plan as OrgPlan | ''
+    // THE PLAN, as the route reads it (AGL-3034). Where a live subscription
+    // decides the plan, the stored plan is edited as it always was. Where
+    // none does, a plan is a COMP: the stored plan goes back exactly as it
+    // was read (unless the operator cleared a directly stored one), and the
+    // comp rides its own field — `null` removes it, a plan grants or changes
+    // it, and ABSENCE leaves it alone, so an untouched select sends nothing
+    // that could create or drop one.
+    //
+    // A grant states `uncapped` either way (AGL-3049), and goes over the wire
+    // when the plan OR the caps differ from the comp that stands — lifting or
+    // restoring the caps of a standing comp is a change to that comp.
+    const planState = describeOrgPlan(org)
+    const governed = planState.subscription === 'live'
+    const comp: { plan: OrgPlan; uncapped: boolean } | null | undefined =
+      editor.removeComp
+        ? null
+        : !governed &&
+            editor.compPlan &&
+            (editor.compPlan !== planState.comp?.plan ||
+              editor.compUncapped !== (planState.comp?.uncapped ?? false))
+          ? { plan: editor.compPlan, uncapped: editor.compUncapped }
+          : undefined
+    const wirePlan = !governed && editor.clearStoredPlan ? null : plan || null
     // WHAT THE WIRE CARRIES IS INTENT, NOT A FIRESTORE PAYLOAD (AGL-1786).
     //
     // "Inherit" has to DELETE the key rather than omit it (AGL-1109): the
@@ -748,12 +869,13 @@ const StaffOrgActions = ({
         },
         body: JSON.stringify({
           orgId: editor.id,
-          plan: plan || null,
+          plan: wirePlan,
           quotas,
           features,
           releaseFlags,
           reason: reason.reason,
           note: reason.note,
+          ...(comp !== undefined ? { comp } : {}),
         }),
       })
     } catch (error) {
@@ -788,13 +910,28 @@ const StaffOrgActions = ({
     // Applied — the dialog closes and the owner re-reads. Outside the branch
     // above on purpose: a parent re-read that threw must never be reported
     // as an override that never landed.
-    enqueueSnackbar('Organization updated (audited)', {
-      variant: 'success',
-      persist: false,
-    })
+    //
+    // WHAT TOOK EFFECT, in the route's own words (AGL-3034). "Updated" alone
+    // is how a plan that did nothing was reported as done; the route answers
+    // which plan the organization is now on and what decided it, and a plan
+    // or comp change stays on screen until it is read.
+    const effect = payload?.planEffect
+    const summary = typeof effect?.summary === 'string' ? effect.summary : ''
+    enqueueSnackbar(
+      summary
+        ? `Organization updated (audited). ${summary}`
+        : 'Organization updated (audited)',
+      {
+        variant: 'success',
+        persist: Boolean(
+          effect &&
+            (effect.compChange !== 'none' || effect.planChange !== 'unchanged'),
+        ),
+      },
+    )
     setEditor(null)
     onChanged()
-  }, [editor, user, enqueueSnackbar, onChanged])
+  }, [editor, org, user, enqueueSnackbar, onChanged])
 
   const openSuspender = () =>
     org &&
@@ -969,24 +1106,275 @@ const StaffOrgActions = ({
               )
             }
           />
-          <TextField
-            select
-            size="small"
-            label="Plan"
-            value={editor?.plan ?? ''}
-            onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, plan: event.target.value } : prev,
-              )
-            }
-          >
-            {PLAN_OPTIONS.map((option) => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </TextField>
+          {/*
+            THE PLAN, as it RESOLVES and not only as it is stored (AGL-3034).
+            A canceled workspace stores the plan it paid for and gets Free,
+            and this dialog used to show only the stored one — so setting
+            Pro on it looked done and did nothing. The effective plan, the
+            stored one, the subscription and any comp are stated before
+            anything can be changed.
+          */}
+          <Typography variant="subtitle2">{'Plan'}</Typography>
+          {planState ? (
+            <Stack
+              direction="row"
+              spacing={1}
+              useFlexGap
+              sx={{ flexWrap: 'wrap', alignItems: 'center' }}
+            >
+              <Chip
+                size="small"
+                color="primary"
+                label={`Effective: ${PLAN_LABELS[planState.effectivePlan]}`}
+              />
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Stored: ${
+                  planState.storedPlan
+                    ? PLAN_LABELS[planState.storedPlan]
+                    : 'no plan'
+                }`}
+              />
+              <Chip
+                size="small"
+                variant="outlined"
+                color={planState.subscription === 'dead' ? 'warning' : 'default'}
+                label={
+                  planState.subscription === 'none'
+                    ? 'Subscription: none'
+                    : `Subscription: ${planState.subscriptionStatus}` +
+                      (planState.subscription === 'dead' ? ' (dead)' : '')
+                }
+              />
+              {planState.comp ? (
+                <Chip
+                  size="small"
+                  color="secondary"
+                  label={`Comp: ${planCompLabel(
+                    planState.comp,
+                    planState.compInForce,
+                  )}`}
+                />
+              ) : null}
+            </Stack>
+          ) : null}
+          {planState ? (
+            <Alert
+              severity={planState.decidedBy === 'lapsed' ? 'warning' : 'info'}
+            >
+              {orgPlanDescriptionSentence(planState)}
+              {planState.comp
+                ? ` Granted${
+                    planState.comp.grantedBy
+                      ? ` by ${planState.comp.grantedBy}`
+                      : ''
+                  }${
+                    planState.comp.grantedAt
+                      ? ` on ${new Date(planState.comp.grantedAt).toLocaleDateString()}`
+                      : ''
+                  }${
+                    orgOverrideReasonSummary(
+                      planState.comp.reason,
+                      planState.comp.note,
+                    )
+                      ? ` — ${orgOverrideReasonSummary(
+                          planState.comp.reason,
+                          planState.comp.note,
+                        )}`
+                      : ''
+                  }.`
+                : null}
+            </Alert>
+          ) : null}
+          {planGoverned ? (
+            <TextField
+              select
+              size="small"
+              label="Stored plan"
+              value={editor?.plan ?? ''}
+              helperText={
+                'The live subscription decides the plan, so this is written ' +
+                'as it always was — and the next subscription event from ' +
+                'Stripe rewrites it.'
+              }
+              onChange={(event) =>
+                setEditor((prev) =>
+                  prev ? { ...prev, plan: event.target.value } : prev,
+                )
+              }
+            >
+              {PLAN_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : planState ? (
+            <TextField
+              select
+              size="small"
+              label="Comp plan"
+              value={editor?.removeComp ? '' : (editor?.compPlan ?? '')}
+              disabled={Boolean(editor?.removeComp)}
+              helperText={
+                'No live subscription decides this workspace’s plan, so a ' +
+                'plan chosen here is saved as a STAFF COMP: in force at once, ' +
+                'recorded with the reason above, and billing nothing. It lasts ' +
+                'until it is removed, and a live subscription outranks it ' +
+                'while one lasts.'
+              }
+              onChange={(event) =>
+                setEditor((prev) =>
+                  prev
+                    ? { ...prev, compPlan: event.target.value as '' | OrgPlan }
+                    : prev,
+                )
+              }
+            >
+              {/* "No comp" only where there is none to keep: removing one
+                  is the explicit checkbox below, never a select that
+                  drifted back to empty. */}
+              {!planState.comp ? (
+                <MenuItem value="">
+                  {`No comp — resolves as ${PLAN_LABELS[planWithoutComp(org)]}`}
+                </MenuItem>
+              ) : null}
+              {planState.comp && editor?.removeComp ? (
+                <MenuItem value="">{'Removed on save'}</MenuItem>
+              ) : null}
+              {COMP_PLAN_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : null}
+          {/*
+            HOW THE COMP HOLDS THE BANDS (AGL-3049), offered wherever a comp
+            is chosen and staying. Two named choices rather than one checkbox,
+            so a capped comp is a decision staff read the consequence of —
+            which bands stop, and how to raise one — and not an unticked box.
+          */}
+          {savedCompCaps ? (
+            <FormControl>
+              <FormLabel id="staff-org-comp-caps">{'Comp caps'}</FormLabel>
+              <RadioGroup
+                aria-labelledby="staff-org-comp-caps"
+                value={savedCompCaps}
+                onChange={(event) =>
+                  setEditor((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          compUncapped: event.target.value === 'uncapped',
+                        }
+                      : prev,
+                  )
+                }
+              >
+                <FormControlLabel
+                  value="capped"
+                  control={<Radio size="small" />}
+                  label={
+                    'Capped — every band is a hard limit at the comp plan’s ' +
+                    'figure, because a comp sells nothing past one. Raise a ' +
+                    'single band with a quota override below.'
+                  }
+                />
+                <FormControlLabel
+                  value="uncapped"
+                  control={<Radio size="small" />}
+                  label={
+                    'Uncapped — no band or quota limits at all while the comp ' +
+                    'is in force, for an internal workspace. It still bills ' +
+                    'nothing.'
+                  }
+                />
+              </RadioGroup>
+            </FormControl>
+          ) : null}
+          {planState?.comp ? (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size="small"
+                  checked={Boolean(editor?.removeComp)}
+                  onChange={(event) =>
+                    setEditor((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            removeComp: event.target.checked,
+                            compPlan: event.target.checked
+                              ? prev.compPlan
+                              : (planState.comp?.plan ?? prev.compPlan),
+                            compUncapped: event.target.checked
+                              ? prev.compUncapped
+                              : (planState.comp?.uncapped ?? prev.compUncapped),
+                          }
+                        : prev,
+                    )
+                  }
+                />
+              }
+              label={
+                `Remove the ${planCompPhrase(planState.comp)} on save` +
+                (planState.compInForce
+                  ? ` — this workspace then resolves as ${
+                      PLAN_LABELS[planWithoutComp(org)]
+                    }`
+                  : ' — it is dormant, so the plan does not change')
+              }
+            />
+          ) : null}
+          {planState &&
+          !planGoverned &&
+          !planState.comp &&
+          planState.decidedBy === 'stored-plan' &&
+          planState.storedPlan ? (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size="small"
+                  checked={Boolean(editor?.clearStoredPlan)}
+                  onChange={(event) =>
+                    setEditor((prev) =>
+                      prev
+                        ? { ...prev, clearStoredPlan: event.target.checked }
+                        : prev,
+                    )
+                  }
+                />
+              }
+              label={
+                `Clear the stored ${PLAN_LABELS[planState.storedPlan]} plan ` +
+                '(set directly, before comps) — without a comp this ' +
+                'workspace then resolves as Free'
+              }
+            />
+          ) : null}
           <Typography variant="subtitle2">{'Quota overrides'}</Typography>
+          {/* What the comp being saved does to these fields (AGL-3049). Body
+              text rather than a second alert: the plan state above is the
+              one alert this dialog raises. */}
+          {savedCompCaps === 'capped' ? (
+            <Typography variant="body2">
+              {'This comp caps every band below at the figure its empty ' +
+                'field shows; a band showing ∞ has no cap on this plan. To ' +
+                'raise one band for this workspace, type a higher figure into ' +
+                'it — that figure becomes its hard limit. The three fee ' +
+                'percentages are prices, not caps.'}
+            </Typography>
+          ) : savedCompCaps === 'uncapped' ? (
+            <Typography variant="body2">
+              {'This comp is uncapped: every band below reads as unlimited ' +
+                'while it is in force, whatever a field holds. A figure typed ' +
+                'here is kept, and applies again if the comp is capped or ' +
+                'removed. The three fee percentages are prices, not caps, and ' +
+                'still apply.'}
+            </Typography>
+          ) : null}
           <Typography variant="caption" color="text.secondary">
             {'Empty = plan default: only filled fields persist as ' +
               'per-organization overrides, and emptying one REMOVES that ' +
@@ -995,10 +1383,18 @@ const StaffOrgActions = ({
           </Typography>
           <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
             {QUOTA_FIELDS.map((field) => {
-              const plan = editor?.plan as OrgPlan | ''
-              const fallback = plan
-                ? (PLAN_ENTITLEMENTS[plan] as any)?.[field.key]
-                : undefined
+              // The defaults of the plan the org will RESOLVE as once saved,
+              // comp included (AGL-3034) — not the stored plan, which a
+              // canceled workspace does not get. An uncapped comp reads every
+              // band as unlimited, and never a fee (AGL-3049).
+              const plan = savedPlan
+              const fallback =
+                savedCompCaps === 'uncapped' &&
+                !PRICE_ENTITLEMENT_KEYS.has(field.key)
+                  ? Number.POSITIVE_INFINITY
+                  : plan
+                    ? (PLAN_ENTITLEMENTS[plan] as any)?.[field.key]
+                    : undefined
               return (
                 <TextField
                   key={field.key}
@@ -1034,7 +1430,10 @@ const StaffOrgActions = ({
           <Typography variant="subtitle2">{'Feature overrides'}</Typography>
           <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
             {FLAG_FIELDS.map((key) => {
-              const plan = editor?.plan as OrgPlan | ''
+              // The defaults of the plan the org will RESOLVE as once saved,
+              // comp included (AGL-3034) — not the stored plan, which a
+              // canceled workspace does not get.
+              const plan = savedPlan
               const fallback = plan
                 ? Boolean((PLAN_ENTITLEMENTS[plan]?.features as any)?.[key])
                 : undefined

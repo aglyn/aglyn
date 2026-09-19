@@ -118,6 +118,67 @@ describe('the rules carry the CRM suite on the plans the tables do (AGL-2801)', 
   })
 })
 
+/**
+ * A STAFF COMP OPENS THE SUITE WHERE THE RESOLVER SAYS IT DOES (AGL-3034).
+ *
+ * `resolveEffectivePlan` honors `entitlements.planComp` while the
+ * subscription is dead or absent. Without the comp half here, a workspace
+ * comped to Pro would be shown the CRM by the console and refused every write
+ * to it by the database — the comp silently ignored in the one place staff
+ * cannot see.
+ */
+describe('the rules honor a staff comp on the statuses the resolver does (AGL-3034)', () => {
+  const carried = rawBlockBody(RULES, 'function crmSuiteCarried(org) {')
+  const comp = rawBlockBody(RULES, 'function orgPlanComp(org) {')
+  const flat = (text: string) => text.replace(/\s+/g, ' ')
+
+  it('names the same plans for a comp as for a stored plan', () => {
+    expect(listAfter(carried, 'orgPlanComp(org) in')).toEqual(
+      listAfter(carried, "org.get('plan', 'free') in"),
+    )
+  })
+
+  it('applies a comp on exactly the dead statuses and on none at all', () => {
+    const compHalf = carried.slice(carried.indexOf('orgPlanComp(org) in'))
+    const at = compHalf.indexOf('orgSubscriptionStatus(org) in')
+    const statuses = compHalf
+      .slice(compHalf.indexOf('[', at) + 1, compHalf.indexOf(']', at))
+      .split(',')
+      .map((item) => item.trim().replace(/^'|'$/g, ''))
+      .sort()
+    const applies = ['', ...SUBSCRIPTION_STATUSES].filter(
+      (status) =>
+        resolveEffectivePlan({
+          plan: 'free',
+          ...(status ? { billingStatus: status } : {}),
+          entitlements: { planComp: { plan: 'pro' } },
+        } as never) === 'pro',
+    )
+    expect(statuses).toEqual(applies.sort())
+    // The absent status is in the list — without it a workspace that never
+    // subscribed could be comped in the console and refused here.
+    expect(statuses).toContain('')
+  })
+
+  it('reads the comp plan off entitlements.planComp, defensively typed', () => {
+    expect(flat(comp)).toContain(
+      "org.get('entitlements', {}).get('planComp', {}).get('plan', '')",
+    )
+    expect(flat(comp)).toContain("org.get('entitlements', {}) is map")
+    expect(flat(comp)).toContain("org.get('entitlements', {}).get('planComp', {}) is map")
+  })
+
+  it('every plan a comp can name carries the suite, so OR-ing the halves keeps the order', () => {
+    // The comp half is OR'd beside the stored-plan half instead of taking
+    // precedence over it. The two orders agree only while no comp plan lacks
+    // the suite: then the comp half is true whenever the comp is in force.
+    const listed = new Set(listAfter(carried, 'orgPlanComp(org) in'))
+    for (const plan of Object.keys(PLAN_ENTITLEMENTS).filter((key) => key !== 'free')) {
+      expect(`${plan}: ${listed.has(plan)}`).toBe(`${plan}: true`)
+    }
+  })
+})
+
 describe('every client-written suite collection asks the plan (AGL-2801)', () => {
   const orgs = rawBlockBody(RULES, 'match /orgs/<orgId> {')
 

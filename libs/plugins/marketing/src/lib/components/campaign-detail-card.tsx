@@ -33,11 +33,15 @@ import {
   RateRow,
   Section,
 } from '@aglyn/shared-ui-email-campaigns/components/report-figures'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { PageHeaderRecord, pluginDocsHelp } from '@aglyn/aglyn'
 import {
@@ -47,13 +51,9 @@ import {
   Chip,
   Divider,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Typography,
 } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   deleteField,
@@ -293,13 +293,6 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
     () => sends.map((send) => String(send.$id)).filter(Boolean),
     [sends],
   )
-  // The page is a SLICE of a window the card already holds.
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const visibleSends = useMemo(
-    () => sends.slice(page * pageSize, page * pageSize + pageSize),
-    [sends, page, pageSize],
-  )
 
   /*==========================================
    * SAVING THE CONTAINER, WITH THE CLIENT SDK.
@@ -523,6 +516,121 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
     ]
   }
 
+  /*
+   * The campaign's emails, on the surface's own row grammar: the row opens
+   * the email's report, its subject is also a real link so it can be
+   * middle-clicked and copied, and the trailing cluster holds the actions.
+   * The window is one the card already holds, so the grid pages it.
+   */
+  const sendColumns: GridColDef<CampaignSend>[] = [
+    {
+      field: 'subject',
+      headerName: 'Subject',
+      flex: 1,
+      minWidth: 220,
+      valueGetter: (_value, send) => send.subject || send.$id,
+      /*
+        Plain text until the Emails hub resolves: a link with no destination
+        is worse than none, and this cell is the message's subject either way.
+       */
+      renderCell: ({ row: send, value }) => {
+        const href = sendHref(send)
+        return href ? (
+          <AppLink
+            href={href}
+            // The row's own handler would fire too and push the same route
+            // twice — one history entry per back press.
+            onClick={(event: { stopPropagation: () => void }) =>
+              event.stopPropagation()
+            }
+          >
+            {value}
+          </AppLink>
+        ) : (
+          value
+        )
+      },
+    },
+    {
+      /*
+        WHAT THE EMAIL IS DOING, not the field it stores.
+
+        This branched on the status, which reads "Scheduled" about an email
+        that has delivered five hundred messages and is between batches — the
+        stored state the processor claims to resume it. The derivation reads
+        the counters beside the status; the due date is appended only where
+        there is genuinely nothing delivered yet, which is the one case a time
+        answers.
+       */
+      field: 'state',
+      headerName: 'State',
+      width: 220,
+      valueGetter: (_value, send) => {
+        const display = campaignSendDisplay(send)
+        return display.state === 'pending' && send.sendAtMs
+          ? `${display.label} · ${new Date(send.sendAtMs).toLocaleString()}`
+          : display.label
+      },
+      renderCell: ({ row: send, value }) => {
+        const state = campaignSendDisplay(send).state
+        return (
+          <Chip
+            size="small"
+            color={
+              state === 'sending' ? 'info' : state === 'stopped' ? 'warning' : undefined
+            }
+            label={value}
+          />
+        )
+      },
+    },
+    {
+      /*
+        Sent over addressed, on one line: the two figures only mean anything
+        beside each other, and the gap between them is the suppression list
+        doing its work.
+       */
+      field: 'sent',
+      headerName: 'Sent',
+      type: 'number',
+      align: 'right',
+      headerAlign: 'right',
+      width: 110,
+      valueGetter: (_value, send) => Number(send.stats?.sent ?? 0),
+      renderCell: ({ row: send }) =>
+        `${send.stats?.sent ?? 0}/${send.stats?.recipients ?? 0}`,
+    },
+    {
+      field: 'opens',
+      headerName: 'Opens',
+      type: 'number',
+      align: 'right',
+      headerAlign: 'right',
+      width: 100,
+      valueGetter: (_value, send) => Number(send.stats?.opens ?? 0),
+      valueFormatter: (value: number) => value.toLocaleString(),
+    },
+    {
+      field: 'clicks',
+      headerName: 'Clicks',
+      type: 'number',
+      align: 'right',
+      headerAlign: 'right',
+      width: 100,
+      valueGetter: (_value, send) => Number(send.stats?.clicks ?? 0),
+      valueFormatter: (value: number) => value.toLocaleString(),
+    },
+    listActionsColumn(
+      (send: CampaignSend) => (
+        <ListRowActions
+          label={String(send.subject || send.$id)}
+          items={sendActions(send)}
+        />
+      ),
+      { width: 72 },
+    ),
+  ]
+
   const windowState = campaignWindowState(campaign, Date.now())
   const start = campaign.startAtMs
     ? new Date(campaign.startAtMs).toLocaleDateString()
@@ -745,129 +853,15 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         </Stack>
         {sends.length ? (
           <Stack spacing={0.5}>
-            {/*
-              A TABLE, on the surface's own row grammar: the row opens the
-              email's report, its subject is also a real link so it can be
-              middle-clicked and copied, and the trailing cluster holds the
-              actions. It used to be a row of `Stack`s with a `Report` text
-              button on the end, which meant the campaign's emails and the
-              Emails tab's — the same documents — read as two different kinds
-              of thing.
-             */}
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'Subject'}</TableCell>
-                  <TableCell>{'State'}</TableCell>
-                  <TableCell align="right">{'Sent'}</TableCell>
-                  <TableCell align="right">{'Opens'}</TableCell>
-                  <TableCell align="right">{'Clicks'}</TableCell>
-                  <TableCell align="right" />
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {visibleSends.map((send) => (
-                  <TableRow
-                    key={send.$id}
-                    hover
-                    onClick={() => {
-                      const href = sendHref(send)
-                      if (href) router.push(href)
-                    }}
-                    sx={{ cursor: 'pointer' }}
-                  >
-                    <TableCell>
-                      {/*
-                        The row's own handler would fire too and push the same
-                        route twice — one history entry per back press.
-
-                        Plain text until the Emails hub resolves: a link with
-                        no destination is worse than none, and this cell is
-                        the message's subject either way.
-                       */}
-                      {sendHref(send) ? (
-                        <AppLink
-                          href={sendHref(send) as string}
-                          onClick={(event: { stopPropagation: () => void }) =>
-                            event.stopPropagation()
-                          }
-                        >
-                          {send.subject || send.$id}
-                        </AppLink>
-                      ) : (
-                        (send.subject || send.$id)
-                      )}
-                    </TableCell>
-                    {/*
-                      WHAT THE EMAIL IS DOING, not the field it stores.
-
-                      This branched on the status, which reads "Scheduled"
-                      about an email that has delivered five hundred messages
-                      and is between batches — the stored state the processor
-                      claims to resume it. The derivation reads the counters
-                      beside the status; the due date is appended only where
-                      there is genuinely nothing delivered yet, which is the
-                      one case a time answers.
-                     */}
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        color={
-                          campaignSendDisplay(send).state === 'sending'
-                            ? 'info'
-                            : campaignSendDisplay(send).state === 'stopped'
-                              ? 'warning'
-                              : undefined
-                        }
-                        label={
-                          campaignSendDisplay(send).state === 'pending' &&
-                          send.sendAtMs
-                            ? `${campaignSendDisplay(send).label} · ${new Date(
-                                send.sendAtMs,
-                              ).toLocaleString()}`
-                            : campaignSendDisplay(send).label
-                        }
-                      />
-                    </TableCell>
-                    {/*
-                      Sent over addressed, on one line: the two figures only
-                      mean anything beside each other, and the gap between
-                      them is the suppression list doing its work.
-                     */}
-                    <TableCell align="right">
-                      {`${send.stats?.sent ?? 0}/${
-                        send.stats?.recipients ?? 0
-                      }`}
-                    </TableCell>
-                    <TableCell align="right">
-                      {Number(send.stats?.opens ?? 0).toLocaleString()}
-                    </TableCell>
-                    <TableCell align="right">
-                      {Number(send.stats?.clicks ?? 0).toLocaleString()}
-                    </TableCell>
-                    <TableCell
-                      align="right"
-                      sx={{ width: 56 }}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <RowActionsMenu
-                        label={String(send.subject || send.$id)}
-                        items={sendActions(send)}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <ListPagination
-              page={page}
-              pageSize={pageSize}
-              rowCount={visibleSends.length}
-              // The emails the card HOLDS — bounded by the ceiling, which the
-              // notice below owns up to when it bites.
-              count={sends.length}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+            <ListTable
+              aria-label="The campaign's emails"
+              rows={sends}
+              columns={sendColumns}
+              rowHeight={TABLE_ROW_HEIGHT}
+              onOpen={(_id, send) => {
+                const href = sendHref(send)
+                if (href) router.push(href)
+              }}
             />
             {sendsTruncated ? (
               <Alert severity="info">

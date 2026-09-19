@@ -1045,3 +1045,337 @@ describe('validateAiNodeTree required props (AGL-2905)', () => {
     })
   })
 })
+
+describe('validateAiNodeTree site references (AGL-2935)', () => {
+  const withInstance = () =>
+    tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'section',
+          props: { element: 'section' },
+          children: [
+            {
+              componentId: 'reusableInstance',
+              props: {
+                refId: 'cmp-card',
+                propValues: {
+                  title: 'Roofs',
+                  photo: 'https://example.com/roof.jpg',
+                  count: '3',
+                  stray: 'x',
+                  'bad.name': 'y',
+                },
+              },
+            },
+          ],
+        },
+      ],
+    })
+
+  const formPlaced = (props: Record<string, unknown>) =>
+    tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'section',
+          props: { element: 'section' },
+          children: [{ componentId: 'form', props }],
+        },
+      ],
+    })
+
+  it('refuses an instance nobody grounded, and one naming a component the site does not have', () => {
+    expect(validateAiNodeTree(withInstance(), 'screen')).toMatchObject({
+      ok: false,
+      code: 'component',
+    })
+    expect(
+      validateAiNodeTree(withInstance(), 'screen', { componentIds: ['cmp-other'] }),
+    ).toMatchObject({ ok: false, code: 'reference' })
+  })
+
+  it('admits an instance of a listed component, holding its values to the declared props', () => {
+    const result = validateAiNodeTree(withInstance(), 'screen', {
+      componentIds: ['cmp-card'],
+      componentProps: { 'cmp-card': { title: 'text', photo: 'image', count: 'number' } },
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const instance = Object.values(result.nodes).find(
+      (node) => node.componentId === 'reusableInstance',
+    )
+    expect(instance?.props).toEqual({
+      refId: 'cmp-card',
+      propValues: { title: 'Roofs', photo: 'https://example.com/roof.jpg', count: 3 },
+    })
+    expect(result.repairs).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('propValues.stray is not a prop of that component'),
+        expect.stringContaining('propValues.bad.name is not a prop name'),
+      ]),
+    )
+  })
+
+  it('leaves an icon a page fills with a word for the site owner to pick (AGL-3054)', () => {
+    const placed = tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'section',
+          props: { element: 'section' },
+          children: [
+            { componentId: 'reusableInstance', props: { refId: 'cmp-area', propValues: { title: 'Family law', icon: 'family' } } },
+          ],
+        },
+      ],
+    })
+    const result = validateAiNodeTree(placed, 'screen', {
+      componentIds: ['cmp-area'],
+      componentProps: { 'cmp-area': { title: 'text', icon: 'icon' } },
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(Object.values(result.nodes).find((node) => node.componentId === 'reusableInstance')?.props).toEqual({
+      refId: 'cmp-area',
+      propValues: { title: 'Family law' },
+    })
+    expect(result.repairs).toEqual([
+      expect.stringContaining('propValues.icon is an icon, which the site owner picks from the library; dropped'),
+    ])
+  })
+
+  it('keeps a form bound to a form and a dataset the site has, and drops a binding it does not', () => {
+    const kept = validateAiNodeTree(
+      formPlaced({ formId: 'frm-contact', datasetId: 'ds-leads' }),
+      'screen',
+      { formIds: ['frm-contact'], datasetIds: ['ds-leads'] },
+    )
+    expect(kept.ok).toBe(true)
+    if (!kept.ok) return
+    expect(
+      Object.values(kept.nodes).find((node) => node.componentId === 'form')?.props,
+    ).toMatchObject({ formId: 'frm-contact', datasetId: 'ds-leads' })
+
+    const dropped = validateAiNodeTree(formPlaced({ formId: 'frm-unknown' }), 'screen', {
+      formIds: ['frm-contact'],
+    })
+    expect(dropped.ok).toBe(true)
+    if (!dropped.ok) return
+    expect(
+      Object.values(dropped.nodes).find((node) => node.componentId === 'form')?.props,
+    ).not.toHaveProperty('formId')
+    expect(dropped.repairs).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('formId names a form this site does not have'),
+      ]),
+    )
+  })
+
+  it('maps every minted id back to the id the model wrote for that node', () => {
+    const input = GOLDEN.screen()
+    const result = validateAiNodeTree(input, 'screen')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(Object.values(result.sourceIds).sort()).toEqual(Object.keys(input.nodes).sort())
+    for (const [minted, source] of Object.entries(result.sourceIds)) {
+      expect(result.nodes[minted].componentId).toBe(input.nodes[source].componentId)
+    }
+  })
+})
+
+describe('validateAiNodeTree binding tokens (AGL-2909)', () => {
+  const bound = (image: Record<string, unknown>) =>
+    tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'section',
+          props: { element: 'section' },
+          children: [
+            { componentId: 'image', props: image },
+            { componentId: 'muiTypography', props: { children: '{{entry.title}}' } },
+          ],
+        },
+      ],
+    })
+  const propsOf = (result: AiNodeTreeResult, componentId: string) =>
+    result.ok
+      ? Object.values(result.nodes).find((node) => node.componentId === componentId)?.props
+      : undefined
+  const TOKENS = ['{{entry.coverImage}}', '{{entry.url}}']
+
+  it('drops a token from a link or media prop when the caller named none', () => {
+    const result = validateAiNodeTree(
+      bound({ src: '{{entry.coverImage}}', href: '{{entry.url}}', alt: 'The cover' }),
+      'screen',
+    )
+    expect(result.ok).toBe(true)
+    expect(propsOf(result, 'image')).not.toHaveProperty('src')
+    expect(propsOf(result, 'image')).not.toHaveProperty('href')
+    // Copy keeps its tokens either way: a text prop is no address.
+    expect(propsOf(result, 'muiTypography')).toMatchObject({ children: '{{entry.title}}' })
+  })
+
+  it('keeps a token the caller named, whole, in a link or media prop', () => {
+    const result = validateAiNodeTree(
+      bound({ src: ' {{entry.coverImage}} ', href: '{{entry.url}}', alt: 'Cover for {{entry.title}}' }),
+      'screen',
+      { bindingTokens: TOKENS },
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(propsOf(result, 'image')).toMatchObject({
+      src: '{{entry.coverImage}}',
+      href: '{{entry.url}}',
+      alt: 'Cover for {{entry.title}}',
+    })
+    expect(result.repairs.filter((repair) => /\.(src|href) /.test(repair))).toEqual([])
+  })
+
+  it('admits no named token inside a longer value, none that is not named, and none in a screen prop', () => {
+    const result = validateAiNodeTree(
+      bound({
+        src: 'javascript:{{entry.coverImage}}',
+        href: '{{entry.authorUrl}}',
+        screenId: '{{entry.url}}',
+        alt: 'The cover',
+      }),
+      'screen',
+      { bindingTokens: TOKENS },
+    )
+    expect(result.ok).toBe(true)
+    const image = propsOf(result, 'image')
+    expect(image).not.toHaveProperty('src')
+    expect(image).not.toHaveProperty('href')
+    expect(image).not.toHaveProperty('screenId')
+  })
+})
+
+describe('validateAiNodeTree component definitions (AGL-2908)', () => {
+  const card = () =>
+    tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'muiCard',
+          props: { variant: 'outlined' },
+          children: [
+            {
+              componentId: 'image',
+              props: { src: '{{prop.photo}}', alt: 'Portrait of {{prop.name}}', hideIf: '{{prop.hidePhoto}}' },
+            },
+            {
+              componentId: 'muiButton',
+              props: {
+                children: '{{prop.label}}',
+                variant: '{{prop.style}}',
+                fullWidth: '{{prop.wide}}',
+                screenId: '{{prop.link}}',
+                href: '{{prop.url}}',
+              },
+            },
+          ],
+        },
+      ],
+    })
+  const propsOf = (result: AiNodeTreeResult, componentId: string) =>
+    result.ok
+      ? Object.values(result.nodes).find((node) => node.componentId === componentId)?.props
+      : undefined
+
+  it('keeps a component’s own tokens whole in fields that are not copy and in the visibility directives, when the tree defines a component', () => {
+    const result = validateAiNodeTree(card(), 'component', { definesComponent: true })
+    expect(result.ok).toBe(true)
+    expect(propsOf(result, 'image')).toEqual({
+      src: '{{prop.photo}}',
+      alt: 'Portrait of {{prop.name}}',
+      hideIf: '{{prop.hidePhoto}}',
+    })
+    expect(propsOf(result, 'muiButton')).toEqual({
+      children: '{{prop.label}}',
+      variant: '{{prop.style}}',
+      fullWidth: '{{prop.wide}}',
+      screenId: '{{prop.link}}',
+      href: '{{prop.url}}',
+    })
+    if (result.ok) expect(result.repairs).toEqual([])
+  })
+
+  it('drops them like any value the field cannot hold when the tree defines no component, and keeps copy either way', () => {
+    const result = validateAiNodeTree(card(), 'component')
+    expect(result.ok).toBe(true)
+    expect(propsOf(result, 'image')).toEqual({ alt: 'Portrait of {{prop.name}}' })
+    expect(propsOf(result, 'muiButton')).toEqual({ children: '{{prop.label}}' })
+  })
+
+  it('keeps nothing but a whole property token: not one inside a value, another namespace’s, or a literal directive', () => {
+    const mixed = tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'muiButton',
+          props: {
+            children: 'Get a quote',
+            variant: 'Style {{prop.style}}',
+            fullWidth: '{{entry.wide}}',
+            href: 'javascript:{{prop.url}}',
+            hideIf: 'true',
+          },
+        },
+      ],
+    })
+    const result = validateAiNodeTree(mixed, 'component', { definesComponent: true })
+    expect(result.ok).toBe(true)
+    expect(propsOf(result, 'muiButton')).toEqual({ children: 'Get a quote' })
+  })
+
+  it('binds an Icon’s pick to an icon property, and drops an icon a model names itself, whose drawing it cannot write (AGL-3054)', () => {
+    const icons = tree({
+      componentId: 'div',
+      children: [
+        { componentId: 'icon', props: { iconId: '{{prop.icon}}' } },
+        { componentId: 'icon', props: { iconId: 'mdiScaleBalance', size: '32' } },
+        { componentId: 'muiButton', props: { children: 'Call us', startIconId: 'mdiPhone' } },
+      ],
+    })
+    const result = validateAiNodeTree(icons, 'component', { definesComponent: true })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(Object.values(result.nodes).filter((node) => node.componentId === 'icon').map((node) => node.props)).toEqual([
+      { iconId: '{{prop.icon}}' },
+      { size: '32' },
+    ])
+    expect(propsOf(result, 'muiButton')).toEqual({ children: 'Call us' })
+    expect(result.repairs).toEqual([
+      expect.stringContaining('.iconId is an icon, which the site owner picks from the library; dropped'),
+      expect.stringContaining('.startIconId is an icon, which the site owner picks from the library; dropped'),
+    ])
+    // A page's surface places no Icon of its own.
+    expect(validateAiNodeTree(icons, 'screen')).toMatchObject({ ok: false, code: 'component' })
+  })
+
+  it('hands a whole token on to a placed component’s values only while the tree defines a component', () => {
+    const placed = tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'reusableInstance',
+          props: { refId: 'cmp-avatar', propValues: { picture: '{{prop.photo}}', size: '{{prop.size}}' } },
+        },
+      ],
+    })
+    const context = {
+      definesComponent: true,
+      componentIds: ['cmp-avatar'],
+      componentProps: { 'cmp-avatar': { picture: 'image', size: 'number' } },
+    }
+    expect(propsOf(validateAiNodeTree(placed, 'component', context), 'reusableInstance')).toEqual({
+      refId: 'cmp-avatar',
+      propValues: { picture: '{{prop.photo}}', size: '{{prop.size}}' },
+    })
+    expect(
+      propsOf(validateAiNodeTree(placed, 'component', { ...context, definesComponent: false }), 'reusableInstance'),
+    ).toEqual({ refId: 'cmp-avatar' })
+  })
+})

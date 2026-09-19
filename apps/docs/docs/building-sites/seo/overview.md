@@ -17,10 +17,11 @@ Aglyn emits the right tags, sitemap, and structured data automatically.
 
 ## Per-screen SEO
 
-Every screen's detail page has an **SEO** card with three fields:
+Every screen's detail page has an **SEO** card with four fields:
 
 - **Search title** — up to 60 characters, published exactly as you type it.
 - **Search description** — up to 155 characters, the meta description.
+- **Breadcrumb label** — up to 40 characters, the page's short name in a breadcrumb trail.
 - **Social image** — the picture shown when the page is shared. Press **Choose
   image** to pick one from your [media library](../../content-and-data/media/overview.md)
   (or the organization's shared library); **Clear** puts the site default back.

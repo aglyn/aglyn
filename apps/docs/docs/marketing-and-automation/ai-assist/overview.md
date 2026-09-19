@@ -51,6 +51,32 @@ has one AI budget rather than a separate one per feature. Two limits apply:
 A request that fails before the model answers — an outage upstream — does not
 count against the allowance.
 
+Inside the workspace's credits, an organization can give a member, a site collaborator
+or a whole site its own monthly share, and anyone can see their usage and choose a model
+while they work — see [AI allotments, usage and model choice](ai-allotments.md).
+
+## Switch AI off for one site {#switch-ai-off-for-one-site}
+
+AI is **on for every site** in a workspace. A site admin can switch it off for one site on
+that site's **Admin → Plugins → AI** page, and the page says, beside the switch, what
+switching it off stops and what it leaves running.
+
+With AI off for a site:
+
+- the assistant, **Describe it** on the Screens, Templates, Layouts, Forms and Components
+  pages, the SEO and theme cards, the editor's **Rewrite with AI**,
+  **Generate a section with AI** and **Make a reusable component with AI** controls, and
+  the AI columns on the site's collaborators card are gone from that site;
+- every AI request made for the site is refused with **AI is switched off for this site.**,
+  including one sent from a tab that was open before the switch;
+- an AI job already queued for the site stops with the same sentence, and spends no
+  credits. A job that stopped does not restart when AI is switched back on.
+
+Switching AI off for a site does **not** stop the workspace's AI add-on, credits,
+allotments or overage billing. AI keeps working on the workspace's other sites and on
+workspace pages such as **Billing**, and an agency batch still builds the sites in it
+that have AI on.
+
 ## Related
 
 - [The Besigner](../../building-sites/besigner/overview.md)

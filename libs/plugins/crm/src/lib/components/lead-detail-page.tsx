@@ -33,6 +33,7 @@ import { useState } from 'react'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import { CrmRecordHeader } from './crm-record-header'
+import { CrmRecordInsightsZone } from './crm-record-insights-zone'
 import { useErasePersonAction } from './erase-person-action'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import { LeadHistoryCard } from './lead-history-card'
@@ -130,6 +131,14 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
           banner={erase.banner}
           erasurePending={erase.pendingSinceMs !== null}
           org={org}
+        />
+        {/* What an assistant says about where the lead stands (AGL-2917): read on its own site. */}
+        <CrmRecordInsightsZone
+          hostId={hostId}
+          org={org as Record<string, unknown> | undefined}
+          kind="lead"
+          recordId={id}
+          name={label ?? ''}
         />
         <LeadHistoryCard hostId={hostId} leadId={id} lead={lead} />
         <RecordActivityCard hostId={hostId} org={org} leadId={id} />

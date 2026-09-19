@@ -186,27 +186,28 @@ seeded emulator stack). Use two accounts with distinct names/photos.
 
 ## Published sites — admin bar
 
-Requires the `release_edit_bar` flag ON for the seeded org (staff flags page), a
-published site, and a signed-in editor account.
+Requires a published site and a signed-in editor account. The bar is on for every site,
+so there is no flag to switch on first.
 
 ### 14. `static/img/tenant/admin-bar-pill.png`
 
-- **Docs page:** `building-sites/besigner/edit-from-the-live-site.md` → `#call-it-up`
-- **Capture:** the published site with `?aglyn-edit` appended, before connecting.
-- **Frame:** the bottom-right corner of the page with the **Edit this site** pill —
+- **Docs page:** `building-sites/besigner/edit-from-the-live-site.md` → `#on-your-own-domain`
+- **Capture:** a page of the published site with `?aglyn-edit` appended, in a browser with
+  no editor hint for that site (a custom domain, or localhost), before connecting.
+- **Frame:** the bottom-right corner of the page with the **Edit this site** button —
   include enough of the page to show it floating over real content.
-- **Alt text:** The Edit this site pill in the corner of a published page, before
+- **Alt text:** The Edit this site button in the corner of a published page, before
   connecting edit access.
 
 ### 15. `static/img/tenant/admin-bar-connected.png`
 
 - **Docs page:** `building-sites/besigner/edit-from-the-live-site.md` → `#the-bar`
-- **Capture:** after connecting through the console popup: the dark bar along the
-  bottom showing the site name, the current screen's name, **Edit this page**,
-  **Open console**, and the × button.
-- **Frame:** the full-width bar plus a strip of the page above it.
-- **Alt text:** The connected admin bar at the bottom of a published page, with
-  Edit this page and Open console links.
+- **Capture:** at desktop width, once the bar is up: the dark bar across the top of the
+  page showing the site name, the current screen's name, **Edit this page**, today's
+  views, **Screens**, the account menu and the × button.
+- **Frame:** the full-width bar plus a strip of the page below it.
+- **Alt text:** The admin bar across the top of a published page, naming the screen
+  beside Edit this page, today's views and the Screens link.
 
 ## Media
 

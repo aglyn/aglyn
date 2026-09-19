@@ -37,9 +37,10 @@
 import { RELEASE_FLAGS, type ReleaseFlagKey } from '@aglyn/aglyn'
 
 /**
- * The `edit-from-the-live-site.md` treatment: the admonition a page that is
- * ABOUT an unreleased feature must open with. Matched on the marker, not on
- * loose prose — "we're working on it" further down the page is not disclosure.
+ * The admonition a page that is ABOUT an unreleased feature must open with —
+ * `docs/content-and-data/crm/outreach.md` carries it today. Matched on the
+ * marker, not on loose prose — "we're working on it" further down the page is
+ * not disclosure.
  */
 export const ROLLING_OUT_ADMONITION =
   /^:::(?:caution|warning|note|info)\s+Rolling out\s*$/m
@@ -100,9 +101,10 @@ export interface FlagDocPage {
 /**
  * Flag key → the docs pages that document it.
  *
- * Entries STAY after a flag flips on: the spec then asserts the inverse (the
- * disclosure must be gone), which is what stops a rolling-out marker rotting in
- * place on a shipped feature.
+ * While an entry stays after its flag flips on, the spec asserts the inverse
+ * (the disclosure must be gone), which is what stops a rolling-out marker
+ * rotting in place on a shipped feature. An entry may instead go in the same
+ * change that takes its disclosures down, once no page needs watching.
  */
 export const FLAG_DOC_PAGES: Partial<
   Record<ReleaseFlagKey, readonly FlagDocPage[]>
@@ -131,21 +133,6 @@ export const FLAG_DOC_PAGES: Partial<
     },
   ],
 
-  // AGL-1302 follow-on. The template AGL-1603 was told to copy.
-  release_edit_bar: [
-    {
-      path: 'docs/building-sites/besigner/edit-from-the-live-site.md',
-      disclosure: 'admonition',
-      checkNoPriceClaim: true,
-    },
-    {
-      path: 'docs/whats-new.md',
-      disclosure: [/Edit from the live site\][\s\S]{0,120}\*\(rolling out\)\*/],
-      checkNoPriceClaim: false,
-      priceClaimNote:
-        'A changelog prices the whole product; the admin bar itself carries no price claim anywhere.',
-    },
-  ],
   // AGL-2974. The flag closes Outreach's console hub and its API routes
   // together, and the one page about it is ABOUT the feature, so it takes the
   // admonition treatment, whole-file. No plan carries the entitlement either,
@@ -204,6 +191,26 @@ export const FLAG_DOC_PAGES: Partial<
       checkNoPriceClaim: true,
     },
   ],
+  // AGL-2938. The flag closes the AI job routes, and with them the Theme
+  // assistant, which asks the jobs route before it shows anything — the first
+  // generative surface a customer page describes, which moved this key out of
+  // FLAGS_WITHOUT_DOCS. The AI section's page is ABOUT the feature, so it
+  // takes the admonition, whole-file; the theme editor's page names the
+  // assistant beside its own controls and discloses the rollout there.
+  release_ai_generative: [
+    {
+      path: 'docs/marketing-and-automation/ai-assist/theme-assist.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/building-sites/theme-builder/edit-your-theme.md',
+      disclosure: [/## Change it with AI\s+\*\*Rolling out\.\*\* The \*\*Theme assistant\*\*/],
+      checkNoPriceClaim: false,
+      priceClaimNote:
+        'The theme editor page opens with a `:::info Plan availability` admonition for the editor itself, which ships on every plan and has nothing to do with this flag.',
+    },
+  ],
 }
 
 /**
@@ -212,16 +219,7 @@ export const FLAG_DOC_PAGES: Partial<
  * the spec checks that the flag's LABEL really is absent from the published
  * tree outside `docs/staff-console/` (where naming every flag is the point).
  */
-export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {
-  // AGL-2903 / AGL-2904. The flag gates the AI job routes and the console's
-  // jobs drawer, which are staff preview only and describe themselves in
-  // `docs/AI_JOBS.md` rather than on a customer page: the one job kind that
-  // runs today produces draft copy, and no published page tells a customer
-  // to expect it. The first customer-facing generative page moves this key
-  // to FLAG_DOC_PAGES.
-  release_ai_generative:
-    'The generative doors are staff preview only and no customer-facing page describes them yet; the job model is documented for operators in docs/AI_JOBS.md.',
-}
+export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {}
 
 /**
  * Where a published-ON verdict was read, and why it holds. Every field is

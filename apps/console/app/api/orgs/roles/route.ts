@@ -17,9 +17,9 @@
 
 import { pluginRequestFromWeb, runPluginEventHandlers } from '@aglyn/aglyn/server'
 import {
-  aiPermissionChanges,
   createResourceUid,
   ORG_PERMISSION_KEYS,
+  pluginPermissionChanges,
   type AglynOrgCustomRole,
   type OrgPermission,
 } from '@aglyn/aglyn/server'
@@ -148,9 +148,9 @@ async function handler(request: Request): Promise<Response> {
       if (!name) return Response.json({ error: 'Name the role' }, { status: 400 })
       const roleId = String(body?.roleId ?? '') || createResourceUid()
       const roleRef = rolesRef.doc(roleId)
-      // The map as stored, read before the write: the AI keys the save
-      // moved are one activity row each (AGL-2929), and only a comparison
-      // can say which moved. A new role reads as nothing stored.
+      // The map as stored, read before the write: each plugin-declared key
+      // the save moved is one platform event (AGL-2929), and only a
+      // comparison can say which moved. A new role reads as nothing stored.
       const stored = (await roleRef.get()).data() as
         | Pick<AglynOrgCustomRole, 'permissions'>
         | undefined
@@ -186,9 +186,9 @@ async function handler(request: Request): Promise<Response> {
         body?.roleId ? 'Updated role' : 'Created role',
         { type: 'member', id: roleId, name },
       )
-      // Beside the sentence above, a coded row per AI key that moved, so
-      // the feed's AI chip finds who switched generation off for a role.
-      for (const change of aiPermissionChanges(stored?.permissions, permissions)) {
+      // Beside the sentence above, one event per plugin-declared key that
+      // moved, for the plugin that owns the key to record who moved it.
+      for (const change of pluginPermissionChanges(stored?.permissions, permissions)) {
         await runPluginEventHandlers('org.permissions.changed', {
           orgId,
           actor: { uid: decoded.uid, email: decoded.email ?? null },

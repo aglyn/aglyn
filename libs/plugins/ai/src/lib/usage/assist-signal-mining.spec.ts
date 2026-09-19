@@ -95,7 +95,7 @@ jest.mock('./assist-free-taste', () => ({
   ...jest.requireActual('./assist-free-taste'),
   readPlatformFreeSpend: async (_firestore: unknown, day: string) => ({
     day,
-    estCostUsd: 21.5,
+    providerCostUsd: 21.5,
     requests: 88,
     refusals: 3,
     ceilingUsd: 25,
@@ -122,7 +122,9 @@ import { GET } from '../server/ai-admin-signals'
 import {
   assistSignalRow,
   costSplitRows,
+  kindTokenRows,
   mineAssistSignals,
+  nearestRankPercentile,
   type AssistSignalRow,
 } from './assist-signal-mining'
 
@@ -141,7 +143,7 @@ const signal = (over: Partial<AssistSignalRow> = {}): AssistSignalRow => ({
   outputTokens: 40,
   cacheReadTokens: 900,
   cacheWriteTokens: 0,
-  estCostUsd: 0.001,
+  providerCostUsd: 0.001,
   docsPaths: ['/building-sites/publish#steps'],
   stopReason: 'end_turn',
   feedback: null,
@@ -234,15 +236,15 @@ describe('mineAssistSignals — the docs-gap ranking (AGL-2252)', () => {
 
   it('rolls cost up per org, dearest first, and totals the fleet', () => {
     const report = mineAssistSignals([
-      signal({ orgId: 'cheap', estCostUsd: 0.001, inputTokens: 10, outputTokens: 5, cacheReadTokens: 0 }),
-      signal({ orgId: 'dear', estCostUsd: 0.05, inputTokens: 100, outputTokens: 50, cacheReadTokens: 900 }),
-      signal({ orgId: 'dear', estCostUsd: 0.02, inputTokens: 100, outputTokens: 20, cacheReadTokens: 900 }),
+      signal({ orgId: 'cheap', providerCostUsd: 0.001, inputTokens: 10, outputTokens: 5, cacheReadTokens: 0 }),
+      signal({ orgId: 'dear', providerCostUsd: 0.05, inputTokens: 100, outputTokens: 50, cacheReadTokens: 900 }),
+      signal({ orgId: 'dear', providerCostUsd: 0.02, inputTokens: 100, outputTokens: 20, cacheReadTokens: 900 }),
     ])
     expect(report.orgs.map((row) => row.orgId)).toEqual(['dear', 'cheap'])
     expect(report.orgs[0]).toMatchObject({
       orgId: 'dear',
       messages: 2,
-      estCostUsd: 0.07,
+      providerCostUsd: 0.07,
       inputTokens: 200,
       outputTokens: 70,
       cacheReadTokens: 1800,
@@ -253,9 +255,9 @@ describe('mineAssistSignals — the docs-gap ranking (AGL-2252)', () => {
       outputTokens: 75,
       cacheReadTokens: 1800,
     })
-    expect(report.totals.estCostUsd).toBeCloseTo(0.071, 9)
-    // Cache-read rate over BILLABLE prompt tokens (fresh input + cache
-    // reads). This is the number that settles whether the assist system
+    expect(report.totals.providerCostUsd).toBeCloseTo(0.071, 9)
+    // Cache-read rate over BILLABLE prompt tokens (fresh input, cache reads
+    // and cache writes; this fixture writes none). This is the number that settles whether the assist system
     // prefix is caching at all — it measures 1,030–1,190 tokens against
     // Sonnet 5's 1,024-token minimum, so a prefix under the line caches
     // silently not at all and the bill is the only evidence.
@@ -317,31 +319,31 @@ describe('mineAssistSignals — the docs-gap ranking (AGL-2252)', () => {
    *=========================================*/
   it('splits cost by tier and by model, not turns by tier and by model', () => {
     const report = mineAssistSignals([
-      signal({ tier: 'entitled', model: 'claude-sonnet-5', estCostUsd: 0.4 }),
-      signal({ tier: 'entitled', model: 'claude-sonnet-5', estCostUsd: 0.004 }),
-      signal({ tier: 'free', model: 'claude-haiku-4-5', estCostUsd: 0.002 }),
-      signal({ tier: 'free', model: 'claude-haiku-4-5', estCostUsd: 0.003 }),
-      signal({ tier: 'free', model: 'claude-haiku-4-5', estCostUsd: 0.001 }),
+      signal({ tier: 'entitled', model: 'claude-sonnet-5', providerCostUsd: 0.4 }),
+      signal({ tier: 'entitled', model: 'claude-sonnet-5', providerCostUsd: 0.004 }),
+      signal({ tier: 'free', model: 'claude-haiku-4-5', providerCostUsd: 0.002 }),
+      signal({ tier: 'free', model: 'claude-haiku-4-5', providerCostUsd: 0.003 }),
+      signal({ tier: 'free', model: 'claude-haiku-4-5', providerCostUsd: 0.001 }),
     ])
 
     expect(report.totals.byTier['entitled'].messages).toBe(2)
-    expect(report.totals.byTier['entitled'].estCostUsd).toBeCloseTo(0.404, 9)
+    expect(report.totals.byTier['entitled'].providerCostUsd).toBeCloseTo(0.404, 9)
     expect(report.totals.byTier['free'].messages).toBe(3)
-    expect(report.totals.byTier['free'].estCostUsd).toBeCloseTo(0.006, 9)
+    expect(report.totals.byTier['free'].providerCostUsd).toBeCloseTo(0.006, 9)
     // The minority of turns is the majority of the bill. This is the whole
     // finding, and a count-keyed breakdown reports its exact opposite.
-    expect(report.totals.byTier['entitled'].estCostUsd).toBeGreaterThan(
-      report.totals.byTier['free'].estCostUsd,
+    expect(report.totals.byTier['entitled'].providerCostUsd).toBeGreaterThan(
+      report.totals.byTier['free'].providerCostUsd,
     )
     expect(report.totals.byTier['free'].messages).toBeGreaterThan(
       report.totals.byTier['entitled'].messages,
     )
 
-    expect(report.totals.byModel['claude-sonnet-5'].estCostUsd).toBeCloseTo(
+    expect(report.totals.byModel['claude-sonnet-5'].providerCostUsd).toBeCloseTo(
       0.404,
       9,
     )
-    expect(report.totals.byModel['claude-haiku-4-5'].estCostUsd).toBeCloseTo(
+    expect(report.totals.byModel['claude-haiku-4-5'].providerCostUsd).toBeCloseTo(
       0.006,
       9,
     )
@@ -349,10 +351,10 @@ describe('mineAssistSignals — the docs-gap ranking (AGL-2252)', () => {
     // The split must reconcile with the fleet total, or one of the two is
     // measuring a different population than the panel says it is.
     const tierSum = Object.values(report.totals.byTier).reduce(
-      (sum, bucket) => sum + bucket.estCostUsd,
+      (sum, bucket) => sum + bucket.providerCostUsd,
       0,
     )
-    expect(tierSum).toBeCloseTo(report.totals.estCostUsd, 9)
+    expect(tierSum).toBeCloseTo(report.totals.providerCostUsd, 9)
   })
 
   it('orders a breakdown dearest first, so the expensive line is the top line', () => {
@@ -360,14 +362,14 @@ describe('mineAssistSignals — the docs-gap ranking (AGL-2252)', () => {
     // disagree. A `costSplitRows` that returned `Object.entries` untouched
     // passes any assertion written against a fixture that happened to agree.
     const rows = costSplitRows({
-      free: { messages: 900, estCostUsd: 0.01 },
-      trial: { messages: 1, estCostUsd: 0.5 },
-      entitled: { messages: 12, estCostUsd: 2.25 },
+      free: { messages: 900, providerCostUsd: 0.01 },
+      trial: { messages: 1, providerCostUsd: 0.5 },
+      entitled: { messages: 12, providerCostUsd: 2.25 },
     })
     expect(rows.map((row) => row.key)).toEqual(['entitled', 'trial', 'free'])
     // And it carries EACH row's own figures across — a mapper that reused
     // the first bucket for every row looks right and is wrong everywhere.
-    expect(rows.map((row) => row.estCostUsd)).toEqual([2.25, 0.5, 0.01])
+    expect(rows.map((row) => row.providerCostUsd)).toEqual([2.25, 0.5, 0.01])
     expect(rows.map((row) => row.messages)).toEqual([12, 1, 900])
   })
 
@@ -402,10 +404,10 @@ describe('mineAssistSignals — the docs-gap ranking (AGL-2252)', () => {
 describe('the deflection rate an operator reads (AGL-2486)', () => {
   it('counts the free turns and reports the rate', () => {
     const report = mineAssistSignals([
-      signal({ deflected: true, model: 'docs-retrieval', estCostUsd: 0 }),
-      signal({ deflected: true, model: 'assist-cache', estCostUsd: 0 }),
-      signal({ estCostUsd: 0.02 }),
-      signal({ estCostUsd: 0.02 }),
+      signal({ deflected: true, model: 'docs-retrieval', providerCostUsd: 0 }),
+      signal({ deflected: true, model: 'assist-cache', providerCostUsd: 0 }),
+      signal({ providerCostUsd: 0.02 }),
+      signal({ providerCostUsd: 0.02 }),
     ])
     expect(report.totals.messages).toBe(4)
     expect(report.totals.deflected).toBe(2)
@@ -429,7 +431,7 @@ describe('the deflection rate an operator reads (AGL-2486)', () => {
       route: '/acme',
       model: 'claude-sonnet-5',
       tier: 'free',
-      estCostUsd: 0.01,
+      providerCostUsd: 0.01,
     })
     expect(row.deflected).toBe(false)
     expect(mineAssistSignals([row]).totals.deflectionRate).toBe(0)
@@ -440,13 +442,13 @@ describe('the deflection rate an operator reads (AGL-2486)', () => {
     // turn count and move the money not at all. A build that metered the
     // saving as spend would report a rising rate and a rising bill together.
     const report = mineAssistSignals([
-      signal({ deflected: true, model: 'docs-retrieval', estCostUsd: 0 }),
-      signal({ estCostUsd: 0.02 }),
+      signal({ deflected: true, model: 'docs-retrieval', providerCostUsd: 0 }),
+      signal({ providerCostUsd: 0.02 }),
     ])
-    expect(report.totals.estCostUsd).toBeCloseTo(0.02, 6)
+    expect(report.totals.providerCostUsd).toBeCloseTo(0.02, 6)
     expect(report.totals.byModel['docs-retrieval']).toMatchObject({
       messages: 1,
-      estCostUsd: 0,
+      providerCostUsd: 0,
     })
   })
 })
@@ -511,7 +513,7 @@ describe('/api/ai/admin/signals authorization (AGL-2252)', () => {
             outputTokens: 40,
             cacheReadTokens: 900,
             cacheWriteTokens: 0,
-            estCostUsd: 0.01,
+            providerCostUsd: 0.01,
             docsPaths: ['/publish#steps'],
             stopReason: 'end_turn',
             feedback: 'down',
@@ -528,7 +530,7 @@ describe('/api/ai/admin/signals authorization (AGL-2252)', () => {
             outputTokens: 10,
             cacheReadTokens: 0,
             cacheWriteTokens: 0,
-            estCostUsd: 0.002,
+            providerCostUsd: 0.002,
             docsPaths: [],
             stopReason: 'end_turn',
             feedback: null,
@@ -555,7 +557,7 @@ describe('/api/ai/admin/signals authorization (AGL-2252)', () => {
     // the current UTC day and handed through untouched.
     expect(payload.freeSpend).toEqual({
       day: '2026-09-14',
-      estCostUsd: 21.5,
+      providerCostUsd: 21.5,
       requests: 88,
       refusals: 3,
       ceilingUsd: 25,
@@ -596,7 +598,7 @@ describe('/api/ai/admin/signals authorization (AGL-2252)', () => {
     mockSignalsGet.mockResolvedValueOnce({
       size: ceiling + 1,
       docs: Array.from({ length: ceiling + 1 }, () =>
-        doc('org-a', { docsPaths: ['/p'], estCostUsd: 0 }),
+        doc('org-a', { docsPaths: ['/p'], providerCostUsd: 0 }),
       ),
     })
     const payload = await (await get({ token: 'tok' })).json()
@@ -616,7 +618,7 @@ describe('/api/ai/admin/signals authorization (AGL-2252)', () => {
     mockSignalsGet.mockResolvedValueOnce({
       size: 300,
       docs: Array.from({ length: 300 }, (_, index) =>
-        doc(`org-${index}`, { docsPaths: [`/p${index}`], estCostUsd: index }),
+        doc(`org-${index}`, { docsPaths: [`/p${index}`], providerCostUsd: index }),
       ),
     })
     const payload = await (await get({ token: 'tok', limit: '9999' })).json()
@@ -679,5 +681,51 @@ describe('the mined report states how tall each ranking was (AGL-2501)', () => {
     )
     expect(report.docsGaps).toHaveLength(4)
     expect(report.ranked.docsGaps).toBe(4)
+  })
+})
+
+describe('tokens by kind (AGL-2937)', () => {
+  it('splits model turns by kind with their cost, tokens, p95 output and cache hit rate, leaving docs answers out', () => {
+    const report = mineAssistSignals([
+      signal({ kind: 'page', providerCostUsd: 0.2, inputTokens: 1_000, cacheReadTokens: 3_000, cacheWriteTokens: 1_000, outputTokens: 2_000 }),
+      signal({ kind: 'page', providerCostUsd: 0.4, inputTokens: 1_000, cacheReadTokens: 3_000, cacheWriteTokens: 0, outputTokens: 6_000 }),
+      signal({ kind: 'assist', providerCostUsd: 0.01, inputTokens: 100, cacheReadTokens: 900, outputTokens: 40 }),
+      signal({ kind: 'assist', deflected: true, model: 'docs-retrieval', providerCostUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 }),
+    ])
+    expect(report.totals.byKind['page']).toMatchObject({
+      messages: 2,
+      inputTokens: 2_000,
+      cacheReadTokens: 6_000,
+      cacheWriteTokens: 1_000,
+      outputTokens: 8_000,
+      outputP95: 6_000,
+    })
+    expect(report.totals.byKind['page'].providerCostUsd).toBeCloseTo(0.6, 9)
+    expect(report.totals.byKind['page'].cacheHitRate).toBeCloseTo(6_000 / 9_000, 9)
+    // The docs answer bought nothing, so it has no tokens to split.
+    expect(report.totals.byKind['assist'].messages).toBe(1)
+    expect(kindTokenRows(report.totals.byKind).map((row) => row.kind)).toEqual(['page', 'assist'])
+  })
+
+  it('counts cache writes against the fleet cache-read rate', () => {
+    // A prefix written again as often as it is read: against fresh input and
+    // reads alone this reads as 67%, and it is the expensive month.
+    const report = mineAssistSignals([
+      signal({ inputTokens: 5_000, cacheReadTokens: 10_000, cacheWriteTokens: 10_000 }),
+    ])
+    expect(report.totals.cacheReadRate).toBeCloseTo(0.4, 9)
+  })
+
+  it('reads a signal written before the kind by its route', () => {
+    expect(assistSignalRow('org-1', 'ex-1', { route: '/api/ai/assist/element' }).kind).toBe('element')
+    expect(assistSignalRow('org-1', 'ex-1', { route: 'ai/jobs' }).kind).toBe('job')
+    expect(assistSignalRow('org-1', 'ex-1', { route: '/acme/hosts' }).kind).toBe('assist')
+    expect(assistSignalRow('org-1', 'ex-1', { route: 'ai/jobs', kind: 'theme' }).kind).toBe('theme')
+  })
+
+  it('takes the nearest rank, so a p95 is always a value that was seen', () => {
+    expect(nearestRankPercentile([], 0.95)).toBe(0)
+    expect(nearestRankPercentile([40], 0.95)).toBe(40)
+    expect(nearestRankPercentile(Array.from({ length: 20 }, (_, index) => (index + 1) * 100), 0.95)).toBe(1_900)
   })
 })

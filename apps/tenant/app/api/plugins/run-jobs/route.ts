@@ -45,8 +45,6 @@ import '../../../../utils/publish-schedule-job'
 // silent way to stop re-checking whether a verified sending domain still
 // publishes its records.
 import '../../../../utils/sending-domain-recheck-job'
-// The AI jobs beat (AGL-2904) is the AI plugin's (AGL-2939): its `/server`
-// entry registers it, and `ensureAll(['tenantApi'])` below is what loads it.
 // Imported for its registration side effect too (AGL-2495): it is what tells
 // core's job gate how to resolve a host's lockdown. Core cannot import the
 // admin lib (that edge is a cycle), so if this import goes, every job on the

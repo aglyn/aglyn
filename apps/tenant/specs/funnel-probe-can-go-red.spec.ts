@@ -334,6 +334,7 @@ describe('the intake verdict', () => {
     ['not-configured', 'not-configured'],
     ['host-unresolved', 'host-unresolved'],
     ['paused', 'submissions-paused'],
+    ['forms-off', 'forms-switched-off'],
     ['quota-exhausted', 'quota-exhausted'],
     ['ceiling-tripped', 'abuse-ceiling-tripped'],
     ['unavailable', 'intake-unavailable'],

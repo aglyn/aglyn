@@ -29,11 +29,13 @@ import {
   MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import RowActionsMenu, {
-  type RowActionsMenuItem,
-} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   ceilingedWindow,
@@ -53,16 +55,12 @@ import {
   Button,
   Chip,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Typography,
 } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import { collection, doc, Timestamp, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { templateProvenance } from '../model/template-provenance'
 import { createEmailScreen } from '../utils/create-email-screen'
 
@@ -161,14 +159,6 @@ export function EmailScreensCard(props: {
     [readScreens],
   )
 
-  // The page is a SLICE of a window this card already holds, not a query.
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const visible = useMemo(
-    () => emailScreens.slice(page * pageSize, page * pageSize + pageSize),
-    [emailScreens, page, pageSize],
-  )
-
   const handleCreate = async () => {
     try {
       const { screenId, versionId } = await createEmailScreen(
@@ -252,6 +242,58 @@ export function EmailScreensCard(props: {
     },
   ]
 
+  /*
+   * The templates are a window this card already holds, so the grid pages
+   * it. The name is a link AND the row opens the template.
+   */
+  const columns: GridColDef[] = [
+    {
+      field: 'displayName',
+      headerName: 'Template',
+      flex: 1,
+      minWidth: 220,
+      valueGetter: (_value, row) => templateName(row),
+      renderCell: ({ row, value }) => (
+        <AppLink
+          href={templateHref(row)}
+          // The row's own handler would fire too and push the same route
+          // twice — one history entry per back press.
+          onClick={(event: { stopPropagation: () => void }) =>
+            event.stopPropagation()
+          }
+        >
+          {value}
+        </AppLink>
+      ),
+    },
+    {
+      /*
+        WHOSE template this is, where the reader is choosing between them. An
+        installed one is versioned by its publisher and can be withdrawn, which
+        is not a property a name can carry.
+       */
+      field: 'origin',
+      headerName: 'Origin',
+      width: 140,
+      valueGetter: (_value, row) =>
+        templateProvenance(row).origin === 'installed' ? 'Installed' : 'Yours',
+      renderCell: ({ value }) =>
+        value === 'Installed' ? (
+          <Chip size="small" label="Installed" />
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            {'Yours'}
+          </Typography>
+        ),
+    },
+    listActionsColumn(
+      (row) => (
+        <ListRowActions label={templateName(row)} items={rowActions(row)} />
+      ),
+      { width: 72 },
+    ),
+  ]
+
   return (
     <CardDisplay
       header={'Templates'}
@@ -279,78 +321,13 @@ export function EmailScreensCard(props: {
               'only.'}
           </Typography>
         ) : (
-          <>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'Template'}</TableCell>
-                  <TableCell>{'Origin'}</TableCell>
-                  <TableCell align="right" />
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {visible.map((screen: any) => (
-                  <TableRow
-                    key={screen.$id}
-                    hover
-                    onClick={() => router.push(templateHref(screen))}
-                    sx={{ cursor: 'pointer' }}
-                  >
-                    <TableCell>
-                      {/*
-                        The row's own handler would fire too and push the same
-                        route twice — one history entry per back press.
-                       */}
-                      <AppLink
-                        href={templateHref(screen)}
-                        onClick={(event: { stopPropagation: () => void }) =>
-                          event.stopPropagation()
-                        }
-                      >
-                        {templateName(screen)}
-                      </AppLink>
-                    </TableCell>
-                    <TableCell>
-                      {/*
-                        WHOSE template this is, where the reader is choosing
-                        between them. An installed one is versioned by its
-                        publisher and can be withdrawn, which is not a property
-                        a name can carry.
-                       */}
-                      {templateProvenance(screen).origin === 'installed' ? (
-                        <Chip size="small" label="Installed" />
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">
-                          {'Yours'}
-                        </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell
-                      align="right"
-                      sx={{ width: 56 }}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <RowActionsMenu
-                        label={templateName(screen)}
-                        items={rowActions(screen)}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <ListPagination
-              page={page}
-              pageSize={pageSize}
-              rowCount={visible.length}
-              count={emailScreens.length}
-              onPageChange={setPage}
-              onPageSizeChange={(next) => {
-                setPageSize(next)
-                setPage(0)
-              }}
-            />
-          </>
+          <ListTable
+            aria-label="Email templates"
+            rows={emailScreens}
+            columns={columns}
+            rowHeight={TABLE_ROW_HEIGHT}
+            onOpen={(_id, row) => router.push(templateHref(row))}
+          />
         )}
         {truncated ? (
           <Alert severity="info">

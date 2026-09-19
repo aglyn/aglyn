@@ -34,7 +34,12 @@ import {
   mdiOpenInNew,
 } from '@aglyn/shared-data-mdi'
 import { CONSENT_OPT_OUT_TITLE } from '@aglyn/aglyn/app-utils/consent-banner-ui'
-import { isEnterpriseOrg, PLAN_LABELS, type OrgPlan } from '@aglyn/aglyn'
+import {
+  isEnterpriseOrg,
+  PLAN_LABELS,
+  readOrgPlanComp,
+  resolveEffectivePlan,
+} from '@aglyn/aglyn'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   useUser,
@@ -155,11 +160,15 @@ export function UserMenu() {
   const resolvedName = useUserName()
   const name = resolvedName || 'Account'
   const email = user?.email ?? ''
-  const plan = org?.plan
+  // The plan the workspace GETS (AGL-3034): a staff comp names a plan the
+  // stored field does not, and a dead subscription's stored plan is not one
+  // the workspace has. Named only when there is a plan to name — stored, or
+  // granted by a comp — so an org that has never had one still shows none.
+  const plan = org ? resolveEffectivePlan(org) : undefined
   const planLabel = isEnterpriseOrg(org)
     ? PLAN_LABELS.enterprise
-    : plan
-      ? (PLAN_LABELS[plan as OrgPlan] ?? '')
+    : plan && (org?.plan || readOrgPlanComp(org))
+      ? (PLAN_LABELS[plan] ?? '')
       : ''
   // Only pitch an upgrade once the org doc has resolved (AGL-887) — while
   // it's loading (or the read failed) `plan` is undefined, which would show

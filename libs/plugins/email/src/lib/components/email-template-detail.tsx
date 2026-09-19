@@ -28,6 +28,7 @@ import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   useConsoleHostRoute,
   useFirestore,
@@ -40,7 +41,6 @@ import {
   Chip,
   Divider,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -585,7 +585,7 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
           <Section title="Who this went to">
             {report.audiences.length ? (
               <>
-                <Table size="small">
+                <ScrollTable size="small">
                   <TableHead>
                     <TableRow>
                       <TableCell>{'Audience'}</TableCell>
@@ -606,7 +606,7 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                </ScrollTable>
                 {/*
                  * The naming rule, stated rather than left to be discovered
                  * from a list whose name no longer matches the one in the
@@ -629,7 +629,7 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
             <>
               <Divider />
               <Section title="Emails using this template">
-                <Table size="small">
+                <ScrollTable size="small">
                   <TableHead>
                     <TableRow>
                       <TableCell>{'Subject'}</TableCell>
@@ -707,7 +707,7 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                </ScrollTable>
               </Section>
             </>
           ) : null}

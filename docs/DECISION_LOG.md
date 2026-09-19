@@ -92,6 +92,85 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-16 — The site admin bar is released to every site, on every plan
+
+- **Decided by:** the account owner, 2026-09-16, as recorded in AGL-3041: the admin bar's rollout was never finished, and it is to be fully released and on by default.
+- **Scope:** packaging
+- **Evidence:** `RELEASE_FLAGS` in `libs/aglyn/src/lib/app-utils/release-flags.ts` (`release_edit_bar`, `defaultEnabled: true`) and `cloud/firebase-remoteconfig.template.json` (`"enabled":true`), held together by `release-flags-template.spec.ts`; production Remote Config template v11, which published only that parameter, with its `adminAudit` row; the bar checked on a production tenant site, where a signed-in editor got it and an anonymous visitor got nothing; the `release_edit_bar` entry dropped from `apps/console/constants/docs-release-flags.ts` and the rolling-out disclosures taken down from the two pages it watched; the mint gate scoped to the site being minted for (AGL-3062); AGL-3041.
+
+**No price, band or entitlement moves.** The bar is on for every site on every plan,
+Free included. The count of today's views of the page on it stays behind
+`screenAnalytics`, which is Pro+. `release_edit_bar` stays the kill switch: turned off
+for the platform, or for one organization by a staff override, the bar disappears and
+every outstanding edit token stops working.
+
+---
+
+## 2026-09-15 — An AI credit carries a markup: the catalog's billed rate and the provider's rate are two figures, and cost is measured at the provider's
+
+- **Decided by:** the account owner on 2026-09-15 (AGL-3015). Asked whether to correct the balanced tier's catalog rate down to the vendor's published list, they kept the higher figure and named it deliberate: the platform is upcharging on AI, and the answer to cost is to spend fewer tokens rather than to charge less for them.
+- **Scope:** pricing, packaging, policy
+- **Evidence:** `AiCatalogRates`, `aiRatesAtList`, `aiProviderRatesForModel`, `aiBilledRatesForModel`, `estimateAiProviderCostUsd` and `estimateAiBilledUsd` in `libs/plugins/ai/src/lib/providers/catalog.ts`; `ASSIST_PROVIDER_COST_FIELD` and `assistProviderCostUsd` in `libs/aglyn/src/lib/app-utils/assist-credits.ts`; the second increment in `writeSignalAndRollup` (`libs/plugins/ai/src/lib/usage/assist-usage.ts`); the readers switched in `usage/staff-org-ai.ts`, `usage/assist-signal-mining.ts`, `server/ai-admin-orgs-spend.ts`, `apps/console/app/api/_lib/org-cogs.ts`, `apps/console/app/api/admin/margin-utilization/route.ts` and the COGS line of `apps/console/app/api/billing/report-usage/route.ts`; `libs/plugins/ai/src/lib/providers/billed-rate-is-not-provider-cost.spec.ts`; AGL-3015, AGL-3011, AGL-2937.
+
+**No locked price moves.** No price, band, credit rate or overage figure
+changes, and no customer is charged differently. What changes is which figure
+the platform's own cost and margin surfaces read.
+
+**What was wrong.** One rate table answered two questions. The balanced tier —
+which serves most requests — is billed above what the vendor charges, and that
+markup was being read as though it were spend. Everything reasoning about real
+money was therefore computed from a price nobody pays: the staff cost meters,
+the discount guardrail's cost of goods, the fleet margin page, and the overage
+exposure figures AGL-3011 is sized against.
+
+**What a credit is now, stated once.** A credit is **$0.001 of BILLED spend**,
+not of provider spend. Every band, ceiling, cap, overage rate and invoice line
+keeps that reading and is unchanged. What a credit COSTS us is at or below a
+tenth of a cent, and on the balanced tier it is two thirds of one. The rule
+retired by this entry is the framing in the 2026-09-14 add-on entry and the
+Free-taste entry above it, where a credit was described as a tenth of a cent of
+provider spend; those entries stand as written and their cost figures are read
+as upper bounds.
+
+**Consequences worth stating plainly:**
+
+* `ASSIST_CREDIT_MIN_MARGIN_PCT` is unchanged at 50%, and every retail rate on
+  the ladder still clears it — by **more** than before, never less. The cost
+  side of `assistCreditRateMarginPct` is the billed rate, which is at or above
+  what we pay, so the figure it reports is a **lower bound** on the realized
+  line margin. A rate that clears the floor there clears it on every model mix.
+* The staff margin card was comparing a billed-rate spend figure against a
+  billed-rate revenue figure, so a workspace that drew exactly its band read as
+  **exactly break-even** whatever its tokens cost. On the balanced tier that
+  same month now reads about **33% margin** on the plan's assist share.
+* AGL-3011's exposure arithmetic was conservative rather than wrong: it put $50
+  of retail overage at $16.67–$25 of provider cost, and the true figure is
+  lower. Its guards stand; they are simply not as tight as they looked.
+* Periods closed before this shipped carry only the billed figure and answer
+  with it, which **over-states** what we paid rather than hiding it.
+
+## 2026-09-15 — Manual AI model picks by plan, the org-wide model restriction, and who may set AI allotments are confirmed as built
+
+- **Decided by:** the account owner on 2026-09-15. Asked in the engineering session to confirm or change the defaults AGL-2942 had chosen, they confirmed all three as built.
+- **Scope:** packaging
+- **Evidence:** `AI_PLAN_MODEL_TIERS` and `AI_MODEL_RESTRICTION_PLANS` in `libs/plugins/ai/src/lib/providers/model-choice.ts`; the write rules in `libs/plugins/ai/src/lib/server/ai-allotments.ts`; merged in `c62c9c574`, with follow-ups `db4517be3`, `ef6f789a4`, `26c0b981f` and `6da9fe350`; `match /aiAllotments/{subject}` in `cloud/firebase-firestore.rules`; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2942.
+
+**No locked price moves.** No price, band, credit rate or overage figure changes.
+
+1. **Manual model picks:**
+   - Free runs on Auto only.
+   - Starter, Pro and Business may pick the fast and balanced tiers.
+   - Scale, Advanced, Agency and Enterprise add the deep tier.
+
+   Auto, the routing table's choice, stays the default on every plan. A plan limits only a manual pick.
+2. **Org-wide model restriction:** Agency and Enterprise only. Clearing a restriction is always allowed.
+3. **Allotment writes:**
+   - `billing.manage` sets a member's allotment, a site's allotment and the org-wide restriction.
+   - A site's admin collaborator may also set another collaborator's allotment on that site, but never their own.
+   - Allotments sit inside the org's band and never grant credits beyond it.
+
+---
+
 ## 2026-09-14 — Outreach is on no plan: `features.outreach` is false on every tier, Enterprise included, until packaging is decided
 
 - **Decided by:** the scope of AGL-2974, filed in the account owner's Linear workspace on 2026-09-14: the Outreach entitlement is false on every plan including Enterprise, because which plans carry sequences and connected mailboxes, and at what caps, is an owner decision that has not been made. That decision is AGL-2976, still open. This entry records that no packaging is decided; it is not a packaging decision.

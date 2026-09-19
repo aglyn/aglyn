@@ -54,7 +54,9 @@ Sorted by whether a mechanism enforces the period.
 ### Enforced by a live TTL policy
 
 Verified against `gcloud firestore fields ttls list --project=aglyn-main
---database='(default)'` on 2026-08-18 — all five `ACTIVE`.
+--database='(default)'` on 2026-08-18 — the first five rows, all `ACTIVE`. The
+`aiJobs` and `months` policies were enabled on 2026-09-14 and read back `ACTIVE`
+the same day (`docs/FIRESTORE_MANUAL_CONFIG.md`).
 
 | Collection group | Field | Period | Contents | Evidence |
 | --- | --- | --- | --- | --- |
@@ -63,6 +65,10 @@ Verified against `gcloud firestore fields ttls list --project=aglyn-main
 | `mediaTombstones` | `expiresAt` | **7 days** | DAM undo records. Each holds a deleted media document **verbatim** — alt text, tags, custom metadata, `visibleTo` scope tokens. Bounded to the bucket's 7-day soft-delete window because a tombstone that outlives the bytes it addresses can only produce a failed restore while still being a copy of customer data. | `media-tombstone.ts:93` (AGL-1467) |
 | `cspViolationDaily` | `expiresAt` | **60 days** | CSP violation counters — one doc per (day × app × directive × disposition × blocked origin). Never report bodies. | `csp-aggregate.ts:101` (AGL-1799) |
 | `rateLimits` | `expiresAt` | window-scoped; degradation markers **30 days**, signup refusals **7 days** | IP-keyed counters and refusal markers. | `rate-limit-store.ts:84,257` |
+| `aiCrmAnswers` | `expiresAt` | **14 days** | A CRM job's answer: a contact's, company's, deal's or lead's summary and proposed next step, a one-to-one email draft, or an import's column matches — written from a person's CRM record, with the record's id and the asking `uid`. Written only by the server and read only through `GET /api/ai/crm/{jobId}`, which asks the CRM again whether the reader may see the record. A person erasure does not sweep it; the door stops serving an erased person's answer at once and the policy removes it. The policy is declared; enabling it in gcloud is owed. | `ai-job-crm-step.ts` stamps `aiCrmAnswerExpiry(now)` (AGL-2917) |
+| `aiJobs` | `expiresAt` | **180 days** — the same clock as an Assist exchange | An AI generation job: the customer's **brief verbatim**, the step ledger with its credit figures, the outputs it named (a `text` output carries its copy on the document), the creating `uid`. Written only by the server; the drafts a job creates are ordinary content and live as long as the workspace does. Enabled and read back `ACTIVE` on 2026-09-14. | `ai-jobs.ts` `createAiJob` stamps `assistExchangeExpiry(now)` (AGL-2904) |
+| `aiInsights` | `expiresAt` | **180 days** — the job's own clock | An insight job's answer: the question verbatim, the tables of aggregates it read (counts, sums, rates and labels, never a record) and the insights written about them. Written only by the server and read only through `GET /api/ai/insights/{jobId}`. The policy is declared; enabling it in gcloud is owed. | `ai-job-insight-step.ts` stamps the job's `expiresAt` (AGL-2915) |
+| `months` (under `aiUsageByUser`) | `expiresAt` | **13 months** past the month the document describes | A person's monthly AI usage in one workspace, keyed by their `uid`: credits, provider spend, request and refusal counts, a split by kind and by site. Integers and an id, no prose. Written only by the server, in the same batch as the workspace's own month. Enabled and read back `ACTIVE` on 2026-09-14. | `ai-usage-by-user.ts` `recordUserAiUsage` stamps `aiUsageByUserExpiry(month)` (AGL-2928) |
 
 `docs/FIRESTORE_MANUAL_CONFIG.md` lists three of these five. `analytics` and
 `screenAnalytics` are live and undocumented there, and the `cspViolationDaily`
@@ -83,8 +89,6 @@ that blurs the two is worse than one that admits the gap. Commands in
 | Collection group | Field | Period | Contents | Evidence |
 | --- | --- | --- | --- | --- |
 | `assistExchanges` | `expiresAt` | **180 days** | The **verbatim** half of an Assist exchange: the question, the answer, the asking `uid`, the host. | `assist-usage.ts` `ASSIST_EXCHANGE_RETENTION_DAYS` (AGL-1972) |
-| `aiJobs` | `expiresAt` | **180 days** — the same clock as an exchange | An AI generation job: the customer's **brief verbatim**, the step ledger with its credit figures, the outputs it named (a `text` output carries its copy on the document), the creating `uid`. Written only by the server; the drafts a job creates are ordinary content and live as long as the workspace does. **Declared and written; the gcloud policy is owed** (`docs/FIRESTORE_MANUAL_CONFIG.md`). | `ai-jobs.ts` `createAiJob` stamps `assistExchangeExpiry(now)` (AGL-2904) |
-| `months` (under `aiUsageByUser`) | `expiresAt` | **13 months** past the month the document describes | A person's monthly AI usage in one workspace, keyed by their `uid`: credits, provider spend, request and refusal counts, a split by kind and by site. Integers and an id, no prose. Written only by the server, in the same batch as the workspace's own month. **Declared and written; the gcloud policy is owed** (`docs/FIRESTORE_MANUAL_CONFIG.md`). | `ai-usage-by-user.ts` `recordUserAiUsage` stamps `aiUsageByUserExpiry(month)` (AGL-2928) |
 | `churnSurveyDetails` | `expiresAt` | **365 days** | The churn survey's ≤500 characters of free text, split off the survey document. | `_lib/retention.ts` `CHURN_SURVEY_DETAIL_RETENTION_DAYS` (AGL-1978) |
 | `apiIdempotency` | `expiresAt` | **30 days** | Replay keys **and the original response body** — for the REST API, a copy of the created record's `values`. | `api-idempotency.ts` `API_IDEMPOTENCY_RETENTION_DAYS` (AGL-1978) |
 
@@ -134,15 +138,43 @@ A TTL deletes documents, so a period on the survey itself would have taken the
 reason with it; that is the general shape of both splits.
 
 The same is true of everything under `users/{uid}/…` — profile, org
-memberships, host memberships, notifications, passkeys, `legalAcceptances` —
-which `eraseUser` removes with `recursiveDelete(userRef)`
-(`erase.ts:938`, AGL-1140).
+memberships, host memberships, notifications, passkeys, `legalAcceptances`, and
+the Free plan's per-account AI usage count `users/{uid}/aiUsage/{YYYY-MM}`
+(AGL-2925), which has no TTL and is kept with the account — which `eraseUser`
+removes with `recursiveDelete(userRef)` (`erase.ts:938`, AGL-1140).
+
+**AI answers about CRM records (AGL-2917) are one more org subcollection**,
+`orgs/{orgId}/aiCrmAnswers/{jobId}`, so the workspace cascade reaches them. A
+person erasure (AGL-2623) does not: an answer names the record by id, and the
+two-week clock in the TTL table above is what removes a copy written from an
+erased person's record. It is never served in the meantime, because the answer
+door asks the CRM, which no longer finds the record.
 
 **AI generation jobs (AGL-2904) are one more org subcollection**,
 `orgs/{orgId}/aiJobs/{jobId}`, so the cascade reaches them too. Each carries
 the customer's brief verbatim and expires at 180 days on the exchange's clock
-(the owed-policy table above); the drafts a job creates are ordinary screens,
+(the live TTL table above); the drafts a job creates are ordinary screens,
 components and versions under the host, retained as content is.
+
+**AI insights (AGL-2915) are two more org subcollections and one top-level
+queue.** An insight job's answer is `orgs/{orgId}/aiInsights/{jobId}`, on the
+job's own 180-day clock (the TTL table above). The weekly insights keep
+`orgs/{orgId}/aiInsightDigests/{week}`: the job id, site name and state of each
+site's digest that week and, until a site's digest settles, the ids of the
+members already sent it. Settling replaces the site's entry without them, so a
+settled week names nobody. No TTL; the workspace cascade reaches it.
+`aiInsightDigestQueue/{week}` is top-level and holds only workspace ids, each
+with whether it still owes a delivery; it names no person. A person's opt-in is
+the `insightDigests` map on `users/{uid}`, which the account erasure removes
+with the document.
+
+**AI allotments (AGL-2942) are one more org subcollection**,
+`orgs/{orgId}/aiAllotments/{subject}`: whom an allotment applies to, its
+monthly limit, any models it allows and who set it. No TTL. An allotment lives
+until it is changed or removed, and the workspace cascade reaches it; an
+account erasure also deletes the allotments set for that person in the
+workspaces they belong to when it runs (`eraseAiAllotmentsForUser` in
+`libs/plugins/ai/src/lib/usage/ai-allotments.ts`).
 
 **A person's AI usage (AGL-2928) is one more org subcollection**,
 `orgs/{orgId}/aiUsageByUser/{uid}/months/{YYYY-MM}`, so the workspace cascade

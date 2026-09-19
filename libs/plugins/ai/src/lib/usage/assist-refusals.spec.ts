@@ -95,6 +95,8 @@ describe('assistRefusalCounts', () => {
       band: 3,
       cap: 12,
       messages: 0,
+      // A hard allotment a manager set (AGL-2942).
+      allotment: 0,
       budget: 0,
       account: 0,
       requests: 0,
@@ -110,6 +112,7 @@ describe('assistRefusalCounts', () => {
       band: 0,
       cap: 0,
       messages: 0,
+      allotment: 0,
       budget: 2,
       account: 0,
       requests: 0,

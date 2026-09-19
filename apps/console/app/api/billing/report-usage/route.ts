@@ -16,7 +16,16 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { assistMonthOverage } from '@aglyn/aglyn/app-utils/assist-credits'
+import {
+  ASSIST_PROVIDER_COST_FIELD,
+  assistMonthOverage,
+  assistProviderCostUsd,
+} from '@aglyn/aglyn/app-utils/assist-credits'
+import {
+  pluginBillsMeteredLine,
+  runPluginMeteredLineClose,
+} from '@aglyn/aglyn/plugin-manager/plugin-metered-lines'
+import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
@@ -498,6 +507,14 @@ async function hostUsage(
  * already-reported org-months. Validate rates against a real invoice
  * month before enabling live billing.
  */
+/**
+ * The name this sweep knows the AI overage line by, and the name a plugin
+ * claims it under. One string, stated here because this is the file that
+ * computes the line — a plugin's internal name for it would be the plugin's
+ * to change.
+ */
+const ASSIST_OVERAGE_METER_LINE_ID = 'assist-overage'
+
 async function handler(request: Request): Promise<Response> {
   const {
     method,
@@ -572,6 +589,36 @@ async function handler(request: Request): Promise<Response> {
   // on the 1st must not decide that August is open for one org and closed for
   // the next, which would report half the platform and freeze the other half.
   const closed = monthIsClosed(month)
+  /*==========================================
+   * A METER LINE A PLUGIN BILLS FOR ITSELF (AGL-3011).
+   *
+   * One line of the figure below — AI credits past a plan's included band —
+   * can be billed by the AI plugin as it accrues, on its own one-off
+   * invoices, from a month the plugin names. From that month the line must
+   * be LEFT OUT of what this sweep meters, or the customer pays for it
+   * twice.
+   *
+   * Only the BILLING moves. The line is still measured and still written to
+   * the month's audit fields below, so a month's usage history reads the
+   * same either way and the handover is visible in it.
+   *
+   * Resolved ONCE for the sweep, like `closed` above and for the same
+   * reason: a run straddling midnight on the 1st must not bill one org
+   * through the meter and the next by invoice for the same month. The
+   * plugins' declarations are loaded first because this is a core cron that
+   * never touches a plugin's own doors — and a failure to load them leaves
+   * the line billed through the meter, which is the channel that already
+   * works.
+   *=========================================*/
+  try {
+    await registerPluginServerDeclarations()
+  } catch (error) {
+    console.error('[report-usage] plugin declarations failed', error)
+  }
+  const assistOverageBilledByPlugin = pluginBillsMeteredLine(
+    ASSIST_OVERAGE_METER_LINE_ID,
+    month,
+  )
   const stripeKey = process.env.STRIPE_SECRET_KEY
   const meterEventName =
     process.env.STRIPE_METER_EVENT_NAME ?? 'aglyn_metered_usage'
@@ -1100,13 +1147,17 @@ async function handler(request: Request): Promise<Response> {
        * pay a provider, and the discount guardrail's entire job is to compare
        * revenue against what an org costs us.
        *
-       * Already dollars: `estCostUsd` is computed at the provider's list
-       * rates where the tokens were counted. Re-deriving it from tokens here
-       * would be a second cost model to drift from the first.
+       * Already dollars, and the PROVIDER figure of the two the rollup keeps
+       * (AGL-3015): `estCostUsd` beside it is the same tokens at the billed
+       * rates a customer's credits come out of, and a cost of goods carrying
+       * our own markup would understate the margin the guardrail defends.
+       * Re-deriving either from tokens here would be a second cost model to
+       * drift from the first.
        *=========================================*/
-      const assistCostRaw = Number(assistUsageSnap.get('estCostUsd') ?? 0)
-      const assistCostUsd =
-        Number.isFinite(assistCostRaw) && assistCostRaw > 0 ? assistCostRaw : 0
+      const assistCostUsd = assistProviderCostUsd(
+        assistUsageSnap.get('estCostUsd'),
+        assistUsageSnap.get(ASSIST_PROVIDER_COST_FIELD),
+      )
       /*==========================================
        * AGLYN ASSIST OVERAGE, PRICED ONTO THE INVOICE (AGL-2653).
        *
@@ -1118,6 +1169,11 @@ async function handler(request: Request): Promise<Response> {
        * to, and prices the rest — so the console meter and this line cannot
        * disagree about what was over.
        *
+       * Off the BILLED figure, not the provider one above it (AGL-3015). A
+       * credit is a fixed quantity of billed spend, so this is the only
+       * reading under which the credits invoiced here are the credits the
+       * customer's own meter counted down.
+       *
        * The org's hard-cap switch is NOT read here, on purpose. The switch
        * lives at the gate: on, `reserveAssistMessage` refuses at the band and
        * at most the one exchange that crossed the line can land past it; off,
@@ -1127,7 +1183,19 @@ async function handler(request: Request): Promise<Response> {
        * erase a month's overage, which is AGL-2399 on a different meter. A
        * plan with no band or no rate prices zero structurally.
        *=========================================*/
-      const assistOverage = assistMonthOverage(orgData, assistCostUsd)
+      const assistBilledRaw = Number(assistUsageSnap.get('estCostUsd') ?? 0)
+      const assistOverage = assistMonthOverage(
+        orgData,
+        Number.isFinite(assistBilledRaw) && assistBilledRaw > 0 ? assistBilledRaw : 0,
+      )
+      // WITHHELD from the meter figure once a plugin bills the line itself
+      // (AGL-3011) — the same shape as `emailOverageUsd` above, and for the
+      // same reason: one month's usage must reach exactly one invoice. The
+      // priced figure is kept and still written to the audit fields below,
+      // so the month still records what the overage WAS.
+      const assistOverageBilledUsd = assistOverageBilledByPlugin
+        ? 0
+        : assistOverage.overageMonthlyUsd
       /*==========================================
        * THE POS FEE THAT STRIPE CANNOT COLLECT (AGL-2111).
        *
@@ -1155,11 +1223,32 @@ async function handler(request: Request): Promise<Response> {
         Math.round(apiQuota.overageMonthlyUsd * 100) +
         Math.round(contactsOverageUsd * 100) +
         Math.round(emailOverageUsd * 100) +
-        Math.round(assistOverage.overageMonthlyUsd * 100) +
+        Math.round(assistOverageBilledUsd * 100) +
         offlinePosFeeCents
       // `usageRef` / `existing` come from the batch above (AGL-2399) — the
       // stock basis needs the same document this guard does, and reading it
       // twice per org bought nothing.
+      // THE PLUGIN'S CLOSE-OUT (AGL-3011), before the already-reported skip
+      // below: the remainder of a line a plugin bills itself is owed whether
+      // or not the meter reported for this workspace, and a month that has
+      // reported is exactly the month whose remainder is due. Awaited, and
+      // isolated by the registry — a plugin's Stripe call failing must not
+      // cost the platform's own metering.
+      //
+      // No cost at all before a plugin claims the line and names a month:
+      // `runPluginMeteredLineClose` answers `false` without calling anything.
+      //
+      // The billing read is made only when a plugin actually claims the line
+      // for this month, so a deployment with no claim adds no read per org.
+      if (closed && assistOverageBilledByPlugin) {
+        const closeCustomerId = (await readOrgBilling(orgId)).stripeCustomerId
+        await runPluginMeteredLineClose(ASSIST_OVERAGE_METER_LINE_ID, {
+          orgId,
+          month,
+          org: orgData as Record<string, unknown>,
+          stripeCustomerId: closeCustomerId ? String(closeCustomerId) : null,
+        })
+      }
       if (existing.get('reportedAt')) {
         orgResults[orgId] = { billedCents, skipped: true }
         continue
@@ -1392,6 +1481,13 @@ async function handler(request: Request): Promise<Response> {
           assistCreditsOverage: assistOverage.overageCredits,
           assistOverageUsd: assistOverage.overageMonthlyUsd,
           assistOverageRateUsd: assistOverage.overageRateUsd,
+          // Whether the meter billed it, or a plugin did (AGL-3011). Same
+          // pair, same reason, as `emailSendsOverageBilled` below: a month
+          // billed through the other channel must not read as a month that
+          // stayed inside its band, and the handover must be countable from
+          // the rows rather than inferred from a deployment variable.
+          assistOverageMeteredUsd: assistOverageBilledUsd,
+          assistOverageBilledByPlugin,
           // The cash/folio POS platform fee this month (AGL-2111), and the
           // number of sales it came from. Recorded ALWAYS, including at zero,
           // so "this store took no cash" is legible as a fact rather than as

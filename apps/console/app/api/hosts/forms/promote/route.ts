@@ -17,7 +17,9 @@
 
 import {
   encodeStoredNodes,
+  FORMS_PLUGIN_ID,
   hostRoleCanPublish,
+  isHostPluginEnabled,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
 import {
@@ -166,6 +168,9 @@ async function handler(request: Request): Promise<Response> {
       formId,
       form: formSnapshot.data() as Record<string, unknown>,
       storedNodes: versionSnapshot.get('nodes'),
+      // The site's own plugin set (AGL-3029): a site that switched Forms off
+      // does not draw a form or accept its submissions, so none goes live.
+      formsOnForSite: isHostPluginEnabled(org, hostSnapshot.data(), FORMS_PLUGIN_ID),
     })
     if (isFormPromotionRefusal(resolved)) {
       return Response.json(resolved.body, { status: resolved.status })

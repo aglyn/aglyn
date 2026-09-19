@@ -1,0 +1,28 @@
+{
+  "id": "chat-publish-first-screen",
+  "kind": "chat",
+  "brief": "How do I publish my first screen so visitors can see it?",
+  "framing": null,
+  "inventory": null,
+  "docsUrls": ["https://docs.example.com/building-sites/publishing-a-screen"],
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: the plain steps, the documentation it was given linked, and one technical paragraph.",
+      "plan": null,
+      "answer": "Open the screen in the Besigner and press **Publish** in the top bar. The version you publish is what visitors see; your later edits stay in a draft until you publish again. See [Publishing a screen](https://docs.example.com/building-sites/publishing-a-screen) for what each option in the publish dialog does.\n\nUnder the hood: publishing marks that screen version as the live one for its route, so the next request for its path serves it.",
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A link to a page the answer was not grounded in.",
+      "answer": "Press **Publish** in the Besigner. There is a longer guide at [this blog post](https://random.example.net/how-to-publish).",
+      "fails": ["rules"]
+    }
+  ]
+}

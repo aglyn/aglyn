@@ -15,11 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  PLAN_PRICING,
-  pluginRequestFromWeb,
-  resolveEffectivePlan,
-} from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   ASSIST_HARD_CAP_CONTROL_LABEL,
   ASSIST_OVERAGE_CAP_CONTROL_LABEL,
@@ -28,6 +24,7 @@ import {
   resolveAssistCreditBudget,
   resolveAssistHardCap,
   resolveAssistOverageCapUsd,
+  resolveAssistOverageRateUsdPer1k,
 } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
   emailUnverifiedResponse,
@@ -37,6 +34,23 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { logAiOverageControl } from '../activity/ai-activity'
+import { assistMonthOverage } from '@aglyn/aglyn/app-utils/assist-credits'
+import { assistUsageMonth } from '../usage/assist-usage'
+import { aiOverageBillsByInvoice } from '../billing/ai-overage-cutover'
+import { aiOverageNextChargeUsd } from '../billing/ai-overage-gate'
+import {
+  AI_BILLING_STANDING_DOC,
+  AI_BILLING_SUBCOLLECTION,
+  readAiOverageMonthLedger,
+} from '../billing/ai-overage-ledger'
+import {
+  AI_OVERAGE_THRESHOLD_USD,
+  aiOverageCardOnFile,
+  aiOverageEffectiveCeilingUsd,
+  aiOverageStandingCeilingUsd,
+  aiOverageStep,
+  readAiOverageStanding,
+} from '../billing/ai-overage-standing'
 import { FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
@@ -49,8 +63,10 @@ import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token
  * Read or set the org's own assist controls: the hard-cap switch (AGL-2653)
  * and the dollar ceiling on overage (AGL-2898).
  *
- * Credits past the plan's assist band are SOLD by default, at
- * `PLAN_PRICING.extraAssistCreditsUsdPer1k`. This route holds the two
+ * Credits past the plan's assist band are SOLD by default, at the rate
+ * `resolveAssistOverageRateUsdPer1k` answers — the plan's listed
+ * `extraAssistCreditsUsdPer1k`, or the add-on's rate on a plan that carries
+ * its band only with the add-on. This route holds the two
  * controls a customer has over that, and nothing else — it is not a consent
  * surface, and there is nothing here an org must do before assist works.
  *
@@ -74,6 +90,69 @@ import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token
  * is already the wall (`assistBandRefuses`), and storing a control that
  * changes nothing would read as protection the org does not have.
  */
+/**
+ * What the overage card needs to say about Aglyn's own limit (AGL-3011).
+ *
+ * Every figure is `null` before the cutover month. That is not a missing
+ * value: it is the honest answer while overage still bills on the monthly
+ * invoice, and rendering a ceiling and a "next charge" figure that nothing
+ * enforces would be a promise the platform is not yet keeping.
+ */
+async function readAiOverageStandingForCard(
+  orgRef: FirebaseFirestore.DocumentReference,
+  org: Parameters<typeof aiOverageEffectiveCeilingUsd>[0],
+): Promise<{
+  aglynCeilingUsd: number | null
+  overageStep: number | null
+  overageThresholdUsd: number | null
+  overageChargedUsd: number | null
+  overageChargeCount: number | null
+  overageNextChargeUsd: number | null
+  overagePaused: string | null
+  overageCardOnFile: boolean | null
+  overageBillsByInvoice: boolean
+}> {
+  const now = new Date()
+  const month = assistUsageMonth(now)
+  const empty = {
+    aglynCeilingUsd: null,
+    overageStep: null,
+    overageThresholdUsd: null,
+    overageChargedUsd: null,
+    overageChargeCount: null,
+    overageNextChargeUsd: null,
+    overagePaused: null,
+    overageCardOnFile: null,
+    overageBillsByInvoice: false,
+  }
+  if (!aiOverageBillsByInvoice(month)) return empty
+  const [standingSnapshot, usageSnapshot] = await Promise.all([
+    orgRef.collection(AI_BILLING_SUBCOLLECTION).doc(AI_BILLING_STANDING_DOC).get(),
+    orgRef.collection('assistUsage').doc(month).get(),
+  ])
+  const standing = readAiOverageStanding(
+    standingSnapshot.exists ? (standingSnapshot.data() ?? null) : null,
+  )
+  const ledger = readAiOverageMonthLedger(
+    usageSnapshot.exists ? (usageSnapshot.data() ?? null) : null,
+  )
+  const priced = assistMonthOverage(org, Number(usageSnapshot.get('estCostUsd') ?? 0))
+  return {
+    aglynCeilingUsd: aiOverageStandingCeilingUsd(standing, now),
+    overageStep: aiOverageStep(standing),
+    overageThresholdUsd: AI_OVERAGE_THRESHOLD_USD,
+    overageChargedUsd: ledger.paidUsd,
+    overageChargeCount: ledger.charges,
+    overageNextChargeUsd: aiOverageNextChargeUsd(
+      priced.overageMonthlyUsd,
+      ledger.invoicedUsd,
+    ),
+    overagePaused: standing.pause?.reason ?? null,
+    overageCardOnFile: aiOverageCardOnFile(standing) ?? null,
+    overageBillsByInvoice: true,
+  }
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -115,12 +194,24 @@ async function handler(request: Request): Promise<Response> {
     const capUsd = resolveAssistOverageCapUsd(org as never)
     const bandCredits = resolveAssistCreditBudget(org as never)
     // The rate the card quotes must be the rate the rollup bills, so it is
-    // served from the same table rather than duplicated into the bundle.
-    const overageRateUsdPer1k =
-      PLAN_PRICING[resolveEffectivePlan(org as never)].extraAssistCreditsUsdPer1k
+    // read through the one resolver every reader of the rate goes through.
+    // `PLAN_PRICING` alone is not that rate: Starter carries no listed band,
+    // and the add-on's rate is added by the resolver rather than written onto
+    // the table, where it would advertise a rate on a band the plan does not
+    // carry without the add-on (AGL-3014).
+    const overageRateUsdPer1k = resolveAssistOverageRateUsdPer1k(org as never)
     const sellsOverage = bandCredits !== null && overageRateUsdPer1k !== null
 
     if (action === 'get') {
+      // AGLYN'S OWN LIMIT BESIDE THE WORKSPACE'S (AGL-3011). The card shows
+      // both because the LOWER of the two binds, and a card that showed only
+      // the figure the workspace set would explain neither the refusal it
+      // gets at Aglyn's nor the charge it sees before its own is reached.
+      //
+      // `null` for every figure while the platform still bills overage on
+      // the monthly invoice, so the card keeps saying what is true today
+      // rather than describing a mechanism that is not running.
+      const overage = await readAiOverageStandingForCard(orgRef, org as never)
       return Response.json(
         {
           hardCap,
@@ -128,6 +219,7 @@ async function handler(request: Request): Promise<Response> {
           bandCredits,
           overageRateUsdPer1k,
           sellsOverage,
+          ...overage,
           label: ASSIST_HARD_CAP_CONTROL_LABEL,
           capLabel: ASSIST_OVERAGE_CAP_CONTROL_LABEL,
           minCapUsd: ASSIST_OVERAGE_CAP_MIN_USD,

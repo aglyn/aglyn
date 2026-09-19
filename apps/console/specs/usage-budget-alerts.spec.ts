@@ -61,6 +61,8 @@ interface SeededOrg {
   assistOverage?: { hardCap?: boolean; capUsd?: number | null }
   /** Per-org entitlement overrides, as staff write them. */
   entitlements?: Record<string, number>
+  /** Purchased seat add-ons, e.g. `{ aiAddon: 1 }` (AGL-2896). */
+  seatAddons?: Record<string, number>
 }
 
 let mockOrgs: SeededOrg[]
@@ -191,6 +193,7 @@ function fakeOrgDoc(org: SeededOrg) {
     ...(org.usageAlerts ? { usageAlerts: org.usageAlerts } : {}),
     ...(org.assistOverage ? { assistOverage: org.assistOverage } : {}),
     ...(org.entitlements ? { entitlements: org.entitlements } : {}),
+    ...(org.seatAddons ? { seatAddons: org.seatAddons } : {}),
   }
   return {
     id: org.id,
@@ -915,9 +918,9 @@ describe('the Assist margin guard is staff-facing (AGL-1528)', () => {
         assistEstCostUsd: 260,
         usageAlerts: {
           assistCogs: { month: MONTH, threshold: 1 },
-          // An org this far over has long since crossed the $40 refusal
-          // ceiling, and that announcement fires once a month — seeded as
-          // already spoken so this test counts margin alerts alone.
+          // The refusal announcement fires once a month wherever a ceiling
+          // binds — seeded as already spoken so this test counts margin
+          // alerts alone.
           assistCeiling: { month: MONTH, threshold: 1 },
         },
       }),
@@ -948,10 +951,12 @@ describe('the Assist margin guard is staff-facing (AGL-1528)', () => {
  * The HARD ceiling's announcement (AGL-2264).
  *
  * The alert above warns about a cost; this one reports a STOP. Past $40 the
- * reservation transaction refuses every further Assist request from the org,
- * at both entrypoints, so a customer's assistant has gone silent — and the
- * margin alert cannot be the thing that says so, because it speaks in whole
- * multiples of $25 and an org at $40 is still at 1x.
+ * reservation transaction refuses every further Assist request from a
+ * workspace with no AI band of its own, at both entrypoints, so its assistant
+ * has gone silent — and the margin alert cannot be the thing that says so,
+ * because it speaks in whole multiples of $25 and an org at $40 is still at
+ * 1x. A workspace WITH a band is measured against that band or an operator's
+ * explicit figure instead, and is not told about a $40 stop it never gets.
  *
  * The ceiling function is NOT faked in this suite. It is required through the
  * real implementation module in the `@aglyn/tenant-data-admin` mock above, so
@@ -963,7 +968,7 @@ describe('the REFUSAL is announced to staff in its own words (AGL-2264)', () => 
     // No environment variable: the ceiling ships armed at $40, so a fresh
     // deployment announces the refusal without anyone opting in.
     expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
-    mockOrgs = [seededOrg({ rollup: null, assistEstCostUsd: 41 })]
+    mockOrgs = [seededOrg({ plan: 'starter', rollup: null, assistEstCostUsd: 41 })]
     await run()
     const ceiling = mockStaffNotifications.filter((entry) =>
       entry.title.includes('REFUSING'),
@@ -983,7 +988,7 @@ describe('the REFUSAL is announced to staff in its own words (AGL-2264)', () => 
     // Without this, the test above is satisfied by a build that announces a
     // refusal for every org with any Assist cost at all. $39 is over the $25
     // review threshold — so the margin alert DOES fire — and under $40.
-    mockOrgs = [seededOrg({ rollup: null, assistEstCostUsd: 39 })]
+    mockOrgs = [seededOrg({ plan: 'starter', rollup: null, assistEstCostUsd: 39 })]
     await run()
     expect(
       mockStaffNotifications.filter((entry) => entry.title.includes('REFUSING')),
@@ -997,6 +1002,7 @@ describe('the REFUSAL is announced to staff in its own words (AGL-2264)', () => 
     // quiet on the very reading where the assistant went off.
     mockOrgs = [
       seededOrg({
+        plan: 'starter',
         rollup: null,
         assistEstCostUsd: 41,
         usageAlerts: { assistCogs: { month: MONTH, threshold: 1 } },
@@ -1007,9 +1013,30 @@ describe('the REFUSAL is announced to staff in its own words (AGL-2264)', () => 
     expect(mockStaffNotifications[0].title).toContain('REFUSING')
   })
 
+  it('says nothing for a workspace whose band is sold past — no $40 stop reaches it', async () => {
+    // Pro sells credits past its band, so its reservation has no dollar
+    // ceiling at all while nothing is configured: an announcement here would
+    // report an assistant as off while it answers.
+    mockOrgs = [
+      seededOrg({
+        rollup: null,
+        assistEstCostUsd: 41,
+        usageAlerts: {
+          assistCogs: { month: MONTH, threshold: 1 },
+          assistCredits: { month: MONTH, threshold: 100 },
+        },
+      }),
+    ]
+    await run()
+    expect(
+      mockStaffNotifications.filter((entry) => entry.title.includes('REFUSING')),
+    ).toHaveLength(0)
+  })
+
   it('announces ONCE a month, however far past the ceiling it climbs', async () => {
     mockOrgs = [
       seededOrg({
+        plan: 'starter',
         rollup: null,
         assistEstCostUsd: 4_000,
         usageAlerts: { assistCeiling: { month: MONTH, threshold: 1 } },
@@ -1026,7 +1053,7 @@ describe('the REFUSAL is announced to staff in its own words (AGL-2264)', () => 
     // announcement reads the REAL resolver rather than a hardcoded 40.
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = 'off'
     try {
-      mockOrgs = [seededOrg({ rollup: null, assistEstCostUsd: 10_000 })]
+      mockOrgs = [seededOrg({ plan: 'starter', rollup: null, assistEstCostUsd: 10_000 })]
       await run()
       expect(
         mockStaffNotifications.filter((entry) =>
@@ -1044,7 +1071,7 @@ describe('the REFUSAL is announced to staff in its own words (AGL-2264)', () => 
     // same function, so this cannot drift.
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '500'
     try {
-      mockOrgs = [seededOrg({ rollup: null, assistEstCostUsd: 100 })]
+      mockOrgs = [seededOrg({ plan: 'starter', rollup: null, assistEstCostUsd: 100 })]
       await run()
       expect(
         mockStaffNotifications.filter((entry) =>
@@ -1109,6 +1136,28 @@ describe('the AI credits band alerts the customer (AGL-2898)', () => {
     // The same words by mail.
     const mail = mockEmails.filter((entry) => entry.context === 'usage-alert')
     expect(mail[0].text).toContain(alert.body)
+  })
+
+  it('Starter WITH the add-on is quoted the rate it is billed, not $0.00 (AGL-3014)', async () => {
+    // Starter lists no `extraAssistCreditsUsdPer1k`; the add-on's $3.00 comes
+    // from `resolveAssistOverageRateUsdPer1k`. Read off the table, this alert
+    // told a workspace its extra credits "are now billed" and quoted
+    // "$0.00 per 1,000" in the same breath, while the invoice charged $3.00.
+    mockOrgs = [
+      seededOrg({
+        plan: 'starter',
+        seatAddons: { aiAddon: 1 },
+        rollup: null,
+        assistEstCostUsd: credits(4_500),
+      }),
+    ]
+    await run()
+    expect(assistAlerts()).toHaveLength(1)
+    const [alert] = assistAlerts()
+    expect(alert.title).toContain('extra credits are now billed')
+    expect(alert.body).toContain('4,500 of 4,000 credits used')
+    expect(alert.body).toContain('metered on your monthly invoice at $3.00 per 1,000')
+    expect(alert.body).not.toContain('$0.00 per 1,000')
   })
 
   it('at the band with the org’s own switch on: AI stops, and the switch is named', async () => {

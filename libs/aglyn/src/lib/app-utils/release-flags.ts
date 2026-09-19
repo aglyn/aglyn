@@ -228,17 +228,19 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'rather than to a dead button.',
     defaultEnabled: false,
   },
+  // Released to every site 2026-09-16 (AGL-3041). Still the whole surface's
+  // kill switch, globally or for one org by override: off, the tenant slot
+  // renders nothing, both token mints refuse, and `/api/edit-context` turns
+  // away every token already issued.
   {
     key: 'release_edit_bar',
     label: 'Site admin bar',
     description:
-      'Edit-access admin bar on published sites: a signed-in editor can ' +
-      'jump from a live page straight into the besigner for the screen ' +
-      'serving it (admin edit bar, AGL-1302 follow-on). OFF by default ' +
-      'until the cross-origin connect flow is verified on a live tenant ' +
-      'domain; flipping it off also invalidates every outstanding edit ' +
-      'token at the verify site.',
-    defaultEnabled: false,
+      'Admin bar on published sites: a signed-in editor jumps from a live ' +
+      'page into the besigner for the screen serving it. Released ' +
+      '2026-09-16 (AGL-3041) for every site; turning it off hides the bar ' +
+      'and revokes every outstanding edit token at the verify site.',
+    defaultEnabled: true,
   },
   {
     key: 'release_assist',
@@ -432,6 +434,102 @@ export function parseReleaseFlagValue(
     // fall through to the registry default
   }
   return { enabled: fallbackEnabled }
+}
+
+/**
+ * The longest parameter description Remote Config will publish (AGL-3048).
+ *
+ * One description past it refuses the WHOLE publish with
+ * `DESCRIPTION_EXCEEDS_MAXIMUM_SIZE`, which the staff flags route answered as
+ * a 500. Registry descriptions are written for the staff flags page, and
+ * several run far past the limit, so what the page shows and what a
+ * parameter carries cannot always be the same text.
+ *
+ * Counted in UTF-8 BYTES. Remote Config states the limit in characters
+ * without saying how it counts them, and a UTF-8 byte count is never smaller
+ * than the code-point or UTF-16 count, so text within 256 bytes is within the
+ * limit on every reading. The cost is a few characters of headroom on text
+ * with typographic punctuation.
+ */
+export const REMOTE_CONFIG_DESCRIPTION_MAX_BYTES = 256
+
+function utf8ByteLength(text: string): number {
+  let bytes = 0
+  for (const character of text) {
+    const codePoint = character.codePointAt(0) ?? 0
+    bytes +=
+      codePoint < 0x80 ? 1 : codePoint < 0x800 ? 2 : codePoint < 0x10000 ? 3 : 4
+  }
+  return bytes
+}
+
+/** Whether Remote Config accepts `text` as a parameter description. */
+export function fitsRemoteConfigDescription(text: string): boolean {
+  return utf8ByteLength(text) <= REMOTE_CONFIG_DESCRIPTION_MAX_BYTES
+}
+
+const DESCRIPTION_ELLIPSIS = '…'
+
+/**
+ * `text` cut to a length Remote Config accepts, at a word boundary, with an
+ * ellipsis marking the cut. Text that already fits comes back unchanged.
+ *
+ * The cut takes whole code points, so a multi-byte character is never split.
+ * It backs up to the last space when it lands inside a word (only a single
+ * word longer than the whole budget is cut hard), and punctuation left
+ * dangling before the ellipsis is dropped.
+ */
+export function clampRemoteConfigDescription(text: string): string {
+  if (fitsRemoteConfigDescription(text)) return text
+  const budget =
+    REMOTE_CONFIG_DESCRIPTION_MAX_BYTES - utf8ByteLength(DESCRIPTION_ELLIPSIS)
+  let kept = ''
+  let bytes = 0
+  for (const character of text) {
+    const size = utf8ByteLength(character)
+    if (bytes + size > budget) break
+    kept += character
+    bytes += size
+  }
+  const next = text.charAt(kept.length)
+  if (next && !/\s/.test(next)) {
+    const lastSpace = kept.search(/\s\S*$/)
+    if (lastSpace > 0) kept = kept.slice(0, lastSpace)
+  }
+  return `${kept.replace(/[\s.,;:(–—-]+$/, '')}${DESCRIPTION_ELLIPSIS}`
+}
+
+/**
+ * The description to publish with a release flag's Remote Config parameter
+ * (AGL-3048). Always one Remote Config accepts:
+ *
+ * 1. The registry description, when it fits, so the flags page and the
+ *    parameter say the same thing.
+ * 2. Otherwise the LIVE parameter's description, when it has one that fits.
+ *    Remote Config has already accepted exactly that text, and someone chose
+ *    it for the Firebase console. The first 250 characters of a longer
+ *    paragraph would drop whatever the paragraph says last: for
+ *    `release_assist`, the `/legal/subprocessors` precondition that its
+ *    AGL-1909 suite wants in front of whoever reads the flag there. The full
+ *    registry text stays on the staff flags page either way.
+ * 3. Otherwise, as on a first publish with nothing live to keep, the
+ *    registry description clamped at a word boundary.
+ */
+export function releaseFlagParameterDescription(
+  registryDescription: string,
+  liveDescription: string | null | undefined,
+): string {
+  if (fitsRemoteConfigDescription(registryDescription)) {
+    return registryDescription
+  }
+  if (
+    typeof liveDescription === 'string' &&
+    liveDescription.trim().length > 0 &&
+    fitsRemoteConfigDescription(liveDescription)
+  ) {
+    return liveDescription
+  }
+  return clampRemoteConfigDescription(registryDescription)
 }
 
 /**

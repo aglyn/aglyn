@@ -1,0 +1,33 @@
+{
+  "id": "text-bakery-tagline",
+  "kind": "text",
+  "brief": "A two-line tagline for Tidewater Bakery, a neighborhood bakery that bakes sourdough every morning. Under 25 words.",
+  "framing": null,
+  "inventory": null,
+  "maxWords": 25,
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: the copy only, inside the length the brief set.",
+      "plan": null,
+      "answer": "Sourdough out of the oven before the sun is up.\nYour neighborhood bakery, every morning.",
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 5, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A code fence around the copy, which a text output shows as it is.",
+      "answer": "```\nSourdough out of the oven before the sun is up.\n```",
+      "fails": ["readable"]
+    },
+    {
+      "why": "Well past the 25 words the brief asked for.",
+      "answer": "At Tidewater Bakery we believe that every neighborhood deserves a bakery that gets up early, shapes every loaf by hand, bakes sourdough before the sun comes up, and greets every single customer by name when they come through the door each morning.",
+      "fails": ["budget"]
+    }
+  ]
+}

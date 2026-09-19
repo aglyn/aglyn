@@ -28,6 +28,7 @@ import {
   productInventory,
   productPriceRange,
   registersWithinCap,
+  renameProductOptions,
   resolveCheckoutBillingMode,
   stockTrackingApplies,
   transferVariantInventory,
@@ -208,6 +209,65 @@ describe('validateProduct', () => {
         }),
       ),
     ).toMatch(/Compare-at/)
+  })
+})
+
+describe('renameProductOptions (AGL-3066)', () => {
+  const sized = product({
+    options: [
+      { name: 'Size', values: ['S', 'M'] },
+      { name: 'Color', values: ['Red', 'Blue'] },
+    ],
+    variants: [
+      { id: 'v-s-red', options: { Size: 'S', Color: 'Red' }, priceUsd: 20, sku: 'TEE-S-R', inventory: 4 },
+      { id: 'v-m-blue', options: { Size: 'M', Color: 'Blue' }, priceUsd: 24, compareAtPriceUsd: 30, weightGrams: 180 },
+    ],
+  })
+
+  it('moves each selection to the new name and keeps every variant as it was', () => {
+    const renamed = renameProductOptions(sized, [null, 'Colour'])
+    expect(renamed.options).toEqual([
+      { name: 'Size', values: ['S', 'M'] },
+      { name: 'Colour', values: ['Red', 'Blue'] },
+    ])
+    expect(renamed.variants).toEqual([
+      { id: 'v-s-red', options: { Size: 'S', Colour: 'Red' }, priceUsd: 20, sku: 'TEE-S-R', inventory: 4 },
+      { id: 'v-m-blue', options: { Size: 'M', Colour: 'Blue' }, priceUsd: 24, compareAtPriceUsd: 30, weightGrams: 180 },
+    ])
+    // A selection keeps its place, which is the order a variant is labeled in.
+    expect(Object.keys(renamed.variants[0].options ?? {})).toEqual(['Size', 'Colour'])
+    expect(validateProduct({ ...sized, ...renamed })).toBeNull()
+  })
+
+  it('carries the selections through a name cleared and typed again', () => {
+    const cleared = renameProductOptions(sized, ['', null])
+    const typed = renameProductOptions({ ...sized, ...cleared }, ['Fit', null])
+    expect(typed.variants.map((variant) => [variant.id, variant.options, variant.priceUsd])).toEqual([
+      ['v-s-red', { Fit: 'S', Color: 'Red' }, 20],
+      ['v-m-blue', { Fit: 'M', Color: 'Blue' }, 24],
+    ])
+  })
+
+  it('moves nothing while two options share a name, and loses nothing once they differ', () => {
+    const duplicate = renameProductOptions(sized, [null, 'Size'])
+    expect(duplicate.options?.map((option) => option.name)).toEqual(['Size', 'Size'])
+    expect(duplicate.variants).toBe(sized.variants)
+    expect(validateProduct({ ...sized, ...duplicate })).toMatch(/its own name/)
+
+    const apart = renameProductOptions({ ...sized, ...duplicate }, [null, 'Shade'])
+    expect(apart.variants.map((variant) => variant.options)).toEqual([
+      { Size: 'S', Shade: 'Red' },
+      { Size: 'M', Shade: 'Blue' },
+    ])
+    expect(validateProduct({ ...sized, ...apart })).toBeNull()
+  })
+
+  it('leaves a selection no option holds as it is', () => {
+    const stale = product({
+      options: [{ name: 'Size', values: ['S'] }],
+      variants: [{ id: 'v1', options: { Size: 'S', Material: 'Cotton' }, priceUsd: 10 }],
+    })
+    expect(renameProductOptions(stale, ['Fit']).variants[0].options).toEqual({ Fit: 'S', Material: 'Cotton' })
   })
 })
 

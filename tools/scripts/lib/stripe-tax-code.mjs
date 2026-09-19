@@ -70,6 +70,12 @@ export function productsMissingTaxCode(products, expected = PLATFORM_TAX_CODE) {
   const missing = []
   for (const product of products) {
     if (!product || typeof product !== 'object') continue
+    // An ARCHIVED product sells nothing, so its tax position is moot and
+    // reporting it is a nag nobody can clear: `active: false` is how Stripe
+    // retires a product, and a product carrying a price can never be deleted
+    // outright. Only `active === false` is skipped — a product that omits the
+    // field is still live and still counts.
+    if (product.active === false) continue
     const taxCode =
       typeof product.tax_code === 'string'
         ? product.tax_code

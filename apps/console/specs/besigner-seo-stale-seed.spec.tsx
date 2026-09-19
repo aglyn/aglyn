@@ -417,6 +417,24 @@ jest.mock('../hooks/use-coediting', () => ({
   default: () => ({ clearMirror: () => undefined }),
 }))
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
+// The besigner's inspector and toolbar zones read the org the screen belongs
+// to (AGL-2908), so mounting either editor now reaches `useCurrentOrg`. The
+// zone's widget is the null component above, leaving `orgId` the only thing
+// read here. The real hook resolves an org through `useOrgScope` and opens a
+// `useConfirmedDoc` listen this suite does not drive, and that listen's effect
+// keys on the `useFirestore` double above — a fresh object per call — so it
+// re-subscribes on every render and the editor never settles (AGL-2928). One
+// held object, because a double rebuilt per call is that same loop.
+jest.mock('../hooks/use-current-org', () => {
+  const currentOrg = {
+    org: undefined,
+    orgId: 'org-1',
+    ready: true,
+    entitlementsFromCache: false,
+  }
+  const useCurrentOrg = () => currentOrg
+  return { __esModule: true, useCurrentOrg, default: useCurrentOrg }
+})
 // AGL-2334 gave the editor pages a host-role read, purely to disable the
 // publish controls for an `author` and say why. This spec drives the RENAME
 // and SEO save paths, which that role does not gate, so the hook is stubbed

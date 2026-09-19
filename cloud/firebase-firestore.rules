@@ -1,4 +1,7 @@
 rules_version = '2';
+// SIZE: this source must stay under 256 KiB (262,144 bytes), COMMENTS INCLUDED.
+// The Rules API refuses a larger one at deploy with a bare 400, and nothing
+// that compiles it checks the limit; `npm run check:rules-size` does (AGL-3027).
 service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() { return request.auth != null; }
@@ -234,37 +237,24 @@ service cloud.firestore {
     }
 
     /**
-     * Whether an org's plan carries the CRM SUITE (AGL-2801): the rules'
-     * restatement of `resolveOrgEntitlements(org).features.crm`, which
-     * `checkEntitlement(org, 'crm')` answers everywhere else.
+     * Whether an org carries the CRM SUITE (AGL-2801): the rules' restatement
+     * of `checkEntitlement(org, 'crm')` for the collections the console writes
+     * client-direct. Starter and up carry it; Free has none (AGL-2851).
      *
-     * The CRM is included from Starter, and a Free workspace has none of it
-     * (the 2026-09-11 pricing decision, AGL-2851). The console locks the
-     * CRM on a plan without it and the CRM's routes refuse such a plan;
-     * these functions are the same answer for the collections the console
-     * writes client-direct.
+     * In the resolver's order: a per-org `entitlements.features.crm` wins
+     * either way; else a staff comp (`entitlements.planComp`, AGL-3034)
+     * decides while the subscription is dead or absent; else the stored plan,
+     * Free when missing or when its subscription died — `billingStatus`
+     * first, then `subscription.status`, as `subscriptionStatusOf` reads.
+     * The comp half is OR'd beside the plan half, which agrees with that
+     * order while every plan a comp can name carries the suite.
      *
-     * Three facts, in the resolver's order of precedence:
-     *
-     *  1. A per-org `entitlements.features.crm` wins either way — a staff
-     *     grant opens the suite on Free, a revocation closes it on a paid
-     *     plan.
-     *  2. Otherwise the PLAN decides, and only a plan in the list below
-     *     carries the suite. A missing or unknown plan is Free, as
-     *     `resolveEffectivePlan` says.
-     *  3. A plan whose subscription has died is Free until the billing
-     *     webhook restores it: the mirrored `billingStatus` first, then the
-     *     legacy inline `subscription.status`, as `subscriptionStatusOf`
-     *     reads them.
-     *
-     * CEL has no constants and cannot import the plan table, so both lists
-     * are the resolver's, retyped. `crm-suite-rules-drift.spec.ts` parses
-     * them out of this file and fails when either disagrees with
-     * `PLAN_ENTITLEMENTS` or `resolveEffectivePlan`.
+     * CEL cannot import the plan table, so the lists are the resolver's,
+     * retyped; `crm-suite-rules-drift.spec.ts` fails when any disagrees.
      *
      * A missing org document carries nothing. The read is one document per
-     * evaluated write, and every rule that asks this asks it LAST, so a
-     * write refused for its role or its scope never pays for it.
+     * evaluated write, asked LAST, so a write refused for its role or scope
+     * never pays for it.
      */
     function orgCarriesCrmSuite(orgId) {
       return orgId != null &&
@@ -274,16 +264,26 @@ service cloud.firestore {
     function crmSuiteCarried(org) {
       return crmSuiteOverride(org) == true ||
         (crmSuiteOverride(org) == null &&
-          org.get('plan', 'free') in
-            ['starter', 'pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] &&
-          !(orgSubscriptionStatus(org) in
-            ['canceled', 'unpaid', 'incomplete', 'incomplete_expired']));
+          ((org.get('plan', 'free') in
+              ['starter', 'pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] &&
+            !(orgSubscriptionStatus(org) in
+              ['canceled', 'unpaid', 'incomplete', 'incomplete_expired'])) ||
+          (orgPlanComp(org) in
+              ['starter', 'pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] &&
+            orgSubscriptionStatus(org) in
+              ['', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired'])));
     }
     function crmSuiteOverride(org) {
       return org.get('entitlements', {}) is map &&
           org.get('entitlements', {}).get('features', {}) is map
         ? org.get('entitlements', {}).get('features', {}).get('crm', null)
         : null;
+    }
+    function orgPlanComp(org) {
+      return org.get('entitlements', {}) is map &&
+          org.get('entitlements', {}).get('planComp', {}) is map
+        ? org.get('entitlements', {}).get('planComp', {}).get('plan', '')
+        : '';
     }
     function orgSubscriptionStatus(org) {
       return org.get('billingStatus', '') is string && org.get('billingStatus', '') != ''
@@ -863,6 +863,85 @@ service cloud.firestore {
               (memberResolves('billing.view') || memberResolves('org.auditLog'))) ||
              memberStamps('billing.view') ||
              memberStamps('org.auditLog')));
+        allow write: if false;
+      }
+
+      /**
+       * AI allotments (AGL-2942): a monthly share of the workspace's AI
+       * credits, keyed by subject — `member:{uid}`, `collab:{hostId}:{uid}`,
+       * `host:{hostId}` — plus `org`, the org-wide model restriction.
+       *
+       * READ by the people the figure is about and the people who manage it:
+       *
+       *  - `org` by any member: it names models, not anyone's spend, and
+       *    every member's model switch is bounded by it;
+       *  - the subject reads their own — `member:` with their uid, or a
+       *    `collab:` whose third segment is their uid;
+       *  - an org-wide manager with `billing.view` or `billing.manage`, read
+       *    the way the per-user usage months are (`memberResolves` for an
+       *    owner or admin, `memberStamps` for anyone a custom role granted);
+       *  - a collaborator holding the ADMIN role on the site the subject
+       *    names reads that site's collaborator and site allotments — the
+       *    collaborators card is theirs. Nothing about another site, and
+       *    nobody's `member:` allotment.
+       *
+       * The subject is matched with a full-string regex BEFORE it is split,
+       * so a malformed id never reaches an index that does not exist.
+       *
+       * Server-written only: an allotment is a spend control, and a subject
+       * who could write their own could lift it.
+       */
+      match /aiAllotments/{subject} {
+        allow read: if isStaff() ||
+          (subject == 'org' && isOrgMember()) ||
+          (isOrgMember() &&
+            (subject == 'member:' + request.auth.uid ||
+             (subject.matches('collab:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+') &&
+              subject.split(':')[2] == request.auth.uid))) ||
+          (isOrgWideMember() &&
+            ((canManageOrg() &&
+              (memberResolves('billing.view') || memberResolves('billing.manage'))) ||
+             memberStamps('billing.view') ||
+             memberStamps('billing.manage'))) ||
+          (isOrgMember() &&
+            subject.matches('(collab|host):[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?') &&
+            orgMember().get('hostAccess', {}).get(subject.split(':')[1], '') == 'admin');
+        allow write: if false;
+      }
+
+      /*
+       * AI OVERAGE BILLING (AGL-3011) — server-written, billing-readable.
+       *
+       * `aiBilling/standing` holds what bounds the overage a workspace may
+       * accrue: whether a card is on file, whether accrual is paused and
+       * why, the months of payment history behind its ceiling, and any staff
+       * override. `aiOverageCharges/{chargeId}` is one row per mid-period
+       * charge, with its Stripe invoice and status.
+       *
+       * Readable by the same people who may read `aiAllotments` and see a
+       * bill — this is the workspace's own billing standing, and a workspace
+       * refused for unpaid overage must be able to see that it was. Writable
+       * by NOBODY: every field here is a spend control, and a workspace that
+       * could write its own would lift its own ceiling, clear its own pause
+       * and mark its own charges paid.
+       */
+      match /aiBilling/{document} {
+        allow read: if isStaff() ||
+          (isOrgWideMember() &&
+            ((canManageOrg() &&
+              (memberResolves('billing.view') || memberResolves('billing.manage'))) ||
+             memberStamps('billing.view') ||
+             memberStamps('billing.manage')));
+        allow write: if false;
+      }
+
+      match /aiOverageCharges/{chargeId} {
+        allow read: if isStaff() ||
+          (isOrgWideMember() &&
+            ((canManageOrg() &&
+              (memberResolves('billing.view') || memberResolves('billing.manage'))) ||
+             memberStamps('billing.view') ||
+             memberStamps('billing.manage')));
         allow write: if false;
       }
 
@@ -2687,26 +2766,8 @@ service cloud.firestore {
                 .hasAny(['versionId', 'publishSchedule'])));
         allow delete: if isStaff() ||
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
-        // THE WORKING DRAFT (AGL-1152), one per version, id `current`.
-        //
-        // A draft is the working document: you save into it as you work and
-        // publish when you are done, and there is exactly ONE per target. The fixed document id is what enforces that: there is no
-        // second name to create.
-        //
-        // It needs its own rule because the recursive matcher below allows
-        // `create` only to staff, so an author's FIRST save of a draft — the
-        // one that brings the document into existence — would be refused while
-        // every save after it succeeded. Rules are OR'd across matching paths,
-        // so this grants that create without loosening anything below.
-        //
-        // Deleting is deliberately open to the same role that writes: clearing
-        // a draft is what PUBLISHING it does, and it is not a publish act. The
-        // version document itself is untouched by this pattern — a path must
-        // end in `/draft/{id}` to match here, so the delete protection the
-        // matcher below puts on `versions` is intact.
-        //
-        // Frozen writes still freeze it. A draft is authoring, and a freeze
-        // stops authoring.
+        // THE WORKING DRAFT (AGL-1152): the same rule as the screen's above,
+        // whose note explains it.
         match /versions/{versionId}/draft/{draftId} {
           allow read: if isStaff() || isHostMember(hostId);
           allow create, update, delete: if isStaff() ||
@@ -2752,26 +2813,8 @@ service cloud.firestore {
                 .hasAny(['versionId', 'publishSchedule'])));
         allow delete: if isStaff() ||
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
-        // THE WORKING DRAFT (AGL-1152), one per version, id `current`.
-        //
-        // A draft is the working document: you save into it as you work and
-        // publish when you are done, and there is exactly ONE per target. The fixed document id is what enforces that: there is no
-        // second name to create.
-        //
-        // It needs its own rule because the recursive matcher below allows
-        // `create` only to staff, so an author's FIRST save of a draft — the
-        // one that brings the document into existence — would be refused while
-        // every save after it succeeded. Rules are OR'd across matching paths,
-        // so this grants that create without loosening anything below.
-        //
-        // Deleting is deliberately open to the same role that writes: clearing
-        // a draft is what PUBLISHING it does, and it is not a publish act. The
-        // version document itself is untouched by this pattern — a path must
-        // end in `/draft/{id}` to match here, so the delete protection the
-        // matcher below puts on `versions` is intact.
-        //
-        // Frozen writes still freeze it. A draft is authoring, and a freeze
-        // stops authoring.
+        // THE WORKING DRAFT (AGL-1152): the same rule as the screen's above,
+        // whose note explains it.
         match /versions/{versionId}/draft/{draftId} {
           allow read: if isStaff() || isHostMember(hostId);
           allow create, update, delete: if isStaff() ||
@@ -3025,280 +3068,106 @@ service cloud.firestore {
         allow read: if isStaff() ||
           (isHostMember(hostId) &&
             !(subcollection in ['webhooks', 'orders', 'mediaTombstones']));
+        // THE EXCLUSION LISTS ARE THE MECHANISM. Sibling match blocks are OR'd
+        // and the LOOSER one wins, so a dedicated deny (or a tighter dedicated
+        // block) beside this catch-all decides nothing until the name is also
+        // excluded here, and one list is not denial: a name excluded from
+        // create alone keeps update and delete. Each name's reason is kept
+        // short below; the long form is in its issue.
+        //
         // Quota-governed collections are created via /api/hosts/resources
-        // ONLY (AGL-473) — the route enforces the per-plan quota (and the
-        // feature entitlement, where paid) server-side. These flat
-        // collections have no client-written subcollections, so denying
-        // client `create` by name is safe. Screens/layouts also appear
-        // here — their dedicated blocks above own create; excluding them
-        // from update/delete too keeps this catch-all from re-granting.
-        // `installs` (plugin pins) are create/update API-only (AGL-508): the
-        // install route enforces entitlement + purchase + kill-switch before
-        // writing the pin; only DELETE (uninstall) stays client-side, so
-        // update/delete is split to allow the console's uninstall.
-        // `datasets` is excluded from all three (AGL-1050). Datasets moved to
-        // the org in AGL-237 and the org block above has enforced API-only
-        // create/delete since AGL-473/945 — but this catch-all never learned
-        // the name, so `hosts/{hostId}/datasets/*` stayed a client-writable
-        // path with NO quota enforcement: the same resource, one path over,
-        // free. Nothing in production lives there (AGL-1061 counted 0 across
-        // every host) and AGL-1050 removed the client fallback that used to
-        // address it, so the exclusion takes the whole subtree — `records`
-        // included, since {document=**} spans them — with nothing to re-grant.
-        // `webhooks` joins the exclusion (AGL-1360): WEBHOOK_MAX_PER_HOST is
-        // a flat platform cap that was only ever checked in the console, by
-        // counting listener rows, so it did not survive a stale cache.
-        // /api/hosts/resources now counts the live webhooks server-side.
+        // ONLY (AGL-473), which enforces the per-plan quota (and the feature
+        // entitlement, where paid) server-side. They have no client-written
+        // subcollections, so denying client create by name is safe. Screens
+        // and layouts are here too; their dedicated blocks above own create,
+        // and excluding them from update/delete keeps this catch-all from
+        // re-granting.
         //
-        // `counters`, `analytics` and `members` join all THREE lists
-        // (AGL-1367). AGL-1360 moved a cap off a client-held COUNT; these are
-        // the same untrusted number persisted in a client-writable DOCUMENT,
-        // which is strictly worse — it survives the page.
-        //
-        //   - `counters` is the entire enforcement state of five quotas.
-        //     `formSubmissionsPerMonth`, `emailSendsPerMonth`,
-        //     `workflowRunsPerMonth` and `actionRunsPerMonth` each read
-        //     `counters/<name>[YYYY-MM]`, compare, and proceed; `storagePerHostMb`
-        //     reads `counters/media.bytes`. Every one is read-compare-proceed,
-        //     so writing the counter back to 0 removes the wall — and for
-        //     storage that is unbounded Firebase Storage against a Free plan's
-        //     250 MB, real infrastructure cost rather than a feature.
-        //   - `analytics/{day}.total` is the month's page views.
-        //   - Both are ALSO the metered invoice: /api/billing/report-usage
-        //     computes `storageBytes`, `formSubmissions` and `pageViews` from
-        //     exactly these documents, and AGL-1280 turned the metered
-        //     pass-through on for every paid plan. Lowering a counter lowers
-        //     the customer's bill. `rateLimits` states the principle above —
-        //     a client that can write a counter can reset its own counter.
-        //   - `members` is the site roster. A raw delete does NOT revoke
-        //     anything (real access lives in `orgs/{orgId}/members/{uid}
-        //     .hostAccess`, which is `write: false`, projected into the frozen
-        //     `memberRoles`), but the seat cap in /api/hosts/members counts
-        //     these rows — so deleting N rows leaves N collaborators working
-        //     and frees N seats to sell to nobody, at $1-3/seat.
-        //
-        // A dedicated `match /counters/{counterId} { allow write: if false; }`
-        // would NOT have closed any of this: sibling match blocks are OR'd and
-        // the LOOSER one wins, so the catch-all would have re-granted every
-        // write. The exclusion lists ARE the mechanism, exactly as for
-        // `webhooks`. Nothing is lost: every writer of all three is an
-        // Admin-SDK route, and every client reference in the console and the
-        // plugin components is a read, which the catch-all's `allow read`
-        // above still grants.
-        //
-        // `mediaTombstones` joins all three as well (AGL-1467), and for the
-        // `counters` reason rather than the privacy one above: a restore
-        // re-increments `counters/media` by the tombstone's OWN `sizeBytes`.
-        // A client that could write a tombstone could therefore hand itself a
-        // negative `sizeBytes` and lower the storage meter — AGL-1367's
-        // read-compare-proceed wall, reached one collection to the left — or
-        // forge a media document with `visibleTo` tokens it was never granted.
-        // A client that could DELETE one destroys the only route back to an
-        // asset it just deleted. Both writers are Admin-SDK routes.
-        //
-        // `formSubmissions` joins CREATE ONLY (AGL-1668), and the asymmetry is
-        // the decision rather than an oversight. `counters` above is the
-        // number; this is the ROW the number counts. /api/forms/submit is its
-        // only writer and it increments `counters/formSubmissions[YYYY-MM]` in
-        // the same request — the document /api/billing/report-usage invoices
-        // from, and the one AGL-1655's abuse ceiling is evaluated against. A
-        // client `add()` here entered neither: an editor could hold
-        // submissions the Free plan's 20/month wall would have refused, and
-        // paid rows the meter never billed. Not a spam vector (it needs
-        // membership) and NOT a way to lower a bill either — AGL-1367 already
-        // made the counter itself unreachable on all three operations, so the
-        // ceiling's read point was never the exposure. Only the create path
-        // was.
-        //
-        // Update and delete stay OPEN, deliberately. The inbox plugin marks a
-        // submission read with a client `updateDoc` and deletes one with a
-        // client `deleteDoc` — the product's own reader — and neither touches
-        // the counter, which is monotonic per month and does not fall when a
-        // row is removed. Following the `counters` precedent onto all three
-        // lists would have broken the inbox to close nothing.
-        //
-        // `orders` joins all THREE lists (AGL-1827): status is server-owned,
-        // and the dedicated block above owns the reasoning and re-grants the
-        // one thing the console still writes — the status-frozen update.
-        //
-        // `screenAnalytics` joins all THREE lists (AGL-2038), for the
-        // `analytics` reason minus the money. It is the same beacon written
-        // one document finer — /api/analytics/collect increments
-        // `screenAnalytics/{screenId}:{day}.total` from the Admin SDK in the
-        // same request that increments `analytics/{day}.total` — and every
-        // client reference is a READ, which `allow read` above still grants.
-        // It was in NONE of these lists purely because nobody added it when
-        // AGL-151 created the collection; the catch-all is permissive by
-        // default, so a new subcollection is granted rather than denied.
-        //
-        // Unlike `analytics` it is NOT a billing input: /api/billing/
-        // report-usage computes `pageViews` from `analytics` only, so nothing
-        // here lowers a bill and the AGL-1367 sentence does not transfer.
-        // What it does buy is integrity of a Pro+ panel — a per-screen
-        // history the customer consumes rather than authors — and the fact
-        // that the only writer is server-side, which is the AGL-1367 test for
-        // whether denial costs the product anything. It does not.
-        //
-        // That it was missed is the actual finding. `screenAnalytics` is not
-        // read by the billing rollup, so the coverage spec — which swept
-        // `apps/console/app/api/billing` — was right and still silent. The
-        // second half of that spec now asks the broader question: every host
-        // subcollection anywhere in the repo must be server-owned here or
-        // named in its classification map, so the NEXT one fails the build
-        // rather than inheriting write access quietly.
-        //
-        // SIX SERVER-WRITTEN COLLECTIONS JOIN ALL THREE LISTS (AGL-2042).
-        //
-        // `carts`, `checkouts`, `giftCards`, `stripeTaxRates`,
-        // `restockAlerts` and `inventoryReconciliation` were parked in the
-        // coverage guard's SERVER_WRITTEN_NOT_YET_DENIED because nothing
-        // writes any of them from a client. That was re-checked here rather
-        // than taken on the parking note's word: no `'hosts', hostId,
-        // '<name>'` client path in `apps` or `libs` produces a write, and the
-        // repo contains no `addDoc`/`setDoc`/`updateDoc`/`deleteDoc` against
-        // one. The three client-SDK references that DO exist are READS —
-        // `recovery-queue-card` queries `checkouts` and `restockAlerts`,
-        // `gift-cards-card` queries `giftCards` — and `allow read` above is
-        // untouched, so all three console panels keep working.
-        //
-        // Denying them costs the product nothing because the catch-all only
-        // ever grants EDITORS (`canWriteHostContent`). Every shopper-facing
-        // write to these — add to cart, start a checkout, redeem a gift card,
-        // subscribe to a restock alert — is an Admin-SDK route that these
-        // rules do not govern at all. There is no storefront flow to break.
-        //
-        // What it buys, worst first:
-        //  • `giftCards` is STORED VALUE. An editor who can write one can mint
-        //    balance, which is the AGL-1367 shape with money in it rather than
-        //    on the invoice.
-        //  • `inventoryReconciliation` is the per-order idempotency marker
-        //    that stops a stock decrement being applied twice; writing one by
-        //    hand makes a lost decrement permanent.
-        //  • `restockAlerts` holds shopper email addresses captured by an
-        //    UNAUTHENTICATED storefront endpoint — third-party PII an editor
-        //    had no reason to be able to rewrite.
-        //  • `carts` and `checkouts` are pre-purchase state the checkout reads
-        //    back; `stripeTaxRates` is a cache of Stripe rate ids, where a
-        //    forged id is a wrong tax on a real order.
-        //
-        // NOT `suppressions`, which AGL-2042's description also names. That
-        // premise went stale on AGL-2410: the Emails console page's
-        // Suppressions tab now removes an entry with a plain client
-        // `deleteDoc` (`suppressions-card.tsx:176`) — the only way to undo a
-        // suppression a link prescanner caused (AGL-2408). It has moved to
-        // EDITOR_WRITABLE_HOST_SUBCOLLECTIONS in the coverage guard, and
-        // denying it here would break a shipped surface. Recorded because the
-        // issue text still reads the other way.
-        //
-        // All THREE lists, not one: one list is not denial, and a dedicated
-        // `allow write: if false` block would not close it either, because
-        // sibling match blocks are OR'd and the LOOSER one wins — the trap
-        // that left `components` publishable by an author for as long as it
-        // did. Checked for these six specifically: the rules file contains no
-        // dedicated `match` block for any of the names, so nothing re-grants
-        // them one line below.
-        //
-        // `actions` joins CREATE ONLY (AGL-2266), the `formSubmissions`
-        // asymmetry for the `webhooks` reason. It was in NONE of these lists —
-        // the catch-all is permissive by default, so a subcollection nobody
-        // classified is granted — and the import route's own table had already
-        // written down what that meant: "no `RESOURCES` entry and no quota key
-        // anywhere; all three creators write the document client-direct." A
-        // free org could mint unbounded Firestore documents from the browser
-        // against a $0 subscription, which is the AGL-1360 / AGL-1399 shape:
-        // uncapped infrastructure rather than a bypass of anything we sell.
-        // /api/hosts/resources now owns the create and counts live rows
-        // against `ACTIONS_MAX_PER_HOST`.
-        //
-        // Update and delete stay OPEN, and that is the decision rather than an
-        // oversight. The actions card toggles `enabled`, the besigner's
-        // interactions provider flips one in place, and both RETIRE an action
-        // by stamping `deletedAt` — a soft delete, which is a client update.
-        // Following `counters` onto all three lists would break every one of
-        // those surfaces to close nothing: neither operation creates a
-        // document, so neither can raise the count the cap is about. The cap
-        // counts LIVE rows, so the soft delete frees a slot, which is the
-        // property that makes leaving update open safe rather than merely
-        // convenient.
-        //
-        // `authors` joins CREATE ONLY (AGL-2486), which is the `actions` split
-        // AGL-2266 made and for the same single reason: a new host
-        // subcollection the browser can create is unbounded Firestore
-        // documents against a $0 subscription. Nothing about a byline is
-        // priced — `AUTHORS_MAX_PER_HOST` is a flat platform cap counted by
-        // /api/hosts/resources, like `ACTIONS_MAX_PER_HOST` and
-        // `WEBHOOK_MAX_PER_HOST` before it.
-        //
-        // Update and delete are deliberately NOT excluded. The authors tab
-        // edits a record in place and removes one outright; neither creates a
-        // document, so neither can raise the count the cap is about, and
-        // adding the name to those lists would break both surfaces to close
-        // nothing. Deleting frees a slot, which is the property that lets a
-        // host at the ceiling recover without support — and a deleted author
-        // does not strip the byline off its posts, because
-        // `resolveEntryAuthor` falls through a dangling `authorId` to the
-        // entry's own `authorName` and then to the site.
-        //
-        // `media` joins CREATE and UPDATE (AGL-1881), and it is the one name
-        // on these lists that is NOT being denied. The dedicated block below
-        // re-grants both operations with the object fields frozen, because
-        // `storagePath` addresses the shared Storage bucket through the Admin
-        // SDK and was client-writable — the CRITICAL finding of the pre-launch
-        // review — and the rest of the set is server-written beside it.
-        //
-        // The exclusion is the MECHANISM, not an extra: sibling matches are
-        // OR'd and the LOOSER one wins, so a dedicated block that freezes a
-        // field while this catch-all still grants the same operation freezes
-        // nothing at all. That is exactly how `components` stayed
-        // author-publishable after its own block was narrowed (AGL-2334), and
-        // it is why a tighter `match /media/{mediaId}` on its own would have
-        // read correct and enforced nothing.
-        //
-        // DELETE is deliberately NOT excluded. Removing the document does not
-        // set a field, so it cannot address another tenant's object, and the
-        // re-create is already refused by the create freeze — a client that
-        // deleted and re-made the document would get a doc with no
-        // `storagePath`, which `mediaStoragePathInScope` resolves to the
-        // document's OWN key. Adding the name here would take the DAM's delete
-        // with it to close nothing.
-        //
-        // `memberPosts` joins CREATE and UPDATE, with DELETE excluded and
-        // re-granted by the dedicated block below (AGL-2372). This is the
-        // DATABASE half of the route fix in `f78705249`, which made
-        // `member-post.ts` refuse an `author` and closed the front door only:
-        // the name was in NONE of these three lists, so this catch-all
-        // granted it on `canWriteHostContent`, and that has included `author`
-        // since AGL-2334. The role the route had just refused could `addDoc`
-        // the identical document straight from the browser. Only the
-        // subscriber email is lost in that path — it lives on the route — and
-        // the post itself is what paying subscribers read.
-        //
-        // The split is written from the call sites, and they are unanimous:
-        // the ONLY client-SDK write to this collection anywhere in `apps` or
-        // `libs` is the `deleteDoc` at `member-posts-card.component.tsx:166`.
-        // /api/commerce/member-post owns the create on the Admin SDK, so
-        // denying it here costs the product nothing and makes that route the
-        // single door — its `admin | editor` allowlist becomes the whole
-        // policy instead of half of it. Nothing updates one at all.
-        //
-        // DELETE could not simply join them. Excluding the name outright is
-        // what the previous pass declined to do, and correctly: it breaks the
-        // card's Delete button for the admins and editors entitled to press
-        // it. But leaving delete in the catch-all lets an `author` destroy
-        // content paying subscribers read, and AGL-2334 already answered that
-        // exact question for `components` — taking live content down is the
-        // publish act in the other direction. So the name is excluded here
-        // and the block below re-grants delete on `canPublishHostContent`.
-        //
-        // `topicOptOuts` joins all THREE lists. It records which email streams
-        // a RECIPIENT has left — third-party PII captured by an
-        // unauthenticated endpoint behind a signed link, on the same footing
-        // as `restockAlerts`, and read by the send path to decide who a
-        // campaign skips. An editor who could write one would be forging a
-        // preference somebody else expressed; one who could delete one would
-        // be putting an address back into a stream it asked to leave, and
-        // destroying the record that the request was ever honored. The
-        // preference page is the only writer and it runs on the Admin SDK.
+        //  - `installs` (plugin pins, AGL-508): create/update are API-only, as
+        //    the install route enforces entitlement + purchase + kill-switch;
+        //    only DELETE (uninstall) stays client-side.
+        //  - `datasets`, all three (AGL-1050): datasets moved to the org
+        //    (AGL-237), whose block is API-only (AGL-473/945), and this host
+        //    path was the same resource with NO quota. Nothing lives there
+        //    (AGL-1061), so the whole subtree, `records` included, is excluded.
+        //  - `webhooks` (AGL-1360): WEBHOOK_MAX_PER_HOST was only counted from
+        //    the console's listener rows, which a stale cache under-counts.
+        //    /api/hosts/resources now counts live webhooks server-side.
+        //  - `counters`, `analytics` and `members`, all three (AGL-1367): an
+        //    untrusted number persisted in a client-writable document.
+        //    `counters` is the whole enforcement state of five
+        //    read-compare-proceed quotas (writing 0 removes the wall; for
+        //    storage that is unbounded bucket spend on a Free plan), and
+        //    `analytics/{day}.total` is the month's page views. Both feed the
+        //    metered invoice in /api/billing/report-usage (AGL-1280), so
+        //    lowering one lowers the bill. `members` rows are what the seat cap
+        //    in /api/hosts/members counts; deleting one frees a seat and
+        //    revokes nothing, since access lives in the org member's
+        //    `hostAccess`. Every writer of the three is an Admin-SDK route and
+        //    every client reference is a read.
+        //  - `mediaTombstones`, all three (AGL-1467): a restore re-increments
+        //    `counters/media` by the tombstone's OWN `sizeBytes`, so a forged
+        //    one lowers the storage meter or forges `visibleTo` tokens, and a
+        //    deleted one destroys the only route back to an asset. Both
+        //    writers are Admin-SDK routes.
+        //  - `formSubmissions`, CREATE ONLY (AGL-1668): /api/forms/submit is
+        //    the only writer, and in the same request increments the monthly
+        //    counter billing and the AGL-1655 abuse ceiling read; a client
+        //    `add()` reached neither. Update and delete stay OPEN on purpose:
+        //    the inbox plugin marks read and deletes client-side, and neither
+        //    touches the counter, which is monotonic per month.
+        //  - `orders`, all three (AGL-1827): status is server-owned; the
+        //    dedicated block above owns the reasoning and the re-grant.
+        //  - `screenAnalytics`, all three (AGL-2038): the page-view beacon one
+        //    document finer, written by /api/analytics/collect on the Admin
+        //    SDK, and every client reference is a read. It is not a billing
+        //    input (`pageViews` comes from `analytics` only). It was missed
+        //    because nobody classified it, so the coverage spec now fails the
+        //    build for any host subcollection in the repo that is neither
+        //    server-owned here nor named in its classification map.
+        //  - `carts`, `checkouts`, `giftCards`, `stripeTaxRates`,
+        //    `restockAlerts` and `inventoryReconciliation`, all three
+        //    (AGL-2042): no client write to any of them exists (the console
+        //    panels only read them) and every shopper-facing write is an
+        //    Admin-SDK route. `giftCards` is stored value, the reconciliation
+        //    doc is the per-order decrement's idempotency marker,
+        //    `restockAlerts` holds shopper emails from an unauthenticated
+        //    endpoint, and a forged `stripeTaxRates` id is a wrong tax on a
+        //    real order. No dedicated match block re-grants any of the six.
+        //    NOT `suppressions`: the Suppressions tab removes an entry with a
+        //    client `deleteDoc`, the only undo for a suppression a link
+        //    prescanner caused (AGL-2408/AGL-2410), so the coverage guard
+        //    lists it in EDITOR_WRITABLE_HOST_SUBCOLLECTIONS.
+        //  - `actions`, CREATE ONLY (AGL-2266): the browser could mint
+        //    unbounded documents against a $0 subscription (the AGL-1360 /
+        //    AGL-1399 shape); /api/hosts/resources now counts live rows against
+        //    `ACTIONS_MAX_PER_HOST`. Update and delete stay OPEN: the actions
+        //    card toggles `enabled`, the besigner flips one in place, and both
+        //    retire one with a `deletedAt` soft delete. Neither can raise the
+        //    count, and the soft delete frees a slot.
+        //  - `authors`, CREATE ONLY (AGL-2486): the same split against
+        //    `AUTHORS_MAX_PER_HOST`. The authors tab edits and removes in
+        //    place, and a deleted author keeps its bylines, since
+        //    `resolveEntryAuthor` falls through to the entry's `authorName`.
+        //  - `media`, CREATE and UPDATE (AGL-1881), and NOT a denial: the
+        //    dedicated block below re-grants both with the Storage-object
+        //    fields frozen, because `storagePath` addresses the shared bucket
+        //    through the Admin SDK (the pre-launch review's CRITICAL). DELETE
+        //    is not excluded: it sets no field, the re-create is refused by the
+        //    create freeze, and a doc without `storagePath` resolves to its OWN
+        //    key in `mediaStoragePathInScope`.
+        //  - `memberPosts`, CREATE and UPDATE, with DELETE excluded and
+        //    re-granted below (AGL-2372): the database half of `f78705249`,
+        //    which made `member-post.ts` refuse an `author`. The only client
+        //    write anywhere is the card's `deleteDoc`, while
+        //    /api/commerce/member-post owns the create, and delete moves to
+        //    `canPublishHostContent`, so an `author` cannot take down what
+        //    paying subscribers read.
+        //  - `topicOptOuts`, all three: which email streams a RECIPIENT left,
+        //    third-party PII captured behind a signed link and read by the send
+        //    path. A write forges someone else's preference, a delete puts an
+        //    address back into a stream it left, and the Admin-SDK preference
+        //    page is the only writer.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
@@ -3313,207 +3182,90 @@ service cloud.firestore {
               'topicOptOuts', 'emailFrequency', 'campaigns',
               'emailAttributions', 'campaignAttributions',
               'flowEnrollments', 'leads']));
-        // `campaigns` joins all THREE lists. Each document is one email SEND,
-        // and every field on it is written server-side: `campaign-send.ts`
-        // stamps the audience, the consent and suppression populations and the
-        // delivery counters on the Admin SDK, and the Resend webhook
-        // (`email-events.ts`) and the unsubscribe handler increment the `stats`
-        // map from there. An editor who could write one would be authoring the
-        // campaign report itself — delivered, open, click, bounce, complaint
-        // and unsubscribe counts — and the send-time record of who the send
-        // was allowed to reach, which is the compliance evidence for that send
-        // rather than a vanity metric.
+        // More names on all THREE lists, each server-written with no client
+        // writer to break:
         //
-        // `{document=**}` spans the nested `reports` documents, so the
-        // exclusion covers the per-link click breakdown the report screen
-        // renders beside those counters — written by the same webhook — and
-        // the `reports/revenue` rollup, which is the money a campaign was
-        // credited with. An editor who could write that one would be
-        // authoring their own sales figures.
+        //  - `campaigns`: one document per email SEND. `campaign-send.ts`
+        //    stamps the audience and the consent and suppression populations,
+        //    and the Resend webhook (`email-events.ts`) and the unsubscribe
+        //    handler increment `stats`. A client write would author the
+        //    campaign report and the send-time compliance record of who the
+        //    send was allowed to reach. `{document=**}` spans the nested
+        //    `reports`, so the per-link clicks and the `reports/revenue` rollup
+        //    (the money a campaign is credited with) are covered too.
+        //  - `emailAttributions`: one document per order, crediting a campaign,
+        //    written only by `email-revenue-attribution.ts`. The create is what
+        //    makes crediting idempotent, so a client `set` credits twice, and a
+        //    delete leaves a refund nothing to reverse. READ stays: it carries a
+        //    campaign, an amount and a currency, and no address.
+        //  - `campaignAttributions`: one document per CONVERSION (a form
+        //    submission, lead, contact or booking), written only by
+        //    `campaign-conversion-attribution.ts`, idempotent for the same
+        //    reason. It carries `personKey`, the address hash the erasure sweep
+        //    joins on (the `topicOptOuts` PII footing), so only an erasure may
+        //    remove one. READ stays for the site's conversion reporting; the
+        //    record holds a hash, never an address.
+        //  - NOT `emailCampaigns`, the campaign CONTAINER (a name, a date
+        //    window, its lists), created client-side by the campaigns card's
+        //    drawer. It holds no counter and no entitlement input (the send cap
+        //    is claimed against the ORG counter by the send route), and the
+        //    report, the emails list and the marketing summary read it.
+        //  - `emailFrequency`: the per-recipient marketing send window the
+        //    `sendEmail` gate keeps on the Admin SDK, keyed by
+        //    `sha256(address)`. Writing it decides how much mail a person gets
+        //    from the shared sending domain; reading it shows who a merchant
+        //    mails and when.
+        //  - `themeHistory` (AGL-1302): the PREVIOUS theme verbatim, written only
+        //    by `install-theme.ts`, so a forged one picks the CSS a publisher's
+        //    revert restores onto a live site.
+        //  - `flowEnrollments`: a person suspended part-way through an
+        //    automation, written by the executor and the resume beat. A forged
+        //    one schedules mail to an address and time of the forger's choosing,
+        //    a rewrite moves `nextStepIndex` or pushes `resumeAtMs` out, and a
+        //    delete silently cancels a sequence. READ stays, like `checkouts`.
+        //  - `stockHolds` (AGL-2356): the release index for the units a live
+        //    checkout reserved, written in the same transaction as the holds.
+        //    A delete strands stock until the TTL; a forgery releases holds it
+        //    does not own. Server-only state on the money path, like `carts`.
         //
-        // `emailAttributions` joins all THREE lists. One document per order,
-        // recording which campaign the sale was credited to and how much of
-        // it has since come back. It is written only by
-        // `email-revenue-attribution.ts` on the Admin SDK, and every field on
-        // it is evidence: the create is what makes crediting an order
-        // idempotent, so a client that could `set` one would credit a campaign
-        // twice, and one that could DELETE one would leave a refund with
-        // nothing to reverse — revenue that can only ever go up. READ is
-        // untouched; the record carries a campaign, an amount and a currency,
-        // and no address.
+        // Names on the UPDATE list for their own reasons:
         //
-        // `campaignAttributions` joins all THREE lists. One document per
-        // CONVERSION — a form submission, a lead, a contact or a booking —
-        // recording which campaign the visitor came from, through which
-        // channel, and under which model and window. It is written only by
-        // `campaign-conversion-attribution.ts` on the Admin SDK, and every
-        // operation is load-bearing for the same reasons `emailAttributions`
-        // states one paragraph up: the CREATE is what makes crediting a
-        // conversion idempotent, so a client that could `set` one would
-        // credit a campaign twice for one submission, and one that could
-        // DELETE one would remove the record an erasure is supposed to be the
-        // only thing that removes.
-        //
-        // It also carries `personKey` — the address hash the erasure sweep
-        // joins on — which is the same third-party PII footing `topicOptOuts`
-        // sits on. An editor who could write one would be forging a claim
-        // about where somebody else came from.
-        //
-        // READ is untouched: the site's own conversion reporting is a console
-        // surface reading this collection with the client SDK, and the record
-        // carries a campaign, a kind and a hash, never an address.
-        //
-        // NOT `emailCampaigns`, which is the campaign CONTAINER — a name, a
-        // date window and the lists it is aimed at — created client-side from
-        // the campaigns card's create drawer. It holds no counter and no
-        // entitlement input, since the monthly send cap is claimed against the
-        // ORG counter by the send route, so a container an editor writes
-        // cannot buy them a send. Denying it would break that drawer.
-        //
-        // READ is untouched, and the console depends on it: the campaign
-        // report, the emails list and the marketing summary card all read this
-        // collection with the client SDK.
-        //
-        // `emailFrequency` joins all THREE lists. It is the per-recipient
-        // marketing send window the `sendEmail` marketing gate reads and
-        // writes on the Admin SDK — the instants one site mailed one person,
-        // keyed by `sha256(address)` exactly as both suppression lists are.
-        // A client that could write one would be choosing how much mail a
-        // person may receive from the shared sending domain, which is a
-        // platform deliverability control rather than site content, and a
-        // client that could read one would be reading who a merchant mails
-        // and when.
-        //
-        // `themeHistory` joins all THREE lists (AGL-1302), and has no client
-        // writer of any kind. It holds the PREVIOUS theme verbatim so that
-        // "Go back to the previous theme" can restore it, written only by
-        // `install-theme.ts` on the Admin SDK. A client that could forge one
-        // would be choosing the CSS a publisher's revert restores — arbitrary
-        // styling pushed onto a live site from the narrowest role we sell,
-        // and it would arrive looking like the site's own history.
-        //
-        // `flowEnrollments` joins all THREE lists. Each document is one person
-        // suspended part-way through an automation: their address, the step
-        // list they entered with, the position inside it, and the instant the
-        // flow continues. Every field is written by the executor and the
-        // resume beat on the Admin SDK, and there is no client writer of any
-        // kind to break.
-        //
-        // A client that could forge one would be scheduling mail from the
-        // shared sending domain to an address of its choosing, at a time of
-        // its choosing, with a merchant-authored body attached — the send
-        // gates would still refuse a suppressed recipient, but the enrollment
-        // itself is an instruction to send. One that could rewrite one could
-        // move `nextStepIndex` into a different step of somebody else's
-        // sequence, or push `resumeAtMs` far enough out to silently cancel a
-        // sequence a merchant is relying on. One that could delete one would
-        // do the same by removing the row, and the person mid-flow is the
-        // party least able to notice either.
-        //
-        // READ is untouched, on the same footing as `checkouts` beside it: it
-        // is the state a console surface would show a merchant about their own
-        // site's automations.
-        //
-        // `stockHolds` joins all THREE lists (AGL-2356). It is the release
-        // index for the units a live checkout has reserved: written inside the
-        // same transaction as the holds it names, read by id when the session
-        // expires or settles, and never touched by any client. An editor who
-        // could delete one would strand a merchant's stock until the hold's TTL
-        // lapsed, and one who could forge one would have this webhook release
-        // reservations it does not own. Same footing as `carts`/`checkouts`
-        // beside it — server-only state on the money path, with no client-SDK
-        // writer to break.
-        // `templates` is excluded from update as well as create: its
-        // dedicated block above freezes `source`, and leaving it here would
-        // re-grant the unrestricted update this catch-all allows (AGL-666).
-        // `collections` is excluded from create and update (AGL-978): the
-        // slug is the collection's public address and must be claimed
-        // transactionally, like the host subdomain (AGL-642), so
-        // /api/hosts/collections owns both. The dedicated block below
-        // re-grants the non-identity updates the console still makes
-        // client-side (template assignment, categories).
-        // `registers` joins update and delete (AGL-1775). It was excluded from
-        // create only, which is not denial: the POS register add-on is a
-        // per-org POOL allocated per site, the billing rollup reads these
-        // docs, and an editor who can rewrite or delete one can re-allocate
-        // registers the org is billed for. Same shape as AGL-1367 — a
-        // document the invoice is computed from is a document the customer
-        // must not be able to write. Allocation is an Admin-SDK route, so
-        // denying the client changes nothing about the product.
-        //
-        // Re-applied after fcf1017eb reverted it from a stale worktree. If
-        // this comment is here and `registers` is NOT in both lists below,
-        // the same clobber has happened a third time — the coverage spec
-        // host-subcollection-write-deny-coverage is what catches it.
-        //
-        // `inventoryAdjustments` joins UPDATE and DELETE, not create
-        // (AGL-2269). It is an append-only LEDGER, and it is load-bearing
-        // rather than historical: `cancel-order.ts` reads its
-        // `reason: 'sale'` rows to decide whether a POS card order decremented
-        // at all, and caps the units it releases at each row's
-        // `appliedDelta` (AGL-2149) so a backordered sale cannot be
-        // cancelled into stock nobody has. A row an editor can rewrite or
-        // delete is a row that changes how much inventory a cancellation
-        // invents — the AGL-1367 shape again, one collection over.
-        //
-        // CREATE stays client-side, deliberately: the products hub's "Adjust
-        // stock" writes a row with `addDoc` in the same act as the count, and
-        // moving that server-side is a different change. Appending is also the
-        // one operation a ledger is supposed to allow.
-        //
-        // `components` joins UPDATE only (AGL-2334), and for the `templates`
-        // reason rather than the AGL-1367 one: its dedicated block above now
-        // freezes `versionId`/`publishSchedule` for an `author`, and leaving
-        // the name here would re-grant the unrestricted update this catch-all
-        // allows — sibling matches are OR'd and the looser one wins, so the
-        // freeze would never have fired. `screens` and `layouts` were already
-        // excluded, which is why only the component publish was open.
-        //
-        // Create and delete are deliberately NOT changed: create is already
-        // API-only via the list above, and the dedicated block owns delete.
-        //
-        // `media` joins UPDATE for the `components` reason stated on the
-        // create list above (AGL-1881): the block below freezes the object
-        // fields, and a freeze under a looser sibling never fires.
-        //
-        // `memberPosts` joins UPDATE for the reason stated on the create list
-        // (AGL-2372), and it is a deny rather than a re-grant: no client
-        // updates one — the card has no edit control — so the operation is
-        // dead client-side, and leaving it open would let an `author` rewrite
-        // a live post's title and body in place, which reaches paying
-        // subscribers by the same door the create fix just shut.
-        //
-        // `redirects` joins UPDATE and DELETE (AGL-1881). It was on the create
-        // list ALONE, which for this collection is not a control at all: the
-        // console's create rides /api/hosts/resources, but its EDIT is a
-        // client-direct `setDoc(..., {merge: true})` and its delete is a
-        // client-direct `updateDoc` stamping `deletedAt`. So the one operation
-        // the exclusion covered was the one no client performed, and both
-        // operations that decide what a redirect DOES resolved here, on
-        // `canWriteHostContent` — which has admitted `author` since AGL-2334.
-        //
-        // A redirect rule is the strongest routing statement on the platform.
-        // It is evaluated in `resolveRedirect` BEFORE route resolution, on
-        // every path of every render, and a `kind: 'regex'` rule's `source`
-        // can be written to match every path at once — so one update to one
-        // document decides what the whole live site serves, with no publish
-        // step in front of it and no version pointer to move. `destination`
-        // may be an absolute https URL (a documented feature — vanity domains
-        // and campaign links), so that one write can also send the site's
-        // entire traffic off-platform.
-        //
-        // That is the AGL-2334 question with the highest possible answer:
-        // "registering a path is what makes a page reachable" is the reason
-        // `screens` is publish-gated, and a redirect OVERRIDES the routing map
-        // rather than adding to it. The role docs promise an Author that
-        // "nothing they do goes live" and that they cannot "change its
-        // address"; a redirect is live the moment it is written and changes
-        // every address at once. The dedicated block below therefore re-grants
-        // both operations on `canPublishHostContent`.
-        //
-        // The exclusion is the MECHANISM, as on `media`/`components` above:
-        // sibling matches are OR'd and the looser one wins, so the block below
-        // decides nothing at all while this list still names neither operation.
+        //  - `templates` (AGL-666): its dedicated block above freezes `source`,
+        //    which an unrestricted update here would re-grant.
+        //  - `collections`, create and update (AGL-978): the slug is the public
+        //    address and is claimed transactionally, like the host subdomain
+        //    (AGL-642), by /api/hosts/collections. The block below re-grants the
+        //    non-identity updates (template assignment, categories).
+        //  - `registers`, update and delete (AGL-1775): the POS register pool is
+        //    billed per org and allocated per site by an Admin-SDK route, and
+        //    the billing rollup reads these docs: the AGL-1367 shape.
+        //    Re-applied after fcf1017eb reverted it from a stale worktree. If
+        //    this comment is here and `registers` is NOT in both lists below,
+        //    the same clobber has happened again; the coverage spec
+        //    host-subcollection-write-deny-coverage is what catches it.
+        //  - `inventoryAdjustments`, update and delete, NOT create (AGL-2269):
+        //    an append-only ledger `cancel-order.ts` reads (its `reason: 'sale'`
+        //    rows, capped at each row's `appliedDelta`, AGL-2149), so a
+        //    rewritten row changes how much stock a cancellation invents. CREATE
+        //    stays client-side: "Adjust stock" appends a row with `addDoc`.
+        //  - `components`, update (AGL-2334): its dedicated block freezes
+        //    `versionId`/`publishSchedule` for an `author`, a freeze that never
+        //    fires under a looser sibling. Create is already API-only, and the
+        //    dedicated block owns delete.
+        //  - `media` (AGL-1881): the block below freezes the object fields, and
+        //    a freeze under a looser sibling never fires.
+        //  - `memberPosts` (AGL-2372): a deny, not a re-grant. No client updates
+        //    one, and an `author` must not rewrite a live post in place.
+        //  - `redirects`, update and delete (AGL-1881). On the create list alone
+        //    it controlled nothing: the console's edit is a client
+        //    `setDoc(..., {merge: true})` and its delete a `deletedAt` update.
+        //    A redirect is the strongest routing statement on the platform:
+        //    `resolveRedirect` runs BEFORE route resolution on every path, a
+        //    `kind: 'regex'` rule can match every path at once, and
+        //    `destination` may be an absolute https URL, so one write can send
+        //    the whole live site off-platform with no publish step. That makes
+        //    it a publish act (AGL-2334) rather than authoring, so the block
+        //    below re-grants both on `canPublishHostContent`.
         allow update: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',

@@ -17,7 +17,11 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { parseReleaseFlagValue, RELEASE_FLAGS } from './release-flags'
+import {
+  fitsRemoteConfigDescription,
+  parseReleaseFlagValue,
+  RELEASE_FLAGS,
+} from './release-flags'
 
 /**
  * A release flag lives in two places that must agree, and nothing checked
@@ -39,7 +43,12 @@ const template = JSON.parse(
     join(__dirname, '..', '..', '..', '..', '..', 'cloud', 'firebase-remoteconfig.template.json'),
     'utf8',
   ),
-) as { parameters: Record<string, { defaultValue?: { value?: string } }> }
+) as {
+  parameters: Record<
+    string,
+    { defaultValue?: { value?: string }; description?: string }
+  >
+}
 
 describe('release flags are seeded in the Remote Config template', () => {
   it.each(RELEASE_FLAGS.map((flag) => [flag.key, flag.defaultEnabled] as const))(
@@ -71,5 +80,20 @@ describe('release flags are seeded in the Remote Config template', () => {
       .filter((key) => key.startsWith('release_'))
       .filter((key) => !registered.has(key as never))
     expect(orphaned).toEqual([])
+  })
+
+  it('seeds only descriptions Remote Config accepts (AGL-3048)', () => {
+    // `firebase deploy --only remoteconfig` publishes this file whole, and a
+    // single description past Remote Config's limit refuses all of it.
+    const refused = Object.entries(template.parameters)
+      .filter(
+        ([, parameter]) =>
+          !fitsRemoteConfigDescription(parameter.description ?? ''),
+      )
+      .map(
+        ([key, parameter]) =>
+          `${key}: ${Buffer.byteLength(parameter.description ?? '')} bytes`,
+      )
+    expect(refused).toEqual([])
   })
 })

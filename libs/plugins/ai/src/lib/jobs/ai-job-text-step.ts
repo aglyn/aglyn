@@ -15,10 +15,18 @@
  * limitations under the License.
  */
 
-import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
-import { aiModelForStep } from '../providers/routing'
-import { runAiRequest, type AiSystemBlock } from '../runtime/ai-runtime'
+import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import type {
+  AiJob,
+  AiJobOutput,
+  AiJobPlan,
+  AiJobReview,
+} from '../model/ai-jobs.types'
+import { AI_STEP_TIERS, type AiStepKind } from '../providers/catalog'
+import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
+import { runAiRequest, type AiEffort, type AiSystemBlock } from '../runtime/ai-runtime'
 import type { AssistTokenUsage } from '../usage/assist-usage'
+import { aiJobStepBudget } from './ai-job-budget'
 
 /**
  * The `text` step (AGL-2904): a brief in, a short piece of copy out.
@@ -40,8 +48,26 @@ export function aiJobTextModel(): string {
   return aiModelForStep('job.text')
 }
 
-/** Enough for a few paragraphs; a brief asking for more gets a draft to extend. */
-export const AI_JOB_TEXT_MAX_TOKENS = 1024
+/** The text step's answer ceiling, from the routing table. */
+export const AI_JOB_TEXT_MAX_TOKENS = AI_ROUTING_TABLE['job.text'].maxTokens
+
+/**
+ * The text step's time (AGL-3035): ONE request — no re-ask, and no site
+ * inventory to look anything up in — at the routing table's ceiling on the
+ * tier `job.text` is served from, with the step's reads and writes. That fits
+ * an inline door's budget, so a door runs a text job where it is asked for,
+ * and the least time is the helper's worst case rather than a figure anyone
+ * chose; a slower tier asks less so its worst case still fits.
+ */
+export const AI_JOB_TEXT_STEP_BUDGET = aiJobStepBudget({
+  tier: AI_STEP_TIERS['job.text'],
+  maxTokens: AI_JOB_TEXT_MAX_TOKENS,
+  attempts: 1,
+  lookups: 0,
+})
+
+/** The least time one text step needs before it starts. */
+export const AI_JOB_TEXT_STEP_MINIMUM_MS = AI_JOB_TEXT_STEP_BUDGET.minimumMs
 
 /** How much of a brief is sent. Past this a brief is a document, not a brief. */
 export const AI_JOB_BRIEF_MAX_CHARS = 4_000
@@ -53,12 +79,41 @@ export const AI_JOB_BRIEF_MAX_CHARS = 4_000
  */
 export interface AiJobStepOutcome {
   outputs: AiJobOutput[]
+  /**
+   * The step made progress and has more of the same work to do (AGL-2910):
+   * a site audit works through its pages a batch at a time. The machine
+   * records this pass — its spend and its outputs — and hands the SAME step
+   * back to run again, so every pass is one reservation and one provider
+   * exchange, and the job document says how far it got.
+   */
+  continue?: boolean
   usage: AssistTokenUsage
   estCostUsd: number
   model: string
   stopReason: string | null
+  /**
+   * The thinking effort the request asked for, recorded on the step
+   * (AGL-2937); absent or `null` when the request named none.
+   */
+  effort?: AiEffort | null
   /** The model declined the brief (`stop_reason: 'refusal'`). Tokens were spent. */
   refused?: boolean
+  /**
+   * The model answered and nothing usable came of it — no structured answer
+   * even after the step's own re-ask, say (AGL-2938). Tokens were spent, so
+   * the machine meters the step before it fails the job with this sentence,
+   * which is customer-safe and the only thing a customer reads.
+   */
+  failure?: string
+  /** The plan the plan step proposed, which the machine keeps on the job (AGL-2935). */
+  plan?: AiJobPlan
+  /**
+   * The step stopped for a person (AGL-2935). The machine records what it
+   * spent and parks the job `needs_review`: a `plan` review completes the
+   * step, so confirming runs the next one; a `doctrine` review hands the
+   * step back, so trying again runs the same one.
+   */
+  review?: AiJobReview
 }
 
 export interface AiJobStepContext {
@@ -67,6 +122,20 @@ export interface AiJobStepContext {
   now: Date
   /** Aborts the provider call when the runner's budget ends. */
   signal?: AbortSignal
+  /**
+   * The Admin SDK handle the machine runs on, for a step that reads what it
+   * builds from — a site's theme, say — or writes a draft. A step never
+   * writes the job document, the meter or the lease through it.
+   */
+  firestore: FirebaseFirestore.Firestore
+  /** The org document the machine read for the step's reservation. */
+  org?: Partial<AglynOrgBilling> | null
+  /**
+   * The model a step of this kind runs on for THIS job (AGL-2942): the
+   * creator's pick where the plan and the allotment allowlists allow it,
+   * the routing table otherwise. Absent, a runner asks the table itself.
+   */
+  modelFor?: (kind: AiStepKind) => string | undefined
 }
 
 export type AiJobStepRunner = (
@@ -104,14 +173,17 @@ export function aiJobTextPrompt(job: Pick<AiJob, 'brief' | 'inputs'>): string {
   return lines.join('\n')
 }
 
-export const runAiJobTextStep: AiJobStepRunner = async ({ job, signal }) => {
-  const model = aiJobTextModel()
+export const runAiJobTextStep: AiJobStepRunner = async ({ job, signal, modelFor }) => {
+  const model = modelFor?.('job.text') ?? aiJobTextModel()
   const result = await runAiRequest({
     model,
     system: AI_JOB_TEXT_SYSTEM,
     messages: [{ role: 'user', content: aiJobTextPrompt(job) }],
-    maxTokens: AI_JOB_TEXT_MAX_TOKENS,
-    thinking: 'adaptive',
+    // The routing ceiling, lowered on a tier too slow to answer it inside the
+    // least time the step registered.
+    maxTokens: AI_JOB_TEXT_STEP_BUDGET.maxTokens(model),
+    ...(AI_ROUTING_TABLE['job.text'].thinking ? { thinking: AI_ROUTING_TABLE['job.text'].thinking } : {}),
+    ...(AI_ROUTING_TABLE['job.text'].effort ? { effort: AI_ROUTING_TABLE['job.text'].effort } : {}),
     stream: false,
     ...(signal ? { signal } : {}),
   })

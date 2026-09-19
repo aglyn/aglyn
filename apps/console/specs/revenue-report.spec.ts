@@ -702,6 +702,29 @@ describe('a signup that never paid is neither revenue nor a comp', () => {
     expect(contractedSummary([{ orgId: 'churned', billing: churned }]).compedOrgs).toBe(0)
   })
 
+  it('an explicit staff comp is a comp, on a canceled subscription or none (AGL-3034)', () => {
+    // The churned shape above, plus the comp staff granted it: now it is a
+    // plan we chose to give away, and counts as one — never as revenue.
+    const comped = {
+      name: 'Comped Co',
+      plan: 'business',
+      billingStatus: 'canceled',
+      subscription: { status: 'canceled', interval: 'month' },
+      entitlements: { planComp: { plan: 'pro', reason: 'beta' } },
+    }
+    expect(classifyOrgRevenueState(comped)).toBe('comped')
+    expect(classifyOrgRevenueState({ entitlements: { planComp: { plan: 'scale' } } })).toBe(
+      'comped',
+    )
+    const summary = contractedSummary([{ orgId: 'comped', billing: comped }])
+    expect(summary.compedOrgs).toBe(1)
+    expect(summary.total.orgs).toBe(0)
+    expect(summary.total.mrrUsd).toBe(0)
+    // A live subscription outranks the comp: that org is billing, not comped.
+    const paying = { ...payingOrg(), entitlements: { planComp: { plan: 'agency' } } }
+    expect(classifyOrgRevenueState(paying)).toBe('collecting')
+  })
+
   it('leaves a real comp and a real dunning org alone — the controls', () => {
     // A staff override writes `plan` and NO subscription: still a comp.
     expect(classifyOrgRevenueState({ plan: 'agency' })).toBe('comped')

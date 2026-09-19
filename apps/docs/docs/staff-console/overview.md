@@ -46,7 +46,10 @@ live Stripe subscription — staff plan overrides, comped accounts, and canceled
 unpaid subscriptions contribute $0, and annual plans count at their per-month
 equivalent rather than the month-to-month price. The tile shows how many
 organizations are billing and how many are comped, so a paid plan that bills
-nothing never inflates the headline.
+nothing never inflates the headline. "Comped" counts organizations holding a
+[staff comp](#plan-comps), and paid plans stored with no subscription at all. It
+does not count a canceled subscription whose stored plan still names a paid tier:
+that is churn, and the organization resolves as Free.
 
 ### [Support queue](support-queue.md) {#support-queue}
 
@@ -138,6 +141,81 @@ says the outcome is **not known** when the request never got an answer (a droppe
 connection, a gateway error). In that second case, check the organization and the
 audit log before saving again — saving blind would record a before-state that is
 already overridden.
+
+#### Plans and staff comps {#plan-comps}
+
+The editor opens on the plan as it **resolves**, not only as it is stored:
+**Effective** beside **Stored**, the subscription's status (marked **dead** when
+it is canceled, unpaid or incomplete), and any **comp**, followed by one sentence
+saying what decides the plan. Those can disagree. A customer who canceled can
+still store the plan they paid for, and that stored plan gives them nothing: the
+organization resolves as **Free**.
+
+What saving a plan does depends on the subscription:
+
+- **Live subscription** (active, trialing, past due). The subscription decides
+  the plan. The **Stored plan** select writes the stored plan as it always did,
+  and the next subscription event from Stripe rewrites it. You can't grant a
+  comp while a subscription is live; the server refuses one.
+- **Dead or no subscription.** A plan chosen in **Comp plan** is saved as a
+  **staff comp**. The comp takes effect at once and records the plan, your
+  reason and note, your uid and the time on the same audit row as the rest of
+  the override. The stored plan is left as Stripe last wrote it. Changing the
+  stored plan directly is refused here, because on a dead subscription the
+  change would do nothing. The exception is an organization that never
+  subscribed and had a plan stored directly before comps existed: you can clear
+  that plan, which returns it to Free.
+
+Once a comp plan is chosen, **Comp caps** sets how the comp holds the
+organization's bands:
+
+- **Capped** (the default). Every band is a hard limit at the comp plan's
+  figure, because nothing is sold past it: no AI credit overage, no metered
+  storage or bandwidth, no CRM, API, dataset-storage or email overage. A comped
+  site can hit the bandwidth cap the way a Free site does. To raise one band,
+  type a higher figure into its **Quota overrides** field. The empty field
+  shows the figure the comp caps it at, and the figure you type becomes its
+  hard limit. A band showing **∞** has no cap on that plan.
+- **Uncapped**, for an internal workspace. While the comp is in force, every
+  band and quota reads as unlimited, whatever the plan or a quota override
+  says. Overrides stay stored and apply again if the comp is capped or
+  removed. The three fee percentages are prices, not caps, and still apply.
+  The platform's own safeguards still apply too: the bandwidth and form
+  submission abuse ceilings, the per-site caps on webhooks, actions and
+  collection entries, email send pacing, the AI assistant's monthly message
+  cap, an operator's AI spend ceiling, and staff pauses and suspensions.
+
+Choosing **Uncapped** or **Capped** on a standing comp changes the comp: it is
+saved with your reason, recorded on the audit row, and the comp's grant is
+stamped with you and the time. **Remove the comp on save** removes the comp and
+its caps setting together, and the organization's own bands apply again.
+
+A comp **bills nothing**, capped or uncapped:
+
+- **Nothing is sold past a band.** A capped comp stops at its bands, and an
+  uncapped comp has none to sell past.
+- **Stripe never sees it.** It is never charged, never invoiced, never counted
+  as a card on file, and never counted as MRR. On the staff overview and the
+  revenue page it counts as **comped**.
+- **Old purchases don't come back.** Add-ons bought on the subscription that
+  ended still don't count.
+
+A comp lasts until it is removed. If the organization later subscribes, the
+live subscription outranks the comp, which then shows as **dormant**. If that
+subscription ends, the comp applies again, so remove a comp when it should end.
+Only **Remove the comp on save** removes one. A save that doesn't mention the
+comp, such as a quota edit or an older console tab, leaves it exactly as stored.
+The success message quotes the server's account of what took effect, for
+example *"Pro comp granted. Effective plan: Free → Pro."* or *"Uncapped
+Enterprise comp granted."* A plan change, or lifting or restoring a comp's
+caps, also refreshes the organization's published pages, so a Free-tier badge
+or a paused site clears without waiting for the cache.
+
+The organizations list and the organization's summary card show the effective
+plan, a **stored:** chip when it differs from the stored plan, and a **comp:**
+chip that says **uncapped** and **dormant** where they apply. The override
+dialog's comp chip does the same, and the organization's AI card says when an
+uncapped comp is why the workspace has no AI credit band.
 
 ### Users admin {#users-admin}
 

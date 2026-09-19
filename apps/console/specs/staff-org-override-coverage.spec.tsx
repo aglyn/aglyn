@@ -286,7 +286,9 @@ describe('staff org override surface coverage (AGL-1635)', () => {
       // presence, so an empty `releaseFlags` would keep showing a chip
       // forever. From here that is expressed as an empty request map, which
       // the route turns into a delete of the whole field.
-      await openAndSetFlag('Inherit (default off)', { release_edit_bar: true })
+      // The label names the registry default, which is ON since the admin
+      // bar's release (AGL-3041).
+      await openAndSetFlag('Inherit (default on)', { release_edit_bar: true })
       expect(overridePayload().releaseFlags).toEqual({})
     })
 

@@ -636,6 +636,83 @@ export interface OrgEntitlements {
    */
   marketplaceFeePct?: number
   features?: OrgFeatureFlags
+  /**
+   * A staff PLAN COMP (AGL-3034) — see `OrgPlanComp`. Not a quota: the
+   * resolver's numeric loop skips it, and `ResolvedOrgEntitlements` omits
+   * it. Read through `readOrgPlanComp`, never directly.
+   */
+  planComp?: OrgPlanComp
+}
+
+/**
+ * A plan staff GRANTED a workspace that no live subscription pays for
+ * (AGL-3034), stored at `orgs/{orgId}.entitlements.planComp`.
+ *
+ * ## Why a marker of its own, and not the stored `plan`
+ *
+ * `plan: 'pro'` beside `billingStatus: 'canceled'` is what EVERY customer who
+ * canceled can look like: Stripe's mirror is not always walked back to
+ * `free`, and a staff override used to write `plan` directly. So a stored
+ * paid plan must never outrank a dead subscription — `resolveEffectivePlan`
+ * reads it as Free, which is AGL-247's rule and stays it. A comp is a
+ * different fact with a different writer: only `/api/admin/org-override`
+ * writes this, audited, with a reason. Nothing reads a comp out of `plan`.
+ *
+ * ## When it applies
+ *
+ * Only while the subscription is dead or absent — `resolvePlanComp`. A live
+ * subscription (and any status the resolver does not read as dead) governs
+ * the plan, and the comp waits, dormant, until staff remove it or the
+ * subscription ends.
+ *
+ * ## Why under `entitlements`
+ *
+ * It sits beside the other staff overrides, on the one map the override
+ * route already owns and the rules already deny to every client, staff
+ * included (AGL-1795). A top-level key would have needed a new entry in all
+ * three of the org rule's deny-lists, in a rules file at its size limit.
+ *
+ * ## What it is NOT
+ *
+ * Not a sale. A comp bills nothing, so every metered band on it is a wall —
+ * `resolvePlanPricing` — and it is never a card on file or a paying
+ * subscription: `isBillingSubscription` stays false, and the AI overage
+ * charge path has no rate to bill it at.
+ *
+ * ## Capped or uncapped (AGL-3049)
+ *
+ * A comp is CAPPED unless staff lift it: every band is its plan's figure, a
+ * hard limit, and a per-org quota override beside the comp raises one band.
+ * An UNCAPPED comp (`uncapped: true`) reads every band and quota as
+ * unlimited while it is in force — the shape an internal workspace needs —
+ * and still bills nothing. The flag is part of the grant: the same route
+ * writes it with its own reason and audit row, removing the comp removes it,
+ * and a live subscription ignores it along with the rest of the comp.
+ *
+ * The route states it on every grant, `false` included. The org write is a
+ * merge, which writes a nested map key by key, so a capped grant that left
+ * the key out would keep the `true` of the uncapped comp it replaced.
+ *
+ * Typed loosely where foundation cannot import the vocabulary: `reason` is
+ * an `OrgOverrideReasonCode` (`app-utils/org-override-reason`), narrowed by
+ * `readOrgPlanComp`.
+ */
+export interface OrgPlanComp {
+  /** The plan granted. A paid plan; a comp of `free` is not a comp. */
+  plan: OrgPlan
+  /**
+   * Every band and quota reads as unlimited while the comp is in force
+   * (AGL-3049). Only a literal `true` lifts them; absent means capped.
+   */
+  uncapped?: boolean
+  /** Why, from the override's fixed reason set (AGL-1652). */
+  reason: string
+  /** Staff-only rationale; explicit `null` when none was given. */
+  note: string | null
+  /** The staff uid that granted it. */
+  grantedBy: string
+  /** When it was granted — the server's clock. */
+  grantedAt: ITimestamp | null
 }
 
 /**

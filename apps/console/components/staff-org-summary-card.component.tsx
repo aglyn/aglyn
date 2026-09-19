@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { describeOrgPlan, planCompLabel } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
@@ -95,6 +96,10 @@ export interface StaffOrgSummaryCardProps {
     suspendedAt?: unknown
     suspendedReason?: string | null
     subscription?: { status?: string | null } | null
+    /** The status mirror on the org doc — the resolver reads it first. */
+    billingStatus?: string | null
+    /** Staff overrides; carries the plan comp (AGL-3034). */
+    entitlements?: Record<string, unknown> | null
     createdAt?: { seconds?: number } | null
   } | null
   /** The resolved owner, when the detail endpoint could name one. */
@@ -122,6 +127,9 @@ const StaffOrgSummaryCard = ({
     enqueueSnackbar('Org id copied', { variant: 'success', persist: false })
   }
   const ownerLabel = staffPersonLabel(owner)
+  // The plan as it RESOLVES (AGL-3034): a staff comp, or a dead
+  // subscription, makes the stored field name a plan the org does not get.
+  const planState = org ? describeOrgPlan(org as never) : null
 
   return (
     <CardDisplay
@@ -202,10 +210,31 @@ const StaffOrgSummaryCard = ({
         <GroupHeader>{'Billing'}</GroupHeader>
         <FieldRow label="Plan">
           <Chip
-            label={org?.plan ?? 'no plan'}
+            label={planState ? planState.effectivePlan : 'no plan'}
             size="small"
-            color={org?.plan ? 'primary' : 'default'}
+            color={org?.plan || planState?.comp ? 'primary' : 'default'}
           />
+          {/* Only when the stored value would surprise a reader of the
+              effective one — the orgs list's rule. */}
+          {planState && (org?.plan ?? 'no plan') !== planState.effectivePlan ? (
+            <Chip
+              label={`stored: ${org?.plan ?? 'no plan'}`}
+              size="small"
+              variant="outlined"
+            />
+          ) : null}
+          {/* Says "uncapped" when the comp lifts every band (AGL-3049). */}
+          {planState?.comp ? (
+            <Chip
+              label={`comp: ${planCompLabel(
+                planState.comp,
+                planState.compInForce,
+                planState.comp.plan,
+              )}`}
+              size="small"
+              color="secondary"
+            />
+          ) : null}
           {org?.suspendedAt ? (
             <Chip
               label={`suspended${
@@ -217,11 +246,16 @@ const StaffOrgSummaryCard = ({
           ) : null}
         </FieldRow>
         <FieldRow label="Subscription">
-          {org?.subscription?.status ? (
+          {planState?.subscriptionStatus ? (
             <Chip
-              label={org.subscription.status}
+              label={
+                planState.subscription === 'dead'
+                  ? `${planState.subscriptionStatus} (dead)`
+                  : planState.subscriptionStatus
+              }
               size="small"
               variant="outlined"
+              color={planState.subscription === 'dead' ? 'warning' : 'default'}
             />
           ) : (
             <Typography variant="body2" color="text.secondary">

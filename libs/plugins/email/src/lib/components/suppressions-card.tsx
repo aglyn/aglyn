@@ -27,7 +27,12 @@ import {
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 /*
  * The shared drawer, reached by its own path.
  *
@@ -46,15 +51,11 @@ import {
   Chip,
   IconButton,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
 import Button from '@mui/material/Button'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   count,
@@ -461,6 +462,75 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
     }
   }
 
+  const columns: GridColDef<SuppressionRow>[] = [
+    {
+      field: 'email',
+      headerName: 'Address',
+      flex: 1,
+      minWidth: 240,
+      /*
+        Entries are keyed by `sha256(email)` because addresses are PII, and the
+        address itself is stored in the document. An older row written before
+        the address was stored has only its hash — which tells a merchant
+        nothing, so it says so rather than displaying 64 hex characters.
+      */
+      renderCell: ({ row }) =>
+        row.email || (
+          <Typography variant="body2" color="text.secondary">
+            {'(address not recorded)'}
+          </Typography>
+        ),
+    },
+    {
+      field: 'reason',
+      headerName: 'Reason',
+      width: 170,
+      valueGetter: (_value, row) => describeReason(row.reason).label,
+      renderCell: ({ row }) => {
+        const described = describeReason(row.reason)
+        return (
+          <Chip
+            size="small"
+            color={described.color}
+            variant="outlined"
+            label={described.label}
+          />
+        )
+      },
+    },
+    {
+      field: 'since',
+      headerName: 'Since',
+      width: 140,
+      valueGetter: (_value, row) => onDate(row),
+    },
+    /*
+      A SUPPRESSION HAS NO PAGE, so the row does not open one — this is the
+      surface's one list whose rows are not a way in to anything. What it does
+      have is the one act a merchant performs on an entry, and the trailing
+      cluster is where every other list on this surface keeps that: a bare
+      `Remove` in the row is a click that puts an address back into mailing
+      range, sitting where the reader's eye is running along the row.
+     */
+    listActionsColumn(
+      (row: SuppressionRow) => (
+        <ListRowActions
+          label={row.email || 'this entry'}
+          items={[
+            {
+              key: 'remove',
+              label: 'Remove from the list',
+              icon: <MdiIcon path={mdiEmailCheckOutline.path} size={0.8} />,
+              destructive: true,
+              onClick: () => void handleRemove(row),
+            },
+          ]}
+        />
+      ),
+      { width: 72 },
+    ),
+  ]
+
   return (
     <CardDisplay
       header="Suppressions"
@@ -520,78 +590,14 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
                   })
               )}
             </Stack>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'Address'}</TableCell>
-                  <TableCell>{'Reason'}</TableCell>
-                  <TableCell>{'Since'}</TableCell>
-                  <TableCell align="right" />
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {entries.map((row) => {
-                  const described = describeReason(row.reason)
-                  return (
-                    <TableRow key={row.$id}>
-                      <TableCell>
-                        {/*
-                          Entries are keyed by `sha256(email)` because
-                          addresses are PII, and the address itself is stored
-                          in the document. An older row written before the
-                          address was stored has only its hash — which tells a
-                          merchant nothing, so it says so rather than
-                          displaying 64 hex characters.
-                        */}
-                        {row.email || (
-                          <Typography variant="body2" color="text.secondary">
-                            {'(address not recorded)'}
-                          </Typography>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          size="small"
-                          color={described.color}
-                          variant="outlined"
-                          label={described.label}
-                        />
-                      </TableCell>
-                      <TableCell>{onDate(row)}</TableCell>
-                      {/*
-                        A SUPPRESSION HAS NO PAGE, so the row does not open
-                        one — this is the surface's one table whose rows are
-                        not a way in to anything. What it does have is the one
-                        act a merchant performs on an entry, and the trailing
-                        cluster is where every other table on this surface
-                        keeps that: a bare `Remove` in the row is a click that
-                        puts an address back into mailing range, sitting where
-                        the reader's eye is running along the row.
-                       */}
-                      <TableCell align="right" sx={{ width: 56 }}>
-                        <RowActionsMenu
-                          label={row.email || 'this entry'}
-                          items={[
-                            {
-                              key: 'remove',
-                              label: 'Remove from the list',
-                              icon: (
-                                <MdiIcon
-                                  path={mdiEmailCheckOutline.path}
-                                  size={0.8}
-                                />
-                              ),
-                              destructive: true,
-                              onClick: () => void handleRemove(row),
-                            },
-                          ]}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
+            <ListTable
+              aria-label="Suppressed addresses"
+              rows={entries}
+              columns={columns}
+              rowHeight={TABLE_ROW_HEIGHT}
+              // Paged by the footer below, so the grid must not also slice.
+              hideFooter
+            />
             <ListPagination
               page={page}
               pageSize={pageSize}

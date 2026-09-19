@@ -86,7 +86,9 @@ import InteractionsProvider from '../../../../../../../../../../components/inter
 import BesignerMediaPickerProvider from '../../../../../../../../../../components/besigner-media-picker-provider.component'
 import BesignerAppBarComponent from '../../../../../../../../../../components/besigner-app-bar.component'
 import BesignerDocumentSwitcherComponent from '../../../../../../../../../../components/besigner-document-switcher.component'
-import BesignerVersionsComponent from '../../../../../../../../../../components/besigner-versions.component'
+import BesignerVersionsComponent, {
+  type BesignerVersionsActions,
+} from '../../../../../../../../../../components/besigner-versions.component'
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
@@ -114,6 +116,8 @@ import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import useHostRole from '../../../../../../../../../../hooks/use-host-role'
+import useFormsPublishBlock from '../../../../../../../../../../hooks/use-forms-publish-block'
+import { useEditorSession } from '../../../../../../../../../../hooks/use-editor-session'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -220,6 +224,19 @@ function ComponentBesignerPage(props) {
   const editingLiveVersion = Boolean(
     versionId && versionId === publishedVersionId,
   )
+  // The versions panel's own actions, for the editor session below.
+  const versionsActions = useRef<BesignerVersionsActions>(null)
+  // The open component as an editor session (AGL-2906) — see the screen
+  // editor: the selection and the live pointer read when asked, and New
+  // version's own flow.
+  useEditorSession({
+    documentKind: 'component',
+    documentId: componentId,
+    versionId,
+    live: editingLiveVersion,
+    selectedNodeId: () => Besigner.focus.getLastSelected()?.$id ?? null,
+    versionsActions,
+  })
   const [draftPending, setDraftPending] = useState(false)
   const { data: screenDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
@@ -498,7 +515,11 @@ function ComponentBesignerPage(props) {
    * and is still true in the same tick, so a save chaining into the guarded
    * function would always refuse itself.
    */
+  const { refuse: refuseFormsOff } = useFormsPublishBlock()
   const promoteToSites = useCallback(async () => {
+    // A component carrying a form does not go live on a site that switched
+    // Forms off (AGL-3029): every page placing it would draw an empty space.
+    if (refuseFormsOff(canvas.toJSON().nodes)) return
     setPublishing(true)
     try {
       // The same resolution the Versions dialog's Publish runs (AGL-2878):
@@ -584,6 +605,7 @@ function ComponentBesignerPage(props) {
     componentResult?.data?.rootId,
     data,
     enqueueSnackbar,
+    refuseFormsOff,
     // The revalidate route authenticates with the caller's ID token, so the
     // signed-in user is a real input to publishing now (AGL-2486).
     user,
@@ -850,6 +872,7 @@ function ComponentBesignerPage(props) {
                           parent={{ kind: 'component', id: componentId }}
                           versionId={versionId}
                           publishedVersionId={publishedVersionId}
+                          actionsRef={versionsActions}
                         />
                       </>
                     }

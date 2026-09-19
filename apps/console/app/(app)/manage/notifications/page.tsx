@@ -19,27 +19,21 @@
 import {
   crmDailyDigestEnabled,
   DIGEST_PREFS_FIELD,
+  INSIGHT_DIGESTS_FIELD,
+  insightDigestSubscribed,
   NOTIFICATION_CATEGORY_LABELS,
-  NOTIFICATION_TYPE_LABELS,
   type NotificationCategory,
   PLATFORM_BRAND_NAME,
 } from '@aglyn/aglyn'
 import { mdiBellOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Button,
-  Chip,
   FormControlLabel,
   Stack,
   Switch,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Typography,
 } from '@mui/material'
 import {
@@ -61,6 +55,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import NotificationsTable from '../../../../components/notifications-table.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -221,6 +216,9 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   // digest is a schedule a person keeps or drops, not a category.
   const [prefs, setPrefs] = useState<Record<string, boolean>>({})
   const [digestPrefs, setDigestPrefs] = useState<Record<string, boolean>>({})
+  // The workspaces whose weekly insights this person asked for (AGL-2915).
+  // Turned on beside the answers themselves; listed here to turn off.
+  const [insightDigests, setInsightDigests] = useState<Record<string, boolean>>({})
   useEffect(() => {
     if (!uid) return
     let active = true
@@ -234,6 +232,9 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
           )
           setDigestPrefs(
             (snapshot.get(DIGEST_PREFS_FIELD) as Record<string, boolean>) ?? {},
+          )
+          setInsightDigests(
+            (snapshot.get(INSIGHT_DIGESTS_FIELD) as Record<string, boolean>) ?? {},
           )
         }
       } catch {
@@ -261,6 +262,17 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
     void setDoc(
       doc(firestore, 'users', uid),
       { [DIGEST_PREFS_FIELD]: next },
+      { merge: true },
+    ).catch(console.error)
+  }
+
+  const toggleInsightDigest = (orgId: string) => {
+    if (!uid) return
+    const next = !insightDigestSubscribed(insightDigests, orgId)
+    setInsightDigests({ ...insightDigests, [orgId]: next })
+    void setDoc(
+      doc(firestore, 'users', uid),
+      { [INSIGHT_DIGESTS_FIELD]: { [orgId]: next } },
       { merge: true },
     ).catch(console.error)
   }
@@ -414,6 +426,40 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
                   'nobody has worked, here and by email.'}
               </Typography>
             </Stack>
+            {Object.keys(insightDigests).length ? (
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  {'Weekly insights:'}
+                </Typography>
+                {Object.keys(insightDigests)
+                  .sort()
+                  .map((orgId) => (
+                    <FormControlLabel
+                      key={orgId}
+                      control={
+                        <Switch
+                          size="small"
+                          checked={insightDigestSubscribed(insightDigests, orgId)}
+                          onChange={() => toggleInsightDigest(orgId)}
+                        />
+                      }
+                      label={
+                        (orgs ?? []).find((org) => org.$id === orgId)?.name ??
+                        'A workspace you left'
+                      }
+                      slotProps={{ typography: { variant: 'caption' } }}
+                    />
+                  ))}
+                <Typography variant="caption" color="text.secondary">
+                  {'Each Monday: what your sites’ figures showed that week, here ' +
+                    'and by email. Turned on from Ask about your numbers.'}
+                </Typography>
+              </Stack>
+            ) : null}
             <Stack
               direction="row"
               spacing={1}
@@ -480,82 +526,18 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
                 </Typography>
               )}
             </Stack>
-            {rows.length === 0 && !loading ? (
-              <Typography variant="body2" color="text.secondary">
-                {"You're all caught up."}
-              </Typography>
-            ) : (
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>{'Notification'}</TableCell>
-                    <TableCell>{'Type'}</TableCell>
-                    <TableCell>{'When'}</TableCell>
-                    <TableCell align="right" />
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {rows.map((notification) => (
-                    <TableRow
-                      key={notification.$id}
-                      hover
-                      sx={{ cursor: 'pointer' }}
-                      onClick={() => handleOpen(notification)}
-                    >
-                      <TableCell>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            fontWeight: notification.readAt
-                              ? 'fontWeightRegular'
-                              : 'fontWeightMedium',
-                          }}
-                        >
-                          {notification.title}
-                        </Typography>
-                        {notification.body ? (
-                          <Typography variant="caption" color="text.secondary">
-                            {notification.body}
-                          </Typography>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          size="small"
-                          label={
-                            (NOTIFICATION_TYPE_LABELS as any)[
-                              notification.type
-                            ] ?? notification.type
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {notification.createdAt?.toDate?.().toLocaleString() ??
-                          ''}
-                      </TableCell>
-                      <TableCell align="right">
-                        {notification.readAt ? null : (
-                          <Chip size="small" color="primary" label="New" />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-            <ListPagination
+            <NotificationsTable
+              rows={rows}
+              onOpen={handleOpen}
               page={page}
               pageSize={pageSize}
-              rowCount={rows.length}
               hasMore={hasMore}
-              disabled={loading}
-              onPageChange={(next) => {
-                if (next === page) return
-                void loadPage(
-                  next,
-                  next > page ? cursors[page] : cursors[next - 1],
-                )
-              }}
+              loading={loading}
+              // `cursors[i]` is the LAST row of page i, so page i+1 resumes
+              // after `cursors[i]` and page i resumes after `cursors[i - 1]`.
+              onPageChange={(next) =>
+                void loadPage(next, next > page ? cursors[page] : cursors[next - 1])
+              }
               onPageSizeChange={setPageSize}
             />
           </Stack>

@@ -486,7 +486,9 @@ export interface AglynHost extends AglynDocument {
    * but this site switches OFF. Subtracted from the org's resolved set by
    * `resolveHostEnabledPlugins` — the host can only ever narrow, never
    * widen, and an absent field means every org-enabled plugin runs here.
-   * Writable by site ADMINS only (rules); always-on ids are ignored.
+   * Writable by site ADMINS only (rules). The base component library's id is
+   * ignored; a plugin on for every workspace (AI) is switched off for this
+   * site like any other (AGL-3028).
    */
   disabledPlugins?: string[]
   /**

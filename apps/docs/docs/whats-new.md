@@ -180,9 +180,9 @@ for the how-to.
   the bare `example.com`, not just `www`: an ALIAS/ANAME to `sites.aglyn.app` (or an A
   record, where your registrar has no ALIAS) verifies in the same **Verify & connect**
   click as a CNAME.
-- **[Edit from the live site](building-sites/besigner/edit-from-the-live-site.md)**
-  *(rolling out)* — an admin bar on your published site that jumps from any live page
-  straight into the besigner for the screen serving it.
+- **[Edit from the live site](building-sites/besigner/edit-from-the-live-site.md)** —
+  an admin bar on your published site that jumps from any live page straight into the
+  besigner for the screen serving it.
 
 ## Besigner copy & paste
 

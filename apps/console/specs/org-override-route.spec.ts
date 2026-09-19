@@ -64,10 +64,30 @@
  */
 
 import {
+  checkEntitlement,
+  checkQuota,
+  isBillingSubscription,
+  isUncappedPlanComp,
   PLAN_ENTITLEMENTS,
   RELEASE_FLAGS,
+  resolveEffectivePlan,
   resolveOrgEntitlements,
+  resolvePlanPricing,
 } from '@aglyn/aglyn/server'
+import {
+  assistBandRefuses,
+  resolveAssistOverageRateUsdPer1k,
+} from '@aglyn/aglyn/app-utils/assist-credits'
+
+/** Orgs whose tenant pages the route asked to drop, in order (AGL-3034). */
+let mockRevalidatedOrgs: string[] = []
+jest.mock('../utils/server/tenant-revalidate', () => ({
+  __esModule: true,
+  revalidateOrgHosts: async (_firestore: unknown, orgId: string) => {
+    mockRevalidatedOrgs.push(orgId)
+    return []
+  },
+}))
 
 /** Distinguishable sentinels — a real merge acts on these, JSON cannot. */
 const DELETE = { __sentinel: 'delete' }
@@ -279,12 +299,20 @@ const storedQuotas = () => {
 
 beforeEach(() => {
   mockStore = {
-    'orgs/org-1': { plan: 'pro', entitlements: { hostLimit: 5 } },
+    // A PAYING org: its live subscription decides the plan, so the cases below
+    // exercise the stored-plan write exactly as it behaved before comps
+    // (AGL-3034). The comp cases seed their own dead or absent subscription.
+    'orgs/org-1': {
+      plan: 'pro',
+      billingStatus: 'active',
+      entitlements: { hostLimit: 5 },
+    },
   }
   mockAuditRows = []
   mockOrgWrites = []
   mockCommits = []
   mockDirectWrites = []
+  mockRevalidatedOrgs = []
   mockAuditRefused = false
   mockBatchSeq = 0
   mockAutoId = 0
@@ -485,6 +513,7 @@ describe('"inherit" still DELETES the key across the wire (AGL-1109)', () => {
     // an empty `releaseFlags` would keep showing a chip forever.
     mockStore['orgs/org-1'] = {
       plan: 'pro',
+      billingStatus: 'active',
       releaseFlags: { [RELEASE_KEYS[0]]: true },
     }
     await post(validBody({ releaseFlags: {} }))
@@ -531,6 +560,7 @@ describe('clearing ONE numeric quota removes it (AGL-1789)', () => {
   it('deletes the cleared quota and leaves the others exactly as stored', async () => {
     mockStore['orgs/org-1'] = {
       plan: 'business',
+      billingStatus: 'active',
       // A raised site cap and a negotiated marketplace rate. Removing the
       // rate must not touch the cap.
       entitlements: { hostLimit: 25, marketplaceFeePct: 12 },
@@ -558,6 +588,7 @@ describe('clearing ONE numeric quota removes it (AGL-1789)', () => {
     // charged the negotiated rate the operator just removed.
     mockStore['orgs/org-1'] = {
       plan: 'business',
+      billingStatus: 'active',
       entitlements: { hostLimit: 25, marketplaceFeePct: 12 },
     }
     await post(validBody({ quotas: { hostLimit: 25 } }))
@@ -579,6 +610,7 @@ describe('clearing ONE numeric quota removes it (AGL-1789)', () => {
     // silently start being charged the plan's take rate.
     mockStore['orgs/org-1'] = {
       plan: 'business',
+      billingStatus: 'active',
       entitlements: { marketplaceFeePct: 0, posRegisters: 0 },
     }
     const response = await post(
@@ -627,6 +659,7 @@ describe('clearing ONE numeric quota removes it (AGL-1789)', () => {
     // member did, and it was describing a state nobody was in.
     mockStore['orgs/org-1'] = {
       plan: 'business',
+      billingStatus: 'active',
       entitlements: { hostLimit: 25, marketplaceFeePct: 12 },
     }
     await post(validBody({ quotas: { hostLimit: 25 } }))
@@ -645,7 +678,11 @@ describe('clearing ONE numeric quota removes it (AGL-1789)', () => {
     // was deleted — and the reason the bug read as intermittent. Pinned so
     // the fix does not leave an empty map behind instead: `overrideCount`
     // reads key presence, so the row chip would never clear.
-    mockStore['orgs/org-1'] = { plan: 'business', entitlements: { hostLimit: 25 } }
+    mockStore['orgs/org-1'] = {
+      plan: 'business',
+      billingStatus: 'active',
+      entitlements: { hostLimit: 25 },
+    }
     await post(validBody({ quotas: {} }))
 
     expect(onlyOrgWrite().data['entitlements']).toBe(DELETE)
@@ -660,6 +697,7 @@ describe('clearing ONE numeric quota removes it (AGL-1789)', () => {
     // drops the whole map, which is the one way it goes.
     mockStore['orgs/org-1'] = {
       plan: 'business',
+      billingStatus: 'active',
       entitlements: { hostLimit: 25, datasetsPerHost: 7 },
     }
     await post(validBody({ quotas: { hostLimit: 25 } }))
@@ -675,6 +713,7 @@ describe('the audit row', () => {
     // sends its own `before` must not be believed.
     mockStore['orgs/org-1'] = {
       plan: 'scale',
+      billingStatus: 'active',
       entitlements: { hostLimit: 42 },
       releaseFlags: { [RELEASE_KEYS[0]]: false },
     }
@@ -783,6 +822,7 @@ describe('the staff gate and the rules’ role split (AGL-206/1635)', () => {
     // away quota overrides they can make today.
     mockStore['orgs/org-1'] = {
       plan: 'pro',
+      billingStatus: 'active',
       releaseFlags: { [RELEASE_KEYS[0]]: true },
     }
     mockDecodedToken['staffRole'] = 'billing'
@@ -857,3 +897,636 @@ describe('a percentage quota has a ceiling (AGL-2293)', () => {
   })
 })
 
+
+/**
+ * A PLAN WITH NO LIVE SUBSCRIPTION BEHIND IT IS A COMP (AGL-3034).
+ *
+ * On 2026-09-16 this route set test-org — a stored Pro plan on a canceled
+ * subscription — to Pro, answered 200, and changed nothing: the resolver reads
+ * a paid plan on a dead subscription as Free, and nothing said so. The cases
+ * below pin the replacement from the route's side: the comp is written, it
+ * takes effect, the response says so, a live subscription still governs, and
+ * nothing but an explicit request creates or removes one.
+ */
+describe('a plan with no live subscription behind it is a comp (AGL-3034)', () => {
+  /** test-org as it stood when the override did nothing. */
+  const TEST_ORG = () => ({
+    plan: 'pro',
+    billingStatus: 'canceled',
+    entitlements: {
+      assistCreditsPerMonth: 5000,
+      features: { aiGenerative: true, whiteLabel: false },
+    },
+  })
+  /** The dialog's request for test-org: its own overrides, plus the comp. */
+  const compBody = (over: Record<string, unknown> = {}) =>
+    validBody({
+      plan: 'pro',
+      quotas: { assistCreditsPerMonth: 5000 },
+      features: { aiGenerative: true, whiteLabel: false },
+      reason: 'beta',
+      note: 'AGL-3024 live run',
+      comp: { plan: 'pro' },
+      ...over,
+    })
+
+  it('a comp applies on a dead subscription: written, audited, in force and said so', async () => {
+    mockStore['orgs/org-1'] = TEST_ORG()
+    expect(resolveEffectivePlan(storedOrg() as never)).toBe('free')
+
+    const response = await post(compBody())
+    expect(response.status).toBe(200)
+    const payload = await response.json()
+
+    // The comp, in the same batch as everything else.
+    expect(mockCommits).toHaveLength(1)
+    const write = onlyOrgWrite().data
+    expect((write['entitlements'] as Record<string, any>)['planComp']).toEqual({
+      plan: 'pro',
+      // Stated even when false (AGL-3049): the write is a merge.
+      uncapped: false,
+      reason: 'beta',
+      note: 'AGL-3024 live run',
+      grantedBy: 'staff-1',
+      grantedAt: SERVER_TIMESTAMP,
+    })
+    // The stored plan is Stripe's record, and it is not touched.
+    expect('plan' in write).toBe(false)
+    expect(storedOrg()['plan']).toBe('pro')
+
+    // It TAKES EFFECT — the three things test-org could not do.
+    const org = storedOrg() as never
+    expect(resolveEffectivePlan(org)).toBe('pro')
+    expect(checkEntitlement(org, 'reusableComponents')).toBe(true)
+    expect(resolveOrgEntitlements(org).assistCreditsPerMonth).toBe(5000)
+
+    // The response says what took effect, not "updated".
+    expect(payload.planEffect).toMatchObject({
+      effectivePlan: 'pro',
+      storedPlan: 'pro',
+      subscription: 'dead',
+      subscriptionStatus: 'canceled',
+      compInForce: true,
+      decidedBy: 'comp',
+      compChange: 'granted',
+      planChange: 'unchanged',
+      comp: { plan: 'pro', reason: 'beta', grantedBy: 'staff-1' },
+      before: { effectivePlan: 'free', decidedBy: 'lapsed' },
+    })
+    expect(payload.planEffect.summary).toMatch(
+      /Pro comp granted\. Effective plan: Free → Pro\. Pro is in force as a staff comp, because the subscription is canceled/,
+    )
+    // No sentinel crosses the wire.
+    expect(JSON.stringify(payload)).not.toContain('sentinel')
+
+    // Audited like every override: the row carries the comp and its effect.
+    const row = onlyAuditRow()
+    expect(row).toMatchObject({ action: 'org.override', reason: 'beta' })
+    expect((row['after'] as any).entitlements.planComp).toMatchObject({ plan: 'pro' })
+    expect(row['planEffect']).toEqual({
+      before: { effectivePlan: 'free', decidedBy: 'lapsed', uncapped: false },
+      after: {
+        effectivePlan: 'pro',
+        decidedBy: 'comp',
+        compInForce: true,
+        uncapped: false,
+      },
+      compChange: 'granted',
+      planChange: 'unchanged',
+    })
+    // The plan moved, so the published sites' cached pages are dropped.
+    expect(mockRevalidatedOrgs).toEqual(['org-1'])
+  })
+
+  it('a canceled customer with a stored paid plan stays Free: saving it pre-filled creates no comp', async () => {
+    // The shape a console tab older than this contract sends: the stored
+    // plan pre-filled, a quota edited, and no `comp`. It must never read the
+    // stored plan as a grant.
+    mockStore['orgs/org-1'] = { plan: 'pro', billingStatus: 'canceled' }
+    const response = await post(validBody({ plan: 'pro', quotas: { hostLimit: 9 } }))
+    expect(response.status).toBe(200)
+    const payload = await response.json()
+    expect(storedOrg()['entitlements']).toEqual({ hostLimit: 9, features: {} })
+    expect(resolveEffectivePlan(storedOrg() as never)).toBe('free')
+    expect(payload.planEffect).toMatchObject({
+      effectivePlan: 'free',
+      decidedBy: 'lapsed',
+      compChange: 'none',
+    })
+    // Not silent: the answer says the stored plan grants nothing, and how
+    // to grant one.
+    expect(payload.planEffect.summary).toMatch(/grants nothing.*written as a staff comp/)
+    expect(mockRevalidatedOrgs).toEqual([])
+  })
+
+  it('refuses a stored-plan CHANGE on a dead subscription, and writes nothing', async () => {
+    // Writing it would be the 200-that-did-nothing this issue is about.
+    mockStore['orgs/org-1'] = { plan: 'free', billingStatus: 'canceled' }
+    const response = await post(validBody({ plan: 'business' }))
+    expect(response.status).toBe(409)
+    const payload = await response.json()
+    expect(payload).toMatchObject({ written: false })
+    expect(String(payload.error)).toMatch(/canceled.*grants nothing.*comp/)
+    expect(mockCommits).toEqual([])
+    expect(mockAuditRows).toEqual([])
+
+    // …and clearing it there, which would change nothing either.
+    mockStore['orgs/org-1'] = { plan: 'pro', billingStatus: 'unpaid' }
+    const cleared = await post(validBody({ plan: null }))
+    expect(cleared.status).toBe(409)
+    expect(await cleared.json()).toMatchObject({ written: false })
+    expect(mockCommits).toEqual([])
+  })
+
+  it('a live subscription beats a comp: a comp request is refused while it lasts', async () => {
+    const response = await post(validBody({ plan: 'pro', comp: { plan: 'agency' } }))
+    expect(response.status).toBe(409)
+    const payload = await response.json()
+    expect(payload).toMatchObject({ written: false })
+    expect(String(payload.error)).toMatch(/active.*live subscription decides the plan/)
+    expect(mockCommits).toEqual([])
+  })
+
+  it('a live subscription: the stored plan is written as before, and the answer says the subscription governs', async () => {
+    const response = await post(validBody({ plan: 'business' }))
+    expect(response.status).toBe(200)
+    const payload = await response.json()
+    expect(onlyOrgWrite().data['plan']).toBe('business')
+    expect(payload.planEffect).toMatchObject({
+      effectivePlan: 'business',
+      decidedBy: 'subscription',
+      subscription: 'live',
+      planChange: 'set',
+      compChange: 'none',
+    })
+    expect(payload.planEffect.summary).toMatch(
+      /Stored plan set to Business\. Effective plan: Pro → Business\. The live subscription \(active\) decides the plan: Business\. Stripe's next subscription event rewrites a plan set here\./,
+    )
+  })
+
+  it('only `comp: null` removes a comp — an omitted `comp` and a cleared editor keep it', async () => {
+    mockStore['orgs/org-1'] = {
+      ...TEST_ORG(),
+      entitlements: { ...TEST_ORG().entitlements, planComp: { plan: 'pro', reason: 'beta', note: null, grantedBy: 'staff-0', grantedAt: 'then' } },
+    }
+    // Every override cleared, nothing said about the comp. Before comps this
+    // deleted the whole `entitlements` map — which would have taken the comp
+    // with it.
+    const kept = await post(validBody({ plan: 'pro', quotas: {}, features: {} }))
+    expect(kept.status).toBe(200)
+    expect(onlyOrgWrite().data['entitlements']).not.toBe(DELETE)
+    expect(storedOrg()['entitlements']).toEqual({
+      planComp: { plan: 'pro', reason: 'beta', note: null, grantedBy: 'staff-0', grantedAt: 'then' },
+    })
+    expect(resolveEffectivePlan(storedOrg() as never)).toBe('pro')
+    expect((await kept.json()).planEffect.compChange).toBe('none')
+
+    // The explicit clear.
+    mockOrgWrites = []
+    mockAuditRows = []
+    const removed = await post(validBody({ plan: 'pro', quotas: {}, features: {}, comp: null }))
+    expect(removed.status).toBe(200)
+    const payload = await removed.json()
+    // The comp was all that was left, so the map goes.
+    expect(onlyOrgWrite().data['entitlements']).toBe(DELETE)
+    expect(storedOrg()['entitlements']).toBeUndefined()
+    // Clearing a comp returns Free.
+    expect(resolveEffectivePlan(storedOrg() as never)).toBe('free')
+    expect(payload.planEffect).toMatchObject({
+      effectivePlan: 'free',
+      decidedBy: 'lapsed',
+      compChange: 'removed',
+      before: { effectivePlan: 'pro', decidedBy: 'comp' },
+    })
+    expect(payload.planEffect.summary).toMatch(/Pro comp removed\. Effective plan: Pro → Free\./)
+    expect(onlyAuditRow()['planEffect']).toMatchObject({ compChange: 'removed' })
+  })
+
+  it('removes the comp alone when other overrides stay', async () => {
+    mockStore['orgs/org-1'] = {
+      plan: 'free',
+      billingStatus: 'canceled',
+      entitlements: { hostLimit: 4, planComp: { plan: 'scale', reason: 'trial', note: null, grantedBy: 'staff-0', grantedAt: null } },
+    }
+    const response = await post(validBody({ plan: 'free', quotas: { hostLimit: 4 }, comp: null }))
+    expect(response.status).toBe(200)
+    expect((onlyOrgWrite().data['entitlements'] as any).planComp).toBe(DELETE)
+    expect(storedOrg()['entitlements']).toEqual({ hostLimit: 4, features: {} })
+    expect(resolveEffectivePlan(storedOrg() as never)).toBe('free')
+  })
+
+  it('granting the comp that already stands keeps the original grant', async () => {
+    const standing = { plan: 'pro', reason: 'beta', note: 'first', grantedBy: 'staff-0', grantedAt: 'then' }
+    mockStore['orgs/org-1'] = { plan: 'free', billingStatus: 'canceled', entitlements: { planComp: standing } }
+    const response = await post(validBody({ plan: 'free', reason: 'support', comp: { plan: 'pro' } }))
+    expect(response.status).toBe(200)
+    expect('planComp' in (onlyOrgWrite().data['entitlements'] as object)).toBe(false)
+    expect(storedOrg()['entitlements']).toEqual({ planComp: standing })
+    const payload = await response.json()
+    expect(payload.planEffect).toMatchObject({ compChange: 'kept', effectivePlan: 'pro' })
+    // This act still has its own row, with its own reason.
+    expect(onlyAuditRow()).toMatchObject({ reason: 'support' })
+    expect(mockRevalidatedOrgs).toEqual([])
+  })
+
+  it('replaces a comp with another, and says from what', async () => {
+    mockStore['orgs/org-1'] = {
+      plan: 'free',
+      billingStatus: 'canceled',
+      entitlements: { planComp: { plan: 'pro', reason: 'beta', note: null, grantedBy: 'staff-0', grantedAt: null } },
+    }
+    const response = await post(validBody({ plan: 'free', comp: { plan: 'business' } }))
+    expect(response.status).toBe(200)
+    expect(resolveEffectivePlan(storedOrg() as never)).toBe('business')
+    const payload = await response.json()
+    expect(payload.planEffect.compChange).toBe('replaced')
+    expect(payload.planEffect.summary).toMatch(/Comp changed from Pro to Business\. Effective plan: Pro → Business\./)
+    expect((storedOrg()['entitlements'] as any).planComp).toMatchObject({ plan: 'business', grantedBy: 'staff-1' })
+  })
+
+  it('removes a dormant comp from a live subscription, which moves no plan', async () => {
+    mockStore['orgs/org-1'] = {
+      plan: 'pro',
+      billingStatus: 'active',
+      entitlements: { planComp: { plan: 'agency', reason: 'trial', note: null, grantedBy: 'staff-0', grantedAt: null } },
+    }
+    const response = await post(validBody({ plan: 'pro', comp: null }))
+    expect(response.status).toBe(200)
+    expect(storedOrg()['entitlements']).toBeUndefined()
+    expect((await response.json()).planEffect).toMatchObject({
+      effectivePlan: 'pro',
+      decidedBy: 'subscription',
+      compChange: 'removed',
+    })
+    expect(mockRevalidatedOrgs).toEqual([])
+  })
+
+  it('no subscription at all: a plan is granted as a comp, and a bare stored-plan change is refused', async () => {
+    mockStore['orgs/org-1'] = { name: 'Never subscribed' }
+    const refused = await post(validBody({ plan: 'scale' }))
+    expect(refused.status).toBe(409)
+    expect(String((await refused.json()).error)).toMatch(/No subscription pays.*comp/)
+    expect(mockCommits).toEqual([])
+
+    const granted = await post(validBody({ plan: null, comp: { plan: 'scale' } }))
+    expect(granted.status).toBe(200)
+    expect(storedOrg()['plan']).toBeUndefined()
+    expect(resolveEffectivePlan(storedOrg() as never)).toBe('scale')
+    expect((await granted.json()).planEffect).toMatchObject({
+      subscription: 'none',
+      decidedBy: 'comp',
+      compChange: 'granted',
+    })
+  })
+
+  it('still clears a plan stored directly on a workspace that never subscribed', async () => {
+    // The one stored-plan change allowed without a live subscription: it
+    // really does return the workspace to Free.
+    mockStore['orgs/org-1'] = { plan: 'enterprise' }
+    const response = await post(validBody({ plan: null }))
+    expect(response.status).toBe(200)
+    expect(onlyOrgWrite().data['plan']).toBe(DELETE)
+    expect(resolveEffectivePlan(storedOrg() as never)).toBe('free')
+    expect((await response.json()).planEffect).toMatchObject({
+      planChange: 'cleared',
+      before: { effectivePlan: 'enterprise', decidedBy: 'stored-plan' },
+      decidedBy: 'no-plan',
+    })
+  })
+
+  it.each([
+    [{ plan: 'free' }, /grants nothing/],
+    [{ plan: 'unobtainium' }, /Unknown comp plan/],
+    [{}, /Unknown comp plan/],
+    ['pro', /comp must be/],
+  ])('refuses a malformed comp request %j, before any read', async (comp, message) => {
+    mockStore['orgs/org-1'] = TEST_ORG()
+    const response = await post(compBody({ comp }))
+    expect(response.status).toBe(400)
+    const payload = await response.json()
+    expect(payload).toMatchObject({ written: false })
+    expect(String(payload.error)).toMatch(message)
+    expect(mockCommits).toEqual([])
+  })
+
+  it('lets BILLING staff grant a comp — it is a plan act, not a release one', async () => {
+    mockDecodedToken['staffRole'] = 'billing'
+    mockStore['orgs/org-1'] = TEST_ORG()
+    const response = await post(compBody())
+    expect(response.status).toBe(200)
+  })
+
+  it('a comp never reaches Stripe: no rate to bill, and never a paying subscription', async () => {
+    mockStore['orgs/org-1'] = TEST_ORG()
+    await post(compBody())
+    const org = storedOrg() as never
+    expect(resolveEffectivePlan(org)).toBe('pro')
+    // The AI overage charge claims only what this rate prices, and the
+    // usage sweep bills only what the plan's rates price.
+    expect(resolveAssistOverageRateUsdPer1k(org)).toBeNull()
+    expect(isBillingSubscription(org)).toBe(false)
+  })
+})
+
+/**
+ * AN UNCAPPED COMP (AGL-3049), from the route's side: the one writer of the
+ * flag, and every crossing it makes.
+ *
+ * The flag goes in as a JSON boolean (`post` stringifies the body), lands in
+ * the org document and the audit row as a boolean, and comes back out of the
+ * response as one — never as the `Infinity` the lifted bands resolve to,
+ * which JSON would turn into `null`. The store double merges nested maps key
+ * by key, as Firestore does, so the cases that replace an uncapped comp prove
+ * the flag cannot outlive the grant that set it.
+ */
+describe('a comp can be uncapped, and capped again (AGL-3049)', () => {
+  /** aglyn-org's shape before it is comped: Enterprise stored directly, no subscription. */
+  const INTERNAL = () => ({
+    plan: 'enterprise',
+    enterprise: true,
+    entitlements: { contactsPerHost: 50 },
+  })
+  const UNCAPPED_ENTERPRISE = {
+    plan: 'enterprise',
+    uncapped: true,
+    reason: 'other',
+    note: 'Internal workspace',
+    grantedBy: 'staff-0',
+    grantedAt: 'then',
+  }
+  /** The dialog's request for aglyn-org: its override kept, the comp added. */
+  const internalBody = (over: Record<string, unknown> = {}) =>
+    validBody({
+      plan: 'enterprise',
+      quotas: { contactsPerHost: 50 },
+      reason: 'other',
+      note: 'Internal workspace',
+      comp: { plan: 'enterprise', uncapped: true },
+      ...over,
+    })
+
+  it('grants an uncapped Enterprise comp: a boolean on the document, the row and the response', async () => {
+    mockStore['orgs/org-1'] = INTERNAL()
+    const response = await post(internalBody())
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    const payload = JSON.parse(text)
+
+    // The document: the flag as a literal boolean, beside the grant.
+    const written = (onlyOrgWrite().data['entitlements'] as Record<string, any>)[
+      'planComp'
+    ]
+    expect(written).toEqual({
+      plan: 'enterprise',
+      uncapped: true,
+      reason: 'other',
+      note: 'Internal workspace',
+      grantedBy: 'staff-1',
+      grantedAt: SERVER_TIMESTAMP,
+    })
+    expect(storedOrg()['plan']).toBe('enterprise')
+
+    // It takes effect: no band refuses, nothing is sold, nothing is billed.
+    const org = storedOrg() as never
+    expect(isUncappedPlanComp(org)).toBe(true)
+    expect(resolveOrgEntitlements(org).contactsPerHost).toBe(Number.POSITIVE_INFINITY)
+    expect(resolveOrgEntitlements(org).hostLimit).toBe(Number.POSITIVE_INFINITY)
+    expect(checkQuota(org, 'hostLimit', 1_000_000).allowed).toBe(true)
+    expect(assistBandRefuses(org)).toBe(false)
+    expect(resolveAssistOverageRateUsdPer1k(org)).toBeNull()
+    expect(resolvePlanPricing(org).meteredInfraPassThrough).toBe(false)
+    expect(isBillingSubscription(org)).toBe(false)
+
+    // The response: booleans, and no band crosses it at all.
+    expect(payload.planEffect).toMatchObject({
+      effectivePlan: 'enterprise',
+      decidedBy: 'comp',
+      compInForce: true,
+      uncapped: true,
+      comp: { plan: 'enterprise', uncapped: true },
+      compChange: 'granted',
+      planChange: 'unchanged',
+      before: { effectivePlan: 'enterprise', decidedBy: 'stored-plan', uncapped: false },
+    })
+    expect(payload.after.entitlements.planComp).toMatchObject({ uncapped: true })
+    expect(text).not.toMatch(/Infinity|"uncapped":null/)
+    expect(payload.planEffect.summary).toMatch(
+      /^Uncapped Enterprise comp granted\. Enterprise is in force as an uncapped staff comp, because no subscription pays for this workspace\. It bills nothing, every band and quota reads as unlimited/,
+    )
+
+    // The row, as booleans, and the published sites told the caps moved
+    // though the plan did not.
+    const row = onlyAuditRow()
+    expect((row['after'] as any).entitlements.planComp).toMatchObject({ uncapped: true })
+    expect(row['planEffect']).toEqual({
+      before: { effectivePlan: 'enterprise', decidedBy: 'stored-plan', uncapped: false },
+      after: {
+        effectivePlan: 'enterprise',
+        decidedBy: 'comp',
+        compInForce: true,
+        uncapped: true,
+      },
+      compChange: 'granted',
+      planChange: 'unchanged',
+    })
+    expect(mockRevalidatedOrgs).toEqual(['org-1'])
+  })
+
+  it('a grant without `uncapped` is capped, and says so on the document', async () => {
+    mockStore['orgs/org-1'] = INTERNAL()
+    const response = await post(internalBody({ comp: { plan: 'enterprise' } }))
+    expect(response.status).toBe(200)
+    expect((storedOrg()['entitlements'] as any).planComp).toMatchObject({
+      plan: 'enterprise',
+      uncapped: false,
+    })
+    const org = storedOrg() as never
+    expect(isUncappedPlanComp(org)).toBe(false)
+    expect(resolveOrgEntitlements(org).hostLimit).toBe(PLAN_ENTITLEMENTS.enterprise.hostLimit)
+    const payload = await response.json()
+    expect(payload.planEffect).toMatchObject({ uncapped: false, compChange: 'granted' })
+    expect(payload.planEffect.summary).toMatch(
+      /^Enterprise comp granted\..*every band is a hard limit that a quota override can raise/,
+    )
+    // Neither the plan nor the caps moved, so nothing is revalidated.
+    expect(mockRevalidatedOrgs).toEqual([])
+  })
+
+  it.each([
+    ['the string "true"', 'true'],
+    ['the number 1', 1],
+    ['null', null],
+    ['a map', { on: true }],
+  ])('refuses %s as `uncapped`, before any write', async (_label, uncapped) => {
+    mockStore['orgs/org-1'] = INTERNAL()
+    const response = await post(internalBody({ comp: { plan: 'enterprise', uncapped } }))
+    expect(response.status).toBe(400)
+    const payload = await response.json()
+    expect(payload).toMatchObject({ written: false })
+    expect(String(payload.error)).toMatch(/comp\.uncapped must be true or false/)
+    expect(mockCommits).toEqual([])
+    expect(mockAuditRows).toEqual([])
+  })
+
+  it('lifts the caps of a standing capped comp: a change to the comp, re-stamped', async () => {
+    mockStore['orgs/org-1'] = {
+      ...INTERNAL(),
+      entitlements: {
+        contactsPerHost: 50,
+        planComp: { ...UNCAPPED_ENTERPRISE, uncapped: false },
+      },
+    }
+    const response = await post(internalBody())
+    expect(response.status).toBe(200)
+    expect((storedOrg()['entitlements'] as any).planComp).toEqual({
+      plan: 'enterprise',
+      uncapped: true,
+      reason: 'other',
+      note: 'Internal workspace',
+      grantedBy: 'staff-1',
+      grantedAt: SERVER_TIMESTAMP,
+    })
+    const payload = await response.json()
+    expect(payload.planEffect).toMatchObject({
+      compChange: 'uncapped',
+      uncapped: true,
+      before: { uncapped: false },
+    })
+    expect(payload.planEffect.summary).toMatch(/^The Enterprise comp is now uncapped\./)
+    expect(onlyAuditRow()['planEffect']).toMatchObject({
+      compChange: 'uncapped',
+      before: { uncapped: false },
+      after: { uncapped: true },
+    })
+    expect(mockRevalidatedOrgs).toEqual(['org-1'])
+  })
+
+  it('removing uncapped restores the plan’s caps — and the override beneath them', async () => {
+    mockStore['orgs/org-1'] = {
+      ...INTERNAL(),
+      entitlements: { contactsPerHost: 50, planComp: UNCAPPED_ENTERPRISE },
+    }
+    expect(resolveOrgEntitlements(storedOrg() as never).contactsPerHost).toBe(
+      Number.POSITIVE_INFINITY,
+    )
+    const response = await post(
+      internalBody({ comp: { plan: 'enterprise', uncapped: false }, reason: 'correction', note: null }),
+    )
+    expect(response.status).toBe(200)
+    // The merge kept nothing of the uncapped grant: the flag was written false.
+    expect((storedOrg()['entitlements'] as any).planComp).toMatchObject({
+      plan: 'enterprise',
+      uncapped: false,
+      reason: 'correction',
+    })
+    const org = storedOrg() as never
+    expect(isUncappedPlanComp(org)).toBe(false)
+    const resolved = resolveOrgEntitlements(org)
+    expect(resolved.contactsPerHost).toBe(50)
+    expect(resolved.hostLimit).toBe(PLAN_ENTITLEMENTS.enterprise.hostLimit)
+    expect(checkQuota(org, 'hostLimit', PLAN_ENTITLEMENTS.enterprise.hostLimit).allowed).toBe(false)
+    expect(assistBandRefuses(org)).toBe(true)
+    const payload = await response.json()
+    expect(payload.planEffect).toMatchObject({ compChange: 'capped', uncapped: false })
+    expect(payload.planEffect.summary).toMatch(
+      /^The Enterprise comp is now capped\..*every band is a hard limit/,
+    )
+    expect(mockRevalidatedOrgs).toEqual(['org-1'])
+  })
+
+  it('replacing an uncapped comp with another plan leaves no flag behind under the merge', async () => {
+    mockStore['orgs/org-1'] = {
+      plan: 'free',
+      billingStatus: 'canceled',
+      entitlements: { planComp: UNCAPPED_ENTERPRISE },
+    }
+    // An older console tab's request: a plan change that says nothing of caps.
+    const response = await post(validBody({ plan: 'free', comp: { plan: 'business' } }))
+    expect(response.status).toBe(200)
+    expect((storedOrg()['entitlements'] as any).planComp).toMatchObject({
+      plan: 'business',
+      uncapped: false,
+    })
+    expect(isUncappedPlanComp(storedOrg() as never)).toBe(false)
+    const payload = await response.json()
+    expect(payload.planEffect.compChange).toBe('replaced')
+    expect(payload.planEffect.summary).toMatch(
+      /^Comp changed from uncapped Enterprise to Business\. Effective plan: Enterprise → Business\./,
+    )
+  })
+
+  it('granting the uncapped comp that already stands keeps it, and writes no comp', async () => {
+    mockStore['orgs/org-1'] = {
+      ...INTERNAL(),
+      entitlements: { contactsPerHost: 50, planComp: UNCAPPED_ENTERPRISE },
+    }
+    const response = await post(internalBody({ reason: 'support', note: null }))
+    expect(response.status).toBe(200)
+    expect('planComp' in (onlyOrgWrite().data['entitlements'] as object)).toBe(false)
+    expect((storedOrg()['entitlements'] as any).planComp).toEqual(UNCAPPED_ENTERPRISE)
+    const payload = await response.json()
+    expect(payload.planEffect).toMatchObject({ compChange: 'kept', uncapped: true })
+    expect(payload.planEffect.summary).toMatch(
+      /^The uncapped Enterprise comp already stands and is unchanged\./,
+    )
+    expect(mockRevalidatedOrgs).toEqual([])
+  })
+
+  it('removing an uncapped comp removes the flag with it', async () => {
+    mockStore['orgs/org-1'] = {
+      ...INTERNAL(),
+      entitlements: { contactsPerHost: 50, planComp: UNCAPPED_ENTERPRISE },
+    }
+    const response = await post(internalBody({ comp: null, reason: 'correction', note: null }))
+    expect(response.status).toBe(200)
+    expect(storedOrg()['entitlements']).toEqual({ contactsPerHost: 50, features: {} })
+    const org = storedOrg() as never
+    expect(isUncappedPlanComp(org)).toBe(false)
+    // The plan stored before comps decides again, with its caps.
+    expect(resolveEffectivePlan(org)).toBe('enterprise')
+    expect(resolveOrgEntitlements(org).contactsPerHost).toBe(50)
+    const payload = await response.json()
+    expect(payload.planEffect).toMatchObject({
+      compChange: 'removed',
+      uncapped: false,
+      decidedBy: 'stored-plan',
+      before: { uncapped: true, decidedBy: 'comp' },
+    })
+    expect(payload.planEffect.summary).toMatch(/^Uncapped Enterprise comp removed\./)
+    expect(mockRevalidatedOrgs).toEqual(['org-1'])
+  })
+
+  it('a live subscription: an uncapped grant is refused, and a dormant one lifts nothing', async () => {
+    mockStore['orgs/org-1'] = { plan: 'pro', billingStatus: 'active' }
+    const refused = await post(validBody({ plan: 'pro', comp: { plan: 'agency', uncapped: true } }))
+    expect(refused.status).toBe(409)
+    expect(await refused.json()).toMatchObject({ written: false })
+    expect(mockCommits).toEqual([])
+
+    mockStore['orgs/org-1'] = {
+      plan: 'pro',
+      billingStatus: 'active',
+      entitlements: { planComp: { ...UNCAPPED_ENTERPRISE, plan: 'agency' } },
+    }
+    const saved = await post(validBody({ plan: 'pro', quotas: {}, features: {} }))
+    expect(saved.status).toBe(200)
+    const org = storedOrg() as never
+    expect(isUncappedPlanComp(org)).toBe(false)
+    expect(resolveOrgEntitlements(org).hostLimit).toBe(PLAN_ENTITLEMENTS.pro.hostLimit)
+    const payload = await saved.json()
+    expect(payload.planEffect).toMatchObject({
+      decidedBy: 'subscription',
+      uncapped: false,
+      comp: { plan: 'agency', uncapped: true },
+    })
+    expect(payload.planEffect.summary).toMatch(/An uncapped Agency comp is stored and dormant/)
+  })
+
+  it('lets BILLING staff grant an uncapped comp, as they grant any comp', async () => {
+    mockDecodedToken['staffRole'] = 'billing'
+    mockStore['orgs/org-1'] = INTERNAL()
+    const response = await post(internalBody())
+    expect(response.status).toBe(200)
+    expect(isUncappedPlanComp(storedOrg() as never)).toBe(true)
+  })
+})

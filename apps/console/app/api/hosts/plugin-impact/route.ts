@@ -25,7 +25,9 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { readUsageCandidates } from '../../../../utils/server/read-usage-candidates'
 import {
+  impactedPages,
   scanPluginPlacements,
+  type ImpactedPage,
   type PluginPlacement,
 } from '../../../../utils/server/scan-artifact-usage'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
@@ -43,6 +45,12 @@ export interface PluginImpactSite {
   placements: PluginPlacement[]
   /** Distinct published screens that would stop rendering it. */
   affectedScreens: number
+  /**
+   * Those screens by name and address (AGL-3029), for a confirmation that
+   * names the pages rather than counting them. Bounded by the same scan, so
+   * `truncated` qualifies it exactly as it qualifies the count.
+   */
+  pages: ImpactedPage[]
   /** The scan hit its cap, so these numbers are a floor, not a total. */
   truncated: boolean
 }
@@ -158,6 +166,11 @@ async function handler(request: Request): Promise<Response> {
         stillCovered: stillCoveredIds.has(hostId),
         placements: scan.placements,
         affectedScreens: scan.affectedScreenIds.length,
+        pages: impactedPages(
+          scan.affectedScreenIds,
+          screens.candidates,
+          hostSnapshot.get('screens') as Record<string, unknown> | undefined,
+        ),
         truncated: screens.truncated || layouts.truncated || components.truncated,
       })
     }
@@ -173,6 +186,8 @@ async function handler(request: Request): Promise<Response> {
     return Response.json(
       {
         sites,
+        /** Every losing site's pages, for a single-site confirmation. */
+        pages: sites.flatMap((site) => (site.stillCovered ? [] : site.pages)),
         /** Sites that genuinely lose the plugin — shadowed ones do not. */
         losingSites: sites.filter((site) => !site.stillCovered).length,
         placements,

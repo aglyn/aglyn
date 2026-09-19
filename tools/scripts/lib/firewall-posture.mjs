@@ -534,6 +534,57 @@ export const EXPECTED_POSTURE = Object.freeze([
             `/rss.xml/something` is not admitted by it.
           */
           Object.freeze({ type: 'path', op: 're', value: '/rss\\.xml$' }),
+          /*
+            The `.md` SPELLING OF ANY PAGE (AGL-3018).
+
+            `/llms.txt` is on the exact-path list above for a stated reason —
+            it is what an UNNAMED agent reads first. That file then tells the
+            agent, in its own words, to `append .md to any path`. MEASURED on
+            production 2026-09-15, from a plain client with no User-Agent
+            games: `/llms.txt` answered 200 and `/index.md` and `/pricing.md`
+            answered 429. The invitation was reachable and everything it
+            invited the reader to was not, which is the same shape
+            `check:agent-readiness` exists to catch one layer up.
+
+            It cost a real reader: the `is-agentic` audit's own agent journey
+            was asked what aglyn.com does and who it is for, and reported that
+            the site was rate-limited and inaccessible. It answered from
+            third-party directories instead of from us.
+
+            Same class as every path above — public, read-only, secrets-free,
+            and fetched by clients that cannot solve a JavaScript challenge. It
+            is also the CHEAPEST of them to leave open: the markdown route
+            answers `s-maxage=300, stale-while-revalidate=3600`, so a scraper
+            is served by the edge cache rather than by a function, and it
+            resolves the host record and runs `visitorContentRefusal` BEFORE
+            `loadPageData`, so a locked site pays for no reads and publishes
+            nothing through its own takedown.
+
+            A regex because page paths are the customer's own data and cannot
+            be enumerated here. The NEGATIVE LOOKAHEAD is load-bearing and
+            mirrors the tenant middleware's own `.md` matcher: without it
+            `\\.md$` alone admits `/api/<anything>.md`, and MEASURED, it did —
+            `/api/definitely-nothing` answered 429 while
+            `/api/definitely-nothing.md` answered 404 from the app. Vercel's
+            `ninc` operator does NOT close that hole: `{op: 'ninc', value:
+            '/api/'}` stores and validates, and evaluates as a no-op. The
+            lookahead was measured working, and is the only form that was.
+
+            Only the `.md` half of what `/llms.txt` offers is open. The other
+            half — `Accept: text/markdown` — stays challenged for an unnamed
+            client on purpose: a WAF rule is evaluated on every path, so a bare
+            header group would un-challenge the whole site for anything sending
+            one header, and paths with no markdown variant answer HTML
+            (measured: `Accept: text/markdown` on `/search` returns 200
+            text/html). Publishing a header that skips our bot protection is
+            not a trade worth making; `/llms.txt` enumerates every page, so the
+            `.md` door is a complete reading path on its own.
+          */
+          Object.freeze({
+            type: 'path',
+            op: 're',
+            value: '^/(?!api/|_next/|_static/).*\\.md$',
+          }),
         ]),
       }),
       Object.freeze({

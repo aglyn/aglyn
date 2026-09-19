@@ -32,19 +32,24 @@ import {
   isAiActivityAction,
   staffAuditActionGroup,
   staffAuditActionGroupLabel,
+  registerAiActivityActions,
 } from './ai-activity-actions'
 
 describe('the catalog', () => {
-  it('holds the eleven actions the issue names, each as an ai.* code', () => {
+  it('holds the actions the issues name, each as an ai.* code', () => {
     expect(AI_ACTIVITY_ACTION_LIST).toEqual([
       'ai.job.created',
       'ai.job.output',
       'ai.job.canceled',
       'ai.job.needs_input',
       'ai.edit.applied',
+      // A site audit applied as drafts (AGL-2910).
+      'ai.seo.applied',
       'ai.assist.section',
       'ai.overage.hardCap',
       'ai.overage.cap',
+      // A manager set or removed an allotment (AGL-2942).
+      'ai.allotment.changed',
       'ai.permission.changed',
       'ai.addon.purchased',
       'ai.addon.removed',
@@ -77,8 +82,13 @@ describe('where the feed files a job output', () => {
     expect(aiOutputTargetType('layout')).toBe('layout')
     expect(aiOutputTargetType('template')).toBe('template')
     expect(aiOutputTargetType('workflow')).toBe('workflow')
-    // Copy is content; so are the kinds whose runners have not shipped.
+    // A theme proposal is filed under the site's theme (AGL-2938), which the
+    // host feed links to the Theme section.
+    expect(aiOutputTargetType('theme')).toBe('theme')
+    // Copy is content, and so is a search listing; so are the kinds whose
+    // runners have not shipped.
     expect(aiOutputTargetType('text')).toBe('content')
+    expect(aiOutputTargetType('seo')).toBe('content')
     for (const resource of ['form', 'emailScreen', 'campaign', 'product', 'experiment'] as const) {
       expect(aiOutputTargetType(resource)).toBe('content')
     }
@@ -86,6 +96,8 @@ describe('where the feed files a job output', () => {
 })
 
 describe('the staff audit facet groups AI', () => {
+  beforeAll(registerAiActivityActions)
+
   it('files every ai.* code, the overage controls and the free-spend pause under one group', () => {
     expect(staffAuditActionGroup('ai.overage.cap')).toBe('ai')
     expect(staffAuditActionGroup('billing.assistOverage.setHardCap')).toBe('ai')

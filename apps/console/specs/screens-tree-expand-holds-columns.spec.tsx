@@ -94,6 +94,19 @@ describe('expanding a screen holds the columns still (AGL-2501)', () => {
     expect(columnWidths(nested[1])).toEqual(columnWidths(root))
   })
 
+  it('scrolls the whole tree in one box, so a subtree is never a scroll region of its own (AGL-3045)', () => {
+    const { container } = renderTable()
+    fireEvent.click(screen.getByRole('button', { name: 'Expand children' }))
+    const [root, subtree] = Array.from(container.querySelectorAll('table'))
+    // Positive control: the root table is in a box that scrolls sideways.
+    expect(getComputedStyle(root.parentElement as HTMLElement).overflowX).toBe('auto')
+    expect(subtree).toBeTruthy()
+    const boxes = Array.from(root.querySelectorAll('*')).filter(
+      (element) => getComputedStyle(element).overflowX === 'auto',
+    )
+    expect(boxes).toHaveLength(0)
+  })
+
   it('reserves the toggle slot and the indent only where the tree nests', () => {
     const flat = render(
       <ScreensHierarchyTableComponent

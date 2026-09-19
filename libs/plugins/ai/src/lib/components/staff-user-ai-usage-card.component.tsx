@@ -19,20 +19,19 @@
 import { aiAddonName } from '@aglyn/aglyn'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
-import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
+import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
-import {
-  Alert,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material'
+import { Alert, Typography } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
+import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { aiUsageMonthLabel } from '../usage/ai-usage-wire'
 
@@ -46,6 +45,65 @@ export interface StaffUserAiUsageRow {
   requests: number
   refusals: number
 }
+
+const orgHref = (orgId: string) => buildRoute(Route.ADMIN_ORG_DETAIL, { orgId })
+
+/** A row's id: one workspace's one month. */
+const rowId = (row: StaffUserAiUsageRow) => `${row.orgId}:${row.month}`
+
+/**
+ * One row per workspace per month kept. The row opens the workspace; the
+ * month sorts by its key, which orders chronologically.
+ */
+const COLUMNS: GridColDef<StaffUserAiUsageRow>[] = [
+  {
+    field: 'orgName',
+    headerName: 'Organization',
+    flex: 1,
+    minWidth: 200,
+    valueGetter: (_value, row) => row.orgName ?? row.orgId,
+  },
+  {
+    field: 'month',
+    headerName: 'Month',
+    width: 140,
+    valueFormatter: (value: string) => aiUsageMonthLabel(value),
+  },
+  {
+    field: 'credits',
+    headerName: 'Credits',
+    type: 'number',
+    align: 'right',
+    headerAlign: 'right',
+    width: 110,
+    valueFormatter: (value: number) => value.toLocaleString(),
+  },
+  {
+    field: 'requests',
+    headerName: 'Requests',
+    type: 'number',
+    align: 'right',
+    headerAlign: 'right',
+    width: 110,
+    valueFormatter: (value: number) => value.toLocaleString(),
+  },
+  {
+    field: 'refusals',
+    headerName: 'Refusals',
+    type: 'number',
+    align: 'right',
+    headerAlign: 'right',
+    width: 110,
+    valueFormatter: (value: number) => value.toLocaleString(),
+  },
+  listActionsColumn((row: StaffUserAiUsageRow) => (
+    <ListRowActions
+      label={row.orgName ?? row.orgId}
+      quick={{ icon: mdiOpenInNew.path, label: 'View organization', to: orgHref(row.orgId) }}
+      items={[]}
+    />
+  )),
+]
 
 /**
  * ONE ACCOUNT'S AI USAGE ACROSS ORGANIZATIONS (AGL-2928), on the staff user
@@ -66,10 +124,7 @@ const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
   const [rows, setRows] = useState<StaffUserAiUsageRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
-  // One row per workspace per month kept, paged in memory over the one read.
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const visible = (rows ?? []).slice(page * pageSize, page * pageSize + pageSize)
+  const router = useRouter()
 
   useEffect(() => {
     const user = userRef.current
@@ -77,7 +132,6 @@ const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
     let active = true
     setReady(false)
     setError(null)
-    setPage(0)
     void (async () => {
       try {
         const response = await authorizedFetch(
@@ -130,49 +184,15 @@ const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
           {'No AI usage attributed to this account in any workspace it belongs to.'}
         </Typography>
       ) : (
-        <>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{'Organization'}</TableCell>
-                <TableCell>{'Month'}</TableCell>
-                <TableCell align="right">{'Credits'}</TableCell>
-                <TableCell align="right">{'Requests'}</TableCell>
-                <TableCell align="right">{'Refusals'}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {visible.map((row) => (
-                <TableRow key={`${row.orgId}-${row.month}`}>
-                  <TableCell>
-                    <AppLink
-                      href={buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: row.orgId })}
-                      color="primary"
-                      underline="hover"
-                    >
-                      {row.orgName ?? row.orgId}
-                    </AppLink>
-                  </TableCell>
-                  <TableCell>{aiUsageMonthLabel(row.month)}</TableCell>
-                  <TableCell align="right">{row.credits.toLocaleString()}</TableCell>
-                  <TableCell align="right">{row.requests.toLocaleString()}</TableCell>
-                  <TableCell align="right">{row.refusals.toLocaleString()}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <ListPagination
-            page={page}
-            pageSize={pageSize}
-            rowCount={visible.length}
-            count={rows.length}
-            onPageChange={setPage}
-            onPageSizeChange={(size) => {
-              setPageSize(size)
-              setPage(0)
-            }}
-          />
-        </>
+        // Every month kept is in hand, so the grid pages, sorts and searches
+        // the one read itself.
+        <ListTable
+          rows={rows}
+          columns={COLUMNS}
+          getRowId={rowId}
+          rowHeight={TABLE_ROW_HEIGHT}
+          onOpen={(_id, row: StaffUserAiUsageRow) => router.push(orgHref(row.orgId))}
+        />
       )}
     </CardDisplay>
   )

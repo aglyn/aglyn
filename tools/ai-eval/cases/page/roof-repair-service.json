@@ -1,0 +1,154 @@
+{
+  "id": "page-roof-repair-service",
+  "kind": "page",
+  "brief": "Add a page for our roof repair service: what we fix, and a way to ask for a quote. Keep it in the site's style.",
+  "framing": null,
+  "inventory": {
+    "hostId": "host-harbor",
+    "components": [
+      { "id": "cmp-service-card", "name": "Service card", "props": { "title": "text", "body": "text", "image": "image" } },
+      { "id": "cmp-testimonial", "name": "Testimonial", "props": { "quote": "text", "name": "text" } }
+    ],
+    "layouts": [{ "id": "lay-site", "name": "Harbor Roofing site", "parentId": null }],
+    "templates": [],
+    "forms": [{ "id": "frm-quote", "name": "Request a quote", "fields": ["name", "email", "phone", "address", "message"] }],
+    "datasets": [],
+    "collections": [],
+    "screens": [
+      { "id": "scr-home", "name": "Home", "slug": "/", "layoutId": "lay-site", "template": false },
+      { "id": "scr-gutters", "name": "Gutter cleaning", "slug": "/services/gutter-cleaning", "layoutId": "lay-site", "template": false }
+    ],
+    "theme": { "summary": ["Light scheme only"], "colors": { "primary.main": "#1d4e89", "secondary.main": "#f2a93b" }, "fonts": ["Inter"] },
+    "truncated": []
+  },
+  "assets": { "asset-crew": { "sizeBytes": 240000, "width": 1600, "height": 1067 } },
+  "expected": {
+    "plan": { "screens": [1, 1], "reuse": ["lay-site", "cmp-service-card", "frm-quote"], "layout": "lay-site", "maxCreate": 0 }
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: the site's layout, one service card instance per repair, and the quote form placed by id.",
+      "plan": {
+        "reuse": [
+          { "kind": "layout", "id": "lay-site", "purpose": "the site header, navigation and footer" },
+          { "kind": "component", "id": "cmp-service-card", "purpose": "one card per repair service" },
+          { "kind": "form", "id": "frm-quote", "purpose": "the quote request at the foot of the page" }
+        ],
+        "create": [],
+        "screens": [
+          {
+            "title": "Roof repair",
+            "slug": "/services/roof-repair",
+            "layout": "lay-site",
+            "template": null,
+            "duplicateOf": null,
+            "nav": true,
+            "seoTitle": "Roof repair in Harbor County | Harbor Roofing",
+            "seoDescription": "Leak, storm damage and flashing repairs from a local crew, usually scheduled within a week. Ask for a free quote online.",
+            "sections": [
+              { "name": "hero", "uses": [], "items": 0 },
+              { "name": "repair services", "uses": ["cmp-service-card"], "items": 3 },
+              { "name": "quote request", "uses": ["frm-quote"], "items": 0 }
+            ]
+          }
+        ]
+      },
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["hero", "services", "quote"] },
+            "hero": { "componentId": "section", "props": { "element": "section", "ariaLabel": "Roof repair" }, "nodes": ["title", "lede", "hero-art"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Roof repair in Harbor County" } },
+            "lede": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Leaks, storm damage and worn flashing fixed by a local crew, usually within the week you call." } },
+            "hero-art": { "componentId": "image", "props": { "src": "media:host-harbor/asset-crew", "alt": "A roofer replacing shingles on a pitched roof" } },
+            "services": { "componentId": "section", "props": { "element": "section", "ariaLabel": "What we repair" }, "nodes": ["services-title", "services-grid"] },
+            "services-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What we repair" } },
+            "services-grid": { "componentId": "muiStack", "props": { "direction": "row", "flexWrap": "wrap" }, "sx": { "gap": 3 }, "nodes": ["card-leaks", "card-storm", "card-flashing"] },
+            "card-leaks": { "componentId": "reusableInstance", "props": { "refId": "cmp-service-card", "propValues": { "title": "Leak repair", "body": "We find where the water gets in, not only where it shows, and seal it for good." } } },
+            "card-storm": { "componentId": "reusableInstance", "props": { "refId": "cmp-service-card", "propValues": { "title": "Storm damage", "body": "Missing shingles and lifted edges replaced to match the roof you already have." } } },
+            "card-flashing": { "componentId": "reusableInstance", "props": { "refId": "cmp-service-card", "propValues": { "title": "Flashing and vents", "body": "Rusted flashing and cracked vent boots replaced before they let water through." } } },
+            "quote": { "componentId": "section", "props": { "element": "section", "ariaLabel": "Request a quote" }, "nodes": ["quote-title", "quote-form"] },
+            "quote-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "Request a quote" } },
+            "quote-form": { "componentId": "form", "props": { "formId": "frm-quote" } }
+          }
+        }
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": 5, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A hex color written on the page heading instead of a theme token (rule 5).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["hero"] },
+            "hero": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lede"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Roof repair in Harbor County" }, "sx": { "color": "#1d4e89" } },
+            "lede": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Leaks and storm damage fixed by a local crew." } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "Quote form fields drawn on the page instead of placing the form from the Forms page (rule 3).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["quote"] },
+            "quote": { "componentId": "section", "props": { "element": "section" }, "nodes": ["quote-title", "quote-form"] },
+            "quote-title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Request a quote" } },
+            "quote-form": { "componentId": "form", "props": { "formName": "Quote" }, "nodes": ["field-name", "field-email"] },
+            "field-name": { "componentId": "formField", "props": { "fieldName": "name", "label": "Your name", "fieldType": "text" } },
+            "field-email": { "componentId": "formField", "props": { "fieldName": "email", "label": "Email", "fieldType": "email" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A plan whose screen names no layout and carries its own footer section (rule 2).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["hero"] },
+            "hero": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lede"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "Roof repair in Harbor County" } },
+            "lede": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Leaks and storm damage fixed by a local crew." } }
+          }
+        }
+      },
+      "plan": {
+        "reuse": [{ "kind": "form", "id": "frm-quote", "purpose": "the quote request" }],
+        "create": [],
+        "screens": [
+          {
+            "title": "Roof repair",
+            "slug": "/services/roof-repair",
+            "layout": null,
+            "template": null,
+            "duplicateOf": null,
+            "nav": true,
+            "seoTitle": "Roof repair in Harbor County",
+            "seoDescription": "Leak and storm damage repairs from a local crew.",
+            "sections": [
+              { "name": "hero", "uses": [], "items": 0 },
+              { "name": "footer", "uses": [], "items": 0 }
+            ]
+          }
+        ]
+      },
+      "fails": ["plan"]
+    }
+  ]
+}

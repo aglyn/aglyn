@@ -29,15 +29,18 @@ import {
 // stub the barrel closed-world, and the ladder, the machine and the runtime
 // are the things under test here, not things to be stubbed away.
 import { aiGateLadder } from '../runtime/ai-gate'
+import { aiJobAdmissionRefusal, aiJobSiteRefusal } from '../jobs/ai-job-admission'
 import { AI_JOB_BRIEF_MAX_CHARS } from '../jobs/ai-job-text-step'
 import {
   AI_JOB_INLINE_BUDGET_MS,
+  aiJobNextStepMinimumMs,
   aiJobSummary,
   createAiJob,
   listAiJobs,
   runAiJobStep,
 } from '../jobs/ai-jobs'
 import { releaseAssistMessage } from '../usage/assist-usage'
+import { aiUsageMeter } from '../usage/ai-usage-meter'
 import { aiJobsGate } from './ai-jobs-gate'
 
 /**
@@ -70,6 +73,7 @@ const AI_JOB_STATUSES: readonly AiJobStatus[] = [
   'queued',
   'running',
   'needs_input',
+  'needs_review',
   'done',
   'failed',
   'canceled',
@@ -81,9 +85,14 @@ export interface CreateAiJobBody {
   kind: AiJobKind
   brief: string
   inputs: Record<string, string | number | boolean>
+  /** A catalog model the creator picked (AGL-2942), or `null` for Auto. */
+  model: string | null
 }
 
 const ID_CHARS = /^[A-Za-z0-9_-]{1,100}$/
+
+/** The longest model id a body may carry; the catalog's ids are far shorter. */
+const MAX_MODEL_CHARS = 100
 
 /** Validate + clamp the request body; a string names what is wrong. */
 export function parseCreateAiJobBody(payload: unknown): CreateAiJobBody | string {
@@ -107,6 +116,9 @@ export function parseCreateAiJobBody(payload: unknown): CreateAiJobBody | string
         ? rawHost
         : undefined
   if (hostId === undefined) return 'hostId is not a site id'
+  // A theme is fields on one site's document, so a theme job that names no
+  // site has nothing to propose a change to (AGL-2938).
+  if (kind === 'theme' && !hostId) return 'Open a site before changing its theme'
   const rawInputs = body.inputs
   const inputs: Record<string, string | number | boolean> = {}
   if (rawInputs !== undefined && rawInputs !== null) {
@@ -127,7 +139,12 @@ export function parseCreateAiJobBody(payload: unknown): CreateAiJobBody | string
       return 'inputs are too large'
     }
   }
-  return { orgId, hostId, kind: kind as AiJobKind, brief, inputs }
+  const rawModel = typeof body.model === 'string' ? body.model.trim() : ''
+  if (rawModel.length > MAX_MODEL_CHARS) return 'model is not a model id'
+  // Validated against the plan and the allotment allowlists when each step
+  // runs, not here: the allowlists are read inside the step's reservation.
+  const model = rawModel && rawModel !== 'auto' ? rawModel : null
+  return { orgId, hostId, kind: kind as AiJobKind, brief, inputs, model }
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -165,11 +182,44 @@ export async function POST(request: Request): Promise<Response> {
     )
     return Response.json({ error: parsed }, { status: 400 })
   }
+  // What only this kind can say about the request (AGL-2909): a site it
+  // needs, inputs it reads, an allowance its draft counts against. Asked
+  // before the job exists, so a refusal spends nothing.
+  let refusal: Awaited<ReturnType<typeof aiJobAdmissionRefusal>>
+  try {
+    // A site that switched AI off first (AGL-3028), then the kind's own check.
+    refusal =
+      (await aiJobSiteRefusal({
+        firestore: gate.firestore,
+        org: gate.org,
+        hostId: parsed.hostId,
+      })) ??
+      (await aiJobAdmissionRefusal(parsed.kind, {
+        firestore: gate.firestore,
+        orgId: gate.orgId,
+        hostId: parsed.hostId,
+        inputs: parsed.inputs,
+        org: gate.org,
+        uid: gate.uid,
+      }))
+  } catch (error) {
+    await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
+      () => undefined,
+    )
+    console.error('ai job admission failed', { orgId: gate.orgId, kind: parsed.kind, error })
+    return Response.json({ error: 'The AI job could not be created' }, { status: 500 })
+  }
+  if (refusal) {
+    await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
+      () => undefined,
+    )
+    return Response.json({ error: refusal.error }, { status: refusal.status })
+  }
 
   const now = new Date()
-  let jobId: string
+  let created: Awaited<ReturnType<typeof createAiJob>>
   try {
-    const job = await createAiJob(
+    created = await createAiJob(
       gate.firestore,
       {
         orgId: gate.orgId,
@@ -177,18 +227,36 @@ export async function POST(request: Request): Promise<Response> {
         kind: parsed.kind,
         brief: parsed.brief,
         inputs: parsed.inputs,
+        model: parsed.model,
         createdBy: gate.uid,
         createdByEmail: gate.decoded.email ?? null,
       },
       now,
     )
-    jobId = job.$id
   } catch (error) {
     await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
       () => undefined,
     )
     console.error('ai job create failed', { orgId: gate.orgId, error })
     return Response.json({ error: 'The AI job could not be created' }, { status: 500 })
+  }
+  const jobId = created.$id
+
+  // A first step that needs more time than this request has (AGL-2907) is left
+  // queued for the beat, which starts it with a budget of its own: a provider
+  // call this request's timeout cut off would be billed upstream and metered
+  // nowhere. Nothing ran, so the reservation goes back.
+  if (aiJobNextStepMinimumMs(created) > AI_JOB_INLINE_BUDGET_MS) {
+    await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
+      () => undefined,
+    )
+    return Response.json(
+      {
+        job: aiJobSummary(created, now),
+        meter: aiUsageMeter(gate.reservation, { lastCredits: null }),
+      },
+      { status: 200 },
+    )
   }
 
   // The first step, inline, on the reservation the ladder already holds.
@@ -203,6 +271,8 @@ export async function POST(request: Request): Promise<Response> {
     // The caller is on the request, so what the inline step produces is
     // attributed with their address; the beat's steps carry the uid alone.
     actor: { uid: gate.uid, email: gate.decoded.email ?? null },
+    // The workspace's AI pause lets staff through, as the ladder above did.
+    staff: gate.staff,
   })
   if (run.outcome === 'not-claimable') {
     // A job created a moment ago has a claimable first step; anything else
@@ -213,7 +283,17 @@ export async function POST(request: Request): Promise<Response> {
     console.error('ai job first step not claimable', { orgId: gate.orgId, jobId })
     return Response.json({ error: 'The AI job could not be started' }, { status: 500 })
   }
-  return Response.json({ job: aiJobSummary(run.job) }, { status: 200 })
+  return Response.json(
+    {
+      job: aiJobSummary(run.job),
+      // The usage strip's envelope (AGL-2942): the reservation the ladder
+      // took, with what the inline step spent.
+      meter: aiUsageMeter(gate.reservation, {
+        lastCredits: run.job.creditsSpent > 0 ? run.job.creditsSpent : null,
+      }),
+    },
+    { status: 200 },
+  )
 }
 
 export async function GET(request: Request): Promise<Response> {

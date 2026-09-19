@@ -33,7 +33,6 @@ import {
   IconButton,
   MenuItem,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -52,6 +51,18 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { type PickedMedia, useMediaPicker } from '@aglyn/aglyn'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import {
+  seoListingFieldCount,
+  seoListingFieldTooLong,
+  type SeoListingFieldKey,
+} from '@aglyn/aglyn/app-utils/seo-listing-fields'
+import type {
+  ConsoleProductCopyValues,
+  ConsoleProductEditorZoneProps,
+  ConsoleSeoFieldValues,
+} from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   EntitlementUpsell,
   useCommerceEntitlement,
@@ -91,6 +102,27 @@ export interface ProductEditorDialogProps {
   seedUnreadable?: boolean
   open: boolean
   onClose: () => void
+}
+
+/**
+ * The search listing fields this editor holds (AGL-2910): `product.seo`
+ * carries a title and a description beside its share image, and nothing
+ * else a listing zone may propose.
+ */
+const PRODUCT_SEO_LISTING_FIELDS: readonly Extract<SeoListingFieldKey, 'title' | 'description'>[] = [
+  'title',
+  'description',
+]
+
+/** A product nobody has saved yet, as the editor starts one. */
+function blankProduct(): CommerceModel.HostProduct {
+  return {
+    name: '',
+    slug: '',
+    type: 'physical',
+    status: 'draft',
+    variants: [{ id: 'default', priceUsd: 0 }],
+  }
 }
 
 /** Stable key for matching variants across matrix regenerations. */
@@ -214,17 +246,65 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     [pickMedia],
   )
   // Lazy-init per open; parent remounts via `key` on product change.
-  const current: CommerceModel.HostProduct =
-    draft ??
-    lifted ?? {
-      name: '',
-      slug: '',
-      type: 'physical',
-      status: 'draft',
-      variants: [{ id: 'default', priceUsd: 0 }],
-    }
+  const current: CommerceModel.HostProduct = draft ?? lifted ?? blankProduct()
   const update = (patch: Partial<CommerceModel.HostProduct>) =>
     setDraft({ ...current, ...patch })
+
+  /** The shell's zone renderer (AGL-2910); `null` outside the console shell. */
+  const WidgetSlot = useConsoleWidgetSlot()
+  /**
+   * A listing zone widget's proposal, staged into the draft like typing.
+   * Functional, because a proposal can arrive after a generation finishes,
+   * and a closure over the render that started it would put back every edit
+   * made while it ran. Only the fields a product's listing holds are taken.
+   */
+  const proposeSeoValues = useCallback(
+    (values: ConsoleSeoFieldValues) => {
+      const staged: { title?: string; description?: string } = {}
+      for (const field of PRODUCT_SEO_LISTING_FIELDS) {
+        const value = values[field]
+        if (typeof value === 'string') staged[field] = value
+      }
+      if (!Object.keys(staged).length) return
+      setDraft((prior) => {
+        const base = prior ?? lifted ?? blankProduct()
+        return { ...base, seo: { ...base.seo, ...staged } }
+      })
+    },
+    [lifted],
+  )
+
+  /**
+   * The product zone's proposal (AGL-2916): copy staged into the draft like
+   * typing, functional for the reason `proposeSeoValues` gives. Option names
+   * go through `renameProductOptions`, so every variant keeps its price, SKU
+   * and stock.
+   */
+  const proposeProductValues = useCallback(
+    (values: ConsoleProductCopyValues) => {
+      setDraft((prior) => {
+        const base = prior ?? lifted ?? blankProduct()
+        return { ...base, ...CommerceModel.productCopyPatch(base, values) }
+      })
+    },
+    [lifted],
+  )
+  const zoneCategories = useMemo(
+    () => categories.rows.map((category: any) => ({ id: String(category.$id), name: String(category.name ?? '') })),
+    [categories.rows],
+  )
+  const zoneProduct: ConsoleProductEditorZoneProps['product'] = {
+    id: product?.$id ?? null,
+    name: current.name,
+    type: current.type,
+    description: String(current.description ?? ''),
+    tags: current.tags ?? [],
+    categoryIds: current.categoryIds ?? [],
+    options: (current.options ?? []).map((option) => ({ name: option.name, values: option.values })),
+    mediaUrls: current.mediaUrls ?? [],
+    seoTitle: current.seo?.title ?? '',
+    seoDescription: current.seo?.description ?? '',
+  }
 
   const error = current.name ? CommerceModel.validateProduct(current) : null
 
@@ -270,6 +350,24 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
 
   const handleOptionsChange = useCallback(
     (index: number, patch: Partial<CommerceModel.ProductOption> | null) => {
+      // A RENAME moves each variant's selection to the new name (AGL-3066).
+      // Rebuilding the matrix matches variants by name and value, so under a
+      // new name it finds none and replaces every variant, its id, price, SKU
+      // and stock with them. Only a change of values rebuilds.
+      if (
+        patch &&
+        current.options?.[index] &&
+        Object.keys(patch).length === 1 &&
+        typeof patch.name === 'string'
+      ) {
+        update(
+          CommerceModel.renameProductOptions(
+            current,
+            current.options.map((option, at) => (at === index ? patch.name : option.name)),
+          ),
+        )
+        return
+      }
       const options = [...(current.options ?? [])]
       if (patch === null) options.splice(index, 1)
       else options[index] = { name: '', values: [], ...options[index], ...patch }
@@ -598,6 +696,21 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             )}
           />
         ) : null}
+        {/*
+          The product zone (AGL-2916), hosted like the listing zone below: a
+          widget proposes copy from what this product says and shows, staged in
+          the fields above like typing. Save product is still the only write.
+        */}
+        {WidgetSlot ? (
+          <WidgetSlot
+            slot="productEditor"
+            hostId={hostId}
+            orgId={undefined}
+            product={zoneProduct}
+            categories={zoneCategories}
+            proposeValues={proposeProductValues}
+          />
+        ) : null}
 
         <Divider textAlign="left">{'Media'}</Divider>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
@@ -716,8 +829,8 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             {'Add option'}
           </Button>
         ) : null}
-        <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small">
+        <Box>
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Variant'}</TableCell>
@@ -743,6 +856,10 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
                       }
                       size="small"
                       sx={{ width: 88 }}
+                      // An empty price is marked (AGL-2916): a proposed
+                      // product arrives with none, and Save waits for one.
+                      error={!CommerceModel.variantHasPrice(variant)}
+                      placeholder="Set"
                       slotProps={{ htmlInput: { inputMode: 'decimal' } }}
                     />
                   </TableCell>
@@ -813,7 +930,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </ScrollTable>
         </Box>
         <Typography variant="caption" color="text.secondary">
           {stockApplies
@@ -1166,6 +1283,10 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             onChange={(event) =>
               update({ seo: { ...current.seo, title: event.target.value } })
             }
+            // The counts every search listing editor prints (AGL-2910): what a
+            // search result shows before it truncates.
+            helperText={seoListingFieldCount('title', current.seo?.title)}
+            error={seoListingFieldTooLong('title', current.seo?.title)}
             size="small"
             fullWidth
           />
@@ -1186,10 +1307,40 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           onChange={(event) =>
             update({ seo: { ...current.seo, description: event.target.value } })
           }
+          helperText={seoListingFieldCount('description', current.seo?.description)}
+          error={seoListingFieldTooLong('description', current.seo?.description)}
           size="small"
           multiline
           minRows={2}
         />
+        {/*
+          The search listing zone (AGL-2910), hosted here through the shell's
+          renderer: a plugin's dialog cannot mount the console's slot itself.
+          A widget proposes a title and a description from what this product
+          says; they are staged in the fields above like typing, and Save
+          product is still the only write.
+        */}
+        {WidgetSlot ? (
+          <WidgetSlot
+            slot="seoFields"
+            hostId={hostId}
+            orgId={undefined}
+            orgSlug=""
+            subject={{
+              kind: 'product',
+              id: product?.$id ?? null,
+              name: current.name,
+              description: String(current.description ?? ''),
+            }}
+            fields={PRODUCT_SEO_LISTING_FIELDS}
+            values={{
+              title: current.seo?.title ?? '',
+              description: current.seo?.description ?? '',
+            }}
+            hasImage={Boolean(current.seo?.imageUrl)}
+            proposeValues={proposeSeoValues}
+          />
+        ) : null}
 
         {error ? <Alert severity="warning">{error}</Alert> : null}
         {product?.$id ? (

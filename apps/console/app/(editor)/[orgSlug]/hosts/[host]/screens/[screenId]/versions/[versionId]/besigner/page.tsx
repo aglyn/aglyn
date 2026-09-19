@@ -21,6 +21,12 @@ import {
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import {
+  SCREEN_SEO_TEXT_FIELDS,
+  SCREEN_SEO_TEXT_GUIDANCE,
+  screenSeoStageKey,
+  type ScreenSeoTextField,
+} from '@aglyn/aglyn/app-utils/screen-seo-fields'
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   buildScreenRouteEntries,
@@ -47,6 +53,7 @@ import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
   BesignerInspectorExtrasContext,
+  type BesignerInspected,
   besignerDocsUrl,
   BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
@@ -157,6 +164,7 @@ import {
   useHostSubdomain,
 } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
+import useCurrentOrg from '../../../../../../../../../../hooks/use-current-org'
 import { syncScreenRouteEntries } from '../../../../../../../../../../constants/screen-publishing'
 import { announceLiveScreenChange } from '../../../../../../../../../../constants/screen-live-announce'
 import {
@@ -179,6 +187,8 @@ import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import useHostRole from '../../../../../../../../../../hooks/use-host-role'
+import useFormsPublishBlock from '../../../../../../../../../../hooks/use-forms-publish-block'
+import { useEditorSession } from '../../../../../../../../../../hooks/use-editor-session'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -206,6 +216,7 @@ function BesignerPage(props) {
     versionId: string
   }>()
   const hostId = useHostId()
+  const { orgId } = useCurrentOrg()
   const screenId = params?.screenId as string
   const versionId = params?.versionId as string
   const { enqueueSnackbar } = useSnackbar()
@@ -217,6 +228,7 @@ function BesignerPage(props) {
   // Disabled with a reason rather than hidden, so the console says no instead
   // of the rules answering with a bare `permission-denied`.
   const { canPublish, loaded: hostRoleLoaded } = useHostRole(hostId)
+  const { refuse: refuseFormsOff } = useFormsPublishBlock()
   const publishBlock = hostRoleLoaded
     ? 'Your role on this site can edit content but not publish it'
     : 'Checking your access…'
@@ -260,11 +272,22 @@ function BesignerPage(props) {
   // File ▸ New version drives the versions panel's own create flow (AGL-1218)
   // rather than re-implementing the entitlement gate and the save-first rule.
   const versionsActions = useRef<BesignerVersionsActions>(null)
-  // One element for the Attributes panel's plugin section (AGL-2940), so the
-  // context's consumers re-render with the site rather than with this page.
-  const inspectorExtras = useMemo(
-    () => <PluginWidgetSlot slot="besignerInspector" hostId={hostId} />,
-    [hostId],
+  // One section for the Attributes panel's plugin zone (AGL-2940), drawn for
+  // the selected element (AGL-2984), so the context's consumers re-render with
+  // the site rather than with this page. `editable` (AGL-2908) is the panel's
+  // own rule for whether this editor may change the element in place, which a
+  // widget has no other way to ask.
+  const inspectorExtras = useCallback(
+    (inspected: BesignerInspected) => (
+      <PluginWidgetSlot
+        slot="besignerInspector"
+        hostId={hostId}
+        orgId={orgId}
+        node={inspected.node}
+        editable={inspected.editable}
+      />
+    ),
+    [hostId, orgId],
   )
   // Installed plugins appear as named drawer entries (AGL-190).
   usePluginDrawerRegistration(hostId)
@@ -323,6 +346,34 @@ function BesignerPage(props) {
   const editingLiveVersion = Boolean(
     versionId && versionId === screenResult?.data?.versionId,
   )
+  /**
+   * The open screen as an editor session (AGL-2906): a plugin in a shell zone
+   * reads the selection and the live pointer, starts File ▸ New version's own
+   * flow, and stages the SEO text fields into Screen Properties — unsaved,
+   * and stored only by Save SEO. The record type is what keeps a field added
+   * to `SCREEN_SEO_TEXT_FIELDS` from shipping without a setter.
+   */
+  const seoFieldSetters = useMemo(() => {
+    const setters: Record<ScreenSeoTextField, (value: string) => void> = {
+      title: setSeoTitle,
+      description: setSeoDescription,
+    }
+    return Object.fromEntries(
+      SCREEN_SEO_TEXT_FIELDS.map((field) => [screenSeoStageKey(field), setters[field]]),
+    )
+  }, [])
+  useEditorSession({
+    documentKind: 'screen',
+    documentId: screenId,
+    versionId,
+    // Served, not merely pointed at: the pointer version of a screen the
+    // site routes. An unrouted screen's version reaches no visitor.
+    live: editingLiveVersion && Boolean(publishedPath),
+    selectedNodeId: () => Besigner.focus.getLastSelected()?.$id ?? null,
+    versionsActions,
+    fields: seoFieldSetters,
+    revealFields: () => setScreenDialog(true),
+  })
   const { doc: layoutResult } = useLayout({
     hostId,
     layoutId: layoutId ?? '-no-layout-',
@@ -1058,6 +1109,9 @@ function BesignerPage(props) {
     // push the stored page live and then clear the draft as published
     // (AGL-2874).
     if (refuseOverUnopenedDraft('publish')) return
+    // A page carrying a form does not go live on a site that switched Forms
+    // off (AGL-3029): it would draw an empty space where the author sees one.
+    if (refuseFormsOff(canvas.toJSON().nodes)) return
     savedLandedRef.current = false
     saveRefusedRef.current = false
     await handleSave()
@@ -1193,6 +1247,7 @@ function BesignerPage(props) {
     )
   }, [
     refuseOverUnopenedDraft,
+    refuseFormsOff,
     handleSave,
     isEmailScreen,
     livePublished,
@@ -2279,7 +2334,7 @@ function BesignerPage(props) {
                           ''
                         }
                         onChange={(e) => setSeoTitle(e.target.value)}
-                        helperText="The whole tab/search title, published verbatim (≤60 chars works best)"
+                        helperText={`The whole tab/search title, published verbatim (≤${SCREEN_SEO_TEXT_GUIDANCE.title} chars works best)`}
                       />
                       <TextField
                         size="small"
@@ -2292,7 +2347,7 @@ function BesignerPage(props) {
                           ''
                         }
                         onChange={(e) => setSeoDescription(e.target.value)}
-                        helperText="Search snippet / social share text (≤160 chars works best)"
+                        helperText={`Search snippet / social share text (≤${SCREEN_SEO_TEXT_GUIDANCE.description} chars works best)`}
                       />
                       {/* Social image (AGL-1337), shared with the screen detail page's
               SEO card so the two surfaces cannot drift (AGL-1368). */}

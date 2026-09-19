@@ -72,6 +72,7 @@ import {
   meteredBackfillDecision,
 } from '../../../../utils/server/metered-backfill'
 import { platformInvoiceRevenue } from '../../../../utils/server/platform-revenue'
+import { describeStripePaymentMethod } from '../../_lib/stripe-payment-method'
 // The annual-mix metric's only input (AGL-1640) — three-state on purpose, and
 // specced per branch, because a wrong `billing_interval` is indistinguishable
 // from a right one in every report that reads it.
@@ -161,6 +162,66 @@ function subscriptionCoupon(object: any): {
  * Best-effort, like every other write on this path: the `console.error` is the
  * floor, and a failed audit append must not 500 a billing webhook.
  */
+/**
+ * A Stripe object's metadata as a plain string map (AGL-3011).
+ *
+ * Stripe sends metadata as an object of strings, but a hand-built fixture,
+ * an older API version or a redelivery of a malformed event can send
+ * anything. This narrows whatever arrived to the shape the plugin event
+ * declares, dropping what will not narrow rather than handing a plugin a
+ * value it would have to re-check.
+ */
+function invoiceEventMetadata(object: any): Record<string, string> {
+  const raw = object?.metadata
+  if (!raw || typeof raw !== 'object') return {}
+  const metadata: Record<string, string> = {}
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'string') metadata[key] = value
+    else if (typeof value === 'number' || typeof value === 'boolean') {
+      metadata[key] = String(value)
+    }
+  }
+  return metadata
+}
+
+/**
+ * The TYPE of a customer's default payment method (AGL-3011).
+ *
+ * `null` means the customer has no default; `undefined` means we could not
+ * find out — Stripe is unconfigured, the call failed, or the answer did not
+ * parse. The two are different answers and the caller must not collapse
+ * them: one is a fact about the workspace, the other is a fact about us.
+ *
+ * Expanded in the request rather than followed with a second call, because
+ * an unexpanded default arrives as a bare id string and
+ * `describeStripePaymentMethod` deliberately refuses to read one as a method.
+ */
+async function readDefaultPaymentMethodType(
+  customerId: string,
+): Promise<string | null | undefined> {
+  const secretKey = process.env.STRIPE_SECRET_KEY
+  if (!secretKey) return undefined
+  try {
+    const response = await fetch(
+      `https://api.stripe.com/v1/customers/${encodeURIComponent(customerId)}` +
+        '?expand[]=invoice_settings.default_payment_method',
+      { headers: { Authorization: `Bearer ${secretKey}` } },
+    )
+    if (!response.ok) return undefined
+    const customer: any = await response.json()
+    const raw = customer?.invoice_settings?.default_payment_method
+    if (raw === null || raw === undefined) return null
+    return describeStripePaymentMethod(raw)?.type ?? null
+  } catch (error) {
+    console.error(
+      '[billing/webhook] reading the default payment method failed',
+      customerId,
+      error,
+    )
+    return undefined
+  }
+}
+
 async function recordOrphanedSubscription(entry: {
   orgId: string
   reason: 'no-such-org' | 'erased-mid-handler'
@@ -1073,7 +1134,15 @@ async function handler(request: Request): Promise<Response> {
     if (
       type === 'invoice.finalized' ||
       type === 'invoice.paid' ||
-      type === 'invoice.payment_failed'
+      type === 'invoice.payment_failed' ||
+      // The two ways an invoice ends WITHOUT being paid (AGL-3011). They
+      // notify nobody and move no revenue — they are here because a plugin
+      // that charged a workspace's usage on its own invoice must learn that
+      // the invoice will never be paid, and the org resolution that answer
+      // needs is this branch's. `notifiesOrgAdmins` below is what keeps them
+      // out of the customer-facing half.
+      type === 'invoice.voided' ||
+      type === 'invoice.marked_uncollectible'
     ) {
       dispatchEntered = true // AGL-2157
       routeHandled = true // AGL-1954
@@ -1269,25 +1338,138 @@ async function handler(request: Request): Promise<Response> {
           // invoice is the durable consequence of the delivery, and it is the
           // one that stops for all three invoice types at once if this branch
           // ever goes quiet.
-          ledger.effect('org-admins-notified')
-          after(() => notifyOrgAdmins(orgId, {
-            type:
-              type === 'invoice.payment_failed'
-                ? 'billing.paymentFailed'
-                : 'billing.invoice',
-            title:
-              type === 'invoice.payment_failed'
-                ? `Payment failed for your $${dollars} invoice`
-                : `Your $${dollars} invoice is available`,
-            orgId,
-            link: orgSlug
-              ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
-              : '/org/billing',
-          }))
+          // A voided or written-off invoice tells the workspace nothing it
+          // wants to hear — it is the withdrawal of a bill, not a new one —
+          // so the three notifying events keep the notice and the other two
+          // pass straight to the plugin raise below.
+          if (
+            type === 'invoice.finalized' ||
+            type === 'invoice.paid' ||
+            type === 'invoice.payment_failed'
+          ) {
+            ledger.effect('org-admins-notified')
+            after(() => notifyOrgAdmins(orgId, {
+              type:
+                type === 'invoice.payment_failed'
+                  ? 'billing.paymentFailed'
+                  : 'billing.invoice',
+              title:
+                type === 'invoice.payment_failed'
+                  ? `Payment failed for your $${dollars} invoice`
+                  : `Your $${dollars} invoice is available`,
+              orgId,
+              link: orgSlug
+                ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
+                : '/org/billing',
+            }))
+          }
+          // THE PLUGIN'S OWN INVOICE, ANSWERED (AGL-3011).
+          //
+          // A plugin that bills usage on a one-off invoice needs the
+          // outcome of the invoice it asked for, and subscribing it to
+          // Stripe directly would be a second webhook to secure, verify and
+          // keep in step with this one. So the fact is raised here, once the
+          // invoice has resolved to a workspace, carrying the invoice's own
+          // metadata — which core does not read. A plugin recognises its own
+          // by the `pluginId` it stamped and every other handler ignores it.
+          //
+          // AWAITED, unlike the notice above: a plugin handler here is where
+          // a workspace's overage standing moves, and deferring it past the
+          // response would let the gate admit work against a charge whose
+          // failure had not landed yet. Handlers are isolated by the
+          // registry, so a plugin that throws is logged and never this
+          // route's failure.
+          const invoiceMetadata = invoiceEventMetadata(object)
+          if (type === 'invoice.paid') {
+            await runPluginEventHandlers('billing.invoice.paid', {
+              orgId,
+              invoiceId: String(object?.id ?? ''),
+              amountPaidCents: Math.max(0, Number(object?.amount_paid ?? 0)),
+              currency: String(object?.currency ?? 'usd'),
+              // Stripe's own flag for an invoice marked paid with no charge
+              // behind it. A plugin counting payment history must not count
+              // one: it is a staff action, not money moving.
+              paidOutOfBand: object?.paid_out_of_band === true,
+              metadata: invoiceMetadata,
+            })
+          }
+          if (type === 'invoice.payment_failed') {
+            await runPluginEventHandlers('billing.invoice.failed', {
+              orgId,
+              invoiceId: String(object?.id ?? ''),
+              amountDueCents: Math.max(0, Number(object?.amount_due ?? 0)),
+              metadata: invoiceMetadata,
+            })
+          }
+          if (type === 'invoice.voided' || type === 'invoice.marked_uncollectible') {
+            await runPluginEventHandlers('billing.invoice.closed', {
+              orgId,
+              invoiceId: String(object?.id ?? ''),
+              reason: type === 'invoice.voided' ? 'voided' : 'uncollectible',
+              metadata: invoiceMetadata,
+            })
+          }
         }
       }
     }
 
+
+    // THE DEFAULT PAYMENT METHOD, MIRRORED TO PLUGINS (AGL-3011).
+    //
+    // A plugin that extends credit between invoices needs to know what the
+    // workspace's default payment method IS — not merely that one exists.
+    // Bank debits take days to settle, so a bound on unpaid usage cannot
+    // hold against one; a card settles now.
+    //
+    // All three events answer the same question, and none of them answers it
+    // on its own: an attached method is not necessarily the default, and
+    // `customer.updated` sends the default as a bare id. So each one is
+    // followed by ONE read of the customer with the default expanded, and
+    // the answer to that read is what is raised.
+    //
+    // Silence when the read cannot be made, deliberately. The raise is a
+    // positive statement about the workspace's standing, and a guess of
+    // "no default" would refuse a paying workspace's usage over a network
+    // failure of ours. Leaving the standing where it was is the honest
+    // answer to "we do not know".
+    if (
+      type === 'customer.updated' ||
+      type === 'payment_method.attached' ||
+      type === 'payment_method.detached'
+    ) {
+      dispatchEntered = true // AGL-2157
+      routeHandled = true // AGL-1954
+      const customerId =
+        type === 'customer.updated'
+          ? String(object?.id ?? '')
+          : String(
+              (typeof object?.customer === 'string' ? object.customer : '') ||
+                // A detached method reports its customer as null and leaves
+                // the id it left in `previous_attributes`, so the org can
+                // still be resolved for the event that most needs it.
+                (typeof event?.data?.previous_attributes?.customer === 'string'
+                  ? event.data.previous_attributes.customer
+                  : '') ||
+                '',
+            )
+      if (!customerId) ledger.skip('payment-method-event-has-no-customer')
+      if (customerId) {
+        const orgId = await findOrgIdByStripeCustomer(customerId)
+        if (!orgId) ledger.skip('payment-method-customer-is-not-a-workspace')
+        if (orgId) {
+          const defaultType = await readDefaultPaymentMethodType(customerId)
+          if (defaultType === undefined) {
+            ledger.skip('payment-method-default-could-not-be-read')
+          } else {
+            ledger.effect('plugins-told-the-default-payment-method')
+            await runPluginEventHandlers('billing.paymentMethod.changed', {
+              orgId,
+              defaultType,
+            })
+          }
+        }
+      }
+    }
 
     // GA4 `refund` for OUR subscription revenue (AGL-1850). The `purchase`
     // above fires on every paid invoice, so without this GA revenue could
@@ -1486,6 +1668,20 @@ async function handler(request: Request): Promise<Response> {
       }
       if (revenueDoc) {
         const orgId = String(revenueDoc.get('orgId') ?? '')
+        // A DISPUTE IS A FACT A PLUGIN MAY NEED (AGL-3011). A plugin
+        // extending credit against a card reads an opened dispute as the
+        // moment payment trust dropped, and it must read it while the
+        // evidence window is still open — which is `created`, not `closed`.
+        // Raised only where the charge resolved to a workspace, because a
+        // plugin cannot act on a dispute it cannot attribute.
+        if (type === 'charge.dispute.created' && orgId) {
+          await runPluginEventHandlers('billing.dispute.opened', {
+            orgId,
+            chargeId: chargeId || '',
+            invoiceId: revenueDoc.id || null,
+            amountCents: disputedCents,
+          })
+        }
         if (lost) {
           // The row's own reversal total, not a blind add: `refundedCents`
           // is CUMULATIVE (the refund branch above maintains it the same

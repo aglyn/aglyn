@@ -22,7 +22,7 @@ import {
   matchComponentPropToken,
   REUSABLE_PROP_KINDS,
   reusablePropBindsToField,
-  reusablePropHasAnswers,
+  unofferedChoiceValues,
 } from '@aglyn/aglyn'
 import {
   type FieldBindAction,
@@ -100,29 +100,6 @@ export function propertyKindsBindableTo(
     .map((type) => REUSABLE_PROP_KINDS[type].label)
   if (labels.length <= 1) return labels[0] ?? ''
   return `${labels.slice(0, -1).join(', ')} or ${labels[labels.length - 1]}`
-}
-
-/**
- * The values of a property with answers that a dropdown does not offer.
- *
- * An answer reaches the dropdown's element as its VALUE, and an element handed
- * a value outside its own list draws as though nothing were chosen. The
- * dialog that declares the answers cannot see the dropdowns they will drive,
- * so the mismatch is only knowable here, where the two meet.
- */
-export function unofferedChoiceValues(
-  prop: Pick<Aglyn.ReusableComponentProp, 'type' | 'options' | 'settings'> | undefined,
-  fieldOptions: unknown,
-): string[] {
-  if (!reusablePropHasAnswers(prop) || !Array.isArray(fieldOptions)) return []
-  const offered = new Set(
-    fieldOptions.map((option) =>
-      String((option as { value?: unknown } | null)?.value ?? ''),
-    ),
-  )
-  return (prop?.options ?? [])
-    .map((option) => option?.value)
-    .filter((value): value is string => Boolean(value) && !offered.has(value))
 }
 
 /** A component-mapper entry: a component, or `{ component, ...defaults }`. */

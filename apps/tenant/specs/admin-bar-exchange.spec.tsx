@@ -188,3 +188,94 @@ describe('AdminBar hint exchange (AGL-1842)', () => {
     )
   })
 })
+
+/**
+ * A MANUAL arm where the hint is (AGL-3047). `?aglyn-edit` — which the
+ * console's Visit links add — and the chord arm the bar MANUAL, and a manual
+ * arm used to start on the connect button without trying the exchange: the
+ * console's own route to a site replaced the bar that the same address shows
+ * unprompted with a button in front of it.
+ *
+ * - a 200 exchange brings the bar straight up, and nothing renders while the
+ *   exchange is in flight, so the button never flashes up in front of it;
+ * - every failure leaves the button, never silence and never the auto arm's
+ *   hidden probe: the editor asked, and the popup can still connect a
+ *   console session the hint does not name;
+ * - with no hint (a custom domain) the button is there at once, and no
+ *   exchange is attempted.
+ */
+describe('AdminBar manual arm tries the exchange first (AGL-3047)', () => {
+  const pill = () =>
+    screen.queryByRole('button', { name: 'Connect edit access for this site' })
+
+  const renderManual = () =>
+    render(<AdminBar hostId={HOST} consoleOrigin={CONSOLE_ORIGIN} />)
+
+  const exchangeAnswers = (status: number) =>
+    mockFetch((url) =>
+      url.includes('/api/edit-access/exchange')
+        ? status === 200
+          ? { ok: true, status, json: async () => EXCHANGE_RESPONSE }
+          : { ok: false, status, json: async () => ({ error: 'refused' }) }
+        : { ok: true, status: 200, json: async () => CONTEXT_RESPONSE },
+    )
+
+  beforeEach(() => {
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+    document.cookie = 'aglyn_editor=1; Path=/'
+  })
+
+  afterEach(() => {
+    document.cookie = 'aglyn_editor=; Max-Age=0; Path=/'
+    jest.restoreAllMocks()
+  })
+
+  it('brings the bar straight up from a 200 exchange — no button, no popup', async () => {
+    const open = jest.spyOn(window, 'open')
+    const fetchMock = exchangeAnswers(200)
+    const { container } = renderManual()
+    expect(container.innerHTML).toBe('')
+    await waitFor(() =>
+      expect(
+        screen.getByRole('region', { name: 'Aglyn admin bar' }),
+      ).toBeTruthy(),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/edit-access/exchange',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(pill()).toBeNull()
+    expect(open).not.toHaveBeenCalled()
+    expect(container.querySelector('iframe')).toBeNull()
+  })
+
+  it.each([
+    [401, 'no usable hint'],
+    [403, 'an account that cannot edit this site'],
+    [404, 'nothing to exchange here'],
+    [500, 'a server error'],
+  ])('leaves the connect button on a %s — %s', async (status) => {
+    exchangeAnswers(status)
+    const { container } = renderManual()
+    await waitFor(() => expect(pill()).not.toBeNull())
+    expect(container.querySelector('iframe')).toBeNull()
+  })
+
+  it('leaves the connect button when the exchange throws', async () => {
+    global.fetch = jest.fn(async () => {
+      throw new Error('network down')
+    }) as unknown as typeof fetch
+    const { container } = renderManual()
+    await waitFor(() => expect(pill()).not.toBeNull())
+    expect(container.querySelector('iframe')).toBeNull()
+  })
+
+  it('shows the button at once with no hint — a custom domain — and never exchanges', () => {
+    document.cookie = 'aglyn_editor=; Max-Age=0; Path=/'
+    const fetchMock = exchangeAnswers(200)
+    renderManual()
+    expect(pill()).not.toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})

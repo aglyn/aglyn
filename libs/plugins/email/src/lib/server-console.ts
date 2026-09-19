@@ -72,6 +72,7 @@
  * order the loader happened to reach them.
  */
 
+import { registerEmailDesignDraftWriter } from './server-email-drafts'
 import { registerEmailSuppressionsApi } from './server-suppressions'
 import { registerEmailListImportApi } from './server-list-import'
 import {
@@ -441,6 +442,11 @@ export const emailListRulePreviewHandler: PluginApiHandler = async (
  * isolated and hands one operator a fresh budget per site.
  */
 export function registerEmailConsoleApi(): void {
+  // The email design writer another plugin reaches through the core's
+  // resource-drafts seam (AGL-2912). Registered here alone: the AI jobs that
+  // write through it run only on the console, inline and on the beat
+  // (AGL-3026).
+  registerEmailDesignDraftWriter()
   registerPluginApiRoute('email/list-rule-preview', emailListRulePreviewHandler)
   registerPluginApiRoute(
     'email/list-members-preview',

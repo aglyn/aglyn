@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v2'
+export const LEGAL_DOCUMENT_VERSION = 'v8'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -497,6 +497,93 @@ export interface LegalDocumentManifestEntry {
  * byte-for-byte, and each new capture differs from the pre-publication capture
  * of the same page by exactly the published edits.
  *
+ * v7 (2026-09-15, AGL-2902 + AGL-2963 + AGL-2971): one version for three
+ * changes, so every account re-accepts once.
+ *
+ * ⚠️ THE LABEL IS `v7`, NOT `v3`. On 2026-09-15 production held acceptance
+ * records labeled `v1` (6), `v2` (2) and `v6` (1), and a new version reaches
+ * only the records it outranks (the warning at the top of this file): under
+ * `v3` the account whose latest acceptance is `v6` would never be asked. `v7`
+ * is the lowest label above every stored record, which is what the 2026-09-13
+ * entry in `docs/DECISION_LOG.md` said a later bump would need.
+ *
+ *   - AGL-2902, the AI clauses. Terms: §2 defines AI Features, AI Input and AI
+ *     Output; new §4.11 meters AI Features in AI credits, with allotments, a
+ *     spending limit and the Free plan's extra limits; new §8.6 makes AI Input
+ *     and AI Output Customer Content and assigns Aglyn's rights in output to
+ *     the customer; new §8.7 requires review before output is applied,
+ *     published or sent, and says AI Features only draft, propose or leave
+ *     unsaved changes; §11 says which AI providers receive AI Input; §14.5
+ *     disclaims warranties on AI Features and AI Output. Privacy: §2 says what
+ *     each AI feature sends, and records generation jobs, monthly AI usage and
+ *     allotments; §3 names Anthropic among the providers; §5 gives the AI
+ *     retention periods, which are 180 days for Assist exchanges and
+ *     generation jobs (the D2 decision on AGL-2902) and 13 months for monthly
+ *     usage records. The Acceptable Use Policy's §5, the DPA's nature and
+ *     purpose, the Subprocessors Anthropic row and three new console storage
+ *     rows in the Cookie Policy published in the same sitting; none of those
+ *     four is acceptance-pinned.
+ *   - AGL-2963, Privacy §3: Wistia's player loads when the visitor presses play
+ *     or, on a page built to show a single film, with the page for a visitor
+ *     whose privacy choices permit analytics. The Subprocessors Wistia row and
+ *     change log, and the Cookie Policy's Wistia row and §3, moved with it.
+ *   - AGL-2971, Privacy §1.3 and §11: business contact information about
+ *     prospective customers, from public sources and data providers, used
+ *     only to contact them about Aglyn; a prospect may opt out by replying.
+ *     No fixed retention period is stated.
+ *
+ * All six documents move "Last updated" to September 15, 2026; the Terms keep
+ * "Effective date: August 5, 2026".
+ *
+ * Publication-first: all six documents and the index were published, the
+ * live pages confirmed serving the new text, and only then were these
+ * captured — terms 43836 bytes, privacy 20785 bytes, each identical across
+ * two requests and a cache-busting query. Both pinned documents changed, so
+ * no control could run after publication. The method was proven before it
+ * instead: on 2026-09-15 the live pages reproduced the `v2` pins (terms 39062
+ * bytes / `7257cc…`, privacy 15426 bytes / `6cb2c8…`) byte for byte.
+ *
+ * v8 (2026-09-17, AGL-3069): one version for the four AI disclosures drafted
+ * beside their features, so every account re-accepts once. Production held
+ * acceptance records labeled `v1`, `v2`, `v6` and `v7`, so `v8` outranks them
+ * all.
+ *
+ *   - AGL-2915, AI insights. Privacy §2 names AI insights, which answer a
+ *     member's questions about the site's own figures and can write a weekly
+ *     summary. It says a question sends tables of totals, counts and rates,
+ *     never an individual record, and that the answer and its tables are kept
+ *     beside the job record and shown only to the member who asked (or, for a
+ *     weekly summary, to members who can access the site). §5 keeps those
+ *     tables on the job's 180 days, and the weekly-insights choice until it is
+ *     changed.
+ *   - AGL-2916, product copy and proposals. Privacy §2 says what writing a
+ *     product's copy sends, including its first photo as a copy at most 768
+ *     pixels on its longer side without the original's embedded details, and
+ *     what a brief for products, categories or discounts sends.
+ *   - AGL-2917, AI assistance in the CRM. Privacy §2 names it and says what a
+ *     record summary, an email draft and an import's column matching send; that
+ *     the result is kept beside the job record and who sees it; and that AI
+ *     never sends an email. §5 deletes that result 14 days after it is
+ *     produced.
+ *   - AGL-2919, automations. Privacy §2 says what drafting an automation and
+ *     explaining one or its failed run send, and that the details of the event
+ *     that started a run are never sent.
+ *
+ * The Subprocessors Anthropic row (its purpose, its data, and a change-log
+ * entry) and the `/legal` index cards published in the same sitting; neither
+ * is acceptance-pinned. The Terms, the Acceptable Use Policy, the DPA and the
+ * Cookie Policy are unchanged: the DPA's nature and purpose already names
+ * AI-assisted features. The Privacy Policy and Subprocessors move "Last
+ * updated" to September 17, 2026. The combined wording is recorded in
+ * `Platform Docs/Legal/Proposed/2026-09-16-ai-data-flows/COMBINED-FINAL.md`.
+ *
+ * Publication-first: the pages were published, the live pages confirmed
+ * serving the new text, and only then was privacy captured: 25267 bytes
+ * (`069319…`), identical across two requests and a cache-busting query.
+ * The Terms did not change, so they were the control: the live terms page
+ * reproduced its `v7` pin (43836 bytes / `69d59b…`) byte for byte before and
+ * after publication, and keeps that pin.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -556,14 +643,14 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '7257cce3324dc001b361532ebb922b665c374d8e40926087c83289eed0e27d9f',
-    bytes: 39062,
+      '69d59b4367067a1c95adc9ed825fb09165e5e6b1817ebacad835234b15561b7a',
+    bytes: 43836,
   },
   {
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '6cb2c8bbafade158292c77dcb58606d241c02b2c75892968125f0fe601c4ff90',
-    bytes: 15426,
+      '069319b0e5a43b6d4e01f1d37114ffa4bbedf72d6bce827dacf3ee58b6f63086',
+    bytes: 25267,
   },
 ]

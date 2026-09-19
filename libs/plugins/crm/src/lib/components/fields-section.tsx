@@ -47,6 +47,7 @@ import {
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -59,7 +60,6 @@ import {
   IconButton,
   Stack,
   Tab,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -519,7 +519,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             }
           />
         ) : (
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell sx={{ width: 96 }}>{'Order'}</TableCell>
@@ -593,7 +593,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </ScrollTable>
         )}
         {definitions.length ? (
           <Typography variant="caption" color="text.secondary">

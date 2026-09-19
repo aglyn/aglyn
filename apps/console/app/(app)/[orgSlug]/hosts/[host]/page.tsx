@@ -137,6 +137,11 @@ function HostDashboard() {
 
             `start` keeps a three-line card from being stretched to the
             height of a five-row one beside it.
+
+            Gone when every card in it rendered nothing (AGL-3058). A glance
+            card with nothing to say draws nothing, and an empty grid left in
+            the Stack would take the Stack's spacing on both sides of a
+            zero-height row: a double gap under Traffic.
            */}
           <Box
             sx={{
@@ -147,6 +152,7 @@ function HostDashboard() {
                 xs: '1fr',
                 md: 'repeat(2, minmax(0, 1fr))',
               },
+              '&:empty': { display: 'none' },
             }}
           >
             <PluginWidgetSlot slot="commerceGlance" hostId={hostId} />

@@ -17,6 +17,8 @@
 
 import { checkEntitlement } from '@aglyn/aglyn'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { formatBytes } from '@aglyn/aglyn/app-utils/measure-node-map'
 import {
   AI_JOB_TERMINAL_STATUSES,
   type AiJobOutput,
@@ -38,6 +40,10 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { AiInsightSurface } from '../model/ai-insight'
+import { AiPageBriefDialog } from './ai-page-brief-dialog.component'
+import { AiInsightDialog } from './ai-insight-dialog.component'
+import { AiJobPlan } from './ai-job-plan.component'
 
 /**
  * The AI jobs drawer inside the Assist panel (AGL-2904): the workspace's
@@ -66,6 +72,7 @@ const STATUS_LABEL: Record<AiJobStatus, string> = {
   queued: 'Queued',
   running: 'Running',
   needs_input: 'Needs attention',
+  needs_review: 'Needs review',
   done: 'Done',
   failed: 'Failed',
   canceled: 'Canceled',
@@ -78,6 +85,7 @@ const STATUS_COLOR: Record<
   queued: 'default',
   running: 'primary',
   needs_input: 'warning',
+  needs_review: 'warning',
   done: 'success',
   failed: 'error',
   canceled: 'default',
@@ -89,34 +97,72 @@ const BESIGNER_SEGMENT: Partial<Record<AiJobOutput['resource'], string>> = {
   reusableComponent: 'components',
   layout: 'layouts',
   template: 'templates',
-  emailScreen: 'emails',
+  // An email design is a screen: it opens in the screen besigner, as the
+  // Emails page's own Edit design does.
+  emailScreen: 'screens',
 }
 
 /**
  * Where "open draft" goes, or `null` when the output has no page of its
  * own — a `text` output carries its copy on the job and is shown inline.
  * A versioned resource opens in the besigner on the version the job wrote;
- * one the console lists without a detail page opens its list.
+ * one the console lists without a detail page opens its list; a `theme`
+ * proposal opens the site's Theme section, where it is put in the editor.
+ *
+ * A console URL names a site by its SUBDOMAIN: the `[host]` segment resolves
+ * through the member's host projection by subdomain, never by document id.
+ * So an output that carries no `hostSubdomain` gets no link rather than one
+ * that opens no site.
  */
 export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | null {
-  if (!orgSlug) return null
+  const host = output.hostSubdomain
+  if (!orgSlug || !host) return null
   const segment = BESIGNER_SEGMENT[output.resource]
   if (segment) {
-    if (!output.hostId) return null
-    const base = `/${orgSlug}/hosts/${output.hostId}/${segment}/${output.id}`
+    const base = `/${orgSlug}/hosts/${host}/${segment}/${output.id}`
     return output.versionId ? `${base}/versions/${output.versionId}/besigner` : base
   }
-  if (output.resource === 'product' && output.hostId) {
-    return `/${orgSlug}/hosts/${output.hostId}/products`
+  if (output.resource === 'product') {
+    return `/${orgSlug}/hosts/${host}/products`
   }
-  if (output.resource === 'workflow' && output.hostId) {
-    return `/${orgSlug}/hosts/${output.hostId}/automation?tab=workflows`
+  if (output.resource === 'workflow') {
+    // A drafted automation is an action (AGL-2919), listed switched off on
+    // the Automation page's Actions.
+    return `${buildRoute(Route.HOST_AUTOMATION, { orgSlug, host })}/actions`
+  }
+  if (output.resource === 'theme') {
+    return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
+  }
+  if (output.resource === 'form') {
+    // A new form has no version for the besigner to open: its own page mints
+    // the first one, and holds the routing and consent it declares.
+    return buildRoute(Route.FORM_DETAILS, { orgSlug, host, formId: output.id })
+  }
+  if (output.resource === 'campaign') {
+    // A campaign's page belongs to the Marketing console, under the site.
+    return `${buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'marketing' })}/campaigns/${output.id}`
   }
   return null
 }
 
-/** `data:` frames out of an SSE body, one parsed event per frame. */
-async function readEventFrames(
+/**
+ * The navigation entry a page job proposes for the page it built (AGL-2907),
+ * or `null`. The job writes no menu: the member adds the entry once the page
+ * is live.
+ */
+export function aiJobNavigationProposal(output: AiJobOutput): string | null {
+  if (output.resource !== 'screen') return null
+  const navigation = output.proposal?.['navigation']
+  if (!navigation || typeof navigation !== 'object') return null
+  const label = (navigation as Record<string, unknown>)['label']
+  return typeof label === 'string' && label.trim() ? label.trim() : null
+}
+
+/**
+ * `data:` frames out of an SSE body, one parsed event per frame. Shared with
+ * every panel that watches a job through the events route.
+ */
+export async function readEventFrames(
   body: ReadableStream<Uint8Array>,
   onEvent: (event: Record<string, unknown>) => void,
 ): Promise<void> {
@@ -150,6 +196,14 @@ export interface AssistJobsDrawerProps {
   user: Parameters<typeof authorizedFetch>[0]
   /** The `release_ai_generative` verdict, staff bypass applied (the shell's). */
   visible: boolean
+  /** The site the console page is on, when it is on one: a page is described for a site. */
+  hostId?: string | null
+  /**
+   * The page's insight surface (AGL-2915) — a site's Analytics, Data or CRM
+   * Reports page, or the workspace's Data page — with the site's subdomain;
+   * `null` elsewhere, where no question about the figures is offered.
+   */
+  insight?: { surface: Exclude<AiInsightSurface, 'digest'>; host: string | null } | null
 }
 
 export function AssistJobsDrawer({
@@ -159,12 +213,21 @@ export function AssistJobsDrawer({
   orgSlug,
   user,
   visible,
+  hostId,
+  insight,
 }: AssistJobsDrawerProps): JSX.Element | null {
   const entitled = orgReady && checkEntitlement(org as never, 'aiGenerative')
   const [expanded, setExpanded] = useState(false)
   const [jobs, setJobs] = useState<AiJobSummary[]>([])
   const [loading, setLoading] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  /** Whether the page brief dialog is open (AGL-2907). */
+  const [describing, setDescribing] = useState(false)
+  /**
+   * The insight dialog (AGL-2915): `'ask'` for a new question, a job id for an
+   * answer a job already wrote, `null` when closed.
+   */
+  const [insightOpen, setInsightOpen] = useState<string | null>(null)
   /** Job ids whose terminal event has been tracked, so a re-read does not count twice. */
   const trackedRef = useRef(new Set<string>())
   /** The job whose stream is open, so a re-render does not open a second. */
@@ -302,6 +365,41 @@ export function AssistJobsDrawer({
     [orgId, user, patchJob],
   )
 
+  /** The job whose resume is in flight, so its button cannot send twice. */
+  const [resuming, setResuming] = useState<string | null>(null)
+
+  // Confirms a plan, or tries again a step whose answer broke a building
+  // rule (AGL-2935). The door runs the next step inline and answers with the
+  // job, so the row moves on without waiting for the stream.
+  const resume = useCallback(
+    async (job: AiJobSummary) => {
+      if (!orgId) return
+      setResuming(job.id)
+      setNotice(null)
+      try {
+        const response = await authorizedFetch(
+          user,
+          `/api/ai/jobs/${encodeURIComponent(job.id)}/resume`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orgId, hostId: job.hostId }),
+          },
+        )
+        const payload = await response.json().catch(() => null)
+        if (payload?.job) patchJob(payload.job as AiJobSummary)
+        if (!response.ok) {
+          setNotice(String(payload?.error ?? 'The job could not be resumed — try again.'))
+        }
+      } catch {
+        setNotice('The job could not be resumed — try again.')
+      } finally {
+        setResuming(null)
+      }
+    },
+    [orgId, user, patchJob],
+  )
+
   if (!visible || !orgId || !entitled) return null
 
   const active = jobs.filter((job) => !AI_JOB_TERMINAL_STATUSES.includes(job.status)).length
@@ -315,6 +413,18 @@ export function AssistJobsDrawer({
             <Chip size="small" color="primary" label={`${active} running`} sx={{ ml: 1 }} />
           )}
         </Typography>
+        {/* A question about the page's figures (AGL-2915). */}
+        {insight && (
+          <Button size="small" onClick={() => setInsightOpen('ask')}>
+            Ask about your numbers
+          </Button>
+        )}
+        {/* A page from a brief (AGL-2907), on a site's own routes. */}
+        {hostId && (
+          <Button size="small" onClick={() => setDescribing(true)}>
+            Describe a page
+          </Button>
+        )}
         <IconButton
           size="small"
           aria-label={expanded ? 'Hide AI jobs' : 'Show AI jobs'}
@@ -378,9 +488,14 @@ export function AssistJobsDrawer({
                 )}
                 {job.outputs.map((output, index) => {
                   const href = aiJobOutputHref(output, orgSlug)
+                  const navigation = aiJobNavigationProposal(output)
                   return (
                     <Box key={`${output.resource}:${output.id}:${index}`} sx={{ mt: 0.5 }}>
-                      {href ? (
+                      {output.resource === 'insight' ? (
+                        <Button size="small" onClick={() => setInsightOpen(output.id)}>
+                          View answer
+                        </Button>
+                      ) : href ? (
                         <AppLink componentVariant="naked" href={href}>
                           Open draft — {output.label}
                         </AppLink>
@@ -397,14 +512,68 @@ export function AssistJobsDrawer({
                           {output.label}
                         </Typography>
                       )}
+                      {output.load ? (
+                        <Typography variant="caption" color="text.secondary" component="div">
+                          About {formatBytes(output.load.totalBytes)} on a first visit
+                        </Typography>
+                      ) : null}
+                      {output.note ? (
+                        <Typography variant="caption" color="text.secondary" component="div">
+                          {output.note}
+                        </Typography>
+                      ) : null}
+                      {navigation ? (
+                        <Typography variant="caption" color="text.secondary" component="div">
+                          Add “{navigation}” to your navigation once the page is live.
+                        </Typography>
+                      ) : null}
                     </Box>
                   )
                 })}
+                <AiJobPlan
+                  job={job}
+                  onResume={(target) => void resume(target)}
+                  busy={resuming === job.id}
+                />
               </Box>
             )
           })}
         </Stack>
       </Collapse>
+      {/*
+        The brief dialog (AGL-2907). It starts a job and closes; the list
+        below it is the only place the job is watched, so an open list reads
+        the new job back as soon as the dialog hands it over.
+      */}
+      {insightOpen !== null && (
+        <AiInsightDialog
+          open
+          onClose={() => {
+            setInsightOpen(null)
+            if (expanded) void load()
+          }}
+          orgId={orgId}
+          orgSlug={orgSlug}
+          hostId={insight?.host ? (hostId ?? null) : null}
+          host={insight?.host ?? null}
+          surface={insight?.surface ?? 'analytics'}
+          user={user}
+          uid={(user as { uid?: string } | null | undefined)?.uid ?? null}
+          jobId={insightOpen === 'ask' ? null : insightOpen}
+        />
+      )}
+      {hostId && (
+        <AiPageBriefDialog
+          open={describing}
+          onClose={() => {
+            setDescribing(false)
+            if (expanded) void load()
+          }}
+          orgId={orgId}
+          hostId={hostId}
+          user={user}
+        />
+      )}
     </Box>
   )
 }

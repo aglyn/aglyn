@@ -1,0 +1,243 @@
+{
+  "id": "insight-roof-traffic-change",
+  "kind": "insight",
+  "brief": "Why did our traffic go up these last two weeks?",
+  "framing": null,
+  "inventory": null,
+  "tables": [
+    {
+      "ref": "t1",
+      "reader": "traffic.summary",
+      "days": 14,
+      "scope": "site",
+      "title": "Traffic",
+      "source": {
+        "label": "Analytics",
+        "path": "analytics"
+      },
+      "period": {
+        "from": "2026-09-03",
+        "to": "2026-09-16",
+        "days": 14
+      },
+      "columns": [
+        {
+          "key": "figure",
+          "label": "Figure",
+          "kind": "text"
+        },
+        {
+          "key": "current",
+          "label": "This window",
+          "kind": "count"
+        },
+        {
+          "key": "previous",
+          "label": "Window before",
+          "kind": "count"
+        },
+        {
+          "key": "change",
+          "label": "Change",
+          "kind": "change"
+        }
+      ],
+      "rows": [
+        {
+          "figure": "Page views",
+          "current": 1204,
+          "previous": 1050,
+          "change": 14.7
+        },
+        {
+          "figure": "Visitors",
+          "current": 830,
+          "previous": 874,
+          "change": -5
+        },
+        {
+          "figure": "Page views a day",
+          "current": 86,
+          "previous": 75,
+          "change": 14.7
+        }
+      ],
+      "omitted": 0,
+      "notes": [
+        "Visitors are counted once per browser tab per day, so one person on two days counts twice."
+      ]
+    },
+    {
+      "ref": "t2",
+      "reader": "traffic.pages",
+      "days": 14,
+      "scope": "site",
+      "title": "Top pages",
+      "source": {
+        "label": "Analytics",
+        "path": "analytics"
+      },
+      "period": {
+        "from": "2026-09-03",
+        "to": "2026-09-16",
+        "days": 14
+      },
+      "columns": [
+        {
+          "key": "page",
+          "label": "Page",
+          "kind": "text"
+        },
+        {
+          "key": "views",
+          "label": "Views",
+          "kind": "count"
+        },
+        {
+          "key": "share",
+          "label": "Share of views",
+          "kind": "percent"
+        },
+        {
+          "key": "change",
+          "label": "Change",
+          "kind": "change"
+        }
+      ],
+      "rows": [
+        {
+          "page": "/roof-repair",
+          "views": 410,
+          "share": 34.1,
+          "change": 41.4
+        },
+        {
+          "page": "/",
+          "views": 388,
+          "share": 32.2,
+          "change": 2.1
+        },
+        {
+          "page": "/contact",
+          "views": 97,
+          "share": 8.1,
+          "change": null
+        }
+      ],
+      "omitted": 6,
+      "notes": []
+    }
+  ],
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: every figure is quoted from a row it cites, and the reason the tables cannot give is the gap.",
+      "plan": null,
+      "answer": {
+        "insights": [
+          {
+            "text": "Page views rose 14.7% to 1,204 over the 14 days, while visitors fell 5% to 830.",
+            "cites": [
+              {
+                "table": "t1",
+                "rows": [
+                  0,
+                  1
+                ]
+              }
+            ]
+          },
+          {
+            "text": "Most of the rise is the roof repair page: its 410 views are up 41.4% and make up 34.1% of all views.",
+            "cites": [
+              {
+                "table": "t2",
+                "rows": [
+                  0
+                ]
+              }
+            ]
+          },
+          {
+            "text": "The home page held steady at 388 views, up 2.1%.",
+            "cites": [
+              {
+                "table": "t2",
+                "rows": [
+                  1
+                ]
+              }
+            ]
+          }
+        ],
+        "gap": "These figures do not say which searches or links sent visitors to the roof repair page."
+      },
+      "usage": null,
+      "rubric": {
+        "structure": 5,
+        "copy": 4,
+        "reuse": null,
+        "grader": "authored"
+      }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A total the model computed itself: 410 and 388 make 798, which no row holds.",
+      "answer": {
+        "insights": [
+          {
+            "text": "Your two top pages drew 798 views between them.",
+            "cites": [
+              {
+                "table": "t2",
+                "rows": [
+                  0,
+                  1
+                ]
+              }
+            ]
+          }
+        ],
+        "gap": null
+      },
+      "fails": [
+        "readable",
+        "rules"
+      ]
+    },
+    {
+      "why": "A fall the change does not show.",
+      "answer": {
+        "insights": [
+          {
+            "text": "Page views fell 14.7% to 1,204.",
+            "cites": [
+              {
+                "table": "t1",
+                "rows": [
+                  0
+                ]
+              }
+            ]
+          }
+        ],
+        "gap": null
+      },
+      "fails": [
+        "readable",
+        "rules"
+      ]
+    },
+    {
+      "why": "An answer in prose rather than through the tool.",
+      "answer": "Traffic went up because of the roof repair page.",
+      "fails": [
+        "readable"
+      ]
+    }
+  ]
+}

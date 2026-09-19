@@ -25,6 +25,8 @@ import {
   assignmentRuleMatches,
   campaignEmailSummary,
   companyDomainForEmail,
+  isPublicMailboxDomain,
+  PUBLIC_MAILBOX_DOMAINS,
   CRM_ASSIGNMENT_RULES_MAX,
   CRM_ASSIGNMENT_RULES_PATH,
   CRM_ROUND_ROBIN_LAST_ASSIGNED_PATH,
@@ -651,6 +653,8 @@ describe('companyDomainForEmail', () => {
     expect(companyDomainForEmail('jo@gmail.com')).toBeNull()
     expect(companyDomainForEmail('jo@Outlook.com')).toBeNull()
     expect(companyDomainForEmail('jo@icloud.com')).toBeNull()
+    // An internet provider's subscriber mailbox is a person's, not a company's.
+    expect(companyDomainForEmail('jo@comcast.net')).toBeNull()
   })
 
   it('answers null for anything that is not an address', () => {
@@ -660,6 +664,34 @@ describe('companyDomainForEmail', () => {
     expect(companyDomainForEmail('jo@')).toBeNull()
     expect(companyDomainForEmail('jo smith@acme.com')).toBeNull()
     expect(companyDomainForEmail('jo@acme')).toBeNull()
+  })
+})
+
+describe('isPublicMailboxDomain', () => {
+  it('reads a bare domain or an address, however it is cased or pasted', () => {
+    expect(isPublicMailboxDomain('gmail.com')).toBe(true)
+    expect(isPublicMailboxDomain(' Jo@YAHOO.com ')).toBe(true)
+    expect(isPublicMailboxDomain('https://www.hotmail.com/')).toBe(true)
+    expect(isPublicMailboxDomain('proton.me.')).toBe(true)
+  })
+
+  it('matches exact domains, never a suffix or a lookalike', () => {
+    expect(isPublicMailboxDomain('acme.com')).toBe(false)
+    expect(isPublicMailboxDomain('jo@nc.rr.com')).toBe(false)
+    expect(isPublicMailboxDomain('jo@examplemail.com')).toBe(false)
+    expect(isPublicMailboxDomain('jo@gmail.com.example.org')).toBe(false)
+  })
+
+  it('answers false for anything that is not a domain', () => {
+    expect(isPublicMailboxDomain('')).toBe(false)
+    expect(isPublicMailboxDomain(null)).toBe(false)
+    expect(isPublicMailboxDomain('jo@')).toBe(false)
+  })
+
+  it('holds only lowercase bare hostnames, so every entry can match', () => {
+    for (const domain of PUBLIC_MAILBOX_DOMAINS) {
+      expect(normalizeCompanyDomain(domain)).toBe(domain)
+    }
   })
 })
 

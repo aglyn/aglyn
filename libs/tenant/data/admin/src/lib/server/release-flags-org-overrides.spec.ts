@@ -155,21 +155,41 @@ describe('server per-org release flag overrides (AGL-1635)', () => {
     })
 
     it('falls back to the registry default with no Remote Config', async () => {
-      // Emulator/local: no template. `release_edit_bar` defaults OFF, and an
-      // override must still be honoured on top of that fallback.
+      // Emulator/local: no template. `release_edit_bar` defaults ON since its
+      // release (AGL-3041), and an override must still be honoured on top of
+      // that fallback — here the per-org kill switch.
       mockGetTemplate.mockRejectedValue(new Error('no remote config'))
       mockOrgGet.mockResolvedValue(orgSnapshot({}))
       await expect(
         isServerReleaseFlagOnForOrg('release_edit_bar', 'org-1'),
+      ).resolves.toBe(true)
+
+      __resetReleaseFlagCaches()
+      mockGetTemplate.mockRejectedValue(new Error('no remote config'))
+      mockOrgGet.mockResolvedValue(
+        orgSnapshot({ releaseFlags: { release_edit_bar: false } }),
+      )
+      await expect(
+        isServerReleaseFlagOnForOrg('release_edit_bar', 'org-1'),
+      ).resolves.toBe(false)
+    })
+
+    it('falls back to an OFF registry default the same way', async () => {
+      // The other direction, on a flag that still ships dark: no template, no
+      // override, off — and a grant on top of that fallback turns it on.
+      mockGetTemplate.mockRejectedValue(new Error('no remote config'))
+      mockOrgGet.mockResolvedValue(orgSnapshot({}))
+      await expect(
+        isServerReleaseFlagOnForOrg('release_outreach', 'org-1'),
       ).resolves.toBe(false)
 
       __resetReleaseFlagCaches()
       mockGetTemplate.mockRejectedValue(new Error('no remote config'))
       mockOrgGet.mockResolvedValue(
-        orgSnapshot({ releaseFlags: { release_edit_bar: true } }),
+        orgSnapshot({ releaseFlags: { release_outreach: true } }),
       )
       await expect(
-        isServerReleaseFlagOnForOrg('release_edit_bar', 'org-1'),
+        isServerReleaseFlagOnForOrg('release_outreach', 'org-1'),
       ).resolves.toBe(true)
     })
 

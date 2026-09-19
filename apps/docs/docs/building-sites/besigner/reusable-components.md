@@ -412,3 +412,4 @@ the same plan as creating a component.
 - [Copy & paste elements](copy-paste.md)
 - [The Besigner](overview.md)
 - [Screens & layouts](../screens-and-layouts/overview.md)
+- [Generate a reusable component with Aglyn AI](../components/generate-a-component-with-aglyn-ai.md)

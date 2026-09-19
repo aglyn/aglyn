@@ -213,6 +213,12 @@ const firstCells = () =>
     (row) => row.querySelector('td')?.textContent?.trim() ?? '',
   )
 
+/** The experiment names the grid draws, top to bottom. */
+const experimentNames = () =>
+  Array.from(document.querySelectorAll('[role="row"][data-id]')).map(
+    (row) => row.querySelector('[data-field="name"]')?.textContent?.trim() ?? '',
+  )
+
 describe('the experiments table walks the collection (AGL-2501)', () => {
   it('THE CONTROL: the two behaviours disagree at the page size', () => {
     const page = TABLE_PAGE_SIZE_DEFAULT + 1
@@ -233,9 +239,9 @@ describe('the experiments table walks the collection (AGL-2501)', () => {
 
   it('shows the alphabetical first page and pages to the next', async () => {
     render(<HostExperimentsCard hostId="host-1" org={ORG} />)
-    expect(firstCells()[0]).toBe('Test 00')
+    expect(experimentNames()[0]).toBe('Test 00')
     fireEvent.click(screen.getByLabelText('Go to next page'))
-    await waitFor(() => expect(firstCells()[0]).toBe('Test 10'))
+    await waitFor(() => expect(experimentNames()[0]).toBe('Test 10'))
   })
 
   it('a page may render FEWER rows than its size, and that is correct', () => {
@@ -245,10 +251,8 @@ describe('the experiments table walks the collection (AGL-2501)', () => {
     // nine rows of a ten-row page. Asserting the ragged page is what stops a
     // later change moving that filter into the query, where it would drop
     // every live experiment instead.
-    expect(document.querySelectorAll('tbody tr')).toHaveLength(
-      TABLE_PAGE_SIZE_DEFAULT - 1,
-    )
-    expect(firstCells()).not.toContain('Test 09')
+    expect(experimentNames()).toHaveLength(TABLE_PAGE_SIZE_DEFAULT - 1)
+    expect(experimentNames()).not.toContain('Test 09')
   })
 })
 

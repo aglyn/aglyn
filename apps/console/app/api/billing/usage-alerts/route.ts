@@ -17,7 +17,6 @@
 
 import {
   buildRoute,
-  PLATFORM_BRAND_NAME,
   pluginRequestFromWeb,
   Route,
 } from '@aglyn/aglyn/server'
@@ -28,9 +27,7 @@ import {
   bandwidthCapShouldEngage,
   type OrgBandwidthCap,
   checkDatasetQuota,
-  PLAN_PRICING,
   planMetersInfraOverage,
-  resolveEffectivePlan,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn/server'
@@ -49,6 +46,7 @@ import {
   assistCreditsFromUsd,
   resolveAssistCreditBudget,
   resolveAssistHardCap,
+  resolveAssistOverageRateUsdPer1k,
 } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
   measureScreenCaps,
@@ -70,20 +68,16 @@ import {
 } from '../../../../utils/billing-auto-lock'
 import { applyOrgLockdown } from '../../../../utils/server/org-lockdown'
 import {
-  aiAddonName,
-  hasAiAddon,
-} from '@aglyn/aglyn/app-utils/plan-entitlements'
-import {
-  assistCeilingBreach,
-  assistCogsAlertThresholdUsd,
-  assistMarginBreach,
-  assistMarginMultiple,
-  assistOrgMonthlyCostLimitUsd,
   budgetAlertDue,
   BUDGET_GUARD_KEY,
   orgMonthlySpend,
   resolveUsageBudget,
 } from '@aglyn/aglyn/app-utils/usage-budget'
+// From the seam's own module, not the server barrel: the cron specs stub that
+// barrel wholesale, and a stubbed registry would evaluate no contributor while
+// the sweep still read green.
+import { listUsageAlertContributors } from '@aglyn/aglyn/plugin-manager/usage-alert-contributors'
+import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
 import {
   consoleOrigin,
   emailFailureReason,
@@ -236,6 +230,18 @@ async function handler(request: Request): Promise<Response> {
   // human's GET is not the scheduler and must not stand in for it.
   if (method === 'POST') await recordCronBeat('usage-alerts')
 
+  // The plugins' server declarations, so every usage alert contributor is
+  // registered before the sweep lists them. Boot registers the same memoized
+  // set once per process, so this resolves at once there, and a process that
+  // reaches this route without boot having run still sweeps with every
+  // contributor. Logged, not thrown: a declaration that fails to load costs its
+  // plugin's alerts, never core's.
+  try {
+    await registerPluginServerDeclarations()
+  } catch (error) {
+    console.error('[usage-alerts] plugin declarations failed', error)
+  }
+
   try {
     const firestore = firebaseAdmin.app().firestore()
     // ONE month boundary for the whole sweep, and the SAME function the
@@ -251,7 +257,7 @@ async function handler(request: Request): Promise<Response> {
      *
      * This was `collection('orgs').limit(500).get()` — no order, no cursor,
      * no truncation flag. Every org past the first 500 got **no quota alert,
-     * no budget alert, no Assist margin alert, no free-plan bandwidth cap and
+     * no budget alert, no plugin staff alert, no free-plan bandwidth cap and
      * no billing auto-lock**, and the response reported `alerted: N` exactly
      * as if the platform had been swept. A ceiling is tolerable; a SILENT one
      * on the platform's only pre-invoice warning is not, and public signups
@@ -317,6 +323,8 @@ async function handler(request: Request): Promise<Response> {
      * the silent pass indistinguishable from a mass mailing.
      */
     const seeded: Array<Record<string, unknown>> = []
+    /** Plugin staff alert rules, listed once for the run in the seam's fixed order. */
+    const usageAlertContributors = listUsageAlertContributors()
 
     for (const org of orgs.docs) {
       const orgData = org.data()
@@ -647,9 +655,15 @@ async function handler(request: Request): Promise<Response> {
       // behavior cannot drift: a band that refuses — the org's own switch,
       // or a plan with no rate — is a wall, and everything else is sold past.
       const assistBandIsWall = assistBandRefuses(orgData as never)
-      const assistRateUsdPer1k =
-        PLAN_PRICING[resolveEffectivePlan(orgData as never)]
-          .extraAssistCreditsUsdPer1k
+      // Through the same resolver `assistBandRefuses` asks, so the alert's
+      // rate and its wall/sold verdict cannot disagree about one org. Read
+      // straight off `PLAN_PRICING` they did: Starter's listed rate is null
+      // and the add-on's is added by the resolver, so a Starter workspace
+      // with the add-on was told "sold past the band" at "$0.00 per 1,000"
+      // in the same sentence (AGL-3014).
+      const assistRateUsdPer1k = resolveAssistOverageRateUsdPer1k(
+        orgData as never,
+      )
 
       const checks: Array<{
         key: string
@@ -1070,152 +1084,98 @@ async function handler(request: Request): Promise<Response> {
       }
 
       /*==========================================
-       * THE MARGIN GUARD — staff-facing, and the live half of "covers Assist
-       * token spend alike".
+       * PLUGIN STAFF ALERTS (AGL-2984).
        *
-       * `assistEntitledMonthlyLimit` caps an entitled org at 1,000 MESSAGES a
-       * month. A thousand long, cache-cold, Opus-class exchanges is a
-       * three-figure Anthropic bill against a subscription that did not move,
-       * and no dollar figure anywhere gates it. This is that dollar figure.
+       * A plugin that meters a cost or enforces a ceiling this route knows
+       * nothing about registers a usage alert contributor, and each one
+       * evaluates this org against the reading its pass already holds: the
+       * spend the budget above was measured with, and the guard map read at
+       * the top of the loop. A plugin's alert costs no read of its own.
        *
-       * STAFF, not the customer: the org is not being charged for Assist and
-       * has done nothing wrong, so mailing them about our cost would be
-       * alarming and meaningless. Its own guard key, so a staff alert and a
-       * customer budget can never suppress one another.
+       * THE SENDERS ARE THIS ROUTE'S. A contributor decides and words the
+       * alert; its guard goes through `recordAlert`, so the first-sweep seed
+       * silences it like every other send here, and its delivery is the staff
+       * bell, then the staff inbox, then a row in `details` saying whether the
+       * mail went out.
+       *
+       * ISOLATED. A contributor that throws is logged and the next one runs,
+       * and a guard it recorded for an alert it never delivered is taken back
+       * out of `guardUpdates`, so that alert is tried again next sweep rather
+       * than written down as announced. One plugin's failure must not cost
+       * this org's bandwidth cap, its guard write or its auto-lock, nor any
+       * other org's pass.
        *=========================================*/
-      const assistCogsThreshold = assistCogsAlertThresholdUsd(
-        process.env.ASSIST_ORG_MONTHLY_COGS_ALERT_USD,
-      )
-      // Hoisted out of the block (AGL-2420) so `recordAlert` can take it in
-      // the condition. Pure arithmetic — it answers 0 for a zero or
-      // non-finite threshold and is never read unless the breach predicate
-      // agrees.
-      const multiple = assistMarginMultiple(spend.assistUsd, assistCogsThreshold)
-      if (
-        assistMarginBreach({
-          assistUsd: spend.assistUsd,
-          thresholdUsd: assistCogsThreshold,
-          guard: guards['assistCogs'],
-          month,
-        }) &&
-        recordAlert('assistCogs', multiple)
-      ) {
-        // ONE set of words for both channels, as with the quota alerts —
-        // hoisted rather than written twice so a staff inbox and the staff
-        // bell can never say different things about the same number.
-        const marginTitle =
-          `Assist token spend is $${spend.assistUsd.toFixed(2)} for one org this month`
-        // The add-on state and the band, in the mail (AGL-2930): the same
-        // dollar figure is a finding on an org paying for the add-on and
-        // an incident on one that is not, and the reader should not have
-        // to open the console to know which.
-        const marginAddonClause = hasAiAddon(orgData as never)
-          ? `The ${aiAddonName()} add-on is on`
-          : `The ${aiAddonName()} add-on is off`
-        const marginBandCredits = resolveAssistCreditBudget(orgData as never)
-        const marginBandClause =
-          marginBandCredits === null
-            ? 'no AI credit band'
-            : `an AI credit band of ${marginBandCredits.toLocaleString()}`
-        const marginBody =
-          `${org.get('slug') ?? org.id} has run about ` +
-          `$${spend.assistUsd.toFixed(2)} of ${PLATFORM_BRAND_NAME} Assist ` +
-          `tokens in ` +
-          `${month}, past the $${assistCogsThreshold.toFixed(0)} review ` +
-          'threshold. Assist is a plan entitlement with no per-token ' +
-          'price, so this is margin, not revenue. ' +
-          `${marginAddonClause}, with ${marginBandClause}.`
-        await notifyStaff({
-          type: 'billing.usage',
-          title: marginTitle,
-          body: marginBody,
-          orgId: org.id,
-          link: '/admin/orgs',
-        })
-        // AND BY EMAIL (AGL-2234). `notifyStaff` writes
-        // `users/{uid}/notifications` and nothing turns that into mail — the
-        // identical defect AGL-2052 removed one audience over. This is the
-        // only dollar figure guarding a meter whose other ceiling is a
-        // MESSAGE count, so it is precisely the alert nobody will be sitting
-        // in the console waiting for. Sequenced after the console write and
-        // independently: a mail outage must degrade to what this did before,
-        // not to nothing.
-        const marginEmail = await emailStaffAlert({
-          subject: marginTitle,
-          text: `${marginBody}\n\nOrg: ${consoleOrigin()}/admin/orgs`,
-          context: 'assist-margin',
-        })
-        alerted.push({
-          orgId: org.id,
-          quota: 'assistCogs',
-          threshold: multiple,
-          emailed: marginEmail.sent,
-          ...(marginEmail.sent
-            ? {}
-            : { emailReason: emailFailureReason(marginEmail) }),
-        })
-      }
-
-      /*==========================================
-       * THE HARD CEILING — the org is being REFUSED right now (AGL-2264).
-       *
-       * The alert above warns; `assistOrgMonthlyCostLimitUsd` refuses, in the
-       * reservation transaction, for every assist entrypoint at once. So past
-       * this figure a customer's assistant has stopped answering, and staff
-       * must be told that in those words rather than left to infer it from a
-       * cost alert that fired at a different number.
-       *
-       * It cannot ride the margin guard. That one announces whole multiples
-       * of $25, so an org climbing from $25 to the $40 ceiling is still at 1x
-       * and says nothing — staff would learn the assistant had stopped only
-       * when the customer complained. Its own guard key, announced once for
-       * the month, because crossing is a state rather than an escalating sum.
-       *=========================================*/
-      const assistCeilingUsd = assistOrgMonthlyCostLimitUsd(
-        process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD,
-      )
-      if (
-        assistCeilingBreach({
-          assistUsd: spend.assistUsd,
-          ceilingUsd: assistCeilingUsd,
-          guard: guards['assistCeiling'],
-          month,
-        }) &&
-        recordAlert('assistCeiling', 1)
-      ) {
-        const ceilingTitle =
-          `Assist is REFUSING ${org.get('slug') ?? org.id} — the ` +
-          `$${Number(assistCeilingUsd).toFixed(0)} monthly spend ceiling is crossed`
-        const ceilingBody =
-          `${org.get('slug') ?? org.id} has run about ` +
-          `$${spend.assistUsd.toFixed(2)} of ${PLATFORM_BRAND_NAME} Assist ` +
-          `tokens in ${month}, past the ` +
-          `$${Number(assistCeilingUsd).toFixed(0)} ceiling. Every further ` +
-          'Assist request from this organization is refused until the month ' +
-          'rolls over — the assistant is not degraded or slowed, it is off. ' +
-          'The customer keeps whatever messages their plan has left, and the ' +
-          'refusal says so in its own words.'
-        await notifyStaff({
-          type: 'billing.usage',
-          title: ceilingTitle,
-          body: ceilingBody,
-          orgId: org.id,
-          link: '/admin/orgs',
-        })
-        const ceilingEmail = await emailStaffAlert({
-          subject: ceilingTitle,
-          text: `${ceilingBody}\n\nOrg: ${consoleOrigin()}/admin/orgs`,
-          context: 'assist-ceiling',
-        })
-        alerted.push({
-          orgId: org.id,
-          quota: 'assistCeiling',
-          threshold: 1,
-          emailed: ceilingEmail.sent,
-          ...(ceilingEmail.sent
-            ? {}
-            : { emailReason: emailFailureReason(ceilingEmail) }),
-        })
+      for (const contributor of usageAlertContributors) {
+        /** Guards recorded for alerts not yet delivered, with the entry each replaced. */
+        const undelivered = new Map<
+          string,
+          { month: string; threshold: number } | undefined
+        >()
+        try {
+          await contributor.evaluate({
+            orgId: org.id,
+            orgSlug: (org.get('slug') as string | undefined) ?? null,
+            org: orgData,
+            month,
+            spend,
+            guards,
+            recordAlert: (key, threshold) => {
+              const replaced = guardUpdates[key]
+              const send = recordAlert(key, threshold)
+              if (send && !undelivered.has(key)) undelivered.set(key, replaced)
+              return send
+            },
+            alertStaff: async ({
+              quota,
+              threshold,
+              title,
+              body,
+              link,
+              emailContext,
+            }) => {
+              // The first sweep of an org sends nothing, whoever asks.
+              if (seedOnly) return
+              await notifyStaff({
+                type: 'billing.usage',
+                title,
+                body,
+                orgId: org.id,
+                link,
+              })
+              // AND BY EMAIL (AGL-2234): the staff bell is a notification
+              // nothing turns into mail, and a staff alert is not one anybody
+              // sits in the console waiting for. Sequenced after the bell and
+              // independently, so a mail outage degrades to the bell rather
+              // than to nothing.
+              const staffEmail = await emailStaffAlert({
+                subject: title,
+                text: `${body}\n\nOrg: ${consoleOrigin()}${link}`,
+                context: emailContext,
+              })
+              undelivered.delete(quota)
+              alerted.push({
+                orgId: org.id,
+                quota,
+                threshold,
+                emailed: staffEmail.sent,
+                ...(staffEmail.sent
+                  ? {}
+                  : { emailReason: emailFailureReason(staffEmail) }),
+              })
+            },
+          })
+        } catch (error) {
+          for (const [key, replaced] of undelivered) {
+            if (replaced) guardUpdates[key] = replaced
+            else delete guardUpdates[key]
+          }
+          console.error(
+            '[usage-alerts] usage alert contributor failed',
+            `${contributor.pluginId}:${contributor.id}`,
+            org.id,
+            error,
+          )
+        }
       }
 
       /*==========================================

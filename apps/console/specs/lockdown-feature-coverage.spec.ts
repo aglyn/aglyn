@@ -158,10 +158,22 @@ const CHOKEPOINTS: Chokepoint[] = [
     file: 'libs/plugins/ai/src/lib/jobs/ai-jobs-beat.ts',
     wiring: [`featureLockdownRefusal({ feature: 'ai-generate' })`],
     why:
-      'the AI jobs beat (AGL-2904) is the one generative caller with no ' +
-      'request to refuse, so it asks the feature verdict itself before it ' +
-      'claims a step — a lock that stopped the doors and not the beat would ' +
-      'keep spending on every job already queued',
+      'the AI jobs beat (AGL-2904) — a console cron route since AGL-3026, ' +
+      'served outside the plugin dispatcher that maps ai/* paths to the lever ' +
+      '— is the one generative caller with no member request to refuse, so it ' +
+      'asks the feature verdict itself before it claims a step: a lock that ' +
+      'stopped the doors and not the beat would keep spending on every job ' +
+      'already queued',
+  },
+  {
+    feature: 'ai-generate',
+    file: 'libs/plugins/ai/src/lib/jobs/ai-jobs-pause.ts',
+    wiring: [`featureLockdownRefusal({`, `feature: 'ai-generate',`, 'orgId: input.orgId,'],
+    why:
+      'the workspace-scoped AI pause (AGL-2927) held at the claim of every AI ' +
+      'job step (AGL-3037): a job queued before staff paused the workspace has ' +
+      'no request for a door to refuse, so the jobs machine asks the same ' +
+      'verdict with the job’s org before it claims, reserves or runs anything',
   },
   {
     feature: '(writer)',

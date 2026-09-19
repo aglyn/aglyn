@@ -19,6 +19,8 @@
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
@@ -26,15 +28,11 @@ import {
   Chip,
   MenuItem,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import type { GridColDef } from '@mui/x-data-grid'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 /** The server's page size. Fixed, so the reader is not offered a choice. */
 const PAGE_SIZE = 25
@@ -221,6 +219,84 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
     setCursors([null])
   }, [])
 
+  const columns = useMemo<GridColDef<RecipientRow>[]>(
+    () => [
+      {
+        field: 'to',
+        headerName: 'Recipient',
+        flex: 1,
+        minWidth: 240,
+        renderCell: ({ row }) => (
+          <Stack spacing={0.5} sx={{ py: 1, minWidth: 0, wordBreak: 'break-all' }}>
+            <Typography variant="body2">{row.to}</Typography>
+            {/*
+             * WHICH links, under the person who followed them. The
+             * per-campaign link rollup counts destinations and names nobody;
+             * this is the other half of the same question, and it is the half
+             * a merchant asks when they want to know who to call.
+             */}
+            {row.clickedLinks.map((link) => (
+              <Typography key={link} variant="caption" color="text.secondary">
+                {link}
+              </Typography>
+            ))}
+          </Stack>
+        ),
+      },
+      ...(emailId
+        ? []
+        : [
+            {
+              field: 'subject',
+              headerName: 'Email',
+              flex: 1,
+              minWidth: 180,
+              valueGetter: (_value: unknown, row: RecipientRow) => row.subject ?? '—',
+            } satisfies GridColDef<RecipientRow>,
+          ]),
+      {
+        field: 'status',
+        headerName: 'State',
+        width: 130,
+        renderCell: ({ row }) => <Chip size="small" label={row.status} />,
+      },
+      {
+        field: 'openCount',
+        headerName: 'Opens',
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+        width: 100,
+        renderCell: ({ row }) => (
+          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+            {row.openCount.toLocaleString()}
+          </Typography>
+        ),
+      },
+      {
+        field: 'clickCount',
+        headerName: 'Clicks',
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+        width: 100,
+        renderCell: ({ row }) => (
+          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+            {row.clickCount.toLocaleString()}
+          </Typography>
+        ),
+      },
+      {
+        field: 'lastEventAtMs',
+        headerName: 'Last event',
+        width: 190,
+        renderCell: ({ row }) =>
+          row.lastEventAtMs ? new Date(row.lastEventAtMs).toLocaleString() : '—',
+      },
+    ],
+    [emailId],
+  )
+
   return (
     <CardDisplay
       header={'Recipients'}
@@ -273,62 +349,21 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
               : 'Nobody in the delivery log matches that yet.'}
           </Typography>
         ) : (
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{'Recipient'}</TableCell>
-                {emailId ? null : <TableCell>{'Email'}</TableCell>}
-                <TableCell>{'State'}</TableCell>
-                <TableCell align="right">{'Opens'}</TableCell>
-                <TableCell align="right">{'Clicks'}</TableCell>
-                <TableCell>{'Last event'}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.messageId} hover>
-                  <TableCell sx={{ wordBreak: 'break-all' }}>
-                    <Stack spacing={0.5}>
-                      <Typography variant="body2">{row.to}</Typography>
-                      {/*
-                       * WHICH links, under the person who followed them. The
-                       * per-campaign link rollup counts destinations and
-                       * names nobody; this is the other half of the same
-                       * question, and it is the half a merchant asks when
-                       * they want to know who to call.
-                       */}
-                      {row.clickedLinks.map((link) => (
-                        <Typography
-                          key={link}
-                          variant="caption"
-                          color="text.secondary"
-                        >
-                          {link}
-                        </Typography>
-                      ))}
-                    </Stack>
-                  </TableCell>
-                  {emailId ? null : (
-                    <TableCell>{row.subject ?? '—'}</TableCell>
-                  )}
-                  <TableCell>
-                    <Chip size="small" label={row.status} />
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                    {row.openCount.toLocaleString()}
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                    {row.clickCount.toLocaleString()}
-                  </TableCell>
-                  <TableCell>
-                    {row.lastEventAtMs
-                      ? new Date(row.lastEventAtMs).toLocaleString()
-                      : '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ListTable
+            aria-label="Recipients"
+            rows={rows}
+            columns={columns}
+            getRowId={(row: RecipientRow) => row.messageId}
+            rowHeight={TABLE_ROW_HEIGHT}
+            // A recipient carries the links they followed beneath the
+            // address, so a row is as tall as its list of links.
+            getRowHeight={() => 'auto'}
+            // One page of a cursor feed, turned by the footer below: the grid
+            // neither slices it nor filters the page and calls that the log.
+            hideFooter
+            disableColumnFilter
+            quickFilter={false}
+          />
         )}
 
         {/*

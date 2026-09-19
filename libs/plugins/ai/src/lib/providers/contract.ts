@@ -55,6 +55,17 @@ import { UpstreamServiceError } from '@aglyn/shared-util-errors'
  * in force. The omission is deliberate rather than a gap: some models
  * reject an explicit setting, and the copy assistant serves its element
  * mode on such a model. `effort` rides the same rule.
+ *
+ * ── Pictures ──────────────────────────────────────────────────────────────
+ *
+ * A user turn may carry pictures beside its text (AGL-2916): `content` is
+ * then an ordered list of parts, and a turn with nothing but text stays a
+ * string, which every adapter passes through as it always has. A picture is
+ * base64 bytes of one of `AI_IMAGE_MEDIA_TYPES`, never a URL, so no provider
+ * fetches anything on the platform's behalf. The runtime refuses a picture
+ * on an assistant turn, a picture for a model whose descriptor does not say
+ * `vision`, and a picture past the size or count bounds, all before any
+ * network is touched. Each adapter maps the parts onto its vendor's shape.
  */
 
 /**
@@ -80,9 +91,80 @@ export interface AiTool {
 export type AiEffort = 'low' | 'medium' | 'high'
 export type AiThinking = 'off' | 'adaptive'
 
+/**
+ * The picture formats a request may carry (AGL-2916): the four every model
+ * the catalog marks as reading images accepts. A door converts anything else
+ * — an AVIF, an SVG — before it attaches the picture, or attaches none.
+ */
+export const AI_IMAGE_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const
+export type AiImageMediaType = (typeof AI_IMAGE_MEDIA_TYPES)[number]
+
+/**
+ * The largest picture one part may carry, in decoded bytes: the ceiling the
+ * providers behind the contract accept for one image. A door that attaches a
+ * picture resizes it far below this; the runtime refuses anything above it
+ * before a byte leaves the process, rather than letting the provider do it
+ * after the request was paid for in time.
+ */
+export const AI_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+
+/** The most pictures one request may carry. */
+export const AI_REQUEST_MAX_IMAGES = 8
+
+/** Text in a message made of parts. */
+export interface AiTextPart {
+  type: 'text'
+  text: string
+}
+
+/**
+ * A picture in a message (AGL-2916): its bytes, base64-encoded, and their
+ * format. Only a USER turn carries one, and only to a model whose descriptor
+ * says it reads images; the runtime refuses any other request before a byte
+ * leaves the process, so a door cannot send a picture by accident to a model
+ * that would reject it, or to a turn the model wrote.
+ */
+export interface AiImagePart {
+  type: 'image'
+  mediaType: AiImageMediaType
+  /** The picture's bytes, base64-encoded, with no `data:` prefix. */
+  data: string
+}
+
+export type AiMessagePart = AiTextPart | AiImagePart
+
 export interface AiMessage {
   role: 'user' | 'assistant'
-  content: string
+  /**
+   * The turn's text, or its parts in order — text and pictures — for a door
+   * that shows the model an image. A door with nothing but text sends a
+   * string, which every adapter passes through as it always has.
+   */
+  content: string | readonly AiMessagePart[]
+}
+
+/** A message's text: its parts' text joined, with every picture left out. */
+export function aiMessageText(message: Pick<AiMessage, 'content'>): string {
+  if (typeof message.content === 'string') return message.content
+  return message.content
+    .filter((part): part is AiTextPart => part.type === 'text')
+    .map((part) => part.text)
+    .join('\n\n')
+}
+
+/** Every picture a list of messages carries, in order. */
+export function aiMessageImages(messages: readonly Pick<AiMessage, 'content'>[]): AiImagePart[] {
+  return messages.flatMap((message) =>
+    typeof message.content === 'string'
+      ? []
+      : message.content.filter((part): part is AiImagePart => part.type === 'image'),
+  )
+}
+
+/** The decoded size of a base64 string, without decoding it. */
+export function aiBase64Bytes(data: string): number {
+  const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0
+  return Math.max(0, Math.floor((data.length * 3) / 4) - padding)
 }
 
 /** What every door hands the runtime; `provider` and `model` resolve there. */
@@ -126,7 +208,13 @@ export interface AiCompletion {
   text: string
   toolUse: AiToolUse[]
   usage: AiUsage
-  /** At the serving model's list rates — see the model catalog. */
+  /**
+   * The exchange at the serving model's BILLED rates — what a customer's
+   * credits are drawn from, and never a margin's cost side (AGL-3015). What
+   * the same exchange cost us is `estimateAiProviderCostUsd`, recorded by
+   * the meter; a result travels no further than the credit path, so it
+   * carries the one figure that path needs.
+   */
   estCostUsd: number
   stopReason: string | null
 }
@@ -163,7 +251,7 @@ export type AiStreamEvent =
       stopReason: string | null
     }
 
-/** What a provider says about one of its models; the catalog carries the rates. */
+/** What a provider says about one of its models; the catalog carries both rates. */
 export interface AiModelDescriptor {
   id: string
   /** The provider id the model is served by. */
@@ -176,6 +264,12 @@ export interface AiModelDescriptor {
     thinking: boolean
     /** Whether the provider caches a system prefix for this model. */
     promptCache: boolean
+    /**
+     * Whether the model reads a picture in a user turn (AGL-2916). Absent
+     * reads as no, so a provider registered before the field existed is never
+     * sent an image it did not say it can read.
+     */
+    vision?: boolean
   }
 }
 
@@ -248,10 +342,24 @@ export function aiTokenCount(value: unknown): number {
 /**
  * A tool call's `input` as an object. A provider sends an object or, for
  * the one shape a stream assembles by hand, a JSON string.
+ *
+ * A string that does not parse to an object is an EMPTY input, not a throw.
+ * The case that produces one is a stream cut off mid-call by the output
+ * ceiling, and a throw there would end the stream before its `done` event —
+ * the event that carries the usage a door must meter for tokens already
+ * spent. An empty input is one every door's own validation refuses.
  */
 export function aiToolInputOf(value: unknown): Record<string, unknown> {
   if (typeof value === 'string') {
-    return value.trim() ? (JSON.parse(value) as Record<string, unknown>) : {}
+    if (!value.trim()) return {}
+    try {
+      const parsed: unknown = JSON.parse(value)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {}
+    } catch {
+      return {}
+    }
   }
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
 }

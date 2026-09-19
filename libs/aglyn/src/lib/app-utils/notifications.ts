@@ -78,6 +78,12 @@ export type AglynNotificationType =
   // `crmDailyDigestEnabled`: the mute is a fact about the console feed and
   // the digest switch is a fact about the digest.
   | 'content.crmDailyDigest'
+  // The weekly insights (AGL-2915): what a site's figures showed that week,
+  // for a person who asked for them. `content.` beside the CRM digest, for the
+  // reason that one gives: it is about the site's work, and the operational
+  // mute governs the console notification while the person's own switch for
+  // the digest governs the digest.
+  | 'content.insightsDigest'
   // Marketplace review verdicts (AGL-432/653).
   | 'marketplace.review'
   // Support desk, staff audience (AGL-850): a subscriber opened or replied to
@@ -228,6 +234,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'content.contactAssigned': 'Contact assigned to you',
     'content.leadAssigned': 'Lead assigned to you',
     'content.crmDailyDigest': 'Daily CRM digest',
+    'content.insightsDigest': 'Weekly insights',
     'marketplace.review': 'Listing review',
 
     'support.ticketOpened': 'New support ticket',
@@ -307,4 +314,23 @@ export function crmDailyDigestEnabled(
   prefs: Record<string, boolean> | null | undefined,
 ): boolean {
   return prefs?.['crmDaily'] !== false
+}
+
+/**
+ * The field on `users/{uid}` naming the workspaces whose weekly insights a
+ * person asked for (AGL-2915): `{ [orgId]: true }`. OPT-IN, unlike the CRM
+ * digest — an absent key is off — because a weekly insight is generated, and a
+ * generation spends the workspace's credits. The person turns it on beside the
+ * answers themselves, where the plan, the release and their permission have
+ * already been checked, and off again there or in Notifications; the weekly
+ * sweep checks all three again before it spends anything.
+ */
+export const INSIGHT_DIGESTS_FIELD = 'insightDigests'
+
+/** Whether a person asked for a workspace's weekly insights. */
+export function insightDigestSubscribed(
+  value: Record<string, boolean> | null | undefined,
+  orgId: string,
+): boolean {
+  return Boolean(orgId) && value?.[orgId] === true
 }

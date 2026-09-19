@@ -16,9 +16,15 @@
  */
 'use client'
 
+import { hostThemeSource } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import { useHostSubdomain } from '../../../../../../../../components/host-id-provider'
+import PluginWidgetSlot from '../../../../../../../../components/plugin-widget-slot.component'
 import ThemeEditor from '../../../../../../../../components/theme-editor/theme-editor.component'
 import ThemeOverridesCard from '../../../../../../../../components/theme-editor/theme-overrides-card.component'
+import ThemePreview from '../../../../../../../../components/theme-editor/theme-preview.component'
 import ThemeSourceCard from '../../../../../../../../components/theme-editor/theme-source-card.component'
+import useCurrentOrg from '../../../../../../../../hooks/use-current-org'
+import { useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
 import { useHostSettingsScope } from '../../../host-settings-scope'
 
 /**
@@ -39,7 +45,13 @@ export default function HostSetupThemeSection() {
     themeSaving,
     handleThemeSave,
     handleWriteOverride,
+    themeDraft,
+    proposeThemeDraft,
+    settleThemeDraft,
   } = useHostSettingsScope()
+  const { orgId } = useCurrentOrg()
+  const orgSlug = useOrgSlug()
+  const host = useHostSubdomain()
   if (!hostHasEmitted) return null
   return (
     <>
@@ -65,10 +77,26 @@ export default function HostSetupThemeSection() {
           onWriteOverride={handleWriteOverride}
         />
       </div>
+      {/* Plugin zone (AGL-2938): widgets that propose a change to this theme.
+          A proposal reaches the editor below as unsaved changes, and only the
+          editor's own Save writes it. */}
+      <PluginWidgetSlot
+        slot="hostTheme"
+        hostId={hostId}
+        orgId={orgId}
+        orgSlug={orgSlug}
+        host={host}
+        theme={resolvedTheme}
+        themeSource={hostThemeSource(data)}
+        ThemePreview={ThemePreview}
+        proposeDraft={proposeThemeDraft}
+      />
       <ThemeEditor
         theme={resolvedTheme}
         saving={themeSaving}
         onSave={handleThemeSave}
+        proposedDraft={themeDraft}
+        onProposedDraftSettled={settleThemeDraft}
       />
     </>
   )

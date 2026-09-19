@@ -18,6 +18,7 @@
 
 import { PageHeaderRecord, pluginDocsHelp } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
   Box,
@@ -25,7 +26,6 @@ import {
   Chip,
   Divider,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -545,7 +545,7 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
           </Typography>
           {linkReport.rows.length ? (
             <>
-              <Table size="small">
+              <ScrollTable size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>{'Destination'}</TableCell>
@@ -570,7 +570,7 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </ScrollTable>
               {/*
                * The normalisation, stated rather than left for somebody to
                * discover from a total that does not add up. Two links to the
@@ -808,7 +808,7 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
                   'then. These figures describe the send, not the audience ' +
                   'as it stands today.'}
               </Typography>
-              <Table size="small">
+              <ScrollTable size="small">
                 <TableBody>
                   {report.populations.map((population) => (
                     <TableRow key={population.id}>
@@ -824,7 +824,7 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </ScrollTable>
             </Section>
           </>
         ) : null}

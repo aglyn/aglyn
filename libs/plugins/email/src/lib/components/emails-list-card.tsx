@@ -30,11 +30,13 @@ import {
   MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import RowActionsMenu, {
-  type RowActionsMenuItem,
-} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -47,18 +49,8 @@ import {
   useFirestore,
   useFirestoreCollection,
 } from '@aglyn/tenant-feature-instance'
-import {
-  Alert,
-  Button,
-  Chip,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material'
+import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import { collection } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
@@ -194,13 +186,6 @@ export function EmailsListCard(props: EmailsListCardProps) {
         (a: any, b: any) => emailListTimeMs(b) - emailListTimeMs(a),
       ),
     [readEmails],
-  )
-
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const visible = useMemo(
-    () => emails.slice(page * pageSize, page * pageSize + pageSize),
-    [emails, page, pageSize],
   )
 
   const emailHref = (email: any) => `${basePath}/messages/${email.$id}`
@@ -462,6 +447,97 @@ export function EmailsListCard(props: EmailsListCardProps) {
     [basePath, campaignSendApi, creating, enqueueSnackbar, router],
   )
 
+  /*
+   * One row per message, in the order above; the whole window is in hand, so
+   * the grid pages it. The subject is a link AND the row opens the report: a
+   * click handler cannot be middle-clicked or opened in a new tab.
+   */
+  const columns: GridColDef[] = [
+    {
+      field: 'subject',
+      headerName: 'Subject',
+      flex: 1,
+      minWidth: 220,
+      valueGetter: (_value, row) => row.subject || 'Untitled email',
+      renderCell: ({ row, value }) => (
+        <AppLink
+          href={emailHref(row)}
+          // The row's own handler would fire too and push the same route
+          // twice — one history entry per back press.
+          onClick={(event: { stopPropagation: () => void }) =>
+            event.stopPropagation()
+          }
+        >
+          {value}
+        </AppLink>
+      ),
+    },
+    {
+      /*
+       * WHAT THIS EMAIL IS DOING, not what field it stores.
+       *
+       * An email delivering an audience larger than one batch is written back
+       * as `scheduled` between runs, so a chip rendering the status said
+       * "Scheduled" about a send that had already reached five hundred people.
+       * The derivation reads the counters beside the status and says which of
+       * the two it is.
+       */
+      field: 'state',
+      headerName: 'State',
+      width: 150,
+      valueGetter: (_value, row) => campaignSendDisplay(row).label,
+      renderCell: ({ row }) => {
+        const display = campaignSendDisplay(row)
+        return (
+          <Chip
+            size="small"
+            color={STATE_COLOR[display.state]}
+            label={display.label}
+          />
+        )
+      },
+    },
+    {
+      field: 'when',
+      headerName: 'When',
+      width: 190,
+      // Sorted on the time the list is ordered by, so a draft sorts by its
+      // creation rather than as the oldest thing on the page.
+      valueGetter: (_value, row) => emailListTimeMs(row),
+      renderCell: ({ row }) => {
+        const at = emailSendTimeMs(row)
+        return at ? new Date(at).toLocaleString() : '—'
+      },
+    },
+    ...(
+      [
+        ['recipients', 'Addressed'],
+        ['opens', 'Opens'],
+        ['clicks', 'Clicks'],
+      ] as const
+    ).map(
+      ([stat, headerName]): GridColDef => ({
+        field: stat,
+        headerName,
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+        width: 110,
+        valueGetter: (_value, row) => Number(row.stats?.[stat] ?? 0),
+        valueFormatter: (value: number) => value.toLocaleString(),
+      }),
+    ),
+    listActionsColumn(
+      (row) => (
+        <ListRowActions
+          label={String(row.subject || 'Untitled email')}
+          items={rowActions(row)}
+        />
+      ),
+      { width: 72 },
+    ),
+  ]
+
   return (
     <CardDisplay
       header={'Messages'}
@@ -494,102 +570,13 @@ export function EmailsListCard(props: EmailsListCardProps) {
             </Button>
           </Stack>
         ) : (
-          <>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'Subject'}</TableCell>
-                  <TableCell>{'State'}</TableCell>
-                  <TableCell>{'When'}</TableCell>
-                  <TableCell align="right">{'Addressed'}</TableCell>
-                  <TableCell align="right">{'Opens'}</TableCell>
-                  <TableCell align="right">{'Clicks'}</TableCell>
-                  <TableCell align="right" />
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {visible.map((email: any) => {
-                  const at = emailSendTimeMs(email)
-                  const display = campaignSendDisplay(email)
-                  return (
-                    <TableRow
-                      key={email.$id}
-                      hover
-                      onClick={() => router.push(emailHref(email))}
-                      sx={{ cursor: 'pointer' }}
-                    >
-                      <TableCell>
-                        {/*
-                          The row's own handler would fire too and push the
-                          same route twice — one history entry per back press.
-                         */}
-                        <AppLink
-                          href={emailHref(email)}
-                          onClick={(event: { stopPropagation: () => void }) =>
-                            event.stopPropagation()
-                          }
-                        >
-                          {email.subject || 'Untitled email'}
-                        </AppLink>
-                      </TableCell>
-                      {/*
-                        WHAT THIS EMAIL IS DOING, not what field it stores.
-
-                        An email delivering an audience larger than one batch
-                        is written back as `scheduled` between runs, so a chip
-                        rendering the status said "Scheduled" about a send
-                        that had already reached five hundred people. The
-                        derivation reads the counters beside the status and
-                        says which of the two it is.
-                       */}
-                      <TableCell>
-                        <Chip
-                          size="small"
-                          color={STATE_COLOR[display.state]}
-                          label={display.label}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {at ? new Date(at).toLocaleString() : '—'}
-                      </TableCell>
-                      <TableCell align="right">
-                        {Number(
-                          email.stats?.recipients ?? 0,
-                        ).toLocaleString()}
-                      </TableCell>
-                      <TableCell align="right">
-                        {Number(email.stats?.opens ?? 0).toLocaleString()}
-                      </TableCell>
-                      <TableCell align="right">
-                        {Number(email.stats?.clicks ?? 0).toLocaleString()}
-                      </TableCell>
-                      <TableCell
-                        align="right"
-                        sx={{ width: 56 }}
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <RowActionsMenu
-                          label={String(email.subject || 'Untitled email')}
-                          items={rowActions(email)}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-            <ListPagination
-              page={page}
-              pageSize={pageSize}
-              rowCount={visible.length}
-              count={emails.length}
-              onPageChange={setPage}
-              onPageSizeChange={(next) => {
-                setPageSize(next)
-                setPage(0)
-              }}
-            />
-          </>
+          <ListTable
+            aria-label="Messages"
+            rows={emails}
+            columns={columns}
+            rowHeight={TABLE_ROW_HEIGHT}
+            onOpen={(_id, row) => router.push(emailHref(row))}
+          />
         )}
         {truncated ? (
           <Alert severity="info">

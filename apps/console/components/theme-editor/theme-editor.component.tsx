@@ -15,16 +15,10 @@
  * limitations under the License.
  */
 
-import type {
-  HostTheme,
-  HostThemeScheme,
-  HostThemeSchemeColors,
-} from '@aglyn/shared-data-types'
+import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   consoleOptions,
-  consoleThemeDark,
-  consoleThemeLight,
   getGoogleFontsUrl,
   sanitizeHostTheme,
 } from '@aglyn/shared-ui-theme'
@@ -48,19 +42,37 @@ import { useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
 import ColorField from './color-field.component'
 import {
-  buildToolbarMixin,
+  BORDER_RADIUS_FIELD,
+  COMPONENT_OVERRIDES_FIELD,
+  copyThemeSchemeColors,
+  DARK_SCHEME_FIELD,
   DEFAULT_TOOLBAR_SM,
   DEFAULT_TOOLBAR_XS,
-  fontFamilyStack,
-  getSchemeColor,
+  FONT_FAMILY_FIELD,
   GOOGLE_FONT_OPTIONS,
+  INHERITED_BORDER_RADIUS,
+  INHERITED_FONT_FAMILY,
+  INHERITED_SPACING,
+  inheritedThemeColor,
   orderSensitiveKey,
-  PALETTE_COLOR_FIELDS,
+  readDarkScheme,
+  readFontFamily,
+  readThemeColor,
   readToolbarHeight,
-  SURFACE_COLOR_FIELDS,
-  type SurfaceColorPath,
-  TINT_COLOR_FIELDS,
+  resetComponentOverrides,
+  SPACING_FIELD,
+  SYSTEM_FONT_VALUE,
+  THEME_COLOR_FIELDS,
+  type ThemeColorGroup,
+  type ThemeColorToken,
+  TOOLBAR_HEIGHT_FIELDS,
   TOOLBAR_SM_MIN_WIDTH,
+  writeBorderRadius,
+  writeDarkScheme,
+  writeFontFamily,
+  writeSpacing,
+  writeThemeColor,
+  writeToolbarHeight,
 } from './theme-editor.constants'
 import ThemePreview from './theme-preview.component'
 
@@ -69,13 +81,29 @@ const JsonEditor = dynamic<JsonEditorProps>(
   { ssr: false },
 )
 
-const SYSTEM_FONT_VALUE = '__system__'
+/**
+ * A theme handed to the editor from outside it — a proposal someone chose to
+ * put in the editor — keyed so the editor adopts each one once, and a parent
+ * re-rendering with the same proposal does not throw away the edits made on
+ * top of it.
+ */
+export interface ThemeEditorProposedDraft {
+  key: string
+  theme: HostTheme
+}
 
 export interface ThemeEditorProps {
   /** Saved theme from the host document. */
   theme: HostTheme | undefined
   saving?: boolean
   onSave: (theme: HostTheme) => Promise<void> | void
+  /**
+   * A theme to show in place of the current draft, unsaved: Save writes it
+   * through `onSave` like any edit, and Discard goes back to the saved theme.
+   */
+  proposedDraft?: ThemeEditorProposedDraft | null
+  /** Called once the proposed draft has been saved, discarded or reset. */
+  onProposedDraftSettled?: () => void
 }
 
 /**
@@ -96,24 +124,17 @@ function isJsonSafe(value: unknown): boolean {
   return Object.values(value as Record<string, unknown>).every(isJsonSafe)
 }
 
-function setSchemeValue(
-  draft: HostTheme,
-  scheme: HostThemeScheme,
-  update: (colors: HostThemeSchemeColors) => HostThemeSchemeColors,
-): HostTheme {
-  const colors = draft.colorSchemes?.[scheme] ?? {}
-  return {
-    ...draft,
-    colorSchemes: { ...draft.colorSchemes, [scheme]: update(colors) },
-  }
-}
-
 /**
  * Host theme editor: palette, typography, shape/spacing controls with a live
  * preview per color scheme. All edits stay in local draft state until Save.
+ *
+ * Every control, its bounds and its write come from the shared field catalog
+ * (`THEME_EDITOR_CONTROLS`, AGL-2938), which is also what anything else that
+ * proposes a theme change offers — so the two cannot offer different
+ * controls or write the same one differently.
  */
 export function ThemeEditor(props: ThemeEditorProps) {
-  const { theme, saving, onSave } = props
+  const { theme, saving, onSave, proposedDraft, onProposedDraftSettled } = props
   const [draft, setDraft] = useState<HostTheme>(() => theme ?? {})
   const [scheme, setScheme] = useState<HostThemeScheme>('light')
 
@@ -143,6 +164,19 @@ export function ThemeEditor(props: ThemeEditorProps) {
     setSeededKey(themeKey)
     setDraft(theme ?? {})
   }
+  /**
+   * A proposed draft is adopted the same way, once per key. Once it settles
+   * the key is forgotten, so putting the same proposal back in the editor
+   * after discarding it adopts it again.
+   */
+  const proposalKey = proposedDraft?.key ?? null
+  const [adoptedKey, setAdoptedKey] = useState<string | null>(null)
+  if (proposedDraft && proposalKey !== adoptedKey) {
+    setAdoptedKey(proposalKey)
+    setDraft(proposedDraft.theme)
+  } else if (!proposedDraft && adoptedKey !== null) {
+    setAdoptedKey(null)
+  }
   // Sanitize both sides and compare order-insensitively (AGL-56): the saved
   // doc round-trips through Firestore with different key order than the local
   // draft, and the draft is only sanitized at save time — a string compare
@@ -157,49 +191,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
       orderSensitiveKey(next) !== orderSensitiveKey(saved)
     )
   }, [draft, theme])
-  const schemeColors = draft.colorSchemes?.[scheme]
   const previewFontsHref = getGoogleFontsUrl(draft.fonts)
-
-  // What each slot resolves to when it is left unset — the brand palette the
-  // site actually renders (AGL-1180). Surfaced next to every "Default" so the
-  // swatches are distinguishable and a single change is attributable.
-  // Read the BUILT theme, not the options: text, divider and the light/dark
-  // shades are derived by MUI, so the raw options would leave those slots
-  // showing a bare "Default" with nothing to identify them by.
-  const basePalette = (
-    scheme === 'dark' ? consoleThemeDark : consoleThemeLight
-  ).palette as unknown as Record<string, any>
-  const inheritedColor = useCallback(
-    (key: string): string | undefined => basePalette?.[key]?.main,
-    [basePalette],
-  )
-  const inheritedSurfaceColor = useCallback(
-    (path: readonly [string, string]): string | undefined =>
-      basePalette?.[path[0]]?.[path[1]],
-    [basePalette],
-  )
-  const inheritedDivider = typeof basePalette?.['divider'] === 'string'
-    ? (basePalette['divider'] as string)
-    : undefined
-  // Shape/spacing/typography defaults come from the brand theme too — these
-  // used to be the literals `?? 4` and `?? 8`, which happen to match today
-  // and would silently stop matching the moment console.theme.ts changed.
-  const baseShapeRadius =
-    typeof consoleThemeLight.shape?.borderRadius === 'number'
-      ? consoleThemeLight.shape.borderRadius
-      : 4
-  const baseSpacing =
-    typeof consoleOptions.spacing === 'number' ? consoleOptions.spacing : 8
-  // The inherited stack is a long CSS font list; name its first family so
-  // the fallback option says what you actually get instead of the
-  // meaningless "System default".
-  const baseFontFamily = String(
-    (consoleOptions.typography as { fontFamily?: string } | undefined)
-      ?.fontFamily ?? '',
-  )
-    .split(',')[0]
-    .replace(/["']/g, '')
-    .trim()
 
   /**
    * The brand's own component overrides, offered as the starting point in
@@ -225,131 +217,37 @@ export function ThemeEditor(props: ThemeEditorProps) {
     setScheme(value)
   }, [])
 
-  // Absent means "follows the visitor"; only the opt-out is written, so the
-  // saved document stays empty for the common case.
   const setDarkScheme = useCallback((value: string) => {
-    setDraft((prev) => {
-      const next: HostTheme = { ...prev }
-      if (value === 'off') next.darkScheme = 'off'
-      else delete next.darkScheme
-      return next
-    })
+    setDraft((prev) => writeDarkScheme(prev, value === 'off' ? 'off' : 'auto'))
   }, [])
 
-  const setMainColor = useCallback(
-    (key: (typeof PALETTE_COLOR_FIELDS)[number]['key']) =>
-      (hex: string | undefined) => {
-        setDraft((prev) =>
-          setSchemeValue(prev, scheme, (colors) => {
-            const next = { ...colors }
-            if (hex) next[key] = { ...next[key], main: hex }
-            else delete next[key]
-            return next
-          }),
-        )
-      },
-    [scheme],
-  )
-
-  const setSurfaceColor = useCallback(
-    (path: SurfaceColorPath) => (hex: string | undefined) => {
-      setDraft((prev) =>
-        setSchemeValue(prev, scheme, (colors) => {
-          const [group, key] = path
-          const groupValue = {
-            ...(colors[group] as Record<string, string> | undefined),
-          }
-          if (hex) groupValue[key] = hex
-          else delete groupValue[key]
-          const next = { ...colors, [group]: groupValue }
-          if (!Object.keys(groupValue).length) delete next[group]
-          return next
-        }),
-      )
-    },
-    [scheme],
-  )
-
-  const setDividerColor = useCallback(
-    (hex: string | undefined) => {
-      setDraft((prev) =>
-        setSchemeValue(prev, scheme, (colors) => {
-          const next = { ...colors }
-          if (hex) next.divider = hex
-          else delete next.divider
-          return next
-        }),
-      )
+  const setColor = useCallback(
+    (token: ThemeColorToken) => (hex: string | undefined) => {
+      setDraft((prev) => writeThemeColor(prev, scheme, token, hex))
     },
     [scheme],
   )
 
   const copyFromOtherScheme = useCallback(() => {
-    setDraft((prev) => {
-      const other: HostThemeScheme = scheme === 'light' ? 'dark' : 'light'
-      const source = prev.colorSchemes?.[other]
-      if (!source) return prev
-      return {
-        ...prev,
-        colorSchemes: {
-          ...prev.colorSchemes,
-          [scheme]: JSON.parse(JSON.stringify(source)),
-        },
-      }
-    })
+    setDraft((prev) =>
+      copyThemeSchemeColors(prev, scheme === 'light' ? 'dark' : 'light', scheme),
+    )
   }, [scheme])
 
-  const activeFontFamily = useMemo(() => {
-    const family = draft.fonts?.[0]?.family
-    return family ?? SYSTEM_FONT_VALUE
-  }, [draft.fonts])
+  const activeFontFamily = useMemo(() => readFontFamily(draft), [draft])
 
   const handleFontChange = useCallback((event) => {
     const value = event.target.value as string
-    setDraft((prev) => {
-      if (value === SYSTEM_FONT_VALUE) {
-        const next = { ...prev }
-        delete next.fonts
-        const typography = { ...next.typography }
-        delete typography.fontFamily
-        if (Object.keys(typography).length) next.typography = typography
-        else delete next.typography
-        return next
-      }
-      const option = GOOGLE_FONT_OPTIONS.find((o) => o.family === value)
-      if (!option) return prev
-      return {
-        ...prev,
-        fonts: [
-          {
-            family: option.family,
-            weights: option.weights,
-            source: 'google',
-          },
-        ],
-        typography: {
-          ...prev.typography,
-          fontFamily: fontFamilyStack(option.family, option.category),
-        },
-      }
-    })
+    setDraft((prev) => writeFontFamily(prev, value))
   }, [])
 
   const handleRadiusChange = useCallback((_, value: number | number[]) => {
-    setDraft((prev) => ({
-      ...prev,
-      shape: { ...prev.shape, borderRadius: value as number },
-    }))
+    setDraft((prev) => writeBorderRadius(prev, value as number))
   }, [])
 
   const handleSpacingChange = useCallback((event) => {
     const value = Number(event.target.value)
-    setDraft((prev) => {
-      const next = { ...prev }
-      if (Number.isFinite(value) && value > 0) next.spacing = value
-      else delete next.spacing
-      return next
-    })
+    setDraft((prev) => writeSpacing(prev, value))
   }, [])
 
   // Nav height has to travel as `mixins.toolbar` (AGL-1242) — MUI builds the
@@ -360,19 +258,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
   const handleToolbarHeightChange = useCallback(
     (breakpoint: 'xs' | 'sm') => (event) => {
       const value = Number(event.target.value)
-      const valid = Number.isFinite(value) && value > 0
-      setDraft((prev) => {
-        const edited = valid ? value : undefined
-        const xs = breakpoint === 'xs' ? edited : readToolbarHeight(prev, 'xs')
-        const sm = breakpoint === 'sm' ? edited : readToolbarHeight(prev, 'sm')
-        const next = { ...prev }
-        if (xs === undefined && sm === undefined) {
-          delete next.mixins
-          return next
-        }
-        next.mixins = { toolbar: buildToolbarMixin(xs, sm) }
-        return next
-      })
+      setDraft((prev) => writeToolbarHeight(prev, breakpoint, value))
     },
     [],
   )
@@ -412,24 +298,39 @@ export function ThemeEditor(props: ThemeEditorProps) {
   )
 
   const handleOverridesReset = useCallback(() => {
-    setDraft((prev) => {
-      const next = { ...prev }
-      delete next.components
-      return next
-    })
+    setDraft((prev) => resetComponentOverrides(prev))
   }, [])
 
   const handleDiscard = useCallback(() => {
     setDraft(theme ?? {})
-  }, [theme])
+    onProposedDraftSettled?.()
+  }, [theme, onProposedDraftSettled])
 
   const handleReset = useCallback(() => {
     setDraft({})
-  }, [])
+    onProposedDraftSettled?.()
+  }, [onProposedDraftSettled])
 
   const handleSave = useCallback(() => {
+    onProposedDraftSettled?.()
     return onSave(sanitizeHostTheme(draft))
-  }, [draft, onSave])
+  }, [draft, onSave, onProposedDraftSettled])
+
+  const renderColorFields = (group: ThemeColorGroup) =>
+    THEME_COLOR_FIELDS.filter((field) => field.group === group).map(
+      ({ token, label }) => (
+        <ColorField
+          key={token}
+          label={label}
+          value={readThemeColor(draft, scheme, token)}
+          // What the slot resolves to when it is left unset — the brand
+          // palette the site actually renders (AGL-1180) — so every
+          // "Default" names its color and a single change is attributable.
+          inheritedValue={inheritedThemeColor(scheme, token)}
+          onChange={setColor(token)}
+        />
+      ),
+    )
 
   return (
     <Grid container spacing={3}>
@@ -457,8 +358,8 @@ export function ThemeEditor(props: ThemeEditorProps) {
             <TextField
               select
               size="small"
-              label="Dark scheme"
-              value={draft.darkScheme === 'off' ? 'off' : 'auto'}
+              label={DARK_SCHEME_FIELD.label}
+              value={readDarkScheme(draft)}
               onChange={(event) => setDarkScheme(event.target.value)}
               helperText={
                 draft.darkScheme === 'off'
@@ -467,8 +368,11 @@ export function ThemeEditor(props: ThemeEditorProps) {
               }
               sx={{ mb: 2 }}
             >
-              <MenuItem value="auto">{'Follows the visitor'}</MenuItem>
-              <MenuItem value="off">{'Off — always light'}</MenuItem>
+              {DARK_SCHEME_FIELD.options.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
             </TextField>
             <TabContext value={scheme}>
               <TabList onChange={handleSchemeTab}>
@@ -485,47 +389,18 @@ export function ThemeEditor(props: ThemeEditorProps) {
                     {`Copy from ${scheme === 'light' ? 'dark' : 'light'}`}
                   </Button>
                   <Typography variant="subtitle2">{'Palette'}</Typography>
-                  {PALETTE_COLOR_FIELDS.map(({ key, label }) => (
-                    <ColorField
-                      key={key}
-                      label={label}
-                      value={schemeColors?.[key]?.main}
-                      inheritedValue={inheritedColor(key)}
-                      onChange={setMainColor(key)}
-                    />
-                  ))}
+                  {renderColorFields('palette')}
                   <Typography variant="subtitle2">
                     {'Background & text'}
                   </Typography>
-                  {SURFACE_COLOR_FIELDS.map(({ path, label }) => (
-                    <ColorField
-                      key={path.join('.')}
-                      label={label}
-                      value={getSchemeColor(schemeColors, path)}
-                      inheritedValue={inheritedSurfaceColor(path)}
-                      onChange={setSurfaceColor(path)}
-                    />
-                  ))}
+                  {renderColorFields('surface')}
                   {/* Pale accent washes (AGL-1244). Own heading rather than a
                       tail on "Background & text": these are fills for tiles
                       and panels, and each one is named after the accent whose
                       icon sits on it. */}
                   <Typography variant="subtitle2">{'Tints'}</Typography>
-                  {TINT_COLOR_FIELDS.map(({ path, label }) => (
-                    <ColorField
-                      key={path.join('.')}
-                      label={label}
-                      value={getSchemeColor(schemeColors, path)}
-                      inheritedValue={inheritedSurfaceColor(path)}
-                      onChange={setSurfaceColor(path)}
-                    />
-                  ))}
-                  <ColorField
-                    label="Divider"
-                    value={schemeColors?.divider}
-                    inheritedValue={inheritedDivider}
-                    onChange={setDividerColor}
-                  />
+                  {renderColorFields('tint')}
+                  {renderColorFields('divider')}
                 </Stack>
               </TabPanel>
             </TabContext>
@@ -545,13 +420,15 @@ export function ThemeEditor(props: ThemeEditorProps) {
               select
               fullWidth
               size="small"
-              label="Font family"
+              label={FONT_FAMILY_FIELD.label}
               value={activeFontFamily}
               onChange={handleFontChange}
             >
+              {/* The inherited stack is a long CSS font list; its first family
+                  names what "Theme default" actually gives you. */}
               <MenuItem value={SYSTEM_FONT_VALUE}>
-                {baseFontFamily
-                  ? `Theme default (${baseFontFamily})`
+                {INHERITED_FONT_FAMILY
+                  ? `Theme default (${INHERITED_FONT_FAMILY})`
                   : 'Theme default'}
               </MenuItem>
               {GOOGLE_FONT_OPTIONS.map((option) => (
@@ -574,44 +451,63 @@ export function ThemeEditor(props: ThemeEditorProps) {
             <Stack spacing={2}>
               <Stack spacing={0.5}>
                 <Typography variant="body2">
-                  {`Border radius: ${draft.shape?.borderRadius ?? baseShapeRadius}px`}
+                  {`${BORDER_RADIUS_FIELD.label}: ${draft.shape?.borderRadius ?? INHERITED_BORDER_RADIUS}px`}
                 </Typography>
                 <Slider
-                  aria-label="border radius"
+                  aria-label={BORDER_RADIUS_FIELD.label}
                   size="small"
-                  min={0}
-                  max={24}
-                  value={draft.shape?.borderRadius ?? baseShapeRadius}
+                  min={BORDER_RADIUS_FIELD.min}
+                  max={BORDER_RADIUS_FIELD.max}
+                  step={BORDER_RADIUS_FIELD.step}
+                  value={draft.shape?.borderRadius ?? INHERITED_BORDER_RADIUS}
                   onChange={handleRadiusChange}
                 />
               </Stack>
               <TextField
                 type="number"
                 size="small"
-                label="Spacing unit (px)"
-                value={draft.spacing ?? baseSpacing}
+                label={SPACING_FIELD.label}
+                value={draft.spacing ?? INHERITED_SPACING}
                 onChange={handleSpacingChange}
-                slotProps={{ htmlInput: { min: 2, max: 16 } }}
+                slotProps={{
+                  htmlInput: {
+                    min: SPACING_FIELD.min,
+                    max: SPACING_FIELD.max,
+                    step: SPACING_FIELD.step,
+                  },
+                }}
               />
               <Stack direction="row" spacing={2}>
                 <TextField
                   type="number"
                   size="small"
                   fullWidth
-                  label="Nav height, mobile (px)"
+                  label={TOOLBAR_HEIGHT_FIELDS.xs.label}
                   value={readToolbarHeight(draft, 'xs') ?? DEFAULT_TOOLBAR_XS}
                   onChange={handleToolbarHeightChange('xs')}
-                  slotProps={{ htmlInput: { min: 40, max: 160 } }}
+                  slotProps={{
+                    htmlInput: {
+                      min: TOOLBAR_HEIGHT_FIELDS.xs.min,
+                      max: TOOLBAR_HEIGHT_FIELDS.xs.max,
+                      step: TOOLBAR_HEIGHT_FIELDS.xs.step,
+                    },
+                  }}
                 />
                 <TextField
                   type="number"
                   size="small"
                   fullWidth
-                  label="Nav height, desktop (px)"
+                  label={TOOLBAR_HEIGHT_FIELDS.sm.label}
                   helperText={`Applies from ${TOOLBAR_SM_MIN_WIDTH}px up`}
                   value={readToolbarHeight(draft, 'sm') ?? DEFAULT_TOOLBAR_SM}
                   onChange={handleToolbarHeightChange('sm')}
-                  slotProps={{ htmlInput: { min: 40, max: 160 } }}
+                  slotProps={{
+                    htmlInput: {
+                      min: TOOLBAR_HEIGHT_FIELDS.sm.min,
+                      max: TOOLBAR_HEIGHT_FIELDS.sm.max,
+                      step: TOOLBAR_HEIGHT_FIELDS.sm.step,
+                    },
+                  }}
                 />
               </Stack>
             </Stack>
@@ -620,7 +516,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
           <CardDisplay
             contentGutterY
             contentGutterX
-            header="Component overrides"
+            header={COMPONENT_OVERRIDES_FIELD.label}
             help={docsHelp('themeBuilder', {
               excerpt:
                 'Fine-tune how specific components render beyond the base palette and typography.',

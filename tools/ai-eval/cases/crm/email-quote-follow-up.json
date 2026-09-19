@@ -1,0 +1,74 @@
+{
+  "id": "crm-email-quote-follow-up",
+  "kind": "crm",
+  "brief": "Follow up on the quote I sent last week and offer to walk through it on a quick call.",
+  "framing": null,
+  "inventory": null,
+  "crm": {
+    "task": "email",
+    "record": "contact",
+    "facts": {
+      "record": "contact",
+      "name": "Dana Whitfield",
+      "jobTitle": "Facilities manager",
+      "company": "Harbor Cold Storage",
+      "lifecycleStage": "Opportunity",
+      "tags": [],
+      "sources": ["Booking"],
+      "orders": 0,
+      "lastPurchase": null,
+      "since": "2026-07-02",
+      "lastEmailEngagement": "2026-09-09",
+      "notes": "",
+      "timeline": [
+        { "on": "2026-09-09", "kind": "Email", "direction": "outbound", "subject": "Your roof inspection report", "text": "Attached is the inspection report and the quote for the loading dock section.", "delivery": "Opened" }
+      ],
+      "openTasks": [],
+      "deals": [
+        { "title": "Loading dock membrane", "stage": "Proposal sent", "status": "open", "amount": "USD 18450.00", "expectedClose": "2026-10-01" }
+      ]
+    }
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: greeted and signed with merge fields, no invented times or prices, plain paragraphs.",
+      "plan": null,
+      "answer": {
+        "subject": "Your loading dock roof quote",
+        "body": "Hi {{contact.firstName}},\n\nI wanted to follow up on the inspection report and quote for the loading dock section I sent over last week.\n\nIf it would help, I am happy to walk you through it on a quick call. Just let me know a time that works for you.\n\nThanks,\n{{sender.firstName}}\n{{site.name}}"
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 5, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A merge field no contact email can fill.",
+      "answer": {
+        "subject": "Your loading dock roof quote",
+        "body": "Hi {{contact.nickname}},\n\nFollowing up on the quote I sent last week.\n\n{{sender.firstName}}"
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "Writes a phone number into the message.",
+      "answer": {
+        "subject": "Your loading dock roof quote",
+        "body": "Hi {{contact.firstName}},\n\nCall me at +1 512 555 0142 to go over the quote.\n\n{{sender.firstName}}"
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A subject far past what an inbox shows.",
+      "answer": {
+        "subject": "Following up on the roof inspection report and the quote for the loading dock membrane section that we sent over last week",
+        "body": "Hi {{contact.firstName}},\n\nFollowing up on the quote.\n\n{{sender.firstName}}"
+      },
+      "fails": ["budget"]
+    }
+  ]
+}

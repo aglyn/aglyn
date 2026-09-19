@@ -241,28 +241,111 @@ export const OUTREACH_SEQUENCE_STATUSES = [
 export type OutreachSequenceStatus =
   (typeof OUTREACH_SEQUENCE_STATUSES)[number]
 
+/*==========================================
+ * SEQUENCES (AGL-2979).
+ *
+ * The limits are the outbound playbook's: a person gets at most four emails
+ * from one sequence, spaced by business days, and the tasks between them are
+ * the rep's own touches — a LinkedIn note, a call. The engine
+ * (`../engine/sequence-validation.ts`) holds a stored sequence to them.
+ *==========================================*/
+
+/** The most steps one sequence holds, emails and tasks together. */
+export const OUTREACH_MAX_STEPS = 8
+
+/** The most of those steps that send an email. */
+export const OUTREACH_MAX_EMAIL_STEPS = 4
+
+/** The longest wait one step may carry, in business days. */
+export const OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS = 30
+
+/**
+ * The shortest wait before an email that follows an earlier email. The first
+ * email may wait `0` — "the next opening of the window", or the same day as
+ * a task before it — and so may a task, but each later email waits at least
+ * this long after the step before it.
+ */
+export const OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS = 1
+
 /**
  * One email step.
  *
- * Steps are a union on `kind` so a step of another kind joins without
- * reshaping the ones already stored; `email` is the only kind there is.
+ * Steps are a union on `kind`, so a later kind joins without reshaping the
+ * ones already stored.
  */
 export interface OutreachEmailStep {
   /** Stable within the sequence, so an edit that reorders steps is traceable. */
   id: string
   kind: 'email'
-  /** Days to wait after the previous step is sent (after enrollment, for the first). */
-  waitDays: number
+  /**
+   * Business days to wait after the previous step, counted in the mailbox's
+   * zone — after enrollment for the first step, where `0` means the next
+   * opening of the sending window.
+   */
+  delayBusinessDays: number
+  /**
+   * The subject, merge fields allowed. Required on the first email and on
+   * any email that starts a new thread; an in-thread email is sent as `Re:`
+   * the thread's own subject, so its field is not read.
+   */
   subject: string
-  /** The message as its author wrote it; merge fields resolve at send time. */
+  /**
+   * Whether the email goes out as a reply in the thread the earlier emails
+   * started. True by default for every email after the first; the first
+   * email always starts the thread, whatever this says.
+   */
+  replyInThread: boolean
+  /** Plain text with merge fields, as its author wrote it; `''` when `templateId` is set. */
   body: string
+  /**
+   * A CRM email template (`orgs/{orgId}/crmEmailTemplates/{id}`) whose body
+   * is sent instead of `body`, or `null`. Only the body is taken from it: the
+   * step's own subject is the one that is sent.
+   */
+  templateId: string | null
 }
-export type OutreachSequenceStep = OutreachEmailStep
+
+/** The rep's own touches a task step asks for. */
+export const OUTREACH_TASK_KINDS = ['linkedin', 'call', 'todo'] as const
+export type OutreachTaskKind = (typeof OUTREACH_TASK_KINDS)[number]
+
+export const OUTREACH_TASK_KIND_LABELS: Record<OutreachTaskKind, string> = {
+  linkedin: 'LinkedIn',
+  call: 'Call',
+  todo: 'To-do',
+}
+
+/** One task step: a CRM task for the rep, created when the step comes due. */
+export interface OutreachTaskStep {
+  id: string
+  kind: 'task'
+  taskKind: OutreachTaskKind
+  /** What the task says, e.g. "Connect on LinkedIn". */
+  title: string
+  /** Business days after the previous step; `0` is the same day. */
+  delayBusinessDays: number
+}
+
+export type OutreachSequenceStep = OutreachEmailStep | OutreachTaskStep
+
+/** The countries a new sequence sends to: the United States alone. */
+export const OUTREACH_DEFAULT_ALLOWED_COUNTRIES: readonly string[] = ['US']
 
 /** Behavior a sequence applies to every enrollment in it. */
 export interface OutreachSequenceSettings {
-  /** Stop an enrollment when its recipient replies. */
-  stopOnReply: boolean
+  /**
+   * The hours this sequence sends in, replacing its mailbox's own window;
+   * `null` sends in the mailbox's. Read in the mailbox's zone either way.
+   */
+  window: OutreachSendWindow | null
+  /**
+   * ISO-3166-1 alpha-2 codes a recipient may be in, uppercase. Default
+   * {@link OUTREACH_DEFAULT_ALLOWED_COUNTRIES}: Canada, the United Kingdom
+   * and most of the EU need a consent basis a cold email does not have.
+   */
+  allowedCountries: string[]
+  /** Whether a contact who is already a customer may be enrolled. Default `false`. */
+  allowCustomers: boolean
 }
 
 /** An ordered set of steps sent from one mailbox (`orgs/{orgId}/outreachSequences/{id}`). */
@@ -271,32 +354,124 @@ export interface OutreachSequence extends OutreachTimestamps {
   name: string
   /** The site whose CRM the enrolled people are records of. */
   hostId: string
-  /** The mailbox every step is sent from. */
+  /**
+   * The mailbox every email step is sent from. A setting of the sequence,
+   * kept beside `settings` rather than inside it because enrollments and a
+   * mailbox's own screens select sequences by it.
+   */
   mailboxId: string
   steps: OutreachSequenceStep[]
   settings: OutreachSequenceSettings
   status: OutreachSequenceStatus
 }
 
-/** Where one person's run through a sequence stands. */
+/*==========================================
+ * ENROLLMENTS (AGL-2979).
+ *==========================================*/
+
+/**
+ * Where one person's run through a sequence stands.
+ *
+ * `active` sends and `paused` waits. The rest end the sending, and each says
+ * why: `finished` sent every step, `replied` heard back, `bounced` reached a
+ * mailbox that does not exist, `opted_out` was asked to stop, `stopped` was
+ * ended by a member or a gate, `failed` could not be sent. The transitions
+ * between them are the engine's (`../engine/enrollment-state.ts`).
+ */
 export const OUTREACH_ENROLLMENT_STATUSES = [
   'active',
   'paused',
-  'completed',
+  'finished',
+  'replied',
+  'bounced',
+  'opted_out',
   'stopped',
+  'failed',
 ] as const
 export type OutreachEnrollmentStatus =
   (typeof OUTREACH_ENROLLMENT_STATUSES)[number]
 
-/** Why an enrollment was `stopped` before its last step. */
+/**
+ * Why an enrollment is not `active`, recorded beside the status. `finished`
+ * needs none; each other status allows the reasons
+ * `OUTREACH_STOP_REASONS_BY_STATUS` names.
+ */
 export const OUTREACH_STOP_REASONS = [
-  'replied',
-  'bounced',
-  'unsubscribed',
+  /** A person wrote back in the thread. */
+  'reply',
+  /** The recipient's server refused the address for good. */
+  'hard_bounce',
+  /** A reply asked not to be emailed again. */
+  'opt_out_reply',
+  /** The unsubscribe link or header was used. */
+  'unsubscribe',
+  /** The address is on the organization's do-not-contact list. */
+  'do_not_contact',
+  /** A gate refused the next send — the person became a customer, say. */
+  'gate',
+  /** A member paused or stopped it. */
   'manual',
-  'mailbox_unavailable',
+  /** The sequence was archived with the person still in it. */
+  'sequence_archived',
+  /** The provider refused the send for good, or the email could not be composed. */
+  'send_failed',
 ] as const
 export type OutreachStopReason = (typeof OUTREACH_STOP_REASONS)[number]
+
+/** The statuses a stop reason is recorded with, and the reasons each allows. */
+export const OUTREACH_STOP_REASONS_BY_STATUS: Readonly<
+  Record<
+    Exclude<OutreachEnrollmentStatus, 'active' | 'finished'>,
+    readonly OutreachStopReason[]
+  >
+> = {
+  paused: ['manual'],
+  replied: ['reply'],
+  bounced: ['hard_bounce'],
+  opted_out: ['opt_out_reply', 'unsubscribe', 'do_not_contact'],
+  stopped: ['manual', 'gate', 'sequence_archived'],
+  failed: ['send_failed'],
+}
+
+/**
+ * What a rep confirms before a COLD contact is enrolled — one with no
+ * inbound capture behind them — each recorded with who confirmed it and
+ * when, because each is a fact only the rep can know:
+ *
+ * - `us_business_address`: the address is a business address in the US;
+ * - `published_or_given`: they or their company published it, or they gave
+ *   it to us — never guessed from a name or bought on a list;
+ * - `verified_deliverable`: a verifier said it accepts mail.
+ */
+export const OUTREACH_ATTESTATION_KINDS = [
+  'us_business_address',
+  'published_or_given',
+  'verified_deliverable',
+] as const
+export type OutreachAttestationKind = (typeof OUTREACH_ATTESTATION_KINDS)[number]
+
+/** The sentence a rep ticks for each attestation. */
+export const OUTREACH_ATTESTATION_LABELS: Record<OutreachAttestationKind, string> = {
+  us_business_address: 'This is a US business address',
+  published_or_given:
+    'They or their company published this address, or they gave it to us',
+  verified_deliverable: 'This address was verified as deliverable',
+}
+
+/** One confirmation, as stored. */
+export interface OutreachAttestation {
+  /** The member who confirmed it. */
+  uid: string
+  atMs: number
+}
+
+/** The confirmations an enrollment carries, by kind. */
+export type OutreachAttestations = Partial<
+  Record<OutreachAttestationKind, OutreachAttestation>
+>
+
+/** The longest personal line an enrollment keeps: one sentence, not a letter. */
+export const OUTREACH_PERSONAL_LINE_MAX = 300
 
 /** One person in one sequence (`orgs/{orgId}/outreachEnrollments/{id}`). */
 export interface OutreachEnrollment extends OutreachTimestamps {
@@ -304,17 +479,71 @@ export interface OutreachEnrollment extends OutreachTimestamps {
   sequenceId: string
   /** The CRM contact the person is. */
   contactId: string
-  /** The address the steps go to, captured at enrollment. */
+  /** The address the steps go to, normalized, captured at enrollment. */
   email: string
   hostId: string
   mailboxId: string
-  /** The index into `steps` of the NEXT step to send. */
+  /** The index into `steps` of the NEXT step to run. */
   stepIndex: number
   /** When that step comes due, or `null` when nothing is waiting. */
   nextDueAtMs: number | null
   status: OutreachEnrollmentStatus
-  /** Set exactly when `status` is `stopped`. */
+  /** Why the status is not `active`; `null` while active and once finished. */
   stopReason: OutreachStopReason | null
-  /** The provider thread the steps are sent into, once the first has gone. */
+  /** Plain-language detail: the gate's reason, the bounce's diagnostic. */
+  stopDetail: string | null
+  stoppedAtMs: number | null
+  /** The member who paused or stopped it; `null` when the engine did. */
+  stoppedByUid: string | null
+  /**
+   * The rep's signal sentence — why this person, now — merged into the
+   * steps as `{{enrollment.personalLine}}`. Required for a cold contact.
+   */
+  personalLine: string
+  /** Whether the contact was cold (no inbound capture) when enrolled. */
+  cold: boolean
+  attestations: OutreachAttestations
+  /** The member who enrolled the person. */
+  enrolledByUid: string
+  /** The provider thread the next in-thread email is sent into, once one exists. */
   gmailThreadId: string | null
+  /** Every provider thread this enrollment has sent into, oldest first — what reply sync watches. */
+  gmailThreadIds: string[]
+  /** The subject the current thread was started with, as sent. */
+  threadSubject: string | null
+  /**
+   * The `Message-ID`s of the emails sent into the current thread, oldest
+   * first, angle brackets included: the next in-thread email answers the
+   * last and names them all in `References`.
+   */
+  messageIds: string[]
+  /** When the last step ran. */
+  lastSentAtMs: number | null
+}
+
+/*==========================================
+ * ORGANIZATION SETTINGS (AGL-2979).
+ *==========================================*/
+
+/**
+ * What every Outreach email's footer says about who sent it — the
+ * identification and the postal address CAN-SPAM requires on commercial
+ * mail. The composer refuses to write an email without a legal name and a
+ * postal address, and a sequence cannot be activated without them.
+ */
+export interface OutreachOrgSettings {
+  /** The organization's legal name, as the footer prints it: "Example Co LLC". */
+  legalName: string
+  /**
+   * The name the solicitation sentence uses when it is not the legal name:
+   * "This is a business solicitation from Example Co." `''` uses the legal
+   * name.
+   */
+  brandName: string
+  /**
+   * A valid physical postal address: a street address, a USPS PO box, or a
+   * private mailbox registered with the USPS. Line breaks are printed as
+   * commas.
+   */
+  postalAddress: string
 }

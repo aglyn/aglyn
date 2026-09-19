@@ -36,6 +36,7 @@ import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-j
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   DUPLICATE_MENU_LABEL,
@@ -48,7 +49,6 @@ import {
   Button,
   Chip,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -291,7 +291,7 @@ export function EmailTemplatesCard(props: EmailTemplatesCardProps) {
             }
           />
         ) : (
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Name'}</TableCell>
@@ -330,7 +330,7 @@ export function EmailTemplatesCard(props: EmailTemplatesCardProps) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </ScrollTable>
         )}
         {atCap ? (
           <Typography variant="caption" color="text.secondary">

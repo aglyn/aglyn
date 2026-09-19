@@ -69,6 +69,7 @@ export function companyImportVocabulary(
 > {
   return {
     title: 'Import companies from CSV',
+    collection: 'companies',
     help: pluginDocsHelp('companies', { anchor: '#import-from-csv' }),
     sitePickerHelperText:
       'The site these companies are filed under — it decides which of your ' +

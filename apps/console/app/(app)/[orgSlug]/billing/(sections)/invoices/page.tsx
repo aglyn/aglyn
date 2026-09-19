@@ -17,6 +17,7 @@
 'use client'
 
 import { CardDisplay, GridItems } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Alert,
@@ -25,7 +26,6 @@ import {
   Chip,
   Link,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -228,7 +228,7 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
                             )
                           ) : (
                             <>
-                              <Table size="small">
+                              <ScrollTable size="small">
                                 <TableHead>
                                   <TableRow>
                                     <TableCell>{'Invoice'}</TableCell>
@@ -307,7 +307,7 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
                                     </TableRow>
                                   ))}
                                 </TableBody>
-                              </Table>
+                              </ScrollTable>
                               {invoicesHasMore ? (
                                 <Box sx={{ textAlign: 'center', mt: 1 }}>
                                   <Button

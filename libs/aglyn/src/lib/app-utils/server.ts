@@ -25,6 +25,9 @@
 export * from './binding-token-catalog'
 export * from './binding-tokens'
 export * from './breadcrumb-json-ld'
+// What a search listing holds and how long each field may be (AGL-2910):
+// the SEO editors and anything that proposes a value read one catalog.
+export * from './seo-listing-fields'
 // `VideoObject` for the Video elements a page actually ships (AGL-2747).
 // Beside the other structured-data builders, and server-only like them: only
 // the route emits JSON-LD, and a crawler-facing block has no client caller.
@@ -190,7 +193,7 @@ export * from './org-permissions'
 // The AI verdict on either membership axis (AGL-2927). After both modules it
 // composes: the org catalog for org-wide members, the host role for site
 // collaborators.
-export * from './ai-permissions'
+export * from './host-permissions'
 export * from './password-policy'
 export * from './idp-profile'
 export * from './onboarding-deep-link'

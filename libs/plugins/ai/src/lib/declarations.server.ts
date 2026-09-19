@@ -15,14 +15,32 @@
  * limitations under the License.
  */
 
+// Each registry from its own module, not the `@aglyn/aglyn/server` barrel:
+// boot needs three registries rather than the whole server surface, and a
+// suite that stubs that barrel wholesale still loads these declarations
+// against the real registries.
 import {
   listPluginEventHandlers,
-  listPluginUserErasers,
   registerPluginEventHandler,
+} from '@aglyn/aglyn/plugin-manager/plugin-events'
+import {
+  listPluginUserErasers,
   registerPluginUserEraser,
-} from '@aglyn/aglyn/server'
+} from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
+import {
+  listUsageAlertContributors,
+  registerUsageAlertContributor,
+} from '@aglyn/aglyn/plugin-manager/usage-alert-contributors'
+import { pluginMeteredLineOwner } from '@aglyn/aglyn/plugin-manager/plugin-metered-lines'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
+import {
+  AI_OVERAGE_METER_LINE_ID,
+  registerAiOverageMeteredLine,
+} from './billing/ai-overage-cutover'
+
+/** The provider-spend staff alerts' contributor id under the plugin. */
+const AI_USAGE_ALERTS_ID = 'provider-spend'
 
 /**
  * The plugin's SERVER declarations (AGL-2939): what the server must know
@@ -32,11 +50,15 @@ import { registerAiDeclarations } from './declarations'
  * routes that never load the plugin's API surface, so the subscriptions
  * have to be in place from the first request. So does the eraser: an
  * account erasure is a core route too, and a person's AI usage months sit
- * under each org, keyed by the uid, where no core delete reaches them.
+ * under each org, keyed by the uid, where no core delete reaches them. So
+ * does the usage alert contributor (AGL-2984): the usage-alerts sweep is a
+ * core cron, and it evaluates the plugin's staff alerts on provider spend for
+ * every org it reads.
  *
  * Light at boot by construction: the writers behind the handlers are
- * imported when the first event arrives, not when the process starts, so
- * the boot cost is the subscription and nothing that touches Firestore.
+ * imported when the first event arrives, and the alert rules when the sweep
+ * first evaluates an org, not when the process starts, so the boot cost is
+ * the registration and nothing that touches Firestore.
  */
 export function registerAiServerDeclarations(): void {
   registerAiDeclarations()
@@ -61,6 +83,64 @@ export function registerAiServerDeclarations(): void {
       { pluginId: AI_PLUGIN_ID },
     )
   }
+  // THE PLATFORM'S BILLING EVENTS (AGL-3011). Subscribed at boot for the
+  // same reason as the two above: they are raised by the billing webhook,
+  // which never loads an AI door, and a workspace's overage standing moving
+  // late is a workspace charged or refused against a fact we already had.
+  //
+  // The handler modules are imported when the first event arrives, so a
+  // process that never receives one pays only for the registration.
+  if (!listPluginEventHandlers('billing.invoice.paid').includes(AI_PLUGIN_ID)) {
+    registerPluginEventHandler(
+      'billing.invoice.paid',
+      async (payload) => {
+        const { onAiBillingInvoicePaid } = await import('./billing/ai-overage-events')
+        await onAiBillingInvoicePaid(payload)
+      },
+      { pluginId: AI_PLUGIN_ID },
+    )
+    registerPluginEventHandler(
+      'billing.invoice.failed',
+      async (payload) => {
+        const { onAiBillingInvoiceFailed } = await import('./billing/ai-overage-events')
+        await onAiBillingInvoiceFailed(payload)
+      },
+      { pluginId: AI_PLUGIN_ID },
+    )
+    registerPluginEventHandler(
+      'billing.invoice.closed',
+      async (payload) => {
+        const { onAiBillingInvoiceClosed } = await import('./billing/ai-overage-events')
+        await onAiBillingInvoiceClosed(payload)
+      },
+      { pluginId: AI_PLUGIN_ID },
+    )
+    registerPluginEventHandler(
+      'billing.dispute.opened',
+      async (payload) => {
+        const { onAiBillingDisputeOpened } = await import('./billing/ai-overage-events')
+        await onAiBillingDisputeOpened(payload)
+      },
+      { pluginId: AI_PLUGIN_ID },
+    )
+    registerPluginEventHandler(
+      'billing.paymentMethod.changed',
+      async (payload) => {
+        const { onAiBillingPaymentMethodChanged } = await import(
+          './billing/ai-overage-events'
+        )
+        await onAiBillingPaymentMethodChanged(payload)
+      },
+      { pluginId: AI_PLUGIN_ID },
+    )
+  }
+  // The meter line the plugin bills for itself from the cutover month
+  // (AGL-3011). Registered at boot because the monthly usage sweep is a core
+  // cron; the claim reads its own cutover month on every call, so it is
+  // inert until the month is configured.
+  if (pluginMeteredLineOwner(AI_OVERAGE_METER_LINE_ID) !== AI_PLUGIN_ID) {
+    registerAiOverageMeteredLine()
+  }
   if (!listPluginUserErasers().includes(AI_PLUGIN_ID)) {
     registerPluginUserEraser(
       async (request) => {
@@ -69,6 +149,22 @@ export function registerAiServerDeclarations(): void {
       },
       { pluginId: AI_PLUGIN_ID },
     )
+  }
+  if (
+    !listUsageAlertContributors().some(
+      (contributor) =>
+        contributor.pluginId === AI_PLUGIN_ID &&
+        contributor.id === AI_USAGE_ALERTS_ID,
+    )
+  ) {
+    registerUsageAlertContributor({
+      pluginId: AI_PLUGIN_ID,
+      id: AI_USAGE_ALERTS_ID,
+      evaluate: async (context) => {
+        const { evaluateAiUsageAlerts } = await import('./usage/ai-usage-alerts')
+        await evaluateAiUsageAlerts(context)
+      },
+    })
   }
 }
 

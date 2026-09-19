@@ -107,6 +107,13 @@ credits **on that site** this month, so an agency can see which client site's pe
 are generating what. The figure is the site's slice of the member's month; the whole
 month, split by site, is on the member's page under Team.
 
+The same card has an **AI allotment** column — the credits each collaborator may draw on
+that site each month, hard or soft — and a **Site AI allotment** card beneath it for
+everyone on the site together. Members with **Manage billing** set both; a collaborator
+who is the site's **Admin** can set the other collaborators' allotments on that site,
+never their own. See
+[AI allotments, usage and model choice](../../marketing-and-automation/ai-assist/ai-allotments.md).
+
 ### What a site collaborator sees
 
 Someone invited to a **specific site** rather than the whole organization gets a console

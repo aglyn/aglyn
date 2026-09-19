@@ -423,7 +423,7 @@ your dashboard stays green, and the state it drives simply never moves — a
 refund that never revokes an entitlement looks exactly like a healthy
 integration.
 
-Subscribe your platform endpoint to **all ten**:
+Subscribe your platform endpoint to **all fifteen**:
 
 ```
 customer.subscription.created
@@ -433,10 +433,22 @@ checkout.session.completed
 invoice.finalized
 invoice.paid
 invoice.payment_failed
+invoice.voided
+invoice.marked_uncollectible
 charge.refunded
 charge.dispute.created
 charge.dispute.closed
+customer.updated
+payment_method.attached
+payment_method.detached
 ```
+
+The last five serve usage a plugin bills on its own one-off invoices. Without
+`invoice.voided` and `invoice.marked_uncollectible` an unpaid usage invoice
+never ends, so the pause it set on further usage never lifts. Without the
+three customer events nothing notices that the workspace's default payment
+method changed, and a bound that assumes a card holds against a bank debit
+that takes days to settle.
 
 **Connect is a second destination, not more events on the first one.**
 Connected-account events are delivered only to an endpoint created with
@@ -526,6 +538,8 @@ immediately, so enabling it cannot reach backwards and retro-bill. Format is
 | `BILL_ASSIST_TOKENS_FROM` | Optional | Runtime | First month Assist token cost appears on an invoice. Unset, assist usage is measured but never billed. |
 | `BILL_ORG_LIBRARY_STORAGE_FROM` | Optional | Runtime | First month media-library bytes are charged. Unset, storage is metered and cap-enforced but not charged. |
 | `BILL_EMAIL_SEND_OVERAGE_FROM` | Optional | Runtime | First month email past the plan's included band is charged, as `YYYY-MM`. Unset, the overage is measured, shown on the billing page and priced into the cost model, but never reaches an invoice. Not retroactive: no month before the one named here is ever charged, however late it is set. |
+| `AI_OVERAGE_INVOICED_FROM` | Optional | Runtime | First month AI credits past a plan's included band are charged to the card on file **as they accrue**, as `YYYY-MM`, instead of being metered onto the renewal invoice. Unset, AI overage bills exactly as every other metered line does and nothing charges mid-period. Setting it also turns on the guards that bound what a workspace may owe — a card requirement, a monthly limit that rises with payment history, a pause on a failed charge, and a refusal once accrued-but-unpaid overage reaches its limit. The two move together on purpose: a workspace refused for unpaid overage needs an invoice it can pay, and before this month there is none. Not retroactive, and one month bills through exactly one channel. |
+| `STRIPE_PRODUCT_AI_OVERAGE` | Optional | Runtime | The Stripe product the AI overage line is billed against; `setup-stripe.mjs` creates it and prints the id. It carries the tax code automatic tax computes the line from. Required once `AI_OVERAGE_INVOICED_FROM` names a month; without it nothing is charged and the reason is logged. |
 
 ---
 
@@ -736,7 +750,7 @@ Three separate mechanisms, and missing any of them is quiet rather than loud.
 | --- | --- | --- | --- |
 | `CRON_SECRET` | Feature | Runtime | Shared secret every scheduled route checks, accepted as `Authorization: Bearer <secret>` or `x-cron-secret: <secret>`. Unset, every one of those routes refuses. `openssl rand -hex 32`. |
 | `AGLYN_JOB_RUNNER_URL` | Feature *(cloud functions)* | Runtime | The tenant origin the every-minute beat POSTs: `https://sites.example.com/api/plugins/run-jobs`. **No default, deliberately.** |
-| `AGLYN_CONSOLE_URL` | Feature *(cloud functions)* | Runtime | The origin that **serves** your console — never one that redirects to it, because a redirect drops the POST body and the `x-cron-secret` header. **No default, deliberately.** |
+| `AGLYN_CONSOLE_URL` | Feature *(cloud functions)* | Runtime | The origin that **serves** your console — never one that redirects to it, because a redirect drops the POST body and the `x-cron-secret` header. It drives the fifteen-minute console sweeps and the every-minute AI jobs beat. **No default, deliberately.** |
 | `CRM_DIGEST_TIME_ZONE` | Optional | Runtime | The zone `/api/crm/daily-digest` reads "today" in when it counts overdue and due-today tasks. Default `America/Chicago`, which is why the schedule below fires at 13:00 UTC; an IANA name (`Europe/London`). A value the runtime does not know falls back to the default with a warning. Schedule the route for 08:00 in whatever zone you set. |
 
 What `CRON_SECRET` being unset silently switches off:

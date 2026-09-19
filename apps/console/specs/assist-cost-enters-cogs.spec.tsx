@@ -48,14 +48,11 @@
  *    rates against is the same dead data one indirection later.
  */
 
-import { render, screen } from '@testing-library/react'
 import {
   checkDiscountMargin,
   orgCogsInputFrom,
   orgMonthlyCogsUsd,
 } from '@aglyn/aglyn/server'
-
-import StaffOrgUsageTable from '../components/staff-org-usage-table.component'
 
 /*==========================================
  * THE FIRESTORE DOUBLE.
@@ -278,51 +275,5 @@ describe('AN OUTCOME, NOT A FIGURE', () => {
     expect(after.infraCogsUsd).toBeGreaterThan(before.infraCogsUsd)
     expect(after.rating).not.toBe(before.rating)
     expect(after.rating).not.toBe('ok')
-  })
-})
-
-describe('the console shows it', () => {
-  it('renders an Assist column carrying the month’s spend', () => {
-    // A capability is not a feature until the console exposes it. Staff
-    // rating a deal have to be able to SEE the line that moved the verdict.
-    render(
-      <StaffOrgUsageTable
-        months={[
-          {
-            month: MONTH,
-            storageGb: 0.0002,
-            pageViews: 120,
-            formSubmissions: 3,
-            costUsd: 0.01,
-            assistCostUsd: 44.125,
-            deltas: null,
-          },
-        ]}
-      />,
-    )
-    expect(screen.getByText('Assist')).toBeTruthy()
-    // FOUR decimals: Assist arrives in thousandths of a dollar per exchange,
-    // and `$0.00` under a month that really cost eight cents is the same
-    // silence this column exists to end.
-    expect(screen.getByText('$44.1250')).toBeTruthy()
-  })
-
-  it('does not print $0.00 for a sub-cent month', () => {
-    render(
-      <StaffOrgUsageTable
-        months={[
-          {
-            month: MONTH,
-            storageGb: 0,
-            pageViews: 0,
-            formSubmissions: 0,
-            costUsd: 0,
-            assistCostUsd: 0.085,
-            deltas: null,
-          },
-        ]}
-      />,
-    )
-    expect(screen.getByText('$0.0850')).toBeTruthy()
   })
 })

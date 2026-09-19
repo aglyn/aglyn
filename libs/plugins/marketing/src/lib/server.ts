@@ -23,12 +23,16 @@ import {
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import { emailEventsHandler } from './server/email-events'
+import { registerMarketingFigureReaders } from './server/marketing-figures'
 import { marketingSitePageEnricher } from './server/site-page-enricher'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { campaignProcessScheduledHandler } from './server/campaign-process-scheduled'
 import { listsMaterializeHandler } from './server/lists-materialize'
-import { campaignManageHandler } from './server/campaign-manage'
+import {
+  campaignManageHandler,
+  registerCampaignDraftWriter,
+} from './server/campaign-manage'
 import { campaignSendHandler } from './server/campaign-send'
 import { campaignRecipientsHandler } from './server/campaign-recipients'
 
@@ -128,6 +132,14 @@ export function registerMarketingApi(): void {
 
 /** Registers the marketing plugin's console-side API routes (AGL-396). */
 export function registerMarketingConsoleApi(): void {
+  // The campaign draft writer another plugin reaches through the core's
+  // resource-drafts seam (AGL-2912). Registered here alone: the AI jobs that
+  // write through it run only on the console, inline and on the beat
+  // (AGL-3026).
+  registerCampaignDraftWriter()
+  // Campaign and A/B testing results as figure tables (AGL-2915), for the AI
+  // plugin's insights to read by id; the console runs insight jobs.
+  registerMarketingFigureReaders(() => firebaseAdmin.app().firestore())
   registerPluginApiRoute('campaigns/send', campaignSendHandler)
   // Taking a campaign or an abandoned draft away, which is the one class of
   // change the send route may not carry: both write to the SEND collection,

@@ -29,6 +29,7 @@ import { mdiAccountPlusOutline, mdiLinkOff } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, usePagedCollection } from '@aglyn/tenant-feature-instance'
 import {
@@ -36,7 +37,6 @@ import {
   Button,
   IconButton,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -443,7 +443,7 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
             }
           />
         ) : (
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Contact'}</TableCell>
@@ -486,7 +486,7 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </ScrollTable>
         )}
         {/*
           The footer counts with the server aggregate when it has arrived —

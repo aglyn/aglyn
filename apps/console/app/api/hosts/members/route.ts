@@ -29,13 +29,7 @@ import {
   lockdownRefusal,
   logHostActivity,
   revokeHostAccess,
-  setHostAiPermissions,
 } from '@aglyn/tenant-data-admin'
-import {
-  AI_PERMISSION_KEYS,
-  aiPermissionChanges,
-  runPluginEventHandlers,
-} from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -44,33 +38,6 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 // publish" — and this is the surface that guide points an agency at.
 const ROLES = new Set(['viewer', 'author', 'editor', 'admin'])
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-/**
- * The `aiPermissions` field of a PATCH body (AGL-2927): absent → null, a
- * well-formed map → the map, anything else → false.
- */
-function readAiPermissions(
-  value: unknown,
-): Partial<Record<'ai.use' | 'ai.generate', boolean>> | null | false {
-  if (value === undefined || value === null) return null
-  if (typeof value !== 'object' || Array.isArray(value)) return false
-  const accepted: Partial<Record<'ai.use' | 'ai.generate', boolean>> = {}
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (!(AI_PERMISSION_KEYS as readonly string[]).includes(key)) return false
-    if (typeof entry !== 'boolean') return false
-    accepted[key as 'ai.use' | 'ai.generate'] = entry
-  }
-  return Object.keys(accepted).length ? accepted : false
-}
-
-/** `assist on, generate off` — the activity entry's words for a verdict. */
-function describeAiPermissions(
-  verdict: Record<'ai.use' | 'ai.generate', boolean>,
-): string {
-  return `assist ${verdict['ai.use'] ? 'on' : 'off'}, generate ${
-    verdict['ai.generate'] ? 'on' : 'off'
-  }`
-}
 
 /**
  * Host user manager (AGL-107, re-keyed to orgs with AGL-238): add/update/
@@ -267,76 +234,12 @@ async function handler(request: Request): Promise<Response> {
     if (method === 'PATCH') {
       const memberId = String(body?.memberId ?? '')
       const role = body?.role === undefined ? '' : String(body.role)
-      // The per-site AI toggles (AGL-2927): a map of the two AI keys to
-      // booleans, on its own or beside a role change. Keys outside the
-      // catalog and non-boolean values are refused rather than dropped, so
-      // a client that mis-spells a key learns so instead of saving nothing.
-      const aiPermissions = readAiPermissions(body?.aiPermissions)
-      if (aiPermissions === false) {
-        return Response.json(
-          { error: `aiPermissions must map ${AI_PERMISSION_KEYS.join(' and ')} to booleans` },
-          { status: 400 },
-        )
-      }
-      if (!memberId || (!role && !aiPermissions) || (role && !ROLES.has(role))) {
+      if (!memberId || !role || !ROLES.has(role)) {
         return Response.json({ error: 'Missing member or role' }, { status: 400 })
       }
       const memberSnapshot = await membersRef.doc(memberId).get()
       const member = memberSnapshot.data()
       if (!member) return Response.json({ error: 'Member not found' }, { status: 404 })
-      if (aiPermissions && !role) {
-        // A pending invite has no member document to carry the toggle, and
-        // the org invite it rides carries only the host grant: the toggles
-        // become settable once the person has accepted and holds the role
-        // whose default they refine.
-        if (!member['uid']) {
-          return Response.json(
-            { error: 'AI access is set once the invite is accepted' },
-            { status: 409 },
-          )
-        }
-        const { before, after: resolved } = await setHostAiPermissions({
-          orgId,
-          uid: String(member['uid']),
-          hostId,
-          permissions: aiPermissions,
-        })
-        // The display roster carries the verdict so the card renders it
-        // without a second read; the member document is what the doors read.
-        await membersRef.doc(memberId).update({ aiPermissions: resolved })
-        // The new state goes in the action text, as the role change's does:
-        // an entry saying only that AI access changed cannot answer the
-        // question it is read for.
-        await logHostActivity(
-          hostId,
-          actor,
-          `Changed member AI access to ${describeAiPermissions(resolved)}`,
-          {
-            type: 'member',
-            id: memberId,
-            ...(member['email'] ? { name: String(member['email']) } : {}),
-          },
-        )
-        // The org feed's coded row per key that moved (AGL-2929), beside the
-        // site feed's sentence: the site feed answers what this collaborator
-        // may do here, the org feed answers who changed an AI permission
-        // anywhere in the workspace. A toggle set to the value it already
-        // had writes nothing.
-        const subjectName = [host['displayName'], member['email']]
-          .map((value) => (typeof value === 'string' ? value.trim() : ''))
-          .filter(Boolean)
-          .join(' · ')
-        for (const change of aiPermissionChanges(before, resolved)) {
-          await runPluginEventHandlers('org.permissions.changed', {
-            orgId,
-            actor,
-            subject: { type: 'host', id: hostId, name: subjectName },
-            permission: change.permission,
-            granted: change.granted,
-          })
-        }
-        return Response.json({ ok: true, aiPermissions: resolved }, { status: 200 })
-      }
       await membersRef.doc(memberId).update({ role })
       if (member['uid']) {
         await grantHostAccess({

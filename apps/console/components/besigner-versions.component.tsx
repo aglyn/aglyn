@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { canvas, encodeStoredNodes } from '@aglyn/aglyn'
+import { canvas, decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn'
 import {
   ICON_VARIANT_DATE_TIME,
   ICON_VARIANT_MENU_DOWN,
@@ -29,6 +29,7 @@ import {
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { docsHelp } from '../constants/docs-links'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -42,7 +43,6 @@ import {
   DialogTitle,
   IconButton,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -72,6 +72,7 @@ import {
   useHostVersionApi,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import useFormsPublishBlock from '../hooks/use-forms-publish-block'
 import revalidateLivePages, {
   describeRevalidateShortfall,
 } from '../utils/revalidate-live-pages'
@@ -216,6 +217,7 @@ export const BesignerVersionsComponent = observer(
     const host = useHostSubdomain()
     const router = useRouter()
     const { enqueueSnackbar } = useSnackbar()
+    const { formsOnForSite, refuse: refuseFormsOff } = useFormsPublishBlock()
     const { queueLoading } = useLoading()
     const { org, ready: orgReady } = useCurrentOrg()
     const createHostVersion = useHostVersionApi()
@@ -280,6 +282,15 @@ export const BesignerVersionsComponent = observer(
       (targetVersionId: string) => async () => {
         const dequeue = queueLoading()
         try {
+          // A version carrying a form does not go live on a site that
+          // switched Forms off (AGL-3029). The version is read only when the
+          // site has — everywhere else this costs nothing.
+          if (formsOnForSite === false) {
+            const target = await getDoc(
+              doc(firestore, ...parentPath, 'versions', targetVersionId),
+            )
+            if (refuseFormsOff(decodeStoredNodes(target.get('nodes')))) return
+          }
           // Publish-time normalization (AGL-193): legacy {{name}} tokens in
           // the version being published rewrite to rename-safe id form, so
           // actively-maintained content converges without the AGL-188
@@ -466,6 +477,8 @@ export const BesignerVersionsComponent = observer(
         user,
         parent.kind,
         parent.id,
+        formsOnForSite,
+        refuseFormsOff,
       ],
     )
 
@@ -788,7 +801,7 @@ export const BesignerVersionsComponent = observer(
             </Button>
           </DialogTitle>
           <DialogContent>
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Version'}</TableCell>
@@ -943,7 +956,7 @@ export const BesignerVersionsComponent = observer(
                   )
                 })}
               </TableBody>
-            </Table>
+            </ScrollTable>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpen(false)}>{'Close'}</Button>

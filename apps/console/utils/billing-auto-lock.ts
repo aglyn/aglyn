@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+import {
+  orgSubscriptionState,
+  readOrgPlanComp,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+
 /**
  * Billing auto-lock predicate (AGL-1501) — **DISABLED BY DEFAULT**.
  *
@@ -116,6 +121,8 @@ export function shouldAutoLockOrgForBilling(
   org: {
     suspendedAt?: unknown
     billingStatus?: string
+    /** Staff overrides — carries the plan comp (AGL-3034). */
+    entitlements?: unknown
   },
   billingSubscription: {
     status?: string
@@ -127,6 +134,18 @@ export function shouldAutoLockOrgForBilling(
   if (org.suspendedAt != null) return false
   const status = billingSubscription?.status ?? org.billingStatus
   if (!status) return false
+  // A STAFF COMP IN FORCE IS STAFF'S ANSWER TO THIS ORG'S BILLING (AGL-3034).
+  // It exists precisely for a workspace whose subscription died, and it was
+  // granted on purpose, with a reason — so a sweep suspending that workspace
+  // for the same dead subscription would undo the decision without anyone
+  // making it. Read against the status this predicate decides on: a comp is
+  // dormant while that subscription is live, and `past_due` still locks.
+  if (
+    readOrgPlanComp(org as never) &&
+    orgSubscriptionState({ billingStatus: status } as never) !== 'live'
+  ) {
+    return false
+  }
   // A subscription Stripe cancelled for non-payment is the terminal form of
   // exactly the state the two statuses above describe, and on this account it
   // is the ONLY form the org ever reaches (see `DELINQUENT_STATUSES`). Read

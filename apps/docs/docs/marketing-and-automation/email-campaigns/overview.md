@@ -447,8 +447,11 @@ required) · 44 withheld — no consent on record
 Consent is never assumed from an action. Submitting a form, placing an order, booking, or
 creating an account are not opt-ins on their own — a person is only counted as consenting
 when they ticked a box that says so. To grow the consented number, add a marketing opt-in
-checkbox to your forms and sign-up: a form field named `marketingConsent`, `emailOptIn`,
-`newsletterOptIn` or `subscribe` is recorded as consent when it is ticked.
+checkbox to your forms and sign-up, and on each form's own page pick that box as the
+**Marketing consent field**: a tick is then recorded as consent. As a safety net, a
+published form from the **Forms** page that names no consent field still records a ticked
+one-option **Checkboxes** field named `marketingConsent`, `emailOptIn`, `newsletterOptIn` or
+`subscribe`.
 
 Withheld recipients cost you nothing — they are removed before your monthly send
 allowance is claimed.

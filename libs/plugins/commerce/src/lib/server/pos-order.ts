@@ -268,6 +268,11 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       const variant =
         product.variants.find((item) => item.id === raw.variantId) ??
         product.variants[0]
+      // A variant with no price yet (AGL-2916) is refused with its name, not
+      // rung up at nothing.
+      if (!CommerceModel.variantHasPrice(variant)) {
+        return res.status(400).json({ error: `Set a price for ${product.name} before selling it.` })
+      }
       const quantity = Math.max(1, Math.min(99, Math.round(Number(raw.quantity ?? 1))))
       lineItems.push({
         productId: String(raw.productId),

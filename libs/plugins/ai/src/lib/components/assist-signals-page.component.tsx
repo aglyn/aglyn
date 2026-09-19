@@ -19,6 +19,7 @@
 import { aiAddonName, type ConsoleStaffPageProps } from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Accordion,
   AccordionDetails,
@@ -28,7 +29,6 @@ import {
   Chip,
   LinearProgress,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -42,7 +42,11 @@ import type {
   AssistMiningReport,
   AssistSpendRow,
 } from '../usage/assist-signal-mining'
-import { costSplitRows, freeTasteRefusals } from '../usage/assist-signal-mining'
+import {
+  costSplitRows,
+  freeTasteRefusals,
+  kindTokenRows,
+} from '../usage/assist-signal-mining'
 
 /** The month leaderboard as the route serves it beside the report. */
 interface AssistSpendLeaderboard {
@@ -62,7 +66,7 @@ interface AssistSpendLeaderboard {
  * words that produced it". That is only true once something reads the corpus.
  * This is that something.
  *
- * Three panels, in the order the questions actually get asked:
+ * Four panels, in the order the questions actually get asked:
  *
  *  1. **Docs gaps** — cited pages ranked by thumbs-down, then volume. A page
  *     high on this list is being found and is not answering, which is a docs
@@ -77,6 +81,10 @@ interface AssistSpendLeaderboard {
  *     measures 1,030–1,190 tokens against Sonnet 5's 1,024-token minimum, so
  *     whether it caches is an empirical question the chat route could only
  *     pose, and this is the evidence.
+ *  4. **Tokens by kind** — what each kind of model request costs per
+ *     request, what it sends and generates, how much of its prompt the cache
+ *     served, and the p95 output its `max_tokens` is sized against
+ *     (AGL-2937).
  *
  * Read through `/api/ai/admin/signals` rather than Firestore directly.
  * `assistSignals` is absent from the rules file on purpose — default-deny for
@@ -137,13 +145,13 @@ function CostSplitTable({
 }: {
   caption: string
   label: string
-  rows: { key: string; messages: number; estCostUsd: number }[]
+  rows: { key: string; messages: number; providerCostUsd: number }[]
   totalUsd: number
 }) {
   return (
     <Stack spacing={1} sx={{ width: '100%' }}>
       <Typography variant="subtitle2">{caption}</Typography>
-      <Table size="small">
+      <ScrollTable size="small">
         <TableHead>
           <TableRow>
             <TableCell>{label}</TableCell>
@@ -168,15 +176,15 @@ function CostSplitTable({
                 <TableCell align="right">
                   {row.messages.toLocaleString()}
                 </TableCell>
-                <TableCell align="right">{money(row.estCostUsd)}</TableCell>
+                <TableCell align="right">{money(row.providerCostUsd)}</TableCell>
                 <TableCell align="right">
-                  {percent(totalUsd > 0 ? row.estCostUsd / totalUsd : null)}
+                  {percent(totalUsd > 0 ? row.providerCostUsd / totalUsd : null)}
                 </TableCell>
               </TableRow>
             ))
           )}
         </TableBody>
-      </Table>
+      </ScrollTable>
     </Stack>
   )
 }
@@ -264,6 +272,8 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
   // The month's spend leaderboard (AGL-2930), likewise served beside the
   // report: it reads the month documents, which the miner never sees.
   const spend = ((report as any)?.spend ?? null) as AssistSpendLeaderboard | null
+  // Absent from a route older than the page, which reads as no kinds.
+  const kindRows = totals?.byKind ? kindTokenRows(totals.byKind) : []
 
   return (
     <Stack spacing={3}>
@@ -294,7 +304,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
           // AGL-1891 is the same drift, in the Assist panel itself.
           <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
             <Chip label={`${totals.messages.toLocaleString()} turns`} />
-            <Chip label={`${money(totals.estCostUsd)} estimated`} />
+            <Chip label={`${money(totals.providerCostUsd)} estimated`} />
             {/*
              * The headline number for whether Assist is affordable to
              * leave on (AGL-2486): the share of turns answered from the
@@ -413,7 +423,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
             {'Ranked over a sample of the month documents — there are more. This is not the whole fleet.'}
           </Alert>
         ) : null}
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>Workspace</TableCell>
@@ -450,7 +460,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
                     {row.credits.toLocaleString()}
                   </TableCell>
                   <TableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                    {money(row.estCostUsd)}
+                    {money(row.providerCostUsd)}
                   </TableCell>
                   {/* The total, with the reasons on hover-free display:
                       a reader comparing spend to refusals needs both
@@ -464,7 +474,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
                         color="text.secondary"
                         sx={{ display: 'block' }}
                       >
-                        {`band ${row.refusals.band} · ceiling ${row.refusals.cap} · messages ${row.refusals.messages} · backstop ${row.refusals.budget}${freeTasteRefusals(row.refusals) > 0 ? ` · free taste ${freeTasteRefusals(row.refusals)}` : ''}`}
+                        {`band ${row.refusals.band} · ceiling ${row.refusals.cap} · messages ${row.refusals.messages} · backstop ${row.refusals.budget}${row.refusals.allotment > 0 ? ` · allotments ${row.refusals.allotment}` : ''}${freeTasteRefusals(row.refusals) > 0 ? ` · free taste ${freeTasteRefusals(row.refusals)}` : ''}`}
                       </Typography>
                     ) : null}
                   </TableCell>
@@ -472,7 +482,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
               ))
             )}
           </TableBody>
-        </Table>
+        </ScrollTable>
         <RankingFootnote
           shown={spend?.rows?.length ?? 0}
           total={spend?.ranked ?? 0}
@@ -496,7 +506,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
           <Typography variant="body2" color="text.secondary">
             {loading ? 'Reading signals…' : 'No assist turns recorded yet.'}
           </Typography>
-        ) : totals.estCostUsd === 0 ? (
+        ) : totals.providerCostUsd === 0 ? (
           /*
            * ZERO SPEND IS A FINDING, NOT AN EMPTY TABLE.
            *
@@ -527,16 +537,77 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
               caption="By tier"
               label="Tier"
               rows={costSplitRows(totals.byTier)}
-              totalUsd={totals.estCostUsd}
+              totalUsd={totals.providerCostUsd}
             />
             <CostSplitTable
               caption="By model"
               label="Model"
               rows={costSplitRows(totals.byModel)}
-              totalUsd={totals.estCostUsd}
+              totalUsd={totals.providerCostUsd}
             />
           </Stack>
         )}
+      </CardDisplay>
+
+      {/*
+        * TOKENS BY KIND (AGL-2937): what a kind of request costs and weighs,
+        * and the p95 output its `max_tokens` is sized against. Model turns
+        * only — a docs answer has no tokens to split.
+        */}
+      <CardDisplay
+        header={'Tokens by kind'}
+        help={pluginDocsHelp('assistSignals', { anchor: '#tokens-by-kind' })}
+        contentGutterX
+        contentGutterY
+      >
+        <Typography variant="body2" color="text.secondary" gutterBottom>
+          What each kind of model request costs per request, what its prompts
+          and answers weigh, how much of its prompt the cache served, and the
+          answer size 95 of every 100 requests stayed within — the figure its
+          output ceiling is sized against.
+        </Typography>
+        <ScrollTable size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Kind</TableCell>
+              <TableCell align="right">Requests</TableCell>
+              <TableCell align="right">Per request</TableCell>
+              <TableCell align="right">In</TableCell>
+              <TableCell align="right">Cache reads</TableCell>
+              <TableCell align="right">Cache writes</TableCell>
+              <TableCell align="right">Out</TableCell>
+              <TableCell align="right">p95 out</TableCell>
+              <TableCell align="right">Cache hit</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {!kindRows.length ? (
+              <TableRow>
+                <TableCell colSpan={9}>
+                  <Typography variant="body2" color="text.secondary">
+                    No model turns in this sample.
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : (
+              kindRows.map((row) => (
+                <TableRow key={row.kind}>
+                  <TableCell>{row.kind}</TableCell>
+                  <TableCell align="right">{row.messages.toLocaleString()}</TableCell>
+                  <TableCell align="right" sx={{ fontFamily: 'monospace' }}>
+                    {money(row.messages ? row.providerCostUsd / row.messages : 0)}
+                  </TableCell>
+                  <TableCell align="right">{row.inputTokens.toLocaleString()}</TableCell>
+                  <TableCell align="right">{row.cacheReadTokens.toLocaleString()}</TableCell>
+                  <TableCell align="right">{row.cacheWriteTokens.toLocaleString()}</TableCell>
+                  <TableCell align="right">{row.outputTokens.toLocaleString()}</TableCell>
+                  <TableCell align="right">{row.outputP95.toLocaleString()}</TableCell>
+                  <TableCell align="right">{percent(row.cacheHitRate)}</TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </ScrollTable>
       </CardDisplay>
 
       <CardDisplay
@@ -550,7 +621,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
           landed there. A page near the top is being found and is not
           answering — that is a docs issue with its evidence attached.
         </Typography>
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>Docs page</TableCell>
@@ -585,13 +656,13 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
                   </TableCell>
                   <TableCell align="right">{row.orgs}</TableCell>
                   <TableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                    {money(row.estCostUsd)}
+                    {money(row.providerCostUsd)}
                   </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
-        </Table>
+        </ScrollTable>
         <RankingFootnote
           shown={report?.docsGaps?.length ?? 0}
           total={report?.ranked?.docsGaps ?? 0}
@@ -610,7 +681,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
             ? `${report.ungrounded.questions.toLocaleString()} turns matched no documentation at all, ${report.ungrounded.down} of them rated down. These cite no page, so they cannot appear in the ranking above — a missing page is invisible to anything keyed on paths.`
             : 'Turns where retrieval matched no documentation at all.'}
         </Typography>
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>Asked from</TableCell>
@@ -639,7 +710,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
               ))
             )}
           </TableBody>
-        </Table>
+        </ScrollTable>
         <RankingFootnote
           shown={report?.ungrounded?.routes?.length ?? 0}
           total={report?.ranked?.ungroundedRoutes ?? 0}
@@ -758,7 +829,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
           Our estimated cost at the serving model&apos;s list rates —
           telemetry for tuning price against margin, not a bill.
         </Typography>
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>Workspace</TableCell>
@@ -803,13 +874,13 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
                   </TableCell>
                   <TableCell align="right">{row.down}</TableCell>
                   <TableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                    {money(row.estCostUsd)}
+                    {money(row.providerCostUsd)}
                   </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
-        </Table>
+        </ScrollTable>
         <RankingFootnote
           shown={report?.orgs?.length ?? 0}
           total={report?.ranked?.orgs ?? 0}

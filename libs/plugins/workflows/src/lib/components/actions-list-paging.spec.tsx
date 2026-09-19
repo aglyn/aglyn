@@ -107,7 +107,7 @@ const byCollection: Record<string, Array<Record<string, any>>> = {
   datasets: [],
   overlays: [],
   lists: [],
-  campaigns: [],
+  emailCampaigns: [],
   webhooks: [],
 }
 
@@ -276,16 +276,16 @@ describe('the actions list is ceilinged and paged (AGL-2501)', () => {
     // KEYS alone would pass with one of them still asking for five hundred.
     expect(Object.keys(mockCapsAsked).sort()).toEqual([
       'actions',
-      'campaigns',
       'datasets',
+      'emailCampaigns',
       'lists',
       'overlays',
       'webhooks',
       'workflows',
     ])
     for (const picker of [
-      'campaigns',
       'datasets',
+      'emailCampaigns',
       'lists',
       'overlays',
       'webhooks',

@@ -16,6 +16,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { ORG_PERMISSION_KEYS, type OrgPermission } from '@aglyn/aglyn'
@@ -51,6 +52,16 @@ const REPO_ROOT = resolve(__dirname, '../../..')
  * being fixed. Specs are excluded for the same reason: a key used as a
  * convenient sample in a merge-layering test was how `data.manage` and
  * `marketing.manage` looked consumed while governing nothing.
+ *
+ * ## Keys a plugin declares into the catalog
+ *
+ * A plugin adds keys to the catalog through `registerPluginEntitlements`
+ * (AGL-2984), and they are advertised on the role editor exactly like the
+ * core ones. This spec loads no plugin — an import would measure import
+ * order, not what the repo declares — so the declarations are read as TEXT,
+ * the way `plugin-permissions-are-enforced.spec.ts` reads its registry, and
+ * a declaration module is excluded from the enforcement search for the same
+ * reason the catalog file is.
  */
 const ENFORCEMENT_ROOTS = [
   'apps/console/app/api',
@@ -79,6 +90,50 @@ const NOT_ENFORCEMENT = [
  */
 const REGISTRATION_MODULE = /^libs\/plugins\/[^/]+\/src\/lib\/plugin\.tsx?$/
 
+/** Modules that declare catalog keys: anything typed as a declaration list. */
+function catalogDeclarationFiles(): string[] {
+  let output: string
+  try {
+    output = execFileSync(
+      'git',
+      [
+        'grep',
+        '-l',
+        '--untracked',
+        '--fixed-strings',
+        'PluginOrgPermissionDeclaration[]',
+        '--',
+        'libs/plugins',
+      ],
+      { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
+    )
+  } catch {
+    return []
+  }
+  return output
+    .split('\n')
+    .filter(Boolean)
+    .filter((path) => !/\.spec\./.test(path))
+}
+
+const CATALOG_DECLARATION_FILES = catalogDeclarationFiles()
+
+/** Every dotted `key: '…'` a declaration module writes down. */
+function declaredCatalogKeys(): string[] {
+  return CATALOG_DECLARATION_FILES.flatMap((file) =>
+    [
+      ...readFileSync(resolve(REPO_ROOT, file), 'utf8').matchAll(
+        /\bkey:\s*'([a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+)'/g,
+      ),
+    ].map((match) => match[1]),
+  )
+}
+
+/** Every advertised key: the core catalog's and every plugin-declared one. */
+const CATALOG = [
+  ...new Set<string>([...ORG_PERMISSION_KEYS, ...declaredCatalogKeys()]),
+] as OrgPermission[]
+
 /**
  * Where each key actually bites, as a string a server file contains.
  *
@@ -100,9 +155,9 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
     'permissions.publishToMarketplace',
   ],
   'plugins.install': ["'plugins.install'", 'permissions.installPlugins'],
-  // The AI keys (AGL-2927) bite at the doors: `/api/assist/chat` and the
-  // marketplace's `/api/ai/assist` handler call `memberHasAiPermission` with
-  // the literal, and `aiGateLadder` refuses under whichever key a door
+  // The AI keys (AGL-2927), declared by the AI plugin, bite at the doors:
+  // `/api/assist/chat` and `/api/ai/assist` call `memberHasPermissionOnHost`
+  // with the literal, and `aiGateLadder` refuses under whichever key a door
   // passes as `permission`.
   'ai.use': ["'ai.use'"],
   'ai.generate': ["'ai.generate'"],
@@ -138,16 +193,17 @@ function serverFilesContaining(needle: string): string[] {
     .filter((path) => !/\.spec\./.test(path))
     .filter((path) => !NOT_ENFORCEMENT.includes(path))
     .filter((path) => !REGISTRATION_MODULE.test(path))
+    .filter((path) => !CATALOG_DECLARATION_FILES.includes(path))
 }
 
 describe('every advertised org permission is enforced server-side (AGL-2444)', () => {
   it('the catalog and the map name exactly the same keys', () => {
     // Adding a permission without deciding where it is enforced fails HERE,
     // with the key named, rather than as a silent hole a customer finds.
-    expect([...ORG_PERMISSION_KEYS].sort()).toEqual(
+    expect([...CATALOG].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(ORG_PERMISSION_KEYS.length).toBe(12)
+    expect(CATALOG.length).toBe(12)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {
@@ -158,6 +214,8 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect(serverFilesContaining('resolveOrgMembership').length).toBeGreaterThan(
       5,
     )
+    // And the declaration read finds the plugin-declared keys at all.
+    expect(declaredCatalogKeys().length).toBeGreaterThan(0)
   })
 
   it('the definition and projection files are excluded, and DO mention the keys', () => {
@@ -173,7 +231,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect(raw).toContain('libs/aglyn/src/lib/app-utils/org-permissions.ts')
   })
 
-  it.each(ORG_PERMISSION_KEYS.map((key) => [key]))(
+  it.each(CATALOG.map((key) => [key]))(
     '%s is checked by at least one server file',
     (key: OrgPermission) => {
       const files = ENFORCED_AS[key].flatMap(serverFilesContaining)

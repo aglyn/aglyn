@@ -106,6 +106,27 @@ export async function GET(request: Request): Promise<Response> {
         specUrl: `${CONSOLE_ORIGIN}/api/v1/openapi.json`,
         docsUrl: `${DOCS_ORIGIN}/api`,
       },
+      {
+        /*
+          The SAME platform API, offered as tools rather than as endpoints
+          (AGL-3091).
+
+          Listed beside `/api/v1` rather than instead of it, because the two
+          are the same surface reached two ways and an agent should be able to
+          pick: an HTTP client wants the endpoints and the OpenAPI document, a
+          model-driven client wants the tools. Naming only one of them leaves
+          whichever agent arrived the other way to conclude it does not exist,
+          which is the failure this whole catalog was built to end.
+
+          No `specUrl`: the tool list IS the description, and it is served by
+          the protocol itself in answer to `tools/list`. Pointing `service-desc`
+          at the OpenAPI document would name a description of the endpoints for
+          a client that is not calling them.
+        */
+        url: `${CONSOLE_ORIGIN}/api/mcp`,
+        title: `${PLATFORM_BRAND_NAME} MCP server`,
+        docsUrl: `${DOCS_ORIGIN}/api`,
+      },
     ],
   })
 

@@ -89,3 +89,12 @@ test('a malformed list reports nothing rather than throwing', () => {
   }
   assert.deepEqual(productsMissingTaxCode([null, undefined, 'x']), [])
 })
+
+test('an archived product is not reported: it sells nothing, so its tax code is moot', () => {
+  const archived = { ...TEST_PRODUCT, active: false }
+  assert.deepEqual(productsMissingTaxCode([archived]), [])
+  // A product that simply omits `active` is still live and still counts, so
+  // the skip cannot be read as "anything falsy".
+  const { active: _omitted, ...noFlag } = TEST_PRODUCT
+  assert.equal(productsMissingTaxCode([noFlag]).length, 1)
+})

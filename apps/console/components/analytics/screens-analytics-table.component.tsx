@@ -18,11 +18,11 @@
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
   LinearProgress,
   MenuItem,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -262,7 +262,7 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
         </Typography>
       ) : (
         <>
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'Screen'}</TableCell>
@@ -310,7 +310,7 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
                 )
               })}
             </TableBody>
-          </Table>
+          </ScrollTable>
           <ListPagination
             page={page}
             pageSize={pageSize}

@@ -68,7 +68,10 @@ describe('AI_PALETTE agrees with the runtime registry (AGL-2905)', () => {
     for (const id of MARKETPLACE_COMPONENT_ID_ALLOWLIST) {
       expect(AI_SURFACES.screen.allow).toContain(id)
     }
-    expect(AI_SURFACES.component.allow).toEqual(AI_SURFACES.screen.allow)
+    // A component may also place an Icon, bound to an icon the site owner picks (AGL-3054).
+    expect(AI_SURFACES.component.allow).toEqual([...AI_SURFACES.screen.allow, 'icon'].sort())
+    expect(AI_SURFACES.screen.allow).not.toContain('icon')
+    expect(AI_SURFACES.layout.allow).not.toContain('icon')
     expect(AI_SURFACES.layout.allow).toEqual(
       [...AI_SURFACES.screen.allow, 'layoutSlot'].sort(),
     )

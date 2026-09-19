@@ -138,12 +138,26 @@ const POLICIES: Array<{
     writers: ['libs/plugins/ai/src/lib/usage/assist-usage.ts'],
     stamp: 'expiresAt: assistExchangeExpiry(now)',
   },
+  // AGL-2917: an answer a CRM job wrote from a person's record, kept two
+  // weeks, apart from the job, by the step that wrote it.
+  {
+    collectionGroup: 'aiCrmAnswers',
+    writers: ['libs/plugins/ai/src/lib/jobs/ai-job-crm-step.ts'],
+    stamp: 'expiresAt: aiCrmAnswerExpiry(now)',
+  },
   // AGL-2904: an AI generation job carries the customer's brief verbatim,
   // so it expires on the exchange's clock, stamped by the one writer.
   {
     collectionGroup: 'aiJobs',
     writers: ['libs/plugins/ai/src/lib/jobs/ai-jobs.ts'],
     stamp: 'expiresAt: assistExchangeExpiry(now)',
+  },
+  // AGL-2915: an insight answer — the figures an insight job read and what it
+  // said about them — kept on the job's own clock, stamped from the job.
+  {
+    collectionGroup: 'aiInsights',
+    writers: ['libs/plugins/ai/src/lib/jobs/ai-job-insight-step.ts'],
+    stamp: 'expiresAt: job.expiresAt ?? assistExchangeExpiry(now)',
   },
   // AGL-2928: a person's monthly AI usage under the org, keyed by uid, kept
   // thirteen months past the month it counts. Two writers in one file: the

@@ -38,6 +38,10 @@
  * morning.
  */
 
+import {
+  startOfNextZonedDay,
+  startOfZonedDay,
+} from '@aglyn/shared-util-timestamp/zoned-time'
 import { type CrmLeadFields, type CrmTask, crmLeadStatus } from './crm'
 
 /**
@@ -82,77 +86,14 @@ export const CRM_DIGEST_LIST_MAX = 10
 /*==========================================
  * CALENDAR DAYS IN A NAMED ZONE
  *
- * `Intl` is the only zone database a serverless function has, and it only
- * FORMATS. So a day boundary is found by formatting the instant into the
- * zone's calendar fields, building the UTC instant those fields would be,
- * and shifting by the zone's offset — read twice, because the offset at the
- * instant asked about and the offset at the midnight found can differ on
- * the day a clock change falls, and the second read settles it.
+ * The zone math lives in `@aglyn/shared-util-timestamp/zoned-time`, where
+ * booking slots and sending windows read it as well; the digest route and
+ * its spec call it by the names below.
  *=========================================*/
-
-interface ZoneParts {
-  year: number
-  month: number
-  day: number
-  hour: number
-  minute: number
-  second: number
-}
-
-function zoneParts(ms: number, timeZone: string): ZoneParts {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).formatToParts(new Date(ms))
-  const read = (type: Intl.DateTimeFormatPartTypes): number =>
-    Number(parts.find((part) => part.type === type)?.value ?? 0)
-  return {
-    year: read('year'),
-    month: read('month'),
-    day: read('day'),
-    hour: read('hour'),
-    minute: read('minute'),
-    second: read('second'),
-  }
-}
-
-/** The zone's offset from UTC at `ms`, in milliseconds, positive east. */
-function zoneOffsetMs(ms: number, timeZone: string): number {
-  const parts = zoneParts(ms, timeZone)
-  const asUtc = Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute,
-    parts.second,
-  )
-  return asUtc - Math.floor(ms / 1000) * 1000
-}
-
-/** The instant a calendar date begins in `timeZone`. */
-function startOfZoneDate(
-  year: number,
-  monthIndex: number,
-  day: number,
-  nearMs: number,
-  timeZone: string,
-): number {
-  const midnightAsUtc = Date.UTC(year, monthIndex, day)
-  const guess = midnightAsUtc - zoneOffsetMs(nearMs, timeZone)
-  return midnightAsUtc - zoneOffsetMs(guess, timeZone)
-}
 
 /** Midnight at the start of the calendar day `ms` falls in, in `timeZone`. */
 export function startOfDayInZone(ms: number, timeZone: string): number {
-  const parts = zoneParts(ms, timeZone)
-  return startOfZoneDate(parts.year, parts.month - 1, parts.day, ms, timeZone)
+  return startOfZonedDay(ms, timeZone)
 }
 
 /**
@@ -161,8 +102,7 @@ export function startOfDayInZone(ms: number, timeZone: string): number {
  * section gives: a day a clock change falls in is 23 or 25 hours long.
  */
 export function startOfNextDayInZone(ms: number, timeZone: string): number {
-  const parts = zoneParts(ms, timeZone)
-  return startOfZoneDate(parts.year, parts.month - 1, parts.day + 1, ms, timeZone)
+  return startOfNextZonedDay(ms, timeZone)
 }
 
 /** `YYYY-MM-DD` of the UTC day `ms` falls in — the digest's idempotence key. */

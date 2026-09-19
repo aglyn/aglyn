@@ -9,6 +9,400 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.129 — 2026-09-18
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.128...v1.0.0-beta.129)
+
+### Added
+
+- **api:** an MCP server offers the v1 API to agents as tools ([AGL-3091](https://linear.app/aglyn/issue/AGL-3091))
+
+### Fixed
+
+- **api:** the published v1 description names the path the API answers at ([AGL-3094](https://linear.app/aglyn/issue/AGL-3094))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear ceiling is 3094, read from the workspace ([AGL-3094](https://linear.app/aglyn/issue/AGL-3094))
+
+</details>
+
+## v1.0.0-beta.128 — 2026-09-18
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.127...v1.0.0-beta.128)
+
+### Fixed
+
+- **console:** an unknown workspace path 404s instead of rendering ([AGL-3017](https://linear.app/aglyn/issue/AGL-3017), [AGL-3090](https://linear.app/aglyn/issue/AGL-3090), [AGL-3016](https://linear.app/aglyn/issue/AGL-3016))
+- **console:** the auth origin serves only its own family, not the console ([AGL-3090](https://linear.app/aglyn/issue/AGL-3090), [AGL-462](https://linear.app/aglyn/issue/AGL-462), [AGL-1919](https://linear.app/aglyn/issue/AGL-1919), [AGL-3016](https://linear.app/aglyn/issue/AGL-3016), [AGL-3017](https://linear.app/aglyn/issue/AGL-3017))
+- **ai:** a Free page's grader is told a list's items belong in one section ([AGL-3073](https://linear.app/aglyn/issue/AGL-3073))
+- **ai:** the live eval records automation and product briefs, a photo included ([AGL-3074](https://linear.app/aglyn/issue/AGL-3074))
+- **ai:** a recorded page's listing names the site only as its case does ([AGL-3077](https://linear.app/aglyn/issue/AGL-3077))
+- **ai:** the eval grader reads a built page with its plan, screen and layout ([AGL-3073](https://linear.app/aglyn/issue/AGL-3073))
+- **ai:** a link with no destination is told to link a screen that does what it says ([AGL-3072](https://linear.app/aglyn/issue/AGL-3072))
+- **ai:** a split list on a workspace with components is joined around one it places ([AGL-3071](https://linear.app/aglyn/issue/AGL-3071))
+- **ai:** a Free plan asks for no more sections than the wall's worst case pays for ([AGL-3070](https://linear.app/aglyn/issue/AGL-3070), [AGL-3030](https://linear.app/aglyn/issue/AGL-3030))
+- **ai:** a Free plan draws a list's items in one section, and a split list is re-asked ([AGL-3071](https://linear.app/aglyn/issue/AGL-3071), [AGL-3053](https://linear.app/aglyn/issue/AGL-3053), [AGL-3061](https://linear.app/aglyn/issue/AGL-3061))
+- **ai:** a line the validator cut at its ceiling is refused, with the ceiling named ([AGL-3076](https://linear.app/aglyn/issue/AGL-3076))
+- **ai:** a section is refused for a line cut short, an empty item or a link to nowhere ([AGL-3072](https://linear.app/aglyn/issue/AGL-3072))
+
+<details>
+<summary>Also in this release: 1 test, 2 chore</summary>
+
+- **tools:** the Linear ceiling is 3093, read from the workspace ([AGL-3093](https://linear.app/aglyn/issue/AGL-3093), [AGL-3086](https://linear.app/aglyn/issue/AGL-3086), [AGL-3089](https://linear.app/aglyn/issue/AGL-3089))
+- **ai:** every products case records the request its step sends for the store ([AGL-3074](https://linear.app/aglyn/issue/AGL-3074))
+- **tools:** the Linear ceiling is 3077, read from the workspace ([AGL-3077](https://linear.app/aglyn/issue/AGL-3077), [AGL-3070](https://linear.app/aglyn/issue/AGL-3070), [AGL-3071](https://linear.app/aglyn/issue/AGL-3071), [AGL-3072](https://linear.app/aglyn/issue/AGL-3072), [AGL-3076](https://linear.app/aglyn/issue/AGL-3076), [AGL-3075](https://linear.app/aglyn/issue/AGL-3075))
+
+</details>
+
+## v1.0.0-beta.127 — 2026-09-17
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.126...v1.0.0-beta.127)
+
+### Added
+
+- **legal:** v8 goes live, with the Privacy Policy pinned from its published page ([AGL-3069](https://linear.app/aglyn/issue/AGL-3069), [AGL-2915](https://linear.app/aglyn/issue/AGL-2915), [AGL-2916](https://linear.app/aglyn/issue/AGL-2916), [AGL-2917](https://linear.app/aglyn/issue/AGL-2917), [AGL-2919](https://linear.app/aglyn/issue/AGL-2919))
+- **ai:** a record page, the composer and an import ask a crm job and hand on its answer ([AGL-2917](https://linear.app/aglyn/issue/AGL-2917))
+- **ai:** a crm job summarizes a record, drafts an email and matches an import's columns ([AGL-2917](https://linear.app/aglyn/issue/AGL-2917))
+- **crm:** record pages, the composer and imports host zones a widget proposes into ([AGL-2917](https://linear.app/aglyn/issue/AGL-2917))
+- **crm:** the CRM reads a record's facts for another plugin, under its own rules ([AGL-2917](https://linear.app/aglyn/issue/AGL-2917))
+- **aglyn:** a plugin reads another plugin's record through a facts seam ([AGL-2917](https://linear.app/aglyn/issue/AGL-2917))
+- **ai:** a page that only works on desktop fails its eval and its kind's floor ([AGL-3020](https://linear.app/aglyn/issue/AGL-3020))
+- **ai:** golden pages are recorded and held at every width the device switcher shows ([AGL-3020](https://linear.app/aglyn/issue/AGL-3020))
+- **ai:** product copy, catalog and discount proposals in the commerce zones ([AGL-2916](https://linear.app/aglyn/issue/AGL-2916))
+- **commerce:** the product editor, products hub and CSV import host proposal zones ([AGL-2916](https://linear.app/aglyn/issue/AGL-2916))
+- **ai:** a products job proposes product copy, a catalog, categories and discounts ([AGL-2916](https://linear.app/aglyn/issue/AGL-2916))
+- **commerce:** a variant with no price is never sold, and proposals get a draft shape ([AGL-2916](https://linear.app/aglyn/issue/AGL-2916))
+- **ai:** a user turn may carry a picture, for a model that reads one ([AGL-2916](https://linear.app/aglyn/issue/AGL-2916))
+- **ai:** weekly insights, made on Monday for the members who opted in ([AGL-2915](https://linear.app/aglyn/issue/AGL-2915))
+- **ai:** "Ask about your numbers" in the Assist panel on reporting pages ([AGL-2915](https://linear.app/aglyn/issue/AGL-2915))
+- **ai:** an insight job answers questions from figures it cannot compute ([AGL-2915](https://linear.app/aglyn/issue/AGL-2915))
+- **commerce,bookings,marketing:** each plugin reads its own figures for insights ([AGL-2915](https://linear.app/aglyn/issue/AGL-2915))
+- **aglyn:** plugins publish typed figure readers on a service seam ([AGL-2915](https://linear.app/aglyn/issue/AGL-2915))
+- **ai:** the Automation page drafts an automation, and explains one or a failed run ([AGL-2919](https://linear.app/aglyn/issue/AGL-2919))
+- **ai:** a workflow job drafts an automation from a description, or explains one ([AGL-2919](https://linear.app/aglyn/issue/AGL-2919))
+- **workflows:** a drafted automation is written off, with its placeholders shown ([AGL-2919](https://linear.app/aglyn/issue/AGL-2919))
+- **inbox:** form submissions and members & leads move to the shared grid ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **marketing:** campaign emails, members and experiments move to the shared grid ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **email:** the email plugin's record lists move to the shared grid ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **console:** the console's record lists move to the shared grid ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **plugins:** the last plugin tables scroll inside their cards ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **email:** the email plugin's tables scroll inside their cards ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **crm:** the CRM's tables scroll inside their cards and dialogs ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **commerce:** the commerce console's tables scroll inside their cards ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **console:** the screens tree scrolls in one ScrollTable box, its subtrees in none ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **console:** workspace and site tables scroll inside their cards ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **console:** the staff pages' tables scroll inside their cards ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **ai:** record lists move to the shared grid, and every other AI table scrolls ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **ui:** a table outgrowing its card scrolls inside it, and a raw one is refused ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **console:** the staff override grants an uncapped comp, and every comp chip says so ([AGL-3049](https://linear.app/aglyn/issue/AGL-3049))
+- **aglyn:** an uncapped staff comp lifts every band and quota while it is in force ([AGL-3049](https://linear.app/aglyn/issue/AGL-3049))
+- **flags:** the site admin bar is released, on by default for every site ([AGL-3041](https://linear.app/aglyn/issue/AGL-3041))
+- **ai:** a member describes a reusable component beside Create Component ([AGL-3051](https://linear.app/aglyn/issue/AGL-3051), [AGL-2908](https://linear.app/aglyn/issue/AGL-2908))
+- **ai:** a member describes a template, a layout or a form beside its create action ([AGL-3043](https://linear.app/aglyn/issue/AGL-3043), [AGL-2909](https://linear.app/aglyn/issue/AGL-2909), [AGL-2913](https://linear.app/aglyn/issue/AGL-2913))
+
+### Fixed
+
+- **mui:** the Social Links row keeps profile URLs out of its HTML attributes ([AGL-3075](https://linear.app/aglyn/issue/AGL-3075))
+- **commerce:** a Reservation widget with no resource draws nothing on a published page ([AGL-3067](https://linear.app/aglyn/issue/AGL-3067))
+- **mui:** an empty element shows its authoring hint in the canvas and Preview only ([AGL-3067](https://linear.app/aglyn/issue/AGL-3067))
+- **ai:** the insights dataset reader names its page of records rows, which it only reads ([AGL-2915](https://linear.app/aglyn/issue/AGL-2915))
+- **console:** the three CRM record zones say how they space their widgets ([AGL-2917](https://linear.app/aglyn/issue/AGL-2917), [AGL-3044](https://linear.app/aglyn/issue/AGL-3044))
+- **crm:** names, job titles and tags are scrubbed too, for an address filed as a name ([AGL-2917](https://linear.app/aglyn/issue/AGL-2917))
+- **crm:** a task's or a deal's title is scrubbed like the rest of what the team typed ([AGL-2917](https://linear.app/aglyn/issue/AGL-2917))
+- **crm:** an address or a number typed into a note stays out of a record's facts ([AGL-2917](https://linear.app/aglyn/issue/AGL-2917))
+- **ai:** a crm job's answer is kept apart from the job, behind its own door ([AGL-2917](https://linear.app/aglyn/issue/AGL-2917))
+- **aglyn:** the commerce zone props are type-only; their proposal tables are classified ([AGL-2916](https://linear.app/aglyn/issue/AGL-2916))
+- **console:** the commerce product zones are bare, and the zone reference lists them ([AGL-2916](https://linear.app/aglyn/issue/AGL-2916), [AGL-3044](https://linear.app/aglyn/issue/AGL-3044))
+- **ai:** the photo's white and the review tables' columns stay inside the guards ([AGL-2916](https://linear.app/aglyn/issue/AGL-2916))
+- **ai:** the picture guard scans base64 instead of matching megabytes whole ([AGL-2916](https://linear.app/aglyn/issue/AGL-2916))
+- **commerce:** a proposed product is matched by its search key, not only the hub's rows ([AGL-2916](https://linear.app/aglyn/issue/AGL-2916))
+- **commerce:** renaming a product option keeps every variant ([AGL-3066](https://linear.app/aglyn/issue/AGL-3066), [AGL-2916](https://linear.app/aglyn/issue/AGL-2916))
+- **ai:** the console sweeps know the insights door and the weekly insights mail ([AGL-2915](https://linear.app/aglyn/issue/AGL-2915))
+- **ai:** a weekly insights call stops inside its function time ([AGL-2915](https://linear.app/aglyn/issue/AGL-2915))
+- **aglyn:** the figures seam stays out of the plugin-manager barrel ([AGL-2915](https://linear.app/aglyn/issue/AGL-2915))
+- **tools:** the TTL policy list carries the aiInsights policy the doc declares ([AGL-2915](https://linear.app/aglyn/issue/AGL-2915))
+- **ai:** a link reads on its band and goes where it says; the note lists what to fill ([AGL-3056](https://linear.app/aglyn/issue/AGL-3056))
+- **ai:** a Grid of columns is a container of items sized from full width on a phone up ([AGL-3055](https://linear.app/aglyn/issue/AGL-3055))
+- **ai:** a component's headings start at h3, under the h2 of the section that places it ([AGL-3057](https://linear.app/aglyn/issue/AGL-3057))
+- **ai:** an icon is an Icon the site owner picks, never a text property shown as words ([AGL-3054](https://linear.app/aglyn/issue/AGL-3054))
+- **console:** the Automation page's AI zones are bare, like the other header controls ([AGL-2919](https://linear.app/aglyn/issue/AGL-2919), [AGL-3044](https://linear.app/aglyn/issue/AGL-3044))
+- **workflows:** the campaign picker offers the campaigns an Assign step runs against ([AGL-3052](https://linear.app/aglyn/issue/AGL-3052))
+- **shared-ui-jsx:** a press in a list row's actions cell never opens the row ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **console:** the site activity log reads a plugin's action code as its label ([AGL-3065](https://linear.app/aglyn/issue/AGL-3065))
+- **billing:** a subscription's add-on quantities reach the workspace again ([AGL-3060](https://linear.app/aglyn/issue/AGL-3060), [AGL-1028](https://linear.app/aglyn/issue/AGL-1028))
+- **ai:** the refusal alert names only a ceiling this org's reservations refuse at ([AGL-3063](https://linear.app/aglyn/issue/AGL-3063), [AGL-2653](https://linear.app/aglyn/issue/AGL-2653), [AGL-3049](https://linear.app/aglyn/issue/AGL-3049))
+- **workflows:** the run line says there is no monthly limit for an unlimited band ([AGL-3049](https://linear.app/aglyn/issue/AGL-3049))
+- **ai:** an uncapped comp's AI credits read against Unlimited, and staff see why ([AGL-3049](https://linear.app/aglyn/issue/AGL-3049))
+- **ai:** a Free section writes a repeated item once, and its check draws the copies ([AGL-3053](https://linear.app/aglyn/issue/AGL-3053))
+- **ai:** a typed list is counted within its section, as its plan counts it ([AGL-3061](https://linear.app/aglyn/issue/AGL-3061))
+- **console:** the describe buttons' header zones are bare, like the Screens page's ([AGL-3044](https://linear.app/aglyn/issue/AGL-3044), [AGL-3043](https://linear.app/aglyn/issue/AGL-3043))
+- **console:** the host dashboard hides its capability row when no card in it drew ([AGL-3058](https://linear.app/aglyn/issue/AGL-3058))
+- **console:** a widget zone spaces the cards it renders, and keeps the page's gap ([AGL-3044](https://linear.app/aglyn/issue/AGL-3044))
+- **shared-ui-jsx:** balanced card columns end at their last card, with no gutter below ([AGL-3059](https://linear.app/aglyn/issue/AGL-3059))
+- **shared-ui-jsx:** a card grid hides a band that drew nothing, and its column ([AGL-3050](https://linear.app/aglyn/issue/AGL-3050))
+- **tenant:** the admin bar stays up while it follows a soft navigation ([AGL-3064](https://linear.app/aglyn/issue/AGL-3064), [AGL-3041](https://linear.app/aglyn/issue/AGL-3041))
+- **tenant-data-admin:** the edit-access gate mints only for a site the member reaches ([AGL-3062](https://linear.app/aglyn/issue/AGL-3062), [AGL-1881](https://linear.app/aglyn/issue/AGL-1881), [AGL-3041](https://linear.app/aglyn/issue/AGL-3041))
+- **console:** a flag publishes when its description runs past Remote Config's limit ([AGL-3048](https://linear.app/aglyn/issue/AGL-3048), [AGL-1909](https://linear.app/aglyn/issue/AGL-1909))
+- **tenant:** a manual admin bar arm tries the silent exchange before the button ([AGL-3047](https://linear.app/aglyn/issue/AGL-3047), [AGL-3046](https://linear.app/aglyn/issue/AGL-3046), [AGL-1842](https://linear.app/aglyn/issue/AGL-1842))
+- **console,tenant:** the admin bar's connect popup keeps its opener ([AGL-3046](https://linear.app/aglyn/issue/AGL-3046))
+- **ai:** a section is asked for the elements its ceiling holds in real tokens ([AGL-3042](https://linear.app/aglyn/issue/AGL-3042))
+- **ai:** an answer cut off at its ceiling is re-asked smaller, not as unreadable ([AGL-3042](https://linear.app/aglyn/issue/AGL-3042))
+- **ai:** a job step records why each run stopped and what it generated ([AGL-3042](https://linear.app/aglyn/issue/AGL-3042))
+- **ai:** the eval grader is told what a case's workspace may create ([AGL-3040](https://linear.app/aglyn/issue/AGL-3040))
+- **ai:** a plan that places a creation it never declares is refused, with a re-ask ([AGL-3040](https://linear.app/aglyn/issue/AGL-3040), [AGL-3030](https://linear.app/aglyn/issue/AGL-3030))
+- **tools:** a live eval run keeps the provider key it was started with ([AGL-3038](https://linear.app/aglyn/issue/AGL-3038), [AGL-690](https://linear.app/aglyn/issue/AGL-690))
+
+### Performance
+
+- **aglyn:** the record zones' prop types leave the published page's graph ([AGL-2917](https://linear.app/aglyn/issue/AGL-2917))
+
+### Changed
+
+- **besigner:** an audit reads the device switcher's widths and the canvas's theme ([AGL-3020](https://linear.app/aglyn/issue/AGL-3020))
+- **ai:** one media library read serves a theme's logo and a product's photo ([AGL-2916](https://linear.app/aglyn/issue/AGL-2916))
+
+### Documentation
+
+- **analytics:** a page for asking about your numbers and weekly insights ([AGL-2915](https://linear.app/aglyn/issue/AGL-2915))
+- **ai:** drafting an automation, explaining one, and why a run failed ([AGL-2919](https://linear.app/aglyn/issue/AGL-2919))
+- **aglyn:** the price-key comment and the staff docs say what is pinned and named ([AGL-3049](https://linear.app/aglyn/issue/AGL-3049))
+- **besigner:** the admin bar page's summary names no Aglyn hostname ([AGL-3041](https://linear.app/aglyn/issue/AGL-3041))
+- **besigner:** the admin bar page describes the released bar, read from its code ([AGL-3041](https://linear.app/aglyn/issue/AGL-3041))
+
+<details>
+<summary>Also in this release: 6 test, 8 chore</summary>
+
+- **tenant:** a published page's nodes read no editing flag for a hint to draw on ([AGL-3067](https://linear.app/aglyn/issue/AGL-3067))
+- **tools:** the Linear ceiling is 3075, read from the workspace ([AGL-3075](https://linear.app/aglyn/issue/AGL-3075), [AGL-3067](https://linear.app/aglyn/issue/AGL-3067), [AGL-3066](https://linear.app/aglyn/issue/AGL-3066))
+- **tenant:** the products job's photo reader and step are declared off-tenant ([AGL-2916](https://linear.app/aglyn/issue/AGL-2916))
+- **tools:** the Linear ceiling is 3066, read from the workspace ([AGL-3066](https://linear.app/aglyn/issue/AGL-3066), [AGL-2916](https://linear.app/aglyn/issue/AGL-2916))
+- **tools:** the raw-table rule excuses nothing, so its allowlist goes ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **console:** the footerless-table detector sees a table in its ScrollTable box ([AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **tools:** the Linear ceiling is 3065, read from the workspace ([AGL-3065](https://linear.app/aglyn/issue/AGL-3065), [AGL-3045](https://linear.app/aglyn/issue/AGL-3045))
+- **billing:** every reader of the Starter add-on's overage rate has a spec ([AGL-3014](https://linear.app/aglyn/issue/AGL-3014))
+- **ai:** the eval harness draws a page item written once before it scores it ([AGL-3053](https://linear.app/aglyn/issue/AGL-3053))
+- **tools:** the Linear ceiling is 3064, read from the workspace ([AGL-3064](https://linear.app/aglyn/issue/AGL-3064), [AGL-3060](https://linear.app/aglyn/issue/AGL-3060))
+- **tools:** the Linear ceiling is 3059, read from the workspace ([AGL-3059](https://linear.app/aglyn/issue/AGL-3059), [AGL-3050](https://linear.app/aglyn/issue/AGL-3050))
+- **tools:** the Linear ceiling is 3049, read from the workspace ([AGL-3049](https://linear.app/aglyn/issue/AGL-3049), [AGL-3041](https://linear.app/aglyn/issue/AGL-3041))
+- **ai:** a Free page recording that built no page proves nothing about the wall ([AGL-3040](https://linear.app/aglyn/issue/AGL-3040))
+- **tools:** the Linear ceiling is 3040, read from the workspace ([AGL-3040](https://linear.app/aglyn/issue/AGL-3040), [AGL-3038](https://linear.app/aglyn/issue/AGL-3038), [AGL-3039](https://linear.app/aglyn/issue/AGL-3039))
+
+</details>
+
+## v1.0.0-beta.126 — 2026-09-16
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.125...v1.0.0-beta.126)
+
+### Added
+
+- **console:** the staff override grants a comp and says which plan took effect ([AGL-3034](https://linear.app/aglyn/issue/AGL-3034))
+- **aglyn:** a staff plan comp decides the plan while a subscription is dead or absent ([AGL-3034](https://linear.app/aglyn/issue/AGL-3034), [AGL-247](https://linear.app/aglyn/issue/AGL-247))
+- **forms:** a site can switch Forms off, and every half of a form honors it ([AGL-3029](https://linear.app/aglyn/issue/AGL-3029), [AGL-3033](https://linear.app/aglyn/issue/AGL-3033))
+- **ai:** a site can switch AI off for itself, and the workspace half keeps running ([AGL-3028](https://linear.app/aglyn/issue/AGL-3028))
+- **ai:** a page job builds the layout, forms and components its plan creates ([AGL-3031](https://linear.app/aglyn/issue/AGL-3031))
+
+### Fixed
+
+- **ai:** the assistant names the plan a workspace resolves to, not its stored field ([AGL-3034](https://linear.app/aglyn/issue/AGL-3034))
+- **ai:** a workspace whose AI staff have paused runs none of its queued AI jobs ([AGL-3037](https://linear.app/aglyn/issue/AGL-3037), [AGL-3028](https://linear.app/aglyn/issue/AGL-3028))
+- **ai:** every AI generation step registers the least time it needs ([AGL-3035](https://linear.app/aglyn/issue/AGL-3035))
+- **ai:** the step time budget counts a generation's inventory-lookup rounds ([AGL-3036](https://linear.app/aglyn/issue/AGL-3036))
+- **console:** surfaces that name, gate or bill a plan read the plan a comp grants ([AGL-3034](https://linear.app/aglyn/issue/AGL-3034))
+- **rules:** the CRM suite opens for a staff comp wherever the resolver honors one ([AGL-3034](https://linear.app/aglyn/issue/AGL-3034))
+- **renderer:** the render gate never blanks the base library or a surface with no site ([AGL-3033](https://linear.app/aglyn/issue/AGL-3033))
+- **renderer:** a switched-off plugin renders on the server as it does in the browser ([AGL-3033](https://linear.app/aglyn/issue/AGL-3033))
+- **ai:** a plan is told what its workspace may create, and a Free page is built inline ([AGL-3030](https://linear.app/aglyn/issue/AGL-3030))
+- **ai:** a plan registers the least time it needs, so no inline door starts one ([AGL-3026](https://linear.app/aglyn/issue/AGL-3026))
+- **ai:** the AI jobs beat runs on the console, where the provider key is ([AGL-3026](https://linear.app/aglyn/issue/AGL-3026), [AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
+- **aglyn:** the plugin-wiring spec strips rules comments in one pass, not block-first ([AGL-3032](https://linear.app/aglyn/issue/AGL-3032), [AGL-2004](https://linear.app/aglyn/issue/AGL-2004), [AGL-2002](https://linear.app/aglyn/issue/AGL-2002), [AGL-3027](https://linear.app/aglyn/issue/AGL-3027))
+- **tools:** a rules source too big to deploy now fails CI instead of the deploy ([AGL-3027](https://linear.app/aglyn/issue/AGL-3027))
+- **rules:** the Firestore rules fit under the 256 KiB deploy limit again ([AGL-3027](https://linear.app/aglyn/issue/AGL-3027), [AGL-3011](https://linear.app/aglyn/issue/AGL-3011), [AGL-2004](https://linear.app/aglyn/issue/AGL-2004))
+- **ai:** a search is never a form, and a plan is told the ceilings it is cut at ([AGL-3022](https://linear.app/aglyn/issue/AGL-3022))
+
+### Documentation
+
+- **releasing:** a rules source has a 256 KiB deploy limit that compiling never checks ([AGL-3027](https://linear.app/aglyn/issue/AGL-3027))
+
+<details>
+<summary>Also in this release: 1 test, 3 chore, 1 style</summary>
+
+- **console:** the comp's comments and specs lint with no warnings of their own ([AGL-3034](https://linear.app/aglyn/issue/AGL-3034))
+- **ai:** a comped workspace is never metered as Free and never reaches Stripe ([AGL-3034](https://linear.app/aglyn/issue/AGL-3034), [AGL-3011](https://linear.app/aglyn/issue/AGL-3011))
+- **tools:** the Linear ceiling is 3037, read from the workspace ([AGL-3037](https://linear.app/aglyn/issue/AGL-3037), [AGL-3034](https://linear.app/aglyn/issue/AGL-3034))
+- **tools:** the Linear ceiling is 3033, read from the workspace ([AGL-3033](https://linear.app/aglyn/issue/AGL-3033), [AGL-3032](https://linear.app/aglyn/issue/AGL-3032))
+- **tools:** the Linear ceiling is 3031, read from the workspace ([AGL-3031](https://linear.app/aglyn/issue/AGL-3031), [AGL-3026](https://linear.app/aglyn/issue/AGL-3026))
+
+</details>
+
+## v1.0.0-beta.125 — 2026-09-16
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.124...v1.0.0-beta.125)
+
+### Added
+
+- **admin:** list the screens that were published by the act of creating them ([AGL-3021](https://linear.app/aglyn/issue/AGL-3021))
+- **ai:** overage charges as it accrues, bounded by what a workspace has paid ([AGL-3011](https://linear.app/aglyn/issue/AGL-3011))
+- **ai:** an identical brief within the window keeps the plan it was already answered ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** a site larger than its prompt block is found by asking, not by listing ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937), [AGL-2907](https://linear.app/aglyn/issue/AGL-2907))
+- **ai:** a site job scaffolds a whole site through the steps that build each part ([AGL-2911](https://linear.app/aglyn/issue/AGL-2911))
+- **ai:** the routing table carries the email and campaign steps ([AGL-2912](https://linear.app/aglyn/issue/AGL-2912))
+- **ai:** a brief becomes a draft email design, or a draft campaign and its email ([AGL-2912](https://linear.app/aglyn/issue/AGL-2912))
+- **ai:** the routing table carries the page step, and the merge's three tails ([AGL-2907](https://linear.app/aglyn/issue/AGL-2907), [AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** a page job builds a screen from a brief, one section a pass, as a draft ([AGL-2907](https://linear.app/aglyn/issue/AGL-2907))
+- **ai:** a reusable component from a brief, or from the section already on the page ([AGL-2908](https://linear.app/aglyn/issue/AGL-2908))
+- **ai:** the assistant keeps its last turns whole and digests the ones behind them ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** the copy assistant's section answers through a strict tool, not a guessed parse ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** each model states the shortest prefix it caches, and a ledger holds every door ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** the routing table carries the form step the table predates ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937), [AGL-2913](https://linear.app/aglyn/issue/AGL-2913))
+- **ai:** the routing table covers the layout, template and SEO steps ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937), [AGL-2909](https://linear.app/aglyn/issue/AGL-2909), [AGL-2910](https://linear.app/aglyn/issue/AGL-2910))
+- **ai:** one routing table holds each step's thinking, effort, ceiling and eval score ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** live eval recording and grading, refused unless AI_EVAL_LIVE=1 names the run ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** an offline eval harness of golden briefs per output kind, held to floors ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** record tokens per job step and per kind, and show staff the cache hit rate ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** a form job builds a draft form whose design and declaration agree ([AGL-2913](https://linear.app/aglyn/issue/AGL-2913))
+
+### Fixed
+
+- **billing:** a sub-minimum invoice is never raised, and nothing retries a failed one ([AGL-3023](https://linear.app/aglyn/issue/AGL-3023))
+- **billing:** the usage invoice carries its line, so an overage charge is not $0 ([AGL-3023](https://linear.app/aglyn/issue/AGL-3023))
+- **ai:** rule 4 names the count its validator enforces ([AGL-3022](https://linear.app/aglyn/issue/AGL-3022))
+- **ai:** a routing row's provenance is the provenance of the scores it holds ([AGL-3022](https://linear.app/aglyn/issue/AGL-3022))
+- **ai:** the about-page brief may create the crew card its own kind creates ([AGL-3022](https://linear.app/aglyn/issue/AGL-3022))
+- **ai:** a plan's copy is cut on a word break, not through a word ([AGL-3022](https://linear.app/aglyn/issue/AGL-3022))
+- **ai:** the grader of a build plan is told what a plan can hold ([AGL-3022](https://linear.app/aglyn/issue/AGL-3022))
+- **console:** a new screen is a draft until somebody chooses to publish it ([AGL-3021](https://linear.app/aglyn/issue/AGL-3021), [AGL-2334](https://linear.app/aglyn/issue/AGL-2334))
+- **ai:** every job kind registers by a call, so no bundler can delete it ([AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
+- **tools:** an archived product has no tax position to report ([AGL-3023](https://linear.app/aglyn/issue/AGL-3023))
+- **marketing:** the campaign draft names its roles where its refusal is read ([AGL-2912](https://linear.app/aglyn/issue/AGL-2912))
+- **ai:** the billed credit rate and the provider's cost are two figures ([AGL-3015](https://linear.app/aglyn/issue/AGL-3015))
+- **ai:** a kind that writes values is told the rules it can break, not all seventeen ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937), [AGL-3009](https://linear.app/aglyn/issue/AGL-3009))
+- **billing:** every reader of the assist overage rate goes through the resolver ([AGL-3014](https://linear.app/aglyn/issue/AGL-3014))
+- **firewall:** an unnamed agent can read the .md spelling of every page ([AGL-3018](https://linear.app/aglyn/issue/AGL-3018), [AGL-2748](https://linear.app/aglyn/issue/AGL-2748), [AGL-2750](https://linear.app/aglyn/issue/AGL-2750))
+- **console:** the reserved /.well-known namespace 404s, not the console shell ([AGL-3016](https://linear.app/aglyn/issue/AGL-3016))
+- **ai:** the SEO step runs under the real doctrine ([AGL-3009](https://linear.app/aglyn/issue/AGL-3009), [AGL-2910](https://linear.app/aglyn/issue/AGL-2910))
+- **ai:** the theme step and the Assist edit rung run under the real doctrine ([AGL-3009](https://linear.app/aglyn/issue/AGL-3009), [AGL-2938](https://linear.app/aglyn/issue/AGL-2938), [AGL-2906](https://linear.app/aglyn/issue/AGL-2906), [AGL-2935](https://linear.app/aglyn/issue/AGL-2935), [AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **forms:** a one-option consent checkbox records the opt-in its option text posts ([AGL-3010](https://linear.app/aglyn/issue/AGL-3010))
+
+### Performance
+
+- **ai:** rule 4's count costs ten tokens on every cached prefix ([AGL-3022](https://linear.app/aglyn/issue/AGL-3022))
+- **admin:** the published-on-create sweep reads hosts a few at a time ([AGL-3021](https://linear.app/aglyn/issue/AGL-3021))
+- **ai:** a listing rule says only what its tool's schema does not already say ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+
+### Changed
+
+- **ai:** one creation-nouns table, beside the union it is total over ([AGL-2911](https://linear.app/aglyn/issue/AGL-2911), [AGL-2912](https://linear.app/aglyn/issue/AGL-2912))
+
+### Documentation
+
+- **ai:** a registration is a call, and a new step module is held to it ([AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
+- the AI markup entry is scoped pricing, now the Drive log carries it ([AGL-3015](https://linear.app/aglyn/issue/AGL-3015))
+- **ai:** one kind row, naming every kind that has a runner ([AGL-2907](https://linear.app/aglyn/issue/AGL-2907))
+- **ai:** what a prompt caches, which rules a kind is told, and the assistant's doors ([AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+
+<details>
+<summary>Also in this release: 7 test, 3 chore</summary>
+
+- **tools:** the Linear ceiling is 3025, read from the workspace ([AGL-3025](https://linear.app/aglyn/issue/AGL-3025), [AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+- **tools:** the Linear ceiling is 3023, read from the workspace ([AGL-3023](https://linear.app/aglyn/issue/AGL-3023), [AGL-3019](https://linear.app/aglyn/issue/AGL-3019))
+- **console:** the batch picker mirrors a list it does not read ([AGL-2911](https://linear.app/aglyn/issue/AGL-2911))
+- **ai:** the page evals read the billed figure, which is what credits ride ([AGL-3015](https://linear.app/aglyn/issue/AGL-3015), [AGL-2907](https://linear.app/aglyn/issue/AGL-2907))
+- **ai:** the prompt-cache ledger measures the email door, not just names it ([AGL-2912](https://linear.app/aglyn/issue/AGL-2912))
+- **console:** the subprocessor gate keeps only the doors that call runAiRequest ([AGL-2907](https://linear.app/aglyn/issue/AGL-2907))
+- **console:** hold the org double the besigner's zones reach ([AGL-2908](https://linear.app/aglyn/issue/AGL-2908), [AGL-2910](https://linear.app/aglyn/issue/AGL-2910), [AGL-2928](https://linear.app/aglyn/issue/AGL-2928))
+- **tenant:** declare the component step and the assistant's mode prompts off-tenant ([AGL-2908](https://linear.app/aglyn/issue/AGL-2908), [AGL-1725](https://linear.app/aglyn/issue/AGL-1725), [AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **ai:** the component door declares and measures what its prompt caches ([AGL-2908](https://linear.app/aglyn/issue/AGL-2908), [AGL-2937](https://linear.app/aglyn/issue/AGL-2937))
+- **tools:** raise the Linear issue ceiling to 3018, read from the workspace ([AGL-3014](https://linear.app/aglyn/issue/AGL-3014))
+
+</details>
+
+## v1.0.0-beta.124 — 2026-09-16
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.123...v1.0.0-beta.124)
+
+### Added
+
+- **plugins:** the last AI pieces in core move behind generic plugin seams ([AGL-2984](https://linear.app/aglyn/issue/AGL-2984), [AGL-3008](https://linear.app/aglyn/issue/AGL-3008))
+- **ai:** search listings, a site audit applied as drafts, structured data and llms.txt ([AGL-2910](https://linear.app/aglyn/issue/AGL-2910))
+- **legal:** v7 goes live, with Terms and Privacy pinned from the published pages ([AGL-2902](https://linear.app/aglyn/issue/AGL-2902))
+- **legal:** v7 manifest entry, Anthropic and Wistia rows, and the docs they move ([AGL-2902](https://linear.app/aglyn/issue/AGL-2902), [AGL-2963](https://linear.app/aglyn/issue/AGL-2963), [AGL-2971](https://linear.app/aglyn/issue/AGL-2971))
+- **ai:** layout and page template jobs build a draft from a brief, applied to nothing ([AGL-2909](https://linear.app/aglyn/issue/AGL-2909))
+- **ai:** the assistant proposes besigner edits and applies them as a draft on confirm ([AGL-2906](https://linear.app/aglyn/issue/AGL-2906))
+- **ai:** every generator builds under the doctrine: 17 validated rules and a plan step ([AGL-2935](https://linear.app/aglyn/issue/AGL-2935))
+- **ai:** allotments per member, collaborator and site, a usage strip and a model switch ([AGL-2942](https://linear.app/aglyn/issue/AGL-2942))
+- **ai:** themes by AI, a proposal over every theme editor control saved in the editor ([AGL-2938](https://linear.app/aglyn/issue/AGL-2938), [AGL-2935](https://linear.app/aglyn/issue/AGL-2935), [AGL-2987](https://linear.app/aglyn/issue/AGL-2987))
+- **outreach:** scaffold the Outreach plugin behind a flag, entitlement and permission ([AGL-2974](https://linear.app/aglyn/issue/AGL-2974))
+- **ai:** the usage meter, Free taste and per-user rollups move into the AI plugin ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **ai:** the Assist signal staff page, its route and its miner move into the AI plugin ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **plugins:** a plugin adds a page to the staff area, with its own tab at /admin/{id} ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **plugins:** account erasure runs each plugin's eraser, and AI usage erases through it ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **ai:** the staff org AI card and both staff AI doors move into the AI plugin ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939), [AGL-2928](https://linear.app/aglyn/issue/AGL-2928), [AGL-2930](https://linear.app/aglyn/issue/AGL-2930))
+- **ai:** per-member AI usage surfaces and their read move into the AI plugin ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939), [AGL-2928](https://linear.app/aglyn/issue/AGL-2928))
+- **ai:** the runtime, jobs, doors, panel and cards of Aglyn AI move into the AI plugin ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+
+### Fixed
+
+- **plugins:** the two key separators are written as an escape, not a raw NUL ([AGL-2984](https://linear.app/aglyn/issue/AGL-2984))
+- **ai:** price the SEO step's model choices from its measured listing exchange ([AGL-2910](https://linear.app/aglyn/issue/AGL-2910))
+- **ai:** a job step that stops before the provider hands its message back ([AGL-2909](https://linear.app/aglyn/issue/AGL-2909))
+- **ai:** the plan step runs on the model the switch resolves for it ([AGL-2935](https://linear.app/aglyn/issue/AGL-2935), [AGL-2942](https://linear.app/aglyn/issue/AGL-2942))
+- **ai:** the model switch prices a typical plan request ([AGL-2935](https://linear.app/aglyn/issue/AGL-2935))
+- **ai:** the theme brand reads defer a relative module, not the tenant-data-admin lib ([AGL-2938](https://linear.app/aglyn/issue/AGL-2938))
+- **console:** a staff browser stamps its first hit, not only the ones after its token ([AGL-3007](https://linear.app/aglyn/issue/AGL-3007))
+- **ai:** the AI allotments tables page on the shared footer ([AGL-2942](https://linear.app/aglyn/issue/AGL-2942), [AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **ai:** a theme job runs on the model the switch resolves for it ([AGL-2942](https://linear.app/aglyn/issue/AGL-2942), [AGL-2938](https://linear.app/aglyn/issue/AGL-2938))
+- **ai:** the model switch prices a typical theme request ([AGL-2942](https://linear.app/aglyn/issue/AGL-2942), [AGL-2938](https://linear.app/aglyn/issue/AGL-2938))
+- **ai:** the allotment alert reads the console origin in dot notation ([AGL-2942](https://linear.app/aglyn/issue/AGL-2942))
+- **ai:** a metered exchange no longer wipes the org month's refusal counts ([AGL-2986](https://linear.app/aglyn/issue/AGL-2986))
+- **ai:** the theme logo read names the storage bucket in dot notation ([AGL-2938](https://linear.app/aglyn/issue/AGL-2938))
+- **console:** a plugin's staff page names itself by its label in the browser tab ([AGL-3005](https://linear.app/aglyn/issue/AGL-3005))
+- **console:** a plugin's staff page names itself in the tab title ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **billing:** the plan feature grid excludes Outreach while no plan carries it ([AGL-2974](https://linear.app/aglyn/issue/AGL-2974))
+- **crm:** the alias confirmation reads the member's name through resolveIdpDisplayName ([AGL-2975](https://linear.app/aglyn/issue/AGL-2975))
+- **console:** an account address confirmation link is built on the console's origin ([AGL-2983](https://linear.app/aglyn/issue/AGL-2983))
+- **crm:** a BCC sent from a member's verified alias is filed on the prospect ([AGL-2975](https://linear.app/aglyn/issue/AGL-2975))
+- **orgs:** a revoked or removed member loses their site role in the projection ([AGL-2985](https://linear.app/aglyn/issue/AGL-2985))
+- **ai:** the moved staff org AI door imports isLiveSubscriptionStatus once ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939), [AGL-2930](https://linear.app/aglyn/issue/AGL-2930))
+- **ai:** the org AI usage read writes its key separator as an escape, not a raw NUL ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **tools:** the package map drops the six marketplace edges the AI plugin move removed ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **plugins:** the staff zones render on the staff pages, loaded through a staff surface ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+
+### Changed
+
+- **ai:** the generation job model moves from core foundation into the AI plugin ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+
+### Documentation
+
+- **decisions:** the AI model tiers by plan and who may set allotments are confirmed ([AGL-2942](https://linear.app/aglyn/issue/AGL-2942))
+- **outreach:** record that Outreach is on no plan until packaging is decided ([AGL-2974](https://linear.app/aglyn/issue/AGL-2974), [AGL-2976](https://linear.app/aglyn/issue/AGL-2976))
+- **firestore:** the aiJobs and months TTL policies are ACTIVE on aglyn-main ([AGL-2904](https://linear.app/aglyn/issue/AGL-2904), [AGL-2928](https://linear.app/aglyn/issue/AGL-2928))
+
+<details>
+<summary>Also in this release: 13 test, 5 chore</summary>
+
+- **tools:** raise the Linear issue ceiling to 3015, read from the workspace ([AGL-3013](https://linear.app/aglyn/issue/AGL-3013), [AGL-3014](https://linear.app/aglyn/issue/AGL-3014), [AGL-3015](https://linear.app/aglyn/issue/AGL-3015))
+- **console:** boot the plugin declarations the lockdown drill's route reads ([AGL-3013](https://linear.app/aglyn/issue/AGL-3013), [AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **tools:** the brand census follows the Anthropic row into the AI plugin ([AGL-2984](https://linear.app/aglyn/issue/AGL-2984), [AGL-2902](https://linear.app/aglyn/issue/AGL-2902))
+- **console:** a column widget on a card zone stays out of the slot ([AGL-3008](https://linear.app/aglyn/issue/AGL-3008), [AGL-2984](https://linear.app/aglyn/issue/AGL-2984))
+- **tenant:** declare the SEO step and its listing request off-tenant ([AGL-2910](https://linear.app/aglyn/issue/AGL-2910), [AGL-2902](https://linear.app/aglyn/issue/AGL-2902))
+- **console:** mock the org hook the Setup SEO section now reads ([AGL-2910](https://linear.app/aglyn/issue/AGL-2910))
+- **aglyn:** the self-host ratchet records the Wistia row's two aglyn.com mentions ([AGL-2963](https://linear.app/aglyn/issue/AGL-2963))
+- **tools:** record the two brand names the v7 subprocessor rows carry ([AGL-2902](https://linear.app/aglyn/issue/AGL-2902))
+- **tools:** raise the Linear issue ceiling to 3009, read from the workspace ([AGL-2909](https://linear.app/aglyn/issue/AGL-2909), [AGL-3007](https://linear.app/aglyn/issue/AGL-3007), [AGL-3008](https://linear.app/aglyn/issue/AGL-3008), [AGL-3009](https://linear.app/aglyn/issue/AGL-3009))
+- **tenant:** the sink inventory declares the doctrine validators off-tenant ([AGL-2935](https://linear.app/aglyn/issue/AGL-2935))
+- **console:** count the theme proposal among the bounded readouts ([AGL-2938](https://linear.app/aglyn/issue/AGL-2938))
+- **console:** the stale-seed spec stubs what the Theme section's plugin zone reads ([AGL-2938](https://linear.app/aglyn/issue/AGL-2938))
+- **console:** the theme proposal table is a bounded readout, not a list ([AGL-2938](https://linear.app/aglyn/issue/AGL-2938))
+- **crm:** member-alias fixtures use a neutral persona instead of a real person ([AGL-2975](https://linear.app/aglyn/issue/AGL-2975))
+- **tools:** raise the Linear issue ceiling to the AGL-2983 Linear assigned ([AGL-2983](https://linear.app/aglyn/issue/AGL-2983), [AGL-2975](https://linear.app/aglyn/issue/AGL-2975), [AGL-2969](https://linear.app/aglyn/issue/AGL-2969))
+- **ai:** the Assist retention claim runs beside the meter, not from a console spec ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939), [AGL-2941](https://linear.app/aglyn/issue/AGL-2941))
+- **console:** the metered sweep drops the org AI route it no longer walks ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **console:** the subprocessor gate keeps main's adapter wording and names each move ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+
+</details>
+
 ## v1.0.0-beta.123 — 2026-09-14
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.122...v1.0.0-beta.123)

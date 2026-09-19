@@ -1,0 +1,12 @@
+{
+  "label": "Aglyn AI",
+  "position": 7.5,
+  "collapsible": true,
+  "collapsed": true,
+  "link": {
+    "type": "generated-index",
+    "slug": "/ai",
+    "title": "Aglyn AI",
+    "description": "How Aglyn AI plans and builds pages, components, layouts, forms and emails for your site."
+  }
+}

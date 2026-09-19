@@ -128,6 +128,10 @@ jest.mock('next/server', () => ({
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
+  // The platform's billing events (AGL-3011). The webhook raises them once an
+  // invoice or a dispute resolves to a workspace; what a plugin does with one
+  // is proved in the plugin's own suite, so this only has to exist.
+  runPluginEventHandlers: async () => ({ handled: 0, failed: [] }),
   __esModule: true,
   // The REAL classifier, ledger and write observer (AGL-1954), never stubs.
   // The route's "did this delivery do anything" verdict is the thing under

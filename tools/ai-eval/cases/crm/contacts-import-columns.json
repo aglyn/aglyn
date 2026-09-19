@@ -1,0 +1,75 @@
+{
+  "id": "crm-contacts-import-columns",
+  "kind": "crm",
+  "brief": "Match the columns of the file I am importing",
+  "framing": null,
+  "inventory": null,
+  "crm": {
+    "task": "mapping",
+    "facts": {
+      "record": "import",
+      "collection": "contacts",
+      "fields": [
+        { "key": "email", "label": "Email (required)", "type": "email", "required": true },
+        { "key": "name", "label": "Name", "type": "text", "required": false },
+        { "key": "phone", "label": "Phone", "type": "phone", "required": false },
+        { "key": "jobTitle", "label": "Job title", "type": "text", "required": false },
+        { "key": "companyName", "label": "Company name", "type": "text", "required": false },
+        { "key": "tags", "label": "Tags (comma or | separated)", "type": "text", "required": false },
+        { "key": "ownerEmail", "label": "Owner (team member email)", "type": "email", "required": false },
+        { "key": "marketingConsent", "label": "Marketing consent (yes/no)", "type": "yes-no", "required": false },
+        { "key": "custom:renewal_date", "label": "Renewal date", "type": "date", "required": false }
+      ]
+    },
+    "columns": [
+      { "header": "Contact Full Name", "shape": "text" },
+      { "header": "E-mail (work)", "shape": "email" },
+      { "header": "Mobile #", "shape": "phone" },
+      { "header": "Employer", "shape": "text" },
+      { "header": "Account manager", "shape": "email" },
+      { "header": "Opted in?", "shape": "yes-no" },
+      { "header": "Contract renews", "shape": "date" },
+      { "header": "Internal ID", "shape": "number" }
+    ]
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: every column whose header names a field, by number, and the internal id left out.",
+      "plan": null,
+      "answer": {
+        "matches": [
+          { "column": 0, "field": 1 },
+          { "column": 1, "field": 0 },
+          { "column": 2, "field": 2 },
+          { "column": 3, "field": 4 },
+          { "column": 4, "field": 6 },
+          { "column": 5, "field": 7 },
+          { "column": 6, "field": 8 }
+        ]
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 5, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "An email column matched to the name field.",
+      "answer": { "matches": [{ "column": 1, "field": 1 }] },
+      "fails": ["rules"]
+    },
+    {
+      "why": "Two columns matched to the one email field.",
+      "answer": { "matches": [{ "column": 1, "field": 0 }, { "column": 4, "field": 0 }] },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A column the file does not have.",
+      "answer": { "matches": [{ "column": 12, "field": 0 }] },
+      "fails": ["rules"]
+    }
+  ]
+}

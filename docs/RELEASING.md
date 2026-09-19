@@ -434,6 +434,12 @@ Rules do **not** ride the merge. They deploy from a checkout pinned to the
 promoted SHA, by hand, with `tools/scripts/deploy-*-rules.mjs` — so a merged PR
 touching `cloud/firebase-*.rules` is not evidence the ruleset shipped.
 
+A Firestore or Storage rules source also has a hard 256 KiB limit, comments
+included, that compiling and the emulator never check and the deploy enforces
+with a bare `400 INVALID_ARGUMENT` (AGL-3027), which is why
+`npm run check:rules-size` measures all three rules sources on every pull
+request.
+
 ```bash
 npm run check:rules-drift -- --baseline=origin/production
 ```

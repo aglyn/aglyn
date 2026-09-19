@@ -25,14 +25,15 @@ import {
   type PluginEntitlementRegistration,
 } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
 import { AI_PLUGIN_ID } from './constants'
+import { AI_ORG_PERMISSIONS } from './model/ai-permissions'
 import { AI_CONFIG_SCHEMA } from './plugin-config'
-// Registers the activity codes at module scope (AGL-2940).
-import './activity/ai-activity-actions'
+import { registerAiActivityActions } from './activity/ai-activity-actions'
 
 /**
  * The plugin's DECLARATIONS (AGL-2939): what core must know about this
  * plugin before any of its surfaces load — its billing and access keys,
- * its activity codes, its settings schema. Loaded eagerly by both apps
+ * the AI permission keys it adds to the org catalog (AGL-2984), its
+ * activity codes, its settings schema. Loaded eagerly by both apps
  * through the generated declarations manifest, at boot on the server and
  * with the plugin loader on the client, so a core billing route folds the
  * add-on and the staff lockdown page lists the levers whether or not a
@@ -88,22 +89,30 @@ export const AI_PLUGIN_ENTITLEMENTS: PluginEntitlementRegistration = {
         title: 'AI generation is temporarily unavailable',
         body: 'Generating sections, pages and automations with AI is temporarily unavailable. Everything already built is unaffected — please try again shortly.',
       },
-      apiPaths: { prefixes: ['ai/generate', 'ai/jobs'] },
+      // `ai/seo` (AGL-2910) applies a finished audit's drafts; it spends
+      // nothing, and it is still a generative door the switch stops.
+      apiPaths: { prefixes: ['ai/generate', 'ai/jobs', 'ai/seo'] },
     },
   ],
+  orgPermissions: AI_ORG_PERMISSIONS,
 }
 
 let declared = false
 
 /**
- * Registers everything above. Idempotent: the declarations manifest runs
- * it once per process, and a surface's register fn may call it again.
+ * Registers everything above, and the activity codes. Idempotent: the
+ * declarations manifest runs it once per process, and a surface's register
+ * fn may call it again. The codes are a call rather than an import made
+ * for what the module does as it loads, because the browser's manifest
+ * reaches that module through nothing else, and a bundler honoring this
+ * package's `sideEffects` deletes such an import (AGL-3025).
  */
 export function registerAiDeclarations(): void {
   if (declared) return
   declared = true
   registerPluginEntitlements(AI_PLUGIN_ENTITLEMENTS)
   registerPluginConfigSchema(AI_CONFIG_SCHEMA)
+  registerAiActivityActions()
 }
 
 registerAiDeclarations()

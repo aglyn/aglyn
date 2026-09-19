@@ -73,14 +73,13 @@ export type OrgRole = 'owner' | 'admin' | 'editor' | 'viewer'
 export type HostAccessRole = 'admin' | 'editor' | 'author' | 'viewer'
 
 /**
- * The per-site permission keys a collaborator can carry (AGL-2927). The
- * host role decides what a collaborator may do to the SITE; these decide
- * which AI doors that collaborator may open on it, and they are the same
- * dotted keys the org catalog names so one label serves both rosters.
- * Spelled here rather than imported from the catalog because the catalog
- * imports this file for its member type.
+ * A per-site permission key a collaborator can carry (AGL-2927, AGL-2984).
+ * The host role decides what a collaborator may do to the SITE; these keys
+ * decide what else they may do on it. Each is a catalog key a plugin
+ * declares with host-role defaults, the same dotted key the org catalog
+ * names, so one label serves both rosters.
  */
-export type HostPermissionKey = 'ai.use' | 'ai.generate'
+export type HostPermissionKey = string
 
 /**
  * Every host role, as a value — for `where('memberRoles.{uid}', 'in', …)`.
@@ -137,7 +136,9 @@ export interface AglynOrganization extends AglynDocument {
   /**
    * Per-org plugin switchboard (AGL-416): ids of plugins the workspace
    * loads (see plugin-manager/enabled-plugins). Absent = all first-party
-   * plugins; always-on ids (base components) are unioned in regardless.
+   * plugins; always-on ids (base components) and the ids on for every
+   * workspace (AI) are unioned in regardless — a site switches those off for
+   * itself instead.
    */
   enabledPlugins?: string[]
   seatAddons?: OrgSeatAddons

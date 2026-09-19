@@ -21,9 +21,15 @@ path yet are prompted to set one in Properties first.
 
 1. Go to **Screens** and choose **New screen**.
 2. Set a **title** and a URL **slug** (e.g. `about`). Aglyn normalizes the slug and
-   registers it in the site's routing map.
+   stores it on the screen, ready for when you publish.
 3. Optionally pick a **parent** screen — children inherit a nested URL path
    (`/services/pricing`).
+
+:::info A new screen is a draft
+Creating a screen doesn't put anything on your live site — its **Date published**
+stays empty and nothing resolves at its address until you publish it in step 3.
+Design it first, publish when it's ready.
+:::
 
 ## 2. Design it in the Besigner
 

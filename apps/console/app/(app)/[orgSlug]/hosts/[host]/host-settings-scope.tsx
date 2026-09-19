@@ -23,6 +23,7 @@ import {
 } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { overrideWriteValue } from '@aglyn/aglyn/app-utils/marketplace-overrides'
 import * as Aglyn from '@aglyn/aglyn'
+import type { HostTheme } from '@aglyn/shared-data-types'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import {
@@ -64,6 +65,7 @@ import AppIconCard from '../../../../../components/app-icon-card.component'
 import FaviconCard from '../../../../../components/favicon-card.component'
 import EntityLogoCard from '../../../../../components/entity-logo-card.component'
 import SocialImageCard from '../../../../../components/social-image-card.component'
+import type { ThemeEditorProposedDraft } from '../../../../../components/theme-editor/theme-editor.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { useOrgSlug } from '../../../../../hooks/use-org-scope'
@@ -833,6 +835,18 @@ export interface HostSettingsScope {
   handleThemeSave: (theme: any) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handleWriteOverride: any
+  /**
+   * A theme handed to the editor from the Theme section's plugin zone
+   * (AGL-2938). Held here, above the route like the form drafts, so it is
+   * still the editor's draft after a move to another section and back. It is
+   * never written from here: the editor shows it unsaved, and its Save sends
+   * it through `handleThemeSave` like any other edit.
+   */
+  themeDraft: ThemeEditorProposedDraft | null
+  /** Hands the editor a draft under `key`; a new key replaces the last one. */
+  proposeThemeDraft: (theme: HostTheme, key: string) => void
+  /** Forgets the handed-in draft once the editor has saved or discarded it. */
+  settleThemeDraft: () => void
   forms: Array<{
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     schema: any
@@ -844,6 +858,15 @@ export interface HostSettingsScope {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   SeoFormTemplate: any
   draftsRef: MutableRefObject<Record<string, Record<string, unknown>>>
+  /**
+   * Puts `values` in a form as unsaved edits (AGL-2910), keyed by the form's
+   * field names — what a plugin zone proposes. They land in the form's
+   * draft, the same place typing lands, and the form re-applies its draft
+   * as edits: the card reads as changed and its Update is the write.
+   */
+  proposeFormDraft: (schemaId: string, values: Record<string, string>) => void
+  /** Moves each time a proposal lands, so the form picks its draft up again. */
+  formDraftRevision: number
 }
 
 const HostSettingsScopeContext = createContext<HostSettingsScope | null>(null)
@@ -867,7 +890,8 @@ export function useHostSettingsScope(): HostSettingsScope {
  * places for the draft recording to be forgotten on the next one added.
  */
 export function HostSettingsForm({ schemaId }: { schemaId: string }) {
-  const { forms, SeoFormTemplate, draftsRef } = useHostSettingsScope()
+  const { forms, SeoFormTemplate, draftsRef, formDraftRevision } =
+    useHostSettingsScope()
   const form = forms.find((entry) => entry.schema.id === schemaId)
 
   /**
@@ -895,13 +919,17 @@ export function HostSettingsForm({ schemaId }: { schemaId: string }) {
     ]
     // Read once per mount, deliberately: this restores what was typed BEFORE
     // this form existed, and re-running it would fight the reader's cursor.
+    // A proposal landing (AGL-2910) is the one other time it runs: the
+    // revision moves, the renderer below remounts on its key, and the draft
+    // — typed values and proposed ones together — is applied as edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schemaId])
+  }, [schemaId, formDraftRevision])
 
   if (!form) return null
   const { schema, initialValues, onSubmit } = form
   return (
     <FormRenderer
+      key={`${schemaId}:${formDraftRevision}`}
       /*
         The SEO section renders its media controls INSIDE its own card
         (AGL-2486), which is why it gets `SeoFormTemplate` instead of the
@@ -997,6 +1025,13 @@ export function HostSettingsScopeProvider({
     setDoc,
   } = useHost({ hostId })
   const [themeSaving, setThemeSaving] = useState(false)
+  const [themeDraft, setThemeDraft] = useState<ThemeEditorProposedDraft | null>(
+    null,
+  )
+  const proposeThemeDraft = useCallback((theme: HostTheme, key: string) => {
+    setThemeDraft({ key, theme })
+  }, [])
+  const settleThemeDraft = useCallback(() => setThemeDraft(null), [])
   const logActivity = useHostActivityLogger(hostId)
 
   /**
@@ -1346,6 +1381,28 @@ export function HostSettingsScopeProvider({
    */
   const draftsRef = useRef<Record<string, Record<string, unknown>>>({})
 
+  /**
+   * A proposal from a plugin zone (AGL-2910), put in the form's DRAFT beside
+   * whatever was typed, by field name — `seo.agent.whenToUse` — rather than
+   * written anywhere. The revision is what makes the mounted form apply it:
+   * `HostSettingsForm` keys its renderer on it and re-applies the draft as
+   * edits, so the card reads as changed and Update is the write. Field names
+   * go after the typed values, so a proposed field wins over a stale draft of
+   * the same field.
+   */
+  const [formDraftRevision, setFormDraftRevision] = useState(0)
+  const proposeFormDraft = useCallback(
+    (schemaId: string, values: Record<string, string>) => {
+      if (!Object.keys(values).length) return
+      draftsRef.current[schemaId] = {
+        ...(draftsRef.current[schemaId] ?? {}),
+        ...values,
+      }
+      setFormDraftRevision((revision) => revision + 1)
+    },
+    [],
+  )
+
   /*
    * Seeded from the HOST DOCUMENT, always — never from the draft.
    *
@@ -1443,9 +1500,14 @@ export function HostSettingsScopeProvider({
       themeSaving,
       handleThemeSave,
       handleWriteOverride,
+      themeDraft,
+      proposeThemeDraft,
+      settleThemeDraft,
       forms,
       SeoFormTemplate,
       draftsRef,
+      proposeFormDraft,
+      formDraftRevision,
     }),
     [
       hostId,
@@ -1455,8 +1517,13 @@ export function HostSettingsScopeProvider({
       themeSaving,
       handleThemeSave,
       handleWriteOverride,
+      themeDraft,
+      proposeThemeDraft,
+      settleThemeDraft,
       forms,
       SeoFormTemplate,
+      proposeFormDraft,
+      formDraftRevision,
     ],
   )
 

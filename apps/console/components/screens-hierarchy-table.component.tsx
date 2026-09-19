@@ -32,6 +32,7 @@ import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 // of `@aglyn/shared-ui-jsx`'s index (nothing in the tenant page graph shows an
 // empty state, and the barrel rule is enforced in CI).
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   DndContext,
   DragOverlay,
@@ -53,10 +54,8 @@ import {
   Paper,
   Skeleton,
   Stack,
-  Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TablePagination,
   TableRow,
@@ -761,7 +760,8 @@ export function ScreensHierarchyTableComponent(
                   unmountOnExit
                   timeout={collapseTimeout}
                 >
-                  <Table
+                  <ScrollTable
+                    nested
                     size="small"
                     sx={tableSx}
                     aria-label={`Screens nested under ${
@@ -770,7 +770,7 @@ export function ScreensHierarchyTableComponent(
                   >
                     <ScreenColumnWidths controlsWidth={controlsWidth} />
                     <TableBody>{renderNodes(node.children)}</TableBody>
-                  </Table>
+                  </ScrollTable>
                 </Collapse>
               </TableCell>
             </TableRow>
@@ -789,111 +789,109 @@ export function ScreensHierarchyTableComponent(
       onDragCancel={() => setActiveId(undefined)}
     >
       {loading && <LinearProgress color="primary" />}
-      <TableContainer>
-        <Table size="small" aria-label="Screens hierarchy" sx={tableSx}>
-          <ScreenColumnWidths controlsWidth={controlsWidth} />
-          {/* Header height matches the DataTable used by layouts, components
-              and templates (AGL-693/694/695) — a size="small" TableHead is
-              shorter than a DataGrid column header, so without this the
-              screens table reads as a different, cramped design. */}
-          <TableHead sx={{ '& .MuiTableCell-head': { height: TABLE_HEAD_HEIGHT } }}>
-            <TableRow>
-              {/* Widths live in the `colgroup` above, for every table in the
-                  tree at once — a per-cell width here would describe the root
-                  table only. */}
-              <TableCell padding="none" />
-              <TableCell>Display name</TableCell>
-              <TableCell>ID</TableCell>
-              <TableCell>Path</TableCell>
-              <TableCell>Description</TableCell>
-              <TableCell>Updated</TableCell>
-              <TableCell>Published</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {loading &&
-              !rootCount &&
-              [0, 1, 2].map((index) => (
-                <TableRow key={`skeleton-${index}`}>
-                  {Array.from({ length: COLUMN_COUNT }).map((_, cell) => (
-                    <TableCell key={cell}>
-                      <Skeleton variant="text" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            {!loading && !rootCount && (
-              <TableRow>
-                <TableCell
-                  colSpan={COLUMN_COUNT}
-                  align="center"
-                  sx={(theme) => ({
-                    // MUI's OWN `GridOverlay` FORMULA, not an approximation of
-                    // it. The three grid lists render their empty state inside
-                    // that overlay, which fills with `background.default` at
-                    // `action.disabledOpacity` — a very faint wash over the
-                    // white card. Setting `background.default` SOLID here (the
-                    // first attempt) produced a visibly darker grey than the
-                    // lists it was supposed to match. Written as the same
-                    // expression so a theme change moves both together.
-                    backgroundColor: alpha(
-                      theme.palette.background.default,
-                      theme.palette.action.disabledOpacity,
-                    ),
-                    // No bottom rule: the pagination below draws the only line
-                    // this region needs, and the two together read as a stray
-                    // border with a gap in it.
-                    borderBottom: 0,
-                  })}
-                >
-                  {/*
-                    THE SHARED EMPTY STATE, illustration and all (AGL-1152).
-                    This was a hand-rolled Stack: the only list in the console
-                    with a create flow and the only one WITHOUT the
-                    illustration, while layouts/components/templates had the
-                    illustration and no way out. Both halves were the same
-                    omission seen from opposite sides, and `EmptyStateComponent`
-                    has drawn label + description + action since AGL-2501 — the
-                    grid simply never passed the last two, and this table never
-                    called it at all.
-
-                    Not `compact`: this cell has the vertical room, and
-                    matching the other three lists is the entire point.
-                  */}
-                  <EmptyStateComponent
-                    label={'No screens yet — this site is a blank canvas.'}
-                    description={
-                      // WHAT A SCREEN IS, then what to do — the shape the
-                      // other three lists use ("Layouts are the chrome your
-                      // screens render inside…"). This read as instructions
-                      // for a reader who already knew the noun, which is not
-                      // the reader looking at an empty list. Framed the same
-                      // way the page's own help tip frames it: pages, their
-                      // addresses, and the hierarchy that builds the URLs.
-                      'Screens are your pages — each one gets its own address, ' +
-                      'and nesting them builds your URL structure. Create one, ' +
-                      'or start from a template.'
-                    }
-                    action={emptyAction ?? null}
-                  />
-                </TableCell>
+      <ScrollTable size="small" aria-label="Screens hierarchy" sx={tableSx}>
+        <ScreenColumnWidths controlsWidth={controlsWidth} />
+        {/* Header height matches the DataTable used by layouts, components
+            and templates (AGL-693/694/695) — a size="small" TableHead is
+            shorter than a DataGrid column header, so without this the
+            screens table reads as a different, cramped design. */}
+        <TableHead sx={{ '& .MuiTableCell-head': { height: TABLE_HEAD_HEIGHT } }}>
+          <TableRow>
+            {/* Widths live in the `colgroup` above, for every table in the
+                tree at once — a per-cell width here would describe the root
+                table only. */}
+            <TableCell padding="none" />
+            <TableCell>Display name</TableCell>
+            <TableCell>ID</TableCell>
+            <TableCell>Path</TableCell>
+            <TableCell>Description</TableCell>
+            <TableCell>Updated</TableCell>
+            <TableCell>Published</TableCell>
+            <TableCell align="right">Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {loading &&
+            !rootCount &&
+            [0, 1, 2].map((index) => (
+              <TableRow key={`skeleton-${index}`}>
+                {Array.from({ length: COLUMN_COUNT }).map((_, cell) => (
+                  <TableCell key={cell}>
+                    <Skeleton variant="text" />
+                  </TableCell>
+                ))}
               </TableRow>
-            )}
-            {renderNodes(pagedRoots)}
-            {/*
-              Only when there is something to reorder. The row is 32px tall and
-              merely `visibility: hidden` while idle, so on an EMPTY list it
-              added a blank strip between the empty state and the footer —
-              which read as a stray border with a gap above it. Nothing can be
-              dragged onto it when there are no rows.
-            */}
-            {rootCount > 0 ? (
-              <RootDropRow dragging={Boolean(activeId)} />
-            ) : null}
-          </TableBody>
-        </Table>
-      </TableContainer>
+            ))}
+          {!loading && !rootCount && (
+            <TableRow>
+              <TableCell
+                colSpan={COLUMN_COUNT}
+                align="center"
+                sx={(theme) => ({
+                  // MUI's OWN `GridOverlay` FORMULA, not an approximation of
+                  // it. The three grid lists render their empty state inside
+                  // that overlay, which fills with `background.default` at
+                  // `action.disabledOpacity` — a very faint wash over the
+                  // white card. Setting `background.default` SOLID here (the
+                  // first attempt) produced a visibly darker grey than the
+                  // lists it was supposed to match. Written as the same
+                  // expression so a theme change moves both together.
+                  backgroundColor: alpha(
+                    theme.palette.background.default,
+                    theme.palette.action.disabledOpacity,
+                  ),
+                  // No bottom rule: the pagination below draws the only line
+                  // this region needs, and the two together read as a stray
+                  // border with a gap in it.
+                  borderBottom: 0,
+                })}
+              >
+                {/*
+                  THE SHARED EMPTY STATE, illustration and all (AGL-1152).
+                  This was a hand-rolled Stack: the only list in the console
+                  with a create flow and the only one WITHOUT the
+                  illustration, while layouts/components/templates had the
+                  illustration and no way out. Both halves were the same
+                  omission seen from opposite sides, and `EmptyStateComponent`
+                  has drawn label + description + action since AGL-2501 — the
+                  grid simply never passed the last two, and this table never
+                  called it at all.
+
+                  Not `compact`: this cell has the vertical room, and
+                  matching the other three lists is the entire point.
+                */}
+                <EmptyStateComponent
+                  label={'No screens yet — this site is a blank canvas.'}
+                  description={
+                    // WHAT A SCREEN IS, then what to do — the shape the
+                    // other three lists use ("Layouts are the chrome your
+                    // screens render inside…"). This read as instructions
+                    // for a reader who already knew the noun, which is not
+                    // the reader looking at an empty list. Framed the same
+                    // way the page's own help tip frames it: pages, their
+                    // addresses, and the hierarchy that builds the URLs.
+                    'Screens are your pages — each one gets its own address, ' +
+                    'and nesting them builds your URL structure. Create one, ' +
+                    'or start from a template.'
+                  }
+                  action={emptyAction ?? null}
+                />
+              </TableCell>
+            </TableRow>
+          )}
+          {renderNodes(pagedRoots)}
+          {/*
+            Only when there is something to reorder. The row is 32px tall and
+            merely `visibility: hidden` while idle, so on an EMPTY list it
+            added a blank strip between the empty state and the footer —
+            which read as a stray border with a gap above it. Nothing can be
+            dragged onto it when there are no rows.
+          */}
+          {rootCount > 0 ? (
+            <RootDropRow dragging={Boolean(activeId)} />
+          ) : null}
+        </TableBody>
+      </ScrollTable>
       {/*
         The console's shared footer, with the tree's one honest difference in
         the COUNT rather than the label (AGL-2501): a page holds top-level

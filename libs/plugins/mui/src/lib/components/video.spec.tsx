@@ -30,6 +30,13 @@ const CDN = '/api/media/cdn'
 const video = (element: JSX.Element) =>
   render(element).container.querySelector('video') as HTMLVideoElement
 
+/** The besigner canvas or Preview: the surfaces an authoring hint is for. */
+const editing = (element: JSX.Element) => (
+  <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+    {element}
+  </Aglyn.ScreenLinkContext.Provider>
+)
+
 describe('Video element shape', () => {
   it('is flagged self-closing so renderers never pass it children', () => {
     expect(
@@ -43,9 +50,19 @@ describe('Video element shape', () => {
     ).not.toThrow()
   })
 
-  it('renders the placeholder when src is empty', () => {
-    const { getByText } = render(<Video />)
+  it('renders the placeholder on an editing surface when src is empty', () => {
+    const { getByText } = render(editing(<Video />))
     expect(getByText(/set a source URL/i)).toBeTruthy()
+  })
+
+  it('renders the bare element on a published page when src is empty', () => {
+    // The label is addressed to the author (AGL-3067). A visitor gets the
+    // node's own element and nothing inside it.
+    const { container } = render(<Video data-aglyn="leaf:film" />)
+    const root = container.firstElementChild as HTMLElement
+    expect(root.getAttribute('data-aglyn')).toBe('leaf:film')
+    expect(container.textContent).toBe('')
+    expect(getComputedStyle(root).borderStyle).not.toContain('dashed')
   })
 
   it('drops children a renderer leaks rather than putting them beside the track', () => {
@@ -457,7 +474,9 @@ describe('Video plays Wistia only after a press (AGL-2826)', () => {
   })
 
   it('asks for a poster rather than loading the player up front', () => {
-    const { container, getByText } = render(<Video src={LINK} title="Tour" />)
+    const { container, getByText } = render(
+      editing(<Video src={LINK} title="Tour" />),
+    )
     expect(getByText(/add a poster image/i)).toBeTruthy()
     expect(container.querySelector('iframe')).toBeNull()
     expect(container.querySelector('video')).toBeNull()
@@ -899,13 +918,18 @@ describe('Video loads a Wistia player with the page for a visitor who allows ana
     }
   })
 
-  it('still asks for a poster rather than loading the player without one', () => {
+  it('still loads no player without a poster, and asks the author, not the visitor', () => {
     recordConsent('implied')
-    const { container, getByText } = render(
+    const { container, queryByText } = render(
       onSite(<Video src={LINK} title="Tour" loadPlayer />),
     )
-    expect(getByText(/add a poster image/i)).toBeTruthy()
+    expect(queryByText(/add a poster image/i)).toBeNull()
     expect(container.querySelector('iframe')).toBeNull()
+    const authoring = render(
+      editing(<Video src={LINK} title="Tour" loadPlayer />),
+    )
+    expect(authoring.getByText(/add a poster image/i)).toBeTruthy()
+    expect(authoring.container.querySelector('iframe')).toBeNull()
   })
 
   it('changes nothing for a source that is not Wistia', () => {
@@ -994,7 +1018,7 @@ describe('Video asks the CDN for a delivery copy (AGL-2753)', () => {
   it('still shows the placeholder for an empty src', () => {
     // The negotiated builder passes an unusable value straight through, so
     // the empty check above it goes on meaning what it meant.
-    const { getByText } = render(<Video src="" />)
+    const { getByText } = render(editing(<Video src="" />))
     expect(getByText(/set a source URL/i)).toBeTruthy()
   })
 

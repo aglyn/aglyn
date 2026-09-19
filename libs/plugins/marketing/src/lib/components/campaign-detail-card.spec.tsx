@@ -412,8 +412,8 @@ describe('an id that names a campaign', () => {
     await mount('camp-1')
 
     // Newest first, so `send-2` is the first row.
-    const rows = document.querySelectorAll('tbody tr')
-    fireEvent.click(rows[0])
+    const rows = document.querySelectorAll('[role="row"][data-id]')
+    fireEvent.click(rows[0].querySelector('[data-field="state"]') as HTMLElement)
 
     expect(pushed).toContain('/acme/hosts/store/emails/messages/send-2')
     expect(pushed).not.toContain('/acme/hosts/store/marketing/campaigns/send-2')
@@ -427,7 +427,7 @@ describe('an id that names a campaign', () => {
     await mount('camp-1')
 
     const link = document
-      .querySelectorAll('tbody tr')[1]
+      .querySelectorAll('[role="row"][data-id]')[1]
       .querySelector('a') as HTMLAnchorElement
     expect(link.getAttribute('href')).toBe(
       '/acme/hosts/store/emails/messages/send-1',
@@ -460,8 +460,11 @@ describe('an id that names a campaign', () => {
      */
     await mount('camp-1')
 
-    const cells = document.querySelectorAll('tbody tr')[0].querySelectorAll('td')
-    fireEvent.click(cells[cells.length - 1])
+    fireEvent.click(
+      document
+        .querySelectorAll('[role="row"][data-id]')[0]
+        .querySelector('[data-field="actions"]') as HTMLElement,
+    )
     expect(pushed).toEqual([])
   })
 
@@ -511,18 +514,20 @@ describe('an id that names a campaign', () => {
      */
     await mount('camp-1')
 
-    const headers = Array.from(document.querySelectorAll('thead th'))
-    const cells = Array.from(
-      document.querySelectorAll('tbody tr')[0].querySelectorAll('td'),
-    )
-    for (const index of [2, 3, 4]) {
-      expect(headers[index].className).toMatch(/alignRight/)
-      expect(cells[index].className).toMatch(/alignRight/)
+    const header = (field: string) =>
+      document.querySelector(`[role="columnheader"][data-field="${field}"]`) as HTMLElement
+    const cell = (field: string) =>
+      document
+        .querySelectorAll('[role="row"][data-id]')[0]
+        .querySelector(`[data-field="${field}"]`) as HTMLElement
+    for (const field of ['sent', 'opens', 'clicks']) {
+      expect(header(field).className).toMatch(/alignRight/)
+      expect(cell(field).className).toMatch(/textRight/)
     }
     // THE CONTROL: the text columns are not right-aligned, so the assertion
     // above is about alignment rather than about every cell in the table.
-    expect(headers[0].className).not.toMatch(/alignRight/)
-    expect(cells[0].className).not.toMatch(/alignRight/)
+    expect(header('subject').className).not.toMatch(/alignRight/)
+    expect(cell('subject').className).not.toMatch(/textRight/)
   })
 
   it('reads one email past the ceiling and says when the ceiling bit', async () => {
@@ -850,8 +855,8 @@ describe('deleting a campaign', () => {
  *=========================================*/
 describe('the state of each email in the campaign', () => {
   const stateCells = () =>
-    Array.from(document.querySelectorAll('tbody tr')).map((row) =>
-      String(row.querySelectorAll('td')[1]?.textContent ?? ''),
+    Array.from(document.querySelectorAll('[role="row"][data-id]')).map((row) =>
+      String(row.querySelector('[data-field="state"]')?.textContent ?? ''),
     )
 
   it('says a mid-flight send is SENDING, with the count', async () => {
@@ -898,7 +903,7 @@ describe('the state of each email in the campaign', () => {
       },
     ]
     await mount('camp-1')
-    const subjects = Array.from(document.querySelectorAll('tbody tr')).map(
+    const subjects = Array.from(document.querySelectorAll('[role="row"][data-id]')).map(
       (row) => String(row.querySelector('a')?.textContent ?? ''),
     )
     expect(subjects).toEqual(['Half-written', 'Went out'])

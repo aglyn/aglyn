@@ -1,0 +1,48 @@
+{
+  "id": "section-storm-leak-call-to-action",
+  "kind": "section",
+  "brief": "Section to design: a call to action for homeowners who found a leak after a storm, with a button to request a quote.",
+  "framing": null,
+  "inventory": null,
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: one stack, a heading one level under the page's own, theme tokens and spacing units only.",
+      "plan": null,
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["cta"] },
+            "cta": { "componentId": "muiStack", "props": { "direction": "column", "alignItems": "center" }, "sx": { "py": 6, "gap": 2, "bgcolor": "background.paper" }, "nodes": ["cta-title", "cta-body", "cta-button"] },
+            "cta-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "Found a leak after the storm?" } },
+            "cta-body": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Tell us where the water is showing and we will have a crew out within the week." } },
+            "cta-button": { "componentId": "muiButton", "props": { "variant": "contained", "color": "primary", "children": "Request a quote", "href": "/quote" } }
+          }
+        }
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 4, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "A fixed pixel width that holds at one screen size (rule 12).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["cta"] },
+            "cta": { "componentId": "muiStack", "props": { "direction": "column" }, "sx": { "width": "960px" }, "nodes": ["cta-title", "cta-button"] },
+            "cta-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "Found a leak after the storm?" } },
+            "cta-button": { "componentId": "muiButton", "props": { "variant": "contained", "children": "Request a quote" } }
+          }
+        }
+      },
+      "fails": ["rules", "responsive"]
+    }
+  ]
+}

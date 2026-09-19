@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { isEnterpriseOrg } from '@aglyn/aglyn'
+import { isEnterpriseOrg, resolveEffectivePlan } from '@aglyn/aglyn'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useRef, useState } from 'react'
@@ -101,9 +101,13 @@ export function useOrgPlans(
           // no plan therefore MEANS free, and must be reported as such;
           // leaving it absent made "free" look identical to "not loaded"
           // (AGL-646). Only a failed read stays unknown.
+          //
+          // RESOLVED, not read (AGL-3034): a staff comp grants a plan the
+          // field does not name, and a dead subscription's stored plan is
+          // Free. The resolver answers `free` for the missing field too.
           return [
             id,
-            (snap.get('plan') as string | undefined) ?? 'free',
+            resolveEffectivePlan((snap.data() ?? {}) as never) as string,
           ] as const
         } catch {
           // Not an answer — let the next open ask again.

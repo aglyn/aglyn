@@ -34,62 +34,77 @@ export type UseAglynSiteThemeOptions = {
   scheme?: HostThemeScheme
 }
 
-export function useAglynSiteTheme(options: UseAglynSiteThemeOptions = {}) {
+/**
+ * The theme a site renders with on the canvas and in Preview: the host's
+ * overrides layered onto the brand base, with MUI's portals pointed at the
+ * container. {@link useAglynSiteTheme} memoizes it for a surface; anything
+ * that renders a site outside React's hooks — the AI plugin's device-width
+ * audit of its golden pages (AGL-3020) — builds the same theme here.
+ */
+export function createAglynSiteTheme(options: UseAglynSiteThemeOptions = {}) {
   const container = options.container as Element | undefined
   const hostTheme = options.theme
   const scheme = options.scheme ?? 'light'
-
-  return useMemo(() => {
-    // Layer the host's overrides onto the BRAND base, exactly as the tenant's
-    // HostThemeProvider does (AGL-1180/AGL-1205). `hostThemeToThemeOptions`
-    // emits only what the host explicitly set, so building from it alone left
-    // every untouched slot on MUI's stock palette — and because the marketing
-    // host deliberately keeps its theme all-`Default`, that meant EVERY slot.
-    // The canvas and preview were painting `primary` MUI blue (#1976D2) while
-    // the live site painted Aglyn cyan (#00b0ff): the editor disagreed with
-    // what it was supposedly previewing, which is the one thing it must not do.
-    const themeOptions = mergeThemeOptions(
-      (scheme === 'dark' ? consoleOptionsDark : consoleOptions) ?? {},
-      hostThemeToThemeOptions(hostTheme, scheme),
-    )
-    // createResponsiveTheme, not plain createTheme (AGL-593): the tenant
-    // builds host themes through it (HostThemeProvider), which bakes
-    // responsive font sizes into the typography variants — the canvas
-    // must carry the same media-keyed typography or device preview has
-    // nothing to re-resolve and canvas/tenant text sizes disagree.
-    return createResponsiveTheme({
-      themeOptions: {
-        ...themeOptions,
-        components: {
-          ...themeOptions.components,
-          // Spread the existing entry per component: now that the brand base
-          // is merged in, replacing these wholesale would drop any
-          // `styleOverrides` it ships for them. Only `defaultProps.container`
-          // is ours to set — it points MUI's portals at the canvas container.
-          MuiPopover: {
-            ...themeOptions.components?.MuiPopover,
-            defaultProps: {
-              ...themeOptions.components?.MuiPopover?.defaultProps,
-              container: container,
-            },
+  // Layer the host's overrides onto the BRAND base, exactly as the tenant's
+  // HostThemeProvider does (AGL-1180/AGL-1205). `hostThemeToThemeOptions`
+  // emits only what the host explicitly set, so building from it alone left
+  // every untouched slot on MUI's stock palette — and because the marketing
+  // host deliberately keeps its theme all-`Default`, that meant EVERY slot.
+  // The canvas and preview were painting `primary` MUI blue (#1976D2) while
+  // the live site painted Aglyn cyan (#00b0ff): the editor disagreed with
+  // what it was supposedly previewing, which is the one thing it must not do.
+  const themeOptions = mergeThemeOptions(
+    (scheme === 'dark' ? consoleOptionsDark : consoleOptions) ?? {},
+    hostThemeToThemeOptions(hostTheme, scheme),
+  )
+  // createResponsiveTheme, not plain createTheme (AGL-593): the tenant
+  // builds host themes through it (HostThemeProvider), which bakes
+  // responsive font sizes into the typography variants — the canvas
+  // must carry the same media-keyed typography or device preview has
+  // nothing to re-resolve and canvas/tenant text sizes disagree.
+  return createResponsiveTheme({
+    themeOptions: {
+      ...themeOptions,
+      components: {
+        ...themeOptions.components,
+        // Spread the existing entry per component: now that the brand base
+        // is merged in, replacing these wholesale would drop any
+        // `styleOverrides` it ships for them. Only `defaultProps.container`
+        // is ours to set — it points MUI's portals at the canvas container.
+        MuiPopover: {
+          ...themeOptions.components?.MuiPopover,
+          defaultProps: {
+            ...themeOptions.components?.MuiPopover?.defaultProps,
+            container: container,
           },
-          MuiPopper: {
-            ...themeOptions.components?.MuiPopper,
-            defaultProps: {
-              ...themeOptions.components?.MuiPopper?.defaultProps,
-              container: container,
-            },
+        },
+        MuiPopper: {
+          ...themeOptions.components?.MuiPopper,
+          defaultProps: {
+            ...themeOptions.components?.MuiPopper?.defaultProps,
+            container: container,
           },
-          MuiModal: {
-            ...themeOptions.components?.MuiModal,
-            defaultProps: {
-              ...themeOptions.components?.MuiModal?.defaultProps,
-              container: container,
-            },
+        },
+        MuiModal: {
+          ...themeOptions.components?.MuiModal,
+          defaultProps: {
+            ...themeOptions.components?.MuiModal?.defaultProps,
+            container: container,
           },
         },
       },
-    })
-  }, [container, hostTheme, scheme])
+    },
+  })
+}
+
+export function useAglynSiteTheme(options: UseAglynSiteThemeOptions = {}) {
+  const container = options.container
+  const hostTheme = options.theme
+  const scheme = options.scheme ?? 'light'
+
+  return useMemo(
+    () => createAglynSiteTheme({ container, theme: hostTheme, scheme }),
+    [container, hostTheme, scheme],
+  )
 }
 export default useAglynSiteTheme

@@ -133,6 +133,7 @@ function contactImportVocabulary(
 > {
   return {
     title: 'Import contacts from CSV',
+    collection: 'contacts',
     help: pluginDocsHelp('contacts', { anchor: '#import-from-csv' }),
     sitePickerHelperText:
       'The site these people are imported into — it decides which of your ' +

@@ -181,19 +181,25 @@ export async function logAiJobNeedsInput(
 }
 
 /**
- * `ai.edit.applied` — a proposal's edits landed on a screen (AGL-2906).
+ * `ai.edit.applied` — a proposal's edits landed on a besigner document
+ * (AGL-2906).
  *
- * Written by the route that applied them, never by the client, so the row
- * is evidence the edits happened rather than a claim that they did. Op
- * counts are folded into the name (`Home · 3 set, 1 insert`) — the edits
+ * The edits are applied in the author's own editor, as unsaved changes, so
+ * no server sees them land. The row is written by the door the editor
+ * reports the apply to, and only once that door has found the proposal on an
+ * exchange the same member had about the same document — so it stands on a
+ * proposal the server issued rather than on the client's word alone. Op
+ * counts are folded into the name (`Home · 3 set, 1 insert`); the edits
  * themselves are the site's content and are not logged.
  */
 export async function logAiEditApplied(
   hostId: string,
   actor: HostActivityActor,
   edit: {
-    screenId: string
-    screenName?: string | null
+    /** The kind of document the edits landed on. */
+    type: 'screen' | 'component' | 'layout'
+    id: string
+    name?: string | null
     versionId: string
     /** Edits applied, by operation — `{ set: 3, insert: 1 }`. */
     opCounts: Record<string, number>
@@ -204,11 +210,52 @@ export async function logAiEditApplied(
     .map(([op, count]) => `${Math.floor(count)} ${op}`)
     .join(', ')
   await logHostActivity(hostId, actor, AI_ACTIVITY_ACTIONS.editApplied, {
-    type: 'screen',
-    id: edit.screenId,
-    name: named(edit.screenName, counts),
+    type: edit.type,
+    id: edit.id,
+    name: named(edit.name, counts),
     versionId: edit.versionId,
   })
+}
+
+/**
+ * `ai.seo.applied` — a site audit's fixes were applied as drafts (AGL-2910).
+ *
+ * Written by the door that applied them. The name carries the counts — new
+ * unpublished versions, listings staged for a person to save — and never
+ * the text proposed, which is the site's content. Org feed, and the site's
+ * own feed when a person is named.
+ */
+export async function logAiSeoApplied(
+  orgId: string,
+  actor: AiActivityActor,
+  apply: {
+    jobId: string
+    hostId: string
+    hostName?: string | null
+    versions: number
+    staged: number
+  },
+): Promise<void> {
+  const versions = Math.max(0, Math.floor(apply.versions))
+  const staged = Math.max(0, Math.floor(apply.staged))
+  const target = {
+    type: 'aiJob' as const,
+    id: apply.jobId,
+    name: named(
+      apply.hostName ?? apply.hostId,
+      `${versions} draft ${versions === 1 ? 'version' : 'versions'}`,
+      `${staged} ${staged === 1 ? 'listing' : 'listings'} to review`,
+    ),
+  }
+  await logOrgActivity(orgId, actor, AI_ACTIVITY_ACTIONS.seoApplied, target)
+  const onHost = hostActor(actor)
+  if (onHost) {
+    await logHostActivity(apply.hostId, onHost, AI_ACTIVITY_ACTIONS.seoApplied, {
+      type: 'host',
+      id: apply.hostId,
+      name: target.name,
+    })
+  }
 }
 
 /**
@@ -277,6 +324,45 @@ export async function logAiOverageControl(
     name: change.after === null ? 'Cleared' : usd(change.after),
   })
   return true
+}
+
+/**
+ * `ai.allotment.changed` — a manager set, changed or removed an AI allotment
+ * (AGL-2942): a member's, a collaborator's on one site, a site's, or the
+ * org-wide model restriction. The subject is the row's target; what it was
+ * set to is the name, in credits, never dollars.
+ */
+export async function logAiAllotmentChanged(
+  orgId: string,
+  actor: AiActivityActor,
+  change: {
+    subject: {
+      type: 'org' | 'member' | 'host'
+      id?: string | null
+      name?: string | null
+    }
+    /** `null` when the allotment was removed. */
+    after: {
+      credits: number | null
+      mode: 'hard' | 'soft'
+      models: readonly string[] | null
+    } | null
+  },
+): Promise<void> {
+  const after = change.after
+  await logOrgActivity(orgId, actor, AI_ACTIVITY_ACTIONS.allotmentChanged, {
+    type: change.subject.type,
+    ...(change.subject.id ? { id: change.subject.id } : {}),
+    name: named(
+      change.subject.name,
+      after === null
+        ? 'removed'
+        : after.credits === null
+          ? null
+          : `${after.credits.toLocaleString('en-US')} credits a month (${after.mode})`,
+      after?.models?.length ? `${after.models.length} models allowed` : null,
+    ),
+  })
 }
 
 /**

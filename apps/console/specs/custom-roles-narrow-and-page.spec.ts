@@ -51,8 +51,38 @@
 import {
   DEFAULT_ROLE_PERMISSIONS,
   ORG_PERMISSION_KEYS,
+  registerPluginEntitlements,
   resolveOrgPermissions,
 } from '@aglyn/aglyn'
+
+/**
+ * The AI plugin's two catalog keys, declared as the plugin declares them
+ * (AGL-2984). The console registers every plugin's declarations before a
+ * route answers, and the roles route stores only catalog keys, so a role
+ * naming `ai.generate` is only a role naming a catalog key once they are.
+ */
+const AI_SITE_ROLES = { admin: true, editor: true, author: true, viewer: false }
+beforeAll(() => {
+  registerPluginEntitlements({
+    pluginId: 'ai',
+    orgPermissions: [
+      {
+        key: 'ai.use',
+        label: 'Use AI assistance',
+        description: 'Ask the assistant, rewrite copy with AI, and generate a section.',
+        roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
+        hostRoleDefaults: AI_SITE_ROLES,
+      },
+      {
+        key: 'ai.generate',
+        label: 'Generate with AI',
+        description: 'Run AI generation jobs and AI edits.',
+        roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
+        hostRoleDefaults: AI_SITE_ROLES,
+      },
+    ],
+  })
+})
 
 const mockVerifyIdToken = jest.fn()
 const mockLogOrgActivity = jest.fn(async () => undefined)
@@ -192,11 +222,9 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => {
   const permissions = jest.requireActual('@aglyn/aglyn/app-utils/org-permissions')
-  const ai = jest.requireActual('@aglyn/aglyn/app-utils/ai-permissions')
   return {
     __esModule: true,
     ...permissions,
-    aiPermissionChanges: ai.aiPermissionChanges,
     runPluginEventHandlers: (...args: unknown[]) => mockRunPluginEventHandlers(...args),
     createResourceUid: () => 'role-new',
     pluginRequestFromWeb: async (request: Request) => {

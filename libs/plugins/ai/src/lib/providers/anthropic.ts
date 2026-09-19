@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-import { aiModelIdsForProvider, estimateAiCostUsd, aiCatalogEntry } from './catalog'
+import { aiModelIdsForProvider, estimateAiBilledUsd, aiCatalogEntry } from './catalog'
 import {
   AiUpstreamError,
   aiTokenCount,
   aiToolInputOf,
+  type AiMessage,
   type AiModelDescriptor,
   type AiProvider,
   type AiProviderRequest,
@@ -113,10 +114,11 @@ export function buildAnthropicRequestBody(
     strict: true,
   }))
   // A model that rejects an explicit thinking setting gets none, whatever
-  // the door asked for: the catalog says which.
-  const thinking = aiCatalogEntry(input.model)?.capabilities.thinking === false
-    ? undefined
-    : input.thinking
+  // the door asked for, and no effort either: effort rides the same rule
+  // (see the contract), and the catalog says which models those are.
+  const settable = aiCatalogEntry(input.model)?.capabilities.thinking !== false
+  const thinking = settable ? input.thinking : undefined
+  const effort = settable ? input.effort : undefined
   return {
     model: input.model,
     max_tokens: input.maxTokens,
@@ -126,14 +128,28 @@ export function buildAnthropicRequestBody(
       : thinking === 'adaptive'
         ? { thinking: { type: 'adaptive' } }
         : {}),
-    ...(input.effort ? { output_config: { effort: input.effort } } : {}),
+    ...(effort ? { output_config: { effort } } : {}),
     ...(system.length ? { system } : {}),
     messages: input.messages.map((message) => ({
       role: message.role,
-      content: message.content,
+      content: anthropicContentOf(message),
     })),
     ...(tools?.length ? { tools, tool_choice: { type: 'auto' } } : {}),
   }
+}
+
+/**
+ * A turn's content in the Messages API's shape: a text-only turn as the
+ * string it is, and a turn with pictures as content blocks in order, each
+ * picture a base64 image block (AGL-2916).
+ */
+function anthropicContentOf(message: AiMessage): string | Array<Record<string, unknown>> {
+  if (typeof message.content === 'string') return message.content
+  return message.content.map((part) =>
+    part.type === 'image'
+      ? { type: 'image', source: { type: 'base64', media_type: part.mediaType, data: part.data } }
+      : { type: 'text', text: part.text },
+  )
 }
 
 /** The provider's request id, when it sent one — the log's join key. */
@@ -196,7 +212,7 @@ async function complete(input: AiProviderRequest): Promise<AiResult> {
       input: aiToolInputOf(block['input']),
     }))
   const usage = anthropicUsageFrom(payload?.usage)
-  const estCostUsd = estimateAiCostUsd(usage, input.model)
+  const estCostUsd = estimateAiBilledUsd(usage, input.model)
   const stopReason =
     typeof payload?.stop_reason === 'string' && payload.stop_reason
       ? payload.stop_reason
@@ -339,7 +355,7 @@ async function* streamEvents(
   yield {
     type: 'done',
     usage,
-    estCostUsd: estimateAiCostUsd(usage, model),
+    estCostUsd: estimateAiBilledUsd(usage, model),
     stopReason,
   }
 }

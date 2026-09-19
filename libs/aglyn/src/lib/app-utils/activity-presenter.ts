@@ -261,7 +261,7 @@ export function activityHref(
           ? buildRoute(Route.LAYOUT_DETAILS, { orgSlug, host, layoutId: id })
           : buildRoute(Route.HOST_LAYOUTS, { orgSlug, host })
       case 'theme':
-        return buildRoute(Route.HOST_THEME, { orgSlug, host })
+        return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
       case 'media':
         return buildRoute(Route.HOST_MEDIA, { orgSlug, host })
       case 'content':

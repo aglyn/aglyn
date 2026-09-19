@@ -18,9 +18,11 @@
 import {
   AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K,
   hasAiAddon,
-  PLAN_PRICING,
+  isUncappedPlanComp,
   resolveEffectivePlan,
   resolveOrgEntitlements,
+  resolvePlanComp,
+  resolvePlanPricing,
 } from './plan-entitlements'
 import type { AglynOrgBilling } from '../foundation/definitions/org-billing.types'
 
@@ -29,8 +31,8 @@ import type { AglynOrgBilling } from '../foundation/definitions/org-billing.type
  *
  * ## Why cost, and not messages
  *
- * Assist is measured per exchange as `estCostUsd` — real provider spend at
- * the serving model's rates, computed where the tokens were counted. A
+ * Assist is measured per exchange as `estCostUsd` — the exchange priced at
+ * the serving model's billed rates, computed where the tokens were counted. A
  * message allowance would throw that measurement away and price every action
  * the same. It cannot: a question is a few thousand tokens, while generating
  * a screen carries the node tree, the component catalog and the theme tokens
@@ -43,18 +45,27 @@ import type { AglynOrgBilling } from '../foundation/definitions/org-billing.type
  *
  * ## Why a credit rather than the dollar figure
  *
- * `estCostUsd` is our provider bill, not a price. Publishing it would put our
- * model choice, our per-model rates and our margin on a billing page, and it
- * would move under customers every time a model is swapped. A credit is a
- * fixed quantity of that spend with a stable public meaning, so the band on
- * the plan card stays the same number when the model behind it changes.
+ * `estCostUsd` is a dollar figure off our own cost model, not a price.
+ * Publishing it would put our model choice, our per-model rates and our
+ * margin on a billing page, and it would move under customers every time a
+ * model is swapped. A credit is a fixed quantity of that spend with a stable
+ * public meaning, so the band on the plan card stays the same number when
+ * the model behind it changes.
  *
  * Everything customer-facing counts credits. This module is the ONLY place
  * the two units meet.
+ *
+ * ## `estCostUsd` is the BILLED figure, not the bill we pay (AGL-3015)
+ *
+ * It is every exchange priced at the catalog's billed rates, which a model
+ * may carry above what its provider charges. Credits are drawn from it, so
+ * it is the right figure for a band, a wall, a cap and an invoice line. It
+ * is the WRONG figure for a margin or a cost meter, which read the rollup's
+ * provider figure through `assistProviderCostUsd` instead.
  */
 
 /**
- * What one credit costs us, in USD of provider spend.
+ * What one credit is BILLED at, in USD.
  *
  * A tenth of a cent, chosen for two properties rather than for roundness:
  *
@@ -71,8 +82,59 @@ import type { AglynOrgBilling } from '../foundation/definitions/org-billing.type
  * ⚠️ This is a COST-MODEL constant, not a price and not a rate we publish.
  * It never appears on a customer surface; `assistCreditsFromUsd` is how a
  * measured dollar figure becomes something a customer may be shown.
+ *
+ * ⚠️ AND IT IS NOT WHAT A CREDIT COSTS US (AGL-3015). The dollar figure this
+ * divides is priced at the model catalog's BILLED rates, and a model may be
+ * billed above what the provider charges. A credit is therefore a tenth of a
+ * cent of BILLED spend, and at most a tenth of a cent of provider spend. Read
+ * against a retail rate it yields the floor of the line margin, never the
+ * middle of it — which is the safe direction, and the direction every margin
+ * assertion in this repo depends on. What a period actually cost is measured,
+ * not derived: `assistProviderCostUsd` reads it off the rollup.
  */
 export const ASSIST_CREDIT_COST_USD = 0.001
+
+/**
+ * The field a monthly assist rollup, a signal row and a kind bucket keep
+ * PROVIDER spend under, beside the `estCostUsd` a customer's credits are
+ * drawn from (AGL-3015).
+ *
+ * Named here rather than in the meter that writes it because the readers are
+ * spread across the plugin, the billing routes and the staff surfaces, and a
+ * field name spelled out at six call sites is a field name that will be
+ * spelled differently at the seventh.
+ */
+export const ASSIST_PROVIDER_COST_FIELD = 'providerCostUsd'
+
+/**
+ * What a metered period ACTUALLY COST US, from the two dollar figures a
+ * rollup carries.
+ *
+ * `billedUsd` is `estCostUsd`: every exchange priced at its model's billed
+ * rates, and the figure credits are drawn from. `providerUsd` is
+ * `ASSIST_PROVIDER_COST_FIELD`: the same exchanges priced at what the
+ * provider charged. The second is the answer wherever it exists.
+ *
+ * ## Why a rollup may not carry one, and which way that errs
+ *
+ * The provider figure is written from the commit that split the two rates
+ * onward. A period closed before it answers with the BILLED figure, which is
+ * at or above what we paid — so a margin taken on history reads low and a
+ * cost reads high, the direction a cost figure is allowed to be wrong in.
+ * The one period that under-reads is the month in flight when the split
+ * shipped, whose provider figure covers only the exchanges after it; that
+ * month's error is bounded by the markup on a few days of a meter whose
+ * largest measured organization is a fraction of a cent.
+ */
+export function assistProviderCostUsd(
+  billedUsd: unknown,
+  providerUsd: unknown,
+): number {
+  const provider = Number(providerUsd)
+  if (Number.isFinite(provider) && provider > 0) return provider
+  const billed = Number(billedUsd)
+  return Number.isFinite(billed) && billed > 0 ? billed : 0
+}
 
 /**
  * The minimum line margin every retail assist rate must clear.
@@ -146,6 +208,14 @@ export function assistCreditsFromUsd(usd: number): number {
  * reached here as `Infinity` is a band that would read as zero somewhere
  * else. Falling through to the backstop is bounded and consistent; honouring
  * it would be an unbounded budget on one process and a refusal on the next.
+ *
+ * An UNCAPPED staff comp (AGL-3049) is where that `Infinity` comes from on
+ * purpose, and `null` is right for it here too: there is no band to measure
+ * against, be over, price or alert on. What `null` must NOT bring with it is
+ * the backstop, whose repo default would cap the one workspace staff said
+ * has no cap — so `assistBandRefuses` answers false for it, and the
+ * reservation's ceiling (`assistMonthlyCeilingUsd` in the AI plugin) drops
+ * the default and keeps only an operator's explicit figure.
  */
 export function resolveAssistCreditBudget(
   org: Partial<AglynOrgBilling> | null | undefined,
@@ -200,13 +270,24 @@ export function assistCreditOverage(
  * Free and Enterprise stay null with or without the add-on: Free sells no
  * add-on and its taste band is a wall by decision (AGL-2925), and
  * Enterprise's usage is in the contract.
+ *
+ * A STAFF COMP is null on every plan and with every add-on (AGL-3034). The
+ * rate is read through `resolvePlanPricing`, which sells nothing on a comp,
+ * and the Starter add-on exception is refused for one explicitly — on a
+ * workspace with no subscription a staff-set add-on quantity still counts, so
+ * without the check a Starter comp would be sold overage past a band that no
+ * invoice will ever carry. `null` here is what makes a comp's band a wall at
+ * the gate and prices its overage to zero at the charge: the AI overage path
+ * (AGL-3011) claims only what `assistMonthOverage` prices, so a comp never
+ * becomes a Stripe invoice.
  */
 export function resolveAssistOverageRateUsdPer1k(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): number | null {
   const plan = resolveEffectivePlan(org)
-  const listed = PLAN_PRICING[plan].extraAssistCreditsUsdPer1k
+  const listed = resolvePlanPricing(org).extraAssistCreditsUsdPer1k
   if (listed !== null) return listed
+  if (resolvePlanComp(org)) return null
   if (plan === 'starter' && hasAiAddon(org)) {
     return AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K
   }
@@ -261,12 +342,21 @@ export function priceAssistCreditOverage(
 }
 
 /**
- * The line margin a per-1,000-credit retail rate earns, as a fraction.
+ * The line margin a per-1,000-credit retail rate earns AT LEAST, as a
+ * fraction.
  *
  * One expression, so the ladder and its floor cannot be checked against two
  * different definitions of margin. A null or non-positive rate has no margin
  * to report and answers `null` rather than 1 or 0 — "this plan sells no
  * overage" is not "this plan sells overage at 100% margin".
+ *
+ * A LOWER BOUND, not the realized figure (AGL-3015). The cost side is
+ * `ASSIST_CREDIT_COST_USD`, which is what a credit BILLS at; a model billed
+ * above its provider rate costs us less than that per credit, so the real
+ * line margin is this or better and never worse. The floor stays checkable
+ * by eye — a $2.00 rate is still cost x2 — and a retail rate that clears the
+ * floor here clears it on every model mix. What a period realized is the
+ * staff margin card's business, and it reads measured provider spend.
  */
 export function assistCreditRateMarginPct(
   rateUsdPer1k: number | null,
@@ -356,10 +446,16 @@ export function resolveAssistHardCap(
  * decision this function encodes. A plan with no band at all (Free, Starter)
  * answers the same as Enterprise, harmlessly: `resolveAssistBudgetUsd` is
  * `null` for them and the reservation never measures against a band.
+ *
+ * An UNCAPPED staff comp (AGL-3049) is neither: it has no band to be a wall,
+ * and nothing is sold past a band it does not have. It answers false, ahead
+ * of the switch — a workspace staff uncapped is not stopped by a band, and
+ * the reservation reads that answer as "no wall, no backstop default".
  */
 export function assistBandRefuses(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): boolean {
+  if (isUncappedPlanComp(org)) return false
   if (resolveAssistHardCap(org)) return true
   return resolveAssistOverageRateUsdPer1k(org) === null
 }
@@ -581,7 +677,7 @@ export function assistRefusedByOverageCap(
   return (
     refusedBy === 'cap' &&
     resolveAssistOverageCapUsd(org) !== null &&
-    PLAN_PRICING[resolveEffectivePlan(org)].extraAssistCreditsUsdPer1k !== null
+    resolveAssistOverageRateUsdPer1k(org) !== null
   )
 }
 

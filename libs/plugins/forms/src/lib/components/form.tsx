@@ -1023,6 +1023,27 @@ export const formPresets: Aglyn.PresetSchema[] = [
       props: { fieldName: 'field', label: 'Field' },
     },
   },
+  /*
+   * The marketing consent field as one preset rather than a recipe. Its props
+   * are the platform's `MARKETING_CONSENT_FORM_FIELD`, which every place that adds
+   * this field reads, so each adds the same unticked one-option checkbox. It
+   * records consent once the form names it as its Marketing consent field.
+   */
+  {
+    $id: generatePresetId(FORM_FIELD_ID, 'marketing-consent'),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Marketing consent',
+    pluginId: BUNDLE_ID,
+    description: 'An unticked checkbox asking permission to send marketing emails',
+    category: Aglyn.ComponentCategory.FORMS,
+    icon: { path: mdiFormTextbox.path, sx: { color: 'info.main' } },
+    data: {
+      $id: null,
+      componentId: FORM_FIELD_ID,
+      pluginId: BUNDLE_ID,
+      props: { ...Aglyn.MARKETING_CONSENT_FORM_FIELD },
+    },
+  },
 ]
 
 /**

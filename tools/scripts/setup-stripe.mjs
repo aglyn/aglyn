@@ -550,6 +550,48 @@ env['STRIPE_PRICE_METERED_YEARLY'] = (
 ).id
 
 /**
+ * THE AI OVERAGE PRODUCT (AGL-3011) — a product with no price.
+ *
+ * AI credits past a plan's included band are charged as they accrue, on a
+ * one-off invoice whose line carries its own amount. So there is nothing for
+ * a Price to hold: the amount is whatever the workspace accrued. What the
+ * product IS for is the tax code — automatic tax computes a line's tax from
+ * the product behind it, and an amount with no product behind it is an
+ * untaxed line on a taxed invoice.
+ *
+ * Found by metadata rather than a lookup key, because lookup keys belong to
+ * prices and this has none. Products cannot be deleted once they have been
+ * used, so the search comes first and the create only runs on a miss.
+ */
+async function ensureAiOverageProduct() {
+  const query = encodeURIComponent(
+    `active:'true' AND metadata['aglynProduct']:'ai_overage'`,
+  )
+  const search = await stripe(`products/search?query=${query}`)
+  const existing = (search?.data ?? [])[0]
+  if (existing?.id) {
+    console.log(`= Aglyn AI overage product already exists (${existing.id})`)
+    return existing.id
+  }
+  if (DRY_RUN) {
+    dryRunMissing += 1
+    console.log('! Aglyn AI overage product MISSING (would be created)')
+    return '<MISSING:ai_overage_product>'
+  }
+  const product = await stripe('products', {
+    name: 'Aglyn AI overage',
+    'metadata[aglynProduct]': 'ai_overage',
+    // The same base every other Aglyn product carries (AGL-1877/1811): this
+    // is the same service sold past a band, and a differently-taxed line
+    // would make a wrong return whose only symptom is the filing.
+    tax_code: PLATFORM_TAX_CODE,
+  })
+  console.log(`+ created Aglyn AI overage product (${product.id})`)
+  return product.id
+}
+env['STRIPE_PRODUCT_AI_OVERAGE'] = await ensureAiOverageProduct()
+
+/**
  * THE TAX POSITION, checked on every run (AGL-1877).
  *
  * The products this account already had were tagged by hand in the Stripe

@@ -18,11 +18,16 @@
 import { render, screen } from '@testing-library/react'
 import {
   BesignerInspectorExtrasContext,
+  inspectorExtrasFor,
   useBesignerInspectorExtras,
+  type BesignerInspected,
 } from './inspector-extras-context'
 
 function Section() {
-  const extras = useBesignerInspectorExtras()
+  const extras = inspectorExtrasFor(useBesignerInspectorExtras(), {
+    node: { $id: 'node-1' } as unknown as BesignerInspected['node'],
+    editable: true,
+  })
   return extras ? <div data-testid="extras">{extras}</div> : <div>{'no extras'}</div>
 }
 

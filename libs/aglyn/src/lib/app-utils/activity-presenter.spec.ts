@@ -197,9 +197,11 @@ describe('activityHref', () => {
   })
 
   it('links type-level host targets to their section', () => {
+    // The Theme section lives under Setup; `/hosts/{host}/theme` is caught
+    // by the plugin page route and names no page.
     expect(
       activityHref({ target: { type: 'theme' } }, { orgSlug, host }),
-    ).toBe('/acme/hosts/shop/theme')
+    ).toBe('/acme/hosts/shop/setup/theme')
     expect(
       activityHref({ target: { type: 'media' } }, { orgSlug, host }),
     ).toBe('/acme/hosts/shop/media')

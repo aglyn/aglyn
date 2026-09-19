@@ -147,7 +147,7 @@ const mountCard = async () => {
 }
 
 const rowFor = (subject: string) =>
-  Array.from(document.querySelectorAll('tbody tr')).find((row) =>
+  Array.from(document.querySelectorAll('[role="row"][data-id]')).find((row) =>
     row.textContent?.includes(subject),
   ) as HTMLElement
 
@@ -276,8 +276,7 @@ describe('the message row’s other destinations are in the menu', () => {
     // button, and a press landing on that padding is a press inside a row
     // whose handler opens the message.
     await mountCard()
-    const cells = rowFor('Spring sale').querySelectorAll('td')
-    fireEvent.click(cells[cells.length - 1])
+    fireEvent.click(rowFor('Spring sale').querySelector('[data-field="actions"]') as HTMLElement)
     expect(mockPush).not.toHaveBeenCalled()
   })
 })
@@ -393,7 +392,7 @@ describe('discarding a draft from the row', () => {
  *=========================================*/
 describe('the newest thing is at the top', () => {
   const subjects = () =>
-    Array.from(document.querySelectorAll('tbody tr')).map((row) =>
+    Array.from(document.querySelectorAll('[role="row"][data-id]')).map((row) =>
       String(row.querySelector('a')?.textContent ?? ''),
     )
 
@@ -464,7 +463,7 @@ describe('the newest thing is at the top', () => {
  *=========================================*/
 describe('what the state chip says', () => {
   const chipFor = (subject: string) =>
-    String(rowFor(subject).querySelectorAll('td')[1]?.textContent ?? '')
+    String(rowFor(subject).querySelector('[data-field="state"]')?.textContent ?? '')
 
   it('says a mid-flight campaign is SENDING, with the count', async () => {
     emailDocs = [
@@ -519,16 +518,18 @@ describe('what the state chip says', () => {
 describe('the figures line up', () => {
   it('the numeric columns are right-aligned in the head AND the body', async () => {
     await mountCard()
-    const headers = Array.from(document.querySelectorAll('thead th'))
-    const cells = Array.from(rowFor('Spring sale').querySelectorAll('td'))
+    const header = (field: string) =>
+      document.querySelector(`[role="columnheader"][data-field="${field}"]`) as HTMLElement
+    const cell = (field: string) =>
+      rowFor('Spring sale').querySelector(`[data-field="${field}"]`) as HTMLElement
     // Addressed, Opens, Clicks.
-    for (const index of [3, 4, 5]) {
-      expect(headers[index].className).toMatch(/alignRight/)
-      expect(cells[index].className).toMatch(/alignRight/)
+    for (const field of ['recipients', 'opens', 'clicks']) {
+      expect(header(field).className).toMatch(/alignRight/)
+      expect(cell(field).className).toMatch(/textRight/)
     }
     // THE CONTROL: the text columns are not right-aligned, so the assertion
     // above is about alignment and not about every cell in the table.
-    expect(headers[0].className).not.toMatch(/alignRight/)
-    expect(cells[0].className).not.toMatch(/alignRight/)
+    expect(header('subject').className).not.toMatch(/alignRight/)
+    expect(cell('subject').className).not.toMatch(/textRight/)
   })
 })

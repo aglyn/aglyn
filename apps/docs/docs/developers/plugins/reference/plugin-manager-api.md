@@ -235,6 +235,35 @@ after, never a reference to the plugin.
 | --- | --- | --- |
 | `org.seatAddons.changed` | the add-on checkout and the billing webhook | `{ orgId, actor, before, after }` — the `org.seatAddons` maps |
 | `org.permissions.changed` | the member, role and host-member routes | `{ orgId, actor, subject: { type, id?, name? }, permission, granted }` |
+| `billing.invoice.paid` | the billing webhook, once the invoice resolves to a workspace | `{ orgId, invoiceId, amountPaidCents, currency, paidOutOfBand, metadata }` |
+| `billing.invoice.failed` | the billing webhook | `{ orgId, invoiceId, amountDueCents, metadata }` |
+| `billing.invoice.closed` | the billing webhook, on `voided` and on `marked_uncollectible` | `{ orgId, invoiceId, reason: 'voided' \| 'uncollectible', metadata }` |
+| `billing.dispute.opened` | the billing webhook, on a dispute that matched a workspace | `{ orgId, chargeId, invoiceId, amountCents }` |
+| `billing.paymentMethod.changed` | the billing webhook, after reading the customer's default | `{ orgId, defaultType }` |
+
+The five billing events carry the Stripe object's own `metadata`, which core
+does not read. A plugin that stamped its own id on an invoice it created
+recognizes its own by it; every other handler ignores the event. They are
+awaited in the route rather than deferred, because a plugin's decision about
+whether a workspace may keep spending must not lag the payment that settled it.
+
+## A meter line a plugin bills itself — `plugin-metered-lines` (`/server`)
+
+The monthly usage sweep prices several lines into one figure and posts it as a
+single Stripe meter event. A plugin that bills one of those lines its own way
+claims it, and the sweep leaves it out of the metered figure from the month the
+claim names — so one month's usage reaches exactly one invoice.
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginMeteredLine({ lineId, billsFrom, closeMonth?, pluginId? })` | Claims a line. `billsFrom()` answers the first `YYYY-MM` the plugin bills, or `null` while it is registered and not yet switched on; it is called per question, so a deployment change takes effect without a restart. One plugin per line — a second claimant throws. |
+| `pluginBillsMeteredLine(lineId, month)` | What the sweep asks. `false` for an unclaimed line, a month before the claim, an unparseable start month, and a claim that throws — so every failure bills through the sweep, which already works. |
+| `runPluginMeteredLineClose(lineId, context)` | Run by the sweep once a month has CLOSED, per workspace, with `{ orgId, month, org, stripeCustomerId }` — the remainder of a line charged as it accrues is owed whether or not the meter reported. Errors are logged, never the sweep's. |
+| `pluginMeteredLineOwner(lineId)` | The claiming plugin, for diagnostics. |
+
+Only the BILLING moves. A claimed line is still measured, still priced and
+still written to the month's audit fields, so a month's usage history reads the
+same either way and the handover is countable from the rows.
 
 | API | Semantics |
 | --- | --- |
@@ -269,6 +298,38 @@ outlives the data. `null` in a field is a figure the eraser could not
 measure, and a `null` report says the plugin's data may remain — neither
 is zero.
 
+## Usage alerts — `plugin-manager/usage-alert-contributors`
+
+The usage-alerts sweep walks every org once, reads its usage, and sends core's
+own alerts: the plan quotas, the customer's budget and the free plan's
+bandwidth cap. A plugin that meters a cost or enforces a ceiling core knows
+nothing about adds staff alerts to the same sweep by registering a contributor
+from its `serverDeclarations` entry, importing the rule itself lazily. Import
+the registry by its subpath; it is not on a barrel.
+
+```ts
+registerUsageAlertContributor({
+  pluginId: 'acme-sms',
+  id: 'carrier-spend',
+  evaluate: async (context) => {
+    const { evaluateCarrierSpend } = await import('./usage/carrier-spend-alerts')
+    await evaluateCarrierSpend(context)
+  },
+})
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerUsageAlertContributor(contributor)` | Idempotent per plugin and id: the same pair again replaces the earlier contributor in place. A contributor with no plugin id, no id or no `evaluate` throws. |
+| `listUsageAlertContributors()` | What the sweep runs for each org, after the budget alert and before the bandwidth cap: `FIRST_PARTY_PLUGINS` catalog order, then any other plugin id, then registration order within a plugin. |
+| `context.recordAlert(key, threshold)` | Records the dedupe guard and answers whether the alert may be sent. On an org's first, silent evaluation it records the guard and answers `false`. Guard keys share one map with core's checks, so name yours for what it measures. |
+| `context.alertStaff(alert)` | The sweep's own sender: the staff bell, the staff inbox with the same words, and a row in the run's report. It sends nothing on an org's first, silent evaluation. |
+| `context.org` / `spend` / `guards` / `month` | The org document, its spend this month, its guard map as read, and the month the run dedupes against. A contributor never writes a guard itself. |
+
+Contributors run one at a time and are isolated: a throw is logged against the
+contributor, a guard it recorded for an alert it never delivered is dropped so
+the next sweep tries again, and the next contributor runs.
+
 ## Activity actions — `plugin-activity-actions`
 
 A plugin whose activity rows are read by more than a person stores a CODE
@@ -287,7 +348,7 @@ registerPluginActivityActions({
 
 | API | Semantics |
 | --- | --- |
-| `registerPluginActivityActions({ pluginId, group, actions })` | Idempotent per plugin; a code another plugin declared refuses the registration. Declare at module scope from both entries. |
+| `registerPluginActivityActions({ pluginId, group, actions })` | Idempotent per plugin; a code another plugin declared refuses the registration. Declare it from both entries, in code that is sure to run: the register function your `declarations` entry calls, or the top level of a file your `package.json` lists in `sideEffects`. |
 | `pluginActivityActionLabel(action)` | What a reader sees for a code — `activityActionLabel` in the presenter reads it, so every feed, table and card shows the same words. |
 | `listPluginActivityFilters()` | One chip per group with the codes it keeps: the org feed and the actor table draw their chips from this, and send `action isAnyOf …`. |
 | `pluginStaffAuditActionGroup(action)` / `pluginStaffAuditActionGroupLabel(group)` | The staff audit facet's grouping: a registered group by code or by `staffAuditPrefixes`, else the action's leading namespace. |
@@ -322,12 +383,24 @@ registerPluginEntitlements({
     },
   ],
   permissions: [{ key: 'manageAi', label: 'Manage AI', defaults: { admin: true, editor: false, viewer: false } }],
+  orgPermissions: [
+    {
+      key: 'ai.use', // stored on custom roles and member overrides
+      label: 'Use AI assistance',
+      description: 'Ask the assistant, rewrite copy with AI, and generate a section.',
+      roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
+      // Present: a site collaborator holds the key per site.
+      hostRoleDefaults: { admin: true, editor: true, author: true, viewer: false },
+    },
+  ],
 })
 ```
 
 | API | Semantics |
 | --- | --- |
-| `registerPluginEntitlements(registration)` | Idempotent per plugin. A seat add-on or lockdown key another plugin owns refuses the registration. Permissions are forwarded to `registerPluginPermissions` with the owner filled in. |
+| `registerPluginEntitlements(registration)` | Idempotent per plugin. A seat add-on, lockdown or catalog permission key another plugin owns refuses the registration. Permissions are forwarded to `registerPluginPermissions` with the owner filled in. |
+| `listPluginOrgPermissions()` | The keys plugins add to the org permission catalog, in catalog order, with their owner. `ORG_PERMISSIONS` and `ORG_PERMISSION_KEYS` list them after the core keys and are kept in step in place, so a module that imported them first still reads them. `resolveOrgPermissions` layers a declared key like a core one — role default, custom role, per-member override — the role editor lists it, and a member, role or collaborator write raises `org.permissions.changed` once per declared key it moved (`pluginPermissionChanges`). A declaration naming a core key is refused. |
+| `hostRoleDefaults` on a catalog key | Makes the key per-site for a site collaborator: `resolveCollaboratorHostPermissions` and `resolveMemberHostPermissions` decide it from the host role, refined by the per-site toggle on the member document, and `projectHostMemberPermissions` stamps the site's `memberPermissions` projection. On the server, `memberHasPermissionOnHost`, `permissionRefusal` and `setHostPermissions` are a door's rung, its 403 and the toggle write. |
 | `listPluginSeatAddons()` / `pluginSeatAddon(key)` | What `resolveOrgEntitlements` folds: the quota named gains `perUnitByPlan[plan] × units` and the features switch on, after the org's overrides and before nothing. `pluginSeatAddonUnits(org.seatAddons, key)` / `hasPluginSeatAddon(org, key)` in `plan-entitlements` are the readings every surface shares. |
 | `listPluginFeatures()` | A declared feature's `defaultByPlan` fills the plan tables where they are silent; a key the tables already carry keeps their answer. |
 | `listPluginLockdownFeatures()` / `pluginLockdownFeature(key)` | The staff lockdown checklist lists it, `lockdownFeatureLabel` / `lockdownFeatureStaffBypass` / the visitor notice read it, and `lockdownFeaturesForPluginApiPath` gates the declared paths (exact, or a prefix on a segment boundary) at the dispatcher — a door under a declared prefix is gated by existing. |
@@ -340,7 +413,10 @@ staff checklist that followed arrival order would reorder per session.
 
 | API | Semantics |
 | --- | --- |
-| `resolveEnabledPlugins(org)` | The org switchboard: absent field → all first-party; always-on unioned in; unknown (marketplace) ids kept. |
+| `resolveEnabledPlugins(org)` | The org switchboard: absent field → all first-party; `alwaysOn` and `alwaysOnForWorkspace` ids unioned in, so no stored list can switch them off for a workspace; unknown (marketplace) ids kept. |
+| `resolveHostEnabledPlugins(org, host)` / `isHostPluginEnabled(org, host, id)` | One site's set: the org's set minus the host's `disabledPlugins` deny-list, minus the default-off ids it has not opted into. Only `alwaysOn` ids (the base component library) survive the deny-list; an `alwaysOnForWorkspace` plugin (AI) is switched off for a site like any other. An absent host field means on. Forms is `alwaysOnForWorkspace` too, and core asks this about `FORMS_PLUGIN_ID` wherever a form's server half lives: the submit route, the publish-time contract check and the published render. |
+| `isLockedOnForWorkspace(id)` / `isLockedOnForSite(id)` | Whether a switch is inert: the workspace switch for `alwaysOn` and `alwaysOnForWorkspace` plugins, the site switch for `alwaysOn` alone. A catalog entry's `siteOff` carries the copy the site page shows beside the switch — what switching it off stops, and what it keeps running — and `siteOff.confirm` makes the site switch ask first, naming the published pages its `siteOff.pages` sentences describe. |
+| `EnabledPluginsContext` / `isSwitchedOffForRenderedSite(pluginId, ids)` | The rendered site's plugin set, published by the host app. The node renderer draws a registered component whose FIRST-PARTY plugin is not in it exactly as it draws an unregistered one, so a server holding a bundle another site loaded renders the same page the site's browser does. |
 | `filterPluginsByReleaseFlags(ids, isFlagOn, {staffBypass})` | Subtracts release-flagged-off first-party plugins (AGL-422). |
 | `registerPluginConfigSchema(schema)` / `mergePluginConfig` / `resolvePluginConfig` / `pluginConfigOverrides` / `validatePluginConfigValues` | Per-plugin settings: declared once, generic form + typed reads everywhere, resolved across schema defaults → workspace → per-site override (AGL-428). Full contract: [Plugin configuration](./plugin-config.md). |
 | `registerCustomFieldType(fieldType)` / `validateCustomFieldValue` | Dataset field types riding existing storage types (AGL-434). |

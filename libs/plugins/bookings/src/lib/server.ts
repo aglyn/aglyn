@@ -38,6 +38,7 @@ import { BUNDLE_ID } from './constants/bundle-common'
 import { BOOKINGS_CONFIG_SCHEMA } from './plugin-config'
 import { bookingsBillingWebhookHandler } from './server/billing-webhook'
 import { bookingAnalyticsHandler } from './server/booking-analytics'
+import { registerBookingFigureReader } from './server/booking-figures'
 import { bookingRefundHandler } from './server/refund'
 // The booking's way back to the CRM record (AGL-2660): the reference a
 // booking link carried, and the meeting a free booking files on landing.
@@ -1062,4 +1063,7 @@ export function registerBookingsConsoleApi(): void {
   registerPluginApiRoute('bookings/booking-analytics', bookingAnalyticsHandler)
   // Paid-booking confirmation rides the platform Stripe webhook (AGL-418).
   registerBillingWebhookHandler(bookingsBillingWebhookHandler)
+  // Bookings by service as a figure table (AGL-2915), for the AI plugin's
+  // insights to read by id; the console runs insight jobs.
+  registerBookingFigureReader(() => firebaseAdmin.app().firestore())
 }

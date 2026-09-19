@@ -64,7 +64,8 @@ export function registerFormsConsole(): void {
         label: 'Forms',
         href: '/forms',
         // The tab id the console has always keyed this surface's active state
-        // on. It carries no release flag: forms is always-on.
+        // on. It carries no release flag: forms is on for every workspace, and
+        // a site that switches it off loses this tab with the rest.
         navTabId: 'nav-tab-forms',
         icon: { path: mdiEmailFastOutline.path },
         ownsSubtree: true,
@@ -83,27 +84,27 @@ export function registerFormsConsole(): void {
  * Forms feature plugin: a canvas element and a console surface, the shape a
  * capability with both halves takes.
  *
- * ## Why this bundle is always-on
+ * ## On for every workspace, switchable per site (AGL-3029)
  *
- * Its server half is not switchable. `/api/forms/submit` is a core tenant
- * route, `form-contract.ts` is a core module the publish path runs, and
- * neither consults `org.enabledPlugins` — because `libs/tenant/runtime` is
- * `scope:aglyn` and the module graph forbids core from importing a plugin at
- * all. A gate on the bundle would therefore switch off only the half that
- * DRAWS the form: a published contact page would render a hole while the
- * endpoint behind it kept answering, and the site owner would learn about it
- * from whoever stopped writing in.
+ * A form has two halves, and only one of them is this bundle. The bundle
+ * DRAWS the form; its server half is core — `/api/forms/submit` is a core
+ * tenant route and `form-contract.ts` a core module the publish path runs —
+ * because core may not import a plugin. A switch on the bundle alone would
+ * stop only the drawing: a published contact page would render a hole while
+ * the endpoint behind it kept answering.
  *
- * That is the `product` hazard inverted, and worse, because a form has no
- * second element to fall back on. So `forms` carries `alwaysOn: true` in the
- * catalog, and therefore no release flag — `resolveEnabledPlugins` unions it
- * into every org's set and `subtractDisabledPlugins` keeps it through a
- * site's deny-list.
+ * So the switch is not the bundle's. `forms` carries `alwaysOnForWorkspace`
+ * in the catalog — the catalog and the submissions already stored belong to
+ * the workspace, and no workspace switch is offered — and a site switches it
+ * off through its ordinary deny-list. Every half asks the site's plugin set
+ * about `FORMS_PLUGIN_ID`, never this package: the submit route refuses, the
+ * contract check refuses to publish a form or a page carrying one, and the
+ * published page stops drawing the element, on the server as on the client.
  *
- * Always-on is not the same as always-loaded. `requiredSitePlugins` narrows
- * the pre-render set by each node's `pluginId`, so a page with no form on it
- * does not wait for this bundle — which is the saving the move buys, since
- * every page used to carry the form element inside `mui`.
+ * On is not the same as loaded. `requiredSitePlugins` narrows the pre-render
+ * set by each node's `pluginId`, so a page with no form on it does not wait
+ * for this bundle — which is the saving the move buys, since every page used
+ * to carry the form element inside `mui`.
  */
 export function registerFormsPlugin(): void {
   registerFormsConsole()

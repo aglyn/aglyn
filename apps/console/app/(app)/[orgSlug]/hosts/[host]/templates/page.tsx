@@ -36,13 +36,14 @@ import {
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../components/layouts/main.layout'
+import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.component'
 import HostTemplatesCard, {
   type TemplateQuotaReadout,
 } from '../../../../../../components/templates/host-templates-card.component'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
-import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
+import useOrgScope, { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 
 /**
  * Templates page (AGL-667): saved starting points for pages, components and
@@ -53,6 +54,9 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
+  // The org the header's plugin actions start under (AGL-3043): the scope's,
+  // read from context, and `undefined` until the scope names one.
+  const { currentOrg } = useOrgScope()
   const firestore = useFirestore()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
@@ -149,14 +153,22 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
               noun="template"
             />
           ) : null}
-          <Button
-            size="small"
-            variant="contained"
-            disabled={creating}
-            onClick={() => setCreateOpen(true)}
-          >
-            {creating ? 'Creating…' : 'Create Template'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {/* Other ways to start a template, from plugins (AGL-3043). */}
+            <PluginWidgetSlot
+              slot="hostTemplates"
+              hostId={hostId}
+              orgId={currentOrg?.$id}
+            />
+            <Button
+              size="small"
+              variant="contained"
+              disabled={creating}
+              onClick={() => setCreateOpen(true)}
+            >
+              {creating ? 'Creating…' : 'Create Template'}
+            </Button>
+          </Stack>
         </Stack>
       }
       aside={

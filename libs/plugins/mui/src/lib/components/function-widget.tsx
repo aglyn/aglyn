@@ -22,7 +22,7 @@ import Button from '@mui/material/Button'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { forwardRef, useCallback, useState } from 'react'
+import { forwardRef, useCallback, useContext, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -60,6 +60,7 @@ const FunctionWidget = forwardRef<HTMLDivElement, FunctionWidgetProps>(
       definition,
       ...rest
     } = props
+    const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
     const [args, setArgs] = useState<Record<string, string>>({})
     const [result, setResult] = useState<string | null>(null)
 
@@ -73,6 +74,10 @@ const FunctionWidget = forwardRef<HTMLDivElement, FunctionWidgetProps>(
       )
     }, [definition, args, resultLabel])
 
+    // With no definition there is nothing to run, and the line drawn in its
+    // place is addressed to the author: a published page renders the bare
+    // element.
+    if (!definition && !suppressNavigation) return <Stack ref={ref} {...rest} />
     const parameters = definition?.parameters ?? []
     return (
       <Stack ref={ref} spacing={1.5} sx={{ maxWidth: 420 }} {...rest}>

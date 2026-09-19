@@ -62,6 +62,7 @@ import { HelpTip } from '@aglyn/shared-ui-jsx'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { Container, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
 import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -73,7 +74,6 @@ import {
   IconButton,
   LinearProgress,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -607,7 +607,7 @@ function ImportReviewPanel(props: {
       </Alert>
 
       {preview.verdicts.length ? (
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>{'Address'}</TableCell>
@@ -626,7 +626,7 @@ function ImportReviewPanel(props: {
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </ScrollTable>
       ) : null}
 
       {preview.needAttestation ? (
@@ -685,7 +685,7 @@ function ImportProgressPanel(props: {
         sx={{ borderRadius: 1 }}
       />
       {refusals.length ? (
-        <Table size="small">
+        <ScrollTable size="small">
           <TableHead>
             <TableRow>
               <TableCell>{'Not added'}</TableCell>
@@ -700,7 +700,7 @@ function ImportProgressPanel(props: {
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </ScrollTable>
       ) : null}
       {!done ? (
         <Alert severity="info">

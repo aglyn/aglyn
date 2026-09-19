@@ -403,6 +403,52 @@ describe('report-usage: a free org blowing every band posts NO meter event (AGL-
     expect(meterEvents).toHaveLength(0)
   })
 
+  it('a COMPED org blowing every band reaches no invoice and asks Stripe nothing (AGL-3034)', async () => {
+    // A staff comp grants a paid plan with no subscription behind it, so it
+    // sells nothing past any band: every overage line prices to zero, and
+    // with nothing to bill the route never reaches Stripe — not the meter
+    // event, and not the subscription lookup before it. Both shapes a comp
+    // takes: over a canceled subscription, and where none ever existed.
+    //
+    // And an UNCAPPED comp (AGL-3049), the internal workspace's shape: every
+    // band lifted to unlimited, so nothing is past a band either — and even
+    // if something were, the comp's price list sells none of it.
+    for (const org of [
+      {
+        plan: 'starter',
+        billingStatus: 'canceled',
+        entitlements: { planComp: { plan: 'business', reason: 'beta', grantedBy: 'staff-1' } },
+      },
+      { entitlements: { planComp: { plan: 'agency', reason: 'trial', grantedBy: 'staff-1' } } },
+      {
+        plan: 'enterprise',
+        enterprise: true,
+        entitlements: {
+          planComp: {
+            plan: 'enterprise',
+            uncapped: true,
+            reason: 'other',
+            note: 'Internal workspace',
+            grantedBy: 'staff-1',
+          },
+        },
+      },
+    ]) {
+      seedOrg('starter')
+      mockDocs.set('orgs/org-1', org)
+      fetchMock.mockClear()
+      const response = await runRollup(loadRoute())
+      expect(response.status).toBe(200)
+      expect(meterEvents).toHaveLength(0)
+      expect(fetchMock).not.toHaveBeenCalled()
+      const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
+      expect(rollup['billedCents']).toBe(0)
+      // Measured all the same, so the zero is the comp's pricing.
+      expect(rollup['pageViews']).toBe(1_000_000)
+      expect(rollup['costUsd']).toBeGreaterThan(100)
+    }
+  })
+
   it('a LAPSED paid org is free again — the stale plan field does not bill', async () => {
     // The plan field still says `starter`; the subscription is canceled.
     // `resolvePlan` resolves that to free, and this is the one case where a

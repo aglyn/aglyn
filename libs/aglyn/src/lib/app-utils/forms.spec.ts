@@ -26,6 +26,7 @@ import {
   formStatsTotals,
   formStatsWindow,
   discoverFormNodes,
+  isConsentCheckboxTicked,
   matchSubmissionToForm,
   normalizeFormSlug,
   normalizeSubmissionFormName,
@@ -303,6 +304,85 @@ describe('consent comes from a declared field, never from the submission', () =>
 
   it('is FALSE when the declared field was not submitted at all', () => {
     expect(readFormDeclaredConsent(form, { email: 'a@b.com' })).toBe(false)
+  })
+})
+
+describe('a declared Checkboxes consent field posts the text of the option ticked', () => {
+  /** A consent field declared as a checkbox with these options. */
+  const declared = (options: string[], fieldType: 'checkbox' | 'text' = 'checkbox') => ({
+    consentFieldName: 'marketingConsent',
+    fields: [
+      { fieldName: 'email', fieldType: 'email' as const },
+      { fieldName: 'marketingConsent', fieldType, options },
+    ],
+  })
+  /** The one-option consent checkbox the Forms docs' email list recipe places. */
+  const OPTION = 'Email me news and offers'
+
+  it('counts its one option, posted as text or as a list holding only it, as the tick', () => {
+    expect(readFormDeclaredConsent(declared([OPTION]), { marketingConsent: OPTION })).toBe(true)
+    expect(readFormDeclaredConsent(declared([OPTION]), { marketingConsent: ` ${OPTION} ` })).toBe(true)
+    expect(readFormDeclaredConsent(declared([OPTION]), { marketingConsent: [OPTION] })).toBe(true)
+  })
+
+  it('is FALSE when that box was left unticked', () => {
+    expect(readFormDeclaredConsent(declared([OPTION]), { email: 'a@b.com' })).toBe(false)
+    expect(readFormDeclaredConsent(declared([OPTION]), { marketingConsent: '' })).toBe(false)
+    expect(readFormDeclaredConsent(declared([OPTION]), { marketingConsent: [] })).toBe(false)
+  })
+
+  it('never counts one answer of a field with several options', () => {
+    const channels = declared(['Email', 'Text message'])
+    expect(readFormDeclaredConsent(channels, { marketingConsent: 'Email' })).toBe(false)
+    expect(readFormDeclaredConsent(channels, { marketingConsent: ['Email'] })).toBe(false)
+    expect(readFormDeclaredConsent(channels, { marketingConsent: 'Email, Text message' })).toBe(false)
+  })
+
+  it('counts no other text: another wording, a list with more in it, a text field holding the same words', () => {
+    expect(readFormDeclaredConsent(declared([OPTION]), { marketingConsent: 'Email me news' })).toBe(false)
+    expect(
+      readFormDeclaredConsent(declared([OPTION]), { marketingConsent: [OPTION, 'Something else'] }),
+    ).toBe(false)
+    expect(
+      readFormDeclaredConsent(declared([OPTION], 'text'), { marketingConsent: OPTION }),
+    ).toBe(false)
+    // The option text is read only through the declaration: without it, the
+    // same words are not a tick.
+    expect(readFormDeclaredConsent({ consentFieldName: 'marketingConsent' }, { marketingConsent: OPTION })).toBe(false)
+  })
+
+  it('still counts the values a box with no text of its own posts', () => {
+    for (const value of ['true', 'on', 'yes', '1', 'checked', true] as const) {
+      expect(readFormDeclaredConsent(declared([OPTION]), { marketingConsent: value })).toBe(true)
+    }
+  })
+})
+
+describe('isConsentCheckboxTicked', () => {
+  const OPTION = 'Email me news and offers'
+  const oneOption = { fieldType: 'checkbox' as const, options: [OPTION] }
+
+  it('counts an affirmative value with or without a declaration', () => {
+    for (const value of ['true', 'on', 'yes', '1', 'checked', ' ON ', true] as const) {
+      expect(isConsentCheckboxTicked(value)).toBe(true)
+      expect(isConsentCheckboxTicked(value, oneOption)).toBe(true)
+    }
+  })
+
+  it('counts an option’s text only through a declaration of a one-option checkbox', () => {
+    expect(isConsentCheckboxTicked(OPTION, oneOption)).toBe(true)
+    expect(isConsentCheckboxTicked([OPTION], oneOption)).toBe(true)
+    expect(isConsentCheckboxTicked(OPTION)).toBe(false)
+    expect(isConsentCheckboxTicked(OPTION, { fieldType: 'text', options: [OPTION] })).toBe(false)
+    expect(
+      isConsentCheckboxTicked('Email', { fieldType: 'checkbox', options: ['Email', 'Text message'] }),
+    ).toBe(false)
+  })
+
+  it('never counts an absent, empty, mismatched or crowded value', () => {
+    for (const value of [undefined, null, '', [], 'false', 'Email me news', [OPTION, 'Text message']]) {
+      expect(isConsentCheckboxTicked(value, oneOption)).toBe(false)
+    }
   })
 })
 

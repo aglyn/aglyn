@@ -760,6 +760,19 @@ describe('the dollar ceiling on overage (AGL-2898)', () => {
     // No ceiling set: a `cap` refusal is not this org's and must not send
     // the user to a control that shows nothing.
     expect(assistRefusedByOverageCap({ plan: 'pro' }, 'cap')).toBe(false)
+    // Starter's rate lives on the add-on, not on `PLAN_PRICING` (AGL-3014).
+    // Read from the table, this answered false for the one plan that reaches
+    // a ceiling only with the add-on — so the ceiling that refused was not
+    // the ceiling the sentence named.
+    expect(
+      assistRefusedByOverageCap(
+        { plan: 'starter', seatAddons: { aiAddon: 1 }, assistOverage: { capUsd: 6 } },
+        'cap',
+      ),
+    ).toBe(true)
+    expect(
+      assistRefusedByOverageCap({ plan: 'starter', assistOverage: { capUsd: 6 } }, 'cap'),
+    ).toBe(false)
   })
 
   it('the switch and the ceiling are told apart, and each names only itself', () => {

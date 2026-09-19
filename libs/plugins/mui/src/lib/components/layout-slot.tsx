@@ -19,7 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiPageLayoutBody } from '@aglyn/shared-data-mdi'
 import Box, { type BoxProps } from '@mui/material/Box'
 import { alpha } from '@mui/material/styles'
-import { Children, forwardRef } from 'react'
+import { Children, forwardRef, useContext } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -82,10 +82,15 @@ export const DEFAULT_SLOT_CAPTION = 'Screen content renders here'
  * grafted into the layout tree at composition time. With children (composed
  * or previewed) it is a plain passthrough region; empty, it renders a
  * dashed placeholder so layout designers can see the slot on the canvas.
+ *
+ * The placeholder is editor chrome, so it is drawn on editing surfaces only.
+ * A published screen with no content of its own still composes an empty
+ * slot, and that renders as the plain region.
  */
 const LayoutSlot = forwardRef<HTMLDivElement, LayoutSlotProps>(
   (props, ref) => {
     const { children, sx, caption, component, ...rest } = props
+    const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
     const hasChildren = Children.count(children) > 0
     const element = (LAYOUT_SLOT_ELEMENTS as readonly string[]).includes(
       String(component ?? ''),
@@ -93,7 +98,7 @@ const LayoutSlot = forwardRef<HTMLDivElement, LayoutSlotProps>(
       ? (component as LayoutSlotElement)
       : 'div'
 
-    if (hasChildren) {
+    if (hasChildren || !suppressNavigation) {
       return (
         <Box
           ref={ref}

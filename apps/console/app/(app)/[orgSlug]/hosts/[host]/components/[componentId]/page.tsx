@@ -35,7 +35,6 @@ import {
   Button,
   Chip,
   Stack,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -50,6 +49,7 @@ import {
   useHostVersionApi,
 } from '@aglyn/tenant-feature-instance'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
@@ -442,7 +442,7 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
               {'No versions yet — opening the besigner creates the first one.'}
             </Typography>
           ) : (
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Version'}</TableCell>
@@ -486,7 +486,7 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
           )}
         </CardDisplay>
               ),

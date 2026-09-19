@@ -56,8 +56,29 @@ describe('the customer API description — document shape (AGL-2733)', () => {
     expect(document.info.title).toBe('Acme REST API')
     expect(JSON.stringify(document)).not.toMatch(/aglyn\.com/i)
     expect(document.servers).toEqual([
-      { url: 'https://app.acme.test', description: 'Acme' },
+      // `/api`, not the bare origin (AGL-3094) — see the composition test
+      // below for why the difference is the whole document's correctness.
+      { url: 'https://app.acme.test/api', description: 'Acme' },
     ])
+  })
+
+  it('composes a URL that the route actually answers at', () => {
+    /*
+      An OpenAPI URL is `servers[].url` joined to the path, and this is the
+      only assertion that reads the document the way a generated client does.
+
+      It pinned the wrong answer for as long as it existed: `servers` named the
+      bare origin while the paths are spelled `/v1/…`, so every one of the 68
+      operations composed to `https://app.acme.test/v1/…` — and MEASURED on
+      production, `/v1/me` was a 404 while `/api/v1/me` answered 401. The
+      document was describing an API that was not there, to exactly the
+      audience that cannot notice: a human reads the guide, which hard-codes
+      the right URL, and a machine reads this.
+    */
+    const [server] = document.servers as { url: string }[]
+    const composed = new URL(`${server.url}/v1/me`)
+    expect(composed.pathname).toBe(CUSTOMER_API_OPENAPI_PATH.replace('/openapi.json', '/me'))
+    expect(composed.toString()).toBe('https://app.acme.test/api/v1/me')
   })
 
   it('carries the API version, not a platform release', () => {

@@ -193,11 +193,17 @@ async function recordHoneypotHit(hostId: unknown): Promise<void> {
  * (`docs/specs/email-overhaul.md` §1d): the join can only ever be as good as
  * what the capture surfaces record.
  *
- * ⛔ THE FACT OF SUBMISSION IS NOT AN OPT-IN. Only a field whose VALUE is an
- * affirmative checkbox state counts, and only under a name that means
- * marketing consent. A form is submitted to ask a question, book a table or
- * claim a refund, and treating any of those as a subscription is exactly the
- * inference the consent arc refused to make.
+ * ⛔ THE FACT OF SUBMISSION IS NOT AN OPT-IN. Only a field whose VALUE is a
+ * tick counts, and only under a name that means marketing consent. A form is
+ * submitted to ask a question, book a table or claim a refund, and treating
+ * any of those as a subscription is exactly the inference the consent arc
+ * refused to make.
+ *
+ * What a tick is comes from `isConsentCheckboxTicked`. A box with no text of
+ * its own posts an affirmative value on any form. A Checkboxes field posts
+ * the text of its option, which is a tick only where a BOUND form's stored
+ * `declarations` show that field is a checkbox with exactly one option: an
+ * unbound form has no declaration, and the request never supplies one.
  *
  * The name list is `MARKETING_CONSENT_FIELD_NAMES`, closed rather than a
  * substring match on "consent" (a clinic intake form's `consentToTreatment`
@@ -205,21 +211,18 @@ async function recordHoneypotHit(hostId: unknown): Promise<void> {
  * `checkFormContract` accepts as recording consent is one this route reads
  * an opt-in from.
  */
-
-/** Checkbox values a browser form actually posts for a ticked box. */
-const AFFIRMATIVE = new Set(['true', 'on', 'yes', '1', 'checked'])
-
 function readDeclaredMarketingConsent(
   payload: Record<string, any>,
   fields: Record<string, unknown>,
+  declarations: readonly Aglyn.FormFieldDecl[],
 ): boolean {
   // A first-class body field, for a caller that models the checkbox
   // explicitly rather than as one more form field.
   if (payload['marketingConsent'] === true) return true
   for (const [key, value] of Object.entries(fields)) {
     if (!Aglyn.isMarketingConsentFieldName(key)) continue
-    if (value === true) return true
-    if (AFFIRMATIVE.has(String(value ?? '').trim().toLowerCase())) return true
+    const declaration = declarations.find((entry) => entry?.fieldName === key)
+    if (Aglyn.isConsentCheckboxTicked(value, declaration)) return true
   }
   return false
 }
@@ -316,6 +319,31 @@ export async function POST(request: Request): Promise<Response> {
     // Plan/quota gates ride the owning org's doc (AGL-238).
     const owningOrg = await getOrgForHost(hostId)
     const orgBilling = owningOrg?.org
+
+    /*
+     * A site that switched Forms off accepts no form submission (AGL-3029).
+     *
+     * Asked of the site's own plugin set — the org's resolved set minus this
+     * host's deny-list, the same answer the tenant draws the page from — and
+     * about the plugin whose door the submission came through: a Marketing
+     * popup's capture belongs to Marketing, and keeps working on a site that
+     * still shows the popup. Core imports no plugin, so both are ids.
+     *
+     * Placed after the site is known to exist and before the quota read and
+     * every write: a refused submission is not counted, not billed and not
+     * stored. 404, the answer the route already gives a retired form, because
+     * the honest reply to the visitor is the same — this site takes no form
+     * here — and the sentence names no setting a stranger has no use for.
+     */
+    if (
+      !Aglyn.isHostPluginEnabled(
+        orgBilling as never,
+        hostSnapshot.data() as never,
+        Aglyn.formSubmissionDoorPlugin(payload),
+      )
+    ) {
+      return json({ error: Aglyn.FORMS_OFF_FOR_SITE_REFUSAL }, 404)
+    }
     // Shared with the console surface that reads these counters back
     // (AGL-1666) — a differently-derived key there would read 0 refusals on
     // exactly the sites being refused.
@@ -448,13 +476,25 @@ export async function POST(request: Request): Promise<Response> {
      * name list below rather than recording nothing. Adoption must not be the
      * moment a form that was capturing opt-ins stops — consent is carried
      * forward, never dropped as a side effect of a migration.
+     *
+     * Both readers are handed the form's STORED declaration: a Checkboxes
+     * field posts the text of the option that was ticked, and only the
+     * declaration says a consent field has exactly one option, whose text is
+     * then the tick. An unbound form has none, so its boxes count only by an
+     * affirmative value.
      */
+    const formFieldDecls = Array.isArray(form?.get('fields'))
+      ? (form?.get('fields') as Aglyn.FormFieldDecl[])
+      : []
     const declaredMarketingConsent = form?.get('consentFieldName')
       ? Aglyn.readFormDeclaredConsent(
-          { consentFieldName: String(form.get('consentFieldName')) },
+          {
+            consentFieldName: String(form.get('consentFieldName')),
+            fields: formFieldDecls,
+          },
           sanitizedFields,
         )
-      : readDeclaredMarketingConsent(payload, fields)
+      : readDeclaredMarketingConsent(payload, fields, formFieldDecls)
     /*
      * THE CAMPAIGNS THE FORM IS FILED UNDER.
      *
@@ -490,9 +530,6 @@ export async function POST(request: Request): Promise<Response> {
      * over the API are stored as the same thing. A blank field contributes no
      * key at all, so a submission never clears a value the merchant set.
      */
-    const formFieldDecls = Array.isArray(form?.get('fields'))
-      ? (form?.get('fields') as Aglyn.FormFieldDecl[])
-      : []
     const mappedContactCustom =
       form && owningOrg?.orgId && formFieldDecls.some((decl) => decl?.contactFieldKey)
         ? Aglyn.collectMappedContactCustom({

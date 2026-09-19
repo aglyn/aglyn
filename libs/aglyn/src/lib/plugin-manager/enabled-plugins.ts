@@ -42,8 +42,50 @@ export interface FirstPartyPlugin {
   id: string
   /** Console-facing display name. */
   label: string
-  /** Always loaded regardless of the org switchboard (base components). */
+  /**
+   * On for every workspace AND every site, with no switch anywhere: the base
+   * component library the canvas cannot render without.
+   */
   alwaysOn?: boolean
+  /**
+   * On for every WORKSPACE, and switchable for one SITE (AGL-3028, AGL-3029).
+   *
+   * The workspace half is what `alwaysOn` gives: the id is unioned into the
+   * org's resolved set whatever `org.enabledPlugins` stores, so a list saved
+   * before the plugin existed still runs it, and no workspace switch is
+   * offered. The site half is ordinary: the id is subtracted by a site's
+   * `disabledPlugins` deny-list like any other, so an absent host field means
+   * ON and nothing needs migrating.
+   *
+   * It exists for capabilities whose workspace-level half must never stop.
+   * AI carries the add-on, credits, allotments and overage billing, none of
+   * which belongs to a site; Forms carries the catalog and the submissions
+   * already stored. A workspace switch would take those down with the
+   * site-facing half, so the only switch is the site's.
+   */
+  alwaysOnForWorkspace?: boolean
+  /**
+   * What switching this plugin off for ONE site stops, and what it leaves
+   * running (AGL-3028, AGL-3029) — the copy the site's Admin › Plugins page
+   * states beside the switch, so the decision is made knowing both halves.
+   *
+   * `confirm` makes the site switch ask before it applies, naming what it is
+   * about to break on published pages.
+   */
+  siteOff?: {
+    /** What stops on the site, stated as the consequence. */
+    stops: string
+    /** What keeps running, because it carries no site. */
+    keeps: string
+    /** Ask before applying. */
+    confirm?: boolean
+    /**
+     * How the confirmation names the site's published pages the switch
+     * reaches (AGL-3029): the sentence above the list, and the one that
+     * stands in for an empty list when the scan read everything.
+     */
+    pages?: { heading: string; none: string }
+  }
   /** One-line description for the org-settings toggle list. */
   description?: string
   /**
@@ -156,6 +198,16 @@ export const PUBLISHED_SITE_IMPACT: Readonly<
  */
 export const ACCOUNTS_PLUGIN_ID = 'accounts'
 
+/**
+ * The Forms capability's id, named in core (AGL-3029).
+ *
+ * A form's server half is core — `/api/forms/submit`, the publish-time
+ * contract check, the published page's render — and core may not import a
+ * plugin, so each asks the site's plugin set about this id rather than asking
+ * the Forms plugin anything.
+ */
+export const FORMS_PLUGIN_ID = 'forms'
+
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
     id: 'mui',
@@ -164,22 +216,53 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     description: 'The base component and theme library every site builds on.',
   },
   {
-    id: 'forms',
+    id: FORMS_PLUGIN_ID,
     label: 'Forms',
-    alwaysOn: true,
-    description:
-      'Forms on the site and the catalog that owns them. Always on: the ' +
-      'submit endpoint and the publish-time contract check are core, so a ' +
-      'switch here would remove only the half that draws the form.',
+    alwaysOnForWorkspace: true,
+    description: 'Forms on the site and the catalog that owns them.',
+    siteOff: {
+      stops:
+        'Switching Forms off for this site stops forms rendering on its ' +
+        'published pages, refuses every submission sent to it, and blocks ' +
+        'publishing a form, or a page that carries one, until Forms is back on.',
+      keeps:
+        'Submissions already received, the workspace’s form catalog and the ' +
+        'CRM leads its forms created are kept, and forms keep working on the ' +
+        'workspace’s other sites.',
+      confirm: true,
+      pages: {
+        heading:
+          'These published pages carry a form. Their forms stop rendering and ' +
+          'stop accepting submissions:',
+        none: 'No published page on this site carries a form.',
+      },
+    },
+    // On for every workspace and switchable per site (AGL-3029): the catalog
+    // and the submissions already stored belong to the workspace. A site's
+    // switch reaches every half of a form through this id — the tenant stops
+    // drawing it, `/api/forms/submit` refuses it, and the publish-time
+    // contract check refuses to put one live — so no half keeps running
+    // behind a page that no longer shows it.
   },
   {
     id: 'ai',
     label: 'AI',
-    alwaysOn: true,
+    alwaysOnForWorkspace: true,
     description: 'The assistant, generative building and automation, and the AI add-on.',
-    // Always on, and no catalog flag (AGL-2939): the assistant was a console
-    // fixture before it was a plugin, so it stays on every workspace's set
-    // whether or not the switchboard was ever touched, and its doors gate
+    siteOff: {
+      stops:
+        'Switching AI off for this site hides the assistant, Describe it, the ' +
+        'AI cards and the editor’s AI controls on this site, refuses every AI ' +
+        'request made for it, and stops its queued AI jobs without spending ' +
+        'credits.',
+      keeps:
+        'It does not stop the workspace’s AI add-on, credits, allotments or ' +
+        'overage billing, and AI keeps working on the workspace’s other sites.',
+    },
+    // On for every workspace, off for a site only when that site says so, and
+    // no catalog flag (AGL-2939): the workspace half — the add-on, credits,
+    // allotments, overage billing and the staff doors — carries no site and
+    // must keep running whatever any one site decides. Its doors gate
     // themselves one by one — the assistant by `release_assist`, the
     // generative doors by `release_ai_generative` inside their gate ladder,
     // the copy assistant by the provider key. A flag on the bundle would
@@ -253,9 +336,35 @@ function canonicalPluginIds(pluginIds: readonly unknown[]): string[] {
   )
 }
 
+/** On everywhere, a site's deny-list included: the base component library. */
 const ALWAYS_ON: readonly string[] = FIRST_PARTY_PLUGINS.filter(
   (plugin) => plugin.alwaysOn,
 ).map((plugin) => plugin.id)
+
+/**
+ * Unioned into every workspace's set whatever the org stored: {@link ALWAYS_ON}
+ * plus the ids that are on for every workspace and switchable per site.
+ */
+const ALWAYS_ON_FOR_WORKSPACE: readonly string[] = FIRST_PARTY_PLUGINS.filter(
+  (plugin) => plugin.alwaysOn || plugin.alwaysOnForWorkspace,
+).map((plugin) => plugin.id)
+
+/**
+ * Whether the WORKSPACE switch for this plugin is locked on (AGL-3028): the
+ * base library, and every plugin that is on for every workspace and
+ * switchable only per site. The org switchboard renders these on and inert.
+ */
+export function isLockedOnForWorkspace(pluginId: string): boolean {
+  return ALWAYS_ON_FOR_WORKSPACE.includes(pluginId)
+}
+
+/**
+ * Whether the SITE switch for this plugin is locked on: the base library
+ * alone. Every other plugin a workspace runs can be switched off for one site.
+ */
+export function isLockedOnForSite(pluginId: string): boolean {
+  return ALWAYS_ON.includes(pluginId)
+}
 
 const FIRST_PARTY_IDS: ReadonlySet<string> = new Set(
   FIRST_PARTY_PLUGINS.map((plugin) => plugin.id),
@@ -330,9 +439,11 @@ export function classifyEnabledPlugins(pluginIds: readonly string[]): {
 
 /**
  * The org's effective enabled-plugin set. Absent field → every first-party
- * plugin (existing orgs keep working untouched); always-on ids are unioned
- * in so the base component library can't be switched off. Unknown ids are
- * kept — realm-trusted marketplace plugins (AGL-420) ride the same field.
+ * plugin (existing orgs keep working untouched); always-on ids — and the ids
+ * that are on for every workspace and switchable only per site — are unioned
+ * in, so no stored list can switch them off for a workspace, including one
+ * saved before the plugin existed. Unknown ids are kept — realm-trusted
+ * marketplace plugins (AGL-420) ride the same field.
  */
 export function resolveEnabledPlugins(
   org?: { enabledPlugins?: string[] } | null,
@@ -341,13 +452,15 @@ export function resolveEnabledPlugins(
   const base = Array.isArray(configured)
     ? canonicalPluginIds(configured)
     : [...DEFAULT_ENABLED_PLUGINS]
-  return Array.from(new Set([...ALWAYS_ON, ...base]))
+  return Array.from(new Set([...ALWAYS_ON_FOR_WORKSPACE, ...base]))
 }
 
 /**
  * Subtracts a host's per-site deny-list from an enabled set (AGL-1014).
  * Always-on ids survive — the base component library cannot be switched
- * off per site any more than per org. Order of the surviving ids is kept.
+ * off per site any more than per org. A plugin that is on for every
+ * workspace (`alwaysOnForWorkspace`) does NOT survive: its site switch is
+ * the one switch it has. Order of the surviving ids is kept.
  */
 export function subtractDisabledPlugins(
   pluginIds: readonly string[],
@@ -421,6 +534,9 @@ export function isPluginEnabled(
  * with `resolveHostEnabledPlugins`, which is what actually runs.
  *
  * - `always-on`         — the base library; it cannot be switched off anywhere.
+ *                         A plugin that is on for every workspace but
+ *                         switchable per site is NOT this: it reads
+ *                         `runs-here` or `off-for-site` like any other.
  * - `off-for-workspace` — the org has it off, so it runs on none of its sites
  *                         and this site cannot turn it on.
  * - `runs-here`         — the effective host set contains it.

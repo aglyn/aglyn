@@ -73,7 +73,7 @@ function isPrivateIp(ip: string): boolean {
  * Pinning the exact IP the fetch connects to closes the DNS-rebinding TOCTOU —
  * the name can't re-resolve to an internal target between check and connect.
  */
-async function resolvePublicIp(hostname: string): Promise<string | null> {
+export async function resolvePublicIp(hostname: string): Promise<string | null> {
   try {
     const addresses = await lookup(hostname, { all: true })
     if (!addresses.length) return null

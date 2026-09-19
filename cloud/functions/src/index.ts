@@ -275,12 +275,19 @@ interface ConsoleCronChunk {
 }
 
 /**
+ * How long one POST waits for a route to answer, unless its caller says
+ * otherwise: longer than any console cron route may run.
+ */
+const CONSOLE_CRON_REQUEST_TIMEOUT_MS = 240_000
+
+/**
  * One POST. `cursor` resumes a chunked sweep (AGL-1141), exactly the body
  * `scheduled-crons.yml` sends: `{"cursor":"…"}`, and `{}` for a first call.
  */
 async function postConsoleCron(
   route: string,
   cursor: string | null = null,
+  timeoutMs: number = CONSOLE_CRON_REQUEST_TIMEOUT_MS,
 ): Promise<ConsoleCronChunk> {
   const url = `${CONSOLE_URL}${route}`
   const headers: Record<string, string> = {
@@ -307,7 +314,7 @@ async function postConsoleCron(
       // it, turning a misconfigured origin into a request that 200s having
       // authenticated as nobody. Manual, so a 3xx is a status we can name.
       redirect: 'manual',
-      signal: AbortSignal.timeout(240_000),
+      signal: AbortSignal.timeout(timeoutMs),
     })
     const text = await response.text().catch(() => '')
     return { response, text }
@@ -386,11 +393,14 @@ const CRON_SWEEP_MAX_CHUNKS = 50
  * one invocation — so a caller that stopped after the first chunk would
  * report half the platform and leave the rest unmetered, silently.
  */
-async function sweepConsoleCron(route: string): Promise<void> {
+async function sweepConsoleCron(
+  route: string,
+  timeoutMs: number = CONSOLE_CRON_REQUEST_TIMEOUT_MS,
+): Promise<void> {
   let cursor: string | null = null
   let partial = false
   for (let chunk = 1; chunk <= CRON_SWEEP_MAX_CHUNKS; chunk += 1) {
-    const result = await postConsoleCron(route, cursor)
+    const result = await postConsoleCron(route, cursor, timeoutMs)
     if (!result.accepted) return
     partial = partial || result.partial
     if (result.done) {
@@ -465,6 +475,80 @@ export const consoleFastCrons = onSchedule(
         })
       }
     })
+  },
+)
+
+/*==============================================================
+ * THE AI JOBS BEAT (AGL-3026)
+ *=============================================================*/
+
+/**
+ * Every minute, five-field UTC cron — the same string the `ai-jobs-beat` row
+ * of `SCHEDULED_JOBS` holds, which `scheduled-crons-wiring.spec.ts` asserts.
+ */
+const CONSOLE_AI_JOBS_BEAT_SCHEDULE = '* * * * *'
+
+/**
+ * The AI plugin's beat, served by the console at its own route.
+ *
+ * A console route and not a job on `pluginJobsBeat` above, for the reason
+ * the sending-domain sweep gives: every AI step calls the provider, and the
+ * provider's key is held by the console alone. The tenant app serves every
+ * published site and holds no such key, so a step it ran could only fail.
+ *
+ * Its own job and not a route on `consoleFastCrons`, for two reasons. The
+ * resolution: a step handed back by a budget, and every page pass after the
+ * first, waits for the next beat, and a quarter hour between sections of one
+ * page is not a product. And the time: one sweep may run for most of five
+ * minutes, where the fast routes share a tick and each finishes in seconds.
+ */
+const CONSOLE_AI_JOBS_BEAT_ROUTE = '/api/admin/ai-jobs-beat'
+
+/**
+ * How long a beat's POST waits: the route's 300 s `maxDuration`, with room
+ * for the answer to arrive. A beat still running when the next minute fires
+ * overlaps it by design — each sweep claims steps under its own lease owner,
+ * so two beats never run one step.
+ */
+const CONSOLE_AI_JOBS_BEAT_TIMEOUT_MS = 320_000
+
+/**
+ * Drives the AI jobs beat on Cloud Scheduler, every minute.
+ *
+ * No retry, like every console cron here: the next tick is a minute away,
+ * and a failed beat shows as a silent job on `/api/health/crons`. The route
+ * stamps that job's mark itself, so this function writes none.
+ */
+export const consoleAiJobsBeat = onSchedule(
+  {
+    schedule: CONSOLE_AI_JOBS_BEAT_SCHEDULE,
+    timeZone: 'Etc/UTC',
+    secrets: [CONSOLE_CRON_SECRET],
+    retryCount: 0,
+    // A POST at its full wait, after a challenged first attempt and the
+    // retry's delay (AGL-2642).
+    timeoutSeconds: 360,
+  },
+  async () => {
+    if (!CONSOLE_URL) {
+      logger.error(
+        'AI jobs beat skipped — set AGLYN_CONSOLE_URL to the origin that ' +
+          'SERVES your console, e.g. https://app.example.com. Until it is set, ' +
+          'no AI generation job gets past its first step.',
+      )
+      return
+    }
+    try {
+      await sweepConsoleCron(CONSOLE_AI_JOBS_BEAT_ROUTE, CONSOLE_AI_JOBS_BEAT_TIMEOUT_MS)
+    } catch (error) {
+      // A POST that never answered — the wait ran out, or the connection
+      // failed. Named, like the fast routes' throws, rather than left to read
+      // as an anonymous function failure.
+      logger.error('console cron threw', {
+        route: CONSOLE_AI_JOBS_BEAT_ROUTE,
+        error: String(error),
+      })
+    }
   },
 )
 
@@ -561,6 +645,17 @@ const CONSOLE_DAILY_CRONS = {
     schedule: '0 6 * * *',
     route: '/api/admin/reap-unverified-orgs?dryRun=0',
   },
+  /*
+   * The weekly insights (AGL-2915), served by the AI plugin. Twice a day: the
+   * Monday 06:00 run makes the week's digests, which the AI jobs beat writes
+   * over the next minutes, and the 14:00 run delivers them — as does any later
+   * run, for a digest that finished late. Every other run reads one queue
+   * document and stops.
+   */
+  'ai-insights-digest': {
+    schedule: '0 6,14 * * *',
+    route: '/api/admin/ai-insights-digest',
+  },
 } as const
 
 /**
@@ -608,6 +703,7 @@ export const consoleReportUsageCurrent = consoleDailyCron('report-usage-current'
 export const consoleUsageAlerts = consoleDailyCron('usage-alerts')
 export const consoleReapSendingDomains = consoleDailyCron('reap-sending-domains')
 export const consoleReapUnverifiedOrgs = consoleDailyCron('reap-unverified-orgs')
+export const consoleAiInsightsDigest = consoleDailyCron('ai-insights-digest')
 
 /*==============================================================
  * THE SIGNUPS LOCK, AT ACCOUNT CREATION (AGL-1531)

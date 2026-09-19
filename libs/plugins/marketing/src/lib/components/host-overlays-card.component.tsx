@@ -29,6 +29,7 @@ import {
   MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -43,7 +44,6 @@ import {
   MenuItem,
   Stack,
   Switch,
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -461,7 +461,7 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
                 'below keep working as your default surfaces.'}
             </Typography>
           ) : (
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead>
                 <TableRow>
                   <TableCell>{'Name'}</TableCell>
@@ -560,7 +560,7 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
           )}
         </Stack>
       )}

@@ -285,6 +285,33 @@ describe('a promotion the contract refuses', () => {
   })
 })
 
+describe('a promotion on a site that switched Forms off (AGL-3029)', () => {
+  const GOOD = () =>
+    canvas([
+      { id: 'f1', fieldName: 'name' },
+      { id: 'f2', fieldName: 'email', fieldType: 'email' },
+    ])
+
+  it('refuses a design that would publish anywhere else, with the contract’s own sentence', () => {
+    written(promote(GOOD()))
+    const refused = refusal(
+      resolveFormPromotion({ formId: FORM_ID, form: {}, storedNodes: GOOD(), formsOnForSite: false }),
+    )
+    expect(refused.status).toBe(422)
+    expect(refused.body.violations?.map((one) => one.code)).toEqual(['forms-off-for-site'])
+    expect(refused.body.error).toMatch(/Forms is switched off for this site/)
+  })
+
+  it('publishes on a site that runs Forms', () => {
+    written(resolveFormPromotion({ formId: FORM_ID, form: {}, storedNodes: GOOD(), formsOnForSite: true }))
+  })
+
+  it('the route asks the site’s own plugin set before it resolves', () => {
+    const text = readRepo(ROUTE)
+    expect(text).toContain('formsOnForSite: isHostPluginEnabled(org, hostSnapshot.data(), FORMS_PLUGIN_ID)')
+  })
+})
+
 describe('a promotion the CANVAS refuses', () => {
   it('refuses a version that holds no design', () => {
     const result = refusal(promote(undefined))

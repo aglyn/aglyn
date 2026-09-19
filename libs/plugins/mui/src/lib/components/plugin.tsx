@@ -21,7 +21,7 @@ import { MdiIcons } from '@aglyn/shared-data-mdi'
 import { registerPluginInstallPresetMapper } from '@aglyn/aglyn'
 import { mdiPuzzle } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
-import { forwardRef } from 'react'
+import { forwardRef, useContext } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { PluginFrame } from './plugin-frame'
@@ -82,9 +82,9 @@ export function parsePluginPropsJson(
  *
  * The claim is only made when it has been earned. The editor publishes the
  * installs it reads (`setKnownPluginInstalls`); a listing id missing from that
- * list really is not installed. Where nothing published a list — the tenant, a
- * preview — the placeholder states what is true of the placement instead and
- * asserts nothing about installation.
+ * list really is not installed. Where nothing published a list — a preview —
+ * the placeholder states what is true of the placement instead and asserts
+ * nothing about installation. A published page draws no placeholder at all.
  */
 export function placeholderText(listingId: string | undefined): string {
   if (!listingId) return 'Plugin — pick an installed plugin'
@@ -139,9 +139,13 @@ const MarketplacePlugin = forwardRef<HTMLElement, MarketplacePluginProps>(
         : undefined
     // Host id for host-mediated fetch (AGL-191); empty in the editor.
     const { hostId } = Aglyn.useSite()
+    const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
 
-    // No resolved install (editor canvas / uninstalled): inert placeholder.
+    // No resolved install (editor canvas / uninstalled): inert placeholder,
+    // which speaks to the author, so a published page renders the bare
+    // element instead.
     if (!listingId || !version || !sha256) {
+      if (!suppressNavigation) return <Box ref={ref as any} {...rest} />
       return (
         <Box
           ref={ref as any}
