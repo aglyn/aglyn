@@ -285,6 +285,15 @@ describe('the question carries the canvas it is about', () => {
     })
   })
 
+  it('sends no canvas while the open editor is on a version other than the one the route names', async () => {
+    openEditor({ versionId: 'v-1' })
+    armChat('Answer only.', null)
+    render(<AssistPanelComponent {...dockProps()} />)
+    await ask()
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0][1]['canvas']).toBeUndefined()
+  })
+
   it('sends no canvas for a reader who may not generate, or with no editor open', async () => {
     aiPermissions.generate = false
     openEditor()

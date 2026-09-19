@@ -593,14 +593,16 @@ export function AssistPanelComponent(props: AssistDockProps) {
     try {
       // The canvas outline rides along from the besigner document the open
       // editor holds — ids, component ids and short values, never the stored
-      // document.
+      // document — and only while that editor is on the version the route
+      // names, so the outline and the selection are the ones on screen.
       const editDocument = editRungHint ? assistEditDocumentOf(pathname ?? '') : null
       const session = editDocument ? openEditorSession() : undefined
       const canvasOutline =
         editDocument &&
         session &&
         session.documentKind === editDocument.kind &&
-        session.documentId === editDocument.documentId
+        session.documentId === editDocument.documentId &&
+        session.versionId === editDocument.versionId
           ? describeAssistEditCanvas(canvas, session.selectedNodeId?.() ?? null)
           : null
       const response = await authorizedFetch(user, '/api/assist/chat', {
