@@ -21,6 +21,10 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
+import {
+  runPluginPersonErasers,
+  type PluginPersonErasureReport,
+} from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { companyContactsCountFields } from './contact-company-link'
 import { eraseEmailDeliveriesForAddresses } from './email-delivery-log'
 import { suppressEmailForHostErasure } from './email-suppression'
@@ -77,6 +81,11 @@ export interface ErasePersonCounts {
   bookings: number
   /** Delivery-log messages deleted under the address. */
   emailDeliveries: number
+  /**
+   * Each plugin's share (AGL-2981), by plugin id: its eraser's own counts,
+   * or `null` for an eraser that failed — its data may remain.
+   */
+  plugins: Record<string, PluginPersonErasureReport | null>
 }
 
 export type ErasePersonResult =
@@ -98,12 +107,15 @@ export type ErasePersonResult =
  *      list, before any delete: a form filled in while the sweep runs must
  *      already find the door closed, or the sweep deletes a row that the
  *      capture re-creates a moment later.
- *   2. The contact and its satellites — company counts, deals unlinked,
+ *   2. The plugins' share: every eraser registered on
+ *      `plugin-person-erasure`, handed the address, its key and the ids of
+ *      the contacts about to go, while those documents still exist.
+ *   3. The contact and its satellites — company counts, deals unlinked,
  *      tasks and activities deleted — by the contact's id, then the
  *      document itself.
- *   3. Leads, list memberships, orders and bookings by the address, on
+ *   4. Leads, list memberships, orders and bookings by the address, on
  *      every site of the workspace.
- *   4. The delivery log, last: it is filed under the address alone, and the
+ *   5. The delivery log, last: it is filed under the address alone, and the
  *      tombstone it leaves is what keeps a later import from refilling it.
  *
  * ## What is anonymized rather than deleted
@@ -152,6 +164,7 @@ export async function erasePerson(
     orders: 0,
     bookings: 0,
     emailDeliveries: 0,
+    plugins: {},
   }
 
   const hosts = await db
@@ -171,6 +184,21 @@ export async function erasePerson(
   }
 
   const contacts = await orgRef.collection('contacts').where('email', '==', email).get()
+
+  // What the plugins keep about the person (AGL-2981): records filed under
+  // the organization by the contact or by the address, which none of the
+  // sweeps here can see. Every site's door is already closed above, and
+  // the contacts are still there for an eraser that reads one. Isolated
+  // per plugin: one that fails is recorded as `null` and the erasure goes
+  // on. This erasure has no plan of its own, so it is never a dry run.
+  counts.plugins = await runPluginPersonErasers({
+    orgId: options.orgId,
+    email,
+    key,
+    contactIds: contacts.docs.map((contact: any) => String(contact.id)),
+    dryRun: false,
+  })
+
   for (const contact of contacts.docs) {
     const contactId = String(contact.id)
     const companyIds: unknown = contact.get('companyIds')

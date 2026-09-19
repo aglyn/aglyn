@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import {
+  registerPluginPersonEraser,
+  resetPluginPersonErasersForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { createHash } from 'node:crypto'
 import { erasePerson } from './erase-person'
 
@@ -190,6 +194,7 @@ beforeEach(() => {
   autoId = 0
   onDelete = null
   mockEraseDeliveries.mockClear()
+  resetPluginPersonErasersForTests()
 })
 
 describe('erasePerson', () => {
@@ -305,6 +310,51 @@ describe('erasePerson', () => {
       after: { contacts: 1, leads: 1, orders: 1 },
     })
     expect(JSON.stringify(audit[0])).not.toContain(EMAIL)
+  })
+
+  it("runs each plugin's eraser with the address, its key and the contacts, after the door closes and before the contacts go (AGL-2981)", async () => {
+    seedWorkspace()
+    let seen: Record<string, unknown> | null = null
+    registerPluginPersonEraser(
+      async (request) => {
+        seen = {
+          ...request,
+          suppressed: docs.get(`hosts/h1/suppressions/${KEY}`)?.reason === 'erasure',
+          contactStillThere: docs.has(`orgs/${ORG}/contacts/c1`),
+        }
+        return { enrollments: 2 }
+      },
+      { pluginId: 'mail' },
+    )
+    const result = await erasePerson({ orgId: ORG, email: ' Jane@Example.com ', firestore: store })
+    expect(seen).toEqual({
+      orgId: ORG,
+      email: EMAIL,
+      key: KEY,
+      contactIds: ['c1'],
+      dryRun: false,
+      suppressed: true,
+      contactStillThere: true,
+    })
+    expect(result).toMatchObject({ plugins: { mail: { enrollments: 2 } } })
+    // The audit row carries the plugins' counts, and still no address.
+    expect(audit[0]).toMatchObject({ after: { plugins: { mail: { enrollments: 2 } } } })
+    expect(JSON.stringify(audit[0])).not.toContain(EMAIL)
+  })
+
+  it("records a plugin eraser that failed as null and still erases the person (AGL-2981)", async () => {
+    seedWorkspace()
+    registerPluginPersonEraser(
+      async () => {
+        throw new Error('plugin store down')
+      },
+      { pluginId: 'mail' },
+    )
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const result = await erasePerson({ orgId: ORG, email: EMAIL, firestore: store })
+    spy.mockRestore()
+    expect(result).toMatchObject({ ok: true, contacts: 1, plugins: { mail: null } })
+    expect(docs.has(`orgs/${ORG}/contacts/c1`)).toBe(false)
   })
 
   it('finishes, with counts, when one sweep fails', async () => {
