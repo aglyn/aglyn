@@ -1,0 +1,241 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { createDecipheriv, randomBytes } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import {
+  createSecretBoxKey,
+  deriveSecretBoxKeyId,
+  needsReseal,
+  openSecret,
+  parseSecretBoxKeyring,
+  sealSecret,
+  sealedSecretKeyId,
+  SecretBoxError,
+  SECRET_BOX_VERSION,
+  type SecretBoxErrorCode,
+} from './secret-box'
+
+/**
+ * The secret box (AGL-2978): what it seals opens, and nothing else does.
+ *
+ * Every refusal is asserted by its CODE, not merely by a throw, because a
+ * sealed-value reader that threw for the wrong reason — a `malformed` where
+ * the ciphertext authenticated, say — would pass a bare `toThrow()` while
+ * hiding exactly the bug the refusal exists to report.
+ */
+
+const KEY_A = createSecretBoxKey(Buffer.alloc(32, 1))
+const KEY_B = createSecretBoxKey(Buffer.alloc(32, 2))
+
+const SECRET = '1//0refresh-token-shaped-value-for-a-test'
+
+function codeOf(run: () => unknown): SecretBoxErrorCode | 'no-throw' | 'other' {
+  try {
+    run()
+    return 'no-throw'
+  } catch (error) {
+    return error instanceof SecretBoxError ? error.code : 'other'
+  }
+}
+
+/** Replaces one part of a sealed value. */
+function withPart(sealed: string, index: number, value: string): string {
+  const parts = sealed.split('.')
+  parts[index] = value
+  return parts.join('.')
+}
+
+/** Flips the low bit of the first byte of a base64url part. */
+function flipFirstByte(part: string): string {
+  const bytes = Buffer.from(part, 'base64url')
+  bytes[0] ^= 1
+  return bytes.toString('base64url')
+}
+
+describe('secret box — round trip', () => {
+  it('opens what it sealed, reporting the key that opened it', () => {
+    const sealed = sealSecret(SECRET, KEY_A)
+    expect(openSecret(sealed, KEY_A)).toEqual({ plaintext: SECRET, keyId: KEY_A.id })
+  })
+
+  it('carries non-ASCII text and the empty string unchanged', () => {
+    for (const plaintext of ['', 'naïve café — 東京 🚀', 'line one\r\nline two']) {
+      expect(openSecret(sealSecret(plaintext, KEY_A), KEY_A).plaintext).toBe(plaintext)
+    }
+  })
+
+  it('seals to the documented shape, with a fresh IV every time', () => {
+    const first = sealSecret(SECRET, KEY_A)
+    const second = sealSecret(SECRET, KEY_A)
+    const parts = first.split('.')
+    expect(parts).toHaveLength(5)
+    expect(parts[0]).toBe(SECRET_BOX_VERSION)
+    expect(parts[1]).toBe(KEY_A.id)
+    expect(Buffer.from(parts[2], 'base64url')).toHaveLength(12)
+    expect(Buffer.from(parts[4], 'base64url')).toHaveLength(16)
+    expect(first).not.toBe(second)
+    expect(first).not.toContain(SECRET)
+  })
+
+  it('is the documented construction: AES-256-GCM with version and key id authenticated', () => {
+    // Decrypted here WITHOUT the module, from the format as the header
+    // describes it, so the documented scheme and the implemented one cannot
+    // drift apart unnoticed.
+    const [, keyId, iv, ciphertext, tag] = sealSecret(SECRET, KEY_A, {
+      context: 'docs/example',
+    }).split('.')
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      Buffer.from(KEY_A.material),
+      Buffer.from(iv, 'base64url'),
+    )
+    decipher.setAAD(Buffer.from(`sb1\u0000${keyId}\u0000docs/example`, 'utf8'))
+    decipher.setAuthTag(Buffer.from(tag, 'base64url'))
+    const plaintext = Buffer.concat([
+      decipher.update(Buffer.from(ciphertext, 'base64url')),
+      decipher.final(),
+    ]).toString('utf8')
+    expect(plaintext).toBe(SECRET)
+  })
+})
+
+describe('secret box — tamper refusal', () => {
+  const sealed = sealSecret(SECRET, KEY_A)
+
+  it('refuses a flipped bit in the ciphertext, the tag or the IV', () => {
+    expect(codeOf(() => openSecret(withPart(sealed, 3, flipFirstByte(sealed.split('.')[3])), KEY_A))).toBe('refused')
+    expect(codeOf(() => openSecret(withPart(sealed, 4, flipFirstByte(sealed.split('.')[4])), KEY_A))).toBe('refused')
+    expect(codeOf(() => openSecret(withPart(sealed, 2, flipFirstByte(sealed.split('.')[2])), KEY_A))).toBe('refused')
+  })
+
+  it('refuses a key id rewritten to another key the reader holds', () => {
+    // The id is authenticated, so pointing the value at KEY_B does not make
+    // KEY_B try it and succeed: it fails to authenticate.
+    expect(codeOf(() => openSecret(withPart(sealed, 1, KEY_B.id), [KEY_A, KEY_B]))).toBe('refused')
+  })
+
+  it('refuses a truncated value, a padded part and an unknown version', () => {
+    expect(codeOf(() => openSecret(sealed.split('.').slice(0, 4).join('.'), KEY_A))).toBe('malformed')
+    expect(codeOf(() => openSecret(withPart(sealed, 4, `${sealed.split('.')[4]}==`), KEY_A))).toBe('malformed')
+    expect(codeOf(() => openSecret(withPart(sealed, 0, 'sb2'), KEY_A))).toBe('unsupported-version')
+    expect(codeOf(() => openSecret('', KEY_A))).toBe('malformed')
+    expect(codeOf(() => openSecret(undefined as unknown as string, KEY_A))).toBe('malformed')
+  })
+
+  it('refuses a value moved to a different context, or opened with none', () => {
+    const bound = sealSecret(SECRET, KEY_A, { context: 'credentials/mailbox-1' })
+    expect(openSecret(bound, KEY_A, { context: 'credentials/mailbox-1' }).plaintext).toBe(SECRET)
+    expect(codeOf(() => openSecret(bound, KEY_A, { context: 'credentials/mailbox-2' }))).toBe('refused')
+    expect(codeOf(() => openSecret(bound, KEY_A))).toBe('refused')
+  })
+})
+
+describe('secret box — wrong-key refusal', () => {
+  it('refuses a key the reader does not hold, by id', () => {
+    const sealed = sealSecret(SECRET, KEY_A)
+    expect(codeOf(() => openSecret(sealed, KEY_B))).toBe('unknown-key')
+  })
+
+  it('refuses different material presented under the same explicit id', () => {
+    const original = createSecretBoxKey(Buffer.alloc(32, 7), 'k1')
+    const impostor = createSecretBoxKey(Buffer.alloc(32, 8), 'k1')
+    const sealed = sealSecret(SECRET, original)
+    expect(codeOf(() => openSecret(sealed, impostor))).toBe('refused')
+  })
+
+  it('never puts the plaintext or the key into a refusal message', () => {
+    const sealed = sealSecret(SECRET, KEY_A)
+    const material = Buffer.from(KEY_A.material).toString('base64')
+    for (const run of [
+      () => openSecret(sealed, KEY_B),
+      () => openSecret(withPart(sealed, 3, flipFirstByte(sealed.split('.')[3])), KEY_A),
+    ]) {
+      try {
+        run()
+        throw new Error('expected a refusal')
+      } catch (error) {
+        expect((error as Error).message).not.toContain(SECRET)
+        expect((error as Error).message).not.toContain(material)
+      }
+    }
+  })
+})
+
+describe('secret box — keys and rotation', () => {
+  it('derives a stable, short id that differs per key', () => {
+    expect(deriveSecretBoxKeyId(Buffer.alloc(32, 1))).toBe(KEY_A.id)
+    expect(KEY_A.id).toMatch(/^[A-Za-z0-9_-]{8}$/)
+    expect(KEY_A.id).not.toBe(KEY_B.id)
+  })
+
+  it('parses base64 and base64url material, and refuses anything that is not 32 bytes', () => {
+    const material = randomBytes(32)
+    expect(createSecretBoxKey(material.toString('base64')).id).toBe(deriveSecretBoxKeyId(material))
+    expect(createSecretBoxKey(material.toString('base64url')).id).toBe(deriveSecretBoxKeyId(material))
+    expect(codeOf(() => createSecretBoxKey(randomBytes(16).toString('base64')))).toBe('invalid-key')
+    expect(codeOf(() => createSecretBoxKey('not base64 at all!'))).toBe('invalid-key')
+    expect(codeOf(() => createSecretBoxKey(material, 'has.dot'))).toBe('invalid-key')
+  })
+
+  it('seals with the first key of a ring and opens with any of them', () => {
+    const older = randomBytes(32).toString('base64')
+    const newer = randomBytes(32).toString('base64')
+    const before = parseSecretBoxKeyring(older)
+    const sealedEarlier = sealSecret(SECRET, before.current)
+
+    const after = parseSecretBoxKeyring(`${newer}, ${older}`)
+    const opened = openSecret(sealedEarlier, after)
+    expect(opened.plaintext).toBe(SECRET)
+    expect(needsReseal(opened, after)).toBe(true)
+
+    const resealed = sealSecret(opened.plaintext, after.current)
+    expect(sealedSecretKeyId(resealed)).toBe(after.current.id)
+    expect(needsReseal(openSecret(resealed, after), after)).toBe(false)
+
+    // Dropping the old key retires what was sealed under it.
+    expect(codeOf(() => openSecret(sealedEarlier, parseSecretBoxKeyring(newer)))).toBe('unknown-key')
+  })
+
+  it('accepts explicit ids and refuses a ring that names one id twice, or nothing', () => {
+    const material = randomBytes(32).toString('base64')
+    const ring = parseSecretBoxKeyring(`2026a:${material}`)
+    expect(ring.current.id).toBe('2026a')
+    expect(codeOf(() => parseSecretBoxKeyring(`k:${material} k:${randomBytes(32).toString('base64')}`))).toBe('invalid-key')
+    expect(codeOf(() => parseSecretBoxKeyring(`${material},${material}`))).toBe('invalid-key')
+    expect(codeOf(() => parseSecretBoxKeyring('  '))).toBe('invalid-key')
+  })
+
+  it('reads the key id off a sealed value without opening it', () => {
+    expect(sealedSecretKeyId(sealSecret(SECRET, KEY_B))).toBe(KEY_B.id)
+    expect(sealedSecretKeyId('plain text')).toBeNull()
+    expect(sealedSecretKeyId(42)).toBeNull()
+  })
+})
+
+describe('secret box — packaging', () => {
+  it('stays off the library index, so no browser bundle reaches node:crypto through it', () => {
+    const index = readFileSync(join(__dirname, '..', 'index.ts'), 'utf8')
+    expect(index).not.toMatch(/secret-box/)
+  })
+
+  it('reads no environment: the caller hands the key in', () => {
+    const source = readFileSync(join(__dirname, 'secret-box.ts'), 'utf8')
+    expect(source).not.toMatch(/process\s*\.\s*env/)
+  })
+})

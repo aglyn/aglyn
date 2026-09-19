@@ -25,6 +25,8 @@ import {
   pluginStaffAuditActionGroupLabel,
   registerPluginActivityActions,
   resetPluginActivityActionsForTests,
+  isPluginActivityTargetType,
+  pluginActivityTargetNoun,
 } from './plugin-activity-actions'
 
 const AI = {
@@ -118,5 +120,16 @@ describe('isPluginStaffAuditAccess', () => {
     expect(isPluginStaffAuditAccess('backup.snapshot.viewed.restored')).toBe(false)
     expect(isPluginStaffAuditAccess('org.plan-changed')).toBe(false)
     expect(isPluginStaffAuditAccess(undefined)).toBe(false)
+  })
+})
+
+describe('a plugin’s namespaced activity target (AGL-2978)', () => {
+  it('reads `pluginId:noun` and nothing else', () => {
+    expect(isPluginActivityTargetType('acme-mail:mailbox')).toBe(true)
+    expect(pluginActivityTargetNoun('acme-mail:mailbox')).toBe('mailbox')
+    for (const type of ['mailbox', 'aiJob', ':mailbox', 'acme-mail:', 'a:b:c', 'Acme-mail:mailbox', 'acme-mail:mail box', 42, null]) {
+      expect([type, isPluginActivityTargetType(type)]).toEqual([type, false])
+      expect([type, pluginActivityTargetNoun(type)]).toEqual([type, undefined])
+    }
   })
 })

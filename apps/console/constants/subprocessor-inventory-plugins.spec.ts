@@ -76,3 +76,50 @@ describe('plugin-declared subprocessors reach the registry (AGL-2984)', () => {
     }
   })
 })
+
+/**
+ * A plugin's other hosts and its uses of declared hosts (AGL-2978).
+ *
+ * Read off the manifest, whichever plugin wrote them: every host a plugin
+ * declares lands in the registry exactly as declared, with no published
+ * row, and every use it declares is carried into the entry its host already
+ * had, which keeps its own disposition.
+ */
+describe('plugin-declared hosts and uses reach the registry (AGL-2978)', () => {
+  const hosts = PLUGIN_SUBPROCESSORS.flatMap((entry) => entry.hosts ?? [])
+  const uses = PLUGIN_SUBPROCESSORS.flatMap((entry) => entry.uses ?? [])
+  const recipients = new Set(
+    PLUGIN_SUBPROCESSORS.flatMap((entry) => entry.subprocessors.map((declaration) => declaration.host)),
+  )
+
+  it('reads a manifest that declares both, so the checks below are not vacuous', () => {
+    expect(hosts.length).toBeGreaterThan(0)
+    expect(uses.length).toBeGreaterThan(0)
+  })
+
+  it('folds each declared host in as written, with no published row', () => {
+    for (const declaration of hosts) {
+      expect([declaration.host, EGRESS_HOSTS[declaration.host]]).toStrictEqual([
+        declaration.host,
+        {
+          disposition: declaration.disposition,
+          reason: declaration.reason,
+          dataReceived: declaration.dataReceived,
+        },
+      ])
+    }
+  })
+
+  it('carries each use into the entry its host already had', () => {
+    for (const use of uses) {
+      const entry = EGRESS_HOSTS[use.host]
+      expect([use.host, Boolean(entry)]).toEqual([use.host, true])
+      expect(entry.reason).toContain(` ${use.reason}`)
+      expect(entry.dataReceived).toContain(` ${use.dataReceived}`)
+      // A use neither takes the host over nor changes what it is.
+      expect(hosts.some((declaration) => declaration.host === use.host)).toBe(false)
+      expect(recipients.has(use.host)).toBe(false)
+      expect(entry.reason.startsWith(use.reason)).toBe(false)
+    }
+  })
+})

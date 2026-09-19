@@ -20,6 +20,7 @@ import {
   pluginIdForRegisteredApiPath,
   resolveHostEnabledPlugins,
   resolvePluginApiMatch,
+  resolvePluginApiRequestSubject,
   runLegacyHandler,
   runPluginApiMatch,
 } from '@aglyn/aglyn/server'
@@ -79,7 +80,8 @@ async function dispatch(
         // Non-JSON body — fall through to handler self-gating.
       }
     }
-    let orgId: string | null = null
+    let orgId: string | null
+    let subjectUid: string | null = null
     if (hostId) {
       // Per-site enablement (AGL-1014): the org set minus the host's
       // deny-list — a plugin disabled for THIS site has no API surface for
@@ -101,6 +103,15 @@ async function dispatch(
       ) {
         return Response.json({ error: 'Not found' }, { status: 404 })
       }
+    } else {
+      // No site named: the route may name its subject itself (AGL-2978) —
+      // an organization-level surface names its org, and a provider's
+      // redirect names the org and account its signed state was minted for.
+      // A route that declares nothing, or cannot read its request, leaves
+      // the subject null, which is the gate's anonymous reading.
+      const subject = await resolvePluginApiRequestSubject(path, request)
+      orgId = subject?.orgId ?? null
+      subjectUid = subject?.uid ?? null
     }
     // Plugin release gate (AGL-422), UNCONDITIONAL since AGL-1689: a
     // flagged-off plugin's API surface does not exist — except for staff
@@ -114,17 +125,20 @@ async function dispatch(
     // does not. The two questions were nested together because they were
     // written together, not because they share a precondition.
     //
-    // `orgId` is null when no host resolved, and `filterEnabledPluginsByReleaseFlags`
-    // treats a subject-less request as eligible for the fully-enabled flags
-    // only — never a partial rollout (AGL-1656). So a hostId-less request to a
-    // half-rolled-out plugin is refused rather than guessed at, which is the
-    // conservative direction for a kill switch and matches what that helper's
-    // docstring already promised every other caller.
+    // `orgId` is null when no host resolved and the route named no subject,
+    // and `filterEnabledPluginsByReleaseFlags` treats a subject-less request
+    // as eligible for the fully-enabled flags only — never a partial rollout
+    // (AGL-1656). So a hostId-less request to a half-rolled-out plugin is
+    // refused rather than guessed at, which is the conservative direction for
+    // a kill switch and matches what that helper's docstring already promised
+    // every other caller. A route-declared subject (AGL-2978) is no bypass:
+    // it only lets the gate ask its question about the right organization.
     const releaseFiltered = await filterEnabledPluginsByReleaseFlags(
       [pluginId],
       {
         orgId,
         authorization: request.headers.get('authorization'),
+        subjectUid,
       },
     )
     if (!releaseFiltered.length) {

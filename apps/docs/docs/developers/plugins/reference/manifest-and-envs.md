@@ -115,8 +115,10 @@ publish ──▶ submitted ──▶ in_review ──▶ listed ──▶ verif
 
 The single source mapping plugin ids to packages, register entry points
 per surface (`site`, `console`, `staff`, `tenantApi`, `consoleApi`, the
-two declaration surfaces `declarations` and `serverDeclarations`, and
-`subprocessors`), and `apiPrefixes`.
+declaration surfaces `declarations`, `serverDeclarations` and
+`consoleServerDeclarations`, and `subprocessors`), `apiPrefixes`, and `activityMutationPaths` — the plugin's
+modules that create, transfer or destroy a durable customer object, which
+`check-activity-coverage.mjs` holds to writing an activity entry.
 `node tools/scripts/generate-plugin-manifests.mjs` turns it into the four
 generated loader manifests, the three declarations manifests and the
 subprocessors manifest — the only files allowed to reference
@@ -129,9 +131,14 @@ server) is a light module that registers what core must know before any
 surface of the plugin has loaded — billing and access keys, activity
 actions, a config schema — and a **serverDeclarations** entry
 (`/declarations.server`, server only) adds platform-event subscriptions.
-The apps run them once per process: at boot from `instrumentation.ts`, and
-with the console's plugin loader module, whose plugins gate holds the first
-paint on them. Anything heavy stays behind a lazy import inside a handler.
+A **consoleServerDeclarations** entry (`/declarations.console-server`) is the
+same for the console's server alone: the tenant runtime never loads or
+bundles it, so it is where a registration belongs that opens something only
+the console holds — an eraser that revokes a provider grant with a key the
+console keeps. The apps run them once per process: at boot from
+`instrumentation.ts`, and with the console's plugin loader module, whose
+plugins gate holds the first paint on them. Anything heavy stays behind a
+lazy import inside a handler.
 
 A **subprocessors** entry names a function in
 `@aglyn/plugins-x/subprocessors` that returns the third parties the plugin's
@@ -144,6 +151,17 @@ synchronously. `foldPluginSubprocessors` folds that manifest into the
 inventory and refuses a host declared twice, by the inventory or by another
 plugin. Regenerate after changing a declaration; `--check` refuses a stale
 manifest.
+
+The inventory keys on every host the code names, so the function may answer
+an object instead of a list: `{ subprocessors, hosts, uses }`. `hosts` are
+the hosts the plugin's code names that are not published recipients, each
+`not-a-subprocessor` (a request is made, and nothing personal reaches the
+host, or the customer chose it) or `no-request` (nothing of ours requests
+it), with the reason and what the host receives. `uses` are hosts the
+inventory or another plugin already declares that the plugin's code reaches
+as well: the host keeps its one declaration, and the plugin's reason and
+data are appended to that entry. A use of a host nothing declares is
+refused — declare the host instead.
 
 A **staff** entry names the registrar the console's staff area loads,
 usually the same function as `console`. The org routes load each

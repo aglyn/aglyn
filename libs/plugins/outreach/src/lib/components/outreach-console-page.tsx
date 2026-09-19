@@ -28,12 +28,12 @@ import SequencesSection from './sequences-section'
  * than a map of nodes so an unopened section is never constructed, which is
  * what keeps its listens closed once sections read data.
  */
-function sectionBody(section: OutreachConsoleSectionId): ReactNode {
+function sectionBody(section: OutreachConsoleSectionId, props: ConsolePluginPageProps): ReactNode {
   switch (section) {
     case 'sequences':
       return <SequencesSection />
     case 'mailboxes':
-      return <MailboxesSection />
+      return <MailboxesSection orgId={props.orgMount?.orgId ?? null} />
     default:
       return null
   }
@@ -61,7 +61,7 @@ export function OutreachConsolePage(props: ConsolePluginPageProps) {
 
   return (
     <HubSections sections={sections}>
-      {sectionBody(section as OutreachConsoleSectionId)}
+      {sectionBody(section as OutreachConsoleSectionId, props)}
     </HubSections>
   )
 }

@@ -92,6 +92,52 @@ export interface PluginApiMatch {
   params: Record<string, string>
 }
 
+/**
+ * Who a request is FOR, as far as the dispatchers' release gate is concerned
+ * (AGL-2978).
+ *
+ * The gate buckets a rollout and reads per-org overrides on an org id, and a
+ * dispatcher learns that id from the site a request names (`hostId`). Two
+ * kinds of request name no site and still belong to one organization:
+ *
+ * - a request to an ORGANIZATION-level surface (`ConsoleExtension.orgNavItems`,
+ *   AGL-2974), which names its org rather than a site;
+ * - a request that arrives with no bearer token by design — a provider's
+ *   OAuth redirect back to the platform, which carries only what the platform
+ *   signed into it.
+ *
+ * Without a subject the gate treats both as anonymous, so a plugin released to
+ * one organization by override refused that organization's own requests, and
+ * a staff member previewing a dark plugin could not complete a redirect their
+ * own session had started.
+ */
+export interface PluginApiRequestSubject {
+  /** The organization: the rollout bucket and the override key. */
+  orgId: string | null
+  /**
+   * The account the request acts for, read ONLY when the request carries no
+   * bearer token — a token speaks for itself. A route may name one only when
+   * it verified a signature binding the uid to the request, because the gate
+   * lets a staff account named here preview a released-off plugin.
+   */
+  uid?: string | null
+}
+
+/** Reads a request's subject; answers `null` when the request names none. */
+export type PluginApiSubjectResolver = (
+  request: Request,
+) => PluginApiRequestSubject | null | Promise<PluginApiRequestSubject | null>
+
+/** What a registration may say about its route beyond the handler. */
+export interface PluginApiRouteOptions {
+  /**
+   * How a request to this route names its subject when it names no site.
+   * Consulted by both dispatchers before their release gate, and only for a
+   * request with no `hostId`: a named site always decides the org.
+   */
+  subject?: PluginApiSubjectResolver
+}
+
 /** Leading/trailing slashes stripped so '/events/list' and 'events/list' key alike. */
 function normalizeApiPath(path: string): string {
   return path.replace(/^\/+|\/+$/g, '')
@@ -99,6 +145,7 @@ function normalizeApiPath(path: string): string {
 
 const apiRoutes = new Map<string, PluginApiRoute>()
 const apiRouteOwners = new Map<string, string>()
+const apiRouteOptions = new Map<string, PluginApiRouteOptions>()
 
 /**
  * The "currently registering plugin" marker moved to a leaf module
@@ -138,6 +185,7 @@ export {
 export function registerPluginApiRoute(
   path: string,
   handler: PluginApiRoute,
+  options?: PluginApiRouteOptions,
 ): void {
   const key = normalizeApiPath(path)
   const owner = getRegisteringPluginId() ?? ANONYMOUS_OWNER
@@ -154,6 +202,10 @@ export function registerPluginApiRoute(
   }
   apiRoutes.set(key, handler)
   apiRouteOwners.set(key, owner)
+  // Replaced with the handler, never merged: a re-registration that drops its
+  // subject resolver must not keep answering with the previous one.
+  if (options) apiRouteOptions.set(key, options)
+  else apiRouteOptions.delete(key)
 }
 
 /** The marker for a registration made outside any loader context. */
@@ -173,23 +225,24 @@ export function unregisterPluginApiRoute(path: string): void {
   // Release the CLAIM too, or the refusal above outlives the route and the
   // path can never be re-registered for the life of the process.
   apiRouteOwners.delete(key)
+  apiRouteOptions.delete(key)
 }
 
 /**
- * The route for a request path, or undefined when nothing is registered.
+ * The registered key a request path resolves to, with its `:name` segments.
  *
  * An exact registration wins; otherwise a registration whose path carries
- * `:name` segments matches segment for segment (`ai/jobs/:jobId/cancel`
- * answers `ai/jobs/abc/cancel`), and the named segments come back as
- * `params`. Patterns are tried in registration order and a static segment
- * beats a named one only by being registered exactly.
+ * `:name` segments matches segment for segment. One matcher for the route and
+ * for its options, so a request can never be answered by one registration and
+ * gated with another's subject.
  */
-export function resolvePluginApiMatch(path: string): PluginApiMatch | undefined {
+function matchRegisteredApiKey(
+  path: string,
+): { key: string; params: Record<string, string> } | undefined {
   const key = normalizeApiPath(path)
-  const exact = apiRoutes.get(key)
-  if (exact) return { route: exact, params: {} }
+  if (apiRoutes.has(key)) return { key, params: {} }
   const segments = key.split('/')
-  for (const [registered, route] of apiRoutes) {
+  for (const registered of apiRoutes.keys()) {
     if (!registered.includes(':')) continue
     const pattern = registered.split('/')
     if (pattern.length !== segments.length) continue
@@ -204,9 +257,60 @@ export function resolvePluginApiMatch(path: string): PluginApiMatch | undefined 
         break
       }
     }
-    if (matched) return { route, params }
+    if (matched) return { key: registered, params }
   }
   return undefined
+}
+
+/**
+ * The route for a request path, or undefined when nothing is registered.
+ *
+ * An exact registration wins; otherwise a registration whose path carries
+ * `:name` segments matches segment for segment (`ai/jobs/:jobId/cancel`
+ * answers `ai/jobs/abc/cancel`), and the named segments come back as
+ * `params`. Patterns are tried in registration order and a static segment
+ * beats a named one only by being registered exactly.
+ */
+export function resolvePluginApiMatch(path: string): PluginApiMatch | undefined {
+  const matched = matchRegisteredApiKey(path)
+  if (!matched) return undefined
+  const route = apiRoutes.get(matched.key)
+  return route ? { route, params: matched.params } : undefined
+}
+
+/** An id a subject may carry: a non-empty path segment, not a path. */
+const SUBJECT_ID = /^[^/\s]{1,128}$/
+
+const subjectId = (value: unknown): string | null =>
+  typeof value === 'string' && SUBJECT_ID.test(value) ? value : null
+
+/**
+ * The subject a request to a registered route names, or `null` (AGL-2978).
+ *
+ * `null` when the route declared no resolver, when the resolver answered
+ * nothing, and when it THREW: a resolver that cannot read its request has
+ * named no subject, and the gate then treats the request as anonymous — the
+ * conservative direction. The resolver reads a clone, so the handler still
+ * receives the untouched body. Ids are held to a plain path segment, so a
+ * resolver cannot hand the gate a path to read overrides from.
+ */
+export async function resolvePluginApiRequestSubject(
+  path: string,
+  request: Request,
+): Promise<PluginApiRequestSubject | null> {
+  const matched = matchRegisteredApiKey(path)
+  const resolve = matched ? apiRouteOptions.get(matched.key)?.subject : undefined
+  if (!resolve) return null
+  try {
+    const subject = await resolve(request.clone())
+    if (!subject) return null
+    const orgId = subjectId(subject.orgId)
+    const uid = subjectId(subject.uid)
+    if (!orgId && !uid) return null
+    return { orgId, ...(uid ? { uid } : {}) }
+  } catch {
+    return null
+  }
 }
 
 /**

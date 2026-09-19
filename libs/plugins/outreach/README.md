@@ -13,8 +13,38 @@ Two halves, like the CRM plugin:
   handlers under the `outreach/` prefix, served by the console's
   `/api/[...pluginApi]` dispatcher.
 
+Two more entries, neither of them loaded by the tenant runtime:
+
+- **Console-only server declarations** (`registerOutreachConsoleServerDeclarations`,
+  `@aglyn/plugins-outreach/declarations.console-server`): the workspace and
+  account erasers, registered at the console's boot. They revoke a rep's
+  Google grant with `OUTREACH_TOKEN_KEY`, which only the console holds.
+- **Subprocessors** (`outreachSubprocessors`, `@aglyn/plugins-outreach/subprocessors`):
+  the third-party hosts the plugin's code names, which the manifest generator
+  writes into the console's subprocessor inventory.
+
 The document model shared by both halves is `src/lib/model/outreach.types.ts`.
 Every `outreach*` collection is written by the server alone.
+
+## Mailboxes
+
+`src/lib/mailboxes` and `src/lib/transport` (AGL-2978) connect a rep's own
+Google mailbox and talk to it:
+
+| module | does |
+| -- | -- |
+| `mailboxes/mailbox-routes` | connect (signed single-use state, PKCE, OpenID nonce), settings, pause, test and disconnect |
+| `mailboxes/oauth-state` | the signed `state` and its pending record under `orgs/{orgId}/outreachOAuthStates` |
+| `mailboxes/mailbox-credentials` | the refresh token sealed with the shared secret box, in `outreachMailboxCredentials` |
+| `mailboxes/mailbox-transport` | opens a mailbox's Gmail client for the runtime, and marks one reconnect-required |
+| `mailboxes/mailbox-erasure` | what a workspace or account erasure revokes and deletes |
+| `transport/gmail-client` | the fetch-based Gmail API client: send, full and metadata thread reads, search, send-as |
+| `transport/send-message` | the one door a send goes through, including the engine's composed email |
+| `transport/rfc5322` | the plain-text RFC 5322 writer |
+
+`OUTREACH_TOKEN_KEY`, `GOOGLE_OUTREACH_CLIENT_ID` and
+`GOOGLE_OUTREACH_CLIENT_SECRET` are read by `mailboxes/outreach-config` alone,
+and `outreach-credential-isolation.spec.ts` holds that no tenant file reaches it.
 
 ## The engine
 
