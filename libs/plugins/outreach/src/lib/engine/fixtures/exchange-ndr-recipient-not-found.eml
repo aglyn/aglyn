@@ -1,0 +1,65 @@
+Delivered-To: avery@example.org
+Return-Path: <>
+From: postmaster@example.net
+To: avery@example.org
+Date: Wed, 16 Sep 2026 15:20:31 +0000
+Content-Type: multipart/report; report-type=delivery-status;
+	boundary="7d4f8a2e-1b3c-4d5e-9f60-a1b2c3d4e5f6"
+MIME-Version: 1.0
+Message-ID: <3c1a9f0e-5b2d-4e8f-a7c6-000000000004@DM6PR00MB0000.namprd00.prod.outlook.example.net>
+In-Reply-To: <CAOutreachStep1-j1k2l3@mail.gmail.com>
+References: <CAOutreachStep1-j1k2l3@mail.gmail.com>
+Subject: Undeliverable: Example Agency's client sites
+Auto-Submitted: auto-replied
+X-MS-Exchange-Message-Is-Ndr:
+
+--7d4f8a2e-1b3c-4d5e-9f60-a1b2c3d4e5f6
+Content-Type: multipart/alternative; differences=Content-Type;
+	boundary="0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9"
+
+--0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: quoted-printable
+
+Your message to riley@example.net couldn't be delivered.
+riley wasn't found at example.net.
+
+avery     Office 365     riley
+Action Required                Recipient
+Unknown To address
+
+How to Fix It
+The address may be misspelled or may not exist. Try one or more of the foll=
+owing:
+Retype the recipient's address, then resend the message.
+
+Diagnostic information for administrators:
+Generating server: DM6PR00MB0000.namprd00.prod.outlook.example.net
+riley@example.net
+Remote server returned '550 5.1.10 RESOLVER.ADR.RecipientNotFound; Recipien=
+t riley@example.net not found by SMTP address lookup'
+
+--0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9--
+
+--7d4f8a2e-1b3c-4d5e-9f60-a1b2c3d4e5f6
+Content-Type: message/delivery-status
+
+Reporting-MTA: dns;DM6PR00MB0000.namprd00.prod.outlook.example.net
+Received-From-MTA: dns;mail-sor-f41.google.com
+Arrival-Date: Wed, 16 Sep 2026 15:20:29 +0000
+
+Final-Recipient: rfc822;riley@example.net
+Action: failed
+Status: 5.1.10
+Diagnostic-Code: smtp;550 5.1.10 RESOLVER.ADR.RecipientNotFound; Recipient riley@example.net not found by SMTP address lookup
+
+--7d4f8a2e-1b3c-4d5e-9f60-a1b2c3d4e5f6
+Content-Type: text/rfc822-headers
+
+From: Avery Quinn <avery@example.org>
+Date: Wed, 16 Sep 2026 10:20:25 -0500
+Message-ID: <CAOutreachStep1-j1k2l3@mail.gmail.com>
+Subject: Example Agency's client sites
+To: riley@example.net
+
+--7d4f8a2e-1b3c-4d5e-9f60-a1b2c3d4e5f6--

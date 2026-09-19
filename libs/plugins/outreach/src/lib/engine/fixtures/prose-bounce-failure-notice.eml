@@ -1,0 +1,23 @@
+Delivered-To: avery@example.org
+Return-Path: <>
+Date: 16 Sep 2026 18:41:07 -0000
+From: MAILER-DAEMON@mx.example.net
+To: avery@example.org
+Subject: failure notice
+Content-Type: text/plain; charset="us-ascii"
+
+Hi. This is the qmail-send program at mx.example.net.
+I'm afraid I wasn't able to deliver your message to the following addresses.
+This is a permanent error; I've given up. Sorry it didn't work out.
+
+<morgan@example.net>:
+203.0.113.25 does not like recipient.
+Remote host said: 550 5.1.1 <morgan@example.net>: Recipient address rejected: User unknown in virtual mailbox table
+Giving up on 203.0.113.25.
+
+--- Below this line is a copy of the message.
+
+Return-Path: <avery@example.org>
+From: Avery Quinn <avery@example.org>
+To: morgan@example.net
+Subject: Example Agency's client sites
