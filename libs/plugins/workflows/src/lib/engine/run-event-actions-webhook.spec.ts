@@ -1,4 +1,9 @@
 /**
+ * @jest-environment node
+ *
+ * Must stay the FIRST block comment in the file — Jest reads the pragma only
+ * from there, and behind the license header the suite would run on jsdom.
+ *
  * @license
  * Copyright 2026 Aglyn LLC
  *
@@ -149,8 +154,13 @@ jest.mock('@aglyn/shared-util-email', () => ({
 }))
 
 import type { HostEventType } from '@aglyn/aglyn/app-utils/workflows'
-import { emitHostEvent } from './emit-host-event'
-import type { HostEventPayload } from './run-event-workflows'
+import { emitHostEvent } from '@aglyn/tenant-runtime/emit-host-event'
+import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
+import { registerWorkflowsServerDeclarations } from '../declarations.server'
+
+// The runtime's own emit path, reaching the engine through the listener the
+// plugin registers at boot — the route every one of these events takes.
+beforeAll(() => registerWorkflowsServerDeclarations())
 
 const HOOK = {
   name: 'CRM sink',

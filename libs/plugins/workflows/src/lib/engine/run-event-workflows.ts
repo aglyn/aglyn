@@ -25,12 +25,11 @@ import {
   runWorkflow,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /** Bounded fan-out per event: at most this many triggered workflows run. */
 const MAX_TRIGGERED_WORKFLOWS = 10
-
-export type HostEventPayload = Record<string, string | number | boolean>
 
 /**
  * Event-triggered workflow runner (AGL-128): loads workflows whose

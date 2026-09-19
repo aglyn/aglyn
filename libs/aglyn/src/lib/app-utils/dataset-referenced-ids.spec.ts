@@ -164,7 +164,7 @@ describe('every record write path carries the index', () => {
   const CONSOLE_ROUTE = 'apps/console/app/api/orgs/datasets/route.ts'
   const REST_API = 'apps/console/utils/api-v1-resources.ts'
   const FORM_SUBMIT = 'apps/tenant/app/api/forms/submit/route.ts'
-  const EVENT_ACTIONS = 'libs/tenant/runtime/src/lib/run-event-actions.ts'
+  const EVENT_ACTIONS = 'libs/plugins/workflows/src/lib/engine/run-event-actions.ts'
   const SITE_IMPORT = 'apps/console/app/api/hosts/import/route.ts'
 
   const callSites = (path: string) =>

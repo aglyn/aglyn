@@ -16,29 +16,24 @@
  */
 
 import type { HostActionAlert, HostEventType } from '@aglyn/aglyn/server'
-import { runEventActions } from './run-event-actions'
 import {
   type HostEventPayload,
-  runEventWorkflows,
-} from './run-event-workflows'
+  runHostEventListeners,
+} from './host-event-listeners'
 
 /**
- * One emit point for host events (AGL-148): fans out to the workflow
- * runner (AGL-128) and the actions runner, returning any site alerts the
- * actions produced so request/response emitters (form submit, booking)
- * can surface them; fire-and-forget emitters ignore the result. Neither
- * runner throws into the emitting request.
+ * One emit point for host events (AGL-148): hands the event to every
+ * registered host-event listener (see `host-event-listeners.ts`) and returns
+ * the site alerts they produced, so request/response emitters (form submit,
+ * booking) can surface them; fire-and-forget emitters ignore the result. No
+ * listener throws into the emitting request.
  */
 export async function emitHostEvent(
   hostId: string,
   event: HostEventType,
   payload: HostEventPayload = {},
 ): Promise<{ alerts: HostActionAlert[] }> {
-  const [, alerts] = await Promise.all([
-    runEventWorkflows(hostId, event, payload),
-    runEventActions(hostId, event, payload),
-  ])
-  return { alerts }
+  return { alerts: await runHostEventListeners(hostId, event, payload) }
 }
 
 export default emitHostEvent

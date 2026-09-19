@@ -48,11 +48,13 @@ import {
 // wholesale, and the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { FieldValue } from 'firebase-admin/firestore'
+// The leaves, not the runtime barrel, for the reason `run-event-actions.ts`
+// gives: the specs substitute each one.
 import {
   OWNER_ASSIGNMENT_REFUSALS,
   reassignContactOwner,
-} from './assign-contact-owner'
-import type { HostEventPayload } from './run-event-workflows'
+} from '@aglyn/tenant-runtime/assign-contact-owner'
+import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
 
 /**
  * The CRM steps of an action run (AGL-2605): what `setContactStage`,

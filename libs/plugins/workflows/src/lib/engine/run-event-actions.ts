@@ -92,11 +92,11 @@ import {
   prepareCrmEmailActivity,
   runCrmActionStep,
 } from './crm-action-steps'
-import { resolveDatasetDoc } from './resolve-dataset'
-import {
-  type HostEventPayload,
-  runEventWorkflows,
-} from './run-event-workflows'
+// The runtime's leaves rather than its barrel: the engine's specs substitute
+// each leaf, and a mock of the barrel would take the rest of it down too.
+import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
+import { resolveDatasetDoc } from '@aglyn/tenant-runtime/resolve-dataset'
+import { runEventWorkflows } from './run-event-workflows'
 
 /** Bounded fan-out per event, mirroring the workflow runner. */
 const MAX_TRIGGERED_ACTIONS = 10

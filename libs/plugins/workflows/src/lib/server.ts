@@ -30,10 +30,11 @@ import {
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { runDueFlowEnrollments } from '@aglyn/tenant-runtime'
 import { timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { BUNDLE_ID as WORKFLOWS_BUNDLE_ID } from './constants/bundle-common'
+import { registerWorkflowsServerDeclarations } from './declarations.server'
+import { runDueFlowEnrollments } from './engine/run-event-actions'
 
 /*==========================================
  * THE BEAT THAT MAKES A WAIT STEP REAL.
@@ -266,8 +267,13 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
   }
 }
 
-/** Registers the workflows plugin's public API routes (AGL-396). */
+/**
+ * Registers the workflows plugin's public API routes (AGL-396), and the
+ * engine's host-event listener beside them for a process whose boot did not
+ * (see `declarations.server.ts`).
+ */
 export function registerWorkflowsApi(): void {
+  registerWorkflowsServerDeclarations()
   registerPluginApiRoute('hooks/[hostId]/[hookId]', inboundHookHandler)
 }
 
