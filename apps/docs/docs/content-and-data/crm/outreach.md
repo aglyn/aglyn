@@ -185,8 +185,8 @@ organization owner or admin, can edit or activate it.
 
 The **Mailbox** list offers the mailboxes you connected, and an owner or admin
 every mailbox in the organization. A disconnected mailbox is never offered.
-With only one mailbox of your own, a new sequence starts on it. With none,
-[connect one](#connect-a-mailbox) first.
+When exactly one of your own mailboxes is active, a new sequence starts on it.
+With none, [connect one](#connect-a-mailbox) first.
 
 A sequence holds up to **eight steps**, of which up to **four** are emails:
 
