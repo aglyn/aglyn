@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { GmailApiMessage } from '../engine/thread-message'
 import { GmailTransportError, gmailApiError } from './gmail-errors'
 import {
   refreshGoogleAccessToken,
@@ -93,6 +94,17 @@ export interface GmailThread {
   messages: GmailMessageMetadata[]
 }
 
+/**
+ * A thread in `format=full`: every message as Gmail returns it — headers,
+ * MIME tree and base64url bodies — which is what the engine's
+ * `outreachThreadMessageFromGmail` reads replies and bounces from.
+ */
+export interface GmailFullThread {
+  id: string
+  historyId: string | null
+  messages: GmailApiMessage[]
+}
+
 export interface GmailMessageList {
   messages: Array<{ id: string; threadId: string }>
   nextPageToken: string | null
@@ -118,8 +130,15 @@ export interface GmailClient {
   sendMessage(input: { raw: string; threadId?: string | null }): Promise<GmailSentMessage>
   /** `threads.get` with `format=metadata` and only the headers named. */
   getThread(threadId: string, options?: { metadataHeaders?: readonly string[] }): Promise<GmailThread>
+  /**
+   * `threads.get` with `format=full`: every message whole, unflattened, for
+   * the engine's classifier — a reply's text, a bounce's delivery report.
+   */
+  getFullThread(threadId: string): Promise<GmailFullThread>
   /** `messages.get` with `format=metadata` and only the headers named. */
   getMessage(messageId: string, options?: { metadataHeaders?: readonly string[] }): Promise<GmailMessageMetadata>
+  /** `messages.get` with `format=full` — a message a search found, read whole. */
+  getFullMessage(messageId: string): Promise<GmailApiMessage>
   /** `messages.list` with a Gmail search `q`. */
   listMessages(options: {
     q: string
@@ -165,6 +184,18 @@ function readSendAs(value: unknown): GmailSendAs {
     treatAsAlias: record['treatAsAlias'] === true,
     verificationStatus: text(record['verificationStatus']) || null,
   }
+}
+
+/**
+ * A `format=full` message, as Gmail sent it. Only the id is checked here: the
+ * engine's reader decodes the rest defensively and never throws.
+ */
+function readFullMessage(value: unknown): GmailApiMessage {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new GmailTransportError('unexpected', 'Gmail answered with a message that is not an object.')
+  }
+  const record = value as Record<string, unknown>
+  return { ...(record as unknown as GmailApiMessage), id: text(record['id']) }
 }
 
 function metadataQuery(headers: readonly string[] | undefined): string {
@@ -285,11 +316,29 @@ export function createGmailClient(options: GmailClientOptions): GmailClient {
       }
     },
 
+    async getFullThread(threadId) {
+      const body = await call<Record<string, unknown>>(
+        `/threads/${encodeURIComponent(threadId)}?format=full`,
+      )
+      return {
+        id: text(body['id']),
+        historyId: text(body['historyId']) || null,
+        // An entry that is not a message object is not one to classify.
+        messages: (Array.isArray(body['messages']) ? body['messages'] : [])
+          .filter((entry) => Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry))
+          .map(readFullMessage),
+      }
+    },
+
     async getMessage(messageId, messageOptions) {
       const body = await call<unknown>(
         `/messages/${encodeURIComponent(messageId)}?${metadataQuery(messageOptions?.metadataHeaders)}`,
       )
       return readMessage(body)
+    },
+
+    async getFullMessage(messageId) {
+      return readFullMessage(await call<unknown>(`/messages/${encodeURIComponent(messageId)}?format=full`))
     },
 
     async listMessages(listOptions) {

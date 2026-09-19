@@ -30,8 +30,11 @@ import {
   readGoogleIdToken,
   revokeGoogleToken,
 } from './google-oauth'
+import { composeOutreachEmail } from '../engine/compose'
+import { outreachThreadMessageFromGmail } from '../engine/thread-message'
 import { backoffDelayMs, retryAfterMs } from './http'
-import { sendOutreachMessage } from './send-message'
+import { LIST_UNSUBSCRIBE_ONE_CLICK } from './rfc5322'
+import { sendComposedOutreachEmail, sendOutreachMessage } from './send-message'
 
 /**
  * The Gmail REST transport against a fake network (AGL-2978).
@@ -207,6 +210,7 @@ describe('Gmail client — the calls (AGL-2978)', () => {
     expect(sent.gmailMessageId).toBe('msg-2')
     expect(sent.threadId).toBe('thread-2')
     expect(sent.messageId).toMatch(/@rep\.example\.com>$/)
+    expect(sent.subject).toBe('Following up')
     const request = network.calls.find((call) => call.url.endsWith('/messages/send'))
     const raw = Buffer.from(JSON.parse(request?.body ?? '{}').raw, 'base64url').toString('utf8')
     expect(raw).toContain('To: jordan@prospect.example.org\r\n')
@@ -246,6 +250,57 @@ describe('Gmail client — the calls (AGL-2978)', () => {
     expect(threadUrl.searchParams.get('format')).toBe('metadata')
     expect(threadUrl.searchParams.getAll('metadataHeaders')).toEqual(['From', 'Message-ID'])
     await expect(gmail.getMessage('msg-1', { metadataHeaders: ['From'] })).resolves.toEqual(thread.messages[0])
+  })
+
+  it('reads a thread and a message in full form, unflattened, for the engine’s classifier', async () => {
+    const reply = {
+      id: 'msg-2',
+      threadId: 'thread-1',
+      labelIds: ['INBOX'],
+      snippet: 'Sounds good &amp; thanks',
+      internalDate: '1789000000000',
+      payload: {
+        mimeType: 'multipart/alternative',
+        headers: [
+          { name: 'From', value: 'Jordan Lee <jordan@prospect.example.org>' },
+          { name: 'Subject', value: 'Re: A note on your pipeline' },
+          { name: 'In-Reply-To', value: '<first@rep.example.com>' },
+        ],
+        parts: [
+          {
+            mimeType: 'text/plain',
+            headers: [{ name: 'Content-Type', value: 'text/plain; charset="UTF-8"' }],
+            body: { data: Buffer.from('Sounds good, thanks.\r\n', 'utf8').toString('base64url') },
+          },
+        ],
+      },
+    }
+    const network = fakeNetwork({
+      [GOOGLE_OAUTH_ENDPOINTS.token]: [TOKEN_OK],
+      [`${GMAIL_API_BASE}/threads/`]: [
+        { status: 200, body: { id: 'thread-1', historyId: '9', messages: [reply, 'not-a-message'] } },
+      ],
+      [`${GMAIL_API_BASE}/messages/msg-2`]: [{ status: 200, body: reply }],
+    })
+    const gmail = client(network)
+    const thread = await gmail.getFullThread('thread-1')
+    expect(thread).toEqual({ id: 'thread-1', historyId: '9', messages: [reply] })
+    const threadUrl = new URL(network.calls.find((call) => call.url.includes('/threads/'))?.url ?? '')
+    expect(threadUrl.pathname).toBe('/gmail/v1/users/me/threads/thread-1')
+    expect([...threadUrl.searchParams.entries()]).toEqual([['format', 'full']])
+    // What the runtime hands the engine reads as the reply it is.
+    const read = outreachThreadMessageFromGmail(thread.messages[0])
+    expect(read).toMatchObject({
+      id: 'msg-2',
+      threadId: 'thread-1',
+      from: 'Jordan Lee <jordan@prospect.example.org>',
+      subject: 'Re: A note on your pipeline',
+      textBody: 'Sounds good, thanks.\r\n',
+      snippet: 'Sounds good & thanks',
+    })
+    await expect(gmail.getFullMessage('msg-2')).resolves.toEqual(reply)
+    const messageUrl = new URL(network.calls.find((call) => call.url.includes('/messages/msg-2'))?.url ?? '')
+    expect(messageUrl.searchParams.get('format')).toBe('full')
   })
 
   it('searches messages with q, a page size and a page token', async () => {
@@ -509,5 +564,82 @@ describe('Google OAuth — the ID token (AGL-2978)', () => {
     expect(read({ ...valid, sub: '' })).toEqual({ ok: false, refusal: 'malformed' })
     expect(readGoogleIdToken('not-a-jwt', { clientId: 'cid', nonce: 'nonce-1', nowMs: NOW })).toEqual({ ok: false, refusal: 'malformed' })
     expect(readGoogleIdToken(null, { clientId: 'cid', nonce: 'nonce-1', nowMs: NOW })).toEqual({ ok: false, refusal: 'malformed' })
+  })
+})
+
+describe('sending the engine’s composed email (AGL-2978)', () => {
+  const ORG_SETTINGS = { legalName: 'Example Co LLC', brandName: '', postalAddress: '1 Main St\nSpringfield, IL 62701' }
+  const SENDER = { address: 'avery@rep.example.com', name: 'Avery Rep' }
+  const firstStep = { id: 's1', kind: 'email' as const, delayBusinessDays: 0, subject: 'A note on your pipeline', replyInThread: false, body: 'Hi Jordan,\n\nA quick note.', templateId: null }
+  const secondStep = { id: 's2', kind: 'email' as const, delayBusinessDays: 2, subject: '', replyInThread: true, body: 'Following up on my note.', templateId: null }
+
+  function sentRaw(network: ReturnType<typeof fakeNetwork>) {
+    const request = network.calls.find((call) => call.url.endsWith('/messages/send'))
+    const body = JSON.parse(request?.body ?? '{}') as { raw: string; threadId?: string }
+    return { raw: Buffer.from(body.raw, 'base64url').toString('utf8'), threadId: body.threadId }
+  }
+
+  it('starts a thread from the send-as address, with both unsubscribe headers, and answers what the next step needs', async () => {
+    const composed = composeOutreachEmail({
+      sequence: { steps: [firstStep, secondStep] },
+      enrollment: { email: 'jordan@prospect.example.org', stepIndex: 0, personalLine: '', threadSubject: null, messageIds: [], gmailThreadId: null },
+      orgSettings: ORG_SETTINGS,
+      merge: null,
+      listUnsubscribeUrl: 'https://console.example.com/u/abc',
+      listUnsubscribeMailto: 'unsubscribe@rep.example.com',
+    })
+    if (!composed.email) throw new Error(composed.error?.message)
+    const network = fakeNetwork({
+      [GOOGLE_OAUTH_ENDPOINTS.token]: [TOKEN_OK],
+      [`${GMAIL_API_BASE}/messages/send`]: [{ status: 200, body: { id: 'msg-1', threadId: 'thread-new' } }],
+    })
+    const sent = await sendComposedOutreachEmail(client(network), composed.email, SENDER)
+    expect(sent).toEqual({
+      gmailMessageId: 'msg-1',
+      threadId: 'thread-new',
+      messageId: expect.stringMatching(/^<[^@]+@rep\.example\.com>$/),
+      subject: 'A note on your pipeline',
+    })
+    const { raw, threadId } = sentRaw(network)
+    expect(threadId).toBeUndefined()
+    expect(raw).toContain('From: "Avery Rep" <avery@rep.example.com>\r\n')
+    expect(raw).toContain('To: jordan@prospect.example.org\r\n')
+    expect(raw).toContain('Subject: A note on your pipeline\r\n')
+    expect(raw).toContain(
+      'List-Unsubscribe: <https://console.example.com/u/abc>,\r\n <mailto:unsubscribe@rep.example.com?subject=unsubscribe>\r\n',
+    )
+    expect(raw).toContain(`List-Unsubscribe-Post: ${LIST_UNSUBSCRIBE_ONE_CLICK}\r\n`)
+    expect(raw).not.toMatch(/^In-Reply-To:/m)
+    expect(raw).toContain('This is a business solicitation from Example Co LLC.')
+  })
+
+  it('sends a reply step into the engine’s thread, answering the last message and naming them all', async () => {
+    const composed = composeOutreachEmail({
+      sequence: { steps: [firstStep, secondStep] },
+      enrollment: {
+        email: 'jordan@prospect.example.org',
+        stepIndex: 1,
+        personalLine: '',
+        threadSubject: 'A note on your pipeline',
+        messageIds: ['<first@rep.example.com>'],
+        gmailThreadId: 'thread-new',
+      },
+      orgSettings: ORG_SETTINGS,
+      merge: null,
+    })
+    if (!composed.email) throw new Error(composed.error?.message)
+    const network = fakeNetwork({
+      [GOOGLE_OAUTH_ENDPOINTS.token]: [TOKEN_OK],
+      [`${GMAIL_API_BASE}/messages/send`]: [{ status: 200, body: { id: 'msg-2', threadId: 'thread-new' } }],
+    })
+    const sent = await sendComposedOutreachEmail(client(network), composed.email, SENDER)
+    expect(sent.threadId).toBe('thread-new')
+    expect(sent.subject).toBe('Re: A note on your pipeline')
+    const { raw, threadId } = sentRaw(network)
+    expect(threadId).toBe('thread-new')
+    expect(raw).toContain('In-Reply-To: <first@rep.example.com>\r\n')
+    expect(raw).toContain('References: <first@rep.example.com>\r\n')
+    // No unsubscribe address was composed, so no unsubscribe header is sent.
+    expect(raw).not.toMatch(/^List-Unsubscribe/m)
   })
 })

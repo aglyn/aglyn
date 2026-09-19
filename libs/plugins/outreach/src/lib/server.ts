@@ -76,8 +76,9 @@ export function registerOutreachConsoleApi(): void {
 }
 
 // The transport the sending runtime reaches a connected mailbox through
-// (AGL-2978): open a mailbox's Gmail client, mark one reconnect-required, and
-// send a composed message through the one RFC 5322 writer.
+// (AGL-2978): open a mailbox's Gmail client, mark one reconnect-required,
+// send the engine's composed email through the one RFC 5322 writer, and read
+// a thread whole for the engine's reply and bounce classifier.
 export {
   markOutreachMailboxReconnectRequired,
   openOutreachMailboxClient,
@@ -88,7 +89,12 @@ export {
   isReconnectRequired,
   type GmailTransportErrorCode,
 } from './transport/gmail-errors'
-export type { GmailClient, GmailMessageMetadata, GmailThread } from './transport/gmail-client'
+export type {
+  GmailClient,
+  GmailFullThread,
+  GmailMessageMetadata,
+  GmailThread,
+} from './transport/gmail-client'
 export {
   buildRfc5322Message,
   encodeGmailRawMessage,
@@ -97,4 +103,9 @@ export {
   type OutreachComposedMessage,
   type OutreachMailAddress,
 } from './transport/rfc5322'
-export { sendOutreachMessage, type OutreachSentMessage } from './transport/send-message'
+export {
+  sendComposedOutreachEmail,
+  sendOutreachMessage,
+  type OutreachSentMessage,
+  type SendOutreachMessageOptions,
+} from './transport/send-message'

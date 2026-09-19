@@ -95,6 +95,8 @@ export interface BuiltRfc5322Message {
   raw: string
   /** The `Message-ID`, angle brackets included, to thread replies against. */
   messageId: string
+  /** The subject as written, trimmed: what the recipient sees. */
+  subject: string
 }
 
 export type Rfc5322MessageErrorCode =
@@ -437,7 +439,11 @@ export function buildRfc5322Message(
     `Content-Transfer-Encoding: ${sevenBit ? '7bit' : 'quoted-printable'}`,
   ]
   const encodedBody = sevenBit ? body : encodeQuotedPrintable(body)
-  return { raw: `${lines.join(CRLF)}${CRLF}${CRLF}${encodedBody}`, messageId }
+  return {
+    raw: `${lines.join(CRLF)}${CRLF}${CRLF}${encodedBody}`,
+    messageId,
+    subject: message.subject.trim(),
+  }
 }
 
 /** The `raw` field Gmail's `messages.send` takes: the message, base64url. */
