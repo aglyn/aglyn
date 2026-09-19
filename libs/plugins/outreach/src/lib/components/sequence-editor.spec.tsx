@@ -31,23 +31,30 @@ import {
 } from './sequence-editor'
 import { OutreachRouteError } from './use-outreach-api'
 import type { OutreachTemplateOption } from './use-outreach-crm'
+import type { OutreachMailboxesResult } from './use-outreach-mailboxes'
 import type { OutreachSettingsLoad } from './use-outreach-settings'
 
 /**
  * The sequence editor (AGL-2980): the draft it starts with, the steps it
  * adds, the merge fields it inserts, a CRM template in place of a body, the
- * live preview with the real footer, every issue beside its field, and the
- * save — refused by the engine's validator before any request, or by the
- * route, whose issues land in the same places.
+ * live preview with the real footer, the mailbox it sends from, every issue
+ * beside its field, and the save — refused by the engine's validator before
+ * any request, or by the route, whose issues land in the same places.
  */
 
 const mockApi = { saveSequence: jest.fn() }
+const mockMailboxApi = {
+  availability: jest.fn(async () => ({ configured: true, canManageAll: false })),
+}
 let mockTemplates: OutreachTemplateOption[]
 const mockEnqueueSnackbar = jest.fn()
 
 jest.mock('./use-outreach-api', () => ({
   ...jest.requireActual('./use-outreach-api'),
   useOutreachApi: () => mockApi,
+}))
+jest.mock('./use-outreach-mailbox-api', () => ({
+  useOutreachMailboxApi: () => mockMailboxApi,
 }))
 jest.mock('./use-outreach-crm', () => ({
   useOutreachEmailTemplates: () => ({ status: 'ready', data: mockTemplates }),
@@ -84,14 +91,32 @@ const settings: OutreachSettingsLoad = {
   reload: jest.fn(),
 }
 
-const mailboxes = [
-  {
+const mailbox = (overrides: Partial<OutreachMailbox>): OutreachMailbox =>
+  ({
     id: 'mbx-1',
     email: 'avery@example.com',
     sendAs: 'avery@example.com',
     displayName: 'Avery Quinn',
-  } as OutreachMailbox,
-]
+    status: 'connected',
+    connectedByUid: 'uid-rep',
+    timezone: 'America/Chicago',
+    ...overrides,
+  }) as OutreachMailbox
+
+const mailboxes: OutreachMailboxesResult = {
+  status: 'ready',
+  mailboxes: [
+    mailbox({}),
+    // A colleague's, which a member who is not an owner or admin is not offered.
+    mailbox({
+      id: 'mbx-colleague',
+      email: 'jordan@example.com',
+      sendAs: 'jordan@example.com',
+      displayName: 'Jordan Lee',
+      connectedByUid: 'uid-colleague',
+    }),
+  ],
+}
 
 const orgMount = {
   orgId: 'org-1',
@@ -143,6 +168,7 @@ const renderEditor = (props: Partial<OutreachSequenceEditorProps> = {}) => {
       sequence={null}
       settings={settings}
       mailboxes={mailboxes}
+      mailboxesPath="/acme/outreach/mailboxes"
       onSaved={onSaved}
       {...props}
     />,
@@ -171,6 +197,10 @@ describe('the sequence editor: a new sequence (AGL-2980)', () => {
     expect(screen.getByRole('region', { name: 'Step 1 · Email' })).toBeTruthy()
     expect(screen.getByRole('combobox', { name: 'Site' }).textContent).toBe(
       'Example Shop',
+    )
+    // The member's one sending mailbox is chosen for them.
+    expect(screen.getByRole('combobox', { name: 'Mailbox' }).textContent).toBe(
+      'Avery Quinn <avery@example.com>',
     )
     // The first email has no subject yet, so the composer says so.
     expect(screen.getByText('This email has no subject.')).toBeTruthy()
@@ -259,16 +289,24 @@ describe('the sequence editor: a new sequence (AGL-2980)', () => {
       warnings: [],
     })
     const { onSaved } = renderEditor({
-      mailboxField: ({ value, onChange }) => (
-        <button
-          onClick={() => onChange('mbx-1')}
-        >{`Mailbox: ${value || 'none'}`}</button>
-      ),
+      mailboxes: {
+        status: 'ready',
+        mailboxes: [
+          mailbox({ id: 'mbx-other', sendAs: 'avery.quinn@example.org', email: 'avery.quinn@example.org' }),
+          mailbox({}),
+        ],
+      },
     })
     fireEvent.change(screen.getByLabelText('Name'), {
       target: { value: 'Second locations' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Mailbox: none' }))
+    // Two of the member's own: nothing is chosen for them, and they choose.
+    const picker = screen.getByRole('combobox', { name: 'Mailbox' })
+    expect(picker.textContent).not.toContain('@')
+    fireEvent.mouseDown(picker)
+    fireEvent.click(
+      screen.getByRole('option', { name: 'Avery Quinn <avery@example.com>' }),
+    )
     const step = screen.getByRole('region', { name: 'Step 1 · Email' })
     fireEvent.change(within(step).getByLabelText('Subject'), {
       target: { value: 'Your second location' },
@@ -355,6 +393,20 @@ describe('the sequence editor: a stored sequence (AGL-2980)', () => {
     const second = screen.getByRole('region', { name: 'Step 2 · Email' })
     expect(
       within(second).getByText('Sent as a reply: “Re: Your second location”.'),
+    ).toBeTruthy()
+  })
+
+  it('says, under the mailbox, what activating needs while it is paused', () => {
+    renderEditor({
+      sequence: stored(),
+      mailboxes: { status: 'ready', mailboxes: [mailbox({ status: 'paused' })] },
+    })
+    const picker = screen.getByRole('combobox', { name: 'Mailbox' })
+    expect(picker.textContent).toBe('Avery Quinn <avery@example.com> — Paused')
+    expect(
+      screen.getByText(
+        "This sequence's mailbox is paused. Resume it in Mailboxes, then activate the sequence.",
+      ),
     ).toBeTruthy()
   })
 

@@ -46,7 +46,9 @@ const mockMailboxes: { status: 'ready'; mailboxes: OutreachMailbox[] } = {
 jest.mock('./use-outreach-data', () => ({
   useOutreachSequences: () => mockSequences,
   useOutreachSequenceCounts: () => mockCounts,
-  useOutreachMailboxList: () => mockMailboxes,
+}))
+jest.mock('./use-outreach-mailboxes', () => ({
+  useOutreachMailboxes: () => mockMailboxes,
 }))
 jest.mock('./use-outreach-settings', () => ({
   useOutreachComplianceSettings: () => ({
@@ -120,6 +122,8 @@ const renderSection = (subpath: string[] = []) =>
       orgId="org-1"
       sectionPath={SECTION}
       subpath={subpath}
+      mailboxesPath="/acme/outreach/mailboxes"
+      compliancePath="/acme/outreach/compliance"
     />,
   )
 

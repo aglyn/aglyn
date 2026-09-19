@@ -41,9 +41,14 @@ import {
 } from '@mui/material'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useState } from 'react'
+import { validateOutreachOrgSettings } from '../engine/sequence-validation'
 import type { OutreachSequenceAction } from '../model/outreach-api'
-import type { OutreachMailbox } from '../model/outreach.types'
-import type { OutreachSequenceIssue } from '../model/sequence-draft'
+import {
+  outreachMailboxActivationIssue,
+  outreachSequenceMailboxState,
+  type OutreachSequenceIssue,
+  type OutreachSequenceMailboxState,
+} from '../model/sequence-draft'
 import { OutreachEnrollDialog } from './enroll-dialog'
 import { OutreachEnrollmentsTable } from './enrollments-table'
 import {
@@ -53,15 +58,13 @@ import {
   OutreachSequenceStatusChip,
   useOutreachNavigate,
 } from './outreach-ui'
-import {
-  OutreachSequenceEditor,
-  type OutreachSequenceEditorProps,
-} from './sequence-editor'
+import { OutreachSequenceEditor } from './sequence-editor'
 import { OutreachRouteError, useOutreachApi } from './use-outreach-api'
 import {
   useOutreachEnrollments,
   useOutreachSequence,
 } from './use-outreach-data'
+import type { OutreachMailboxesResult } from './use-outreach-mailboxes'
 import type { OutreachSettingsLoad } from './use-outreach-settings'
 
 export type OutreachSequenceTab = 'steps' | 'enrollments'
@@ -76,8 +79,60 @@ export interface OutreachSequenceDetailProps {
   sequenceId: string
   tab: OutreachSequenceTab
   settings: OutreachSettingsLoad
-  mailboxes: readonly OutreachMailbox[]
-  mailboxField?: OutreachSequenceEditorProps['mailboxField']
+  mailboxes: OutreachMailboxesResult
+  /** The Mailboxes section: where a mailbox is connected, resumed or reconnected. */
+  mailboxesPath: string
+  /** The Compliance section: where the footer's legal name and address are set. */
+  compliancePath: string
+}
+
+/** Something activation would refuse, and where it is put right. */
+export interface OutreachActivationBlocker {
+  message: string
+  href: string
+  linkLabel: string
+}
+
+/**
+ * What stops a sequence being activated, read before anyone clicks: its
+ * mailbox not sending, and a footer the organization cannot write yet —
+ * each in the words the status route refuses with. Only a finished read
+ * says something is missing, so nothing is claimed while one is loading.
+ */
+export function outreachActivationBlockers(input: {
+  sequence: { mailboxId: string }
+  mailboxes: OutreachMailboxesResult
+  settings: OutreachSettingsLoad
+  paths: { steps: string; mailboxes: string; compliance: string }
+}): OutreachActivationBlocker[] {
+  const blockers: OutreachActivationBlocker[] = []
+  if (input.mailboxes.status === 'ready') {
+    const mailbox =
+      input.mailboxes.mailboxes.find((entry) => entry.id === input.sequence.mailboxId) ?? null
+    const issue = outreachMailboxActivationIssue(input.sequence.mailboxId, mailbox)
+    if (issue) {
+      blockers.push(
+        issue.code === 'mailbox_not_sending'
+          ? { message: issue.message, href: input.paths.mailboxes, linkLabel: 'Open Mailboxes' }
+          : { message: issue.message, href: input.paths.steps, linkLabel: 'Choose a mailbox' },
+      )
+    }
+  }
+  if (input.settings.status === 'ready') {
+    for (const issue of validateOutreachOrgSettings(input.settings.settings)) {
+      blockers.push({ message: issue.message, href: input.paths.compliance, linkLabel: 'Open Compliance' })
+    }
+  }
+  return blockers
+}
+
+/** What an active sequence's page says while its mailbox is not sending. */
+const NOT_SENDING: Record<Exclude<OutreachSequenceMailboxState, 'sending'>, string> = {
+  none: 'This sequence has no mailbox, so nothing is sent from it.',
+  gone: 'This sequence’s mailbox is no longer connected, so nothing is sent from it.',
+  paused: 'This sequence’s mailbox is paused, so nothing is sent until it is resumed.',
+  reconnect_required:
+    'Google stopped accepting this sequence’s mailbox, so nothing is sent until it is reconnected.',
 }
 
 /** The words an action's button and its snackbar use. */
@@ -147,7 +202,31 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
   }
 
   const mailbox =
-    props.mailboxes.find((entry) => entry.id === sequence.mailboxId) ?? null
+    props.mailboxes.mailboxes.find((entry) => entry.id === sequence.mailboxId) ??
+    null
+  const mailboxState =
+    props.mailboxes.status === 'ready'
+      ? outreachSequenceMailboxState(sequence.mailboxId, mailbox)
+      : 'sending'
+  const activatable = sequence.status === 'draft' || sequence.status === 'paused'
+  const blockers = activatable
+    ? outreachActivationBlockers({
+        sequence,
+        mailboxes: props.mailboxes,
+        settings: props.settings,
+        paths: {
+          steps: detailPath,
+          mailboxes: props.mailboxesPath,
+          compliance: props.compliancePath,
+        },
+      })
+    : []
+  // Enrolling onto a mailbox that is gone is refused by the route; a paused
+  // one only makes the new people wait with everyone else.
+  const canEnroll =
+    sequence.status === 'active' &&
+    mailboxState !== 'gone' &&
+    mailboxState !== 'none'
   const act = async (action: OutreachSequenceAction) => {
     setBusy(true)
     setRefusal(null)
@@ -192,7 +271,7 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
       startIcon={
         <MdiIcon path={mdiAccountMultiplePlusOutline.path} fontSize="small" />
       }
-      disabled={sequence.status !== 'active'}
+      disabled={!canEnroll}
       onClick={() => setEnrolling(true)}
     >
       Enroll people
@@ -222,10 +301,10 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
           <OutreachSequenceStatusChip status={sequence.status} />
         </Stack>
         <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-          {sequence.status === 'draft' || sequence.status === 'paused' ? (
+          {activatable ? (
             <Button
               variant="outlined"
-              disabled={busy}
+              disabled={busy || blockers.length > 0}
               onClick={() => void act('activate')}
             >
               {ACTIONS.activate.label}
@@ -278,9 +357,33 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
           </Stack>
         </Alert>
       ) : null}
-      {sequence.status === 'draft' ? (
+      {blockers.length ? (
+        <Alert severity="warning" data-testid="outreach-activation-blockers">
+          <Stack spacing={0.5}>
+            <span>
+              {sequence.status === 'draft'
+                ? 'A draft sends nothing, and this one can’t be activated yet:'
+                : 'This sequence can’t be activated again yet:'}
+            </span>
+            <Stack component="ul" spacing={0.25} sx={{ m: 0, pl: 2.5 }}>
+              {blockers.map((blocker) => (
+                <li key={blocker.message}>
+                  {blocker.message}{' '}
+                  <OutreachLink href={blocker.href}>{blocker.linkLabel}</OutreachLink>
+                </li>
+              ))}
+            </Stack>
+          </Stack>
+        </Alert>
+      ) : sequence.status === 'draft' ? (
         <Alert severity="info">
           A draft sends nothing. Activate it to enroll people.
+        </Alert>
+      ) : null}
+      {sequence.status === 'active' && mailboxState !== 'sending' ? (
+        <Alert severity="warning">
+          {NOT_SENDING[mailboxState]}{' '}
+          <OutreachLink href={props.mailboxesPath}>Open Mailboxes</OutreachLink>
         </Alert>
       ) : null}
 
@@ -302,7 +405,7 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
           sequence={sequence}
           settings={props.settings}
           mailboxes={props.mailboxes}
-          mailboxField={props.mailboxField}
+          mailboxesPath={props.mailboxesPath}
           onSaved={() => undefined}
         />
       ) : (

@@ -183,6 +183,11 @@ you enroll are contacts of and the **mailbox** it sends from. A sequence sends
 as the member who connected its mailbox, so only that member, or an
 organization owner or admin, can edit or activate it.
 
+The **Mailbox** list offers the mailboxes you connected, and an owner or admin
+every mailbox in the organization. A disconnected mailbox is never offered.
+With only one mailbox of your own, a new sequence starts on it. With none,
+[connect one](#connect-a-mailbox) first.
+
 A sequence holds up to **eight steps**, of which up to **four** are emails:
 
 - **Email** — a subject and a body, or a CRM
@@ -213,6 +218,14 @@ sequence from being saved beside the field it is about.
 | **Active** | Enrolled people get each step when it comes due. |
 | **Paused** | Nothing is sent. Activating it again picks up where each person was. |
 | **Archived** | Final. Everyone still in it is stopped, and it takes no one new. |
+
+A sequence can be activated only while its mailbox is **Active** in Mailboxes.
+A paused mailbox has to be resumed, and one that says **Reconnect required**
+connected again, first. Activation also needs the legal name and postal
+address from [Compliance settings](#compliance-settings). Until both are in
+place, the sequence's page says what is missing and **Activate** stays
+unavailable. If an active sequence's mailbox is paused or needs reconnecting,
+nothing is sent from it until the mailbox is active again.
 
 A draft nobody was ever enrolled in can be deleted; once anyone has been
 enrolled, archive the sequence instead. After the first enrollment you can

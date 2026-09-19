@@ -39,6 +39,8 @@ function sectionBody(section: OutreachConsoleSectionId, props: ConsolePluginPage
           org={(props.org as Record<string, unknown> | undefined) ?? null}
           sectionPath={`${props.basePath}/sequences`}
           subpath={(props.segments ?? []).slice(1)}
+          mailboxesPath={`${props.basePath}/mailboxes`}
+          compliancePath={`${props.basePath}/compliance`}
         />
       )
     case 'mailboxes':
