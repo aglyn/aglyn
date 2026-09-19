@@ -89,9 +89,10 @@ import { registerAiJobStep } from './ai-jobs'
  *
  * ## Run again and it finds its drafts
  *
- * Both writes are keyed by the job's id, so a run cut off between them finds
- * what it wrote: two drafts are reported, a design alone is drafted into a
- * campaign from the copy the design already stores, and neither spends.
+ * Each write is keyed by the id the job recorded for its draft when it was
+ * created, so a run cut off between them finds what it wrote: two drafts are
+ * reported, a design alone is drafted into a campaign from the copy the
+ * design already stores, and neither spends.
  */
 
 /** The id the marketing plugin is registered under. */

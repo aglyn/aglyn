@@ -73,14 +73,23 @@ rules deny every client write). Fields:
 | `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout`, `template`, `form`, `component`, `seo`, `page`, `email`, `campaign`, `products` and `site` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
 | `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` and `needs_review` as the two parked states (below). |
 | `brief`, `inputs` | The customer's brief verbatim and the kind-specific scalars a runner reads. |
-| `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`. |
+| `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`, and `draftIds`, the ids of the drafts the step writes. |
 | `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. A page's document carries its estimated first-visit `load`. An output may carry a customer-safe `note`: what the person decides next about it, and the facts in square brackets its draft holds ([below](#what-a-draft-asks-the-member-to-fill)). |
-| `plan` | The plan a planned kind builds from: `reuse`, `create`, `screens`, the inventory `labels` it references, and `status` `proposed` → `confirmed` with who confirmed it and when. |
+| `plan` | The plan a planned kind builds from: `reuse`, `create`, `screens` (each creation and screen the job builds as a draft with the `id` it is written under), the inventory `labels` it references, and `status` `proposed` → `confirmed` with who confirmed it and when. |
 | `review` | While the job is `needs_review`: the `reason` (`plan`, `doctrine` or `limit`), the customer-safe `message`, and the rules the last answer broke, each with the node ids or plan paths it names, beside an `outline` of those parts of the refused answer ([below](#what-a-refused-answer-leaves-on-the-job)). |
 | `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step while the job can run — zero while it waits for a person, and a confirmed page or site plan's whole-job estimate where that is more — and the real spend at the plan's credit rate. |
 | `lease` | `{ owner, until }` while a step runs — see below. |
 | `expiresAt` | 180 days from creation, the assist exchange's clock: the brief is verbatim customer text (`docs/DATA_RETENTION.md`). |
 | `error` | Customer-safe only. Provider detail goes to the server log beside the ids. |
+
+A job is named by a console resource id (`createResourceUid()`, 10 characters),
+and so is every draft it writes (AGL-3079). A draft's id is minted once and
+recorded on the job before the draft exists: on the step that writes it
+(`steps[].draftIds`) for a draft the kind always writes, and on the plan's own
+entry (`plan.create[].id`, `plan.screens[].id`) for a draft the plan decides,
+when the plan is kept. A step run again after its write reads the same id and
+finds its draft (`src/lib/jobs/ai-job-draft-ids.ts`). A job that recorded no
+ids names its drafts by its own id, which is how every earlier job named them.
 
 ## The lease
 
@@ -872,11 +881,12 @@ confirmed `job.plan` and builds exactly one draft.
 - **Drafts.** `src/lib/jobs/ai-job-drafts.ts` writes the document the host
   resources route would write: that route's allow-list (a spec reads the
   route), its stamps, msgpack nodes, the band met inside the transaction with
-  the route's arithmetic, and a name unique among live siblings. The job's id
-  is the document id, so a step run again reports its draft rather than
-  writing a second. A layout gets its first version. A template is `kind:
-  'page'` with `source.type: 'authored'`, a suggested `slug` and no
-  placeholders, so Use template asks for nothing and every token stays bound.
+  the route's arithmetic, and a name unique among live siblings. The document
+  id is the one the job recorded for the draft ([above](#the-document)), so a
+  step run again reports its draft rather than writing a second. A layout gets
+  its first version. A template is `kind: 'page'` with `source.type:
+  'authored'`, a suggested `slug` and no placeholders, so Use template asks for
+  nothing and every token stays bound.
   Nothing else is written: no screen, collection, store setting, layout or
   host document names the draft until a member assigns it. A plan that starts
   from a copy (`duplicateOf`) gets that copy through the platform's
@@ -1102,9 +1112,10 @@ nothing itself.
 - **The units, in build order.** The palette change first (a member reads it
   while the pages build), then the layout every page renders inside and the form
   they place — a page binds both by id, so they must exist — then the pages,
-  then the welcome email. Each unit's derived job carries `$id`
-  `<jobId>-<slot>`, which is what every step already addresses its draft by, so
-  a unit re-run after its write finds its own draft rather than writing a
+  then the welcome email. Each unit's derived job carries as its `$id` the id
+  its plan entry recorded (the welcome email's is on the scaffold's own step),
+  which is what a step that recorded no id of its own names its draft by, so a
+  unit re-run after its write finds its own draft rather than writing a
   second.
 - **One unit a pass.** The step runs one delegated pass and asks the machine to
   continue, so every pass is one reservation, one provider exchange and one
@@ -1281,9 +1292,10 @@ is one thing to build and a plan over it would be a plan of one.
   for `campaign` (`server/campaign-manage.ts`) — and the step asks for one by
   resource name. Every rule stays the owner's: `refusal` (role and room),
   `check` (well-formed, pure), `read` (the draft under an id) and `write`.
-  Both writes are keyed by the job's id, so a run cut off between them finds
-  what it wrote: two drafts are reported, a design alone is drafted into its
-  campaign from the copy the design stores, and neither spends.
+  Each write is keyed by the id the job recorded for its draft, so a run cut
+  off between them finds what it wrote: two drafts are reported, a design alone
+  is drafted into its campaign from the copy the design stores, and neither
+  spends.
 - **Admission.** `src/lib/jobs/ai-job-plugin-drafts.ts` is the caller's half of
   that contract: a site of the job's own org, the owning plugin on for the
   site and past its release flag with its writer registered, the kind's own
@@ -1483,12 +1495,13 @@ Assist panel.
   finished. So the generation step builds them first, one a pass, through the site
   scaffold's unit machinery (`aiPageJobUnits`: the layout, then forms, then
   components). Each is handed to the step registered for its kind under a job derived
-  from this one, `<jobId>-c<index>` by its place in the plan, so a pass run again finds
-  its own draft; each lands as the draft that step writes, unpublished and placed
-  nowhere; and where the job stands is read from its outputs. Once every creation is
-  built, the page's passes run on the plan with each `new:<name>` resolved to the
-  record that was built, which the site's inventory now lists, so the page places the
-  new component and binds the new form by id and renders inside the new layout. A
+  from this one and named by the id its plan entry recorded when the plan was kept, so
+  a pass run again finds its own draft; each lands as the draft that step writes,
+  unpublished and placed nowhere; and where the job stands is read from its outputs.
+  Once every creation is built, the page's passes run on the plan with each
+  `new:<name>` resolved to the record that was built, which the site's inventory now
+  lists, so the page places the new component and binds the new form by id and
+  renders inside the new layout. A
   creation that stops for a person stops the job; one that reports nothing, or whose
   kind no step builds here, fails it. `AI_JOB_PAGE_MAX_PASSES` bounds a job at every
   creation and section the plan limits admit, and the last pass. The proposal lists
@@ -2360,9 +2373,9 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   (`libs/plugins/workflows/src/lib/server-automation-drafts.ts`): the stored
   shape the editor saves, each step's own fields, `validateHostAction`, the
   site role, the `actions` entitlement and the live-action cap, inside one
-  transaction. The write is keyed by the job's id, so a step run again reports
-  its draft and spends nothing, and a refusal at the cap stops the job
-  `needs_review` with `reason: 'limit'`.
+  transaction. The write is keyed by the id the job recorded for its draft, so
+  a step run again reports its draft and spends nothing, and a refusal at the
+  cap stops the job `needs_review` with `reason: 'limit'`.
 - **What an explanation is shown.** An outline, never the stored document:
   what starts the automation, its conditions, and each step by the label the
   editor gives it, with whether each list, campaign, workflow, webhook or

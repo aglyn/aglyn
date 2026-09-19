@@ -186,6 +186,13 @@ jest.mock('../runtime/ai-runtime', () => ({
   runAiRequest: (...args: unknown[]) => mockRunAiRequest(...args),
 }))
 
+// The scaffold's step reads it only in its admission, which no test here runs;
+// the module needs the Admin SDK.
+jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
+  __esModule: true,
+  resolveOrgIdForHost: async () => null,
+}))
+
 /**
  * The activity writers (AGL-2929), captured at the machine's seam. The row
  * shape each one stores is proven in `ai-activity.spec.ts` against the real
@@ -224,6 +231,7 @@ import {
   AI_JOB_STEP_STOP_REASON_MAX_CHARS,
   addAiJobStepTokens,
   aiJobRefusalText,
+  aiJobRunnerForStep,
   AI_JOB_SWEEP_MAX_JOBS,
   aiJobNextStepMinimumMs,
   aiJobStepMinimumMs,
@@ -248,9 +256,12 @@ import {
   sweepAiJobs,
   type AiJobStepRun,
 } from './ai-jobs'
-import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
-import type { AiJob } from '../model/ai-jobs.types'
-import { aiJobDraftId } from './ai-job-draft-ids'
+import { AI_SITE_PAGES, aiJobPlanCreditEstimate } from '../model/ai-site-job'
+import type { AiBuildPlan } from '../model/ai-build-plan'
+import type { AiJob, AiJobDraftSlot, AiJobPlan } from '../model/ai-jobs.types'
+import { aiJobDraftId, aiPlanWithDraftIds } from './ai-job-draft-ids'
+import { createAiJobSiteStep } from './ai-job-site-step'
+import type { AiJobStepRunner } from './ai-job-text-step'
 import { AI_JOB_INLINE_BUDGET_MS } from './ai-job-budget'
 import { aiDoctrineReview, aiGenerationSpent } from './ai-job-generation'
 import {
@@ -355,16 +366,10 @@ describe('createAiJob', () => {
   })
 })
 
+/** A console resource id: `createResourceUid()`'s nanoid, the id everything the console makes carries. */
+const RESOURCE_ID = /^[A-Za-z0-9_-]{10}$/
+
 describe('the ids a job and its drafts are named by (AGL-3079)', () => {
-  /** A console resource id: `createResourceUid()`'s nanoid. */
-  const RESOURCE_ID = /^[A-Za-z0-9_-]{10}$/
-  const ZERO = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
-  const draftRunner = jest.fn()
-
-  // A kind no other test in this file creates, so its runner changes no other kind's path.
-  beforeAll(() => registerAiJobStep('workflow', (context) => draftRunner(context)))
-  beforeEach(() => draftRunner.mockReset())
-
   it('names a new job, and every draft its kind always writes, by a console resource id before any step runs', async () => {
     const job = await createAiJob(
       firestore,
@@ -381,45 +386,176 @@ describe('the ids a job and its drafts are named by (AGL-3079)', () => {
     expect((await newTextJob()).steps.map((step) => step.draftIds)).toEqual([undefined])
   })
 
-  it('finds the draft a run cut off after its write left, under the id the job recorded, and writes no second', async () => {
-    const written: string[] = []
-    draftRunner.mockImplementation(async ({ job, firestore: db }) => {
-      const id = aiJobDraftId(job, 'workflow')
-      const ref = db.collection('hosts').doc('host-1').collection('automations').doc(id)
-      if (!(await ref.get()).exists) {
-        await ref.set({ name: 'Welcome' })
-        written.push(id)
-        // Cut off after the write, before the machine recorded the step.
-        throw new AiUpstreamError(529, true, 'req-draft')
-      }
-      return {
-        outputs: [{ resource: 'workflow', id, hostId: 'host-1', label: 'Welcome' }],
-        usage: ZERO,
-        estCostUsd: 0,
-        model: 'claude-sonnet-5',
-        stopReason: null,
-      }
-    })
+  it.each<[AiJob['kind'], AiJobDraftSlot]>([
+    ['page', 'screen'],
+    ['layout', 'layout'],
+    ['template', 'template'],
+    ['component', 'component'],
+    ['form', 'form'],
+  ])('names a new %s job, and the %s it writes, by console resource ids of their own', async (kind, slot) => {
     const job = await createAiJob(
       firestore,
-      { orgId: ORG, hostId: 'host-1', kind: 'workflow', brief: 'Welcome new contacts.', createdBy: 'uid-1' },
+      { orgId: ORG, hostId: 'host-1', kind, brief: 'For a roofer in Harbor County.', createdBy: 'uid-1' },
       NOW,
     )
-    const recorded = job.steps[0].draftIds?.workflow
+    // The job is stored under the id it reports.
+    expect(mockDocs.has(`orgs/${ORG}/aiJobs/${job.$id}`)).toBe(true)
+    // The id its step writes the draft under, and finds the draft by when it runs again.
+    const draftId = aiJobDraftId((await getAiJob(firestore, ORG, job.$id)) as AiJob, slot)
+    expect([job.$id, draftId]).toEqual([expect.stringMatching(RESOURCE_ID), expect.stringMatching(RESOURCE_ID)])
+    // A resource of its own: neither the job's id nor one made from it.
+    expect(draftId).not.toContain(job.$id)
+  })
+})
+
+describe('a step run again after its draft was written finds that draft and writes no second (AGL-3079)', () => {
+  const ZERO = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
+  /** The id of every layout the step wrote, one entry a write. */
+  const writes: string[] = []
+  /** Whether the next pass that writes its draft then fails, as a provider call made after the write would. */
+  let failAfterWrite = false
+
+  /**
+   * A layout step as every draft step is written: it looks for its draft
+   * under the id the job recorded (`aiJobDraftId`) and reports it without
+   * spending when it is there; otherwise it spends a generation and writes
+   * the draft there. It builds a layout job's own layout and a scaffold's
+   * layout unit alike.
+   */
+  const layoutStep: AiJobStepRunner = async ({ job, firestore: db }) => {
+    const id = aiJobDraftId(job, 'layout')
+    const ref = db.collection('hosts').doc('host-1').collection('layouts').doc(id)
+    const outputs = [{ resource: 'layout' as const, id, hostId: 'host-1', label: 'Site frame' }]
+    if ((await ref.get()).exists) {
+      return { outputs, usage: ZERO, estCostUsd: 0, model: 'claude-sonnet-5', stopReason: null }
+    }
+    await ref.set({ displayName: 'Site frame' })
+    writes.push(id)
+    if (failAfterWrite) {
+      failAfterWrite = false
+      throw new AiUpstreamError(529, true, 'req-after-write')
+    }
+    return { outputs, usage: USAGE, estCostUsd: 0.006, model: 'claude-sonnet-5', stopReason: 'tool_use' }
+  }
+
+  /** The two ways the machine runs a step again once a pass of it wrote its draft. */
+  const runAgain = {
+    /**
+     * The process that claimed the step died after the write, before the
+     * machine recorded anything: the step stays `running` under a lease
+     * that expires, and the next beat claims it and runs it again.
+     */
+    crash: async (jobId: string) => {
+      const claimed = await claimNextStep(firestore, ORG, jobId, 'dead-route', NOW)
+      if (!claimed) throw new Error('the step could not be claimed')
+      const runner = aiJobRunnerForStep(claimed.job.kind, claimed.job.steps[claimed.stepIndex].name)
+      if (!runner) throw new Error('no runner is registered for the step')
+      // What the process did before it died; its outcome died with it.
+      await runner({ job: claimed.job, stepIndex: claimed.stepIndex, now: NOW, firestore })
+      const expired = NOW.getTime() + AI_JOB_LEASE_MS + 1
+      expect(await sweepAiJobs({ firestore, owner: 'beat', now: () => expired })).toMatchObject({ due: 1, ran: 1 })
+    },
+    /** The pass failed retryably after its write: the machine hands the step back, and the next run takes it. */
+    retry: async (jobId: string) => {
+      failAfterWrite = true
+      expect((await runAiJobStep(firestore, ORG, jobId, { owner: 'route-1', now: NOW })).outcome).toBe('requeued')
+      expect((await runAiJobStep(firestore, ORG, jobId, { owner: 'beat', now: NOW })).outcome).toBe('done')
+    },
+  }
+
+  /** Every layout document on the site. */
+  const layoutDocs = () => [...mockDocs.keys()].filter((path) => /^hosts\/host-1\/layouts\/[^/]+$/.test(path))
+
+  // A kind no other test in this file creates, and a scaffold whose only
+  // loaded unit kind is that one, so a scaffold builds its layout alone.
+  beforeAll(() => {
+    registerAiJobStep('layout', layoutStep)
+    registerAiJobStep('site', createAiJobSiteStep({ runnerFor: (kind) => (kind === 'layout' ? layoutStep : null) }))
+  })
+  beforeEach(() => {
+    writes.length = 0
+    failAfterWrite = false
+  })
+  afterEach(() => registerAiJobPlanStep(null))
+
+  it.each(['crash', 'retry'] as const)('finds a kind’s own draft under the id the job recorded, after a %s', async (path) => {
+    const job = await createAiJob(
+      firestore,
+      { orgId: ORG, hostId: 'host-1', kind: 'layout', brief: 'A site frame for a roofer.', createdBy: 'uid-1' },
+      NOW,
+    )
+    const recorded = job.steps[0].draftIds?.layout
     expect(recorded).toMatch(RESOURCE_ID)
 
-    expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })).outcome).toBe('requeued')
-    const again = await runAiJobStep(firestore, ORG, job.$id, { owner: 'beat-1', now: NOW })
+    await runAgain[path](job.$id)
 
-    expect(again.outcome).toBe('done')
-    expect(written).toEqual([recorded])
-    expect([...mockDocs.keys()].filter((path) => path.startsWith('hosts/host-1/automations/'))).toEqual([
-      `hosts/host-1/automations/${recorded}`,
-    ])
-    if (again.outcome !== 'done') throw new Error('unreachable')
-    expect(again.job.outputs).toEqual([expect.objectContaining({ resource: 'workflow', id: recorded })])
-    // The claim and the record kept the id the job was created with.
-    expect((await getAiJob(firestore, ORG, job.$id))?.steps[0].draftIds).toEqual({ workflow: recorded })
+    expect(writes).toEqual([recorded])
+    expect(layoutDocs()).toEqual([`hosts/host-1/layouts/${recorded}`])
+    const done = await getAiJob(firestore, ORG, job.$id)
+    expect(done).toMatchObject({ status: 'done', outputs: [expect.objectContaining({ resource: 'layout', id: recorded })] })
+    // Every claim and record kept the id the job was created with.
+    expect(done?.steps[0].draftIds).toEqual({ layout: recorded })
+  })
+
+  it.each(['crash', 'retry'] as const)('finds a plan creation’s draft under the id the kept plan recorded, after a %s', async (path) => {
+    const plan: AiBuildPlan = {
+      reuse: [],
+      create: [{ kind: 'layout', name: 'Site frame', why: 'Every page renders inside it.', duplicateOf: null, fields: [] }],
+      screens: Array.from({ length: AI_SITE_PAGES.min }, (_, index) => ({
+        title: `Page ${index}`,
+        slug: `page-${index}`,
+        layout: 'new:Site frame',
+        template: null,
+        duplicateOf: null,
+        nav: index === 0,
+        seoTitle: `Page ${index}`,
+        seoDescription: `Page ${index} of the site.`,
+        sections: [{ name: 'hero', uses: [], items: 0 }],
+      })),
+    }
+    // The plan is kept as the plan step keeps it: each draft it decides named before anything is built.
+    registerAiJobPlanStep(async ({ job }) => ({
+      outputs: [],
+      usage: USAGE,
+      estCostUsd: 0.006,
+      model: 'claude-sonnet-5',
+      stopReason: 'tool_use',
+      plan: {
+        ...aiPlanWithDraftIds(job.kind, plan),
+        status: 'proposed',
+        labels: {},
+        proposedAt: NOW as unknown as AiJobPlan['proposedAt'],
+        confirmedAt: null,
+        confirmedBy: null,
+      },
+      review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+    }))
+    const job = await createAiJob(
+      firestore,
+      {
+        orgId: ORG,
+        hostId: 'host-1',
+        kind: 'site',
+        brief: 'A four-page site for a roofer.',
+        inputs: { businessType: 'roofer', pages: AI_SITE_PAGES.min, welcomeEmail: false },
+        createdBy: 'uid-1',
+      },
+      NOW,
+    )
+    expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })).outcome).toBe('needs_review')
+    expect((await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, NOW)).changed).toBe(true)
+    const recorded = (await getAiJob(firestore, ORG, job.$id))?.plan?.create[0].id
+    expect(recorded).toMatch(RESOURCE_ID)
+    expect(recorded).not.toContain(job.$id)
+
+    await runAgain[path](job.$id)
+
+    expect(writes).toEqual([recorded])
+    expect(layoutDocs()).toEqual([`hosts/host-1/layouts/${recorded}`])
+    const done = await getAiJob(firestore, ORG, job.$id)
+    expect(done).toMatchObject({ status: 'done', outputs: [expect.objectContaining({ resource: 'layout', id: recorded })] })
+    // The plan, kept, confirmed and read again on every pass, still names the draft by the id it was kept with.
+    expect(done?.plan?.create[0].id).toBe(recorded)
   })
 })
 
@@ -1356,7 +1492,7 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
     const job = await newSiteJob()
     expect(job.steps.map((step) => [step.name, step.draftIds ?? null])).toEqual([
       [AI_JOB_PLAN_STEP, null],
-      ['generate', { email: expect.stringMatching(/^[A-Za-z0-9_-]{10}$/) }],
+      ['generate', { email: expect.stringMatching(RESOURCE_ID) }],
     ])
   })
 
