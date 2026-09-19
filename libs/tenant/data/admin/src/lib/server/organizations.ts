@@ -52,6 +52,7 @@ import {
   type OrgPermission,
   type OrgRole,
 } from '@aglyn/aglyn/server'
+import type { PluginActivityTargetType } from '@aglyn/aglyn/plugin-manager/plugin-activity-actions'
 import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
 import {
   nameSearchKey,
@@ -1205,9 +1206,9 @@ export interface OrgActivityTarget {
     // A theme proposal a job produced (AGL-2938), filed under the site's
     // theme the way the host feed files a saved theme.
     | 'theme'
-    // An Outreach mailbox a member connected, paused or disconnected
-    // (AGL-2978): an organization-level resource with no site to log under.
-    | 'mailbox'
+    // A plugin's own resource, `pluginId:noun` (AGL-2978). Plugins file
+    // their rows under their own namespace, so this list names none of them.
+    | PluginActivityTargetType
   id?: string
   name?: string
   /** Present on a generated screen output so the deep link can hit the exact version. */

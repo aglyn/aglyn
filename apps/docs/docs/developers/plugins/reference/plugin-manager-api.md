@@ -354,6 +354,13 @@ registerPluginActivityActions({
 | `pluginStaffAuditActionGroup(action)` / `pluginStaffAuditActionGroupLabel(group)` | The staff audit facet's grouping: a registered group by code or by `staffAuditPrefixes`, else the action's leading namespace. |
 | `isPluginStaffAuditAccess(action)` | Whether a staff audit action is one a plugin's group names in `staffAuditAccessActions` — the actions its staff doors write when staff READ something rather than change it. The audit log files them as accesses. Matched exactly. |
 
+An org activity row names its target, `{ type, id, name }`. Core's target
+types are core's own resources; a plugin files a row about one of ITS
+resources under its own namespace, `pluginId:noun` (`PluginActivityTargetType`,
+e.g. `outreach:mailbox`), which the org log accepts without naming the
+plugin. The feed labels it by the noun (`Mailbox`), prefers the target's
+`name` wherever it has one, and links it nowhere.
+
 ## Billing and access keys — `plugin-entitlements`
 
 A plugin that sells something, gates something or can be paused in an

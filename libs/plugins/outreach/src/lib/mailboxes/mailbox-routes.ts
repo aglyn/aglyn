@@ -150,7 +150,7 @@ export interface OutreachMailboxRouteDeps {
     orgId: string,
     actor: { uid: string; email?: string | null },
     action: string,
-    target: { type: 'mailbox'; id: string; name: string },
+    target: { type: typeof OUTREACH_MAILBOX_ACTIVITY_TARGET; id: string; name: string },
   ): Promise<void>
   confirmAliasesByProvider(
     firestore: FirebaseFirestore.Firestore,
@@ -171,6 +171,12 @@ export interface OutreachMailboxRoutes {
 
 /** Test sends one mailbox may make in an hour. */
 export const OUTREACH_TEST_SENDS_PER_HOUR = 5
+
+/**
+ * The org activity target a mailbox's rows are filed under: Outreach's own
+ * namespaced resource, which the feed reads as "Mailbox".
+ */
+export const OUTREACH_MAILBOX_ACTIVITY_TARGET = 'outreach:mailbox'
 
 const MAILBOX_ID = /^[A-Za-z0-9_-]{1,128}$/
 const MAX_CODE_CHARS = 2048
@@ -536,7 +542,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
       gate.orgId,
       { uid: gate.uid, email: gate.email },
       current ? 'Reconnected an Outreach mailbox' : 'Connected an Outreach mailbox',
-      { type: 'mailbox', id: mailboxId, name: activityName(mailbox) },
+      { type: OUTREACH_MAILBOX_ACTIVITY_TARGET, id: mailboxId, name: activityName(mailbox) },
     )
     return ok({
       ok: true,
@@ -605,7 +611,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
       gate.orgId,
       { uid: gate.uid, email: gate.email },
       next === 'paused' ? 'Paused an Outreach mailbox' : 'Resumed an Outreach mailbox',
-      { type: 'mailbox', id: mailbox.id, name: activityName(mailbox) },
+      { type: OUTREACH_MAILBOX_ACTIVITY_TARGET, id: mailbox.id, name: activityName(mailbox) },
     )
     return ok({ ok: true, mailbox: { ...mailbox, status: next, updatedAtMs: nowMs } })
   }
@@ -695,7 +701,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
       gate.orgId,
       { uid: gate.uid, email: gate.email },
       'Disconnected an Outreach mailbox',
-      { type: 'mailbox', id: mailbox.id, name: activityName(mailbox) },
+      { type: OUTREACH_MAILBOX_ACTIVITY_TARGET, id: mailbox.id, name: activityName(mailbox) },
     )
     return ok({ ok: true, revocation } satisfies OutreachMailboxDisconnectResponse)
   }

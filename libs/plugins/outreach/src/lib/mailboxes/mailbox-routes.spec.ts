@@ -545,7 +545,7 @@ describe('connect/complete (AGL-2978)', () => {
     expect(aliasCalls).toEqual([
       { orgId: ORG, uid: REP, addresses: ['avery@rep.example.com', 'sales@rep.example.com'], nowMs: NOW },
     ])
-    expect(activity).toEqual([{ orgId: ORG, action: 'Connected an Outreach mailbox', target: { type: 'mailbox', id: mailbox.id, name: 'avery@rep.example.com' } }])
+    expect(activity).toEqual([{ orgId: ORG, action: 'Connected an Outreach mailbox', target: { type: 'outreach:mailbox', id: mailbox.id, name: 'avery@rep.example.com' } }])
   })
 
   it('refuses a replayed state, and writes no second mailbox', async () => {
