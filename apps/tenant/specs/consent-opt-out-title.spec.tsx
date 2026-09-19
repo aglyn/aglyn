@@ -65,7 +65,7 @@
  */
 
 import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 /**
  * The words the regulation specifies. Deliberately spelled out here instead
@@ -267,15 +267,23 @@ describe('the persistent opt-out control carries the CPRA title', () => {
   })
 
   describe('reachability', () => {
-    it('opens the preferences panel when the pill is activated', () => {
+    // The panel's module is fetched when it is first asked for, so each of
+    // these waits for it rather than relying on an earlier test to have
+    // loaded it.
+    const openedPanel = () =>
+      waitFor(() => {
+        const panel = document.querySelector('[data-aglyn-consent-preferences]')
+        expect(panel).not.toBeNull()
+        return panel as Element
+      })
+
+    it('opens the preferences panel when the pill is activated', async () => {
       renderPill()
       fireEvent.click(pill() as HTMLElement)
-      expect(
-        document.querySelector('[data-aglyn-consent-preferences]'),
-      ).not.toBeNull()
+      expect(await openedPanel()).not.toBeNull()
     })
 
-    it('still opens from an `#aglyn-consent` link anywhere on the page', () => {
+    it('still opens from an `#aglyn-consent` link anywhere on the page', async () => {
       // The documented alternative entry point. A site that puts its own
       // footer link in place of the pill still has to land the visitor on the
       // same mechanism, so this path may not rot.
@@ -287,19 +295,17 @@ describe('the persistent opt-out control carries the CPRA title', () => {
 
       fireEvent.click(anchor)
 
-      expect(
-        document.querySelector('[data-aglyn-consent-preferences]'),
-      ).not.toBeNull()
+      expect(await openedPanel()).not.toBeNull()
       anchor.remove()
     })
 
-    it('names the panel the pill opens with the same exact title', () => {
+    it('names the panel the pill opens with the same exact title', async () => {
       // The consumer activates a control called "Your Privacy Choices"; the
       // region they land in announces itself the same way.
       renderPill()
       fireEvent.click(pill() as HTMLElement)
-      const panel = document.querySelector('[data-aglyn-consent-preferences]')
-      expect(panel?.getAttribute('aria-label')).toBe(REQUIRED_TITLE)
+      const panel = await openedPanel()
+      expect(panel.getAttribute('aria-label')).toBe(REQUIRED_TITLE)
     })
   })
 })

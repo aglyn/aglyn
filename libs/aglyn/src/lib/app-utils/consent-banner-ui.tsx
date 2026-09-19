@@ -24,19 +24,7 @@
 // future import from a SERVER component fails loudly at build time
 // ("useState only works in a client component"), not silently.
 
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControlLabel,
-  Paper,
-  Stack,
-  Switch,
-  Typography,
-} from '@mui/material'
+import { Box, Button, Paper, Stack, Typography } from '@mui/material'
 import {
   type ReactElement,
   type ReactNode,
@@ -44,6 +32,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import type { ConsentPreferencesDialog } from './consent-preferences-dialog'
 import {
   readStoredVisitorConsent,
   refusalStatusFor,
@@ -494,6 +483,45 @@ const overlayCardSx = {
   textAlign: 'left',
 } as const
 
+/**
+ * The preferences panel, once its module has arrived.
+ *
+ * The panel is the one consent surface a visit has to ask for, and its MUI
+ * dialog, modal, focus trap, transitions and switches weigh more than the
+ * banner and the pill together. So it is a module of its own, fetched when
+ * the panel is asked for — or when the pointer or focus reaches a control
+ * that opens it — rather than with the banner every first-time visitor sees.
+ *
+ * Module scope, not a `React.lazy`: once loaded, every later render draws it
+ * synchronously, with no Suspense boundary and no fallback frame.
+ */
+let loadedPreferencesDialog: typeof ConsentPreferencesDialog | undefined
+let preferencesDialogLoad: Promise<void> | undefined
+
+/**
+ * Fetches the preferences panel's module, once. A failed fetch is forgotten
+ * so the next attempt can retry it.
+ *
+ * Exported for callers that know the panel is about to be needed, and for
+ * specs that open it and read it back in the same tick.
+ */
+export function preloadConsentPreferences(): Promise<void> {
+  preferencesDialogLoad ??= import('./consent-preferences-dialog')
+    .then((module) => {
+      loadedPreferencesDialog = module.ConsentPreferencesDialog
+    })
+    .catch((error: unknown) => {
+      preferencesDialogLoad = undefined
+      throw error
+    })
+  return preferencesDialogLoad
+}
+
+/** Starts the panel's fetch on a sign of intent; a failure surfaces on open. */
+function warmPreferences(): void {
+  preloadConsentPreferences().catch((): void => undefined)
+}
+
 export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | null {
   const {
     hostId,
@@ -561,96 +589,60 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
   // Same gate either way, distinct record — see `refusalStatusFor`.
   const refusalStatus = refusalStatusFor(stored, posture)
 
-  const askBanner = !stored && posture === 'opt-in' && !preferencesOpen
+  // The panel is drawn only once its module is here. Until then the surface
+  // that asked for it stays up, so a slow fetch never blanks the banner or
+  // the pill; a fetch that fails puts the request down, and the next click
+  // retries it.
+  const [, setPreferencesArrived] = useState(false)
+  useEffect(() => {
+    if (!preferencesOpen || loadedPreferencesDialog) return undefined
+    let active = true
+    preloadConsentPreferences().then(
+      () => {
+        if (active) setPreferencesArrived(true)
+      },
+      () => {
+        if (active) setPreferencesOpen(false)
+      },
+    )
+    return () => {
+      active = false
+    }
+  }, [preferencesOpen])
+  const PreferencesDialog = preferencesOpen ? loadedPreferencesDialog : undefined
+
+  const askBanner = !stored && posture === 'opt-in' && !PreferencesDialog
 
   // Before the early returns below, so the hook order never depends on which
   // of the three surfaces is up. The banner and the panel are centred cards
   // that reserve nothing — only the pill parks itself on the footer.
   const pillRef = useRef<HTMLButtonElement | null>(null)
-  useConsentPillClearance(pillRef, showPill && !preferencesOpen && !askBanner)
+  useConsentPillClearance(pillRef, showPill && !PreferencesDialog && !askBanner)
 
-  /** One control per category, label and detail on two lines. */
-  const categorySwitch = (
-    label: string,
-    detail: string,
-    checked: boolean,
-    onChange: (next: boolean) => void,
-  ): ReactElement => (
-    <FormControlLabel
-      control={
-        <Switch
-          checked={checked}
-          onChange={(event) => onChange(event.target.checked)}
-          slotProps={{ input: { 'aria-label': label } }}
-        />
-      }
-      label={
-        <Box>
-          <Typography variant="body2">{label}</Typography>
-          <Typography variant="caption" color="text.secondary">
-            {detail}
-          </Typography>
-        </Box>
-      }
-    />
-  )
-
-  if (preferencesOpen) {
+  if (PreferencesDialog) {
     return (
-      <Dialog
-        open
+      <PreferencesDialog
+        title={CONSENT_OPT_OUT_TITLE}
+        zIndex={CONSENT_OVERLAY_Z_INDEX}
+        words={words}
+        advertising={advertising}
+        policyLinks={policyLinks}
+        analyticsChecked={analyticsChecked}
+        onAnalyticsChange={setAnalyticsChecked}
+        adsChecked={adsChecked}
+        onAdsChange={setAdsChecked}
         onClose={() => setPreferencesOpen(false)}
-        maxWidth="sm"
-        fullWidth
-        aria-label={CONSENT_OPT_OUT_TITLE}
-        data-aglyn-consent-preferences=""
-        sx={{ zIndex: CONSENT_OVERLAY_Z_INDEX }}
-      >
-        {/* The exact words are fixed by CCPA regs §7015 for a combined
-            opt-out control — see `CONSENT_OPT_OUT_TITLE`. */}
-        <DialogTitle>{CONSENT_OPT_OUT_TITLE}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2}>
-            <Typography variant="body2">
-              {`${words.panelIntro} ${words.strictlyNecessary}`}
-            </Typography>
-            {categorySwitch(
-              words.analyticsLabel,
-              words.analyticsDetail,
-              analyticsChecked,
-              setAnalyticsChecked,
-            )}
-            {advertising
-              ? categorySwitch(
-                  words.advertisingLabel,
-                  words.advertisingDetail,
-                  adsChecked,
-                  setAdsChecked,
-                )
-              : null}
-            {policyLinks}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          {/* Refuse and accept are the SAME control at the same level — no
-              dark patterns, no click-deep refusal. */}
-          <Button onClick={() => decide(refusalStatus)}>{'Decline all'}</Button>
-          <Button
-            variant="contained"
-            onClick={() =>
-              decide(
-                analyticsChecked ? 'accepted' : refusalStatus,
-                // Advertising cannot outlive analytics: unticking analytics
-                // and leaving advertising ticked is a refusal of both, which
-                // `consentModeSignals` also clamps independently.
-                analyticsChecked && adsChecked,
-              )
-            }
-          >
-            {'Save choices'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onDeclineAll={() => decide(refusalStatus)}
+        onSave={() =>
+          decide(
+            analyticsChecked ? 'accepted' : refusalStatus,
+            // Advertising cannot outlive analytics: unticking analytics and
+            // leaving advertising ticked is a refusal of both, which
+            // `consentModeSignals` also clamps independently.
+            analyticsChecked && adsChecked,
+          )
+        }
+      />
     )
   }
 
@@ -683,6 +675,8 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
           >
             <Button
               size="small"
+              onPointerEnter={warmPreferences}
+              onFocus={warmPreferences}
               onClick={() => {
                 setAnalyticsChecked(stored != null && stored.analytics)
                 setAdsChecked(stored != null && stored.advertising === true)
@@ -728,6 +722,8 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
       aria-label={CONSENT_OPT_OUT_TITLE}
       variant="outlined"
       size="small"
+      onPointerEnter={warmPreferences}
+      onFocus={warmPreferences}
       onClick={() => {
         const current = onDecision ? stored : readStoredVisitorConsent(hostId)
         setAnalyticsChecked(current?.analytics === true)
