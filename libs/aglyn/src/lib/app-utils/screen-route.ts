@@ -427,6 +427,20 @@ export function collectionFeedRoutePath(collectionSlug: string): string {
 }
 
 /**
+ * Where a collection ENTRY is served, in the routing map's own format (no
+ * leading slash): `blog/hello` for the entry slugged `hello` in the
+ * collection at `/blog` — the `/{collection}/{entry}` shape
+ * `parseCollectionRoute` reads back.
+ */
+export function collectionEntryRoutePath(
+  collectionSlug: string,
+  entrySlug: string,
+): string {
+  const listing = collectionListUrl({ collectionSlug }).replace(/^\/+|\/+$/g, '')
+  return `${listing}/${entrySlug.trim().replace(/^\/+|\/+$/g, '')}`
+}
+
+/**
  * The routing map as a LINK TARGET table (AGL-1998).
  *
  * The host's `screens` map is written by publishing, one entry per screen

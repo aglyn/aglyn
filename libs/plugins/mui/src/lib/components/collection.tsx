@@ -868,35 +868,37 @@ const UNRESOLVED_TOKEN = /^\{\{[^}]+\}\}$/
 
 const renderInlines = (
   inlines: Aglyn.MarkdownInline[],
-  suppressNavigation?: boolean,
+  links: { suppressNavigation?: boolean; screens?: Aglyn.ScreenRouteMap },
 ): ReactNode[] =>
-  inlines.map((item, index) =>
-    item.type === 'bold' ? (
-      <strong key={index}>{item.text}</strong>
-    ) : item.type === 'italic' ? (
-      <em key={index}>{item.text}</em>
-    ) : item.type === 'link' ? (
-      // parseMarkdownInlines only emits http(s) or site-relative hrefs.
-      // Internal paths route through AppLink for client-side navigation
-      // (AGL-582); external links stay plain anchors. Editing surfaces
-      // render the link look without an href so clicks never navigate.
-      suppressNavigation ? (
+  inlines.map((item, index) => {
+    if (item.type === 'bold') return <strong key={index}>{item.text}</strong>
+    if (item.type === 'italic') return <em key={index}>{item.text}</em>
+    if (item.type !== 'link') return <span key={index}>{item.text}</span>
+    // Internal paths route through AppLink for client-side navigation
+    // (AGL-582); external links stay plain anchors. Editing surfaces render
+    // the link look without an href so clicks never navigate. A target named
+    // by REFERENCE resolves against the routing map first (AGL-3118), and one
+    // whose entry, listing or screen is gone renders as the words alone —
+    // never as an anchor holding the stored value.
+    const link = Aglyn.resolveMarkdownLink(item.href, links)
+    if (link.kind === 'text') return <span key={index}>{item.text}</span>
+    if (link.kind === 'inert') {
+      return (
         <MuiLink key={index} component="span" sx={{ cursor: 'default' }}>
           {item.text}
         </MuiLink>
-      ) : Aglyn.isInternalMarkdownHref(item.href) ? (
-        <AppLink key={index} href={item.href}>
-          {item.text}
-        </AppLink>
-      ) : (
-        <MuiLink key={index} href={item.href}>
-          {item.text}
-        </MuiLink>
       )
+    }
+    return link.kind === 'internal' ? (
+      <AppLink key={index} href={link.href}>
+        {item.text}
+      </AppLink>
     ) : (
-      <span key={index}>{item.text}</span>
-    ),
-  )
+      <MuiLink key={index} href={link.href}>
+        {item.text}
+      </MuiLink>
+    )
+  })
 
 /**
  * Renders a content entry's markdown-lite body as themed MUI elements
@@ -911,7 +913,13 @@ const CollectionEntryBody = forwardRef<
   const { markdown, ...rest } = props
   // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
   const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
-  const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+  // The routing map travels with the suppression flag: both decide what a
+  // link in this body renders as (AGL-3118).
+  const { suppressNavigation, screens } = useContext(Aglyn.ScreenLinkContext)
+  const links = useMemo(
+    () => ({ suppressNavigation, screens }),
+    [suppressNavigation, screens],
+  )
   // The site being rendered, for image blocks (AGL-1686) — read once here
   // because hooks cannot run inside the block map below.
   const { hostId } = Aglyn.useSite()
@@ -965,7 +973,7 @@ const CollectionEntryBody = forwardRef<
                 scrollMarginTop: `${Aglyn.HEADING_ANCHOR_SCROLL_MARGIN}px`,
               }}
             >
-              {renderInlines(block.inlines, suppressNavigation)}
+              {renderInlines(block.inlines, links)}
             </Typography>
           )
         }
@@ -994,7 +1002,7 @@ const CollectionEntryBody = forwardRef<
             <Box key={index} component="ul" sx={{ lineHeight: 1.7, pl: 3 }}>
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex}>
-                  {renderInlines(item, suppressNavigation)}
+                  {renderInlines(item, links)}
                 </li>
               ))}
             </Box>
@@ -1013,7 +1021,7 @@ const CollectionEntryBody = forwardRef<
             >
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex}>
-                  {renderInlines(item, suppressNavigation)}
+                  {renderInlines(item, links)}
                 </li>
               ))}
             </Box>
@@ -1065,7 +1073,7 @@ const CollectionEntryBody = forwardRef<
                         key={cellIndex}
                         style={{ textAlign: block.align[cellIndex] ?? 'left' }}
                       >
-                        {renderInlines(cell, suppressNavigation)}
+                        {renderInlines(cell, links)}
                       </th>
                     ))}
                   </tr>
@@ -1080,7 +1088,7 @@ const CollectionEntryBody = forwardRef<
                             textAlign: block.align[cellIndex] ?? 'left',
                           }}
                         >
-                          {renderInlines(cell, suppressNavigation)}
+                          {renderInlines(cell, links)}
                         </td>
                       ))}
                     </tr>
@@ -1110,7 +1118,7 @@ const CollectionEntryBody = forwardRef<
                 color: 'text.primary',
               }}
             >
-              {renderInlines(block.inlines, suppressNavigation)}
+              {renderInlines(block.inlines, links)}
             </Typography>
           )
         }
@@ -1121,7 +1129,7 @@ const CollectionEntryBody = forwardRef<
             sx={{ lineHeight: 1.7 }}
             gutterBottom
           >
-            {renderInlines(block.inlines, suppressNavigation)}
+            {renderInlines(block.inlines, links)}
           </Typography>
         )
       })}

@@ -92,6 +92,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
   linkableScreenRoutes: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/screen-route',
   ).linkableScreenRoutes,
+  // And the REAL reference walk beside it (AGL-3118), for the third time the
+  // same reason: the designed 404 carries the site's nav, and a stub that
+  // answered "no entries" would let a suite pass while every entry link on
+  // that page resolved nowhere.
+  collectEntryLinkRefs: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/link-references',
+  ).collectEntryLinkRefs,
   // The REAL layout/screen origin test (AGL-1871). A stub here would be the
   // bug: the whole point of the predicate is that it disagrees with
   // `Boolean(nodes)`, and any hand-written double would have to encode that
@@ -166,10 +173,20 @@ jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
   getTemplateScreenRouting: jest.fn(async () => ({
     templateScreenIds: new Set<string>(),
     listRoutes: {} as Record<string, string>,
+    collectionListings: { blog: 'blog' } as Record<string, string>,
+  })),
+}))
+// The entry read has its own suite; what matters here is that the designed
+// 404 asks it about the entries its own nav links to (AGL-3118).
+jest.mock('@aglyn/tenant-runtime/entry-link-routes', () => ({
+  __esModule: true,
+  resolveEntryLinkRoutes: jest.fn(async () => ({
+    'entry:blog/e1': 'blog/we-launched',
   })),
 }))
 
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
+import { resolveEntryLinkRoutes } from '@aglyn/tenant-runtime/entry-link-routes'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import { GET as notFoundScreenRoute } from '../app/api/screen/not-found/route'
 import {
@@ -186,7 +203,8 @@ const mockCompose = composeScreenNodes as unknown as jest.Mock
 /** The nav and footer a designed 404 screen carries, as composed nodes. */
 const DESIGNED_NODES = {
   root: { type: 'muiBox', nodes: ['nav', 'body', 'foot'] },
-  nav: { type: 'muiNavMenu' },
+  // The nav a designed 404 carries can link a post, by reference (AGL-3118).
+  nav: { type: 'muiNavMenu', props: { items: [{ screenId: 'entry:blog/e1' }] } },
   body: { type: 'muiTypography', props: { text: 'We can’t find that page' } },
   foot: { type: 'muiBox', props: { component: 'footer' } },
 }
@@ -319,6 +337,20 @@ describe('half 1 — an unmatched path is a 404 AND resolves the screen', () => 
     expect(mockCompose).toHaveBeenCalledWith(
       expect.objectContaining({ screenId: 'notFoundScreen' }),
     )
+  })
+
+  it('resolves the entries its own nav links to (AGL-3118)', async () => {
+    // A visitor who already hit one 404 must not be sent to a second: an
+    // entry link in the site's nav is resolved here too, through the same map
+    // every other page's links use.
+    const props = await loadNotFoundScreen('acme')
+
+    expect(resolveEntryLinkRoutes).toHaveBeenCalledWith({
+      hostId: 'host-1',
+      refs: ['entry:blog/e1'],
+      collectionSlugs: { blog: 'blog' },
+    })
+    expect(props?.screenRoutes?.['entry:blog/e1']).toBe('blog/we-launched')
   })
 
   it('serves that screen from /api/screen/not-found with a 200', async () => {

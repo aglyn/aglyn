@@ -153,6 +153,48 @@ describe('Markdown element (AGL-1162)', () => {
   })
 })
 
+/**
+ * A document's links may NAME their targets (AGL-3118) — the Markdown element
+ * renders a whole page of prose, so the same rule the entry body follows has
+ * to hold here or the two surfaces disagree about the same link.
+ */
+describe('Markdown link references (AGL-3118)', () => {
+  const ROUTES = {
+    'collection:blog': 'blog',
+    'entry:blog/e1': 'blog/we-launched',
+  }
+
+  const renderDoc = (content: string, value: Record<string, unknown> = {}) =>
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={{ screens: ROUTES, ...value }}>
+        <Markdown content={content} />
+      </Aglyn.ScreenLinkContext.Provider>,
+    ).container
+
+  it('resolves an entry and a listing against the routing map', () => {
+    const container = renderDoc(
+      'Read [the launch](entry:blog/e1) or [every post](collection:blog).',
+    )
+    expect(
+      [...container.querySelectorAll('a')].map((a) => a.getAttribute('href')),
+    ).toEqual(['/blog/we-launched', '/blog'])
+  })
+
+  it('renders a reference with no live target as its words, never as an href', () => {
+    const container = renderDoc('Read [the draft](entry:blog/draft).')
+    expect(container.querySelector('a')).toBeNull()
+    expect(container.innerHTML).not.toContain('entry:')
+    expect(container.textContent).toBe('Read the draft.')
+  })
+
+  it('leaves typed addresses exactly as they were', () => {
+    const container = renderDoc('[about](/about) and [out](https://example.com)')
+    expect(
+      [...container.querySelectorAll('a')].map((a) => a.getAttribute('href')),
+    ).toEqual(['/about', 'https://example.com'])
+  })
+})
+
 describe('resolveMarkdownSource (AGL-1162)', () => {
   it('takes the first Markdown element in DOCUMENT order', () => {
     fillCanvas([
