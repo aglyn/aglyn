@@ -66,6 +66,13 @@ export interface OutreachRouteGateDeps {
     orgWide: boolean
     permissions: Partial<Record<string, boolean | undefined>>
   }>
+  /**
+   * Whether the member holds a CATALOG permission (`data.manage`) as the
+   * org's roles resolve it. Asked separately because the map
+   * `resolveOrgPermissions` answers carries the legacy keys and the plugins'
+   * own, never a catalog key: read there, a catalog key refuses everyone.
+   */
+  holdsOrgCatalogPermission(uid: string, orgId: string, key: string): Promise<boolean>
   readOrg(orgId: string): Promise<Record<string, unknown> | null>
   lockdownRefusal(options: {
     request: Request
@@ -84,11 +91,15 @@ export interface OutreachRouteCaller {
   orgId: string
   /** The organization document the entitlement was read from. */
   org: Record<string, unknown>
-  /** The caller's resolved permissions in the organization. */
-  permissions: Partial<Record<string, boolean | undefined>>
+  /** An owner or admin of the organization, who may send from any member's mailbox. */
+  isOrgAdmin: boolean
 }
 
-/** A permission a route asks for beyond `outreach.use`, with its refusal. */
+/**
+ * A catalog permission a route asks for beyond `outreach.use`, with its
+ * refusal — `data.manage` for a route that reads the CRM's people, which
+ * the contacts' own rules gate on.
+ */
 export interface OutreachRouteExtraPermission {
   key: string
   /** Why the route needs it, as the refusal says it. */
@@ -143,7 +154,7 @@ export async function outreachRouteGate(
     return outreachRefusal(403, 'permission', 'Your role does not include Use Outreach.')
   }
   for (const permission of extra) {
-    if (membership.permissions[permission.key] !== true) {
+    if (!(await deps.holdsOrgCatalogPermission(decoded.uid, orgId, permission.key))) {
       return outreachRefusal(403, 'permission', permission.refusal)
     }
   }
@@ -162,6 +173,6 @@ export async function outreachRouteGate(
     staff,
     orgId,
     org,
-    permissions: membership.permissions,
+    isOrgAdmin: membership.isOwner,
   }
 }

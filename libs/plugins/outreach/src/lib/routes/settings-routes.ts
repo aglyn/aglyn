@@ -25,7 +25,8 @@ import {
   readOutreachComplianceSettingsDoc,
   writeOutreachComplianceSettings,
 } from '../storage/compliance-settings-store'
-import { outreachRouteGate, type OutreachRouteGateDeps } from './route-gate'
+import type { OutreachRouteDeps } from './route-deps'
+import { outreachRouteGate } from './route-gate'
 import {
   outreachMethodNotAllowed,
   outreachOk,
@@ -43,22 +44,10 @@ import {
  * carries is a legal statement and who last changed it is worth knowing.
  */
 
-export interface OutreachSettingsRouteDeps {
-  firestore(): FirebaseFirestore.Firestore
-  gate: OutreachRouteGateDeps
-  now(): number
-  logOrgActivity(
-    orgId: string,
-    actor: { uid: string; email?: string | null },
-    action: string,
-    target: { type: 'org'; id: string },
-  ): Promise<void>
-}
-
 /** The activity line a changed save writes. */
 export const OUTREACH_SETTINGS_ACTIVITY = 'Updated Outreach compliance settings'
 
-export function createOutreachSettingsRoute(deps: OutreachSettingsRouteDeps): PluginWebApiHandler {
+export function createOutreachSettingsRoute(deps: OutreachRouteDeps): PluginWebApiHandler {
   return async (request) => {
     if (request.method === 'GET') {
       const gate = await outreachRouteGate(

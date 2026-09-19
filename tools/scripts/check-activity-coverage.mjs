@@ -138,6 +138,13 @@ const MUTATION_PATHS = [
   // `mergeContacts`, which both this route and `POST /v1/contacts/{id}/merge`
   // call, so the module that performs the delete is the one listed.
   'libs/tenant/data/admin/src/lib/server/contact-merge.ts',
+  // Outreach's sequence and enroll routes (AGL-2980): `outreach/sequences/save`
+  // brings a sequence into being and `outreach/sequences/delete` destroys
+  // one, and `outreach/enroll` enrolls people in one — the act that starts
+  // email going to them. Plugin routes, written through the route modules'
+  // injected `logOrgActivity`.
+  'libs/plugins/outreach/src/lib/routes/sequence-routes.ts',
+  'libs/plugins/outreach/src/lib/routes/enroll-routes.ts',
 ]
 
 /**

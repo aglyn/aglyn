@@ -454,6 +454,12 @@ export interface OutreachEnrollment extends OutreachTimestamps {
   sequenceId: string
   /** The CRM contact the person is. */
   contactId: string
+  /**
+   * The contact's name as the sending site knew it at enrollment, `''` when
+   * it had none — what the enrollments table shows beside the address,
+   * without a read of every contact on the page (AGL-2980).
+   */
+  contactName: string
   /** The address the steps go to, normalized, captured at enrollment. */
   email: string
   hostId: string

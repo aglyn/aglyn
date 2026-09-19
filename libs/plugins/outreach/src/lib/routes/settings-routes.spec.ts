@@ -19,12 +19,9 @@
 
 import type { DecodedIdToken } from 'firebase-admin/auth'
 import { OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
+import type { OutreachRouteDeps } from './route-deps'
 import type { OutreachRouteGateDeps } from './route-gate'
-import {
-  createOutreachSettingsRoute,
-  OUTREACH_SETTINGS_ACTIVITY,
-  type OutreachSettingsRouteDeps,
-} from './settings-routes'
+import { createOutreachSettingsRoute, OUTREACH_SETTINGS_ACTIVITY } from './settings-routes'
 
 /**
  * The compliance settings route (AGL-2980), and the gate every settings,
@@ -99,6 +96,7 @@ const gate: OutreachRouteGateDeps = {
       ? { orgId: context.orgId, isOwner: member.role === 'owner', ...member }
       : { orgId: context.orgId, role: null, isOwner: false, orgWide: false, permissions: {} }
   },
+  holdsOrgCatalogPermission: async (uid, _orgId, key) => members[uid]?.permissions[key] === true,
   readOrg: async () => orgDoc,
   lockdownRefusal: async () => lockdown,
 }
@@ -106,10 +104,11 @@ const gate: OutreachRouteGateDeps = {
 let docs: Docs
 let activity: Array<{ orgId: string; action: string; target: unknown; actor: unknown }>
 
-const deps = (): OutreachSettingsRouteDeps => ({
+const deps = (): OutreachRouteDeps => ({
   firestore: () => fakeFirestore(docs),
   gate,
   now: () => 1_750_000_000_000,
+  random: () => 0.5,
   logOrgActivity: async (orgId, actor, action, target) => {
     activity.push({ orgId, actor, action, target })
   },

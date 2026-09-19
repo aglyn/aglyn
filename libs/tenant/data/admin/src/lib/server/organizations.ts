@@ -1205,6 +1205,10 @@ export interface OrgActivityTarget {
     // A theme proposal a job produced (AGL-2938), filed under the site's
     // theme the way the host feed files a saved theme.
     | 'theme'
+    // An Outreach sequence created, activated, paused, archived or deleted,
+    // and the people enrolled in one (AGL-2980): an organization-level
+    // resource, since a sequence enrolls people from every site.
+    | 'sequence'
   id?: string
   name?: string
   /** Present on a generated screen output so the deep link can hit the exact version. */
