@@ -21,30 +21,41 @@ import {
   listPluginOrgErasers,
   resetPluginOrgErasersForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
+import {
+  listPluginUserErasers,
+  resetPluginUserErasersForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
 import { registerOutreachConsoleServerDeclarations } from './declarations.console-server'
 
 /**
- * Outreach's console-only declarations (AGL-2978): the workspace eraser is in
- * place once the console boots, registered once however often boot runs, and
- * the tenant runtime's manifest never names it.
+ * Outreach's console-only declarations (AGL-2978): the workspace eraser and
+ * the account eraser (AGL-3106) are in place once the console boots,
+ * registered once however often boot runs, and the tenant runtime's manifest
+ * never names them.
  */
 
 const REPO_ROOT = join(__dirname, '../../../../..')
 
-beforeEach(() => resetPluginOrgErasersForTests())
+beforeEach(() => {
+  resetPluginOrgErasersForTests()
+  resetPluginUserErasersForTests()
+})
 
 describe('registerOutreachConsoleServerDeclarations (AGL-2978)', () => {
-  it('registers the workspace eraser under the plugin, once', () => {
+  it('registers the workspace and account erasers under the plugin, once', () => {
     registerOutreachConsoleServerDeclarations()
     registerOutreachConsoleServerDeclarations()
     expect(listPluginOrgErasers()).toEqual(['outreach'])
+    expect(listPluginUserErasers()).toEqual(['outreach'])
   })
 
-  it('registers it again after the registry is reset', () => {
+  it('registers them again after the registries are reset', () => {
     registerOutreachConsoleServerDeclarations()
     resetPluginOrgErasersForTests()
+    resetPluginUserErasersForTests()
     registerOutreachConsoleServerDeclarations()
     expect(listPluginOrgErasers()).toEqual(['outreach'])
+    expect(listPluginUserErasers()).toEqual(['outreach'])
   })
 
   it('is called by the console’s server declarations manifest and by no tenant manifest', () => {

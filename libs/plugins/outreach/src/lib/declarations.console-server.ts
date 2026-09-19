@@ -21,6 +21,10 @@ import {
   listPluginOrgErasers,
   registerPluginOrgEraser,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
+import {
+  listPluginUserErasers,
+  registerPluginUserEraser,
+} from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
 import { OUTREACH_PLUGIN_ID } from './constants/bundle-common'
 
 /**
@@ -28,14 +32,15 @@ import { OUTREACH_PLUGIN_ID } from './constants/bundle-common'
  * `consoleServerDeclarations` in `plugins.config.json` and run at the
  * console's boot.
  *
- * The workspace eraser that revokes each rep's Google grant is registered
- * here rather than from `serverDeclarations`, which the tenant runtime also
- * loads: revoking opens a sealed token with `OUTREACH_TOKEN_KEY`, which only
- * the console holds, and the tenant may not so much as bundle the code that
- * does (`outreach-credential-isolation.spec.ts`). Every erasure runs in the
- * console, so this is where the eraser is needed.
+ * The erasers are registered here rather than from `serverDeclarations`,
+ * which the tenant runtime also loads: the workspace eraser revokes each
+ * rep's Google grant, and the account eraser (AGL-3106) revokes and deletes
+ * the person's own, and both open a sealed token with `OUTREACH_TOKEN_KEY`,
+ * which only the console holds. The tenant may not so much as bundle the code
+ * that does (`outreach-credential-isolation.spec.ts`). Every erasure runs in
+ * the console, so this is where the erasers are needed.
  *
- * Light at boot: the eraser's module is imported when an erasure first asks
+ * Light at boot: the erasers' module is imported when an erasure first asks
  * for it, so the boot cost is the registration.
  */
 export function registerOutreachConsoleServerDeclarations(): void {
@@ -47,6 +52,17 @@ export function registerOutreachConsoleServerDeclarations(): void {
           './mailboxes/mailbox-erasure'
         )
         return createOutreachOrgEraser(defaultOutreachErasureDeps())(request)
+      },
+      { pluginId: OUTREACH_PLUGIN_ID },
+    )
+  }
+  if (!listPluginUserErasers().includes(OUTREACH_PLUGIN_ID)) {
+    registerPluginUserEraser(
+      async (request) => {
+        const { createOutreachUserEraser, defaultOutreachErasureDeps } = await import(
+          './mailboxes/mailbox-erasure'
+        )
+        return createOutreachUserEraser(defaultOutreachErasureDeps())(request)
       },
       { pluginId: OUTREACH_PLUGIN_ID },
     )

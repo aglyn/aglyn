@@ -33,7 +33,7 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     uses: [
       {
         host: "oauth2.googleapis.com",
-        reason: "Since AGL-2978 also Outreach's OAuth token endpoint for a rep's own Google mailbox grant — the code exchange at connect, the access-token refresh before each Gmail call, and the revocation on disconnect or org erasure — which is the rep's own account at the rep's own provider, the same footing as `gmail.googleapis.com`.",
+        reason: "Since AGL-2978 also Outreach's OAuth token endpoint for a rep's own Google mailbox grant — the code exchange at connect, the access-token refresh before each Gmail call, and the revocation on disconnect, org erasure or account erasure — which is the rep's own account at the rep's own provider, the same footing as `gmail.googleapis.com`.",
         dataReceived: "For Outreach: the deployment's OAuth client credentials and, for the rep's own grant, the authorization code, PKCE verifier, refresh token and access token Google itself issued — credentials, never message content. ⚑ Legal to confirm the Annex III cell needs no change for the Outreach use.",
       },
     ],
