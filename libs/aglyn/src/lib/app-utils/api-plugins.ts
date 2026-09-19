@@ -136,6 +136,22 @@ export interface PluginApiRouteOptions {
    * request with no `hostId`: a named site always decides the org.
    */
   subject?: PluginApiSubjectResolver
+  /**
+   * The route answers a link the platform MAILED to somebody — an
+   * unsubscribe in a message's `List-Unsubscribe` header — rather than a door
+   * a member uses (AGL-2981).
+   *
+   * Such a link has to keep working whether or not its plugin is released,
+   * or switched on, for the workspace NOW. A recipient's way out does not
+   * close when a rollout is paused or a workspace turns the plugin off:
+   * CAN-SPAM holds an opt-out open for thirty days after the send, and an
+   * unsubscribe that 404s the day a kill switch is flipped is one nobody can
+   * use. So both dispatchers skip their per-site enablement and release
+   * gates for it — and nothing else: lockdown and the rate limit still
+   * apply. The flag says nothing about who may act, so the route
+   * authenticates the link itself, by a signature it verifies.
+   */
+  recipientLink?: boolean
 }
 
 /** Leading/trailing slashes stripped so '/events/list' and 'events/list' key alike. */
@@ -276,6 +292,16 @@ export function resolvePluginApiMatch(path: string): PluginApiMatch | undefined 
   if (!matched) return undefined
   const route = apiRoutes.get(matched.key)
   return route ? { route, params: matched.params } : undefined
+}
+
+/**
+ * Whether a request path resolves to a route registered as a
+ * {@link PluginApiRouteOptions.recipientLink} — what both dispatchers ask
+ * before their enablement and release gates (AGL-2981).
+ */
+export function isPluginRecipientLinkRoute(path: string): boolean {
+  const matched = matchRegisteredApiKey(path)
+  return matched ? apiRouteOptions.get(matched.key)?.recipientLink === true : false
 }
 
 /** An id a subject may carry: a non-empty path segment, not a path. */

@@ -37,6 +37,9 @@ import {
   getOrgForHost,
   lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
+// The leaf, not the barrel: the dispatcher's specs substitute the barrel,
+// and a route's own registration must still be read where it was made.
+import { isPluginRecipientLinkRoute } from '@aglyn/aglyn/app-utils/api-plugins'
 import { ensureRemoteServerBundles } from '../../../utils/remote-server-bundles'
 import { serverPluginLoader as loader } from '../../../utils/server-plugin-loader'
 
@@ -69,7 +72,11 @@ async function dispatch(
     pluginIdForRegisteredApiPath(path) ?? loader.pluginIdForApiPath(path)
   let lockdownOrg: Record<string, unknown> | undefined
   let lockdownHost: Record<string, unknown> | undefined
-  if (pluginId) {
+  // A link mailed to a recipient — an unsubscribe — answers whether or not
+  // its plugin is on or released for the workspace now (AGL-2981): an
+  // opt-out outlives a rollout. It skips the two gates below and nothing
+  // else; it verifies its own signature.
+  if (pluginId && !isPluginRecipientLinkRoute(path)) {
     const url = new URL(request.url)
     let hostId = url.searchParams.get('hostId') ?? ''
     if (!hostId && request.method !== 'GET' && request.method !== 'HEAD') {
