@@ -9,6 +9,28 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.130 — 2026-09-19
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.129...v1.0.0-beta.130)
+
+### Added
+
+- **outreach:** the sequence engine: gates, scheduling, composition, classification ([AGL-2979](https://linear.app/aglyn/issue/AGL-2979))
+- **crm:** caller-supplied merge fields; the public mailbox list exported and widened ([AGL-2979](https://linear.app/aglyn/issue/AGL-2979))
+- **shared:** calendar math in a named zone, shared by bookings and the CRM digest ([AGL-2979](https://linear.app/aglyn/issue/AGL-2979))
+
+### Fixed
+
+- **tenant:** an empty collection is not a page until an entry is published ([AGL-3101](https://linear.app/aglyn/issue/AGL-3101))
+- **screens:** an entry template can be duplicated, and the copy stays a template ([AGL-3102](https://linear.app/aglyn/issue/AGL-3102))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear ceiling is 3107, read from the workspace ([AGL-3107](https://linear.app/aglyn/issue/AGL-3107))
+
+</details>
+
 ## v1.0.0-beta.129 — 2026-09-18
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.128...v1.0.0-beta.129)
