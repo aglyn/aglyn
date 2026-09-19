@@ -19,6 +19,7 @@
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { HubSections } from '@aglyn/shared-ui-next'
 import type { ReactNode } from 'react'
+import ComplianceSection from './compliance-section'
 import MailboxesSection from './mailboxes-section'
 import type { OutreachConsoleSectionId } from './outreach-console-sections'
 import SequencesSection from './sequences-section'
@@ -28,12 +29,22 @@ import SequencesSection from './sequences-section'
  * than a map of nodes so an unopened section is never constructed, which is
  * what keeps its listens closed once sections read data.
  */
-function sectionBody(section: OutreachConsoleSectionId): ReactNode {
+function sectionBody(section: OutreachConsoleSectionId, props: ConsolePluginPageProps): ReactNode {
   switch (section) {
     case 'sequences':
-      return <SequencesSection />
+      return (
+        <SequencesSection
+          orgId={props.orgMount?.orgId ?? null}
+          orgMount={props.orgMount}
+          org={(props.org as Record<string, unknown> | undefined) ?? null}
+          sectionPath={`${props.basePath}/sequences`}
+          subpath={(props.segments ?? []).slice(1)}
+        />
+      )
     case 'mailboxes':
       return <MailboxesSection />
+    case 'compliance':
+      return <ComplianceSection orgId={props.orgMount?.orgId ?? null} />
     default:
       return null
   }
@@ -47,7 +58,8 @@ function sectionBody(section: OutreachConsoleSectionId): ReactNode {
  * the `release_outreach` gate through the nav item's tab id, the
  * `features.outreach` entitlement and the `outreach.use` permission declared
  * on the extension, and org-wide reach. It hands over `hostId: null` and an
- * `orgMount`; the sections take what they need from those as they gain data.
+ * `orgMount`; each section takes the organization from the mount, and the
+ * Sequences section its own pages from the path below it.
  */
 export function OutreachConsolePage(props: ConsolePluginPageProps) {
   const { section, sections, basePath } = props
@@ -61,7 +73,7 @@ export function OutreachConsolePage(props: ConsolePluginPageProps) {
 
   return (
     <HubSections sections={sections}>
-      {sectionBody(section as OutreachConsoleSectionId)}
+      {sectionBody(section as OutreachConsoleSectionId, props)}
     </HubSections>
   )
 }

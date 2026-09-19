@@ -102,7 +102,7 @@ export const PLUGIN_SECTIONS: Readonly<Record<string, readonly string[]>> = {
   crm: ['contacts', 'leads', 'companies', 'deals', 'tasks', 'reports', 'fields', 'settings'],
   // An ORGANIZATION-level surface (AGL-2974), titled by the org plugin
   // route's layout from this same table.
-  outreach: ['sequences', 'mailboxes'],
+  outreach: ['sequences', 'mailboxes', 'compliance'],
 }
 
 /**

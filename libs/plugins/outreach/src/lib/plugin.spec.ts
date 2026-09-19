@@ -47,13 +47,14 @@ describe('outreach plugin (AGL-2974)', () => {
     expect(navItem.header?.docsTopic).toBe('outreach')
   })
 
-  it('declares Sequences then Mailboxes, from the one list the page switches on', () => {
+  it('declares Sequences, Mailboxes and Compliance, from the one list the page switches on', () => {
     registerOutreachConsole()
     const sections = registered()?.orgNavItems?.[0]?.sections
     expect(sections).toBe(OUTREACH_CONSOLE_SECTIONS)
     expect(sections?.map((section) => section.id)).toEqual([
       'sequences',
       'mailboxes',
+      'compliance',
     ])
   })
 

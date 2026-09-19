@@ -17,7 +17,7 @@
 
 import type { ConsoleNavSection } from '@aglyn/aglyn'
 
-export type OutreachConsoleSectionId = 'sequences' | 'mailboxes'
+export type OutreachConsoleSectionId = 'sequences' | 'mailboxes' | 'compliance'
 
 /**
  * The Outreach hub's sections, in rail order (AGL-2974).
@@ -39,4 +39,6 @@ export type OutreachConsoleSectionId = 'sequences' | 'mailboxes'
 export const OUTREACH_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'sequences', label: 'Sequences' },
   { id: 'mailboxes', label: 'Mailboxes' },
+  // The footer's sender identity and the allowed countries (AGL-2980).
+  { id: 'compliance', label: 'Compliance' },
 ]
