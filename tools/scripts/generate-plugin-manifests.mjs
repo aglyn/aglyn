@@ -291,18 +291,56 @@ function requireStringFields(list, fields, where) {
   return list
 }
 
+/** One jiti instance with the workspace aliases, for reading TypeScript sources. */
+let workspaceJiti
+function jitiForWorkspace() {
+  if (!workspaceJiti) {
+    const { createJiti } = createRequire(join(ROOT, 'package.json'))('jiti')
+    workspaceJiti = createJiti(join(ROOT, 'package.json'), {
+      alias: workspaceAliases(),
+      interopDefault: true,
+      moduleCache: true,
+      fsCache: false,
+      sourceMaps: false,
+    })
+  }
+  return workspaceJiti
+}
+
+/**
+ * Every plugin declares what it contributes, and where (AGL-3116).
+ *
+ * Required of a first-party plugin: the loaders place a plugin by its
+ * declaration alone, and the default a marketplace plugin gets for declaring
+ * nothing exists for versions published before the contract, not for code in
+ * this repository. Validated by core's own sanitizer, so the catalog and a
+ * marketplace manifest cannot disagree about what a valid declaration is.
+ */
+async function checkContributions() {
+  const { sanitizePluginContributions } = await jitiForWorkspace().import(
+    '@aglyn/aglyn/plugin-manager/plugin-contributions',
+  )
+  const problems = []
+  for (const plugin of config.plugins) {
+    if (!('contributes' in plugin)) {
+      problems.push(`${plugin.id}: declares no "contributes"`)
+      continue
+    }
+    const verdict = sanitizePluginContributions(plugin.contributes)
+    if (!verdict.ok) problems.push(`${plugin.id}: ${verdict.error}`)
+  }
+  if (problems.length) {
+    throw new Error(
+      `plugins.config.json has plugins whose contributions the loaders cannot read:\n  ${problems.join('\n  ')}`,
+    )
+  }
+}
+
 /** Each plugin with a `subprocessors` entry, and what that entry returns. */
 async function pluginSubprocessors() {
   const declaring = config.plugins.filter((plugin) => plugin.register?.subprocessors)
   if (!declaring.length) return []
-  const { createJiti } = createRequire(join(ROOT, 'package.json'))('jiti')
-  const jiti = createJiti(join(ROOT, 'package.json'), {
-    alias: workspaceAliases(),
-    interopDefault: true,
-    moduleCache: true,
-    fsCache: false,
-    sourceMaps: false,
-  })
+  const jiti = jitiForWorkspace()
   const entries = []
   for (const plugin of declaring) {
     const specifier = `${plugin.package}/subprocessors`
@@ -433,6 +471,8 @@ const MANIFESTS = [
 
 const check = process.argv.includes('--check')
 const drifted = []
+
+await checkContributions()
 
 const ALL = [
   ...MANIFESTS.map((manifest) => ({

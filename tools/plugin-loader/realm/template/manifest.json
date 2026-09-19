@@ -1,5 +1,5 @@
 {
-  "$comment": "Plugin manifest — published with each version. `id` is your stable plugin id (matches register()'s pluginId); `entry` names the bundle file; `capabilities` declare what the sandbox tier may do (network allowlist, events) and are enforced by the platform.",
+  "$comment": "Plugin manifest — published with each version. `id` is your stable plugin id (matches register()'s pluginId); `entry` names the bundle file; `capabilities` declare what the sandbox tier may do (network allowlist, events) and are enforced by the platform; `contributes` declares what register() adds and where (site components and features, console slots, routes and shell entries), and the platform loads the plugin only where one of them is used.",
   "id": "my-plugin",
   "name": "My plugin",
   "version": "1.0.0",
@@ -9,5 +9,8 @@
   "capabilities": {
     "network": [],
     "events": []
+  },
+  "contributes": {
+    "console": { "slots": ["hostActivity"] }
   }
 }

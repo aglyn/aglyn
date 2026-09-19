@@ -12,9 +12,11 @@
  *
  * The manifest is read too — from the second argument, or `manifest.json`
  * beside the bundle — because the checker diffs the bundle's network calls
- * against `capabilities.network` (AGL-964). Without it the network findings
- * are warnings here and errors at publish, which is exactly the local/server
- * drift this script exists to prevent, so a missing manifest is called out.
+ * against `capabilities.network` (AGL-964), and what `register()` registers
+ * against the declared `contributes` (AGL-3116). Without it the network
+ * findings are warnings here and errors at publish, and the contributions are
+ * not compared at all, which is exactly the local/server drift this script
+ * exists to prevent, so a missing manifest is called out.
  *
  * The checks are compiled from the same source of truth the server uses
  * (libs/aglyn app-utils/plugin-bundle-checks.ts) via esbuild, so local
@@ -52,10 +54,14 @@ const manifestCandidates = manifestArg
   ? [manifestArg]
   : [join(bundleDir, 'manifest.json'), join(bundleDir, '..', 'manifest.json')]
 let declaredNetwork
+// `null` is "the manifest declares none", which the publish API refuses for a
+// bundle that registers something; `undefined` is "no manifest was found".
+let declaredContributions
 for (const candidate of manifestCandidates) {
   try {
     const manifest = JSON.parse(readFileSync(candidate, 'utf8'))
     declaredNetwork = manifest?.capabilities?.network ?? []
+    declaredContributions = manifest?.contributes ?? null
     console.log(
       `Manifest: ${candidate} (network: ${
         declaredNetwork.length ? declaredNetwork.join(', ') : 'none declared'
@@ -76,7 +82,13 @@ if (!declaredNetwork) {
 }
 
 const source = readFileSync(bundlePath, 'utf8')
-const result = checkPluginBundle(source, { declaredNetwork })
+// The options the publish API passes: a NEW version must declare what its
+// register() contributes (AGL-3116).
+const result = checkPluginBundle(source, {
+  declaredNetwork,
+  declaredContributions,
+  requireContributions: true,
+})
 
 // Every area, not only the ones with findings (AGL-1087) — the same summary
 // a reviewer sees, so a publisher can tell "checked and clean" from "never
@@ -107,6 +119,14 @@ console.log(`  exports: ${Object.entries(result.exports)
   .map(([name]) => name)
   .join(', ')}`)
 console.log(`  sha256:  ${sha256}`)
+// What register() visibly registers, in the manifest's own shape: the
+// declaration the loaders place the plugin by (AGL-3116).
+console.log(
+  `  registers: ${JSON.stringify(result.contributions?.contributes ?? {})}` +
+    (result.contributions?.unresolved?.length
+      ? ` (and could not read: ${result.contributions.unresolved.join('; ')})`
+      : ''),
+)
 console.log(`
 Manifest snippet (keep id/version in step with manifest.json):
   { "version": "<version>", "sha256": "${sha256}", "entry": "plugin.bundle.mjs" }

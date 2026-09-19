@@ -22,6 +22,18 @@ description: The plugin manifest schema, the marketplace listing/version documen
     "events": ["submitted"],  // events the host will accept
     "size": { "height": 240 } // declared frame size
   },
+  "contributes": {            // what register() adds, and where
+    "site": {
+      "components": ["myBanner"], // canvas elements it registers
+      "features": []              // runtimes it mounts on every page
+    },
+    "console": {
+      "slots": ["hostActivity"],  // widget slots and panels it fills
+      "routes": [],               // site-level console routes it serves
+      "orgRoutes": [],            // organization-level routes
+      "shell": false              // a nav tab or provider on every screen
+    }
+  },
   "restrictParent": [],       // besigner lineal rules
   "restrictChildren": [],
   "config": {                 // settings the console renders a form for
@@ -40,6 +52,47 @@ Validation is server-side (`validatePluginManifest`) — invalid manifests
 never publish. `capabilities` are enforced by the sandbox tier: the plugin
 origin stamps a CSP from `network`, the bridge drops undeclared props and
 events.
+
+### `contributes` — where the plugin loads
+
+A plugin loads only where something uses it. Installing one loads nothing:
+the platform reads `contributes` to decide which published pages and which
+console screens fetch your bundle, and it never runs your code to find out.
+
+| Key | What it declares | Where the plugin then loads |
+| --- | --- | --- |
+| `site.components` | The canvas component ids `register()` registers | A published page whose node tree places one of them |
+| `site.features` | The `runtimeId` of each site runtime it mounts | Every page of a site that has the plugin switched on |
+| `console.slots` | The widget slots it fills, including the panels the shell draws as slots (`assistPanel`, `besignerInspector`) | A console screen that renders one of those slots |
+| `console.routes` / `console.orgRoutes` | The console routes its pages serve (`/my-plugin`) | The screens under those routes |
+| `console.shell` | It adds a nav tab, a provider or a staff page, which the shell draws on every screen | Every screen of the workspace |
+
+The declaration is the whole contract, so it has to be complete:
+
+- **The verifier compares it with your bundle.** `verify-plugin-bundle.mjs`
+  and the publish API read what `register()` registers (a widget's `slot`, a
+  nav item's `href`, a runtime's `runtimeId`, a component's `$id`) and refuse
+  a registration the declaration omits: a slot you forget to declare is a
+  slot whose screens never load your plugin.
+- **A new version must declare.** A bundle whose `register()` registers
+  anything and whose manifest has no `contributes` fails publishing, with the
+  declaration the verifier read printed for you to paste. Write the values
+  out (a string, or `CONSOLE_WIDGET_SLOTS.hostActivity`): a registration
+  built at runtime cannot be read, and the verifier asks you to confirm it.
+- **`{}` declares nothing at all.** Such a plugin loads nowhere, which suits a
+  sandbox-only plugin whose `register()` registers nothing.
+
+Versions published before `contributes` existed carry none, and keep working
+under one default: **a published page loads such a plugin only where its
+element is placed** (a node whose `pluginId` is the plugin's manifest id or
+listing id), and **the console loads it with the shell**, as it always did.
+The console default is broad because only running `register()` could reveal a
+nav tab or a provider; publish a new version with `contributes` to narrow it.
+
+A sandboxed element is a different thing: the platform's plugin element
+renders your `render()` entry in an iframe wherever an author places it, and
+the frame fetches your bundle, never the page, so it needs no `contributes`
+entry.
 
 ### `config` — settings without writing a settings screen
 
@@ -119,6 +172,12 @@ declaration surfaces `declarations`, `serverDeclarations` and
 `consoleServerDeclarations`, and `subprocessors`), `apiPrefixes`, and `activityMutationPaths` — the plugin's
 modules that create, transfer or destroy a durable customer object, which
 `check-activity-coverage.mjs` holds to writing an activity entry.
+
+Every entry also carries `contributes`, the same declaration a marketplace
+manifest carries (above), and it is required: the generator refuses a plugin
+without a valid one, and `apps/console/specs/plugin-contributions-declared.spec.ts`
+runs every registrar and fails when what it registers differs from what the
+entry declares.
 `node tools/scripts/generate-plugin-manifests.mjs` turns it into the four
 generated loader manifests, the three declarations manifests and the
 subprocessors manifest — the only files allowed to reference

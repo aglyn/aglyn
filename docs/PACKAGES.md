@@ -110,6 +110,18 @@ changes, because every rule is by tag.
 | `plugins-video-delivery` | `@aglyn/plugins-video-delivery` | `libs/plugins/video-delivery` | `scope:plugin` `type:feature` | yes — library video served from Cloudflare R2 through a Worker, behind core's `core.media-delivery` contract | `.`, `./*` |
 | `plugins-workflows` | `@aglyn/plugins-workflows` | `libs/plugins/workflows` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 
+**What a plugin contributes, and where (AGL-3116).** Every plugin declares
+`contributes` — its `plugins.config.json` entry for the packages above, its
+published manifest for a marketplace plugin — and the loaders place it by that
+declaration alone. A published page loads a plugin only where it places one of
+the plugin's components or the site runs one of its features; a console screen
+only where it renders one of its slots or routes, or where the shell draws its
+nav tab or provider. Installing a plugin loads nothing. The contract, and the
+default for a marketplace version published before it, live in core
+(`plugin-manager/plugin-contributions.ts`); the generator validates the
+catalog's entries and `apps/console/specs/plugin-contributions-declared.spec.ts`
+holds them to what each registrar registers.
+
 ### Shared
 
 Published as dependencies of the packages above, and usable on their own by
