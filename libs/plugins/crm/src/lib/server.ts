@@ -85,6 +85,7 @@ import { BUNDLE_ID } from './constants/bundle-common'
 import { CRM_NEXT_ACTIVITY_ROUTE } from './model/next-activity'
 import { CRM_TASK_ROUTES } from './model/task-routes'
 import { crmNextActivityHandler } from './server/next-activity-routes'
+import { registerCrmRecordTimelineWriter } from './server/record-timeline'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
 import { crmCompaniesImportHandler } from './server/companies-import'
 import { crmContactsImportHandler } from './server/contacts-import'
@@ -630,4 +631,8 @@ export function registerCrmConsoleApi(): void {
   // record-facts seam under the rules every CRM door applies, and written
   // nowhere.
   registerCrmRecordFactsReaders()
+  // The CRM as the workspace's record system on the core's record-timeline
+  // seam (AGL-2981): another plugin files an email, a reply or a task on a
+  // record through it, under the CRM's own scope, dedupe and ceiling.
+  registerCrmRecordTimelineWriter()
 }

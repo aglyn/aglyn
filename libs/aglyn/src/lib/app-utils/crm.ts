@@ -579,6 +579,11 @@ export interface CrmTask extends Omit<CrmScoped, 'hostId'> {
   createdByUid: string
   /** The automation that created it (AGL-2605), when a person did not. */
   sourceActionId?: string
+  /**
+   * The plugin that filed it on the record-timeline seam (AGL-2981) — a
+   * sequence's call step, a reply to answer — when no person did.
+   */
+  sourcePluginId?: string
   contactId?: string
   companyId?: string
   dealId?: string
@@ -810,6 +815,11 @@ export interface CrmActivity extends CrmScoped {
   byName?: string
   /** The automation that logged it (AGL-2605), when a person did not. */
   sourceActionId?: string
+  /**
+   * The plugin that filed it on the record-timeline seam (AGL-2981) — an
+   * email a sequence sent, a reply it read.
+   */
+  sourcePluginId?: string
   contactId?: string
   companyId?: string
   dealId?: string
