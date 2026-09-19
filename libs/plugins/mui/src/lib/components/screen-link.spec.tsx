@@ -497,3 +497,96 @@ describe('a Screen Link to a collection listing (AGL-2799)', () => {
     expect(el.hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR)).toBe(false)
   })
 })
+
+/**
+ * A Screen Link to a content ENTRY (AGL-3118).
+ *
+ * The element resolves it exactly as it resolves a screen or a listing — one
+ * lookup in the routing map the page provides, which on a tenant page carries
+ * the entries that page's links name. A post that is unpublished or deleted
+ * has no key there, and the element renders no href at all rather than a path
+ * the site would 404.
+ */
+describe('a Screen Link to a content entry (AGL-3118)', () => {
+  const ROUTES = {
+    pricing: 'pricing',
+    'collection:blog': 'blog',
+    'entry:blog/e1': 'blog/we-launched',
+  }
+
+  const renderOn = (value: any, ui: React.ReactElement) =>
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={value}>
+        {ui}
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+
+  it('links to the entry’s page on the live site', () => {
+    renderOn(
+      { screens: ROUTES },
+      <ScreenLink renderAs="link" screenId="entry:blog/e1">
+        {'The launch'}
+      </ScreenLink>,
+    )
+    expect(
+      screen.getByRole('link', { name: 'The launch' }).getAttribute('href'),
+    ).toBe('/blog/we-launched')
+  })
+
+  it('follows the entry through a rename of its slug or its collection', () => {
+    renderOn(
+      { screens: { ...ROUTES, 'entry:blog/e1': 'news/the-launch' } },
+      <ScreenLink renderAs="link" screenId="entry:blog/e1">
+        {'The launch'}
+      </ScreenLink>,
+    )
+    expect(
+      screen.getByRole('link', { name: 'The launch' }).getAttribute('href'),
+    ).toBe('/news/the-launch')
+  })
+
+  it('resolves the entry when a component prop lands it in the URL field', () => {
+    renderOn(
+      { screens: ROUTES },
+      <ScreenLink renderAs="link" href="entry:blog/e1">
+        {'The launch'}
+      </ScreenLink>,
+    )
+    expect(
+      screen.getByRole('link', { name: 'The launch' }).getAttribute('href'),
+    ).toBe('/blog/we-launched')
+  })
+
+  it('renders no link once the entry is unpublished, and marks itself', () => {
+    // The typed address beside it must not be followed instead: a stale path
+    // is exactly what AGL-1998 removed from the HTML.
+    renderOn(
+      { screens: ROUTES },
+      <ScreenLink renderAs="link" screenId="entry:blog/pulled" href="/blog/old">
+        {'The launch'}
+      </ScreenLink>,
+    )
+    expect(screen.queryByRole('link')).toBeNull()
+    const el = screen
+      .getByText('The launch')
+      .closest('button, a, span') as HTMLElement
+    expect(el.hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR)).toBe(true)
+  })
+
+  it('does not flag an entry link on a canvas whose map holds no entries', () => {
+    // The console's map is screens and listings; it has not heard of entries
+    // at all, so it is no evidence this one is gone.
+    renderOn(
+      {
+        screens: { pricing: 'pricing', 'collection:blog': 'blog' },
+        suppressNavigation: true,
+        editorInert: true,
+      },
+      <ScreenLink screenId="entry:blog/e1">{'The launch'}</ScreenLink>,
+    )
+    const el = screen
+      .getByText('The launch')
+      .closest('button, a, span') as HTMLElement
+    expect(el.hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR)).toBe(false)
+  })
+})

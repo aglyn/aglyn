@@ -1206,3 +1206,95 @@ describe('heading-anchor coverage across the markdown renderers (AGL-1162)', () 
     ).toEqual([])
   })
 })
+
+/**
+ * Link-reference coverage across EVERY markdown-lite renderer (AGL-3118).
+ *
+ * The same shape of risk the heading-anchor sweep above guards, with a worse
+ * failure: a renderer that never learned about link references draws the
+ * stored `entry:…` as an href, so a published post links nowhere and nothing
+ * in the renderer's own file looks wrong. So the renderers are enumerated
+ * from source again — every tracked file that calls `parseMarkdownLite` and
+ * renders a link inline — and each one must decide what a link renders as
+ * through `resolveMarkdownLink`, or appear below with a reason.
+ */
+describe('link-reference coverage across the markdown renderers (AGL-3118)', () => {
+  /** Renderers that deliberately do not resolve references, with why. */
+  const NOT_RESOLVED: Record<string, string> = {
+    'libs/aglyn-markdown-editor/src/lib/markdown-visual-editor.component.tsx':
+      'an EDITING surface: a link is a contentEditable span that carries its ' +
+      'stored target for the round trip back to source. It is never an ' +
+      'anchor and never followed.',
+    'libs/aglyn-markdown-editor/src/lib/markdown-lite-view.component.tsx':
+      'the console’s preview beside the editor, drawn from the document being ' +
+      'edited, where no published routing map exists; what its links show ' +
+      'belongs to the console link work (AGL-3119).',
+  }
+
+  const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+    encoding: 'utf8',
+  }).trim()
+
+  const tracked = execFileSync(
+    'git',
+    ['ls-files', '--', 'apps/*.ts', 'apps/*.tsx', 'libs/*.ts', 'libs/*.tsx'],
+    { encoding: 'utf8', cwd: repoRoot, maxBuffer: 32 * 1024 * 1024 },
+  )
+    .split('\n')
+    .filter(Boolean)
+    .filter((file) => !/\.spec\.tsx?$/.test(file))
+
+  /** Renders a link inline — `case 'link':`, or a test either way round. */
+  const RENDERS_A_LINK = /(?:case|===|!==)\s*'link'/
+  const CALLS_THE_PARSER = /parseMarkdownLite\(/
+  const DECLARES_THE_PARSER = /export function parseMarkdownLite\(/
+  const RESOLVES = 'resolveMarkdownLink('
+
+  const renderers = tracked
+    .map((file) => ({
+      file,
+      source: readFileSync(join(repoRoot, file), 'utf8'),
+    }))
+    .filter(
+      ({ source }) =>
+        CALLS_THE_PARSER.test(source) &&
+        RENDERS_A_LINK.test(source) &&
+        !DECLARES_THE_PARSER.test(source),
+    )
+
+  it('finds the renderers at all, the site’s three among them', () => {
+    const files = renderers.map((entry) => entry.file)
+    expect(files.length).toBeGreaterThanOrEqual(5)
+    expect(files).toEqual(
+      expect.arrayContaining([
+        'libs/plugins/mui/src/lib/components/markdown.tsx',
+        'libs/plugins/mui/src/lib/components/collection.tsx',
+        'apps/tenant/app/[host]/[scheme]/[[...slug]]/collection-fallback.tsx',
+      ]),
+    )
+  })
+
+  it('every renderer decides its links through resolveMarkdownLink', () => {
+    const unresolved = renderers
+      .filter(({ source }) => !source.includes(RESOLVES))
+      .map(({ file }) => file)
+      .filter((file) => !(file in NOT_RESOLVED))
+    expect(unresolved).toEqual([])
+  })
+
+  it('no exemption outlives its reason', () => {
+    const stale = Object.keys(NOT_RESOLVED).filter((file) =>
+      renderers
+        .find((candidate) => candidate.file === file)
+        ?.source.includes(RESOLVES),
+    )
+    expect(stale).toEqual([])
+  })
+
+  it('every exempt path is still a renderer that exists', () => {
+    const files = new Set(renderers.map((entry) => entry.file))
+    expect(
+      Object.keys(NOT_RESOLVED).filter((file) => !files.has(file)),
+    ).toEqual([])
+  })
+})
