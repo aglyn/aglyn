@@ -17,6 +17,7 @@
 
 import {
   buildScreenRouteEntries,
+  collectionEntryRoutePath,
   collectionFeedRoutePath,
   collectScreenDescendantIds,
   composeScreenRoutePath,
@@ -599,5 +600,20 @@ describe('linkableScreenRoutes — feeds and entries (AGL-3118)', () => {
         entryRoutes: { 'entry:videos/Hpy49iVFX3': 'videos/film' },
       }),
     ).toEqual({ 'entry:videos/Hpy49iVFX3': 'videos/film' })
+  })
+
+  it('builds an entry path in the map format, the route the router reads back', () => {
+    const path = collectionEntryRoutePath('videos', 'every-client-site')
+    expect(path).toBe('videos/every-client-site')
+    // Stray slashes on either half do not become an empty segment.
+    expect(collectionEntryRoutePath('/videos/', ' /every-client-site/ ')).toBe(
+      'videos/every-client-site',
+    )
+    const routes = linkableScreenRoutes(raw, {
+      entryRoutes: { 'entry:videos/Hpy49iVFX3': path },
+    })
+    expect(resolveScreenHref(routes, 'entry:videos/Hpy49iVFX3')).toBe(
+      '/videos/every-client-site',
+    )
   })
 })
