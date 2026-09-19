@@ -338,14 +338,22 @@ export function parseAssistEditContext(raw: unknown): AssistEditCanvasContext | 
     const root = id === CANVAS_ROOT_ELEMENT_ID
     const parentId = root ? null : entry['parentId']
     if (!root && !isNodeId(parentId)) continue
-    seen.add(id)
     const selected = id === requestedSelection
     const name = cleanText(entry['name'], LAYER_NAME_CHARS)
-    const props = describeProps(
-      entry['props'],
-      selected ? ASSIST_EDIT_SELECTED_TEXT_CHARS : ASSIST_EDIT_OUTLINE_TEXT_CHARS,
-    )
+    // A brief element carries no settings whatever the request says, so the
+    // tier the block is priced by is held here and not by the client.
+    const brief = entry['brief'] === true && !selected
+    const props = brief
+      ? undefined
+      : describeProps(
+          entry['props'],
+          selected ? ASSIST_EDIT_SELECTED_TEXT_CHARS : ASSIST_EDIT_OUTLINE_TEXT_CHARS,
+        )
     const sx = selected ? describeSx(entry['sx']) : undefined
+    // Alike only an element described before this one.
+    const like = entry['like']
+    const alike = isNodeId(like) && seen.has(like)
+    seen.add(id)
     nodes.push({
       id,
       componentId,
@@ -355,6 +363,8 @@ export function parseAssistEditContext(raw: unknown): AssistEditCanvasContext | 
       ...(name ? { name } : {}),
       ...(props ? { props } : {}),
       ...(sx ? { sx } : {}),
+      ...(brief ? { brief: true } : {}),
+      ...(alike ? { like } : {}),
     })
   }
   if (!nodes.some((node) => node.id === CANVAS_ROOT_ELEMENT_ID)) return null
@@ -390,17 +400,74 @@ function describePropShape(entry: AiPaletteEntry, name: string): string {
 }
 
 /** What a partial outline covers, and how the model is to read what it leaves out. */
-function outlineCoverage(context: AssistEditCanvasContext, selected: boolean): string[] {
+function outlineCoverage(
+  context: AssistEditCanvasContext,
+  selected: boolean,
+  alike: boolean,
+): string[] {
   const count =
     context.total === undefined
       ? `${context.nodes.length} of its elements`
       : `${context.nodes.length} of its ${context.total} elements`
   return [
     selected
-      ? `This outline is part of the document: ${count}, nearest the selection first — its ancestors, the document's top-level sections, everything inside it, then the elements around it.`
+      ? `This outline is part of the document: ${count}. The selection, what it holds, its siblings, its ancestors and the top-level sections come with their settings; what surrounds them follows, listed briefly.`
       : `This outline is only the top of the document: ${count} — the root, its top-level sections and one level inside each.`,
-    'An element with "more": n has n children the outline does not describe. Something the outline does not show may still be on the canvas, so never say the document lacks it: say it is not in the outline, and ask the user to select it or the element that holds it.',
+    'An element with "more": n has n children the outline does not describe.' +
+      (alike
+        ? ' "like": id marks an element built the same way as that one, whose contents are left out; "ids" lists several of them at once.'
+        : '') +
+      ' Something the outline does not show may still be on the canvas, so never say the document lacks it: say it is not in the outline, and ask the user to select it or the element that holds it.',
   ]
+}
+
+/**
+ * The brief tier, one line per element — or one line for a run of siblings
+ * built like the same element, which is what a row of cards around a selected
+ * card reads as.
+ */
+function briefLines(
+  nodes: readonly AssistEditCanvasNode[],
+  unlisted: (node: AssistEditCanvasNode) => number,
+): string[] {
+  const lines: string[] = []
+  for (let start = 0; start < nodes.length; ) {
+    const first = nodes[start]
+    let end = start + 1
+    const joins = (node: AssistEditCanvasNode) =>
+      Boolean(first.like) &&
+      !first.name &&
+      !node.name &&
+      node.like === first.like &&
+      node.parentId === first.parentId &&
+      node.componentId === first.componentId
+    while (end < nodes.length && joins(nodes[end])) end += 1
+    if (end - start > 1) {
+      lines.push(
+        JSON.stringify({
+          ids: nodes.slice(start, end).map((node) => node.id),
+          component: first.componentId,
+          parent: first.parentId,
+          like: first.like,
+        }),
+      )
+    } else {
+      const more = unlisted(first)
+      lines.push(
+        JSON.stringify({
+          id: first.id,
+          component: first.componentId,
+          parent: first.parentId,
+          children: first.childCount,
+          ...(more ? { more } : {}),
+          ...(first.like ? { like: first.like } : {}),
+          ...(first.name ? { name: first.name } : {}),
+        }),
+      )
+    }
+    start = end
+  }
+  return lines
 }
 
 /**
@@ -414,6 +481,10 @@ function outlineCoverage(context: AssistEditCanvasContext, selected: boolean): s
  * document and reports what it cannot see as missing. A thread replays earlier
  * answers as history, and a model not told that this block replaces them
  * answers about a selection from an earlier turn.
+ *
+ * Priced in two tiers: the elements the outline has always carried keep their
+ * settings, and the ones around them — there so the model knows they exist —
+ * come by place alone, a run of alike siblings on one line.
  */
 export function editSelectionBlock(context: AssistEditCanvasContext): string {
   const selected = context.nodes.find((node) => node.id === context.selectedId)
@@ -432,11 +503,16 @@ export function editSelectionBlock(context: AssistEditCanvasContext): string {
       ? `Selected element: "${selected.id}" (${selected.componentId}). The user selected it before asking, so "this", "it" and "here" mean this element.`
       : 'Nothing is selected. Never treat an element named earlier in the conversation as selected. If the request is about an element you cannot identify for certain below, ask the user to select it on the canvas or in the Hierarchy and ask again; do not guess.',
     ...(partial
-      ? outlineCoverage(context, Boolean(selected))
+      ? outlineCoverage(
+          context,
+          Boolean(selected),
+          context.nodes.some((node) => node.like),
+        )
       : ['Every element of the document is described.']),
     'Elements, one JSON object per line:',
   ]
   for (const node of context.nodes) {
+    if (node.brief) continue
     const more = unlisted(node)
     lines.push(
       JSON.stringify({
@@ -446,11 +522,17 @@ export function editSelectionBlock(context: AssistEditCanvasContext): string {
         index: node.index,
         children: node.childCount,
         ...(more ? { more } : {}),
+        ...(node.like ? { like: node.like } : {}),
         ...(node.name ? { name: node.name } : {}),
         ...(node.props ? { props: node.props } : {}),
         ...(node.sx ? { sx: node.sx } : {}),
       }),
     )
+  }
+  const around = context.nodes.filter((node) => node.brief)
+  if (around.length) {
+    lines.push('Around them, listed briefly without their settings:')
+    lines.push(...briefLines(around, unlisted))
   }
   const shapes: string[] = []
   for (const componentId of new Set(context.nodes.map((node) => node.componentId))) {

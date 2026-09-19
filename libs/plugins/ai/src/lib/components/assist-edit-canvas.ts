@@ -165,6 +165,32 @@ function chainToRoot(
   return current?.$id === CANVAS_ROOT_ELEMENT_ID ? chain : null
 }
 
+/** Elements one shape is taken over at most; a larger subtree is never called alike. */
+const SHAPE_LIMIT = 200
+
+/**
+ * How an element is built: its component and, in order, its children's —
+ * what two cards of one row have in common whatever their text. Null past
+ * `SHAPE_LIMIT` elements, or for a subtree that loops back on itself.
+ */
+function shapeOf(canvas: Pick<AssistEditCanvas, 'getNode'>, rootId: string): string | null {
+  let budget = SHAPE_LIMIT
+  const walked = new Set<string>()
+  const walk = (id: string): string | null => {
+    const node = canvas.getNode(id)
+    if (!node || walked.has(id) || --budget < 0) return null
+    walked.add(id)
+    const parts: string[] = []
+    for (const child of node.nodes ?? []) {
+      const part = walk(child)
+      if (part === null) return null
+      parts.push(part)
+    }
+    return `${String(node.componentId ?? '')}(${parts.join(',')})`
+  }
+  return walk(rootId)
+}
+
 /** Elements reachable from the document root through child lists, the root included. */
 function countElements(canvas: Pick<AssistEditCanvas, 'getNode'>): number {
   let count = 0
@@ -184,16 +210,24 @@ function countElements(canvas: Pick<AssistEditCanvas, 'getNode'>): number {
 }
 
 /**
- * The canvas outline a question carries on the edit rung, nearest first
- * until the cap:
+ * The canvas outline a question carries on the edit rung, in two tiers, until
+ * the cap.
  *
- * 1. the document root, the selection's ancestors and the selection;
- * 2. the document's top-level sections, the map of the rest of it;
- * 3. everything inside the selection, which is what an edit to it changes;
- * 4. the rest of the selection's own section, outward from it: its siblings
- *    and what they hold, then its parent's siblings — the other cards of a
- *    repeated group — and theirs, and so on. The walk never passes through
- *    the root, so another section's content never displaces this one's.
+ * Described in full, settings and all: the document root, the selection's
+ * ancestors and the selection, the document's top-level sections, everything
+ * inside the selection — what an edit to it changes — and its siblings.
+ *
+ * Described briefly, by place alone (`brief`): what surrounds that, so the
+ * model knows it exists and asks for it rather than calling it missing —
+ *
+ * 1. what the selection's siblings hold, level by level (the icons beside a
+ *    selected link, in the card they share);
+ * 2. the siblings of each ancestor below the top-level section, nearest
+ *    first (the other cards of the row, then what sits beside the row).
+ *
+ * An element built the same way as the selection, or as the ancestor it sits
+ * beside, is marked `like` it and its contents are left out: one card
+ * described, and every other card of the row says it holds the same.
  *
  * With nothing selected, it is the root, the top-level sections and one level
  * inside each: enough for a change to the page as a whole, and the prompt asks
@@ -213,21 +247,32 @@ export function describeAssistEditCanvas(
   if (!root) return null
   const order: string[] = []
   const seen = new Set<string>()
+  const brief = new Set<string>()
+  const like = new Map<string, string>()
   const full = (): boolean => order.length >= ASSIST_EDIT_CONTEXT_MAX_NODES
-  const add = (id: string | undefined | null): void => {
+  const add = (id: string | undefined | null, briefly = false): void => {
     if (!id || seen.has(id) || full()) return
     if (!canvas.getNode(id)) return
     seen.add(id)
     order.push(id)
+    if (briefly) brief.add(id)
   }
   const childrenOf = (id: string): string[] => canvas.getNode(id)?.nodes ?? []
+  const shapes = new Map<string, string | null>()
+  const shape = (id: string): string | null => {
+    if (!shapes.has(id)) shapes.set(id, shapeOf(canvas, id))
+    return shapes.get(id) ?? null
+  }
+  // Alike only when there are contents to leave out.
+  const alike = (id: string, model: string): boolean =>
+    childrenOf(id).length > 0 && shape(id) !== null && shape(id) === shape(model)
 
   add(CANVAS_ROOT_ELEMENT_ID)
   const selected =
     selectedId && selectedId !== CANVAS_ROOT_ELEMENT_ID ? canvas.getNode(selectedId) : undefined
   const chain = selected?.$id ? chainToRoot(canvas, selected) : null
-  chain?.forEach(add)
-  if (selected?.$id && seen.has(selected.$id)) {
+  chain?.forEach((id) => add(id))
+  if (selected?.$id && chain && seen.has(selected.$id)) {
     for (const id of root.nodes ?? []) add(id)
     const inside = new Set<string>([selected.$id])
     const queue = [...childrenOf(selected.$id)]
@@ -238,23 +283,37 @@ export function describeAssistEditCanvas(
       add(id)
       queue.push(...childrenOf(id))
     }
-    // Outward over the tree's edges, climbing only along the chain: a sibling
-    // is reached through the parent that lists it, so it follows that parent.
-    const upward = new Map<string, string>()
-    const path = chain ?? []
-    for (let index = path.length - 1; index > 0; index -= 1) {
-      upward.set(path[index], path[index - 1])
-    }
-    const reached = new Set<string>([selected.$id])
-    const around = [selected.$id]
-    while (around.length && !full()) {
-      const id = around.shift() as string
+    const siblings = selected.parentId
+      ? childrenOf(selected.parentId).filter((id) => id !== selected.$id)
+      : []
+    const held: string[] = []
+    for (const id of siblings) {
       add(id)
-      const up = upward.get(id)
-      for (const next of up ? [...childrenOf(id), up] : childrenOf(id)) {
-        if (reached.has(next)) continue
-        reached.add(next)
-        around.push(next)
+      // A sibling the cap left out takes its contents with it.
+      if (!seen.has(id)) continue
+      if (alike(id, selected.$id)) like.set(id, selected.$id)
+      else held.push(...childrenOf(id))
+    }
+    const reached = new Set<string>([...inside, ...siblings, ...held])
+    for (let level = held; level.length && !full(); ) {
+      const deeper: string[] = []
+      for (const id of level) {
+        add(id, true)
+        for (const child of childrenOf(id)) {
+          if (reached.has(child)) continue
+          reached.add(child)
+          deeper.push(child)
+        }
+      }
+      level = deeper
+    }
+    // Parent first; the top-level section's own siblings are the sections above.
+    for (const ancestor of chain.slice(1, -1).reverse()) {
+      const parentId = canvas.getNode(ancestor)?.parentId
+      for (const id of parentId ? childrenOf(parentId) : []) {
+        if (id === ancestor || seen.has(id)) continue
+        add(id, true)
+        if (seen.has(id) && alike(id, ancestor)) like.set(id, ancestor)
       }
     }
   } else {
@@ -270,11 +329,15 @@ export function describeAssistEditCanvas(
     const parentId = isRoot ? null : (node.parentId ?? null)
     const parent = parentId ? canvas.getNode(parentId) : undefined
     const isSelected = id === selected?.$id
-    const props = describeProps(
-      node.props,
-      isSelected ? ASSIST_EDIT_SELECTED_TEXT_CHARS : ASSIST_EDIT_OUTLINE_TEXT_CHARS,
-    )
+    const isBrief = brief.has(id)
+    const props = isBrief
+      ? undefined
+      : describeProps(
+          node.props,
+          isSelected ? ASSIST_EDIT_SELECTED_TEXT_CHARS : ASSIST_EDIT_OUTLINE_TEXT_CHARS,
+        )
     const sx = isSelected ? describeSx(node.sx) : undefined
+    const model = like.get(id)
     return {
       id,
       componentId: String(node.componentId ?? ''),
@@ -284,6 +347,8 @@ export function describeAssistEditCanvas(
       ...(node.name ? { name: String(node.name) } : {}),
       ...(props ? { props } : {}),
       ...(sx ? { sx } : {}),
+      ...(isBrief ? { brief: true } : {}),
+      ...(model ? { like: model } : {}),
     }
   })
   return {

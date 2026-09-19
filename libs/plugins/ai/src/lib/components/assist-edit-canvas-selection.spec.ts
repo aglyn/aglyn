@@ -43,6 +43,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/editor-sessions'
 import * as Besigner from '@aglyn/besigner'
 import { ASSIST_EDIT_CONTEXT_MAX_NODES } from '../model/assist-edit'
+import { AI_CACHE_PREFIX_TOKEN_CHARS } from '../runtime/ai-runtime'
 import { editSelectionBlock, parseAssistEditContext } from '../server/assist-edit'
 import { describeAssistEditCanvas } from './assist-edit-canvas'
 
@@ -263,16 +264,14 @@ describe('the Screen Link selected, the Hierarchy collapsed', () => {
     expect(ids).toEqual(
       expect.arrayContaining([ICON_ROW, GLYPH_STACK, GLYPH, ARROW_STACK, ARROW, DESCRIPTION]),
     )
-    expect(outline.nodes.find((entry) => entry.id === ARROW)).toMatchObject({
-      componentId: 'icon',
-      parentId: ARROW_STACK,
-      props: { iconId: 'arrow-top-right', size: 20 },
-    })
+    // Its siblings come in full; what they hold, briefly, by place alone.
+    const entry = (id: string) => outline.nodes.find((described) => described.id === id)
+    expect(entry(ICON_ROW)).toMatchObject({ props: { direction: 'row' } })
+    expect(entry(ICON_ROW)).not.toHaveProperty('brief')
+    expect(entry(ARROW)).toMatchObject({ componentId: 'icon', parentId: ARROW_STACK, brief: true })
+    expect(entry(ARROW)).not.toHaveProperty('props')
     // The selection alone carries its styles.
-    expect(outline.nodes.find((entry) => entry.id === LINK)?.sx).toEqual({
-      fontWeight: 600,
-      textDecoration: 'none',
-    })
+    expect(entry(LINK)?.sx).toEqual({ fontWeight: 600, textDecoration: 'none' })
   }
 
   it('a Hierarchy click: the outline carries the selection, its ancestors and its whole card', () => {
@@ -292,19 +291,41 @@ describe('the Screen Link selected, the Hierarchy collapsed', () => {
     expectSelectionCarried()
   })
 
-  it('reaches the other cards of the row next — each card, and the Screen Link in each', () => {
+  it('says every other card of the row is built like the selected one, without listing their contents', () => {
     clickCanvasElement(node(LINK))
-    const ids = outlineOnSend().nodes.map((entry) => entry.id)
+    const outline = outlineOnSend()
+    const ids = outline.nodes.map((entry) => entry.id)
     for (const [card, row, , , , , link, , text] of CARDS.slice(1)) {
-      expect(ids).toEqual(expect.arrayContaining([card, row, link, text]))
+      expect(outline.nodes.find((entry) => entry.id === card)).toMatchObject({
+        brief: true,
+        like: SELECTED_CARD,
+        childCount: 3,
+      })
+      expect(ids).not.toEqual(expect.arrayContaining([row]))
+      expect(ids).not.toEqual(expect.arrayContaining([link]))
+      expect(ids).not.toEqual(expect.arrayContaining([text]))
     }
   })
 
-  it('stays within the cap, describes every element after its parent, and counts the document', () => {
+  it('describes in full what the outline always did, and briefly what surrounds it, each element after its parent', () => {
     clickCanvasElement(node(LINK))
     const outline = outlineOnSend()
-    expect(outline.nodes).toHaveLength(ASSIST_EDIT_CONTEXT_MAX_NODES)
     expect(outline.total).toBe(88)
+    const inFull = outline.nodes.filter((entry) => !entry.brief).map((entry) => entry.id)
+    const briefly = outline.nodes.filter((entry) => entry.brief)
+    expect(inFull).toEqual([...ANCESTORS, LINK, ICON_ROW, DESCRIPTION])
+    expect(briefly.map((entry) => entry.id)).toEqual([
+      GLYPH_STACK,
+      ARROW_STACK,
+      GLYPH,
+      ARROW,
+      ...CARDS.slice(1).map((card) => card[0]),
+      '3mIFFfgw_z',
+    ])
+    for (const entry of briefly) {
+      expect(entry).not.toHaveProperty('props')
+      expect(entry).not.toHaveProperty('sx')
+    }
     const ids = outline.nodes.map((entry) => entry.id)
     outline.nodes.forEach((entry, index) => {
       if (entry.parentId) expect(ids.indexOf(entry.parentId)).toBeLessThan(index)
@@ -316,14 +337,66 @@ describe('the Screen Link selected, the Hierarchy collapsed', () => {
     const context = parseAssistEditContext(JSON.parse(JSON.stringify(outlineOnSend())))
     const block = editSelectionBlock(context!)
     expect(block).toContain(`Selected element: "${LINK}" (muiScreenLink).`)
-    expect(block).toContain(`${ASSIST_EDIT_CONTEXT_MAX_NODES} of its 88 elements`)
-    expect(block).toContain(`"id":"${ARROW}","component":"icon"`)
-    // A card further along whose icons did not fit says so, rather than
-    // reading as a card with no icons.
-    const cousinArrowStack = CARDS[9][4]
-    const cousinLine = block.split('\n').find((line) => line.includes(`"id":"${CARDS[9][1]}"`))
-    expect(cousinLine).toContain('"more":')
-    expect(block).not.toContain(`"id":"${cousinArrowStack}"`)
+    expect(block).toContain('22 of its 88 elements')
+    expect(block).toContain(`{"id":"${ARROW}","component":"icon","parent":"${ARROW_STACK}","children":0}`)
+    // The other nine cards, on one line, as built like the selected one.
+    expect(block).toContain(
+      JSON.stringify({
+        ids: CARDS.slice(1).map((card) => card[0]),
+        component: 'muiStack',
+        parent: 'WH4DSEVY_5',
+        like: SELECTED_CARD,
+      }),
+    )
+    // The header beside the row, by place alone, saying it holds more.
+    expect(block).toContain('{"id":"3mIFFfgw_z","component":"muiStack","parent":"pNVe99s0FD","children":3,"more":3}')
+    expect(block).not.toContain(`"id":"${CARDS[9][4]}"`)
+  })
+
+  it('a selected card: the other cards are its siblings, in full and like it, their contents left out', () => {
+    clickCanvasElement(node(SELECTED_CARD))
+    const outline = outlineOnSend()
+    const ids = outline.nodes.map((entry) => entry.id)
+    // Everything inside the selected card, in full.
+    expect(ids).toEqual(
+      expect.arrayContaining([ICON_ROW, GLYPH_STACK, GLYPH, ARROW_STACK, ARROW, LINK, DESCRIPTION]),
+    )
+    for (const [card, , , , , , link] of CARDS.slice(1)) {
+      const sibling = outline.nodes.find((entry) => entry.id === card)
+      expect(sibling).toMatchObject({ like: SELECTED_CARD, props: { direction: 'column' } })
+      expect(sibling).not.toHaveProperty('brief')
+      expect(ids).not.toContain(link)
+    }
+    expect(outline.nodes).toHaveLength(22)
+  })
+})
+
+describe('the block the model reads for the reported document', () => {
+  function measure(selectedId: string | null) {
+    closeEditor()
+    closeEditor = registerEditorSession({
+      documentKind: 'component',
+      documentId: COMPONENT_ID,
+      versionId: VERSION_ID,
+      isLiveVersion: () => false,
+      selectedNodeId: () => selectedId,
+    })
+    const block = editSelectionBlock(
+      parseAssistEditContext(JSON.parse(JSON.stringify(outlineOnSend())))!,
+    )
+    return { chars: block.length, tokens: Math.round(block.length / AI_CACHE_PREFIX_TOKEN_CHARS) }
+  }
+
+  it('holds its size, selected and with nothing selected', () => {
+    // Priced like the cache ledger: a change that cuts this block moves a
+    // number DOWN and says so in its commit, and one that grows it without
+    // meaning to moves it UP and is red here. For this document the outline
+    // before AGL-3114 was 2,412 characters with the link selected and 796
+    // with nothing selected; describing the whole cap in full was 9,768.
+    expect({ selected: measure(LINK), nothingSelected: measure(null) }).toEqual({
+      selected: { chars: 3_945, tokens: 986 },
+      nothingSelected: { chars: 1_533, tokens: 383 },
+    })
   })
 })
 
