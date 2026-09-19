@@ -16,7 +16,7 @@
  */
 
 // Stands up the multi-site demo org (AGL-1734): one organization holding
-// several visibly different client sites, which is what the founding demo
+// several visibly different client sites, which is what the 30-minute demo
 // spends minutes 3–10 on ("switch between several sites in one org;
 // roles/permissions; one billing view", Design-Partner-Outreach.md §4).
 //

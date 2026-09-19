@@ -43,6 +43,91 @@ can grant it to other members of the organization. A collaborator added to
 particular sites cannot open it, because Outreach covers the whole
 organization.
 
+## Connect a mailbox {#connect-a-mailbox}
+
+Each rep connects their **own** Google mailbox in **Outreach → Mailboxes**:
+
+1. Select **Connect with Google** and choose your Google account.
+2. Google asks you to let Outreach **send email on your behalf** and **read
+   your email**. Allow both. Sending is how a sequence's messages go out as
+   you; reading is how Outreach notices a reply or a bounce, so a sequence
+   stops when somebody answers. If either is left unticked, the connection is
+   refused and nothing is saved.
+3. You come back to Mailboxes with the mailbox listed as **Active**.
+
+The access Google grants is stored encrypted and is never shown to anyone,
+administrators included. Connecting the same Google account again updates the
+mailbox you already have and keeps its settings. Each member can connect up to
+five mailboxes.
+
+If Mailboxes says connecting a Google mailbox isn't configured, your deployment
+has no Google OAuth client set up. On a self-hosted install, see
+[Environment variables](../../developers/self-hosting-environment.md#outreach).
+
+### Send-as address and display name {#send-as}
+
+A mailbox sends **as** one address: the account's own, or an alias Gmail has
+already verified for it — one added under **Settings → Accounts → Send mail
+as** in Gmail and confirmed there. Outreach only offers addresses Gmail lists
+as verified. To use a new alias, add it in Gmail first, then connect the
+mailbox again so Outreach sees it.
+
+If the same address is waiting for verification under
+[Your sending addresses](./settings.md#your-sending-addresses), connecting the
+mailbox verifies it there too, because Gmail has already confirmed you can send
+as it.
+
+The **display name** is the name recipients see beside the address.
+
+### Daily cap, warm-up and sending window {#daily-cap}
+
+- **Daily cap** — the most the mailbox sends in one day. It starts at **20**
+  and can be set up to **50**.
+- **Warm-up** — a newly connected mailbox ramps up: at most **10** a day in
+  its first week, **20** in its second and **30** from its third. The daily
+  cap still applies, so a mailbox capped at 20 never sends more than 20.
+- **Sending window** — the days of the week and the hours the mailbox sends
+  in, read in the mailbox's **timezone**. A message that comes due outside the
+  window waits for the next opening.
+
+Google Workspace itself allows each user 2,000 messages and 2,000 unique
+external recipients a day, aliases included; the caps here keep a mailbox far
+below that.
+
+### Status and health {#mailbox-status}
+
+| Status | What it means |
+| --- | --- |
+| **Active** | The mailbox can send. |
+| **Paused** | Somebody paused it. Nothing sends from it until it is resumed. |
+| **Reconnect required** | Google stopped accepting the connection — the password changed, access was removed from the Google account, or an administrator revoked it. Nothing sends until you connect the mailbox again. |
+| **Disconnected** | The mailbox was disconnected. Nothing sends from it until it is connected again. |
+
+**Health** shows the last seven days: messages sent, bounces and replies. A
+mailbox that has never sent shows zeros and **No sends yet**.
+
+### Test, pause and disconnect {#mailbox-actions}
+
+- **Send a test to myself** sends a short plain-text message from the mailbox
+  to its own address, so you can check it arrives. Only the member who
+  connected the mailbox can send one.
+- **Pause** stops the mailbox sending; **Resume** starts it again.
+- **Disconnect** removes the mailbox and deletes its stored access, and tells
+  Google to revoke that access. If another connected mailbox still uses the
+  same Google account — a shared inbox two members connected — the access is
+  left in place for that mailbox. You can always remove access yourself from
+  your Google Account's third-party connections.
+
+Organization owners and admins can change the settings of, pause and
+disconnect any member's mailbox — a departing rep's mailbox has to be
+stoppable by somebody. Other members manage only their own.
+
+When a member deletes their account, Outreach deletes the mailboxes they
+connected and the access stored for them, and asks Google to revoke it; when
+an organization is deleted, it asks Google to revoke the access of every
+mailbox in it. Access another connected mailbox still uses is left in place
+for that mailbox, as with a disconnect.
+
 ## Compliance settings {#compliance-settings}
 
 Every Outreach email ends with a footer saying who sent it, where they can be

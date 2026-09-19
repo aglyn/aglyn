@@ -42,7 +42,7 @@ function sectionBody(section: OutreachConsoleSectionId, props: ConsolePluginPage
         />
       )
     case 'mailboxes':
-      return <MailboxesSection />
+      return <MailboxesSection orgId={props.orgMount?.orgId ?? null} />
     case 'compliance':
       return <ComplianceSection orgId={props.orgMount?.orgId ?? null} />
     default:

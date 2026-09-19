@@ -148,6 +148,25 @@ const MUTATION_PATHS = [
 ]
 
 /**
+ * The mutation paths each plugin declares for itself (AGL-2978), under
+ * `activityMutationPaths` in `plugins.config.json` — repo-relative, like the
+ * list above. A plugin's routes are the plugin's facts, so the plugin names
+ * them in the registry that already maps it, and this list names no plugin.
+ * A declared path is held to exactly the rule above: it logs, or it is
+ * classified, and one that no longer exists fails as stale.
+ */
+function pluginMutationPaths() {
+  const config = JSON.parse(readFileSync(`${repoRoot}plugins.config.json`, 'utf8'))
+  return (config.plugins ?? []).flatMap((plugin) => {
+    const paths = plugin.activityMutationPaths ?? []
+    if (!Array.isArray(paths) || paths.some((path) => typeof path !== 'string' || !path)) {
+      throw new Error(`plugins.config.json: ${plugin.id} has activityMutationPaths that are not a list of paths`)
+    }
+    return paths
+  })
+}
+
+/**
  * Paths that legitimately write no activity entry, each with the reason.
  *
  * A reason is not a formality. Every line here is a claim that an act a
@@ -255,7 +274,7 @@ const covered = []
 const classified = []
 const unlogged = []
 const missing = []
-for (const relative of MUTATION_PATHS) {
+for (const relative of [...MUTATION_PATHS, ...pluginMutationPaths()]) {
   const verdict = verdictFor(relative)
   if (verdict === 'COVERED') covered.push(relative)
   else if (verdict === 'CLASSIFIED') classified.push(relative)

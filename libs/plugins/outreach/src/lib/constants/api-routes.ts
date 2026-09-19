@@ -28,6 +28,28 @@
 export const OUTREACH_API_ROUTES = {
   /** `GET` — proves the server bundle loaded and registered; see `server.ts`. */
   ping: 'outreach/ping',
+  // Mailboxes (AGL-2978). Every one names its org (`orgId`, query or body)
+  // so the dispatcher's release gate asks about that organization.
+  /** `GET ?orgId` — whether this deployment can connect a Google mailbox. */
+  mailboxesAvailability: 'outreach/mailboxes/availability',
+  /** `POST` — Google's consent address for a new connect. */
+  mailboxesConnect: 'outreach/mailboxes/connect',
+  /**
+   * `GET` — Google's redirect back. It carries no bearer token: the signed
+   * state names the org and the member, and the route hands the code to the
+   * Mailboxes page in a fragment rather than acting on it.
+   */
+  mailboxesOAuthCallback: 'outreach/mailboxes/oauth/callback',
+  /** `POST` — finishes a connect with the member's own session. */
+  mailboxesConnectComplete: 'outreach/mailboxes/connect/complete',
+  /** `POST` — send-as, display name, daily cap, sending window, timezone. */
+  mailboxesSettings: 'outreach/mailboxes/settings',
+  /** `POST` — pause or resume. */
+  mailboxesStatus: 'outreach/mailboxes/status',
+  /** `POST` — a plain-text test to the account's own address. */
+  mailboxesTest: 'outreach/mailboxes/test',
+  /** `POST` — revoke the grant at Google and delete the mailbox. */
+  mailboxesDisconnect: 'outreach/mailboxes/disconnect',
   // Settings, sequences and enrollments (AGL-2980). Every one names its org
   // (`orgId`, query or body); the contract is `model/outreach-api.ts`.
   /** `GET ?orgId` — the compliance settings; `POST` — save them. */

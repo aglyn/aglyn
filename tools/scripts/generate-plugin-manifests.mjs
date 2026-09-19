@@ -152,17 +152,26 @@ function describeDrift(expected, actual) {
  * plugin, which the package map refuses (AGL-2941). The function resolves
  * once the declarations are registered, in catalog order, and the apps
  * hold their first render on it.
+ *
+ * A `consoleServerDeclarations` entry (`/declarations.console-server`,
+ * AGL-2978) is written into the CONSOLE's server manifest alone: what it
+ * registers opens something only the console holds — an eraser that
+ * revokes a provider grant with the console's key — and the tenant runtime,
+ * which serves the public internet, must not so much as bundle it.
  */
+const DECLARATION_MODULES = {
+  declarations: 'declarations',
+  serverDeclarations: 'declarations.server',
+  consoleServerDeclarations: 'declarations.console-server',
+}
+
 function declarationsContent(surfaces, constName, entryPoint) {
   const calls = []
   for (const plugin of config.plugins) {
     for (const surface of surfaces) {
       const fn = plugin.register?.[surface]
       if (!fn) continue
-      const specifier =
-        surface === 'serverDeclarations'
-          ? `${plugin.package}/declarations.server`
-          : `${plugin.package}/declarations`
+      const specifier = `${plugin.package}/${DECLARATION_MODULES[surface]}`
       calls.push(`    ;(await import('${specifier}')).${fn}()`)
     }
   }
@@ -195,7 +204,7 @@ const DECLARATION_MANIFESTS = [
   },
   {
     file: 'apps/console/constants/plugins.declarations.server.generated.ts',
-    surfaces: ['declarations', 'serverDeclarations'],
+    surfaces: ['declarations', 'serverDeclarations', 'consoleServerDeclarations'],
     constName: 'registerPluginServerDeclarations',
     entryPoint: 'server',
   },
@@ -220,8 +229,23 @@ const DECLARATION_MANIFESTS = [
  * Its source is the plugin's code as well as plugins.config.json: a plugin
  * that changes a declaration leaves this file describing the old one until
  * the generator runs again, and `--check` names the hosts that differ.
+ *
+ * The entry answers an array of recipients, or an object carrying them with
+ * the plugin's other hosts (`hosts`, each `not-a-subprocessor` or
+ * `no-request`) and its uses of hosts declared elsewhere (`uses`, AGL-2978).
+ * The two lists are written only when a plugin declares them, so a plugin
+ * that answers an array keeps the bytes it always had.
  */
 const SUBPROCESSORS_MANIFEST = 'apps/console/constants/plugins.subprocessors.generated.ts'
+
+/** The fields of core's `PluginEgressHostDeclaration`, in the order written. */
+const HOST_FIELDS = ['host', 'disposition', 'reason', 'dataReceived']
+
+/** The dispositions core's fold accepts for a host that is not a recipient. */
+const HOST_DISPOSITIONS = ['not-a-subprocessor', 'no-request']
+
+/** The fields of core's `PluginEgressUseDeclaration`, in the order written. */
+const USE_FIELDS = ['host', 'reason', 'dataReceived']
 
 /** The fields of core's `PluginSubprocessorDeclaration`, in the order written. */
 const SUBPROCESSOR_FIELDS = [
@@ -251,6 +275,22 @@ function workspaceAliases() {
   return alias
 }
 
+/**
+ * Every declaration in `list` carries each of `fields` as a string, or the
+ * generator stops naming the entry, the list and the field.
+ */
+function requireStringFields(list, fields, where) {
+  if (!Array.isArray(list)) throw new Error(`${where} is not a list`)
+  for (const declaration of list) {
+    for (const field of fields) {
+      if (typeof declaration?.[field] !== 'string') {
+        throw new Error(`${where} has a declaration whose ${field} is not a string`)
+      }
+    }
+  }
+  return list
+}
+
 /** Each plugin with a `subprocessors` entry, and what that entry returns. */
 async function pluginSubprocessors() {
   const declaring = config.plugins.filter((plugin) => plugin.register?.subprocessors)
@@ -271,42 +311,54 @@ async function pluginSubprocessors() {
     if (typeof fn !== 'function') {
       throw new Error(`${specifier} exports no function named ${fnName}`)
     }
-    const subprocessors = await fn()
-    for (const declaration of subprocessors) {
-      for (const field of SUBPROCESSOR_FIELDS) {
-        if (typeof declaration?.[field] !== 'string') {
-          throw new Error(
-            `${specifier}: ${fnName}() returned a declaration whose ${field} is not a string`,
-          )
-        }
+    const answer = await fn()
+    const where = `${specifier}: ${fnName}()`
+    const {
+      subprocessors = [],
+      hosts = [],
+      uses = [],
+    } = Array.isArray(answer) ? { subprocessors: answer } : (answer ?? {})
+    requireStringFields(subprocessors, SUBPROCESSOR_FIELDS, `${where} subprocessors`)
+    requireStringFields(hosts, HOST_FIELDS, `${where} hosts`)
+    requireStringFields(uses, USE_FIELDS, `${where} uses`)
+    for (const declaration of hosts) {
+      if (!HOST_DISPOSITIONS.includes(declaration.disposition)) {
+        throw new Error(
+          `${where} declares ${declaration.host} as '${declaration.disposition}'; a host is ${HOST_DISPOSITIONS.join(' or ')}`,
+        )
       }
     }
-    entries.push({ pluginId: plugin.id, subprocessors })
+    entries.push({ pluginId: plugin.id, subprocessors, hosts, uses })
   }
   return entries
+}
+
+/** One list of declarations as the manifest writes it, or '' for an empty optional one. */
+function declarationList(name, list, fields, { always = false } = {}) {
+  if (!list.length) return always ? `    ${name}: [],\n` : ''
+  const rows = list
+    .map(
+      (declaration) =>
+        `      {\n` +
+        fields.map((field) => `        ${field}: ${JSON.stringify(declaration[field])},\n`).join('') +
+        `      },`,
+    )
+    .join('\n')
+  return `    ${name}: [\n${rows}\n    ],\n`
 }
 
 /** The subprocessors manifest, byte for byte. */
 function subprocessorsContent(entries) {
   const body = entries
-    .map(({ pluginId, subprocessors }) => {
-      const rows = subprocessors
-        .map(
-          (declaration) =>
-            `      {\n` +
-            SUBPROCESSOR_FIELDS.map(
-              (field) => `        ${field}: ${JSON.stringify(declaration[field])},\n`,
-            ).join('') +
-            `      },`,
-        )
-        .join('\n')
-      return (
+    .map(
+      ({ pluginId, subprocessors, hosts, uses }) =>
         `  {\n` +
         `    pluginId: '${pluginId}',\n` +
-        (rows ? `    subprocessors: [\n${rows}\n    ],\n` : `    subprocessors: [],\n`) +
-        `  },`
-      )
-    })
+        declarationList('subprocessors', subprocessors, SUBPROCESSOR_FIELDS, { always: true }) +
+        declarationList('hosts', hosts, HOST_FIELDS) +
+        declarationList('uses', uses, USE_FIELDS) +
+        `  },`,
+    )
     .join('\n')
   return (
     `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +

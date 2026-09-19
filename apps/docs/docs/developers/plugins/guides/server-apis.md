@@ -28,6 +28,37 @@ export function registerMyPluginApi(): void {
   body) 404 when the target workspace has your plugin disabled or its
   release flag is off. Handlers still self-check entitlements
   (`checkEntitlement`/`checkQuota` with the org doc) for plan gating.
+- A request that names no site is gated as anonymous unless its route says
+  who it is for — see [Naming the subject](#route-subject) below.
+
+## Naming the subject a request is for {#route-subject}
+
+The release gate reads per-organization overrides and rollout buckets off an
+organization, and learns it from the `hostId` a request names. Two kinds of
+request name no site and still belong to one organization: a request from an
+organization-level surface, and a provider's OAuth redirect back to your
+route, which carries no bearer token. Declare how your route reads its
+subject:
+
+```ts
+registerPluginApiRoute('my-plugin/org-thing', handler, {
+  subject: async (request) => {
+    const body = (await request.json().catch(() => null)) as { orgId?: string } | null
+    return body?.orgId ? { orgId: body.orgId } : null
+  },
+})
+```
+
+- The resolver receives a **clone** of the request, so your handler still
+  reads the body. It is consulted only when the request names no `hostId`.
+- A subject is no bypass: the gate still refuses an organization the flag is
+  off for. It only asks its question about the right organization.
+- Return a `uid` only from a route that **verified a signature** binding that
+  account to the request (a signed OAuth `state`). The gate lets a staff
+  account named that way preview a released-off plugin, and it ignores the
+  `uid` whenever the request carries a bearer token.
+- A resolver that throws, or returns anything that is not a plain id, names
+  no subject.
 - Settings: `getPluginConfig(orgId, pluginId, { hostId })` returns your
   declared defaults merged with the workspace's values and then the site's
   overrides. **Pass `hostId` whenever the request has one** — without it the

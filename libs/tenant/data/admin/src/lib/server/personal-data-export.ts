@@ -176,7 +176,7 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     keyedBy: 'field',
     subjects: ['org'],
     exported: true,
-    note: 'EXISTENCE ONLY — which connected mailbox a credential authorizes, its provider, granted scopes and dates (AGL-2974). Every token is redacted by name and by shape (see redactSecrets) and never disclosed. The document id is the mailbox id, not derived from any secret, so it is disclosed.',
+    note: 'EXISTENCE ONLY — which connected mailbox a credential authorizes, its provider, granted scopes and dates (AGL-2974), and since AGL-2978 the connected account’s address, its Google account id and the member who connected it: the organization’s own record of whose mailbox it holds. Every token is redacted by name and by shape (see redactSecrets) and never disclosed; the sealed refresh token and the id of the key that sealed it both carry `token` in their names. The document id is the mailbox id, not derived from any secret, so it is disclosed.',
   },
   {
     collection: 'ssoDomains',

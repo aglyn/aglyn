@@ -52,6 +52,7 @@ import {
   type OrgPermission,
   type OrgRole,
 } from '@aglyn/aglyn/server'
+import type { PluginActivityTargetType } from '@aglyn/aglyn/plugin-manager/plugin-activity-actions'
 import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
 import {
   nameSearchKey,
@@ -1209,6 +1210,9 @@ export interface OrgActivityTarget {
     // and the people enrolled in one (AGL-2980): an organization-level
     // resource, since a sequence enrolls people from every site.
     | 'sequence'
+    // A plugin's own resource, `pluginId:noun` (AGL-2978). Plugins file
+    // their rows under their own namespace, so this list names none of them.
+    | PluginActivityTargetType
   id?: string
   name?: string
   /** Present on a generated screen output so the deep link can hit the exact version. */
