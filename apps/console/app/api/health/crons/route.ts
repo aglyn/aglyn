@@ -53,6 +53,7 @@ import { getFirestore } from 'firebase-admin/firestore'
 // Imported for its side effect too: guarantees the firebase-admin default app
 // is initialized before `getApp()` runs, exactly like the sibling routes.
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { pluginConsoleCronScheduledJobs } from '@aglyn/aglyn/plugin-manager/plugin-console-crons'
 import {
   CRON_BEAT_COLLECTION,
   CRON_BEAT_DEGRADED_DOC,
@@ -71,9 +72,12 @@ import {
   HEALTH_PROBE_TTL_MS,
   memoizeWithTtl,
   platformVersion,
+  SCHEDULED_JOBS,
   type CronBeat,
   type CronJobCheck,
+  type ScheduledJob,
 } from '@aglyn/aglyn/server'
+import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
 
 // lockdown-423: exempt — infrastructure monitoring probe; no org-scoped action.
 
@@ -313,10 +317,27 @@ async function confirmSuspects(
   return [...known].map(([jobId, atMs]) => ({ jobId, atMs }))
 }
 
+/**
+ * Every job this board judges: the platform's inventory, and each console
+ * job a plugin declared on `plugin-console-crons` (AGL-2981), which the
+ * plugins' declarations register — at boot, and here for a process that
+ * reaches this route first. A declaration that fails to load costs its
+ * plugin's rows, never the platform's.
+ */
+async function scheduledJobs(): Promise<readonly ScheduledJob[]> {
+  try {
+    await registerPluginServerDeclarations()
+  } catch (error) {
+    console.error('health/crons: plugin declarations failed', error)
+  }
+  return [...SCHEDULED_JOBS, ...pluginConsoleCronScheduledJobs()]
+}
+
 const cronsProbe = memoizeWithTtl<Record<string, CronJobCheck>>(
   PROBE_TTL_MS,
   async () => {
     const startedAt = Date.now()
+    const jobs = await scheduledJobs()
     try {
       // Touch the facade so the import above can never be tree-shaken into
       // skipping app initialization.
@@ -330,7 +351,7 @@ const cronsProbe = memoizeWithTtl<Record<string, CronJobCheck>>(
         .get()
       let beats = cronBeatsFromSummary(summary.get('beats'))
       const judge = () =>
-        cronJobsHealth(beats, watchStartedAtMs, Date.now() - startedAt, now)
+        cronJobsHealth(beats, watchStartedAtMs, Date.now() - startedAt, now, jobs)
       let checks = judge()
       const suspects = Object.entries(checks)
         .filter(([, check]) => !check.ok)
@@ -359,7 +380,7 @@ const cronsProbe = memoizeWithTtl<Record<string, CronJobCheck>>(
       // branch can leave behind, and "we could not see the jobs" is a
       // different incident from "a job stopped".
       return reportDegradedCrons(
-        cronJobsHealth(null, Date.now(), Date.now() - startedAt),
+        cronJobsHealth(null, Date.now(), Date.now() - startedAt, Date.now(), jobs),
       )
     }
   },

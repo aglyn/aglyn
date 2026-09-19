@@ -261,6 +261,17 @@ const CONSOLE_FAST_CRON_ROUTES: readonly string[] = [
    * keeps that measured in minutes rather than in a day.
    */
   '/api/admin/provision-sending-domains',
+  /*
+   * Every console job a PLUGIN declares (AGL-2981), behind one route.
+   *
+   * A plugin whose scheduled work holds something only the console may hold
+   * — a provider key, a sealed grant to a person's mailbox — declares the job
+   * in its own code, and this route runs whatever is declared, each job
+   * stamping its own mark for `/api/health/crons`. So this list names no
+   * plugin and never grows for one: a plugin adding a job adds nothing here,
+   * and needs no deploy of this function.
+   */
+  '/api/admin/plugin-crons',
 ]
 
 /** What one POST to a cron route settled as. */

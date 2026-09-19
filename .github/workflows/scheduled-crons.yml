@@ -281,6 +281,14 @@ on:
           # first beat is stamped before the first scheduled run. On a Monday
           # it SPENDS: the jobs it makes call the AI provider on the beat.
           - /api/admin/ai-insights-digest
+          # Every console job a plugin declares (AGL-2981), the same as the
+          # fifteen-minute `consoleFastCrons` tick. POST only. Safe to run by
+          # hand at any time — each job claims its own work, so a manual run
+          # beside a scheduled one never does a unit of work twice — and after
+          # a deploy it is how the first marks are stamped before the first
+          # scheduled tick. It can SEND: a plugin's job may send what its
+          # workspaces scheduled.
+          - /api/admin/plugin-crons
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes
