@@ -255,8 +255,15 @@ async function syncMailbox(
 
   const sinceMs = Math.max(Number(mailbox.sync?.throughMs) || 0, nowMs - OUTREACH_SYNC_LOOKBACK_MS) - OUTREACH_SYNC_OVERLAP_MS
   const after = `after:${Math.floor(sinceMs / 1000)}`
+  // Every message this run or an earlier one handled outside an enrollment's
+  // thread; one message is handled once however many searches find it.
   const handled = new Set(mailbox.sync?.handledMessageIds ?? [])
   const newlyHandled: string[] = []
+  const markHandled = (id: string) => {
+    if (handled.has(id)) return
+    handled.add(id)
+    newlyHandled.push(id)
+  }
   const fresh = (stub: { id: string; threadId: string }) => !handled.has(stub.id) && !byThread.has(stub.threadId)
 
   // 1. The enrollments' own threads that have new mail.
@@ -280,7 +287,7 @@ async function syncMailbox(
         if (enrollment) await applyMessages(context, enrollment, [message])
       }
     }
-    newlyHandled.push(stub.id)
+    markHandled(stub.id)
   }
 
   // 3. Messages to the unsubscribe address: whoever wrote asked to leave.
@@ -303,7 +310,7 @@ async function syncMailbox(
         })
         report.optOuts += 1
       }
-      newlyHandled.push(stub.id)
+      markHandled(stub.id)
     }
   }
 
@@ -316,14 +323,17 @@ async function syncMailbox(
       const message = outreachThreadMessageFromGmail(await context.client.getFullMessage(stub.id))
       const enrollment = byAddress.get(normalizeContactEmail(emailAddressOf(message.from)) ?? '')
       if (enrollment) await applyMessages(context, enrollment, [message])
-      newlyHandled.push(stub.id)
+      markHandled(stub.id)
     }
   }
 
   const paused = await applyOutreachMailboxHealth(deps, { orgId, mailboxId: mailbox.id, delta: context.delta })
   if (paused) report.paused += 1
   await mailboxRef(firestore, orgId, mailbox.id).update({
-    sync: { throughMs: nowMs, handledMessageIds: [...handled, ...newlyHandled].slice(-MAILBOX_HANDLED_MAX) },
+    sync: {
+      throughMs: nowMs,
+      handledMessageIds: [...(mailbox.sync?.handledMessageIds ?? []), ...newlyHandled].slice(-MAILBOX_HANDLED_MAX),
+    },
   })
 }
 
