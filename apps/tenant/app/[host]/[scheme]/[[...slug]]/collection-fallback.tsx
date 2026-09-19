@@ -23,9 +23,12 @@ import {
   type MarkdownInline,
   markdownHeadingSlugs,
   parseMarkdownLite,
+  resolveMarkdownLink,
 } from '@aglyn/aglyn/app-utils/markdown-lite'
 import { renderedMediaAlt } from '@aglyn/aglyn/app-utils/media-alt'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context-value'
+import { useContext } from 'react'
 import type { Props } from './types'
 
 /**
@@ -49,6 +52,10 @@ export function CollectionFallback({
   hostId,
 }: CollectionFallbackProps) {
   const { collection, entries, entry } = content
+  // A body link may NAME its target rather than spell its address
+  // (AGL-3118), and the page provides the map those names resolve against —
+  // the same one every element link on the site reads.
+  const { screens } = useContext(ScreenLinkContext)
   // Through the ONE shared formatter (AGL-1926), never a local
   // `toLocaleDateString()`. This component is a client component that Next
   // ALSO renders on the server, so a bare call ran twice against two
@@ -110,19 +117,21 @@ export function CollectionFallback({
           ) : null}
           {entryBodyBlocks.map((block, index) => {
             const inline = (inlines: MarkdownInline[]) =>
-              inlines.map((item, i) =>
-                item.type === 'bold' ? (
-                  <strong key={i}>{item.text}</strong>
-                ) : item.type === 'italic' ? (
-                  <em key={i}>{item.text}</em>
-                ) : item.type === 'link' ? (
-                  <a key={i} href={item.href}>
+              inlines.map((item, i) => {
+                if (item.type === 'bold') return <strong key={i}>{item.text}</strong>
+                if (item.type === 'italic') return <em key={i}>{item.text}</em>
+                if (item.type !== 'link') return <span key={i}>{item.text}</span>
+                // A reference whose target is gone renders as the words
+                // alone: this surface has no client router to send a
+                // visitor through, and `entry:…` is no address at all.
+                const link = resolveMarkdownLink(item.href, { screens })
+                if (!('href' in link)) return <span key={i}>{item.text}</span>
+                return (
+                  <a key={i} href={link.href}>
                     {item.text}
                   </a>
-                ) : (
-                  <span key={i}>{item.text}</span>
-                ),
-              )
+                )
+              })
             if (block.type === 'heading') {
               // The same anchor ids the besigner-rendered entry body
               // stamps (AGL-1162). This fallback renders the SAME post, so

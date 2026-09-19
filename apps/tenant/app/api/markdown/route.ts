@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { visitorContentRefusal } from '@aglyn/tenant-data-admin'
+import { resolveEntryLinkRoutes } from '@aglyn/tenant-runtime/entry-link-routes'
 import { getTemplateScreenRouting } from '@aglyn/tenant-runtime/template-screens'
 import getHost from '../../../utils/get-host'
 import { loadPageData } from '../../[host]/[scheme]/[[...slug]]/load-page-data'
@@ -204,6 +205,7 @@ async function renderMarkdown(
   const context: Aglyn.PageMarkdownContext = {
     origin: origin ?? null,
     hostId: host?.$id,
+    screenRoutes: await linkRoutesFor(props),
   }
 
   /*
@@ -213,12 +215,11 @@ async function renderMarkdown(
     and back could only lose fidelity. The entry template's chrome is not
     missed: it is the same furniture on every entry.
 
-    It therefore carries NO `screenRoutes`, and needs none: a body string is
-    emitted verbatim, and the only link shapes markdown-lite stores are the
-    ones `safeLinkUrl` admits — `/path` and `http(s):`. A `screen:` reference
-    cannot be written into one, which is why this branch cannot leak the token
-    the node walk had to be taught to resolve (AGL-2740). Anything added below
-    that RESOLVES links in a body would need the map built further down.
+    It is emitted as written except for its link REFERENCES (AGL-3118): a
+    body may name a post, a listing, a feed or a screen by id, and the stored
+    `entry:…` is not a URL an agent can follow. They resolve through the same
+    routing map as the page's own links, which is why `context` carries it on
+    this branch too.
   */
   const entry = props.content?.entry
   if (entry) {
@@ -247,25 +248,6 @@ async function renderMarkdown(
       }
     | undefined
 
-  /*
-    Screen links resolve against the routing map the ROUTER honors, not the one
-    publishing wrote (AGL-1998) — the same derivation `page.tsx` does, and for
-    the same reason: without it the Markdown would carry the dead links that
-    fix removed from the HTML. It costs no Firestore read, because the loader
-    above has already asked for this cache entry on this request.
-  */
-  let screenRoutes: Record<string, string> | undefined
-  const routedHost = props.data?.host as
-    { $id?: string; screens?: Record<string, string> } | undefined
-  if (routedHost?.$id) {
-    const routing = await getTemplateScreenRouting({ hostId: routedHost.$id })
-    screenRoutes = Aglyn.linkableScreenRoutes(routedHost.screens, {
-      routedElsewhere: routing.listRoutes,
-      unrouted: routing.templateScreenIds,
-      collectionListings: routing.collectionListings,
-    })
-  }
-
   const listing = props.content?.collection
   return {
     canonicalUrl,
@@ -281,7 +263,47 @@ async function renderMarkdown(
         description: screen?.seo?.description || host?.seo?.description,
         canonicalUrl,
       },
-      context: { ...context, screenRoutes },
+      context,
     }),
   }
+}
+
+/**
+ * The routing map this page's links resolve against.
+ *
+ * The one the ROUTER honors, not the one publishing wrote (AGL-1998) — the
+ * same derivation `page.tsx` does, and for the same reason: without it the
+ * Markdown would carry the dead links that fix removed from the HTML. It
+ * costs no Firestore read, because the loader has already asked for this
+ * cache entry on this request.
+ *
+ * With the entries the page links to (AGL-3118), from the same two sources
+ * the HTML reads them from — the composed nodes and an entry's body — so the
+ * key set, and with it the cached read, is the one the HTML page already
+ * paid for.
+ */
+async function linkRoutesFor(
+  props: Props,
+): Promise<Record<string, string> | undefined> {
+  const routedHost = props.data?.host as
+    { $id?: string; screens?: Record<string, string> } | undefined
+  if (!routedHost?.$id) return undefined
+  const routing = await getTemplateScreenRouting({ hostId: routedHost.$id })
+  const entryRefs = Aglyn.collectEntryLinkRefs({
+    nodes: [props.nodes],
+    markdown: [props.content?.entry?.body],
+  })
+  const entryRoutes = entryRefs.length
+    ? await resolveEntryLinkRoutes({
+        hostId: routedHost.$id,
+        refs: entryRefs,
+        collectionSlugs: routing.collectionListings,
+      })
+    : undefined
+  return Aglyn.linkableScreenRoutes(routedHost.screens, {
+    routedElsewhere: routing.listRoutes,
+    unrouted: routing.templateScreenIds,
+    collectionListings: routing.collectionListings,
+    entryRoutes,
+  })
 }

@@ -22,6 +22,7 @@ import {
   ELEMENT_ANIMATION_STYLE_ID,
   pageAnimationAssets,
 } from '@aglyn/tenant-runtime/element-animation-assets'
+import { resolveEntryLinkRoutes } from '@aglyn/tenant-runtime/entry-link-routes'
 import { getTemplateScreenRouting } from '@aglyn/tenant-runtime/template-screens'
 import type { Metadata } from 'next'
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
@@ -1237,16 +1238,34 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
    * and it costs no Firestore read: `load-page-data` has already asked for the
    * same cache entry on this request (it is how the route was matched), so this
    * is a hit on `unstable_cache` rather than a second trip.
+   *
+   * The ENTRIES the page links to join it (AGL-3118), read from the whole
+   * composed document — a withheld lazy panel is still this page's — and from
+   * the entry body the legacy article renders with no node to carry it. A
+   * page that links no entry reads nothing more; one that does pays one
+   * cached batch of exactly those documents.
    */
   const routedHost = result.props.data?.host as
     { $id?: string; screens?: Record<string, string> } | undefined
   let screenRoutes: Record<string, string> | undefined
   if (routedHost?.$id) {
     const routing = await getTemplateScreenRouting({ hostId: routedHost.$id })
+    const entryRefs = Aglyn.collectEntryLinkRefs({
+      nodes: [result.props.nodes],
+      markdown: [result.props.content?.entry?.body],
+    })
+    const entryRoutes = entryRefs.length
+      ? await resolveEntryLinkRoutes({
+          hostId: routedHost.$id,
+          refs: entryRefs,
+          collectionSlugs: routing.collectionListings,
+        })
+      : undefined
     screenRoutes = Aglyn.linkableScreenRoutes(routedHost.screens, {
       routedElsewhere: routing.listRoutes,
       unrouted: routing.templateScreenIds,
       collectionListings: routing.collectionListings,
+      entryRoutes,
     })
   }
   // A new object again, never a mutated one — `result.props` belongs to the
