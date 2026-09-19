@@ -887,6 +887,12 @@ export type AiValidatedGeneration<T> =
       status: 'needs_input'
       violations: AiDoctrineViolation[]
       message: string
+      /**
+       * The answer the violations were found in, as it came through the tool
+       * (AGL-3078): what a job's review outlines the parts they name from.
+       * Held in memory only, and `null` when no answer arrived.
+       */
+      answer?: Record<string, unknown> | null
     })
   /** The model declined; tokens were spent. */
   | (AiGenerationSpend & { status: 'refused' })
@@ -1013,6 +1019,8 @@ export async function runValidatedGeneration(
   const tools = lookup ? [input.tool, lookup] : [input.tool]
   let messages: AiMessage[] = [...input.messages]
   let violations: AiDoctrineViolation[] = []
+  // The answer `violations` were found in, for the review a person reads.
+  let refused: Record<string, unknown> | null = null
   // Answer attempts, which the re-ask bounds, are counted apart from model
   // calls, which lookups also spend.
   let answers = 0
@@ -1095,6 +1103,7 @@ export async function runValidatedGeneration(
     // arrived already broke is named beside it.
     const found = checked?.violations ?? []
     const cutOff = aiStoppedAtCeiling(result.stopReason)
+    refused = answer
     violations = cutOff
       ? [cutOffAnswer(kind, input.cutOff), ...found.filter((violation) => violation.rule !== null)]
       : found.length
@@ -1117,6 +1126,7 @@ export async function runValidatedGeneration(
     status: 'needs_input',
     violations,
     message: aiDoctrineNeedsInputMessage(violations),
+    answer: refused,
   }
 }
 

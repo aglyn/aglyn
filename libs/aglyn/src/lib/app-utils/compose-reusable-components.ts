@@ -40,6 +40,12 @@ import {
 } from './reusable-component-keys'
 import { mergeNodeSx } from './merge-node-sx'
 import {
+  hasUrlScheme,
+  isSafeNodeUrl,
+  NODE_URL_PROPS,
+  type NodeUrlProp,
+} from './node-url-policy'
+import {
   readInstanceIconValue,
   readYesNoValue,
   resolveReusablePropValues,
@@ -593,8 +599,11 @@ function typedBindingValue(
  * an item list is content the component spelled out, and text is text
  * whatever kind of property fills it — so both keep the textual treatment.
  *
- * Inputs are never mutated, and a map with no typed binding comes back exactly
- * as the substitution left it.
+ * An `href` or `src` a token fed is then held to the address rule — see
+ * {@link holdPropFedAddresses}.
+ *
+ * Inputs are never mutated, and a map with no typed binding and no refused
+ * address comes back exactly as the substitution left it.
  */
 export function resolveComponentPropTokens<
   N extends AglynNodeSchema = AglynNodeSchema,
@@ -612,7 +621,7 @@ export function resolveComponentPropTokens<
     const valueClass = reusablePropValueClass(prop)
     if (valueClass !== 'text') typedProps.set(prop.name, valueClass)
   }
-  if (!typedProps.size) return substituted
+  if (!typedProps.size) return holdPropFedAddresses(nodes, substituted)
   const knownValue = (name: string) =>
     values ? { value: values[name] } : undefined
   let typed: NormalizedNodes<N> | undefined
@@ -680,7 +689,102 @@ export function resolveComponentPropTokens<
     typed = typed ?? { ...substituted }
     typed[id] = { ...substituted[id], props } as N
   }
-  return typed ?? substituted
+  return holdPropFedAddresses(nodes, typed ?? substituted)
+}
+
+/** A `{{prop.*}}` token's opening, escaped for a pattern. */
+const PROP_TOKEN_SOURCE = `\\{\\{\\s*${COMPONENT_PROP_TOKEN_PREFIX.replace(
+  /[.*+?^${}()|[\]\\]/g,
+  '\\$&',
+)}`
+
+/** Where a `{{prop.*}}` token opens, anywhere inside a value. */
+const PROP_TOKEN_OPENING = new RegExp(PROP_TOKEN_SOURCE)
+
+/**
+ * The bindings that open a value and that a later compose stage resolves — a
+ * host token, a site variable — but not a property token, which this stage
+ * resolves or never will.
+ */
+const LATER_BINDINGS_OPENING = new RegExp(
+  `^(?:\\{\\{(?!${PROP_TOKEN_SOURCE.slice('\\{\\{'.length)})[^{}]*\\}\\}\\s*)+`,
+)
+
+/**
+ * Whether a property-fed value may stay in an address prop once the
+ * substitution has made it.
+ *
+ * The address rule, with the site's own references admitted — a screen or
+ * collection link, a media-library pick — since this is the site that resolves
+ * them. One exception: a value that opens with a binding a later stage
+ * resolves (`{{host.url}}/about`) has no scheme until then, so the binding is
+ * left to supply one and what follows it is judged as though the binding came
+ * to nothing — which is what an unknown host token does — so a scheme cannot
+ * be smuggled in behind it.
+ */
+function isRenderableAddress(prop: NodeUrlProp, value: unknown): boolean {
+  if (typeof value !== 'string') return false
+  const address = value.trim()
+  if (isSafeNodeUrl(prop, address, { siteReferences: true })) return true
+  const opening = LATER_BINDINGS_OPENING.exec(address)
+  if (!opening) return false
+  const rest = address.slice(opening[0].length)
+  return (
+    rest === '' ||
+    isSafeNodeUrl(prop, rest, { siteReferences: true }) ||
+    !hasUrlScheme(rest)
+  )
+}
+
+/**
+ * `resolved` with every `href` and `src` that a `{{prop.*}}` token fed held to
+ * the address rule, and removed where it fails it (AGL-2933).
+ *
+ * A published node's own address is held to that rule when it is published,
+ * and a property's default when its declaration is — but a property's value
+ * is set by whichever page places the component, or screen inside the layout,
+ * long after either, and this is where it becomes the prop an element spreads
+ * onto the DOM. Canvas, Preview, detach and the tenant all arrive here, so a
+ * `javascript:` or `data:` value set on a property reaches none of them.
+ *
+ * It judges the whole value the substitution made (see
+ * {@link isRenderableAddress}), so a token behind a literal scheme
+ * (`https://example.com/{{prop.path}}`) stays a path on that site, and two
+ * values that spell a scheme between them are refused together. A value still
+ * holding its property token — an undeclared name, or the component editor's
+ * raw-token view — is no address either, and a linking element reads it as
+ * none.
+ *
+ * Only the prop goes: a button with no address is still a button. `raw` is
+ * the map before substitution, which is what says a token fed the value;
+ * neither map is mutated.
+ */
+function holdPropFedAddresses<N extends AglynNodeSchema>(
+  raw: NormalizedNodes<N>,
+  resolved: NormalizedNodes<N>,
+): NormalizedNodes<N> {
+  let held: NormalizedNodes<N> | undefined
+  for (const [id, node] of Object.entries(raw ?? {})) {
+    const authored = node?.props as Record<string, unknown> | undefined
+    if (!authored || typeof authored !== 'object') continue
+    let props: Record<string, unknown> | undefined
+    for (const key of NODE_URL_PROPS) {
+      const source = authored[key]
+      if (typeof source !== 'string' || !PROP_TOKEN_OPENING.test(source)) continue
+      const current = (
+        props ?? (resolved[id]?.props as Record<string, unknown> | undefined)
+      )?.[key]
+      if (current === undefined || isRenderableAddress(key, current)) continue
+      props = props ?? {
+        ...(resolved[id]?.props as Record<string, unknown> | undefined),
+      }
+      delete props[key]
+    }
+    if (!props) continue
+    held = held ?? { ...resolved }
+    held[id] = { ...resolved[id], props } as N
+  }
+  return held ?? resolved
 }
 
 /**

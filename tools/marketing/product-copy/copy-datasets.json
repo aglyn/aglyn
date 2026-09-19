@@ -3,13 +3,13 @@
   "figmaNodeId": "1853:9095",
   "frameName": "Product — Datasets",
   "frameSize": { "width": 1440, "height": 5622 },
-  "notes": "The eleventh product page (AGL-2769). Same 8-section skeleton as the other detail pages, cloned from `Product — CRM` (1638:8653) so the section rhythm matches. Three things differ from the older decks and are deliberate. (1) `explore` carries TEN cards — every product except the page's own; the older decks record seven because they were extracted when the roster was smaller, and on the 3-up 451px grid ten wraps 3+3+3+1. (2) Nothing on the page states a product count: the `9 products built in` stat the older decks reproduce was stale at ten products and an eleventh falsifies it outright. (3) Both mockups show a Job openings dataset. An earlier draft used products, which implied a Commerce relationship that does not exist — Commerce keeps its own product storage and does not use datasets. Job openings are structured, filterable, shareable across brand sites, imported from a spreadsheet and written by integrations, and no plugin owns them. Every claim was checked against `libs/plugins/data`, `dataset-models.ts`, `dataset-query.ts`, `expand-repeatables.ts`, `plan-entitlements.ts`, the console dataset route and the /v1 handlers in `apps/console/utils/api-v1-resources.ts`; `claimsToVerify` records what was questioned and how each was resolved.",
+  "notes": "The eleventh product page (AGL-2769). Same 8-section skeleton as the other detail pages, cloned from `Product — CRM` (1638:8653) so the section rhythm matches. Three things differ from the older decks and are deliberate. (1) `explore` carries TEN cards — every product except the page's own; the older decks record seven because they were extracted when the roster was smaller, and on the 3-up 451px grid ten wraps 3+3+3+1. (2) Nothing on the page states a product count: the `9 products built in` stat the older decks reproduce was stale at ten products and an eleventh falsifies it outright. (3) Both mockups show a Job openings dataset. An earlier draft used products, which implied a Commerce relationship that does not exist — Commerce keeps its own product storage and does not use datasets. Job openings are structured, filterable, shareable across brand sites, imported from a spreadsheet and written by integrations, and no plugin owns them. Every claim was checked against `libs/plugins/data`, `dataset-models.ts`, `dataset-query.ts`, `expand-repeatables.ts`, `plan-entitlements.ts`, the console dataset route and the /v1 handlers in `apps/console/utils/api-v1-resources.ts`; `claimsToVerify` records what was questioned and how each was resolved. The page must not go live before AGL-3105, AGL-3111 and AGL-3113 ship: the hero body, capabilities card 5, the deep-dive and how-it-works step 03 keep copy that only those builds make true, and `claimsToVerify` names the build behind each claim.",
   "sections": [
     {
       "kind": "hero",
       "figmaNodeId": "1853:9097",
       "eyebrow": "DATASETS · STRUCTURED CONTENT",
-      "heading": "One data store behind every site you run.",
+      "heading": "Typed datasets, shared across your sites.",
       "subheading": null,
       "body": [
         "Datasets are typed collections that belong to your organization, not to a single site. Model the fields once, edit records in the console, bind them to a component that repeats — and let forms, workflows and the API write to the same rows."
@@ -36,7 +36,7 @@
       "actions": [],
       "items": [],
       "image": null,
-      "notes": "Single 34px Bold pull-quote at text/muted, one run, no emphasized phrase. It names the console and the API only, because those are the writers that run `validateDocument`: the console dataset route and `createRecord`/`updateRecord` in `api-v1-resources.ts`. A bound form and a workflow action write through `buildDatasetRecordValues`, which keeps known field ids and drops the rest but checks no type or rule, so 'every write' would be false."
+      "notes": "Single 34px Bold pull-quote at text/muted, one run, no emphasized phrase. It names the console and the API only, because those are the writers that run `validateDocument`: the console dataset route and `createRecord`/`updateRecord` in `api-v1-resources.ts`. A bound form and a workflow action write through `buildDatasetRecordValues`, which keeps known field ids and drops the rest but checks no type or rule, so 'every write' would be false. The workflow action is the `datasetAppend`/`updateDataset` step: today it runs only as an Actions step, and AGL-3105 makes every server-side Actions step, these two included, a step of a workflow, which is what makes 'a workflow action' exact."
     },
     {
       "kind": "capabilities",
@@ -58,8 +58,8 @@
           "meta": null
         },
         {
-          "title": "One store, every site",
-          "body": "Datasets belong to the organization, so one collection drives pages across every site. Sharing narrows that per dataset, and the server enforces it.",
+          "title": "Shared with the sites you pick",
+          "body": "Datasets belong to the organization, so a collection can drive pages on any site it is shared with, and the server enforces that sharing.",
           "meta": null
         },
         {
@@ -113,7 +113,7 @@
         "figmaNodeId": "1853:9186",
         "component": "Mockup/Datasets Schema (1851:1098)"
       },
-      "notes": "The schema shot carries the display-name-versus-reference-id distinction as two adjacent columns, which is the only way to show it without prose, and it is the page's evidence for the per-field description. Every cell is a real model capability: `validation.regex` (Pattern), `min`/`max` as a text length or a number bound, `options` (the schema dialog's comma-separated enum), a single `reference`, and `default` ('Pre-filled when creating documents'). The filter and sort syntax is `parseDatasetFilter`/`parseDatasetSort` in `dataset-query.ts`, which both the Data page's Filter and Sort inputs and a repeat's `repeatFilter`/`repeatSort` use. Limit is `repeatLimit`, capped by `REPEAT_MAX_RECORDS` (100). The repeat badge is the notice in the element props panel ('Repeats over dataset …'), not a canvas overlay."
+      "notes": "The schema shot carries the display-name-versus-reference-id distinction as two adjacent columns, which is the only way to show it without prose, and it is the page's evidence for the per-field description. Every cell is a real model capability: `validation.regex` (Pattern), `min`/`max` as a text length or a number bound, `options` (the schema dialog's comma-separated enum), a single `reference`, and `default` ('Pre-filled when creating documents'). The filter and sort syntax is `parseDatasetFilter`/`parseDatasetSort` in `dataset-query.ts`, which both the Data page's Filter and Sort inputs and a repeat's `repeatFilter`/`repeatSort` use. Limit is `repeatLimit`, capped by `REPEAT_MAX_RECORDS` (100). Today the only repeat marker is the notice in the element props panel ('Repeats over dataset …'); the canvas repeat badge the body names, the copies on the canvas, and Repeat on any component rather than Stack alone arrive with AGL-3111 (see claimsToVerify)."
     },
     {
       "kind": "how-it-works",
@@ -136,12 +136,12 @@
         },
         {
           "title": "Publish",
-          "body": "Bind a component over the dataset and publish the site. A write over the API does not publish on its own — call the publish endpoint when you want it live.",
+          "body": "Bind a component to the dataset and publish. A record you write later shows on the live page within seconds.",
           "meta": "03"
         }
       ],
       "image": null,
-      "notes": "Step 03 is the AGL-2462 fact stated as a step rather than as a caveat: `POST /v1/sites/{siteId}/publish` exists (scope `sites:publish`, 10 publishes per site per hour). It deliberately names NO propagation window — see claimsToVerify. Step 02 carries the /v1 plan gate: `apiAccess` is false on Starter and Pro, and this page otherwise says datasets start at Starter."
+      "notes": "Step 03 names a refresh window, 'within seconds', that AGL-3113 has to make true: today no record write announces to the live caches, so a changed record shows only after a publish on that site or once the hour-long page cache lapses. The page must not go live before AGL-3113 ships — see claimsToVerify. Step 02 carries the /v1 plan gate: `apiAccess` is false on Starter and Pro, and this page otherwise says datasets start at Starter."
     },
     {
       "kind": "explore",
@@ -180,13 +180,13 @@
         { "label": "See what’s included", "variant": "outlined" }
       ],
       "items": [
-        { "title": "8", "body": "field types you can author", "meta": "stat" },
-        { "title": "1", "body": "model, on every site that shares it", "meta": "stat" },
+        { "title": "8", "body": "built-in field types", "meta": "stat" },
+        { "title": "2", "body": "ways to share: all or selected sites", "meta": "stat" },
         { "title": "2", "body": "formats, in and out", "meta": "stat" },
         { "title": "7", "body": "filter operators", "meta": "stat" }
       ],
       "image": null,
-      "notes": "The chip reads 'Included from Starter', matching the CRM page rather than the older 'Now in early access'. `dataStore` is false on Free and true from Starter, so 'included from Starter' is the accurate gate — do not soften it to 'every plan'. 'From Starter to Agency' is exact: those plans carry `extraDatasetMonthlyUsd` and `extraDataGbMonthlyUsd` rates, and Enterprise carries neither. The four stats are product facts, not roster counts: 8 is `AUTHORABLE_TYPES`; 1 is the single model a dataset keeps, read by every site it is shared with; 2 is CSV and JSON on both import and export; 7 is `DATASET_QUERY_OPS`. The older decks' `9 / products built in` pair is deliberately absent. Figures are 44px ExtraBold in primary.dark — never author the retired brand-blue literal out of Figma."
+      "notes": "The chip reads 'Included from Starter', matching the CRM page rather than the older 'Now in early access'. `dataStore` is false on Free and true from Starter, so 'included from Starter' is the accurate gate — do not soften it to 'every plan'. 'From Starter to Agency' is exact: those plans carry `extraDatasetMonthlyUsd` and `extraDataGbMonthlyUsd` rates, and Enterprise carries neither. The four stats are product facts, not roster counts: 8 is the built-in types in `AUTHORABLE_TYPES`, and the label says built-in because plugins add their own types to the same picker; the first 2 is the two sharing choices, All sites and Selected sites…; the second 2 is CSV and JSON on both import and export; 7 is `DATASET_QUERY_OPS`. The older decks' `9 / products built in` pair is deliberately absent. Figures are 44px ExtraBold in primary.dark — never author the retired brand-blue literal out of Figma."
     },
     {
       "kind": "cta",
@@ -206,9 +206,19 @@
   ],
   "claimsToVerify": [
     {
-      "section": "how-it-works (step 03) + the page as a whole",
-      "phrase": "A write over the API does not publish on its own — call the publish endpoint when you want it live.",
-      "concern": "RESOLVED, and the resolution is the reason no number appears. AGL-2462 described the fallback as a 60-second TTL and shipped `POST /v1/sites/{siteId}/publish`. The window is no longer 60 seconds: `PUBLISHED_SITE_DATA_TTL_SECONDS` is 3600 and the tenant page's `revalidate` is 3600 (214330ceb, AGL-1302, 2026-08-25). The 60 survives in the `handlePublish` docblock in `api-v1-resources.ts` and in the published API page, which still tells customers a new record appears 'within the minute' without a publish. The copy therefore states the mechanism and no window at all. If a window is ever published here, read the constant, not the comment."
+      "section": "how-it-works (step 03)",
+      "phrase": "A record you write later shows on the live page within seconds.",
+      "concern": "GATED on AGL-3113: the page must not go live before AGL-3113 ships. Today no record write announces to the live caches. The tenant caches dataset reads for `PUBLISHED_SITE_DATA_TTL_SECONDS` (3600, `render-cache.ts`) and the catch-all page revalidates at 3600, so a changed record shows only after a publish on that site or once the hour lapses. AGL-3113 announces every successful record write (console edits and imports, /v1 `createRecord`/`updateRecord`, the form leg, the dataset steps of Actions and workflows, and site import) to the live pages of every site the dataset is shared with, within about ten seconds. The earlier step 03 named no window and pointed at `POST /v1/sites/{siteId}/publish` (AGL-2462), because the hour-long cache was the only window the code honored. Once AGL-3113 ships, recheck with a signed-out fetch of a page that repeats over the dataset, and read any window from the code, never from a docblock."
+    },
+    {
+      "section": "hero (body) + capabilities (card 5)",
+      "phrase": "let forms, workflows and the API write to the same rows / Forms, workflows and the API / A bound form, a workflow action and the /v1 API write the same rows as the record editor",
+      "concern": "GATED on AGL-3105: the page must not go live before AGL-3105 ships. Today a workflow cannot write a record: each workflow step only calls a host function (`HostWorkflowStep` in `libs/aglyn/src/lib/app-utils/workflows.ts`, run by `run-event-workflows.ts`), and the automation steps that write records are the Actions steps `datasetAppend` and `updateDataset` (`actions.ts`, run by `run-event-actions.ts`). AGL-3105 makes every server-side Actions step type a step of a workflow and reuses the Actions executors, so a workflow writes the same rows through the same step. It keeps the Actions tier gates (server-side steps are Pro and up), which the page does not state; naming that gate stays a copy decision."
+    },
+    {
+      "section": "hero (body) + deep-dive (heading, body and Repeat item)",
+      "phrase": "bind them to a component that repeats / Bind a component and it repeats. / Point a component at a dataset in the Besigner and it renders once per record … a repeat badge tells you when a component is data-driven. / One component, one record — a list, a grid or a gallery driven by your rows.",
+      "concern": "GATED on AGL-3111: the page must not go live before AGL-3111 ships. The runtime already expands any node that carries `repeatDataset` (`expandRepeatables`, called from `compose-screen-nodes.ts`); the gap is the editor. Today only the MUI Stack offers Repeat (`libs/plugins/mui/src/lib/components/stack.ts`), the Besigner canvas renders the template once while the copies appear only on the live site, and the only marker is the Attributes panel notice 'Repeats over dataset …' (`element-props-form.component.tsx`). AGL-3111 offers Repeat on every element and component instance, previews the copies on the canvas from the real rows, and adds a repeat badge to the editor overlay. It also settles what repeats (a container repeats its children per record, a leaf element or instance repeats itself), so recheck 'one component, one record' against what ships."
     },
     {
       "section": "early-access",
@@ -217,18 +227,18 @@
     },
     {
       "section": "capabilities (card 1) + early-access (stat 1)",
-      "phrase": "Text, boolean, integer, number, date and time, coordinates, list and reference / 8 field types you can author",
-      "concern": "RESOLVED. `DatasetFieldType` has twelve members but the schema dialog's picker offers eight; `int64`, `map`, `bytes` and `nil` are carried for compatibility and are only shown when an existing field already holds one. Eight is the number a customer can act on. If the picker gains a type, both the card and the stat move together."
+      "phrase": "Text, boolean, integer, number, date and time, coordinates, list and reference / 8 built-in field types",
+      "concern": "RESOLVED. `DatasetFieldType` has twelve members. The schema dialog's picker offers the eight in `AUTHORABLE_TYPES`, then every type a plugin registers (`listCustomFieldTypes()`; Marketplace registers a rating type). `int64`, `map`, `bytes` and `nil` are carried for compatibility and are only shown when an existing field already holds one. The stat counts the built-in eight: 'field types you can author' was false as soon as a plugin adds a type. If `AUTHORABLE_TYPES` gains a type, the card and the stat move together."
     },
     {
       "section": "statement + capabilities (cards 1 and 5) + how-it-works (step 02)",
       "phrase": "validated against on every server-side write — from the console, from a form, from a workflow, or over the API / Four ways in, one set of rules / Every path validates against the same model.",
-      "concern": "RESOLVED by rewriting all four. Only two writers validate: the console dataset route and the /v1 record handlers run `coerceDocumentValues` + `validateDocument`. The form-submission leg (`apps/tenant/app/api/forms/submit/route.ts`) and the workflow step (`libs/tenant/runtime/src/lib/run-event-actions.ts`) build values with `buildDatasetRecordValues`, which keeps known field ids as strings and checks no type or rule. The copy now credits validation to the console and the API only, and card 5 claims just the shared rows and the by-id binding. The form leg is also best-effort: with the record or storage quota full, the submission still lands in the Inbox and the row is skipped. The docs page `content-and-data/datasets/overview.md` still says records are validated 'on every server-side write'."
+      "concern": "RESOLVED by rewriting all four. Only two writers validate: the console dataset route and the /v1 record handlers run `coerceDocumentValues` + `validateDocument`. The form-submission leg (`apps/tenant/app/api/forms/submit/route.ts`) and the `datasetAppend`/`updateDataset` step (`libs/tenant/runtime/src/lib/run-event-actions.ts`) build values with `buildDatasetRecordValues`, which keeps known field ids as strings and checks no type or rule. That step runs as an Actions step today and becomes a workflow step with AGL-3105, which is why the statement notes and card 5 call it a workflow action. The copy now credits validation to the console and the API only, and card 5 claims just the shared rows and the by-id binding. The form leg is also best-effort: with the record or storage quota full, the submission still lands in the Inbox and the row is skipped. The docs page `content-and-data/datasets/overview.md` says the same: console and API records are validated, while form submissions and automation steps store their values as text without validating them."
     },
     {
-      "section": "capabilities (card 3)",
-      "phrase": "Sharing narrows that per dataset, and the server enforces it.",
-      "concern": "RESOLVED against `libs/tenant/runtime/src/lib/get-datasets.ts` — the tenant renderer filters by host scope, so this is not a console-only affordance. Note the cap the copy does not state: a 'Selected sites' scope holds at most 30 hosts, because `array-contains-any` caps there. 'All sites' and 'This site only' have no cap."
+      "section": "hero (heading) + capabilities (card 3) + early-access (stat 2)",
+      "phrase": "Typed datasets, shared across your sites. / Shared with the sites you pick / a collection can drive pages on any site it is shared with, and the server enforces that sharing / 2 ways to share: all or selected sites",
+      "concern": "RESOLVED. An organization holds many datasets (`datasetsPerOrg`), and each is shared on its own. The sharing control offers exactly two choices, All sites and Selected sites… (the `org` and `hosts` items in `dataset-schema-dialog.component.tsx`); there is no 'This site only' option. The server enforces the choice: `libs/tenant/runtime/src/lib/get-datasets.ts` checks `visibleToHost` on every dataset it reads for a host, so this is not a console-only affordance. The earlier heading and card title, 'One data store behind every site you run.' and 'One store, every site', framed a single store on every site, which a Selected-sites dataset contradicts. Note the cap the copy does not state: a Selected-sites scope holds at most `MAX_SCOPE_HOSTS` (30) sites, because `array-contains-any` caps there, and the dialog refuses a larger selection rather than widening it. All sites has no cap."
     },
     {
       "section": "explore",
@@ -248,7 +258,7 @@
     {
       "section": "early-access (stat 2)",
       "phrase": "4 ways to write a record",
-      "concern": "RESOLVED by cutting it. The code names four doors onto records (the console route, /v1, the form leg and the workflow step), but import rides the console route and restoring a site export writes records too, so the figure depends on what a reader counts. Replaced by '1 model, on every site that shares it'."
+      "concern": "RESOLVED by cutting it. The code names four doors onto records (the console route, /v1, the form leg and the workflow step), but import rides the console route and restoring a site export writes records too, so the figure depends on what a reader counts. Its first replacement, '1 model, on every site that shares it', repeated the single-store framing and gave a reader nothing to act on, so the stat is now '2 ways to share: all or selected sites' (see the sharing entry)."
     },
     {
       "section": "deep-dive (body)",
@@ -256,7 +266,7 @@
       "concern": "OPEN. True per record up to a bound: the tenant reads at most `REPEAT_MAX_RECORDS` (100) records per dataset and filters and sorts those in memory (`dataset-query.ts`), so on a larger dataset a filter or sort only considers the first 100 rows read. The Limit item states the 100 cap; whether the page should also say that filter and sort are bounded is a copy decision, not a fact to look up."
     },
     {
-      "section": "hero + capabilities (card 5) + how-it-works (steps 02 and 03)",
+      "section": "hero + capabilities (card 5) + how-it-works (step 02)",
       "phrase": "the API / the /v1 API / POST them to /v1",
       "concern": "RESOLVED. The API is Business and up (`apiAccess` is false on Starter and Pro) while datasets start at Starter. Step 02 carries the gate, so the page does not imply API access from Starter."
     },

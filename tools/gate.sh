@@ -1451,6 +1451,10 @@ if wants build; then
   }
   _build_wanted console && { run "build:console" npx nx run console:build:production; BUILDS_RUN=$((BUILDS_RUN + 1)); }
   _build_wanted tenant  && { run "build:tenant"  npx nx run tenant:build:production;  BUILDS_RUN=$((BUILDS_RUN + 1)); }
+  # The published page's before-settle JavaScript, read from the tenant build
+  # just made (AGL-3082): the bytes the page-view rate is priced on, which the
+  # source-weight guards cannot see through tree shaking and `import()`. ~1s.
+  _build_wanted tenant  && run "check:tenant-wire-weight" node tools/scripts/check-tenant-wire-weight.mjs
   _build_wanted docs    && { run "build:docs"    npx nx run docs:build;               BUILDS_RUN=$((BUILDS_RUN + 1)); }
 
   # The one line that must never be inferred from an absence. A phase list

@@ -158,6 +158,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The dispatcher runs a matched (req, res) route through the adapter it
   // is handed, which is the mocked `runLegacyHandler` below.
   runPluginApiMatch: jest.requireActual('@aglyn/aglyn/app-utils/api-plugins').runPluginApiMatch,
+  // The real subject reader over an empty registry (AGL-2978): no route here
+  // declares a subject, so it answers null exactly as an undeclared route does.
+  resolvePluginApiRequestSubject: jest.requireActual('@aglyn/aglyn/app-utils/api-plugins')
+    .resolvePluginApiRequestSubject,
   runLegacyHandler: jest.fn(async () => {
     mockHandlerCalls += 1
     return Response.json({ ok: true }, { status: 200 })

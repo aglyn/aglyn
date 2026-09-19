@@ -21,6 +21,7 @@ import { stampDocumentLandmark } from '@aglyn/aglyn/app-utils/document-landmark'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import { createAiJobComponentStep } from '../jobs/ai-job-component-step'
+import { aiJobDraftId, aiMintJobDraftIds } from '../jobs/ai-job-draft-ids'
 import { createAiJobFormStep } from '../jobs/ai-job-form-step'
 import { createAiJobLayoutStep } from '../jobs/ai-job-layout-step'
 import { aiPageJobUnits, createAiJobPageStep } from '../jobs/ai-job-page-step'
@@ -181,9 +182,10 @@ export function aiEvalRecorderFor(kind: AiEvalKind): AiEvalRecorder | null {
 
 const EVAL_ORG = 'eval-org'
 
-/** A job for a golden brief, in the shape a step runner reads. */
+/** A job for a golden brief, in the shape a step runner reads: its drafts named as a created job's are. */
 function evalJob(evalCase: AiEvalCase, kind: AiJob['kind']): AiJob {
   const now = new Date(0)
+  const draftIds = aiMintJobDraftIds(kind)
   return {
     $id: `eval-${evalCase.id}`,
     orgId: EVAL_ORG,
@@ -192,7 +194,7 @@ function evalJob(evalCase: AiEvalCase, kind: AiJob['kind']): AiJob {
     status: 'running',
     brief: evalCase.brief,
     inputs: {},
-    steps: [],
+    steps: draftIds ? [{ name: 'generate', status: 'running', creditsSpent: 0, draftIds }] : [],
     outputs: [],
     creditsReserved: 0,
     creditsSpent: 0,
@@ -407,7 +409,7 @@ const recordPage: AiEvalRecorder = async (evalCase, options) => {
     if (!outcome.continue) break
   }
 
-  const screenPath = `hosts/${hostId}/screens/${job.$id}`
+  const screenPath = `hosts/${hostId}/screens/${aiJobDraftId(confirmed, 'screen')}`
   const nodes = storedTree(site.docs, screenPath)
   const built = outputs.some((output) => output.resource === 'screen')
   const screen = built && nodes ? recordedScreen(evalCase, site.docs, screenPath, outputs) : undefined

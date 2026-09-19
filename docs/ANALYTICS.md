@@ -1151,8 +1151,8 @@ a step the compiler was about to drop, with nothing anywhere saying so.
 gap: there is no in-product onboarding, tour or checklist anywhere in the
 console (verified in the AGL-1576 audit), so the getting-started guides _are_
 the activation path. Docs drop-off **is** activation drop-off. And
-`/developers/self-hosting` is quoted verbatim in the founding-customer offer,
-with no way to know whether anyone read it.
+`/developers/self-hosting` is the page Aglyn's own outreach emails link a
+prospect to, with no way to know whether anyone read it.
 
 The whole instrumentation is six lines of config — `gtag` on the classic preset
 in `apps/docs/docusaurus.config.ts` — and the reason it is that small is worth

@@ -38,6 +38,7 @@ import { duplicateActivityActionLabel } from './duplicate-resource'
 import {
   pluginActivityActionLabel,
   pluginActivityGroupForAction,
+  pluginActivityTargetNoun,
 } from '../plugin-manager/plugin-activity-actions'
 
 /** The stored `target` sub-object, read defensively (any field may be absent). */
@@ -136,10 +137,17 @@ const ORG_CRM_SECTIONS: Record<string, string> = {
   task: 'tasks',
 }
 
-/** Human noun for a target type, e.g. `'screen'` → `'Screen'`. */
+/**
+ * Human noun for a target type, e.g. `'screen'` → `'Screen'`. A plugin's
+ * own resource is stored as `pluginId:noun` (AGL-2978), and a reader sees
+ * the noun: `acme-mail:mailbox` → `Mailbox`.
+ */
 export function activityTypeLabel(type: string | undefined): string {
   if (!type) return 'Item'
-  return TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1)
+  const known = TYPE_LABELS[type]
+  if (known) return known
+  const noun = pluginActivityTargetNoun(type) ?? type
+  return noun.charAt(0).toUpperCase() + noun.slice(1)
 }
 
 /**

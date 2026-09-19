@@ -38,6 +38,7 @@ import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fiel
 import { readSiteInventory } from '../runtime/site-inventory'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiGenerationWorstCaseMs } from './ai-job-budget'
+import { aiJobDraftId } from './ai-job-draft-ids'
 import {
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
@@ -56,6 +57,7 @@ import {
   aiDoctrineReview,
   aiGenerationSpent,
   aiLimitReview,
+  aiModelNodeIds,
   aiUnspentOutcome,
 } from './ai-job-generation'
 import {
@@ -379,6 +381,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const name = screen.title || AI_JOB_PAGE_DEFAULT_NAME
     const slug = aiPageDraftSlug(screen)
     const sectionIds = screen.sections.map((_, index) => aiPageSectionNodeId(job.$id, index))
+    // The draft screen, by the id the job recorded for it: every pass writes and finds the same one.
+    const draftId = aiJobDraftId(job, 'screen')
 
     const output = (
       draft: Pick<AiDraftRecord, 'id' | 'versionId' | 'name' | 'hostSubdomain'>,
@@ -401,7 +405,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const [inventory, orgSnapshot, written] = await Promise.all([
       readInventory(job.orgId, hostId, { firestore }),
       firestore.collection('orgs').doc(job.orgId).get(),
-      readAiDraft(firestore, { kind: 'screen', hostId, id: job.$id }),
+      readAiDraft(firestore, { kind: 'screen', hostId, id: draftId }),
     ])
     const org = (orgSnapshot.data() ?? null) as Partial<AglynOrgBilling> | null
     if (written?.deleted) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_DELETED_COPY }
@@ -434,23 +438,35 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       }
     }
 
-    const stored = written ? await readAiDraftNodes(firestore, { kind: 'screen', hostId, id: job.$id }) : null
+    const stored = written ? await readAiDraftNodes(firestore, { kind: 'screen', hostId, id: draftId }) : null
     if (written && !stored) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_DELETED_COPY }
     const page = stored?.nodes ?? aiEmptyPage()
     const index = sectionIds.findIndex((id) => !(id in page))
     // A workspace that keeps no reusable components or saved forms builds its
     // page inline, and every pass is held to the rules that way (AGL-3030).
     const reusableComponents = checkEntitlement(org, 'reusableComponents')
-    const context = aiPageCheckContext(inventory, { reusableComponents })
+    // A link may take a visitor to a section of this page, by its name in the plan (AGL-3097).
+    const sections = screen.sections.map((section) => section.name)
+    const context = aiPageCheckContext(inventory, { reusableComponents, sections })
 
     // ── The last pass: the whole page, its listing, and the draft reported ──
     if (index === -1 && written) {
-      const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', context)
+      // A link the page carries to one of its sections goes there, now every section is built.
+      const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', {
+        ...context,
+        scrollTargetIds: sectionIds,
+      })
       if (report.violations.length) {
+        // The check mints its own ids; the review names the nodes by the ids the draft stores them under.
+        const storedIds = report.tree?.sourceIds ?? {}
+        const violations = report.violations.map((violation) =>
+          violation.nodeIds ? { ...violation, nodeIds: aiModelNodeIds(violation.nodeIds, storedIds) } : violation,
+        )
         return aiUnspentOutcome(model, {
           review: aiDoctrineReview({
-            message: aiDoctrineNeedsInputMessage(report.violations),
-            violations: report.violations,
+            message: aiDoctrineNeedsInputMessage(violations),
+            violations,
+            answer: { tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page } },
           }),
         })
       }
@@ -489,7 +505,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             }
           }
         }
-        await writeAiDraftScreenSeo(firestore, { hostId, id: job.$id, seo: values, now })
+        await writeAiDraftScreenSeo(firestore, { hostId, id: draftId, seo: values, now })
       }
       // The facts the brief did not give, on the page or in the defaults its components show (AGL-3056).
       const note = aiBracketedFactsNote({
@@ -541,7 +557,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       const draft = await writeAiDraft(firestore, {
         kind: 'screen',
         hostId,
-        id: job.$id,
+        id: draftId,
         uid: job.createdBy,
         org,
         name,
@@ -559,7 +575,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       const update = await updateAiDraftNodes(firestore, {
         kind: 'screen',
         hostId,
-        id: job.$id,
+        id: draftId,
         now,
         // A pass run again after its write finds its section and changes nothing.
         update: (nodes) =>

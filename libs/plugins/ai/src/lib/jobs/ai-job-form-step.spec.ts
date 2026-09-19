@@ -251,6 +251,9 @@ function planFor(golden: Golden): AiJobPlan {
   }
 }
 
+/** The id the job recorded for its form when it was created (AGL-3079). */
+const FORM_ID = 'drftFormId'
+
 function job(patch: Partial<AiJob> = {}): AiJob {
   return {
     $id: 'job-1',
@@ -262,7 +265,7 @@ function job(patch: Partial<AiJob> = {}): AiJob {
     inputs: {},
     steps: [
       { name: 'plan', status: 'done', creditsSpent: 3 },
-      { name: 'generate', status: 'running', creditsSpent: 0 },
+      { name: 'generate', status: 'running', creditsSpent: 0, draftIds: { form: FORM_ID } },
     ],
     outputs: [],
     creditsReserved: 50,
@@ -364,7 +367,7 @@ describe.each(Object.keys(EXPECTED))('the %s golden', (key) => {
     expect(outcome.outputs).toEqual([
       {
         resource: 'form',
-        id: 'job-1',
+        id: FORM_ID,
         versionId: null,
         hostId: 'host-1',
         hostSubdomain: 'acme',
@@ -373,9 +376,9 @@ describe.each(Object.keys(EXPECTED))('the %s golden', (key) => {
         ...(expected.note ? { note: expected.note } : {}),
       },
     ])
-    expect(commits).toEqual(['hosts/host-1/forms/job-1'])
+    expect(commits).toEqual([`hosts/host-1/forms/${FORM_ID}`])
 
-    const stored = mockDocs.get('hosts/host-1/forms/job-1') ?? {}
+    const stored = mockDocs.get(`hosts/host-1/forms/${FORM_ID}`) ?? {}
     const stamps = ['createdAt', 'updatedAt', 'createdBy']
     for (const field of Object.keys(stored).filter((name) => !stamps.includes(name))) {
       expect([field, AI_DRAFT_FIELDS.form.includes(field)]).toEqual([field, true])
@@ -395,7 +398,7 @@ describe.each(Object.keys(EXPECTED))('the %s golden', (key) => {
     expect(nodes[formNodeId]).toMatchObject({
       componentId: 'form',
       parentId: CANVAS_ROOT_ELEMENT_ID,
-      props: { formId: 'job-1', formName: golden.name },
+      props: { formId: FORM_ID, formName: golden.name },
     })
 
     // The declaration is the design's own, so the two agree.
@@ -403,14 +406,14 @@ describe.each(Object.keys(EXPECTED))('the %s golden', (key) => {
     expect((stored['fields'] as Array<{ fieldName: string }>).map((field) => field.fieldName)).toEqual(
       expected.fields,
     )
-    expect(checkFormContract({ form: stored as never, formId: 'job-1', nodes, formNodeId })).toEqual([])
+    expect(checkFormContract({ form: stored as never, formId: FORM_ID, nodes, formNodeId })).toEqual([])
     // A publish unwraps the canvas root before it checks; the unwrapped design passes too.
     const definition = canvasTreeToDefinition(nodes)
     expect(definition.ambiguousRoot).toBe(false)
     expect(
       checkFormContract({
         form: stored as never,
-        formId: 'job-1',
+        formId: FORM_ID,
         nodes: definition.nodes,
         formNodeId: definition.rootId,
       }),
@@ -516,7 +519,14 @@ describe('the form step', () => {
     expect(outcome.review).toEqual({
       reason: 'doctrine',
       message: expect.stringContaining('Rule 3'),
-      findings: [{ rule: 3, code: 'lead-routing-has-no-email-field', message: expect.any(String) }],
+      findings: [{ rule: 3, code: 'lead-routing-has-no-email-field', message: expect.any(String), nodeIds: ['survey'] }],
+      // The form, and each field under it by the names of what it sets, never a label (AGL-3078).
+      outline: [
+        expect.objectContaining({ id: 'survey', depth: 0, componentId: 'form', children: Array(4).fill('formField') }),
+        ...['satisfaction', 'frequency', 'improve', 'comments'].map((id) =>
+          expect.objectContaining({ id, depth: 1, componentId: 'formField', props: expect.arrayContaining(['fieldName', 'label', 'fieldType']) }),
+        ),
+      ],
     })
     expect(commits).toEqual([])
   })
@@ -531,7 +541,7 @@ describe('the form step', () => {
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     expect(mockRunAiRequest.mock.calls[1][0].messages[2].content).toContain('asks for no email address')
     expect(outcome.review).toBeUndefined()
-    expect(commits).toEqual(['hosts/host-1/forms/job-1'])
+    expect(commits).toEqual([`hosts/host-1/forms/${FORM_ID}`])
   })
 
   it('reports a declined brief as refused, and writes nothing', async () => {
@@ -596,7 +606,7 @@ describe('the form step', () => {
     expect(again.outputs).toEqual([
       {
         resource: 'form',
-        id: 'job-1',
+        id: FORM_ID,
         versionId: null,
         hostId: 'host-1',
         hostSubdomain: 'acme',
@@ -604,7 +614,7 @@ describe('the form step', () => {
       },
     ])
     expect(again).toMatchObject({ usage: AI_JOB_ZERO_USAGE, estCostUsd: 0 })
-    expect(commits).toEqual(['hosts/host-1/forms/job-1'])
+    expect(commits).toEqual([`hosts/host-1/forms/${FORM_ID}`])
   })
 
   it('copies the form a confirmed plan starts from through the duplicate module, and generates nothing', async () => {
@@ -672,7 +682,7 @@ describe('what the form step sends', () => {
     // The list the brief names travels only as the brief's own words.
     expect(sent).toContain('Monthly Roundup')
     expect([...new Set(reads)].sort()).toEqual(
-      ['hosts/host-1', 'hosts/host-1/forms', 'hosts/host-1/forms/job-1', 'orgs/org-1'].sort(),
+      ['hosts/host-1', 'hosts/host-1/forms', `hosts/host-1/forms/${FORM_ID}`, 'orgs/org-1'].sort(),
     )
   })
 })
@@ -689,15 +699,15 @@ describe('nothing is promoted or placed', () => {
 
     await createAiJobFormStep()(context())
 
-    expect(commits).toEqual(['hosts/host-1/forms/job-1'])
+    expect(commits).toEqual([`hosts/host-1/forms/${FORM_ID}`])
     for (const [path, data] of before) {
       expect([path, JSON.stringify(mockDocs.get(path))]).toEqual([path, data])
     }
     for (const [path, data] of mockDocs) {
-      if (path === 'hosts/host-1/forms/job-1') continue
-      expect([path, JSON.stringify(data).includes('job-1')]).toEqual([path, false])
+      if (path === `hosts/host-1/forms/${FORM_ID}`) continue
+      expect([path, JSON.stringify(data).includes(FORM_ID)]).toEqual([path, false])
     }
-    expect(mockDocs.get('hosts/host-1/forms/job-1')).not.toHaveProperty('versionId')
+    expect(mockDocs.get(`hosts/host-1/forms/${FORM_ID}`)).not.toHaveProperty('versionId')
   })
 })
 

@@ -186,6 +186,13 @@ jest.mock('../runtime/ai-runtime', () => ({
   runAiRequest: (...args: unknown[]) => mockRunAiRequest(...args),
 }))
 
+// The scaffold's step reads it only in its admission, which no test here runs;
+// the module needs the Admin SDK.
+jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
+  __esModule: true,
+  resolveOrgIdForHost: async () => null,
+}))
+
 /**
  * The activity writers (AGL-2929), captured at the machine's seam. The row
  * shape each one stores is proven in `ai-activity.spec.ts` against the real
@@ -224,6 +231,7 @@ import {
   AI_JOB_STEP_STOP_REASON_MAX_CHARS,
   addAiJobStepTokens,
   aiJobRefusalText,
+  aiJobRunnerForStep,
   AI_JOB_SWEEP_MAX_JOBS,
   aiJobNextStepMinimumMs,
   aiJobStepMinimumMs,
@@ -248,9 +256,24 @@ import {
   sweepAiJobs,
   type AiJobStepRun,
 } from './ai-jobs'
-import { aiJobPlanCreditEstimate } from '../model/ai-site-job'
-import type { AiJob } from '../model/ai-jobs.types'
+import { AI_SITE_PAGES, aiJobPlanCreditEstimate } from '../model/ai-site-job'
+import type { AiBuildPlan } from '../model/ai-build-plan'
+import type { AiJob, AiJobDraftSlot, AiJobPlan } from '../model/ai-jobs.types'
+import { aiJobDraftId, aiPlanWithDraftIds } from './ai-job-draft-ids'
+import { createAiJobSiteStep } from './ai-job-site-step'
+import type { AiJobStepRunner } from './ai-job-text-step'
 import { AI_JOB_INLINE_BUDGET_MS } from './ai-job-budget'
+import { aiDoctrineReview, aiGenerationSpent } from './ai-job-generation'
+import {
+  AI_JOB_PAGE_INSTRUCTIONS,
+  AI_PAGE_SECTION_TOOL,
+  aiEmptyPage,
+  aiPageCheckContext,
+  aiPageSectionCheck,
+  aiPageSectionNodeId,
+  type AiPageSection,
+} from './ai-job-page-sections'
+import { runValidatedGeneration } from '../runtime/ai-doctrine'
 import { AI_JOB_SEO_STEP_MINIMUM_MS } from './ai-job-seo-budget'
 import { AI_JOB_TEXT_STEP_MINIMUM_MS } from './ai-job-text-step'
 import { AI_JOB_THEME_STEP_MINIMUM_MS } from './ai-job-theme-budget'
@@ -340,6 +363,199 @@ describe('createAiJob', () => {
       createAiJob(firestore, { orgId: ORG, kind: 'text', brief: '   ', createdBy: 'u' }),
     ).rejects.toThrow('brief')
     expect([...mockDocs.keys()].some((path) => path.includes('/aiJobs/'))).toBe(false)
+  })
+})
+
+/** A console resource id: `createResourceUid()`'s nanoid, the id everything the console makes carries. */
+const RESOURCE_ID = /^[A-Za-z0-9_-]{10}$/
+
+describe('the ids a job and its drafts are named by (AGL-3079)', () => {
+  it('names a new job, and every draft its kind always writes, by a console resource id before any step runs', async () => {
+    const job = await createAiJob(
+      firestore,
+      { orgId: ORG, hostId: 'host-1', kind: 'campaign', brief: 'A spring sale email.', createdBy: 'uid-1' },
+      NOW,
+    )
+    expect(job.$id).toMatch(RESOURCE_ID)
+    const stored = await getAiJob(firestore, ORG, job.$id)
+    const draftIds = stored?.steps[0].draftIds ?? {}
+    expect(draftIds).toEqual({ email: expect.stringMatching(RESOURCE_ID), campaign: expect.stringMatching(RESOURCE_ID) })
+    // Each draft is its own resource, never the job and never the other draft.
+    expect(new Set([job.$id, draftIds.email, draftIds.campaign]).size).toBe(3)
+    // A kind that writes no draft names none.
+    expect((await newTextJob()).steps.map((step) => step.draftIds)).toEqual([undefined])
+  })
+
+  it.each<[AiJob['kind'], AiJobDraftSlot]>([
+    ['page', 'screen'],
+    ['layout', 'layout'],
+    ['template', 'template'],
+    ['component', 'component'],
+    ['form', 'form'],
+  ])('names a new %s job, and the %s it writes, by console resource ids of their own', async (kind, slot) => {
+    const job = await createAiJob(
+      firestore,
+      { orgId: ORG, hostId: 'host-1', kind, brief: 'For a roofer in Harbor County.', createdBy: 'uid-1' },
+      NOW,
+    )
+    // The job is stored under the id it reports.
+    expect(mockDocs.has(`orgs/${ORG}/aiJobs/${job.$id}`)).toBe(true)
+    // The id its step writes the draft under, and finds the draft by when it runs again.
+    const draftId = aiJobDraftId((await getAiJob(firestore, ORG, job.$id)) as AiJob, slot)
+    expect([job.$id, draftId]).toEqual([expect.stringMatching(RESOURCE_ID), expect.stringMatching(RESOURCE_ID)])
+    // A resource of its own: neither the job's id nor one made from it.
+    expect(draftId).not.toContain(job.$id)
+  })
+})
+
+describe('a step run again after its draft was written finds that draft and writes no second (AGL-3079)', () => {
+  const ZERO = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
+  /** The id of every layout the step wrote, one entry a write. */
+  const writes: string[] = []
+  /** Whether the next pass that writes its draft then fails, as a provider call made after the write would. */
+  let failAfterWrite = false
+
+  /**
+   * A layout step as every draft step is written: it looks for its draft
+   * under the id the job recorded (`aiJobDraftId`) and reports it without
+   * spending when it is there; otherwise it spends a generation and writes
+   * the draft there. It builds a layout job's own layout and a scaffold's
+   * layout unit alike.
+   */
+  const layoutStep: AiJobStepRunner = async ({ job, firestore: db }) => {
+    const id = aiJobDraftId(job, 'layout')
+    const ref = db.collection('hosts').doc('host-1').collection('layouts').doc(id)
+    const outputs = [{ resource: 'layout' as const, id, hostId: 'host-1', label: 'Site frame' }]
+    if ((await ref.get()).exists) {
+      return { outputs, usage: ZERO, estCostUsd: 0, model: 'claude-sonnet-5', stopReason: null }
+    }
+    await ref.set({ displayName: 'Site frame' })
+    writes.push(id)
+    if (failAfterWrite) {
+      failAfterWrite = false
+      throw new AiUpstreamError(529, true, 'req-after-write')
+    }
+    return { outputs, usage: USAGE, estCostUsd: 0.006, model: 'claude-sonnet-5', stopReason: 'tool_use' }
+  }
+
+  /** The two ways the machine runs a step again once a pass of it wrote its draft. */
+  const runAgain = {
+    /**
+     * The process that claimed the step died after the write, before the
+     * machine recorded anything: the step stays `running` under a lease
+     * that expires, and the next beat claims it and runs it again.
+     */
+    crash: async (jobId: string) => {
+      const claimed = await claimNextStep(firestore, ORG, jobId, 'dead-route', NOW)
+      if (!claimed) throw new Error('the step could not be claimed')
+      const runner = aiJobRunnerForStep(claimed.job.kind, claimed.job.steps[claimed.stepIndex].name)
+      if (!runner) throw new Error('no runner is registered for the step')
+      // What the process did before it died; its outcome died with it.
+      await runner({ job: claimed.job, stepIndex: claimed.stepIndex, now: NOW, firestore })
+      const expired = NOW.getTime() + AI_JOB_LEASE_MS + 1
+      expect(await sweepAiJobs({ firestore, owner: 'beat', now: () => expired })).toMatchObject({ due: 1, ran: 1 })
+    },
+    /** The pass failed retryably after its write: the machine hands the step back, and the next run takes it. */
+    retry: async (jobId: string) => {
+      failAfterWrite = true
+      expect((await runAiJobStep(firestore, ORG, jobId, { owner: 'route-1', now: NOW })).outcome).toBe('requeued')
+      expect((await runAiJobStep(firestore, ORG, jobId, { owner: 'beat', now: NOW })).outcome).toBe('done')
+    },
+  }
+
+  /** Every layout document on the site. */
+  const layoutDocs = () => [...mockDocs.keys()].filter((path) => /^hosts\/host-1\/layouts\/[^/]+$/.test(path))
+
+  // A kind no other test in this file creates, and a scaffold whose only
+  // loaded unit kind is that one, so a scaffold builds its layout alone.
+  beforeAll(() => {
+    registerAiJobStep('layout', layoutStep)
+    registerAiJobStep('site', createAiJobSiteStep({ runnerFor: (kind) => (kind === 'layout' ? layoutStep : null) }))
+  })
+  beforeEach(() => {
+    writes.length = 0
+    failAfterWrite = false
+  })
+  afterEach(() => registerAiJobPlanStep(null))
+
+  it.each(['crash', 'retry'] as const)('finds a kind’s own draft under the id the job recorded, after a %s', async (path) => {
+    const job = await createAiJob(
+      firestore,
+      { orgId: ORG, hostId: 'host-1', kind: 'layout', brief: 'A site frame for a roofer.', createdBy: 'uid-1' },
+      NOW,
+    )
+    const recorded = job.steps[0].draftIds?.layout
+    expect(recorded).toMatch(RESOURCE_ID)
+
+    await runAgain[path](job.$id)
+
+    expect(writes).toEqual([recorded])
+    expect(layoutDocs()).toEqual([`hosts/host-1/layouts/${recorded}`])
+    const done = await getAiJob(firestore, ORG, job.$id)
+    expect(done).toMatchObject({ status: 'done', outputs: [expect.objectContaining({ resource: 'layout', id: recorded })] })
+    // Every claim and record kept the id the job was created with.
+    expect(done?.steps[0].draftIds).toEqual({ layout: recorded })
+  })
+
+  it.each(['crash', 'retry'] as const)('finds a plan creation’s draft under the id the kept plan recorded, after a %s', async (path) => {
+    const plan: AiBuildPlan = {
+      reuse: [],
+      create: [{ kind: 'layout', name: 'Site frame', why: 'Every page renders inside it.', duplicateOf: null, fields: [] }],
+      screens: Array.from({ length: AI_SITE_PAGES.min }, (_, index) => ({
+        title: `Page ${index}`,
+        slug: `page-${index}`,
+        layout: 'new:Site frame',
+        template: null,
+        duplicateOf: null,
+        nav: index === 0,
+        seoTitle: `Page ${index}`,
+        seoDescription: `Page ${index} of the site.`,
+        sections: [{ name: 'hero', uses: [], items: 0 }],
+      })),
+    }
+    // The plan is kept as the plan step keeps it: each draft it decides named before anything is built.
+    registerAiJobPlanStep(async ({ job }) => ({
+      outputs: [],
+      usage: USAGE,
+      estCostUsd: 0.006,
+      model: 'claude-sonnet-5',
+      stopReason: 'tool_use',
+      plan: {
+        ...aiPlanWithDraftIds(job.kind, plan),
+        status: 'proposed',
+        labels: {},
+        proposedAt: NOW as unknown as AiJobPlan['proposedAt'],
+        confirmedAt: null,
+        confirmedBy: null,
+      },
+      review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+    }))
+    const job = await createAiJob(
+      firestore,
+      {
+        orgId: ORG,
+        hostId: 'host-1',
+        kind: 'site',
+        brief: 'A four-page site for a roofer.',
+        inputs: { businessType: 'roofer', pages: AI_SITE_PAGES.min, welcomeEmail: false },
+        createdBy: 'uid-1',
+      },
+      NOW,
+    )
+    expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })).outcome).toBe('needs_review')
+    expect((await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, NOW)).changed).toBe(true)
+    const recorded = (await getAiJob(firestore, ORG, job.$id))?.plan?.create[0].id
+    expect(recorded).toMatch(RESOURCE_ID)
+    expect(recorded).not.toContain(job.$id)
+
+    await runAgain[path](job.$id)
+
+    expect(writes).toEqual([recorded])
+    expect(layoutDocs()).toEqual([`hosts/host-1/layouts/${recorded}`])
+    const done = await getAiJob(firestore, ORG, job.$id)
+    expect(done).toMatchObject({ status: 'done', outputs: [expect.objectContaining({ resource: 'layout', id: recorded })] })
+    // The plan, kept, confirmed and read again on every pass, still names the draft by the id it was kept with.
+    expect(done?.plan?.create[0].id).toBe(recorded)
   })
 })
 
@@ -1272,6 +1488,14 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
     expect(aiJobStepNames('text')).toEqual(['draft'])
   })
 
+  it('names a scaffold’s welcome email on the step that builds it, never on the plan step (AGL-3079)', async () => {
+    const job = await newSiteJob()
+    expect(job.steps.map((step) => [step.name, step.draftIds ?? null])).toEqual([
+      [AI_JOB_PLAN_STEP, null],
+      ['generate', { email: expect.stringMatching(RESOURCE_ID) }],
+    ])
+  })
+
   it('parks a proposed plan for review in the write that records the step, and the beat never picks it up', async () => {
     planRunner.mockResolvedValue(proposedOutcome())
     const job = await newSiteJob()
@@ -1425,6 +1649,92 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
       plan: { status: 'proposed' },
       review: { reason: 'plan' },
     })
+  })
+
+  it('parks a section refused twice for rule 12 with the node ids its finding names and an outline of the refused answer, never its copy (AGL-3078)', async () => {
+    planRunner.mockResolvedValue(proposedOutcome())
+    const job = await newSiteJob()
+    await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
+    await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, LATER)
+
+    // A live About page's practice areas: a Grid with no container, holding items sized 4.
+    const areas = ['Estate planning', 'Real estate', 'Business formation']
+    const section = {
+      rootId: 'root',
+      nodes: {
+        root: { componentId: 'div', nodes: ['areas'] },
+        areas: { componentId: 'section', props: { element: 'section' }, nodes: ['title', 'grid'] },
+        title: { componentId: 'muiTypography', props: { variant: 'h1', component: 'h1', children: 'Practice areas' } },
+        grid: { componentId: 'muiGrid', props: { ariaLabel: 'Practice areas' }, nodes: areas.map((_, index) => `cell-${index}`) },
+        ...Object.fromEntries(
+          areas.flatMap((title, index) => [
+            [`cell-${index}`, { componentId: 'muiGrid', props: { size: '4' }, nodes: [`card-${index}`] }],
+            [`card-${index}`, { componentId: 'muiCard', props: { variant: 'outlined' }, nodes: [`card-${index}-title`] }],
+            [`card-${index}-title`, { componentId: 'muiTypography', props: { variant: 'h2', component: 'h2', children: title } }],
+          ]),
+        ),
+      },
+    }
+    mockRunAiRequest.mockResolvedValue({
+      kind: 'completion',
+      text: '',
+      toolUse: [{ name: AI_PAGE_SECTION_TOOL.name, input: { tree: JSON.stringify(section) } }],
+      usage: USAGE,
+      estCostUsd: 0.006,
+      stopReason: 'tool_use',
+    })
+    // A section pass, as the page step runs one on a workspace that keeps no reusable components.
+    siteRunner.mockImplementationOnce(async () => {
+      const result = await runValidatedGeneration<AiPageSection>('page-section', {
+        model: 'claude-sonnet-5',
+        instructions: AI_JOB_PAGE_INSTRUCTIONS,
+        inventory: null,
+        messages: [{ role: 'user', content: 'Build section 1 of 1: "practice areas".' }],
+        tool: AI_PAGE_SECTION_TOOL,
+        thinking: 'off',
+        check: aiPageSectionCheck({
+          page: aiEmptyPage(),
+          sectionIds: [aiPageSectionNodeId(job.$id, 0)],
+          index: 0,
+          context: aiPageCheckContext(null, { reusableComponents: false }),
+          uses: [],
+          inventory: null,
+        }),
+      })
+      const spent = aiGenerationSpent(result)
+      return result.status === 'needs_input' ? { ...spent, review: aiDoctrineReview(result) } : { ...spent, continue: true }
+    })
+
+    expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-2', now: LATER })).outcome).toBe('needs_review')
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    const parked = await getAiJob(firestore, ORG, job.$id)
+    expect(parked?.status).toBe('needs_review')
+    expect(parked?.review).toEqual({
+      reason: 'doctrine',
+      message: expect.stringContaining('Rule 12'),
+      findings: [
+        {
+          rule: 12,
+          code: 'grid-not-container',
+          message:
+            'A Grid lays out columns only as a container: this one is not, so what it holds stacks at every width. Set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4".',
+          nodeIds: ['grid'],
+        },
+      ],
+      outline: [
+        { id: 'grid', depth: 0, componentId: 'muiGrid', props: ['ariaLabel'], children: ['muiGrid', 'muiGrid', 'muiGrid'] },
+        ...areas.flatMap((_, index) => [
+          { id: `cell-${index}`, depth: 1, componentId: 'muiGrid', props: ['size'], grid: { size: '4' }, children: ['muiCard'] },
+          { id: `card-${index}`, depth: 2, componentId: 'muiCard', props: ['variant'], children: ['muiTypography'] },
+        ]),
+      ],
+    })
+    // The job keeps the shape of what was refused, and none of its words.
+    for (const copy of ['Practice areas', ...areas]) {
+      expect([copy, JSON.stringify(parked).includes(copy)]).toEqual([copy, false])
+    }
+    // The member's wire form carries the same review.
+    expect(aiJobSummary(parked as AiJob).review).toEqual(parked?.review)
   })
 
   it('hands back a step stopped at a site allowance with its sentence, and trying again runs it once more (AGL-2909)', async () => {

@@ -94,7 +94,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { findScreenIdByRoutePath } from '@aglyn/aglyn/app-utils/screen-route'
 import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fields'
-import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
+import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import { AI_BUILD_PLAN_LIMITS } from '../model/ai-build-plan'
@@ -251,7 +251,11 @@ const PLAN: AiJobPlan = {
 }
 const SCREEN = PLAN.screens[0]
 const SECTION_IDS = SCREEN.sections.map((_, index) => aiPageSectionNodeId('job-1', index))
-const DRAFT = 'hosts/host-1/screens/job-1'
+/** The id the job recorded for its page when it was created (AGL-3079). */
+const SCREEN_ID = 'drftScreen'
+const DRAFT = `hosts/host-1/screens/${SCREEN_ID}`
+/** The ids the plan recorded for what it creates when the job kept it (AGL-3079). */
+const CREATION_IDS = { component: 'drftPriceT', layout: 'drftFrameL', form: 'drftQuoteF' }
 
 function job(patch: Partial<AiJob> = {}): AiJob {
   return {
@@ -264,7 +268,7 @@ function job(patch: Partial<AiJob> = {}): AiJob {
     inputs: { pageType: FIXTURE.pageType },
     steps: [
       { name: 'plan', status: 'done', creditsSpent: 3 },
-      { name: 'generate', status: 'running', creditsSpent: 0 },
+      { name: 'generate', status: 'running', creditsSpent: 0, draftIds: { screen: SCREEN_ID } },
     ],
     outputs: [],
     creditsReserved: 50,
@@ -491,9 +495,9 @@ describe('the passes', () => {
     expect(mockDocs.get(DRAFT)).toMatchObject({ displayName: SCREEN.title, slug: 'spring-roof-inspection' })
     expect(mockDocs.get(DRAFT)).not.toHaveProperty('publishedAt')
     expect(storedPage()[CANVAS_ROOT_ELEMENT_ID].nodes).toEqual([SECTION_IDS[0]])
-    expect(mockDocs.get(`${DRAFT}/versions/${versionId}`)).toMatchObject({ screenId: 'job-1', layoutId: 'lay-site' })
+    expect(mockDocs.get(`${DRAFT}/versions/${versionId}`)).toMatchObject({ screenId: SCREEN_ID, layoutId: 'lay-site' })
     const routes = mockDocs.get('hosts/host-1')?.['screens'] as Record<string, string>
-    expect(findScreenIdByRoutePath(routes, 'spring-roof-inspection')).not.toBe('job-1')
+    expect(findScreenIdByRoutePath(routes, 'spring-roof-inspection')).not.toBe(SCREEN_ID)
   })
 
   it('adds each later section to the stored version in the plan’s order, asking with references only', async () => {
@@ -539,7 +543,7 @@ describe('the passes', () => {
       outputs: [
         {
           resource: 'screen',
-          id: 'job-1',
+          id: SCREEN_ID,
           versionId: mockDocs.get(DRAFT)?.['versionId'],
           hostId: 'host-1',
           hostSubdomain: 'acme',
@@ -555,6 +559,34 @@ describe('the passes', () => {
     expect(mockDocs.get(DRAFT)?.['seo']).toEqual({
       title: 'Spring Roof Inspections in Springfield',
       description: 'A licensed roofer checks shingles, flashing and gutters.',
+    })
+  })
+
+  it('stops the last pass for review naming the draft’s own nodes, with their outline, when the stored page breaks a rule (AGL-3078)', async () => {
+    await buildSections()
+    mockRunAiRequest.mockReset()
+    // A member's edit takes the container off the second section's row of cards.
+    const versionPath = `${DRAFT}/versions/${mockDocs.get(DRAFT)?.['versionId']}`
+    const nodes = storedPage() as Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }>
+    const [rowId] = Object.entries(nodes).find(([, node]) => node.props?.['container'] === true) ?? []
+    nodes[rowId as string].props = { ariaLabel: 'What the inspection covers' }
+    mockDocs.set(versionPath, { ...mockDocs.get(versionPath), nodes: encodeStoredNodes(nodes) })
+
+    const outcome = await step()(context())
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(outcome.outputs).toEqual([])
+    const cells = nodes[rowId as string].nodes ?? []
+    expect(outcome.review).toEqual({
+      reason: 'doctrine',
+      message: expect.stringContaining('Rule 12'),
+      findings: [expect.objectContaining({ rule: 12, code: 'grid-not-container', nodeIds: [rowId] })],
+      outline: [
+        { id: rowId, depth: 0, componentId: 'muiGrid', props: ['ariaLabel'], children: cells.map(() => 'muiGrid') },
+        ...cells.flatMap((cell) => [
+          expect.objectContaining({ id: cell, depth: 1, componentId: 'muiGrid', grid: { size: 'xs:12 md:4' } }),
+          expect.objectContaining({ id: nodes[cell].nodes?.[0], depth: 2, componentId: 'reusableInstance' }),
+        ]),
+      ],
     })
   })
 
@@ -618,15 +650,15 @@ describe('the passes', () => {
     const creating: AiJobPlan = {
       ...PLAN,
       create: [
-        { kind: 'component', name: 'Price tier', why: 'Three tiers repeat.', duplicateOf: null, fields: ['tier:text'] },
-        { kind: 'layout', name: 'Site frame', why: 'The site has no layout.', duplicateOf: null, fields: [] },
-        { kind: 'form', name: 'Quote request', why: 'The site has no form.', duplicateOf: null, fields: ['email'] },
+        { kind: 'component', name: 'Price tier', why: 'Three tiers repeat.', duplicateOf: null, fields: ['tier:text'], id: CREATION_IDS.component },
+        { kind: 'layout', name: 'Site frame', why: 'The site has no layout.', duplicateOf: null, fields: [], id: CREATION_IDS.layout },
+        { kind: 'form', name: 'Quote request', why: 'The site has no form.', duplicateOf: null, fields: ['email'], id: CREATION_IDS.form },
       ],
     }
     const built: Record<string, AiJobOutput> = {
-      layout: { resource: 'layout', id: 'job-1-c1', versionId: 'v-frame', hostId: 'host-1', label: 'Site frame' },
-      form: { resource: 'form', id: 'job-1-c2', versionId: null, hostId: 'host-1', label: 'Quote request' },
-      component: { resource: 'reusableComponent', id: 'job-1-c0', versionId: null, hostId: 'host-1', label: 'Price tier' },
+      layout: { resource: 'layout', id: CREATION_IDS.layout, versionId: 'v-frame', hostId: 'host-1', label: 'Site frame' },
+      form: { resource: 'form', id: CREATION_IDS.form, versionId: null, hostId: 'host-1', label: 'Quote request' },
+      component: { resource: 'reusableComponent', id: CREATION_IDS.component, versionId: null, hostId: 'host-1', label: 'Price tier' },
     }
     const next = (outputs: AiJobOutput[]) => aiPageJobRunMinimumMs(job({ plan: creating, outputs }))
     expect(next([])).toBe(mockMinimums['layout'])
@@ -646,6 +678,43 @@ describe('when a pass stops', () => {
     const outcome = await step()(context())
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
     expect(outcome.review).toEqual(expect.objectContaining({ reason: 'doctrine', findings: [expect.objectContaining({ rule: 11, code: 'missing-h1' })] }))
+    expect(outcome.continue).toBeUndefined()
+    expect(commits).toEqual([])
+  })
+
+  it('stops a section refused twice for rule 12 with the node ids its finding names and an outline of the refused section, never its copy (AGL-3078)', async () => {
+    // The hero's column Stack written as a Grid with a column direction, which a Grid does not have.
+    const answer = structuredClone(FIXTURE.answers[0])
+    answer.nodes['a5'] = { ...answer.nodes['a5'], componentId: 'muiGrid' }
+    mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(answer)).mockResolvedValueOnce(sectionAnswer(answer))
+    const outcome = await step()(context())
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    expect(String(mockRunAiRequest.mock.calls[1][0].messages.at(-1).content)).toContain(
+      'Use a Stack (or a Box) for a group that only stacks, such as a heading over its text',
+    )
+    expect(outcome.review).toEqual({
+      reason: 'doctrine',
+      message: expect.stringContaining('Rule 12'),
+      findings: [{ rule: 12, code: 'grid-as-stack', message: expect.stringContaining('no "column" direction'), nodeIds: ['a5'] }],
+      outline: [
+        {
+          id: 'a5',
+          depth: 0,
+          componentId: 'muiGrid',
+          props: ['direction', 'alignItems'],
+          sx: ['gap'],
+          grid: { direction: 'column' },
+          children: ['muiTypography', 'muiTypography', 'muiButton', 'image'],
+        },
+        { id: 'a1', depth: 1, componentId: 'muiTypography', props: ['variant', 'children', 'component'], children: [] },
+        { id: 'a2', depth: 1, componentId: 'muiTypography', props: ['variant', 'children'], children: [] },
+        { id: 'a3', depth: 1, componentId: 'muiButton', props: ['children', 'variant', 'screenId'], children: [] },
+        { id: 'a4', depth: 1, componentId: 'image', props: ['alt'], children: [] },
+      ],
+    })
+    for (const copy of ['Spring roof inspections', 'Request a quote', 'A roofer inspecting shingles']) {
+      expect([copy, JSON.stringify(outcome.review).includes(copy)]).toEqual([copy, false])
+    }
     expect(outcome.continue).toBeUndefined()
     expect(commits).toEqual([])
   })
@@ -775,16 +844,16 @@ describe('what the plan creates comes first (AGL-3031)', () => {
     ...PLAN,
     reuse: PLAN.reuse.filter((entry) => entry.kind !== 'layout'),
     create: [
-      { kind: 'component', name: 'Price tier', why: 'Three tiers repeat.', duplicateOf: null, fields: ['tier:text'] },
-      { kind: 'layout', name: 'Site frame', why: 'The site has no layout.', duplicateOf: null, fields: [] },
-      { kind: 'form', name: 'Quote request', why: 'The site has no form.', duplicateOf: null, fields: ['email'] },
+      { kind: 'component', name: 'Price tier', why: 'Three tiers repeat.', duplicateOf: null, fields: ['tier:text'], id: CREATION_IDS.component },
+      { kind: 'layout', name: 'Site frame', why: 'The site has no layout.', duplicateOf: null, fields: [], id: CREATION_IDS.layout },
+      { kind: 'form', name: 'Quote request', why: 'The site has no form.', duplicateOf: null, fields: ['email'], id: CREATION_IDS.form },
     ],
     screens: [{ ...SCREEN, layout: 'new:Site frame' }],
   }
   const UNIT_OUTPUTS: Record<string, AiJobOutput> = {
-    layout: { resource: 'layout', id: 'job-1-c1', versionId: 'v-frame', hostId: 'host-1', label: 'Site frame' },
-    form: { resource: 'form', id: 'job-1-c2', versionId: null, hostId: 'host-1', label: 'Quote request' },
-    component: { resource: 'reusableComponent', id: 'job-1-c0', versionId: null, hostId: 'host-1', label: 'Price tier' },
+    layout: { resource: 'layout', id: CREATION_IDS.layout, versionId: 'v-frame', hostId: 'host-1', label: 'Site frame' },
+    form: { resource: 'form', id: CREATION_IDS.form, versionId: null, hostId: 'host-1', label: 'Quote request' },
+    component: { resource: 'reusableComponent', id: CREATION_IDS.component, versionId: null, hostId: 'host-1', label: 'Price tier' },
   }
   const spend: AiJobStepOutcome = { outputs: [], usage: USAGE, estCostUsd: 0.02, model: 'claude-sonnet-5', stopReason: 'tool_use' }
 
@@ -820,7 +889,7 @@ describe('what the plan creates comes first (AGL-3031)', () => {
     expect(mockRunAiRequest).not.toHaveBeenCalled()
     const [layoutContext] = runners.layout.mock.calls[0] as unknown as [AiJobStepContext]
     expect(layoutContext.job).toMatchObject({
-      $id: 'job-1-c1',
+      $id: CREATION_IDS.layout,
       kind: 'layout',
       steps: [],
       outputs: [],
@@ -830,7 +899,7 @@ describe('what the plan creates comes first (AGL-3031)', () => {
     const placed = new Set(SCREEN.sections.flatMap((section) => section.uses))
     expect(layoutContext.job.plan?.reuse).toEqual(CREATING.reuse.filter((entry) => !placed.has(entry.id)))
     const [componentContext] = runners.component.mock.calls[0] as unknown as [AiJobStepContext]
-    expect(componentContext.job).toMatchObject({ $id: 'job-1-c0', kind: 'component', plan: { create: [CREATING.create[0]] } })
+    expect(componentContext.job).toMatchObject({ $id: CREATION_IDS.component, kind: 'component', plan: { create: [CREATING.create[0]] } })
     expect(componentContext.job.brief).toContain('Build the component “Price tier”: Three tiers repeat.')
   })
 
@@ -839,7 +908,7 @@ describe('what the plan creates comes first (AGL-3031)', () => {
     // The site's inventory lists what the creations built, as the reader would.
     mockReadInventory.mockResolvedValue({
       ...FIXTURE.inventory,
-      layouts: [...FIXTURE.inventory.layouts, { id: 'job-1-c1', name: 'Site frame', parentId: null }],
+      layouts: [...FIXTURE.inventory.layouts, { id: CREATION_IDS.layout, name: 'Site frame', parentId: null }],
     })
     mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(FIXTURE.answers[0]))
     const outputs = [UNIT_OUTPUTS['layout'], UNIT_OUTPUTS['form'], UNIT_OUTPUTS['component']]
@@ -847,12 +916,12 @@ describe('what the plan creates comes first (AGL-3031)', () => {
     expect(outcome).toMatchObject({ continue: true, outputs: [] })
     const [request] = mockRunAiRequest.mock.calls[0]
     const prompt = String(request.messages[0].content)
-    expect(prompt).toContain('- reuse the layout job-1-c1 ("Site frame")')
-    expect(prompt).toContain('- reuse the component job-1-c0 ("Price tier")')
+    expect(prompt).toContain(`- reuse the layout ${CREATION_IDS.layout} ("Site frame")`)
+    expect(prompt).toContain(`- reuse the component ${CREATION_IDS.component} ("Price tier")`)
     expect(prompt).not.toContain('- create the')
     // The draft renders inside the layout the job built.
     const screen = mockDocs.get(DRAFT)
-    expect(mockDocs.get(`${DRAFT}/versions/${screen?.['versionId']}`)).toMatchObject({ layoutId: 'job-1-c1' })
+    expect(mockDocs.get(`${DRAFT}/versions/${screen?.['versionId']}`)).toMatchObject({ layoutId: CREATION_IDS.layout })
   })
 
   it('waits on a creation that stopped for a person, and fails on one that reported nothing or has no runner', async () => {

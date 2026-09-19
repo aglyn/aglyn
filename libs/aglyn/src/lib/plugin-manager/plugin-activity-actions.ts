@@ -34,6 +34,35 @@
 
 export type PluginActivityScope = 'org' | 'host' | 'staff'
 
+/**
+ * A resource a PLUGIN files an org activity row under (AGL-2978): the
+ * plugin's id, a colon and the plugin's own noun — `acme-mail:mailbox`.
+ *
+ * Core's activity targets are a closed list of core's own resources. A
+ * plugin's resource is not one of them and is never added to that list; the
+ * org log's target type accepts any namespaced type instead, and the feed
+ * reads the noun after the colon for a reader. The namespace keeps two
+ * plugins' nouns from meaning one thing.
+ */
+export type PluginActivityTargetType = `${string}:${string}`
+
+/** A namespaced type as the log stores it: `pluginId:noun`, both parts plain. */
+const PLUGIN_TARGET_TYPE = /^([a-z][a-z0-9-]*):([A-Za-z][A-Za-z0-9]*)$/
+
+/** Whether a stored target type is a plugin's namespaced one. */
+export function isPluginActivityTargetType(type: unknown): type is PluginActivityTargetType {
+  return typeof type === 'string' && PLUGIN_TARGET_TYPE.test(type)
+}
+
+/**
+ * The noun a plugin's namespaced type names — `acme-mail:mailbox` →
+ * `mailbox` — or `undefined` for any other type.
+ */
+export function pluginActivityTargetNoun(type: unknown): string | undefined {
+  if (typeof type !== 'string') return undefined
+  return PLUGIN_TARGET_TYPE.exec(type)?.[2]
+}
+
 export interface PluginActivityAction {
   /** The stored action code — dotted, stable, never a sentence. */
   key: string

@@ -14,7 +14,7 @@ AGL-377, AGL-1734).
 
 ## The multi-site demo org (AGL-1734)
 
-The founding demo (`Design-Partner-Outreach.md` §4) spends minutes 3–10 —
+The 30-minute demo (`Design-Partner-Outreach.md` §4) spends minutes 3–10 —
 its largest block — on *"switch between several sites in one org;
 roles/permissions; one billing view"*. That is the wedge, so the demo org
 has to be several visibly different businesses, not one site cloned.

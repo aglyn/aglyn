@@ -508,13 +508,27 @@ interface ReadTree {
   result: AiGenerationCheckResult<AiValidatedTree> | null
 }
 
-function readTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknown): ReadTree {
+/**
+ * The sections a page answer's plan lays out, by name, which a link on the
+ * page may take a visitor to as the page step lets it (AGL-3097); empty for an
+ * answer of another kind, or with no plan to read them from.
+ */
+function planSections(evalCase: AiEvalCase, plan: unknown): string[] {
+  const screens = evalCase.kind === 'page' && isRecord(plan) && Array.isArray(plan['screens']) ? plan['screens'] : []
+  const sections = isRecord(screens[0]) && Array.isArray(screens[0]['sections']) ? screens[0]['sections'] : []
+  return sections.flatMap((section: unknown) =>
+    isRecord(section) && typeof section['name'] === 'string' ? [section['name']] : [],
+  )
+}
+
+function readTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknown, plan?: unknown): ReadTree {
   const inline = evalCase.capabilities?.reusableComponents === false
   let input = isRecord(answer) ? answer : { tree: answer }
   // A component answer that declares its properties binds them in its tree,
   // and is held to the component step's own checks as that step holds it
   // (AGL-3054).
   const declaresProps = evalCase.kind === 'component' && Array.isArray(input['props'])
+  const sections = planSections(evalCase, plan)
   const check = aiDoctrineTreeCheck(
     outputKind,
     aiDoctrineTreeContext(evalCase.inventory, {
@@ -522,6 +536,7 @@ function readTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknow
       framing: evalCase.framing,
       ...(inline ? { reusableComponents: false } : {}),
       ...(declaresProps ? { definesComponent: true } : {}),
+      ...(sections.length ? { pageSections: sections } : {}),
     }),
   )
   // A page's repeated item written once is drawn into its copies first, as the
@@ -544,8 +559,8 @@ export function aiEvalAnswerTree(evalCase: AiEvalCase, answer: unknown): AiValid
   return outputKind ? (readTree(evalCase, outputKind, answer).result?.value ?? null) : null
 }
 
-function checkTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknown): Checked {
-  const { input, declaresProps, undrawn, result } = readTree(evalCase, outputKind, answer)
+function checkTree(evalCase: AiEvalCase, outputKind: AiOutputKind, answer: unknown, plan?: unknown): Checked {
+  const { input, declaresProps, undrawn, result } = readTree(evalCase, outputKind, answer, plan)
   if (undrawn || !result) {
     return { readable: false, rules: false, budget: false, findings: codes(undrawn ?? []) }
   }
@@ -840,9 +855,10 @@ function checkCrm(evalCase: AiEvalCase, answer: unknown): Checked {
   }
 }
 
-function checkAnswer(evalCase: AiEvalCase, answer: unknown): Checked {
+/** An answer held to its kind's checks; a page's links to the sections of the plan it was built from. */
+function checkAnswer(evalCase: AiEvalCase, answer: unknown, plan?: unknown): Checked {
   const outputKind = AI_EVAL_TREE_OUTPUT[evalCase.kind]
-  if (outputKind) return checkTree(evalCase, outputKind, answer)
+  if (outputKind) return checkTree(evalCase, outputKind, answer, plan)
   switch (evalCase.kind) {
     case 'seo':
       return checkSeo(evalCase, answer)
@@ -953,7 +969,7 @@ export function scoreAiEvalCandidate(
   audits?: AiEvalAudits,
 ): AiEvalScore {
   const scope = candidate.scope ?? 'full'
-  const checked = scope === 'full' ? checkAnswer(evalCase, candidate.answer) : null
+  const checked = scope === 'full' ? checkAnswer(evalCase, candidate.answer, candidate.plan) : null
   const widths = checkWidths(evalCase, candidate.answer, checked, audits)
   const plan = evalCase.expected?.plan ? checkAiEvalPlan(evalCase, candidate.plan) : null
   const rubric = aiEvalRubricVerdict(candidate.rubric)
@@ -996,7 +1012,8 @@ export function scoreAiEvalControl(
   control: AiEvalControl,
   audits?: AiEvalAudits,
 ): AiEvalCheck[] {
-  const checked = checkAnswer(evalCase, control.answer)
+  // A control is the case's first answer with one thing wrong, built from its plan unless it carries its own.
+  const checked = checkAnswer(evalCase, control.answer, control.plan ?? evalCase.candidates[0]?.plan)
   const widths = audits?.(evalCase, control.answer) ? checkWidths(evalCase, control.answer, checked, audits) : null
   const plan =
     control.plan !== undefined && evalCase.expected?.plan

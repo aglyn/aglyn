@@ -145,6 +145,9 @@ const PLAN: AiBuildPlan = {
 
 const USAGE = { inputTokens: 2_000, outputTokens: 300, cacheReadTokens: 0, cacheWriteTokens: 0 }
 
+/** A console resource id: `createResourceUid()`'s nanoid. */
+const RESOURCE_ID = /^[A-Za-z0-9_-]{10}$/
+
 function job(patch: Partial<AiJob> = {}): AiJob {
   return {
     $id: 'job-1',
@@ -226,6 +229,8 @@ describe('the plan step', () => {
       stopReason: 'tool_use',
       plan: {
         ...PLAN,
+        // The draft the creation becomes is named as the plan is kept (AGL-3079).
+        create: [{ ...PLAN.create[0], id: expect.stringMatching(RESOURCE_ID) }],
         status: 'proposed',
         labels: { 'lay-site': 'Site layout', 'cmp-card': 'Service card' },
         proposedAt: NOW,
@@ -273,7 +278,8 @@ describe('the plan step', () => {
     expect(outcome.review).toEqual({
       reason: 'doctrine',
       message: expect.stringContaining(`Rule 2 (${AI_DOCTRINE_RULES[2]})`),
-      findings: [{ rule: 2, code: 'plan-screen-without-layout', message: expect.any(String) }],
+      // A plan's finding keeps the entry it names (AGL-3078); a plan has no nodes to outline.
+      findings: [{ rule: 2, code: 'plan-screen-without-layout', message: expect.any(String), paths: ['screens[0].layout'] }],
     })
   })
 
@@ -727,6 +733,16 @@ describe('the plan step — reuse', () => {
       message: AI_JOB_PLAN_REVIEW_COPY,
       findings: [],
     })
+  })
+
+  it('names the reused plan’s drafts afresh, so this job never finds the earlier job’s drafts as its own (AGL-3079)', async () => {
+    const earlier = candidate()
+    earlier.plan = { ...earlier.plan, create: earlier.plan.create.map((entry) => ({ ...entry, id: 'earlierDrf' })) }
+    mockFindPlans.mockResolvedValue([earlier])
+    const outcome = await planStep()({ job: job(), stepIndex: 0, now: NOW, firestore })
+    expect(outcome.plan?.reusedFrom).toBe('job-earlier')
+    expect(outcome.plan?.create.map((entry) => entry.id)).toEqual([expect.stringMatching(RESOURCE_ID)])
+    expect(outcome.plan?.create[0].id).not.toBe('earlierDrf')
   })
 
   it('looks the plan up by the key this request would have been sent under', async () => {

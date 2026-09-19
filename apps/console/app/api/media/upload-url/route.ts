@@ -36,6 +36,7 @@ import {
 } from '../../../../utils/storage-overage'
 import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
 import { resolveUploadSite } from '../../../../utils/server/media-upload-site'
+import { scheduleMediaDeliveryCopies } from '../../../../utils/server/media-delivery-copies'
 import { videoUploadFields } from '../../../../utils/server/media-video-fields'
 import { videoUploadPausedRefusal } from '../../../../utils/server/video-uploads'
 import {
@@ -761,6 +762,10 @@ async function handler(request: Request): Promise<Response> {
       },
       { merge: true },
     )
+    // A finalized video goes to the delivery provider after the response,
+    // when one is configured and its release flag is on for the org
+    // (AGL-2824). The finalize itself never waits on the copy.
+    scheduleMediaDeliveryCopies({ scope, mediaId, contentType })
     return Response.json({ mediaId, url }, { status: 200 })
   } catch (error) {
     // A refused credential is a 401, not a fault of ours (AGL-1993). Null

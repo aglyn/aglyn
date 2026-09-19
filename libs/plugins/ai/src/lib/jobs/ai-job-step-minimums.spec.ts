@@ -300,12 +300,14 @@ describe('every step the console runs registers the least time it needs (AGL-303
 
 // ── A step whose passes differ ────────────────────────────────────────────
 
-const creation = (kind: AiBuildPlanCreate['kind'], name: string): AiBuildPlanCreate => ({
+/** A creation as a kept plan holds it: with the id its draft is written under, where it writes one. */
+const creation = (kind: AiBuildPlanCreate['kind'], name: string, id?: string): AiBuildPlanCreate => ({
   kind,
   name,
   why: `${name} is missing.`,
   duplicateOf: null,
   fields: [],
+  ...(id ? { id } : {}),
 })
 
 const screen = (index: number): AiJobPlan['screens'][number] => ({
@@ -318,6 +320,7 @@ const screen = (index: number): AiJobPlan['screens'][number] => ({
   seoTitle: `Page ${index}`,
   seoDescription: `Page ${index} of the site`,
   sections: [{ name: 'hero', uses: [], items: 0 }],
+  id: `drftPage0${index}`,
 })
 
 function plannedJob(kind: AiJobKind, plan: Partial<AiJobPlan>, patch: Partial<AiJob> = {}): AiJob {
@@ -360,13 +363,17 @@ const built = (resource: AiJobOutput['resource'], id: string): AiJobOutput => ({
 describe('a pass needs the time of the step its unit is handed to (AGL-3035)', () => {
   it('gives a page job’s creation passes their own step’s time, and its section passes a section’s', () => {
     const job = plannedJob('page', {
-      create: [creation('component', 'Price tier'), creation('layout', 'Site frame'), creation('form', 'Quote request')],
+      create: [
+        creation('component', 'Price tier', 'drftPriceT'),
+        creation('layout', 'Site frame', 'drftFrameL'),
+        creation('form', 'Quote request', 'drftQuoteF'),
+      ],
       screens: [screen(0)],
     })
     const next = (outputs: AiJobOutput[]) => aiJobNextStepMinimumMs({ ...job, outputs })
-    const layout = built('layout', 'job-1-c1')
-    const form = built('form', 'job-1-c2')
-    const component = built('reusableComponent', 'job-1-c0')
+    const layout = built('layout', 'drftFrameL')
+    const form = built('form', 'drftQuoteF')
+    const component = built('reusableComponent', 'drftPriceT')
     // The layout, then the form, then the component, then the page's sections.
     expect(next([])).toBe(aiJobStepMinimumMs('layout', 'generate'))
     expect(next([layout])).toBe(aiJobStepMinimumMs('form', 'generate'))
@@ -383,17 +390,28 @@ describe('a pass needs the time of the step its unit is handed to (AGL-3035)', (
     const job = plannedJob(
       'site',
       {
-        create: [creation('theme-change', 'Palette'), creation('layout', 'Site frame'), creation('form', 'Contact')],
+        create: [
+          creation('theme-change', 'Palette'),
+          creation('layout', 'Site frame', 'drftFrameL'),
+          creation('form', 'Contact', 'drftContct'),
+        ],
         screens: Array.from({ length: AI_SITE_PAGES.min }, (_, index) => screen(index)),
       },
-      { inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, welcomeEmail: true } },
+      {
+        inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, welcomeEmail: true },
+        steps: [
+          { name: AI_JOB_PLAN_STEP, status: 'done', creditsSpent: 0 },
+          // The welcome email's id, recorded on the step that builds it when the job was created.
+          { name: 'generate', status: 'pending', creditsSpent: 0, draftIds: { email: 'drftWelcom' } },
+        ],
+      },
     )
     const units: Array<[AiJobKind, AiJobOutput]> = [
       ['theme', built('theme', 'proposal')],
-      ['layout', built('layout', 'job-1-l')],
-      ['form', built('form', 'job-1-f')],
-      ...Array.from({ length: AI_SITE_PAGES.min }, (_, index): [AiJobKind, AiJobOutput] => ['page', built('screen', `job-1-p${index}`)]),
-      ['email', built('emailScreen', 'job-1-e')],
+      ['layout', built('layout', 'drftFrameL')],
+      ['form', built('form', 'drftContct')],
+      ...Array.from({ length: AI_SITE_PAGES.min }, (_, index): [AiJobKind, AiJobOutput] => ['page', built('screen', `drftPage0${index}`)]),
+      ['email', built('emailScreen', 'drftWelcom')],
     ]
     const outputs: AiJobOutput[] = []
     for (const [kind, output] of units) {

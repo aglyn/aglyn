@@ -139,6 +139,7 @@ import {
 } from '@aglyn/aglyn/app-utils/sanitize-svg'
 import { resolveOrgMediaBand } from './server/media-storage-band'
 import { videoUploadsOpenForOrg } from './server/video-uploads'
+import { scheduleMediaDeliveryCopies } from './server/media-delivery-copies'
 import { folderStoragePath, mediaCdnPathUpdate } from './server/media-scope'
 import {
   claimHostForOrg,
@@ -1109,16 +1110,16 @@ export const PUBLISH_WINDOW_MS = 60 * 60 * 1000
  * ## The authorization, stated plainly
  *
  * The console path (`/api/screens/revalidate`) admits a user whose HOST role
- * `hostRoleCanPublish` accepts — `admin` or `editor`, never `author` — and
- * 404s everyone else so a caller cannot learn a site exists. An API key is an
- * ORG credential with no uid, so there is no host role to read. The same two
- * questions are answered with the two facts a key does carry:
+ * `hostRoleCanWrite` accepts — every role the rules let write the site's
+ * content — and 404s everyone else so a caller cannot learn a site exists. An
+ * API key is an ORG credential with no uid, so there is no host role to read.
+ * The same two questions are answered with the two facts a key does carry:
  *
  * 1. **May this credential publish at all?** `sites:publish`, which the
- *    organization's admin ticks when minting the key. That is the deliberate
- *    grant `hostRoleCanPublish` represents, made once at mint time instead of
- *    per request — and, like `author`, a key without it cannot publish however
- *    much else it can read.
+ *    organization's admin ticks when minting the key — a grant of its own,
+ *    made once at mint time instead of per request, and never implied by a
+ *    write scope (see its entry in `API_SCOPES` for why): a key without it
+ *    cannot publish however much else it can read or write.
  * 2. **May it publish THIS site?** `orgOwnsHost`, the same predicate every
  *    other site sub-resource uses, and the analogue of passing `hostId` to
  *    `resolveOrgPermissions` so a scope over two sites cannot reach a third.
@@ -2284,6 +2285,18 @@ async function createMedia(
         },
         { merge: true },
       )
+    // A video goes to the delivery provider after the response, like one
+    // uploaded in the console (AGL-2824). Nothing runs without a provider.
+    scheduleMediaDeliveryCopies({
+      scope: {
+        collection: scope.collection,
+        scopeId: scopeRef.id,
+        orgId: ctx.orgId,
+        scopeRef,
+      },
+      mediaId,
+      contentType,
+    })
 
     const view = mediaView(await scopeRef.collection('media').doc(mediaId).get(), origin)
     // Stored as 200 so a replay is distinguishable from the fresh 201.

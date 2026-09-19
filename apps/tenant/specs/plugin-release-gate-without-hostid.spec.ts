@@ -96,6 +96,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   resolvePluginApiMatch: jest.fn(() => ({ route: { path: 'bookings/reserve' }, params: {} })),
   // The real runner: a legacy route reaches `runLegacyHandler` through it.
   runPluginApiMatch: jest.requireActual('@aglyn/aglyn/app-utils/api-plugins').runPluginApiMatch,
+  // The real subject reader over an empty registry (AGL-2978): no route here
+  // declares a subject, so the gate still hears a null org.
+  resolvePluginApiRequestSubject: jest.requireActual('@aglyn/aglyn/app-utils/api-plugins')
+    .resolvePluginApiRequestSubject,
   runLegacyHandler: jest.fn(async () => {
     mockHandlerCalls += 1
     return Response.json({ reserved: true }, { status: 200 })

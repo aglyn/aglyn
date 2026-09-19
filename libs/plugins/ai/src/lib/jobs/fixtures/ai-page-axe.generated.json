@@ -6,7 +6,7 @@
     {
       "id": "agency-roofing-landing",
       "answers": "302de155f3e9ebe9",
-      "markupChars": 6880,
+      "markupChars": 6858,
       "devices": [
         {
           "device": "XS",
@@ -71,7 +71,7 @@
     {
       "id": "agency-dental-implants-service",
       "answers": "d4275ec68f71a962",
-      "markupChars": 7288,
+      "markupChars": 7266,
       "devices": [
         {
           "device": "XS",
@@ -253,7 +253,7 @@
     {
       "id": "multibrand-restaurant-group-event",
       "answers": "1e10335cef7d86d3",
-      "markupChars": 5760,
+      "markupChars": 5738,
       "devices": [
         {
           "device": "XS",
@@ -305,7 +305,7 @@
     {
       "id": "multibrand-home-goods-product",
       "answers": "7c2b4d73bfb31805",
-      "markupChars": 5925,
+      "markupChars": 5903,
       "devices": [
         {
           "device": "XS",
@@ -473,7 +473,7 @@
     {
       "id": "smallbiz-yoga-teacher-about",
       "answers": "fb22aef66f44c51e",
-      "markupChars": 4291,
+      "markupChars": 4269,
       "devices": [
         {
           "device": "XS",
@@ -680,7 +680,7 @@
     {
       "id": "agency-law-firm-two-attorneys",
       "answers": "bd0f8d6221248518",
-      "markupChars": 3249,
+      "markupChars": 3205,
       "devices": [
         {
           "device": "XS",

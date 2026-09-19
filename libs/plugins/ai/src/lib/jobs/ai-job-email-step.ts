@@ -45,6 +45,7 @@ import {
 } from './ai-email-bindings'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiJobStepBudget, type AiJobStepBudget } from './ai-job-budget'
+import { aiJobDraftId } from './ai-job-draft-ids'
 import { aiSiteSubdomain } from './ai-job-drafts'
 import {
   aiConfirmedPlan,
@@ -550,8 +551,9 @@ export function createAiJobEmailStep(deps: AiJobEmailStepDeps = {}): AiJobStepRu
     const design = writerFor(AI_EMAIL_DESIGN_RESOURCE)
     if (!design) return { ...aiUnspentOutcome(model), failure: AI_EMAIL_UNAVAILABLE_COPY }
 
-    // A run cut off after its design was written reports that design.
-    const written = await design.read({ hostId, id: job.$id })
+    // A run cut off after its design was written reports that design, found by the id the job recorded.
+    const draftId = aiJobDraftId(job, 'email')
+    const written = await design.read({ hostId, id: draftId })
     if (written) {
       const hostSubdomain = await aiSiteSubdomain(firestore, hostId)
       return aiUnspentOutcome(model, {
@@ -597,7 +599,7 @@ export function createAiJobEmailStep(deps: AiJobEmailStepDeps = {}): AiJobStepRu
 
     const write = await design.write({
       ...context,
-      id: job.$id,
+      id: draftId,
       name,
       content: aiEmailDesignContent(generated.nodes, generated.copy),
     })

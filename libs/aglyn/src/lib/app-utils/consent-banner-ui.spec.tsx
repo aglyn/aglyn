@@ -114,13 +114,13 @@ describe('one component, per-surface words', () => {
     }
   })
 
-  it('names the panel with the regulated title whatever the copy says', () => {
+  it('names the panel with the regulated title whatever the copy says', async () => {
     // §7015 fixes these words. A `copy` prop that could reach them would be a
     // compliance surface disguised as a string.
     renderAsk(CONSOLE_COPY)
     fireEvent.click(screen.getByRole('button', { name: 'Preferences' }))
     expect(
-      screen.getByRole('heading', { name: CONSENT_OPT_OUT_TITLE }),
+      await screen.findByRole('heading', { name: CONSENT_OPT_OUT_TITLE }),
     ).toBeTruthy()
     expect(screen.getByText('Choose what this console may use.', { exact: false }))
       .toBeTruthy()

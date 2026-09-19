@@ -45,6 +45,7 @@ import {
   logHostActivity,
 } from '@aglyn/tenant-data-admin'
 import { isDuplicableHostResourceKind } from '@aglyn/aglyn/app-utils/duplicate-resource'
+import { withMatchableConditions } from '@aglyn/aglyn/app-utils/reusable-prop-values'
 import { Timestamp } from 'firebase-admin/firestore'
 import {
   billableScreenIds,
@@ -802,6 +803,12 @@ async function handler(request: Request): Promise<Response> {
     const doc: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
       if (allowed.has(key) && value !== undefined) doc[key] = value
+    }
+    // A component or layout's declared properties (AGL-2893): a condition
+    // rule whose pattern no page can match is not stored, the way a key
+    // nobody allowed is not.
+    if (doc['props'] !== undefined) {
+      doc['props'] = withMatchableConditions(doc['props'])
     }
     /*
      * COMPRESSED AT REST (AGL-1151).

@@ -43,7 +43,7 @@ import {
   collectionCategorySlug,
   collectionListUrl,
   hostCollectionKind,
-  hostRoleCanPublish,
+  hostRoleCanWrite,
   pluginRequestFromWeb,
   screenRoutePathToUrl,
 } from '@aglyn/aglyn/server'
@@ -96,13 +96,24 @@ export const dynamic = 'force-dynamic'
  * predicate the rules projection, the org gate and this route have to agree
  * on; a fourth copy of "may this person write this site" is how they drift.
  *
- * The role SET was such a copy, and this docblock argued against it while a
- * local `new Set(['admin', 'editor'])` sat six lines above (AGL-2350). It is
- * `hostRoleCanPublish` now — the same predicate over `HOST_PUBLISH_ROLES`,
- * whose own comment requires the rules' `canPublishHostContent()` to move
- * with it. Identical today, and it stays identical when the set changes: the
- * `author` role (AGL-2334) is exactly the kind of addition a private copy
- * would have silently mis-answered.
+ * The role SET is not a copy either (AGL-2350). It is `hostRoleCanWrite`,
+ * the predicate over `HOST_CONTENT_WRITE_ROLES`, whose own comment ties it
+ * to the rules' `canWriteHostContent()` — the WRITE axis, not the publish
+ * one, because of what a drop is. It makes the live site catch up with
+ * Firestore, and the rules have already decided who may change what
+ * Firestore holds. They let an `author` (AGL-2334) save a live screen's SEO,
+ * its password, its visibility and name, the canvas and layout binding of
+ * the version the site serves, and a content entry, and the tenant renders
+ * every one of those. Asking the publish set here refused the drop that
+ * follows each of them (AGL-2934): the save landed, the live page served the
+ * old copy for the whole cache window, and a page an author had just
+ * protected went on serving its content publicly.
+ *
+ * Admitting them grants nothing the rules withhold. A drop moves no version
+ * pointer and registers no route; the tenant re-renders from documents the
+ * caller was allowed to write, so the only thing a drop decides is WHEN that
+ * write is seen. Everyone the rules refuse a write — a `viewer`, a member of
+ * another site, a stranger — is still refused here, with the same 404.
  */
 async function mayRevalidate(
   decoded: { uid: string; [claim: string]: unknown },
@@ -110,11 +121,11 @@ async function mayRevalidate(
 ): Promise<boolean> {
   if (decoded['staff']) return true
   const projected = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-  if (hostRoleCanPublish(projected)) return true
+  if (hostRoleCanWrite(projected)) return true
   const { hostRole } = await resolveOrgPermissions(decoded.uid, {
     hostId: hostSnapshot.id,
   })
-  return hostRoleCanPublish(hostRole)
+  return hostRoleCanWrite(hostRole)
 }
 
 /**
@@ -608,10 +619,11 @@ export async function POST(request: Request): Promise<Response> {
      * into a whole-site drop would make every malformed caller expensive.
      *
      * Authorization is the same `mayRevalidate` the screen branches passed
-     * above — host `admin`/`editor`, which is exactly who can flip the
-     * maintenance toggle. Dropping a site's own cached HTML is bounded by
-     * that: the worst a caller can do to a site they may already edit is make
-     * it regenerate.
+     * above — every host role the rules let write the site's content, which
+     * is exactly who can flip the maintenance toggle: `maintenance` is an
+     * ordinary content key on the host document. Dropping a site's own cached
+     * HTML is bounded by that: the worst a caller can do to a site they may
+     * already edit is make it regenerate.
      */
     if (entireHost) {
       const whole = await revalidateEntireHost(firestore, hostId)

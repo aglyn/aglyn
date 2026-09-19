@@ -20,9 +20,15 @@ import {
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
 } from '@aglyn/aglyn/app-utils/reusable-component-keys'
 import type { AiBuildPlanCreate, AiBuildPlanCreateKind } from '../model/ai-build-plan'
-import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
+import type {
+  AiJob,
+  AiJobOutput,
+  AiJobPlan,
+  AiJobReview,
+  AiJobReviewOutlineNode,
+} from '../model/ai-jobs.types'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
-import type { AiGenerationSpend, AiValidatedTree } from '../runtime/ai-doctrine'
+import { aiAnswerTree, type AiGenerationSpend, type AiValidatedTree } from '../runtime/ai-doctrine'
 import {
   aiBracketedFacts,
   aiTreeCopy,
@@ -152,15 +158,218 @@ export function aiGenerationSpent(
   }
 }
 
-/** The review a generation stops its job for when the re-ask still broke a rule. */
+/** The most node ids, or plan paths, one finding keeps on its review (AGL-3078). */
+export const AI_JOB_REVIEW_REFS_MAX = 24
+/** The longest node id or plan path a review keeps, in characters. */
+export const AI_JOB_REVIEW_REF_MAX_CHARS = 64
+/** How far below a node a finding names its outline goes: the node, its children and theirs. */
+export const AI_JOB_REVIEW_OUTLINE_MAX_DEPTH = 2
+/** The most nodes a review outlines, across all its findings. */
+export const AI_JOB_REVIEW_OUTLINE_MAX_NODES = 40
+/** The most names an outlined node lists of its props, of its sx keys, or of its children. */
+export const AI_JOB_REVIEW_OUTLINE_MAX_NAMES = 16
+/** The most bytes a review's outline takes as JSON, whatever the counts above allow. */
+export const AI_JOB_REVIEW_OUTLINE_MAX_BYTES = 4_096
+
+/** A Grid's layout props, whose written values an outline keeps. */
+const AI_JOB_REVIEW_GRID_PROPS = [
+  'container',
+  'size',
+  'offset',
+  'direction',
+  'wrap',
+  'spacing',
+  'rowSpacing',
+  'columnSpacing',
+  'columns',
+] as const
+
+/** A node id or plan path a review keeps: no whitespace, slash or quote, so never copy or an address. */
+const REVIEW_REF = /^[^\s/\\"'<>]+$/
+/** An element id an outline names. */
+const OUTLINE_ELEMENT = /^[\w.-]{1,64}$/
+/** A prop or sx name an outline lists. */
+const OUTLINE_NAME = /^[A-Za-z_$][\w$-]{0,39}$/
+/** The longest layout value an outline keeps as written. */
+const OUTLINE_VALUE_MAX_CHARS = 40
+/**
+ * The words a Grid's layout is written in, besides numbers: breakpoints, span
+ * words, switch words, directions and wraps. Nothing else is kept, so no copy is.
+ */
+const OUTLINE_LAYOUT_WORDS = new Set([
+  'xs',
+  'sm',
+  'md',
+  'lg',
+  'xl',
+  'auto',
+  'grow',
+  'true',
+  'false',
+  'yes',
+  'no',
+  'on',
+  'off',
+  'row',
+  'row-reverse',
+  'column',
+  'column-reverse',
+  'wrap',
+  'nowrap',
+  'wrap-reverse',
+])
+/** A number a layout value is written in, with a CSS length unit where it has one. */
+const OUTLINE_LAYOUT_NUMBER = /^[-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%)?$/i
+/** What stands between the words of a layout value, as in `xs:12 md:4` or `{ xs: 12, md: 4 }`. */
+const OUTLINE_LAYOUT_SEPARATORS = /[\s,:;=/{}()[\]"']+/
+/** A binding token, which a component's Grid may carry for a layout value. */
+const OUTLINE_BINDING = /^\{\{\s*[\w.-]+\s*\}\}$/
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** Whether text is a layout value: a binding token, or only layout words and numbers. */
+function isLayoutText(value: string): boolean {
+  if (value.length > OUTLINE_VALUE_MAX_CHARS) return false
+  if (OUTLINE_BINDING.test(value.trim())) return true
+  return value
+    .split(OUTLINE_LAYOUT_SEPARATORS)
+    .every((word) => word === '' || OUTLINE_LAYOUT_WORDS.has(word.toLowerCase()) || OUTLINE_LAYOUT_NUMBER.test(word))
+}
+
+/** An id or a path as a review keeps it: cut to its ceiling, and `?` for one it cannot show. */
+function reviewRef(ref: string): string {
+  const cut = ref.slice(0, AI_JOB_REVIEW_REF_MAX_CHARS)
+  return REVIEW_REF.test(cut) ? cut : '?'
+}
+
+function reviewRefs(refs: readonly string[]): string[] {
+  return refs.slice(0, AI_JOB_REVIEW_REFS_MAX).map(reviewRef)
+}
+
+/** A written layout value as an outline keeps it; text that is no layout value is kept as a marker. */
+function outlineValue(value: unknown): string | number | boolean | null {
+  if (value === null) return null
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value === 'string') return isLayoutText(value) ? value : '<text>'
+  return Array.isArray(value) ? '<list>' : '<object>'
+}
+
+function childIdsOf(node: Record<string, unknown>): string[] {
+  return Array.isArray(node['nodes']) ? node['nodes'].filter((child): child is string => typeof child === 'string') : []
+}
+
+function elementOf(node: unknown): string {
+  const componentId = isRecord(node) ? node['componentId'] : undefined
+  return typeof componentId === 'string' && OUTLINE_ELEMENT.test(componentId) ? componentId : '?'
+}
+
+/** One node of an outline: where it sits, what it is and the names of what it sets, never a copy value. */
+function outlineNodeOf(
+  id: string,
+  depth: number,
+  node: Record<string, unknown>,
+  nodes: Readonly<Record<string, unknown>>,
+): AiJobReviewOutlineNode {
+  const props = isRecord(node['props']) ? node['props'] : {}
+  const sx = isRecord(node['sx']) ? node['sx'] : isRecord(props['sx']) ? props['sx'] : {}
+  const names = (keys: string[]) =>
+    keys.filter((key) => OUTLINE_NAME.test(key)).slice(0, AI_JOB_REVIEW_OUTLINE_MAX_NAMES)
+  const componentId = elementOf(node)
+  const grid =
+    componentId === 'muiGrid'
+      ? Object.fromEntries(
+          AI_JOB_REVIEW_GRID_PROPS.filter((name) => props[name] !== undefined).map((name) => [
+            name,
+            outlineValue(props[name]),
+          ]),
+        )
+      : {}
+  const sxNames = names(Object.keys(sx))
+  return {
+    id: reviewRef(id),
+    depth,
+    componentId,
+    props: names(Object.keys(props).filter((key) => key !== 'sx')),
+    ...(sxNames.length ? { sx: sxNames } : {}),
+    ...(Object.keys(grid).length ? { grid } : {}),
+    children: childIdsOf(node)
+      .filter((child) => isRecord(nodes[child]))
+      .slice(0, AI_JOB_REVIEW_OUTLINE_MAX_NAMES)
+      .map((child) => elementOf(nodes[child])),
+  }
+}
+
+/**
+ * The parts of a refused answer its findings name, as a review keeps them
+ * (AGL-3078): each node a finding names by id, with the nodes below it to
+ * `AI_JOB_REVIEW_OUTLINE_MAX_DEPTH`, in document order and each once. A node
+ * keeps its id, its element, the names of its props and sx keys and its
+ * children's elements, and a Grid the values of its layout props as written;
+ * no copy, and no address, is kept. The outline stops at
+ * `AI_JOB_REVIEW_OUTLINE_MAX_NODES` nodes or `AI_JOB_REVIEW_OUTLINE_MAX_BYTES`
+ * bytes, whichever comes first. An answer that is no node map, and findings
+ * that name no node, outline nothing.
+ */
+export function aiDoctrineReviewOutline(
+  answer: Record<string, unknown> | null | undefined,
+  violations: readonly AiDoctrineViolation[],
+): AiJobReviewOutlineNode[] {
+  const outline: AiJobReviewOutlineNode[] = []
+  const tree = answer ? aiAnswerTree(answer) : null
+  const nodes = isRecord(tree) && isRecord(tree['nodes']) ? tree['nodes'] : null
+  if (!nodes) return outline
+  const encoder = new TextEncoder()
+  const seen = new Set<string>()
+  let bytes = 2
+  // False once the outline is full, which ends the walk.
+  const add = (id: string, depth: number): boolean => {
+    const node = nodes[id]
+    if (seen.has(id) || !isRecord(node)) return true
+    seen.add(id)
+    const entry = outlineNodeOf(id, depth, node, nodes)
+    const size = encoder.encode(JSON.stringify(entry)).length + 1
+    if (outline.length === AI_JOB_REVIEW_OUTLINE_MAX_NODES || bytes + size > AI_JOB_REVIEW_OUTLINE_MAX_BYTES) {
+      return false
+    }
+    outline.push(entry)
+    bytes += size
+    return depth === AI_JOB_REVIEW_OUTLINE_MAX_DEPTH || childIdsOf(node).every((child) => add(child, depth + 1))
+  }
+  const named = violations.flatMap((violation) => (violation.nodeIds ?? []).slice(0, AI_JOB_REVIEW_REFS_MAX))
+  for (const id of new Set(named)) {
+    if (!add(id, 0)) break
+  }
+  return outline
+}
+
+/**
+ * The review a generation stops its job for when the re-ask still broke a
+ * rule: the sentence a person reads, each finding with the nodes or plan
+ * entries it names, and an outline of those parts of the answer it was found
+ * in (AGL-3078), so why a job stopped can be read back from the job once the
+ * answer itself is gone.
+ */
 export function aiDoctrineReview(result: {
   message: string
   violations: readonly AiDoctrineViolation[]
+  /** The refused answer, whose nodes the findings name by id; outlined, never kept. */
+  answer?: Record<string, unknown> | null
 }): AiJobReview {
+  const outline = aiDoctrineReviewOutline(result.answer, result.violations)
   return {
     reason: 'doctrine',
     message: result.message,
-    findings: result.violations.map(({ rule, code, message }) => ({ rule, code, message })),
+    findings: result.violations.map(({ rule, code, message, nodeIds, paths }) => ({
+      rule,
+      code,
+      message,
+      ...(nodeIds?.length ? { nodeIds: reviewRefs(nodeIds) } : {}),
+      ...(paths?.length ? { paths: reviewRefs(paths) } : {}),
+    })),
+    ...(outline.length ? { outline } : {}),
   }
 }
 

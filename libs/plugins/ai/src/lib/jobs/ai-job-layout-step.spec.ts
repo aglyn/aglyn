@@ -233,6 +233,9 @@ const NAV_TREE = {
   },
 }
 
+/** The id the job recorded for its layout when it was created (AGL-3079). */
+const LAYOUT_ID = 'drftLayout'
+
 function job(patch: Partial<AiJob> = {}): AiJob {
   return {
     $id: 'job-1',
@@ -244,7 +247,7 @@ function job(patch: Partial<AiJob> = {}): AiJob {
     inputs: {},
     steps: [
       { name: 'plan', status: 'done', creditsSpent: 3 },
-      { name: 'generate', status: 'running', creditsSpent: 0 },
+      { name: 'generate', status: 'running', creditsSpent: 0, draftIds: { layout: LAYOUT_ID } },
     ],
     outputs: [],
     creditsReserved: 50,
@@ -308,7 +311,7 @@ describe('the layout step', () => {
       outputs: [
         {
           resource: 'layout',
-          id: 'job-1',
+          id: LAYOUT_ID,
           versionId: expect.any(String),
           hostId: 'host-1',
           hostSubdomain: 'acme',
@@ -343,15 +346,15 @@ describe('the layout step', () => {
 
     const versionId = outcome.outputs[0].versionId
     expect([...commits].sort()).toEqual(
-      ['hosts/host-1/layouts/job-1', `hosts/host-1/layouts/job-1/versions/${versionId}`].sort(),
+      [`hosts/host-1/layouts/${LAYOUT_ID}`, `hosts/host-1/layouts/${LAYOUT_ID}/versions/${versionId}`].sort(),
     )
-    expect(mockDocs.get('hosts/host-1/layouts/job-1')).toMatchObject({
+    expect(mockDocs.get(`hosts/host-1/layouts/${LAYOUT_ID}`)).toMatchObject({
       displayName: 'Main layout',
       versionId,
       createdBy: 'uid-1',
     })
-    expect(mockDocs.get(`hosts/host-1/layouts/job-1/versions/${versionId}`)).toMatchObject({
-      layoutId: 'job-1',
+    expect(mockDocs.get(`hosts/host-1/layouts/${LAYOUT_ID}/versions/${versionId}`)).toMatchObject({
+      layoutId: LAYOUT_ID,
       displayName: AI_DRAFT_VERSION_NAME,
     })
   })
@@ -429,8 +432,20 @@ describe('the layout step', () => {
       message: expect.stringContaining('Rule 7'),
       findings: [
         { rule: 7, code: 'plan-reuse-not-placed', message: expect.stringContaining('"Main navigation"') },
-        { rule: 1, code: 'navigation-rebuilt', message: expect.stringContaining('"Main navigation"') },
+        {
+          rule: 1,
+          code: 'navigation-rebuilt',
+          message: expect.stringContaining('"Main navigation"'),
+          nodeIds: ['home', 'about'],
+        },
       ],
+      outline: ['home', 'about'].map((id) => ({
+        id,
+        depth: 0,
+        componentId: 'muiScreenLink',
+        props: ['screenId', 'children'],
+        children: [],
+      })),
     })
     expect(commits).toEqual([])
   })
@@ -496,7 +511,7 @@ describe('the layout step', () => {
     expect(again.outputs).toEqual([
       {
         resource: 'layout',
-        id: 'job-1',
+        id: LAYOUT_ID,
         versionId: first.outputs[0].versionId,
         hostId: 'host-1',
         hostSubdomain: 'acme',
@@ -505,6 +520,17 @@ describe('the layout step', () => {
     ])
     expect(again).toMatchObject({ usage: AI_JOB_ZERO_USAGE, estCostUsd: 0 })
     expect(commits).toHaveLength(2)
+  })
+
+  it('names a job whose step records no id by the job itself, and finds that draft again (AGL-3079)', async () => {
+    const unrecorded = { steps: [{ name: 'generate', status: 'running' as const, creditsSpent: 0 }] }
+    mockRunAiRequest.mockResolvedValueOnce(treeAnswer(LAYOUT_TREE))
+    const first = await createAiJobLayoutStep()(context(unrecorded))
+    const again = await createAiJobLayoutStep()(context(unrecorded))
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect([first.outputs[0].id, again.outputs[0].id]).toEqual(['job-1', 'job-1'])
+    expect(mockDocs.has('hosts/host-1/layouts/job-1')).toBe(true)
+    expect(mockDocs.has(`hosts/host-1/layouts/${LAYOUT_ID}`)).toBe(false)
   })
 
   describe('a plan that starts from a copy', () => {
@@ -564,7 +590,7 @@ describe('the layout step', () => {
         duplicate: gone as unknown as typeof duplicateResource,
       })(context({ plan }))
       expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
-      expect(built.outputs).toEqual([expect.objectContaining({ resource: 'layout', id: 'job-1' })])
+      expect(built.outputs).toEqual([expect.objectContaining({ resource: 'layout', id: LAYOUT_ID })])
     })
   })
 })

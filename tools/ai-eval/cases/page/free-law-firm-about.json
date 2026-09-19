@@ -387,6 +387,118 @@
       "fails": ["rules"]
     },
     {
+      "why": "The practice areas' heading and its lead grouped in a Grid that is not a container and only stacks them, which a Stack or a Box holds (AGL-3078).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro", "areas"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } },
+            "areas": { "componentId": "section", "props": { "element": "section" }, "nodes": ["areas-group", "areas-grid"] },
+            "areas-group": { "componentId": "muiGrid", "props": { "spacing": "2" }, "nodes": ["areas-title", "areas-lead"] },
+            "areas-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What we help with" } },
+            "areas-lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "Plain advice for the matters families and small businesses bring us." } },
+            "areas-grid": { "componentId": "muiGrid", "props": { "container": true, "spacing": 3 }, "nodes": ["cell-1", "cell-2", "cell-3"] },
+            "cell-1": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-1"] },
+            "cell-2": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-2"] },
+            "cell-3": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-3"] },
+            "card-1": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-1-title"] },
+            "card-1-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Estate planning" } },
+            "card-2": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-2-title"] },
+            "card-2-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Real estate" } },
+            "card-3": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-3-title"] },
+            "card-3-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Business formation" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "The intro's heading and lead stacked in a Grid written with a column direction, which a Grid does not have and the palette drops, so only what was written names it (AGL-3078).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro", "areas"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["intro-group"] },
+            "intro-group": { "componentId": "muiGrid", "props": { "direction": "column", "spacing": "2" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } },
+            "areas": { "componentId": "section", "props": { "element": "section" }, "nodes": ["areas-title", "areas-grid"] },
+            "areas-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What we help with" } },
+            "areas-grid": { "componentId": "muiGrid", "props": { "container": true, "spacing": 3 }, "nodes": ["cell-1", "cell-2", "cell-3"] },
+            "cell-1": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-1"] },
+            "cell-2": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-2"] },
+            "cell-3": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-3"] },
+            "card-1": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-1-title"] },
+            "card-1-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Estate planning" } },
+            "card-2": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-2-title"] },
+            "card-2-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Real estate" } },
+            "card-3": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-3-title"] },
+            "card-3-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Business formation" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "The practice areas' items wrapped in a Box inside their container, which sizes only the items directly in it, so every card stacks at every width (AGL-3078).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro", "areas"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } },
+            "areas": { "componentId": "section", "props": { "element": "section" }, "nodes": ["areas-title", "areas-grid"] },
+            "areas-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What we help with" } },
+            "areas-grid": { "componentId": "muiGrid", "props": { "container": true, "spacing": 3 }, "nodes": ["areas-box"] },
+            "areas-box": { "componentId": "muiBox", "nodes": ["cell-1", "cell-2", "cell-3"] },
+            "cell-1": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-1"] },
+            "cell-2": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-2"] },
+            "cell-3": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-3"] },
+            "card-1": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-1-title"] },
+            "card-1-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Estate planning" } },
+            "card-2": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-2-title"] },
+            "card-2-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Real estate" } },
+            "card-3": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-3-title"] },
+            "card-3-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Business formation" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "The practice areas' Grid with its container written as the text \"True\", which the palette cannot read as a switch, so it is no container and its items are sized against nothing (AGL-3078).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro", "areas"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } },
+            "areas": { "componentId": "section", "props": { "element": "section" }, "nodes": ["areas-title", "areas-grid"] },
+            "areas-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What we help with" } },
+            "areas-grid": { "componentId": "muiGrid", "props": { "container": "True", "spacing": 3 }, "nodes": ["cell-1", "cell-2", "cell-3"] },
+            "cell-1": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-1"] },
+            "cell-2": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-2"] },
+            "cell-3": { "componentId": "muiGrid", "props": { "size": "xs:12 md:4" }, "nodes": ["card-3"] },
+            "card-1": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-1-title"] },
+            "card-1-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Estate planning" } },
+            "card-2": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-2-title"] },
+            "card-2-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Real estate" } },
+            "card-3": { "componentId": "muiCard", "props": { "variant": "outlined" }, "nodes": ["card-3-title"] },
+            "card-3-title": { "componentId": "muiTypography", "props": { "variant": "h3", "component": "h3", "children": "Business formation" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
       "why": "The consultation request's fields drawn loose on the page, outside any form (rule 3).",
       "answer": {
         "tree": {
@@ -533,6 +645,38 @@
             "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
             "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } },
             "cta": { "componentId": "muiButton", "props": { "variant": "contained", "children": "Request a consultation" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A hero call to action linked to \"#contact\", an anchor no element on the page carries and no section of its plan is named by, which the palette validator drops (AGL-3097).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead", "cta"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } },
+            "cta": { "componentId": "muiButton", "props": { "variant": "contained", "children": "Request a consultation", "href": "#contact" } }
+          }
+        }
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A hero call to action sent by \"scrollTo\" to a \"contact form\" section the page's plan does not have (AGL-3097).",
+      "answer": {
+        "tree": {
+          "rootId": "_@_",
+          "nodes": {
+            "_@_": { "componentId": "div", "nodes": ["intro"] },
+            "intro": { "componentId": "section", "props": { "element": "section" }, "nodes": ["title", "lead", "cta"] },
+            "title": { "componentId": "muiTypography", "props": { "variant": "h1", "component": "h1", "children": "About Brightwater Law" } },
+            "lead": { "componentId": "muiTypography", "props": { "variant": "body1", "children": "A small firm for families and small businesses in [city]." } },
+            "cta": { "componentId": "muiButton", "props": { "variant": "contained", "children": "Request a consultation", "scrollTo": "contact form" } }
           }
         }
       },

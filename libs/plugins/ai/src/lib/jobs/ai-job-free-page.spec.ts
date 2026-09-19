@@ -122,10 +122,10 @@ import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import type { AiEvalCandidate, AiEvalRecording } from '../runtime/ai-eval'
 import type { generateSeoFields } from '../runtime/seo-fields'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
-import { AI_PAGE_SECTION_INLINE_LINE, AI_PAGE_SECTION_REPEAT_LINE, aiPageCheckContext } from './ai-job-page-sections'
+import { AI_PAGE_SECTION_INLINE_LINE, AI_PAGE_SECTION_REPEAT_LINE, aiPageCheckContext, aiPageSectionNodeId } from './ai-job-page-sections'
 import { AI_JOB_PAGE_REAL_TOKENS_PER_ESTIMATED, createAiJobPageStep } from './ai-job-page-step'
 import { AI_JOB_PLAN_REVIEW_COPY, AI_JOB_PLAN_SCOPES, createAiJobPlanStep } from './ai-job-plan-step'
-import { AI_FREE_PAGE_BUILT_PLAN, AI_FREE_PAGE_STOPPED_RECORDING } from './fixtures/ai-free-page-recording'
+import { AI_FREE_PAGE_BUILT_PLAN, AI_FREE_PAGE_HERO_ANSWERS, AI_FREE_PAGE_STOPPED_RECORDING } from './fixtures/ai-free-page-recording'
 import { AI_FREE_PAGE_FIXTURE, AI_TWO_PERSON_PAGE_FIXTURE } from './fixtures/ai-page-briefs'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
@@ -173,6 +173,8 @@ const toolAnswer = (name: string, input: unknown) => ({
   stopReason: 'tool_use',
 })
 
+const SCREEN_ID = 'freeAbout1'
+
 function job(): AiJob {
   return {
     $id: 'job-free-page',
@@ -184,7 +186,8 @@ function job(): AiJob {
     inputs: { pageType: FIXTURE.pageType },
     steps: [
       { name: 'plan', status: 'running', creditsSpent: 0 },
-      { name: 'generate', status: 'pending', creditsSpent: 0 },
+      // The id the job recorded for its page when it was created (AGL-3079).
+      { name: 'generate', status: 'pending', creditsSpent: 0, draftIds: { screen: SCREEN_ID } },
     ],
     outputs: [],
     creditsReserved: 100,
@@ -204,8 +207,16 @@ interface FreeReplay {
   page: Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }>
 }
 
-/** The Free job end to end: its plan, confirmed, then every pass of its page. */
-async function replay(): Promise<FreeReplay> {
+/** A section answer as the tool receives it: a recorded one as it was, a golden node map as JSON. */
+const sectionInput = (answer: unknown) =>
+  typeof (answer as { tree?: unknown } | null)?.tree === 'string' ? answer : { tree: JSON.stringify(answer) }
+
+/**
+ * The Free job end to end: its plan, confirmed, then every pass of its page.
+ * A pass given its own `answers` answers with each in turn, re-asked between
+ * them; every other pass answers with its golden answer.
+ */
+async function replay(answers: Readonly<Record<number, readonly unknown[]>> = {}): Promise<FreeReplay> {
   mockRunAiRequest.mockReset()
   const site = aiEvalMemoryFirestore({
     'orgs/org-1': FREE_ORG,
@@ -256,13 +267,15 @@ async function replay(): Promise<FreeReplay> {
     },
   } as unknown as AiJob
   const outcomes: FreeReplay['outcomes'] = []
-  for (const answer of FIXTURE.answers) {
-    mockRunAiRequest.mockResolvedValueOnce(toolAnswer('submit_section', { tree: JSON.stringify(answer) }))
+  for (const [pass, golden] of FIXTURE.answers.entries()) {
+    for (const answer of answers[pass] ?? [golden]) {
+      mockRunAiRequest.mockResolvedValueOnce(toolAnswer('submit_section', sectionInput(answer)))
+    }
     outcomes.push(await pageStep({ job: confirmed, stepIndex: 1, now: NOW, firestore: site.firestore }))
   }
   outcomes.push(await pageStep({ job: confirmed, stepIndex: 1, now: NOW, firestore: site.firestore }))
-  const screen = site.docs.get(`hosts/${HOST}/screens/${confirmed.$id}`) ?? {}
-  const version = site.docs.get(`hosts/${HOST}/screens/${confirmed.$id}/versions/${String(screen['versionId'])}`)
+  const screen = site.docs.get(`hosts/${HOST}/screens/${SCREEN_ID}`) ?? {}
+  const version = site.docs.get(`hosts/${HOST}/screens/${SCREEN_ID}/versions/${String(screen['versionId'])}`)
   return {
     planRequest,
     planOutcome,
@@ -562,6 +575,89 @@ describe('one Free page fits the Free taste, end to end', () => {
       `past ${figure(most)} tokens the first section pass costs ${Math.max(...past.passes)} credits, and the Free page that builds its layout first leaves ${FREE_AI_TASTE_CREDITS_PER_MONTH - past.totalWithLayout} of the ${FREE_AI_TASTE_CREDITS_PER_MONTH}`,
     )
     expect(notes).toContain(`needs ${figure(roomierTokens)} real tokens, so no ceiling the wall holds fits it`)
+  })
+
+  it('re-asks a section refused for rule 12 within the room the wall keeps, whichever Grid shape its re-ask names (AGL-3078)', async () => {
+    const figures = arithmetic(await replay())
+    const most = Math.max(...figures.passes)
+    expect(FREE_AI_TASTE_CREDITS_PER_MONTH - figures.totalWithLayout).toBeGreaterThan(most)
+    type Nodes = Record<string, { componentId: string; props?: Record<string, unknown>; nodes?: string[] }>
+    // The practice areas written once: b5 the item, b6 their h2, b7 the row holding the item, b8 the column Stack holding both.
+    const shapes: Array<[string, (nodes: Nodes) => void]> = [
+      ['A Grid lays out columns only as a container', (nodes) => (nodes['b7'] = { ...nodes['b7'], props: { ariaLabel: 'Practice areas' } })],
+      ['A Grid lays out rows and has no "column" direction', (nodes) => (nodes['b8'] = { ...nodes['b8'], componentId: 'muiGrid' })],
+      [
+        'this one sits in a Box',
+        (nodes) => {
+          nodes['b7'] = { ...nodes['b7'], nodes: ['b-box'] }
+          nodes['b-box'] = { componentId: 'muiBox', nodes: ['b5'] }
+        },
+      ],
+      ['is the text "True", not true', (nodes) => (nodes['b7'] = { ...nodes['b7'], props: { container: 'True', spacing: 3 } })],
+    ]
+    const reasked: Array<[string, boolean, boolean]> = []
+    let dearest = 0
+    for (const [reason, edit] of shapes) {
+      const refused = structuredClone(FIXTURE.answers[1])
+      edit(refused.nodes as never)
+      const { passRequests, outcomes } = await replay({ 1: [refused, FIXTURE.answers[1]] })
+      // The pass is re-asked once, and its golden answer builds the page.
+      const [reask, ...others] = passRequests.filter((request) => request.messages.length > 1)
+      expect([others, outcomes.slice(0, -1).every((outcome) => outcome.continue === true)]).toEqual([[], true])
+      // Priced as the arithmetic prices a later pass: its prefix read, its answer at the ceiling.
+      const { cached, uncached } = spans(reask)
+      const credits = creditsOf(
+        { inputTokens: realTokens(uncached), outputTokens: reask.maxTokens, cacheReadTokens: realTokens(cached), cacheWriteTokens: 0 },
+        reask.model,
+      )
+      reasked.push([reason, String(reask.messages.at(-1)?.content).includes(reason), credits <= most])
+      dearest = Math.max(dearest, credits)
+    }
+    // Each re-ask says what its own shape needs, and costs no more than the pass the room is kept for.
+    expect(reasked).toEqual(shapes.map(([reason]) => [reason, true, true]))
+    const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
+    expect(notes).toContain(`a section re-asked for any of them costs at most ${dearest} credits, less than the ${most} of the largest pass`)
+  })
+
+  it('builds the live hero from its two recorded answers, its button scrolling to the consultation form, and the page completes within the room the wall keeps (AGL-3097)', async () => {
+    const most = Math.max(...arithmetic(await replay()).passes)
+    const { passRequests, outcomes, page } = await replay({ 0: AI_FREE_PAGE_HERO_ANSWERS })
+    // The first answer is re-asked once, told the page's sections by name; the second is kept.
+    const reasks = passRequests.filter((request) => request.messages.length > 1)
+    expect(reasks).toHaveLength(1)
+    expect(String(reasks[0].messages.at(-1)?.content)).toContain(
+      '"Request a Consultation" goes nowhere. Give it the "screenId" of a screen the site has that does what its words say, or an "href" that is a path on this site or an https: address the brief gives. To take a visitor to a section of this page, set "scrollTo" to that section\'s name in the plan: "hero", "practice areas", "how we work" or "consultation request form". When none of these fits, take it out. (nodes ctaButton)',
+    )
+    // Every pass runs, and the last reports the draft.
+    expect(outcomes.slice(0, -1).map((outcome) => [outcome.continue, outcome.review])).toEqual(FIXTURE.answers.map(() => [true, undefined]))
+    const last = outcomes[outcomes.length - 1]
+    expect([last.review, last.outputs]).toEqual([undefined, [expect.objectContaining({ resource: 'screen', label: FIXTURE.plan.screens[0].title })]])
+    // Its "#consultation-form" is the Scroll to element interaction to the form section's root, as the editor stores one.
+    const form = aiPageSectionNodeId('job-free-page', FIXTURE.plan.screens[0].sections.length - 1)
+    expect(FIXTURE.plan.screens[0].sections.at(-1)?.name).toBe('consultation request form')
+    expect(page[form]?.componentId).toBe('section')
+    const button = Object.values(page).find((node) => node.props?.['children'] === 'Request a Consultation') as { props?: unknown; interactions?: unknown }
+    expect([button.props, button.interactions]).toEqual([
+      { children: 'Request a Consultation', color: 'primary', variant: 'contained', size: 'large' },
+      [
+        {
+          id: 'ai-scroll-to-section',
+          name: 'Scroll to the consultation request form section',
+          enabled: true,
+          trigger: { event: 'elementClick', everyTime: true },
+          steps: [{ type: 'scrollTo', selector: `[data-aglyn="leaf:${form}"]` }],
+        },
+      ],
+    ])
+    // The re-asked pass, priced as the arithmetic prices a later pass, costs no more than the pass the room is kept for.
+    const { cached, uncached } = spans(reasks[0])
+    const credits = creditsOf(
+      { inputTokens: realTokens(uncached), outputTokens: reasks[0].maxTokens, cacheReadTokens: realTokens(cached), cacheWriteTokens: 0 },
+      reasks[0].model,
+    )
+    expect(credits).toBeLessThanOrEqual(most)
+    const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
+    expect(notes).toContain(`the Free page's hero re-asked costs ${credits} credits, within the ${most} of the largest pass`)
   })
 
   it('fits the plan, every section at its answer ceiling and the listing inside the wall, at the figure the developer notes quote', async () => {

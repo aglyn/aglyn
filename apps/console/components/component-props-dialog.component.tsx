@@ -26,6 +26,7 @@ import {
   REUSABLE_PROP_KINDS,
   reusablePropHasAnswers,
   reusablePropKind,
+  reusablePropPatternProblem,
   reusablePropTakesSeveral,
   reusablePropValueClass,
 } from '@aglyn/aglyn'
@@ -413,10 +414,11 @@ export function componentPropErrors(
       } else if (rule.when === name) {
         conditionError = 'A property cannot depend on itself'
       } else if (typeof rule.pattern === 'string') {
-        try {
-          new RegExp(rule.pattern, rule.flags)
-        } catch {
-          conditionError = `"${rule.pattern}" is not a pattern that can be matched`
+        // The rule every page matches the pattern by (AGL-2893), so a
+        // pattern saved here is one the published page can evaluate.
+        const problem = reusablePropPatternProblem(rule.pattern, rule.flags)
+        if (problem) {
+          conditionError = `"${rule.pattern}" is not a pattern that can be matched: ${problem}`
         }
       } else if (
         COMPARISONS.some(

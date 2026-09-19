@@ -46,7 +46,8 @@ import {
   type AiJobStepRunner,
 } from './ai-job-text-step'
 import { aiJobStepBudget } from './ai-job-budget'
-import { aiUnspentOutcome } from './ai-job-generation'
+import { aiDoctrineReview, aiUnspentOutcome } from './ai-job-generation'
+import { aiPlanWithDraftIds } from './ai-job-draft-ids'
 import { AI_JOBS_COLLECTION, registerAiJobPlanStep } from './ai-jobs'
 
 /**
@@ -439,7 +440,8 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         })
       : null
     if (reused) {
-      const plan: AiJobPlan = {
+      // The reused plan's draft ids name the other job's drafts; this job's are its own.
+      const plan: AiJobPlan = aiPlanWithDraftIds(job.kind, {
         ...reused.plan,
         status: 'proposed',
         labels: aiPlanLabels(reused.plan, inventory),
@@ -448,7 +450,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         confirmedBy: null,
         key,
         reusedFrom: reused.jobId,
-      }
+      })
       const unspent = aiUnspentOutcome(resolved)
       return (
         (await refusalOnKeep(plan, unspent)) ?? {
@@ -484,17 +486,9 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       ...(result.effort ? { effort: result.effort } : {}),
     }
     if (result.status === 'refused') return { ...spent, refused: true }
-    if (result.status === 'needs_input') {
-      return {
-        ...spent,
-        review: {
-          reason: 'doctrine',
-          message: result.message,
-          findings: result.violations.map(({ rule, code, message }) => ({ rule, code, message })),
-        },
-      }
-    }
-    const plan: AiJobPlan = {
+    if (result.status === 'needs_input') return { ...spent, review: aiDoctrineReview(result) }
+    // Each draft the plan decides is named as the plan is kept, before anything is built (AGL-3079).
+    const plan: AiJobPlan = aiPlanWithDraftIds(job.kind, {
       ...result.value,
       status: 'proposed',
       labels: aiPlanLabels(result.value, inventory),
@@ -503,7 +497,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       confirmedAt: null,
       confirmedBy: null,
       key,
-    }
+    })
     return (
       (await refusalOnKeep(plan, spent)) ?? {
         ...spent,

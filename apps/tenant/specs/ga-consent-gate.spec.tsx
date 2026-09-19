@@ -235,7 +235,7 @@ describe('the GA consent gate (AGL-1498)', () => {
       await renderPage(GA_HOST)
       await waitFor(() => expect(gaScript()).toBeTruthy())
       fireEvent.click(pill() as Element)
-      const checkbox = screen.getByRole('switch') as HTMLInputElement
+      const checkbox = (await screen.findByRole('switch')) as HTMLInputElement
       expect(checkbox.checked).toBe(true) // implied = currently granted
       fireEvent.click(checkbox)
       fireEvent.click(screen.getByText('Save choices'))
@@ -259,7 +259,7 @@ describe('the GA consent gate (AGL-1498)', () => {
       await renderPage(GA_HOST)
       await waitFor(() => expect(pill()).toBeTruthy())
       fireEvent.click(pill() as Element)
-      fireEvent.click(screen.getByRole('switch'))
+      fireEvent.click(await screen.findByRole('switch'))
       fireEvent.click(screen.getByText('Save choices'))
       expect(gaScript()).toBeTruthy()
       expect(storedRecord()).toMatchObject({ status: 'accepted' })
@@ -366,7 +366,7 @@ describe('the GA consent gate (AGL-1498)', () => {
       await renderPage(GA_HOST)
       await waitFor(() => expect(askBanner()).toBeTruthy())
       fireEvent.click(screen.getByText('Preferences'))
-      expect(screen.getByText('Decline all')).toBeTruthy()
+      expect(await screen.findByText('Decline all')).toBeTruthy()
       expect(screen.getByText('Save choices')).toBeTruthy()
       fireEvent.click(screen.getByRole('switch'))
       fireEvent.click(screen.getByText('Save choices'))

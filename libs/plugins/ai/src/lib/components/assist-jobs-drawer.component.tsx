@@ -196,6 +196,11 @@ export interface AssistJobsDrawerProps {
   user: Parameters<typeof authorizedFetch>[0]
   /** The `release_ai_generative` verdict, staff bypass applied (the shell's). */
   visible: boolean
+  /**
+   * The viewer is staff (AGL-3078): a job that stopped for a broken rule shows
+   * them where the refused answer broke it. Who may read a job is unchanged.
+   */
+  isStaff?: boolean
   /** The site the console page is on, when it is on one: a page is described for a site. */
   hostId?: string | null
   /**
@@ -213,6 +218,7 @@ export function AssistJobsDrawer({
   orgSlug,
   user,
   visible,
+  isStaff = false,
   hostId,
   insight,
 }: AssistJobsDrawerProps): JSX.Element | null {
@@ -534,6 +540,7 @@ export function AssistJobsDrawer({
                   job={job}
                   onResume={(target) => void resume(target)}
                   busy={resuming === job.id}
+                  staff={isStaff}
                 />
               </Box>
             )

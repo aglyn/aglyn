@@ -77,12 +77,38 @@ export interface MediaVariantOutcome {
 }
 
 /**
+ * Formats a WebP copy at the SOURCE'S OWN width beats.
+ *
+ * A renderer's srcSet offers every width in `MEDIA_CDN_VARIANT_WIDTHS`, and
+ * `serveMediaCdn` answers a width an asset has no variant for with the
+ * original. For a JPEG or PNG no wider than a candidate, that original is what
+ * every request at or above its width downloads — the `1280w` a phone asks
+ * for, the `1920w` a desktop asks for. Measured on aglyn.com's hero poster, a
+ * 1920x1080 JPEG: 166,756 B served for `?w=1920`, where a WebP of the same
+ * 1920 pixels at the generator's quality is 40,598 B.
+ *
+ * So these formats also get the widths AT and ABOVE their own, each encoded at
+ * the source width (`withoutEnlargement`): a re-encode, never an upscale, and
+ * the same pixels the original answer served. Not GIF, whose animation a WebP
+ * frame would drop; not WebP or AVIF, which a re-encode could make larger.
+ */
+const SOURCE_WIDTH_WEBP_TYPES: ReadonlySet<string> = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+])
+
+/**
  * Which widths this source should produce.
  *
  * Split out and exported because it is the predicate that decides whether an
  * empty result is NORMAL, and both the routes and the health probe have to
  * agree on it. Inlined, the skip rule was a `continue` buried in the loop that
  * a reader had to reconstruct in order to know whether `[]` was a bug.
+ *
+ * Widths narrower than the source always; for {@link SOURCE_WIDTH_WEBP_TYPES}
+ * the rest as well, provided the source is wider than the narrowest width — a
+ * source smaller than every candidate is an icon, and it is served as it is.
  */
 export function mediaVariantWidthsFor(options: {
   contentType: string
@@ -97,9 +123,12 @@ export function mediaVariantWidthsFor(options: {
   // No known width means generate and let `withoutEnlargement` decide, which
   // is the same call the loop made before: an unreadable header must not
   // silently opt an asset out of the CDN.
-  return MEDIA_CDN_VARIANT_WIDTHS.filter(
-    (width) => !(sourceWidth && sourceWidth <= width),
-  )
+  if (!sourceWidth) return [...MEDIA_CDN_VARIANT_WIDTHS]
+  const narrower = MEDIA_CDN_VARIANT_WIDTHS.filter((width) => width < sourceWidth)
+  if (!narrower.length || !SOURCE_WIDTH_WEBP_TYPES.has(options.contentType)) {
+    return narrower
+  }
+  return [...MEDIA_CDN_VARIANT_WIDTHS]
 }
 
 /**

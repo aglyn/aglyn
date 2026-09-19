@@ -68,16 +68,34 @@ async function sourcePng(width = 1200, height = 630): Promise<Buffer> {
 }
 
 describe('mediaVariantWidthsFor (AGL-1468)', () => {
-  it('keeps only widths narrower than the source', () => {
+  it('keeps only widths narrower than the source for a format a re-encode cannot beat', () => {
+    // WebP and AVIF are already the efficient answer, and a GIF's animation
+    // would not survive a WebP frame: at and above their own width, the
+    // original is what `?w=` should keep serving.
+    for (const contentType of ['image/webp', 'image/avif', 'image/gif']) {
+      expect(
+        mediaVariantWidthsFor({ contentType, sourceWidth: 1200 }),
+      ).toEqual([320, 640])
+    }
+  })
+
+  it('gives a JPEG or PNG a WebP at every width, at and above its own included (AGL-3082)', () => {
+    // aglyn.com's hero poster: a 1920x1080 JPEG whose `?w=1920` served the
+    // 166,756 B original, because 1920 was not NARROWER than 1920.
+    expect(
+      mediaVariantWidthsFor({ contentType: 'image/jpeg', sourceWidth: 1920 }),
+    ).toEqual([...MEDIA_CDN_VARIANT_WIDTHS])
+    // Between two widths: the ones above it are the same pixels as WebP.
     expect(
       mediaVariantWidthsFor({ contentType: 'image/png', sourceWidth: 1200 }),
-    ).toEqual([320, 640])
+    ).toEqual([...MEDIA_CDN_VARIANT_WIDTHS])
   })
 
   it('produces nothing for a source already smaller than every width', () => {
-    expect(
-      mediaVariantWidthsFor({ contentType: 'image/png', sourceWidth: 256 }),
-    ).toEqual([])
+    // An icon is served as it is, whatever its format.
+    for (const contentType of ['image/png', 'image/jpeg', 'image/webp']) {
+      expect(mediaVariantWidthsFor({ contentType, sourceWidth: 256 })).toEqual([])
+    }
   })
 
   it('generates for an unreadable header rather than opting the asset out', () => {
@@ -126,10 +144,12 @@ describe('generateMediaVariants with real sharp (AGL-1468)', () => {
     })
 
     expect(outcome.error).toBeUndefined()
-    expect(outcome.variants).toEqual([320, 640])
+    expect(outcome.variants).toEqual([320, 640, 1280, 1920])
     expect([...written.keys()]).toEqual([
       'hosts/site-a/media/asset__w320.webp',
       'hosts/site-a/media/asset__w640.webp',
+      'hosts/site-a/media/asset__w1280.webp',
+      'hosts/site-a/media/asset__w1920.webp',
     ])
     // The whole point of the feature, asserted in bytes.
     for (const [, webp] of written) {
@@ -142,6 +162,13 @@ describe('generateMediaVariants with real sharp (AGL-1468)', () => {
     const w320 = written.get('hosts/site-a/media/asset__w320.webp') as Buffer
     const w640 = written.get('hosts/site-a/media/asset__w640.webp') as Buffer
     expect(w320.length).toBeLessThan(w640.length)
+    // The widths at and above the source are the source's own pixels, never
+    // an upscale (AGL-3082).
+    const sharp = (await import('sharp')).default
+    for (const width of [1280, 1920]) {
+      const webp = written.get(`hosts/site-a/media/asset__w${width}.webp`) as Buffer
+      expect((await sharp(webp).metadata()).width).toBe(1200)
+    }
   })
 
   it('reports nothing wrong when nothing was eligible', async () => {
@@ -223,7 +250,7 @@ describe('generateStoredMediaVariants fetches the bytes and generates (AGL-1476)
 
     expect(downloads).toBe(1)
     expect(outcome.error).toBeUndefined()
-    expect(outcome.variants).toEqual([320, 640])
+    expect(outcome.variants).toEqual([320, 640, 1280, 1920])
     const w320 = written.get('orgs/org-1/media/asset__w320.webp') as Buffer
     const w640 = written.get('orgs/org-1/media/asset__w640.webp') as Buffer
     expect(w320.toString('ascii', 8, 12)).toBe('WEBP')

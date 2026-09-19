@@ -47,6 +47,7 @@ import {
   OUTREACH_PERMISSIONS,
   OUTREACH_PLUGIN_ID,
 } from './constants/bundle-common'
+import { registerOutreachMailboxRoutes } from './mailboxes/register-mailbox-routes'
 
 /**
  * No auth, no org, no data: it answers whether this server bundle was loaded
@@ -69,4 +70,42 @@ export function registerOutreachConsoleApi(): void {
   // defaults.
   registerPluginPermissions(OUTREACH_PERMISSIONS)
   registerPluginApiRoute(OUTREACH_API_ROUTES.ping, outreachPingHandler)
+  // Connect a Google mailbox, its settings, pause, test and disconnect
+  // (AGL-2978).
+  registerOutreachMailboxRoutes()
 }
+
+// The transport the sending runtime reaches a connected mailbox through
+// (AGL-2978): open a mailbox's Gmail client, mark one reconnect-required,
+// send the engine's composed email through the one RFC 5322 writer, and read
+// a thread whole for the engine's reply and bounce classifier.
+export {
+  markOutreachMailboxReconnectRequired,
+  openOutreachMailboxClient,
+  type OpenedOutreachMailbox,
+} from './mailboxes/mailbox-transport'
+export {
+  GmailTransportError,
+  isReconnectRequired,
+  type GmailTransportErrorCode,
+} from './transport/gmail-errors'
+export type {
+  GmailClient,
+  GmailFullThread,
+  GmailMessageMetadata,
+  GmailThread,
+} from './transport/gmail-client'
+export {
+  buildRfc5322Message,
+  encodeGmailRawMessage,
+  LIST_UNSUBSCRIBE_ONE_CLICK,
+  Rfc5322MessageError,
+  type OutreachComposedMessage,
+  type OutreachMailAddress,
+} from './transport/rfc5322'
+export {
+  sendComposedOutreachEmail,
+  sendOutreachMessage,
+  type OutreachSentMessage,
+  type SendOutreachMessageOptions,
+} from './transport/send-message'

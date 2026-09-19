@@ -34,6 +34,7 @@ import {
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiComponentCheck } from './ai-job-component-checks'
+import { aiJobDraftId } from './ai-job-draft-ids'
 import {
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
@@ -166,8 +167,9 @@ export function createAiJobComponentStep(deps: AiJobComponentStepDeps = {}): AiJ
     // The switch's answer for this job, else the routing table's (AGL-2942).
     const model = modelFor?.('job.component') ?? aiModelForStep('job.component')
 
-    // A run cut off after its draft was written reports that draft.
-    const written = await readAiDraft(firestore, { kind: 'component', hostId, id: job.$id })
+    // A run cut off after its draft was written reports that draft, found by the id the job recorded.
+    const draftId = aiJobDraftId(job, 'component')
+    const written = await readAiDraft(firestore, { kind: 'component', hostId, id: draftId })
     if (written) return aiUnspentOutcome(model, { outputs: [output(written)] })
 
     const [inventory, orgSnapshot] = await Promise.all([
@@ -242,7 +244,7 @@ export function createAiJobComponentStep(deps: AiJobComponentStepDeps = {}): AiJ
     const draft = await writeAiDraft(firestore, {
       kind: 'component',
       hostId,
-      id: job.$id,
+      id: draftId,
       uid: job.createdBy,
       org,
       name,

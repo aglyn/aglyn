@@ -308,7 +308,7 @@ jobs:
       - run: npm run test:media-counter
 
       # AGL-1734. The demo org has to be several visibly different businesses:
-      # the founding demo spends its largest block switching between sites in
+      # the 30-minute demo spends its largest block switching between sites in
       # one org, and a switcher showing one bakery three times argues the
       # opposite of the pitch. The guard runs the seed engine over every brand
       # pack and compares the documents, so it fails both when the packs
@@ -331,6 +331,23 @@ jobs:
       # fifteen minutes over the deploy queue, without that tolerance being a
       # place a deleted route could hide.
       - run: npm run test:uptime-targets
+
+      # test:probe-headers  Every script that fetches one of our own hosts sends
+      # the firewall bypass header (AGL-1611, AGL-2486); one that does not is
+      # challenged with a 429 in CI and reads as an outage. The test discovers
+      # the scripts from the filesystem, so it only guards anything while a
+      # workflow runs it (AGL-3108). Pure node.
+      - run: npm run test:probe-headers
+
+      # check:ai-page-axe  The AI page fixtures' accessibility and width audits
+      # (`ai-page-axe.generated.json`, `tools/ai-eval/widths.generated.json`)
+      # are recorded by rendering every fixture page in Chrome, and go stale
+      # when a fixture, the renderer or the theme changes. The specs read those
+      # files as written, so only this re-render notices a stale one (AGL-3108).
+      # ubuntu-latest ships Chrome; the recorder reads E2E_CHROME_PATH.
+      - name: Locate Chrome for check:ai-page-axe
+        run: echo "E2E_CHROME_PATH=$(which google-chrome || which chromium-browser || which chromium)" >> "$GITHUB_ENV"
+      - run: npm run check:ai-page-axe
 
       # test:front-door  Does a VISITOR get a page (AGL-2709)? Every monitor on
       # the board asked a health route, and a health route answers from inside
@@ -382,7 +399,7 @@ jobs:
       #
       # This step runs `--self-test`, NOT the live check, and the distinction
       # is the whole design. The live run reads a Google Drive shared drive
-      # and live Stripe; in CI it can only ever exit 2 (could-not-evaluate),
+      # and our live pages; in CI it can only ever exit 2 (could-not-evaluate),
       # which is a check that cannot pass — theatre, not wiring. The
       # self-test runs every check against a deliberately broken fixture in
       # its own mkdtemp and FAILS IF ANY CHECK STAYS GREEN, so what this
@@ -943,6 +960,12 @@ jobs:
       - run: npm run test:page-view-rate
       - run: npm run check:page-view-rate
 
+      # The same page as the bytes it is DOWNLOADED as (AGL-3082): the chunks
+      # a published page loads before it settles, read from a tenant
+      # production build. The gate runs where CI builds the tenant; these are
+      # its forced reds, over a synthetic build.
+      - run: npm run test:tenant-wire-weight
+
       # NEXT_PUBLIC access form (AGL-2037, AGL-2172). Next substitutes only the
       # dot form, so a bracket read in a client-reachable module is `undefined`
       # in the browser and the value silently falls back to Aglyn's default —
@@ -1130,6 +1153,23 @@ jobs:
       # and a plugin importing a plugin, the two edges the map exists for.
       - run: npm run test:lib-boundaries
       - run: npm run check:lib-boundaries
+
+      # AGL-3079 — every Firestore document the platform names is named by
+      # `createResourceUid()`, the 10-character id a member sees in the
+      # console's URLs and the public API routes by. AI-created screens,
+      # layouts and forms carried 20-character auto-ids and `<jobId>-c0`
+      # instead, and a sweep found the same class across CRM, commerce,
+      # support, media and forms. This parses every tracked source file (so
+      # a call split over lines is still one site) for a document named by
+      # an auto-id, by an id helper that is not the platform's, or by an id
+      # derived inline from other values, and refuses any site missing from
+      # `tools/scripts/id-minting-allowlist.json`, where each is RESOURCE (a
+      # debt under the area issue that fixes it), RECORD or DELIBERATE, with
+      # a reason. The list's size is pinned, so it only shrinks. The
+      # self-test runs first: its fixtures are the planted `.doc()` the
+      # guard exists to refuse, and the Sets and class lists it must not.
+      - run: npm run test:id-minting
+      - run: npm run check:id-minting
 
       # AGL-118, AGL-2823. Every path that creates, destroys or transfers a
       # durable customer object writes an activity entry, or is classified
