@@ -51,6 +51,7 @@ import {
   SITE_EXPORT_FORMAT,
   SITE_EXPORT_VERSION,
 } from '../../_lib/site-export'
+import { withMatchableConditions } from '@aglyn/aglyn/app-utils/reusable-prop-values'
 import { decodeBundleTimestamps } from '../../_lib/bundle-timestamps'
 import {
   billableScreenIds,
@@ -93,6 +94,11 @@ function cleanDoc(
     // `null` is a real stored state (a workflow's cleared `trigger`), so it
     // has to survive the filter.
     if (allowed.has(key) && value !== undefined) clean[key] = value
+  }
+  // A component's or layout version's declared properties (AGL-2893): a
+  // condition rule whose pattern no page can match is not restored.
+  if (clean['props'] !== undefined) {
+    clean['props'] = withMatchableConditions(clean['props'])
   }
   clean['updatedAt'] = firebaseAdmin.firestore.FieldValue.serverTimestamp()
   return clean

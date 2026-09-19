@@ -143,7 +143,11 @@ that only matters while **Show call to action** is on, say. Under the property's
 - **is one of** / **is none of** — for a property with answers.
 - **is empty** / **is not empty**.
 - **is more than**, **is at least**, **is less than**, **is at most** — for a Number or Slider.
-- **matches the pattern** / **does not match the pattern** — a regular expression.
+- **matches the pattern** / **does not match the pattern** — a regular expression, up to 500
+  characters. Lookahead and lookbehind, backreferences, named groups and Unicode property
+  escapes are not supported, and the dialog says so when a pattern uses one. A pattern that
+  reaches a component some other way and cannot be matched counts as a rule that does not
+  hold, as does any pattern tested against a value longer than 2,000 characters.
 
 With more than one rule, choose whether **all** of them or **any** of them must hold. A rule
 compares what each property is worth on the page: the page's own value, or its default when

@@ -863,6 +863,110 @@ describe('a published design keeps the links and images its properties feed (AGL
   })
 })
 
+/* ------------------------------------------------------------------------ */
+/* Condition patterns                                                        */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Conditions a publisher could write, beside a default long enough to hang a
+ * backtracking matcher on the catastrophic one.
+ */
+const PATTERN_PROPS: ReusableComponentProp[] = [
+  { name: 'headline', type: 'text', defaultValue: `${'a'.repeat(28)}!` },
+  { name: 'unbalanced', type: 'text', condition: { when: 'headline', pattern: '(' } },
+  {
+    name: 'flagged',
+    type: 'text',
+    condition: { when: 'headline', pattern: 'a', flags: 'gg' },
+  },
+  {
+    name: 'lookahead',
+    type: 'text',
+    condition: [
+      { when: 'headline', isNotEmpty: true },
+      { when: 'headline', pattern: 'a(?=!)' },
+    ],
+  },
+  {
+    name: 'unicode',
+    type: 'text',
+    condition: { or: [{ when: 'headline', pattern: 'a', flags: 'u' }] },
+  },
+  {
+    name: 'catastrophic',
+    type: 'text',
+    condition: { when: 'headline', pattern: '^(a+)+$' },
+  },
+  {
+    name: 'plain',
+    type: 'text',
+    condition: { when: 'headline', pattern: '^A+!$', flags: 'i' },
+  },
+]
+
+/**
+ * What survives: every property, and every rule a page can match. The
+ * catastrophic pattern is one — conditions are matched in linear time, so it
+ * answers in microseconds rather than hanging.
+ */
+const MATCHABLE_PATTERN_PROPS: ReusableComponentProp[] = [
+  PATTERN_PROPS[0],
+  { name: 'unbalanced', type: 'text' },
+  { name: 'flagged', type: 'text' },
+  {
+    name: 'lookahead',
+    type: 'text',
+    condition: [{ when: 'headline', isNotEmpty: true }],
+  },
+  { name: 'unicode', type: 'text' },
+  PATTERN_PROPS[5],
+  PATTERN_PROPS[6],
+]
+
+describe('a published condition carries only patterns a page can match (AGL-2893)', () => {
+  it('clears a pattern it cannot match at publish and install, and keeps the property', async () => {
+    seedSource(PATTERN_PROPS)
+    const listingId = await publishComponent()
+    expect(state.store[`marketplaceListings/${listingId}/versions/1`].props).toEqual(
+      MATCHABLE_PATTERN_PROPS,
+    )
+
+    await call(installHandler, { listingId, hostId: 'target' })
+
+    expect(installedComponents()[0].props).toEqual(MATCHABLE_PATTERN_PROPS)
+  })
+
+  it('clears one planted in a stored version on the way in, and on update', async () => {
+    seedSource(undefined)
+    const listingId = await publishComponent()
+    // Written by something other than the publish route.
+    state.store[`marketplaceListings/${listingId}/versions/1`].props = PATTERN_PROPS
+    await call(installHandler, { listingId, hostId: 'target' })
+    expect(installedComponents()[0].props).toEqual(MATCHABLE_PATTERN_PROPS)
+
+    publishNextVersion(listingId, {
+      rootId: ROOT,
+      nodes: COMPONENT_NODES,
+      props: PATTERN_PROPS,
+    })
+    const result = await call(updateArtifactHandler, {
+      listingId,
+      hostId: 'target',
+      action: 'apply',
+      mode: 'merge',
+    })
+    expect(result.status).toBe(200)
+    expect(installedComponents()[0].props).toEqual(MATCHABLE_PATTERN_PROPS)
+  })
+
+  it('does the same for a layout', async () => {
+    seedSource(PATTERN_PROPS)
+    const listingId = await publishLayout()
+    await call(installLayoutHandler, { listingId, hostId: 'target' })
+    expect(installedLayouts()[0].props).toEqual(MATCHABLE_PATTERN_PROPS)
+  })
+})
+
 describe('sanitizeMarketplaceProps', () => {
   const only = (prop: Record<string, unknown>) => {
     const result = sanitizeMarketplaceProps([prop])

@@ -817,3 +817,41 @@ describe('the gates that were already there still answer first', () => {
     expect(writes).toEqual([])
   })
 })
+
+describe('an imported declaration keeps only patterns a page can match (AGL-2893)', () => {
+  it('restores the component with a condition rule no page can match removed', async () => {
+    const response = await runImport('host-1', bundleOf({
+      components: [
+        {
+          $id: 'cmp-1',
+          displayName: 'Hero',
+          rootId: 'root',
+          nodes: { root: { $id: 'root', componentId: 'div', nodes: [] } },
+          props: [
+            { name: 'headline', type: 'text' },
+            { name: 'cta', type: 'text', condition: { when: 'headline', pattern: '(' } },
+            {
+              name: 'note',
+              type: 'text',
+              condition: { or: [{ when: 'headline', pattern: '^(a+)+$' }] },
+            },
+          ],
+        },
+      ],
+    }))
+
+    expect(response.status).toBe(200)
+    const restored = writes.find(
+      (entry) => entry.path === 'hosts/host-1/components/cmp-1',
+    )
+    expect(restored?.data['props']).toEqual([
+      { name: 'headline', type: 'text' },
+      { name: 'cta', type: 'text' },
+      {
+        name: 'note',
+        type: 'text',
+        condition: { or: [{ when: 'headline', pattern: '^(a+)+$' }] },
+      },
+    ])
+  })
+})

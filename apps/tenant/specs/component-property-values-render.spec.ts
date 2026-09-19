@@ -250,3 +250,72 @@ describe('a link or image a property feeds (AGL-2933)', () => {
     expect(JSON.stringify(result.props.nodes)).not.toMatch(/javascript:|data:text/i)
   })
 })
+
+describe('a condition whose pattern cannot be matched (AGL-2893)', () => {
+  /** Long enough to hang a backtracking matcher on `^(a+)+$`. */
+  const HEADLINE = `${'a'.repeat(28)}!`
+
+  /** A banner whose call to action and note apply only while a pattern holds. */
+  const bannerWith = (condition: Record<string, unknown>) => ({
+    rootId: 'banner',
+    nodes: {
+      banner: { $id: 'banner', componentId: 'muiStack', nodes: ['title', 'cta'] },
+      title: {
+        $id: 'title',
+        componentId: 'muiTypography',
+        parentId: 'banner',
+        props: { children: '{{prop.headline}}' },
+      },
+      cta: {
+        $id: 'cta',
+        componentId: 'muiButton',
+        parentId: 'banner',
+        props: { children: '{{prop.ctaLabel}}' },
+      },
+    },
+    props: [
+      { name: 'headline', type: 'text', defaultValue: HEADLINE },
+      { name: 'ctaLabel', type: 'text', defaultValue: 'Go', condition },
+    ],
+  })
+
+  /**
+   * Generous: the whole load answers in milliseconds, and a loaded CI box
+   * must not turn that into a flake. A backtracking matcher takes seconds.
+   */
+  const BUDGET_MS = 3000
+
+  it.each([
+    ['an invalid pattern', { when: 'headline', pattern: '(' }],
+    ['invalid flags', { when: 'headline', pattern: 'a', flags: 'gg' }],
+    ['syntax the matcher refuses', { when: 'headline', pattern: 'a(?=!)' }],
+  ])('renders the page for %s, with the property it decides switched off', async (_label, condition) => {
+    const { result, nodes } = await loadWith(bannerWith(condition), {})
+    // Before AGL-2893 the throw reached the loader's catch, and every page
+    // placing the component answered 404.
+    expect(result.notFound).toBeUndefined()
+    expect(
+      nodes.find((node) => node.componentId === 'muiTypography')?.props?.children,
+    ).toBe(HEADLINE)
+    expect(nodes.find((node) => node.componentId === 'muiButton')?.props?.children).toBe(
+      '',
+    )
+  })
+
+  it('answers a catastrophic pattern in bounded time, and correctly', async () => {
+    const started = Date.now()
+    const unmet = await loadWith(
+      bannerWith({ when: 'headline', pattern: '^(a+)+$' }),
+      {},
+    )
+    const met = await loadWith(
+      bannerWith({ when: 'headline', pattern: '^(a+)+!$' }),
+      {},
+    )
+    expect(Date.now() - started).toBeLessThan(BUDGET_MS)
+    const label = (loaded: typeof unmet) =>
+      loaded.nodes.find((node) => node.componentId === 'muiButton')?.props?.children
+    expect(label(unmet)).toBe('')
+    expect(label(met)).toBe('Go')
+  })
+})
