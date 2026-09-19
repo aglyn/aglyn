@@ -21,6 +21,7 @@ import { join } from 'node:path'
 import {
   collectMarkdownHeadings,
   isInternalMarkdownHref,
+  isMarkdownLinkReference,
   isSupportedImageSrc,
   isSupportedLinkHref,
   markdownHeadingSlugs,
@@ -573,6 +574,59 @@ describe('markdown-lite', () => {
     expect(isSupportedLinkHref('/api/media/cdn/org:abc/xyz')).toBe(true)
     // A page route that merely starts with the same letters is unaffected.
     expect(isInternalMarkdownHref('/apiary/guide')).toBe(true)
+  })
+})
+
+/**
+ * Links that NAME their target instead of spelling its address (AGL-3118).
+ *
+ * A post that links another post by `/blog/old-slug` breaks the day the slug
+ * changes. A reference names the entry, listing, feed or screen by id and is
+ * resolved by the renderer, so the parser has to keep it and the serializer
+ * has to give it back exactly as typed.
+ */
+describe('markdown-lite link references (AGL-3118)', () => {
+  const REFERENCES = [
+    'entry:videos/Hpy49iVFX3',
+    'collection:videos',
+    'feed:videos',
+    'screen:yFjgqiG2wm',
+  ]
+
+  it.each(REFERENCES)('keeps %s as the link target', (href) => {
+    expect(parseMarkdownInlines(`[watch](${href})`)).toEqual([
+      { type: 'link', text: 'watch', href },
+    ])
+    expect(isSupportedLinkHref(href)).toBe(true)
+    expect(isMarkdownLinkReference(href)).toBe(true)
+  })
+
+  it('round-trips a reference through the serializer', () => {
+    const source =
+      'See [the film](entry:videos/Hpy49iVFX3), [all videos](collection:videos) ' +
+      'and [the feed](feed:videos).'
+    expect(serializeMarkdownLite(parseMarkdownLite(source))).toBe(source)
+  })
+
+  it('drops a malformed or empty reference to text, as any unsupported target', () => {
+    for (const href of ['entry:videos', 'entry:a/b/c', 'screen:', 'collection:', 'feed:']) {
+      expect(isMarkdownLinkReference(href)).toBe(false)
+      expect(parseMarkdownInlines(`[x](${href})`)).toEqual([
+        { type: 'text', text: 'x' },
+      ])
+    }
+  })
+
+  it('never reads a bare id as a reference, since it could be a relative path', () => {
+    expect(isMarkdownLinkReference('yFjgqiG2wm')).toBe(false)
+    expect(isMarkdownLinkReference('/videos/film')).toBe(false)
+    expect(isMarkdownLinkReference('https://aglyn.com/videos')).toBe(false)
+  })
+
+  it('is not an internal address until a renderer resolves it', () => {
+    // A renderer must resolve the reference first; handing the raw value to
+    // the router would navigate to a path that does not exist.
+    expect(isInternalMarkdownHref('entry:videos/Hpy49iVFX3')).toBe(false)
   })
 })
 

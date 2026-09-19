@@ -24,6 +24,13 @@
  */
 
 import { isMediaRef, parseMediaRef } from './media-ref'
+import {
+  parseCollectionLinkValue,
+  parseEntryLinkValue,
+  parseFeedLinkValue,
+  parseScreenLinkValue,
+  SCREEN_LINK_VALUE_PREFIX,
+} from './screen-link-value'
 
 export type MarkdownInline =
   | { type: 'text'; text: string }
@@ -107,13 +114,36 @@ export function isSupportedImageSrc(url: string): boolean {
 }
 
 /**
+ * Whether a link target is a stored REFERENCE rather than an address
+ * (AGL-3118): a screen, a collection listing, an entry or a feed, named by id
+ * so a rename cannot break it. Only the marked, well-formed forms count — a
+ * bare id is indistinguishable from a relative path with no slash, so it
+ * stays what the dialect has always made of it.
+ *
+ * Kept verbatim in the parsed link: a renderer resolves it against the same
+ * routing map element links use, and the serializer writes it back as typed.
+ */
+export function isMarkdownLinkReference(url: string): boolean {
+  if (url.startsWith(SCREEN_LINK_VALUE_PREFIX)) {
+    return parseScreenLinkValue(url) !== undefined
+  }
+  return (
+    parseCollectionLinkValue(url) !== undefined ||
+    parseEntryLinkValue(url) !== undefined ||
+    parseFeedLinkValue(url) !== undefined
+  )
+}
+
+/**
  * Link targets additionally allow SITE-RELATIVE paths (AGL-582) so entry
  * markdown can link to other pages of the same site — renderers give those
- * client-side navigation. Protocol-relative `//host` is rejected: it would
- * silently leave the site.
+ * client-side navigation — and link REFERENCES (AGL-3118), which renderers
+ * resolve to wherever the target lives now. Protocol-relative `//host` is
+ * rejected: it would silently leave the site.
  */
 function safeLinkUrl(url: string): string | null {
   if (/^\/(?!\/)/.test(url)) return url
+  if (isMarkdownLinkReference(url)) return url
   return safeUrl(url)
 }
 
