@@ -59,7 +59,7 @@ put one beside the document, drop an **Image** as a sibling.
 | `## A heading` | A top-level heading — and an anchor a contents list can link to |
 | `### A sub-heading` | A second-level heading, also anchored |
 | `**bold**`, `*italic*` | Bold and italic |
-| `[text](https://example.com)` | A link. `/pricing` works too, and navigates without a page reload |
+| `[text](https://example.com)` | A link. `/pricing` works too, and navigates without a page reload. To link a page of this site, pick it instead of typing it — see [Links that survive a rename](#links-that-survive-a-rename) |
 | `- item` | A bullet list (`*` works as well) |
 | `1. item` | A numbered list (`1)` works as well). Start at any number — `7.` counts from seven |
 | `> quoted` | A quote, set off behind a left accent |
@@ -70,6 +70,25 @@ put one beside the document, drop an **Image** as a sibling.
 Blank lines separate blocks. `#` and `####` and deeper are still headings — they fold onto
 the two levels above rather than being read as ordinary text, so a document that opens with
 a single `# Title` renders the way you'd expect.
+
+### Links that survive a rename
+
+The toolbar's **Link** button opens a small dialog with a **Link to** box that searches this
+site: its pages, its collection listings, their RSS feeds, and the entries themselves. Pick
+one and the document stores the target rather than its address, so the link follows a
+renamed page, a renamed post, or a renamed collection. Choose **External URL or path…** in
+the same box for an outside address, or for a path you want to type yourself.
+
+A typed `/blog/my-post` is not wrong, it is just brittle: it is a string, so it keeps
+pointing at the old address the day the post's slug changes, and nothing tells you. A picked
+link cannot go stale that way.
+
+If a picked target does go away — the post is unpublished or deleted, the collection is
+removed — the link renders as its own words. The sentence keeps reading, with no dead link
+for a visitor to click and no internal id leaking into the page. The same is true of the
+[Markdown version of the page](../seo/overview.md#markdown-for-any-page) that agents read:
+picked links are written out as real URLs there too, so an agent following your document
+lands where a reader would.
 
 A list can start directly under the line that introduces it, with no blank line between —
 `A notice must include:` followed straight away by `1.`, `2.`, `3.` gives you the sentence
