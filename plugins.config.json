@@ -181,6 +181,13 @@
         "ai",
         "assist"
       ]
+    },
+    {
+      "id": "video-delivery",
+      "package": "@aglyn/plugins-video-delivery",
+      "register": {
+        "serverDeclarations": "registerVideoDeliveryServerDeclarations"
+      }
     }
   ]
 }

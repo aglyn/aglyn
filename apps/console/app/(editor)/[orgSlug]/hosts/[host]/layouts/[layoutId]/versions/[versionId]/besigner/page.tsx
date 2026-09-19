@@ -378,9 +378,11 @@ function LayoutBesignerPage(props) {
         // does for "the tenant refused the call", and only the second leaves
         // the live page stale for the rest of its window. Discarding the
         // result is how a publish came to report itself complete over a page
-        // that kept serving the old HTML.
+        // that kept serving the old HTML. A shortfall leads with "Saved.", not
+        // "Published.": this is a save, and an author, who cannot publish, may
+        // make it.
         void revalidateLivePages({ user, hostId, layoutId }).then((result) => {
-          const shortfall = describeRevalidateShortfall(result)
+          const shortfall = describeRevalidateShortfall(result, 'Saved.')
           if (shortfall) {
             enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
           }
@@ -428,9 +430,10 @@ function LayoutBesignerPage(props) {
       await save({ props: nextProps }, { merge: true })
       if (editingLiveVersion) {
         // The live version: every screen inside this layout renders with the
-        // new properties from the next request, so drop what is cached.
+        // new properties from the next request, so drop what is cached. A
+        // save, so a shortfall leads with "Saved.".
         void revalidateLivePages({ user, hostId, layoutId }).then((result) => {
-          const shortfall = describeRevalidateShortfall(result)
+          const shortfall = describeRevalidateShortfall(result, 'Saved.')
           if (shortfall) {
             enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
           }

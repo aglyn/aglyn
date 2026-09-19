@@ -1,0 +1,469 @@
+{
+  "name": "submit_automation",
+  "description": "Submit one automation: its trigger, the conditions on it, and its steps in order. Written out, the whole automation is at most 6000 characters, so keep its emails short.",
+  "strict": true,
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "name",
+      "trigger",
+      "steps",
+      "notes",
+      "unsupported"
+    ],
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "A short name for the automation, at most 60 characters."
+      },
+      "trigger": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event",
+          "conditions",
+          "combinator"
+        ],
+        "properties": {
+          "event": {
+            "type": "string",
+            "enum": [
+              "formSubmission",
+              "pageView",
+              "memberSignUp",
+              "memberSignIn",
+              "memberSignOut",
+              "lead",
+              "booking",
+              "taskCompleted",
+              "contactCreated",
+              "contactStageChanged",
+              "dealStageChanged",
+              "dealWon",
+              "dealLost"
+            ]
+          },
+          "conditions": {
+            "type": "array",
+            "description": "At most 5; empty when it runs every time.",
+            "items": {
+              "type": "object",
+              "description": "A condition the event must meet.",
+              "additionalProperties": false,
+              "required": [
+                "field",
+                "op",
+                "value"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "description": "The field of the event the condition reads, as the trigger lists its fields."
+                },
+                "op": {
+                  "type": "string",
+                  "enum": [
+                    "equals",
+                    "contains",
+                    "notEmpty"
+                  ]
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "description": "What equals or contains compares against; null for notEmpty."
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "combinator": {
+            "type": "string",
+            "enum": [
+              "and",
+              "or"
+            ]
+          }
+        }
+      },
+      "steps": {
+        "type": "array",
+        "description": "The steps in order, at most 10. Empty only with unsupported.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "when",
+            "list",
+            "campaign",
+            "workflow",
+            "webhook",
+            "dataset",
+            "subject",
+            "body",
+            "toField",
+            "title",
+            "message",
+            "severity",
+            "minutes",
+            "event",
+            "stage",
+            "tag",
+            "owner",
+            "taskKind",
+            "dueInDays",
+            "activityKind"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "sendEmail",
+                "notifyAdmins",
+                "enrollList",
+                "assignCampaign",
+                "runWorkflow",
+                "datasetAppend",
+                "updateDataset",
+                "webhookPost",
+                "siteAlert",
+                "wait",
+                "waitForEvent",
+                "exitFlow",
+                "setContactStage",
+                "addContactTag",
+                "assignContactOwner",
+                "createCrmTask",
+                "logCrmActivity"
+              ]
+            },
+            "when": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "description": "The step runs only when this holds; null for always.",
+                  "additionalProperties": false,
+                  "required": [
+                    "field",
+                    "op",
+                    "value"
+                  ],
+                  "properties": {
+                    "field": {
+                      "type": "string",
+                      "description": "The field of the event the condition reads, as the trigger lists its fields."
+                    },
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "equals",
+                        "contains",
+                        "notEmpty"
+                      ]
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "description": "What equals or contains compares against; null for notEmpty."
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "list": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "enrollList: the email list, in the words of the description, such as \"newsletter\". Never an id."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "campaign": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "assignCampaign: the campaign, in the words of the description, such as \"newsletter\". Never an id."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "workflow": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "runWorkflow: the workflow, in the words of the description, such as \"newsletter\". Never an id."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "webhook": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "webhookPost: the outbound webhook, in the words of the description, such as \"newsletter\". Never an id."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dataset": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "datasetAppend and updateDataset: the dataset, in the words of the description, such as \"newsletter\". Never an id."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "subject": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "sendEmail: the subject line."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "body": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "sendEmail: the email as plain text. logCrmActivity: what happened."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "toField": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "sendEmail: the event field holding the address; null for \"email\"."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "notifyAdmins: the notification. createCrmTask: the task."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "siteAlert: what the visitor reads."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "severity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "info",
+                    "success",
+                    "warning",
+                    "error"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "minutes": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "description": "wait: how long to wait. waitForEvent: when to give up. Whole minutes from 1 to 129600; an hour is 60 and a day 1440."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "event": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "formSubmission",
+                    "pageView",
+                    "memberSignUp",
+                    "memberSignIn",
+                    "memberSignOut",
+                    "lead",
+                    "booking",
+                    "taskCompleted",
+                    "contactCreated",
+                    "contactStageChanged",
+                    "dealStageChanged",
+                    "dealWon",
+                    "dealLost"
+                  ],
+                  "description": "waitForEvent: what the automation waits for."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stage": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "subscriber",
+                    "lead",
+                    "marketing-qualified",
+                    "sales-qualified",
+                    "opportunity",
+                    "customer",
+                    "evangelist",
+                    "other"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "tag": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "addContactTag: at most 60 characters."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "owner": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "assignContactOwner: \"round robin\", or the teammate’s email address the description gives."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "taskKind": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "call",
+                    "email",
+                    "meeting",
+                    "todo"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dueInDays": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "description": "createCrmTask: days from the run, 0 for today, at most 365."
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "activityKind": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "call",
+                    "email",
+                    "meeting",
+                    "note",
+                    "other"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "notes": {
+        "type": "array",
+        "description": "What the person must decide that the automation cannot hold; at most 3 short sentences.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "unsupported": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": [
+              "not-an-automation",
+              "no-trigger",
+              "no-step",
+              "needs-crm",
+              "needs-webhooks",
+              "needs-bookings"
+            ],
+            "description": "Why no automation can be built from this description; null when one is built."
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    }
+  }
+}

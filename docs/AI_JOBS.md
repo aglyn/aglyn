@@ -112,6 +112,30 @@ context as proof the ladder admitted the request — flag, entitlement,
 lockdown, rate, band and caps — and adds the two rungs a copy needs:
 `ai.generate`, and a host role that may write the site.
 
+**How much strict schema one request may carry (AGL-3096).** A provider that
+constrains decoding to a strict schema compiles every strict tool of a request
+together, before the model runs, and refuses a request past its bounds with a
+400 that no retry clears. Each adapter declares its bounds on the provider
+contract as `toolSchemaLimits`, each a total over one request's tools:
+
+| adapter | strict tools | optional parameters | union-typed parameters |
+| --- | --- | --- | --- |
+| `anthropic` | 20 | 24 | 16 |
+| `openai-compatible` | not stated | 0: its strict function shape requires every property | not stated |
+
+`aiToolSchemaCounts` (`providers/contract.ts`) counts a request's tools the way
+the bounds do: a union is an `anyOf` or a list of types, wherever it is
+written, in an array's items or inside another union's branch too, and a
+local `$ref` counts where it is used. `providers/tool-schema-limits.spec.ts`
+lists every tool set each door sends — a door that reads a site sends the
+lookup tool beside its own, and the two count together — and holds every set
+to every registered provider's bounds, because any provider may serve any
+step. Its control is the automation tool with a `null` union on every field a
+step did not use, the 23 the provider refused. So a field that may be absent
+is left out of a variant, or is an empty list or string, and never a `null`
+union written per field; an optional property is no way around it, since the
+second adapter takes none.
+
 ## Credits, per step
 
 `runAiJobStep` is the one place a step is claimed, metered, run and recorded,
@@ -2305,11 +2329,16 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   webhooks or bookings is refused, with a re-ask, on a workspace whose plan
   lacks it — the entitlements the executor reads before it runs one.
 - **What the model is shown to draft.** The doctrine's cached block, the
-  drafting instructions (cached) and `submit_automation`, a strict tool whose
-  every field a step does not use is `null`. The user turn carries whether the
-  workspace has the CRM, webhooks and bookings, the site's forms with their
-  field names, its datasets by name, and the brief. It carries no email list,
-  campaign, workflow, webhook, pipeline, contact or form submission.
+  drafting instructions (cached) and `submit_automation`, a strict tool with
+  one variant per step type, each carrying only that step's own fields. A step
+  that always runs has an empty `when` list, and a notEmpty condition compares
+  against an empty string, so the tool holds two union-typed parameters where a
+  `null` on every unused field held 23 and was refused (AGL-3096; see
+  [Tools a step may call](#tools-a-step-may-call)). The user turn carries
+  whether the workspace has the CRM, webhooks and bookings, the site's forms
+  with their field names, its datasets by name, and the brief. It carries no
+  email list, campaign, workflow, webhook, pipeline, contact or form
+  submission.
 - **Words, then ids.** The answer names each list, campaign, workflow, webhook,
   dataset, form and deal stage in the description's words. After the answer,
   in code, each is looked up among the site's records — the Actions editor's
@@ -2372,7 +2401,7 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   three characters a token with as much again to think in. A longer answer is
   refused and re-asked shorter. It sends no site inventory block and so makes
   no lookup; its reads are the declared 4 s,
-  `AI_WORKFLOW_RECORDS_READ_MS`. Its cached prefixes are 4,564 tokens drafting
+  `AI_WORKFLOW_RECORDS_READ_MS`. Its cached prefixes are 5,015 tokens drafting
   and 2,212 explaining, as the ledger spec measures them.
 
 | step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |

@@ -167,12 +167,20 @@ export const streamHandler: PluginApiHandler = async (req, res) => {
      * other. Nothing the caller sends reaches this `Location`: the GET half
      * reads `hostId`, `productId`, `video`, `exp` and `sig`, and builds the
      * target from the product document.
+     *
+     * With a delivery provider configured and its release flag on for the
+     * owning org, a video with a current copy there is redirected straight to
+     * the provider's short-lived URL instead (AGL-2824), for the same session
+     * and the same rendition the CDN would pick. `Accept` is the one request
+     * header that reaches that choice, and only to pick among the asset's own
+     * encodings.
      */
     const delivery = await resolvePaidMediaDelivery({
       stored: file.url,
       hostId,
       ttlMs: GATED_VIDEO_SESSION_TTL_MS,
       cdnParams: [[MEDIA_CDN_RENDITION_PARAM, MEDIA_CDN_RENDITION_AUTO]],
+      delivery: { accept: req.headers?.['accept'] },
       io: createPaidMediaDeliveryIo({
         firestore: app.firestore(),
         bucket: app
@@ -193,14 +201,16 @@ export const streamHandler: PluginApiHandler = async (req, res) => {
         : res.status(404).send('No video')
     }
     /*
-     * No `Vary: Accept` on the redirect, deliberately (AGL-2766).
+     * `Vary: Accept` only when this response chose the rendition (AGL-2824).
      *
-     * This 302 is the same for every client: the `Location` is a function of
-     * the product document and the clock, not of the request's `Accept`. The
-     * negotiation happens on the SECOND response, and `serveMediaCdn` declares
-     * `Vary` there — on the one that actually varies. Declaring it here would
-     * advertise a variance this response does not have.
+     * A signed CDN URL is the same for every client: the `Location` is a
+     * function of the product document and the clock, not of the request's
+     * `Accept`, and the negotiation happens on the SECOND response, where
+     * `serveMediaCdn` declares `Vary` (AGL-2766). A delivery provider's URL is
+     * minted after the rendition is picked, so there the `Accept` shaped this
+     * `Location`, and saying so is correct even under `no-store`.
      */
+    if (delivery.via === 'delivery') res.setHeader('Vary', 'Accept')
     return res.redirect(302, delivery.location)
   } catch (error) {
     console.error(error)

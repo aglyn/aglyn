@@ -25,6 +25,13 @@
  */
 
 import { isFirstPartyMediaSrc } from './media-ref'
+import { matchComponentPropToken } from './compose-reusable-components'
+import {
+  isSafeNodeUrl,
+  type NodeUrlProp,
+  SAFE_SRC_PATTERN,
+} from './node-url-policy'
+import { SAFE_HREF_PATTERN } from './screen-link-value'
 
 /**
  * Component ids publishable to the marketplace. Mirrors the persisted ids in
@@ -133,28 +140,45 @@ const KEPT_NODE_KEYS = [
 ] as const
 
 /**
- * Only navigable protocols — mirrors ScreenLink/Image/Button hardening.
+ * The address rules a published node's `href` and `src` meet — the linking
+ * elements' navigable protocols, and https, inline or site-relative images
+ * (see `node-url-policy`).
  *
- * Exported for the marketplace's property sanitizer, which holds a published
- * property's Link default to the same rule as a published node's `href`.
+ * Exported under these names for the marketplace's property sanitizer, which
+ * holds a published property's Link default to the same rule as a published
+ * node's `href`, and an Image default to the `src` rule.
  */
-const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/|#)/i
-/**
- * `src` additionally allows inline images, which are inert.
- *
- * `https:` only, unlike {@link SAFE_HREF} (AGL-1701). An `http:` href is a
- * link a reader chooses to follow and their browser will warn about; an
- * `http:` image is fetched automatically, and on the authenticated console —
- * or on any tenant page we serve over TLS — it is mixed content, which every
- * current browser blocks outright. So the permissive form bought a published
- * node nothing: the image did not render either way, it just failed at the
- * viewer instead of at publish time.
- *
- * Exported for the property sanitizer, which holds an Image default to it.
- */
-const SAFE_SRC = /^(https:\/\/|data:image\/|\/|#)/i
+export {
+  SAFE_HREF_PATTERN as MARKETPLACE_SAFE_HREF,
+  SAFE_SRC_PATTERN as MARKETPLACE_SAFE_SRC,
+}
 
-export { SAFE_HREF as MARKETPLACE_SAFE_HREF, SAFE_SRC as MARKETPLACE_SAFE_SRC }
+/**
+ * The property kind whose value may fill each address prop through a binding
+ * (AGL-2933): a Link feeds an `href`, an Image a `src`. Each kind's default is
+ * held to that prop's own rule wherever a declaration is published, so the
+ * binding carries nothing a literal in the same place could not.
+ */
+const URL_PROP_KIND: Readonly<Record<NodeUrlProp, string>> = {
+  href: 'href',
+  src: 'image',
+}
+
+/**
+ * Declared property names by the address prop their kind may fill — the
+ * index {@link sanitizePublishedNodeProps} reads a binding against.
+ */
+function urlBindingsOf(
+  declaredProps: ReadonlyArray<{ name?: unknown; type?: unknown }> | undefined,
+): ReadonlyMap<string, NodeUrlProp> {
+  const bindings = new Map<string, NodeUrlProp>()
+  for (const prop of declaredProps ?? []) {
+    if (typeof prop?.name !== 'string' || !prop.name) continue
+    if (prop.type === URL_PROP_KIND.href) bindings.set(prop.name, 'href')
+    else if (prop.type === URL_PROP_KIND.src) bindings.set(prop.name, 'src')
+  }
+  return bindings
+}
 
 /**
  * Strips props a published node must never carry into someone else's site
@@ -181,6 +205,15 @@ export { SAFE_HREF as MARKETPLACE_SAFE_HREF, SAFE_SRC as MARKETPLACE_SAFE_SRC }
  *   React already neutralizes `javascript:` hrefs and the mui components run
  *   SAFE_HREF themselves, so this is defense in depth for any component that
  *   forgets to — cheap, and it keeps the stored artifact honest.
+ * - An `href`/`src` that is exactly one `{{prop.*}}` token naming a declared
+ *   property of the kind that holds that address — a Link for `href`, an
+ *   Image for `src` — is kept as the binding it is (AGL-2933). The token is no
+ *   address, so the rule above would refuse it, and every link and image a
+ *   component's properties feed would arrive unbound. What it becomes is held
+ *   to the same rule twice over: the property's default where the declaration
+ *   is published, and whatever value a page sets where the graft substitutes
+ *   it (`resolveComponentPropTokens`). A token that is only part of the value,
+ *   or names a property of another kind or none, is refused as before.
  *
  * Deliberately shallow: only top-level props are spread onto the DOM. A nested
  * object (`icon: { path }`) is consumed by the component, never spread, so
@@ -188,6 +221,7 @@ export { SAFE_HREF as MARKETPLACE_SAFE_HREF, SAFE_SRC as MARKETPLACE_SAFE_SRC }
  */
 function sanitizePublishedNodeProps(
   props: Record<string, unknown>,
+  urlBindings: ReadonlyMap<string, NodeUrlProp>,
 ): Record<string, unknown> {
   const safe: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(props)) {
@@ -195,9 +229,11 @@ function sanitizePublishedNodeProps(
     if (/^on[A-Z]/.test(key)) continue
     if ((key === 'href' || key === 'src') && typeof value === 'string') {
       const trimmed = value.trim()
-      const pattern = key === 'href' ? SAFE_HREF : SAFE_SRC
-      if (!pattern.test(trimmed)) continue
-      safe[key] = trimmed
+      const bound = matchComponentPropToken(trimmed)
+      const keep =
+        isSafeNodeUrl(key, trimmed) ||
+        (bound !== null && urlBindings.get(bound) === key)
+      if (keep) safe[key] = trimmed
       continue
     }
     safe[key] = value
@@ -282,6 +318,13 @@ export function sanitizeMarketplaceDefinition(
      * green-light a `videoEmbed` or `form` that no email client can render.
      */
     componentIds?: readonly string[]
+    /**
+     * The properties the tree declares, as they are published beside it
+     * (AGL-2933). A node's `href` or `src` bound whole to one of the kind that
+     * holds that address is kept — see `sanitizePublishedNodeProps`. Absent
+     * for a tree that declares none, which keeps no binding.
+     */
+    declaredProps?: ReadonlyArray<{ name?: unknown; type?: unknown }>
   },
 ):
   | { ok: true; rootId: string; nodes: MarketplaceDefinitionNodes }
@@ -291,6 +334,7 @@ export function sanitizeMarketplaceDefinition(
   const allowed = options?.extraComponentIds?.length
     ? [...base, ...options.extraComponentIds]
     : base
+  const urlBindings = urlBindingsOf(options?.declaredProps)
   // An UNDECODED `nodes` is never the author's fault, so it must not share a
   // message with a genuinely rootless definition (AGL-1395). Both undecoded
   // forms — a Node `Buffer` from the Admin SDK, and the `{type:'Buffer'}`
@@ -352,7 +396,7 @@ export function sanitizeMarketplaceDefinition(
     }
     // Per-node prop hardening (AGL-784) — see sanitizePublishedNodeProps.
     if (plain.props && typeof plain.props === 'object') {
-      plain.props = sanitizePublishedNodeProps(plain.props)
+      plain.props = sanitizePublishedNodeProps(plain.props, urlBindings)
     }
     plain.$id = id
     plain.parentId = id === rootId ? null : (node.parentId ?? null)

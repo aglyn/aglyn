@@ -386,3 +386,86 @@ describe('the measurement directives admit the URLs gtag actually requests (AGL-
     }
   })
 })
+
+/**
+ * THE MEDIA DELIVERY ORIGIN (AGL-2824).
+ *
+ * With `release_video_delivery` on, the media route answers a library video
+ * with a redirect to the delivery host, and the browser checks `media-src`
+ * against the redirect's target as well as the first request. A policy that
+ * does not name the host refuses the redirect, and the video goes blank on
+ * every published page of the workspace — which nothing on the server can
+ * see, because the server answered correctly.
+ *
+ * The directive reads `MEDIA_VIDEO_DELIVERY_HOST` per call, so each case sets
+ * the variable itself and the suite leaves it as it found it.
+ */
+describe('media-src admits the configured media delivery origin (AGL-2824)', () => {
+  const NAME = 'MEDIA_VIDEO_DELIVERY_HOST'
+  const saved = process.env[NAME]
+  const sourcesWith = (value: string | undefined): string[] => {
+    if (value === undefined) delete process.env[NAME]
+    else process.env[NAME] = value
+    return tenantMediaSrcDirective(true, [], SITE).split(' ')
+  }
+  const added = (value: string): string[] => {
+    const baseline = new Set(sourcesWith(undefined))
+    return sourcesWith(value).filter((source) => !baseline.has(source))
+  }
+
+  afterEach(() => {
+    if (saved === undefined) delete process.env[NAME]
+    else process.env[NAME] = saved
+  })
+
+  it('names no delivery origin when none is configured', () => {
+    const unset = sourcesWith(undefined)
+    expect(sourcesWith('')).toEqual(unset)
+    expect(sourcesWith('   ')).toEqual(unset)
+  })
+
+  it('admits a configured hostname as the HTTPS origin URLs are minted on', () => {
+    expect(added('video.example.workers.dev')).toEqual([
+      'https://video.example.workers.dev',
+    ])
+    expect(added('Video.Example.workers.dev')).toEqual([
+      'https://video.example.workers.dev',
+    ])
+    expect(added('https://video.example.workers.dev')).toEqual([
+      'https://video.example.workers.dev',
+    ])
+  })
+
+  it('admits a local worker on the loopback host, and plain HTTP nowhere else', () => {
+    expect(added('http://localhost:8787')).toEqual(['http://localhost:8787'])
+    expect(added('http://127.0.0.1:8787')).toEqual(['http://127.0.0.1:8787'])
+    expect(added('http://video.example.net')).toEqual([])
+  })
+
+  it('names nothing for a value that is not an origin, and cannot be split into a directive', () => {
+    for (const value of [
+      'https://video.example.net/films',
+      'https://video.example.net/?x=1',
+      'https://user:pass@video.example.net',
+      'ftp://video.example.net',
+      'video.example.net/films',
+      'video.example.net; script-src *',
+      '*.example.net',
+    ]) {
+      expect({ value, added: added(value) }).toEqual({ value, added: [] })
+      const directive = tenantMediaSrcDirective(true, [], SITE)
+      expect(directive).not.toContain(';')
+      expect(directive).not.toContain('*')
+    }
+  })
+
+  it('leaves the pinned sources and the owner list exactly as they were', () => {
+    process.env[NAME] = 'video.example.workers.dev'
+    const value = tenantMediaSrcDirective(true, ['videos.example.net'], SITE)
+    expect(value.startsWith("media-src 'self' data: blob: ")).toBe(true)
+    expect(value).toContain('https://firebasestorage.googleapis.com')
+    expect(value).toContain('https://videos.example.net')
+    expect(value).toContain('https://demo.aglyn.app')
+    expect(value).not.toContain('localhost')
+  })
+})

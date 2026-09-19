@@ -131,3 +131,15 @@ team-shared variables; check through the REST API.
 
 Worth copying whenever a flag turns on a path that needs configuration the flag does not
 itself provide: gate on the capability, not just on the intent.
+
+`release_video_delivery` (AGL-2824) follows the same pattern three times over. A
+workspace's video is copied to the delivery provider and served from it through a
+short-lived signed redirect only when the flag is on for its org, the provider's settings
+are present, and a copy made from the video's current bytes exists. The settings are split
+by what each app does: the console, which writes copies, needs the four `R2_*` values; the
+console and `aglyn-tenant` both need `MEDIA_VIDEO_DELIVERY_HOST` and
+`MEDIA_VIDEO_DELIVERY_SECRET` to mint URLs. Grant it to one org through its override rather
+than a rollout: a copy is that customer's video at the provider, and the provider must be
+on `/legal/subprocessors` before any customer's is. Videos stored before the flag turned on
+are copied the next time they are replaced, restored or given a rendition; until then they
+serve from the platform.
