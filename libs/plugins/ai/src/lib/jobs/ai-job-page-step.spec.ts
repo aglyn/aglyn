@@ -750,6 +750,23 @@ describe('when a pass stops', () => {
       { resource: 'screen', id: 'scr-copy', versionId: 'v-copy', hostId: 'host-1', hostSubdomain: 'acme', label: 'Home copy' },
     ])
   })
+
+  it('builds the page rather than copying a collection entry template the plan names', async () => {
+    mockReadInventory.mockResolvedValue({
+      ...FIXTURE.inventory,
+      screens: [
+        ...FIXTURE.inventory.screens,
+        { id: 'scr-post', name: 'Blog — Entry Template', slug: 'blog-post', layoutId: 'lay-site', template: true },
+      ],
+    })
+    // What core answers for a template: a copy that is a template, not a page.
+    duplicate.mockResolvedValueOnce({ ok: true, id: 'scr-post-copy', versionId: 'v-copy', name: 'Copy of Blog — Entry Template' })
+    mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(FIXTURE.answers[0]))
+    const outcome = await step()(context({ plan: { ...PLAN, screens: [{ ...SCREEN, duplicateOf: 'scr-post' }] } }))
+    expect(duplicate).not.toHaveBeenCalled()
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect(outcome).toMatchObject({ continue: true, outputs: [] })
+  })
 })
 
 describe('what the plan creates comes first (AGL-3031)', () => {

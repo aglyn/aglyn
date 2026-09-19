@@ -70,19 +70,25 @@ afterwards.
 
 ## Duplicate a screen
 
-Every row on the Screens list has **Duplicate…** in its menu, and a screen's
-detail page carries the same action. The copy takes the latest saved version
-whole — the element tree, layout values, description and SEO fields — under
-the name you give it (`Copy of Home` by default; a name another screen already
-has gets a number). Its slug becomes `home-copy`, then `home-copy-2`, so it
-never claims the original's address.
+Every row on the Screens list has **Duplicate…** in its menu. The copy takes
+the latest saved version whole — the element tree, layout values, description
+and SEO fields — under the name you give it (`Copy of Home` by default; a name
+another screen already has gets a number). Its slug becomes `home-copy`, then
+`home-copy-2`, so it never claims the original's address.
 
 The copy is a **draft**: it has no address on the live site until you publish
 it, exactly like a screen you created from scratch. Components and layouts
 placed on the original are shared, not copied — the duplicate points at the
-same ones. A duplicate counts against your screen allowance the moment it is
-made, and is refused with the same message a new screen would be when the
-allowance is spent.
+same ones. A duplicate of a page counts against your screen allowance the
+moment it is made, and is refused with the same message a new screen would be
+when the allowance is spent.
+
+A collection's **entry template** can be duplicated too, which is how a second
+collection starts from the first one's design. The copy is still an entry
+template, with every `{{entry.*}}` binding kept: it isn't published, and no
+collection uses it until you pick it as a collection's **Entry screen** in
+Content. Like the original, it doesn't count against your screen allowance. An
+error screen can't be duplicated.
 
 ## Error & maintenance screens
 
