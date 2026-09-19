@@ -678,6 +678,43 @@ describe('when a pass stops', () => {
     expect(commits).toEqual([])
   })
 
+  it('stops a section refused twice for rule 12 with the node ids its finding names and an outline of the refused section, never its copy (AGL-3078)', async () => {
+    // The hero's column Stack written as a Grid with a column direction, which a Grid does not have.
+    const answer = structuredClone(FIXTURE.answers[0])
+    answer.nodes['a5'] = { ...answer.nodes['a5'], componentId: 'muiGrid' }
+    mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(answer)).mockResolvedValueOnce(sectionAnswer(answer))
+    const outcome = await step()(context())
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    expect(String(mockRunAiRequest.mock.calls[1][0].messages.at(-1).content)).toContain(
+      'Use a Stack (or a Box) for a group that only stacks, such as a heading over its text',
+    )
+    expect(outcome.review).toEqual({
+      reason: 'doctrine',
+      message: expect.stringContaining('Rule 12'),
+      findings: [{ rule: 12, code: 'grid-as-stack', message: expect.stringContaining('no "column" direction'), nodeIds: ['a5'] }],
+      outline: [
+        {
+          id: 'a5',
+          depth: 0,
+          componentId: 'muiGrid',
+          props: ['direction', 'alignItems'],
+          sx: ['gap'],
+          grid: { direction: 'column' },
+          children: ['muiTypography', 'muiTypography', 'muiButton', 'image'],
+        },
+        { id: 'a1', depth: 1, componentId: 'muiTypography', props: ['variant', 'children', 'component'], children: [] },
+        { id: 'a2', depth: 1, componentId: 'muiTypography', props: ['variant', 'children'], children: [] },
+        { id: 'a3', depth: 1, componentId: 'muiButton', props: ['children', 'variant', 'screenId'], children: [] },
+        { id: 'a4', depth: 1, componentId: 'image', props: ['alt'], children: [] },
+      ],
+    })
+    for (const copy of ['Spring roof inspections', 'Request a quote', 'A roofer inspecting shingles']) {
+      expect([copy, JSON.stringify(outcome.review).includes(copy)]).toEqual([copy, false])
+    }
+    expect(outcome.continue).toBeUndefined()
+    expect(commits).toEqual([])
+  })
+
   /**
    * A tool call cut off at its ceiling (AGL-3042): the provider stops on
    * `max_tokens`, and the input it hands over is what had arrived — a `tree`

@@ -210,6 +210,14 @@ export interface AiDoctrineTreeContext extends AiNodeTreeContext {
    * to when the site has none for what it promises. Absent: none is known.
    */
   homeScreenIds?: readonly string[]
+  /**
+   * The node as the model wrote it, by the id the checked tree gives it
+   * (AGL-3078), for a tree that was stored before it is checked: a page
+   * section is checked as part of the page, whose props the palette validator
+   * has already read, and a value it could not read is absent there. Absent,
+   * the tree the check is given is what the model wrote.
+   */
+  writtenNode?: (id: string) => unknown
 }
 
 /** One node of a walk: its id, its depth, and its ancestors' ids from the root down. */
@@ -1016,10 +1024,27 @@ export function detectAdHocWidths(
 const GRID = 'muiGrid'
 /** A Grid's props that only a container reads; on an item they do nothing. */
 const GRID_CONTAINER_PROPS = ['direction', 'wrap', 'spacing', 'rowSpacing', 'columnSpacing', 'columns']
+/** A container's props that set what it holds side by side, which a group that only stacks never needs. */
+const GRID_ROW_PROPS = ['wrap', 'columns', 'columnSpacing']
+/** The directions the palette keeps for a Grid, which lays out rows. */
+const GRID_ROW_DIRECTIONS = ['row', 'row-reverse']
+/** A direction a Stack has and a Grid does not; the palette validator drops it from a Grid. */
+const GRID_COLUMN_DIRECTION = /^column(?:-reverse)?$/i
+/** The elements an answer wraps a container's items in, where they belong in the container itself. */
+const GRID_ITEM_WRAPPERS = new Set(['muiBox', 'muiStack'])
 /** `sx` keys that space a container's columns outside the widths its items are sized by. */
 const GRID_GAP_SX_KEYS = ['gap', 'columnGap']
 /** The columns a container divides a row into when it names none. */
 const GRID_DEFAULT_COLUMNS = 12
+/** The most characters of a written value a re-ask quotes back. */
+const GRID_QUOTED_MAX_CHARS = 24
+
+/** A value as the model wrote it, as a re-ask quotes it: text in quotes, anything else as JSON, cut short. */
+function writtenValueText(value: unknown): string {
+  const text = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value))
+  const cut = text.length > GRID_QUOTED_MAX_CHARS ? `${text.slice(0, GRID_QUOTED_MAX_CHARS)}…` : text
+  return typeof value === 'string' ? `the text "${cut}"` : cut
+}
 
 /** A Grid's columns: its own `columns` when it names a count, else the renderer's twelve. */
 function gridColumns(node: AiDoctrineNode): number {
@@ -1066,44 +1091,123 @@ function gridItemSizeFor(items: number, columns: number): string {
  * page's practice areas were the first: a Grid with no container holding three
  * items sized "4", one column at every width.
  *
- * - `grid-not-container`: a Grid that is not a container but holds sized Grid
- *   items, sets a prop only a container reads, or holds two or more elements
- *   without being an item of a container.
+ * A Grid that is not a container is told what to do by what it was written as
+ * (AGL-3078), because one sentence does not mend every shape: a live About
+ * page's section was refused twice for rule 12, with a re-ask that only ever
+ * said to make the Grid a container of sized columns.
+ *
+ * - `grid-not-container`: a row that is not a container. A Grid that holds
+ *   sized Grid items, sets a prop only a row reads, or holds two or more
+ *   elements of one shape side by side. The rule's intent: a row of cards is a
+ *   container of sized items.
+ * - `grid-as-stack`: any other Grid that is not a container and sets a prop
+ *   only a container reads, or holds two or more elements without being an
+ *   item: a group that only stacks, such as a heading over its text, or one
+ *   written with a column direction, which a Grid does not have. The re-ask
+ *   offers a Stack or a Box for the group, or a container of sized items.
+ * - `grid-item-outside-container`: a sized Grid item that sits in another
+ *   element, such as a Box inside its container. A container sizes only the
+ *   items directly in it, so the re-ask asks to move the item there. A Box or a
+ *   Stack in a container that holds nothing but sized items is refused through
+ *   its items, not as a child of the container that is no item.
+ * - `grid-container-text`: a Grid whose `container` was written as a value the
+ *   palette validator cannot read as true or false, such as the text "True". The
+ *   re-ask names the value as the fault.
  * - `grid-item-size`: a container's child that is not a Grid item sized full
  *   width on a phone, or a container of several whose items never step down
  *   to columns at a larger width.
  * - `grid-gap`: a container spaced by an `sx` gap rather than its spacing.
  *
  * Each re-ask names the Grid or its items by the model's own ids and says what
- * to write, in the size format the renderer reads.
+ * to write, in the size format the renderer reads. `written` is the node as
+ * the model wrote it, by an id of `tree`, where that is known: the palette
+ * validator reads a `container` it cannot parse, and a column direction, as
+ * absent, and only what was written can name them.
  */
 export function detectUnresponsiveGrids(
   tree: AiDoctrineTree,
   outputKind: AiOutputKind,
+  written: (id: string) => unknown = () => undefined,
 ): AiDoctrineViolation[] {
   if (outputKind === 'email' || outputKind === 'form') return []
-  const notContainers: string[] = []
+  // Shapes are indexed only once a Grid needs its children compared.
+  let shapes: ShapeIndex | null = null
+  const shapeOf = (id: string): string | undefined => (shapes ??= indexShapes(tree)).shapeOf.get(id)
+  const childrenOf = (id: string): string[] => (tree.nodes[id]?.nodes ?? []).filter((child) => tree.nodes[child])
+  const isGrid = (id: string | undefined): boolean => id !== undefined && tree.nodes[id]?.componentId === GRID
+  const isContainer = (id: string | undefined): boolean =>
+    isGrid(id) && tree.nodes[id as string].props?.['container'] === true
+  const isSized = (id: string): boolean => isGrid(id) && tree.nodes[id].props?.['size'] !== undefined
+  const writtenProp = (id: string, name: string): unknown => {
+    const node = written(id)
+    return isRecord(node) && isRecord(node['props']) ? node['props'][name] : undefined
+  }
+  /** A `container` the model wrote that the palette validator could not read as true or false. */
+  const unreadContainer = (id: string): unknown => {
+    const value = writtenProp(id, 'container')
+    return tree.nodes[id].props?.['container'] === undefined && value !== null ? value : undefined
+  }
+  /** A Box or a Stack holding nothing but sized Grid items, which belong directly in a container. */
+  const wrapsItems = (id: string): boolean => {
+    const children = childrenOf(id)
+    return GRID_ITEM_WRAPPERS.has(tree.nodes[id].componentId) && children.length > 0 && children.every(isSized)
+  }
+  /** A direction the model wrote as a column, which the palette validator drops from a Grid. */
+  const writtenColumn = (id: string): boolean => {
+    const direction = writtenProp(id, 'direction')
+    return typeof direction === 'string' && GRID_COLUMN_DIRECTION.test(direction.trim())
+  }
+  /** A Grid set out as a row: a row direction, a prop only a row reads, or elements of one shape. */
+  const setsOutRow = (id: string, children: readonly string[]): boolean =>
+    GRID_ROW_DIRECTIONS.includes(String(tree.nodes[id].props?.['direction'])) ||
+    GRID_ROW_PROPS.some((name) => tree.nodes[id].props?.[name] !== undefined) ||
+    (children.length >= 2 && new Set(children.map(shapeOf)).size === 1)
+
+  const refused = new Set<string>()
+  const rows: string[] = []
+  const stacks: Array<{ id: string; column: boolean }> = []
+  const outside: Array<{ id: string; within: string }> = []
+  const texts: Array<{ id: string; value: unknown }> = []
   const unsized: string[] = []
   const suggested: string[] = []
   const gapped: Array<{ id: string; spacing: unknown }> = []
   for (const visit of walkTree(tree)) {
     const { id, node } = visit
     if (node.componentId !== GRID) continue
-    const children = (node.nodes ?? []).filter((child) => tree.nodes[child])
-    const parent = tree.nodes[visit.ancestors[visit.ancestors.length - 1] ?? '']
-    const isItem = parent?.componentId === GRID && parent.props?.['container'] === true
+    const children = childrenOf(id)
+    const [parentId, grandparentId] = [...visit.ancestors].reverse()
+    const parent = parentId === undefined ? undefined : tree.nodes[parentId]
+    const sized = node.props?.['size'] !== undefined
+    // An item whose container sits one element above it: a Box or a Stack holding only items.
+    const wrappedItem = sized && parentId !== undefined && wrapsItems(parentId) && isContainer(grandparentId)
     if (node.props?.['container'] !== true) {
-      const holdsSizedItems = children.some(
-        (child) => tree.nodes[child].componentId === GRID && tree.nodes[child].props?.['size'] !== undefined,
-      )
+      const holdsSized = children.some(isSized)
+      // An item of a container, or of a Grid refused here for not being the container it is written as.
+      const isItem =
+        parentId !== undefined &&
+        isGrid(parentId) &&
+        (isContainer(parentId) ||
+          childrenOf(parentId).some(isSized) ||
+          (refused.has(parentId) && unreadContainer(parentId) !== undefined))
       const setsContainerProps = GRID_CONTAINER_PROPS.some((name) => node.props?.[name] !== undefined)
-      if (holdsSizedItems || setsContainerProps || (!isItem && children.length >= 2)) notContainers.push(id)
+      if (!holdsSized && !setsContainerProps && (isItem || children.length < 2) && !wrappedItem) continue
+      refused.add(id)
+      const text = unreadContainer(id)
+      if (text !== undefined) texts.push({ id, value: text })
+      else if (holdsSized) rows.push(id)
+      else if (sized && parent && parent.componentId !== GRID) outside.push({ id, within: parent.componentId })
+      else if (writtenColumn(id)) stacks.push({ id, column: true })
+      else if (setsOutRow(id, children)) rows.push(id)
+      else stacks.push({ id, column: false })
       continue
     }
+    if (wrappedItem && parent) outside.push({ id, within: parent.componentId })
     const columns = gridColumns(node)
+    // The items a Box or a Stack holds for it are sized against it, and refused where they sit.
+    const items = children.flatMap((child) => (wrapsItems(child) ? childrenOf(child) : [child]))
     let steps = false
     const offending: string[] = []
-    for (const child of children) {
+    for (const child of items) {
       const item = tree.nodes[child]
       const span = item.componentId === GRID ? gridItemSpan(item.props?.['size'], columns) : null
       if (!span?.phoneFull) offending.push(child)
@@ -1111,24 +1215,56 @@ export function detectUnresponsiveGrids(
     }
     if (offending.length) {
       unsized.push(...offending)
-    } else if (children.length >= 2 && !steps) {
-      unsized.push(...children)
+    } else if (items.length >= 2 && !steps) {
+      unsized.push(...items)
     }
-    if (offending.length || (children.length >= 2 && !steps)) {
-      suggested.push(gridItemSizeFor(children.length, columns))
+    if (offending.length || (items.length >= 2 && !steps)) {
+      suggested.push(gridItemSizeFor(items.length, columns))
     }
     const sx = node.sx ?? {}
     const gap = GRID_GAP_SX_KEYS.find((key) => sx[key] !== undefined)
     if (gap) gapped.push({ id, spacing: sx[gap] })
   }
   const violations: AiDoctrineViolation[] = []
-  if (notContainers.length) {
+  if (rows.length) {
     violations.push({
       rule: 12,
       code: 'grid-not-container',
       message:
         'A Grid lays out columns only as a container: this one is not, so what it holds stacks at every width. Set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4".',
-      nodeIds: unique(notContainers),
+      nodeIds: unique(rows),
+    })
+  }
+  if (stacks.length) {
+    violations.push({
+      rule: 12,
+      code: 'grid-as-stack',
+      message: `${
+        stacks[0].column
+          ? 'A Grid lays out rows and has no "column" direction, so this one only stacks what it holds.'
+          : 'A Grid that is not a container lays nothing out, so this one only stacks what it holds.'
+      } Use a Stack (or a Box) for a group that only stacks, such as a heading over its text, or make it a container of sized items: set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4".`,
+      nodeIds: unique(stacks.map((entry) => entry.id)),
+    })
+  }
+  if (outside.length) {
+    const within = displayName(outside[0].within)
+    violations.push({
+      rule: 12,
+      code: 'grid-item-outside-container',
+      message: `A Grid item is sized only by the Grid container it sits directly in, and this one sits in a ${within}, so its size does nothing and it stacks at every width. Move it directly under its Grid container, or, where it has none, put it and the items beside it in one ("container": true).`,
+      nodeIds: unique(outside.map((entry) => entry.id)),
+    })
+  }
+  if (texts.length) {
+    const [first] = texts
+    violations.push({
+      rule: 12,
+      code: 'grid-container-text',
+      message: `This Grid's "container" is ${writtenValueText(first.value)}, not true, so it is not a container and what it holds stacks at every width. Write "container": true${
+        typeof first.value === 'string' ? ', with no quotes around true' : ''
+      }.`,
+      nodeIds: unique(texts.map((entry) => entry.id)),
     })
   }
   if (unsized.length) {
@@ -2122,6 +2258,12 @@ export function validateAiDoctrineTree(
   // The validator's repairs name the nodes as they were written; every finding names the minted ids.
   const minted = new Map(Object.entries(validated.sourceIds).map(([id, source]) => [source, id]))
   const written = isRecord(input) && isRecord(input['nodes']) ? input['nodes'] : {}
+  // What the model wrote of a node, by its minted id: the answer this check was
+  // given, or what the caller says was written of a tree it stored first.
+  const writtenOf = (id: string): unknown => {
+    const source = validated.sourceIds[id] ?? id
+    return context.writtenNode ? context.writtenNode(source) : written[source]
+  }
   const violations = [
     ...publish,
     ...detectRepeatedSubtrees(tree, otherPages, context),
@@ -2136,7 +2278,7 @@ export function validateAiDoctrineTree(
     ...detectLinksWithoutDestination(tree, outputKind),
     ...detectDocumentStructure(tree, outputKind),
     ...detectAdHocWidths(tree, outputKind),
-    ...detectUnresponsiveGrids(tree, outputKind),
+    ...detectUnresponsiveGrids(tree, outputKind, writtenOf),
     ...detectOffVoiceCopy(aiTreeCopy(tree, context), context.framing),
     ...detectCutLines(validated.repairs, written, (id) => minted.get(id) ?? id),
     ...detectDanglingWords(tree),

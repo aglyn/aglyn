@@ -174,6 +174,25 @@ describe('the floors', () => {
     expect([floor(pages), floor([...pages, score])]).toEqual([false, true])
   })
 
+  it('refuses each Grid control of the Free About case for its own shape, so each re-ask says what that shape needs (AGL-3055, AGL-3078)', () => {
+    const about = cases.find((evalCase) => evalCase.id === 'page-free-law-firm-about') as AiEvalCase
+    const [reference] = about.candidates
+    const grids = about.controls
+      .map((control) => scoreAiEvalCandidate(about, { ...reference, answer: control.answer }, audits).findings)
+      .filter((findings) => findings.some((finding) => finding.startsWith('grid-')))
+      .map((findings) => findings.filter((finding) => finding.startsWith('grid-')))
+    expect(grids).toEqual([
+      ['grid-not-container'],
+      ['grid-not-container'],
+      ['grid-item-size'],
+      ['grid-gap'],
+      ['grid-as-stack'],
+      ['grid-as-stack'],
+      ['grid-item-outside-container'],
+      ['grid-container-text'],
+    ])
+  })
+
   it('holds every plan a brief expects to its shape', () => {
     const plans = summarizeAiEvalPlans(
       cases.flatMap((evalCase) =>

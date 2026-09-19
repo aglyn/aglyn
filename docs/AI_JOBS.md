@@ -723,8 +723,10 @@ shape it should allow.
 `jobs/ai-job-generation.spec.ts` holds the review's bounds and that it keeps no copy,
 even a sentence written into a Grid's layout props or its children;
 `ai-job-page-step.spec.ts` stops the page's last pass naming the draft's own nodes, with
-their outline; and `ai-jobs.spec.ts` parks a job for the live About page's shape through
-the real section check and machine and reads the review back from the stored job.
+their outline, and a section refused twice for rule 12 with its node ids and the
+outline of the refused section; and `ai-jobs.spec.ts` parks a job for the live About
+page's shape through the real section check and machine and reads the review back from
+the stored job.
 
 ### The inventory, and "more on request"
 
@@ -1636,12 +1638,35 @@ the same way, in a Grid with a row direction and no container.
   page prefix.
 - **Held by `detectUnresponsiveGrids`** (`runtime/ai-doctrine-validators.ts`, rule 12) on
   every page, template, layout and component tree, with each re-ask naming the Grid or
-  its items by the model's own ids:
-  - `grid-not-container`: a Grid that is not a container but holds sized Grid items, sets
-    a prop only a container reads (`direction`, `wrap`, `spacing`, `rowSpacing`,
-    `columnSpacing`, `columns`), or holds two or more elements without being an item of a
-    container. The re-ask: set `"container": true`, and put each column in a Grid item
-    sized like `"xs:12 md:4"`.
+  its items by the model's own ids. A Grid that is not a container is refused when it
+  holds sized Grid items, sets a prop only a container reads (`direction`, `wrap`,
+  `spacing`, `rowSpacing`, `columnSpacing`, `columns`), holds two or more elements
+  without being an item of a container, or sits, sized, in a Box or a Stack inside its
+  container. Since AGL-3078 it is told what its own shape needs, under one of the first
+  four codes: one sentence for every shape left a live About page's section refused
+  twice, because a Grid used to stack a heading over its text was only ever told to
+  become a container of sized columns.
+  - `grid-not-container`: a row. The Grid holds sized Grid items, sets a prop only a row
+    reads (a `row` direction, `wrap`, `columns` or `columnSpacing`), or holds two or more
+    elements of one shape, such as three cards. The rule's intent holds: a row of cards is
+    a container of sized items. The re-ask: set `"container": true`, and put each column
+    in a Grid item sized like `"xs:12 md:4"`.
+  - `grid-as-stack`: any other such Grid, a group that only stacks, such as a heading
+    over its text, or one written with a `column` direction, which a Grid does not have and
+    the palette validator drops. The re-ask: use a Stack (or a Box) for a group that only
+    stacks, or make it a container of sized items. A column direction is named as such.
+  - `grid-item-outside-container`: a sized Grid item refused in an element that is no
+    Grid, where its size does nothing: one in a Box or a Stack inside its container, or
+    one elsewhere that holds two or more elements or sets a prop only a container reads.
+    The re-ask names that element and asks to move the item directly under its Grid
+    container, or, where it has none, to put it and the items beside it in one. A Box or a
+    Stack in a container that holds only sized items is refused through its items, whose
+    sizes are also held to that container, rather than as a child of the container that
+    is no item.
+  - `grid-container-text`: a Grid whose `container` was written as a value the palette
+    validator cannot read as a switch, such as the text `"True"` or `1`, so it is no
+    container. The re-ask names the value as the fault: write `"container": true`, with no
+    quotes around true. The text `"true"` is read as the switch and passes.
   - `grid-item-size`: a container's child that is not a Grid item whose size is full
     width on a phone (`xs` at the container's columns, or a bare full span), or a
     container of two or more whose items never step down to columns at a larger width.
@@ -1651,6 +1676,11 @@ the same way, in a Grid with a row direction and no container.
   - `grid-gap`: a container spaced by an `sx` `gap` or `columnGap`. MUI sizes a container's
     items by its `spacing`, so a gap on top of it pushes the last column onto a row of its
     own. The re-ask: remove the sx gap and set `"spacing"` to its value.
+- **Read from what was written (AGL-3078).** The palette validator drops a `container` it
+  cannot read and a column direction, so the check reads both from the answer as the model
+  wrote it: the tree check from the answer it was given, and the page section check from
+  the section as it was drawn, since its page check sees the section as the page stores it
+  (`writtenNode` on the check's context).
 - **The goldens are real rows.** `ai-page-briefs.ts` draws every row of cards as a Grid
   container (`"spacing": 3`) of items sized for the row (`span`): the ten briefs'
   component cards, the Free pages' inline cards written out and written once (the
@@ -1659,12 +1689,20 @@ the same way, in a Grid with a row direction and no container.
   whose direction turns from a column into a row at md. The Free About eval case holds its
   page written out and written once the same way, with a failing control for each
   refusal: the goldens' old shape and the live page's shape (`grid-not-container`), items
-  sized `"4"` at every width (`grid-item-size`) and a container spaced by an sx gap
-  (`grid-gap`).
+  sized `"4"` at every width (`grid-item-size`), a container spaced by an sx gap
+  (`grid-gap`), a heading and its lead grouped in a Grid and an intro stacked in a Grid
+  with a column direction (`grid-as-stack`), items wrapped in a Box inside their container
+  (`grid-item-outside-container`) and a container written as the text `"True"`
+  (`grid-container-text`). `ai-eval.spec.ts` holds each Grid control to its own finding.
 - **What it costs.** The page instructions grow by 72 characters (18 estimated tokens of
   the page-section ledger's prefix), and no credit figure the Free arithmetic quotes
   moves. A Grid item is an element, so a row of cards takes one more element a card:
-  written once, one.
+  written once, one. The shapes AGL-3078 tells apart cost nothing until a rule is broken:
+  they are re-ask sentences, and no system block, tool or cached prefix changes.
+  `ai-job-free-page.spec.ts` re-asks the Free page's practice areas for each of the four
+  shapes through the real page step: a section re-asked for any of them costs at most 21
+  credits, less than the 44 of the largest pass, which the room the arithmetic keeps for
+  a re-asked section must exceed.
 
 ### A finished section
 

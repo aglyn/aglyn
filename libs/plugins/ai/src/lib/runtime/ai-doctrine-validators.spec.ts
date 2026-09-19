@@ -1280,6 +1280,122 @@ describe('rule 12 — a Grid of columns is a container of items sized for every 
   })
 })
 
+describe('rule 12 — each Grid that is not a container is told what its own shape needs (AGL-3078)', () => {
+  const grid = (props: Record<string, unknown>, children: Nested[]): Nested => ({ componentId: 'muiGrid', props, children })
+  const cells = (size: string) =>
+    ['Estate planning', 'Real estate', 'Business formation'].map((title) => grid({ size }, [card(title, 'What it covers.')]))
+  const group = [text('h3', 'How we work', 'h3'), text('body1', 'Plain advice and fixed fees.')]
+  const found = (root: Nested) =>
+    detectUnresponsiveGrids(tree(page(section(root))), 'page').map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))
+  /** A page's rule 12 findings as the whole-tree check makes them, named by the ids the fixture wrote. */
+  const checked = (root: Nested) => {
+    const report = validateAiDoctrineTree(tree(page(section(text('h1', 'About', 'h1')), section(root))), 'page', { reusableComponents: false })
+    return report.violations
+      .filter((violation) => violation.rule === 12)
+      .map((violation) => ({ ...violation, nodeIds: violation.nodeIds?.map((id) => report.tree?.sourceIds[id]) }))
+  }
+
+  it('tells a Grid that only stacks a group to use a Stack or a Box, or to become a container of sized items, and passes either', () => {
+    expect(detectUnresponsiveGrids(tree(page(section(grid({ spacing: '2' }, group)))), 'page')).toEqual([
+      {
+        rule: 12,
+        code: 'grid-as-stack',
+        message:
+          'A Grid that is not a container lays nothing out, so this one only stacks what it holds. Use a Stack (or a Box) for a group that only stacks, such as a heading over its text, or make it a container of sized items: set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4".',
+        nodeIds: ['n2'],
+      },
+    ])
+    // A bare Grid holding the group, and an item of a container spacing its own group, are the same shape.
+    expect(found(grid({}, group))).toEqual([{ rule: 12, code: 'grid-as-stack', nodeIds: ['n2'] }])
+    expect(found(grid({ container: true }, [grid({ size: 'xs:12 md:6', spacing: '2' }, group)]))).toEqual([
+      { rule: 12, code: 'grid-as-stack', nodeIds: ['n3'] },
+    ])
+    // A row keeps the container re-ask: cards of one shape, or a row direction, are columns.
+    expect(found(grid({}, cells('4').map((cell) => (cell.children ?? [])[0])))).toEqual([
+      { rule: 12, code: 'grid-not-container', nodeIds: ['n2'] },
+    ])
+    expect(found(grid({ direction: 'row' }, group))).toEqual([{ rule: 12, code: 'grid-not-container', nodeIds: ['n2'] }])
+    // Mended either way, the group passes.
+    expect(found({ componentId: 'muiStack', props: { spacing: '2' }, children: group })).toEqual([])
+    expect(found(grid({ container: true, spacing: '3' }, [grid({ size: 'xs:12 md:6' }, group)]))).toEqual([])
+  })
+
+  it('reads a column direction the palette validator drops from what the model wrote, and tells it a Grid has none', () => {
+    const [stack, ...others] = checked(grid({ direction: 'column' }, group))
+    expect(others).toEqual([])
+    expect(stack).toEqual({
+      rule: 12,
+      code: 'grid-as-stack',
+      message:
+        'A Grid lays out rows and has no "column" direction, so this one only stacks what it holds. Use a Stack (or a Box) for a group that only stacks, such as a heading over its text, or make it a container of sized items: set "container": true on it, and put each column in a Grid item sized like "xs:12 md:4".',
+      nodeIds: ['n4'],
+    })
+    // A column of cards is a group that only stacks too; the Stack it asks for passes.
+    expect(checked(grid({ direction: 'column-reverse' }, cells('xs:12 md:4').map((cell) => (cell.children ?? [])[0])))).toEqual([
+      expect.objectContaining({ code: 'grid-as-stack', message: expect.stringContaining('no "column" direction') }),
+    ])
+    expect(checked({ componentId: 'muiStack', props: { direction: 'column' }, children: group })).toEqual([])
+  })
+
+  it('tells a sized item in a Box or a Stack inside its container to move directly under it, where the wrapper was refused as no item', () => {
+    const boxed = detectUnresponsiveGrids(
+      tree(page(section(grid({ container: true, spacing: '3' }, [{ componentId: 'muiBox', children: cells('xs:12 md:4') }])))),
+      'page',
+    )
+    expect(boxed).toEqual([
+      {
+        rule: 12,
+        code: 'grid-item-outside-container',
+        message:
+          'A Grid item is sized only by the Grid container it sits directly in, and this one sits in a Box, so its size does nothing and it stacks at every width. Move it directly under its Grid container, or, where it has none, put it and the items beside it in one ("container": true).',
+        nodeIds: ['n4', 'n9', 'n14'],
+      },
+    ])
+    // Items that hold a group, in a Stack, are the same shape.
+    const inStack = grid({ container: true }, [{ componentId: 'muiStack', children: [grid({ size: 'xs:12 md:6' }, group), grid({ size: 'xs:12 md:6' }, group)] }])
+    expect(found(inStack)).toEqual([{ rule: 12, code: 'grid-item-outside-container', nodeIds: ['n4', 'n7'] }])
+    // Their sizes are read against the container they belong in.
+    expect(found(grid({ container: true }, [{ componentId: 'muiBox', children: cells('4') }]))).toEqual([
+      { rule: 12, code: 'grid-item-outside-container', nodeIds: ['n4', 'n9', 'n14'] },
+      { rule: 12, code: 'grid-item-size', nodeIds: ['n4', 'n9', 'n14'] },
+    ])
+    // A Box holding anything but items is still no item of its container.
+    expect(found(grid({ container: true }, [{ componentId: 'muiBox', children: [text('h3', 'Areas', 'h3'), ...cells('xs:12 md:4')] }]))).toEqual([
+      { rule: 12, code: 'grid-item-size', nodeIds: ['n3'] },
+    ])
+    // Sized items that hold a group in a Box with no container at all are told the same, and nothing new is refused.
+    expect(found({ componentId: 'muiBox', children: [grid({ size: 'xs:12 md:6' }, group), grid({ size: 'xs:12 md:6' }, group)] })).toEqual([
+      { rule: 12, code: 'grid-item-outside-container', nodeIds: ['n3', 'n6'] },
+    ])
+    expect(found({ componentId: 'muiBox', children: cells('xs:12 md:4') })).toEqual([])
+    // Moved under the container, they pass.
+    expect(found(grid({ container: true, spacing: '3' }, cells('xs:12 md:4')))).toEqual([])
+  })
+
+  it('names a container written as a value the palette cannot read as the fault, and passes the switch it reads', () => {
+    expect(checked(grid({ container: 'True', spacing: '3' }, cells('xs:12 md:4')))).toEqual([
+      {
+        rule: 12,
+        code: 'grid-container-text',
+        message:
+          'This Grid\'s "container" is the text "True", not true, so it is not a container and what it holds stacks at every width. Write "container": true, with no quotes around true.',
+        nodeIds: ['n4'],
+      },
+    ])
+    expect(checked(grid({ container: 1, spacing: '3' }, cells('xs:12 md:4')))).toEqual([
+      expect.objectContaining({
+        code: 'grid-container-text',
+        message: 'This Grid\'s "container" is 1, not true, so it is not a container and what it holds stacks at every width. Write "container": true.',
+      }),
+    ])
+    // The text "true" is read as the switch, and a switch the model wrote passes.
+    expect(checked(grid({ container: 'true', spacing: '3' }, cells('xs:12 md:4')))).toEqual([])
+    expect(checked(grid({ container: true, spacing: '3' }, cells('xs:12 md:4')))).toEqual([])
+    // With nothing written to read, the same Grid is a row that is not a container.
+    expect(found(grid({ spacing: '3' }, cells('xs:12 md:4')))).toEqual([{ rule: 12, code: 'grid-not-container', nodeIds: ['n2'] }])
+  })
+})
+
 describe('rule 13 — drafts only', () => {
   it('refuses an answer that asks to publish, wherever it says so', () => {
     expect(detectPublishIntent({ rootId: 'n1', publish: true })).toMatchObject([

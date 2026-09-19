@@ -204,8 +204,12 @@ interface FreeReplay {
   page: Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }>
 }
 
-/** The Free job end to end: its plan, confirmed, then every pass of its page. */
-async function replay(): Promise<FreeReplay> {
+/**
+ * The Free job end to end: its plan, confirmed, then every pass of its page.
+ * A pass given a `refused` answer answers with it first, is re-asked, and
+ * answers the re-ask with the golden answer.
+ */
+async function replay(refused: Readonly<Record<number, unknown>> = {}): Promise<FreeReplay> {
   mockRunAiRequest.mockReset()
   const site = aiEvalMemoryFirestore({
     'orgs/org-1': FREE_ORG,
@@ -256,7 +260,8 @@ async function replay(): Promise<FreeReplay> {
     },
   } as unknown as AiJob
   const outcomes: FreeReplay['outcomes'] = []
-  for (const answer of FIXTURE.answers) {
+  for (const [pass, answer] of FIXTURE.answers.entries()) {
+    if (refused[pass]) mockRunAiRequest.mockResolvedValueOnce(toolAnswer('submit_section', { tree: JSON.stringify(refused[pass]) }))
     mockRunAiRequest.mockResolvedValueOnce(toolAnswer('submit_section', { tree: JSON.stringify(answer) }))
     outcomes.push(await pageStep({ job: confirmed, stepIndex: 1, now: NOW, firestore: site.firestore }))
   }
@@ -562,6 +567,48 @@ describe('one Free page fits the Free taste, end to end', () => {
       `past ${figure(most)} tokens the first section pass costs ${Math.max(...past.passes)} credits, and the Free page that builds its layout first leaves ${FREE_AI_TASTE_CREDITS_PER_MONTH - past.totalWithLayout} of the ${FREE_AI_TASTE_CREDITS_PER_MONTH}`,
     )
     expect(notes).toContain(`needs ${figure(roomierTokens)} real tokens, so no ceiling the wall holds fits it`)
+  })
+
+  it('re-asks a section refused for rule 12 within the room the wall keeps, whichever Grid shape its re-ask names (AGL-3078)', async () => {
+    const figures = arithmetic(await replay())
+    const most = Math.max(...figures.passes)
+    expect(FREE_AI_TASTE_CREDITS_PER_MONTH - figures.totalWithLayout).toBeGreaterThan(most)
+    type Nodes = Record<string, { componentId: string; props?: Record<string, unknown>; nodes?: string[] }>
+    // The practice areas written once: b5 the item, b6 their h2, b7 the row holding the item, b8 the column Stack holding both.
+    const shapes: Array<[string, (nodes: Nodes) => void]> = [
+      ['A Grid lays out columns only as a container', (nodes) => (nodes['b7'] = { ...nodes['b7'], props: { ariaLabel: 'Practice areas' } })],
+      ['A Grid lays out rows and has no "column" direction', (nodes) => (nodes['b8'] = { ...nodes['b8'], componentId: 'muiGrid' })],
+      [
+        'this one sits in a Box',
+        (nodes) => {
+          nodes['b7'] = { ...nodes['b7'], nodes: ['b-box'] }
+          nodes['b-box'] = { componentId: 'muiBox', nodes: ['b5'] }
+        },
+      ],
+      ['is the text "True", not true', (nodes) => (nodes['b7'] = { ...nodes['b7'], props: { container: 'True', spacing: 3 } })],
+    ]
+    const reasked: Array<[string, boolean, boolean]> = []
+    let dearest = 0
+    for (const [reason, edit] of shapes) {
+      const refused = structuredClone(FIXTURE.answers[1])
+      edit(refused.nodes as never)
+      const { passRequests, outcomes } = await replay({ 1: refused })
+      // The pass is re-asked once, and its golden answer builds the page.
+      const [reask, ...others] = passRequests.filter((request) => request.messages.length > 1)
+      expect([others, outcomes.slice(0, -1).every((outcome) => outcome.continue === true)]).toEqual([[], true])
+      // Priced as the arithmetic prices a later pass: its prefix read, its answer at the ceiling.
+      const { cached, uncached } = spans(reask)
+      const credits = creditsOf(
+        { inputTokens: realTokens(uncached), outputTokens: reask.maxTokens, cacheReadTokens: realTokens(cached), cacheWriteTokens: 0 },
+        reask.model,
+      )
+      reasked.push([reason, String(reask.messages.at(-1)?.content).includes(reason), credits <= most])
+      dearest = Math.max(dearest, credits)
+    }
+    // Each re-ask says what its own shape needs, and costs no more than the pass the room is kept for.
+    expect(reasked).toEqual(shapes.map(([reason]) => [reason, true, true]))
+    const notes = readFileSync(join(REPO_ROOT, 'docs/AI_JOBS.md'), 'utf8').replace(/\s+/g, ' ')
+    expect(notes).toContain(`a section re-asked for any of them costs at most ${dearest} credits, less than the ${most} of the largest pass`)
   })
 
   it('fits the plan, every section at its answer ceiling and the listing inside the wall, at the figure the developer notes quote', async () => {

@@ -720,7 +720,7 @@
     {
       "caseId": "page-free-law-firm-about",
       "of": "control 7",
-      "answer": "68703fdc11fbcf88",
+      "answer": "65546e220833cd1e",
       "devices": [
         {
           "device": "XS",
@@ -748,12 +748,26 @@
           "overflow": []
         }
       ],
-      "rows": []
+      "rows": [
+        {
+          "node": "areas-grid",
+          "component": "muiGrid",
+          "grid": true,
+          "content": 3,
+          "columns": {
+            "XS": 1,
+            "SM": 1,
+            "MD": 3,
+            "LG": 3,
+            "XL": 3
+          }
+        }
+      ]
     },
     {
       "caseId": "page-free-law-firm-about",
       "of": "control 8",
-      "answer": "7552d836d3866bf2",
+      "answer": "1c1901434d7e39f3",
       "devices": [
         {
           "device": "XS",
@@ -781,12 +795,73 @@
           "overflow": []
         }
       ],
-      "rows": []
+      "rows": [
+        {
+          "node": "areas-grid",
+          "component": "muiGrid",
+          "grid": true,
+          "content": 3,
+          "columns": {
+            "XS": 1,
+            "SM": 1,
+            "MD": 3,
+            "LG": 3,
+            "XL": 3
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "page-free-law-firm-about",
+      "of": "control 9",
+      "answer": "a552008d348be8d8",
+      "devices": [
+        {
+          "device": "XS",
+          "width": 390,
+          "overflow": []
+        },
+        {
+          "device": "SM",
+          "width": 600,
+          "overflow": []
+        },
+        {
+          "device": "MD",
+          "width": 900,
+          "overflow": []
+        },
+        {
+          "device": "LG",
+          "width": 1200,
+          "overflow": []
+        },
+        {
+          "device": "XL",
+          "width": 1536,
+          "overflow": []
+        }
+      ],
+      "rows": [
+        {
+          "node": "areas-grid",
+          "component": "muiGrid",
+          "grid": true,
+          "content": 1,
+          "columns": {
+            "XS": 1,
+            "SM": 1,
+            "MD": 1,
+            "LG": 1,
+            "XL": 1
+          }
+        }
+      ]
     },
     {
       "caseId": "page-free-law-firm-about",
       "of": "control 10",
-      "answer": "22307c38dac8ae7c",
+      "answer": "cd08483f5432c171",
       "devices": [
         {
           "device": "XS",
@@ -819,7 +894,7 @@
     {
       "caseId": "page-free-law-firm-about",
       "of": "control 11",
-      "answer": "e926ef0efad49a02",
+      "answer": "68703fdc11fbcf88",
       "devices": [
         {
           "device": "XS",
@@ -852,6 +927,105 @@
     {
       "caseId": "page-free-law-firm-about",
       "of": "control 12",
+      "answer": "7552d836d3866bf2",
+      "devices": [
+        {
+          "device": "XS",
+          "width": 390,
+          "overflow": []
+        },
+        {
+          "device": "SM",
+          "width": 600,
+          "overflow": []
+        },
+        {
+          "device": "MD",
+          "width": 900,
+          "overflow": []
+        },
+        {
+          "device": "LG",
+          "width": 1200,
+          "overflow": []
+        },
+        {
+          "device": "XL",
+          "width": 1536,
+          "overflow": []
+        }
+      ],
+      "rows": []
+    },
+    {
+      "caseId": "page-free-law-firm-about",
+      "of": "control 14",
+      "answer": "22307c38dac8ae7c",
+      "devices": [
+        {
+          "device": "XS",
+          "width": 390,
+          "overflow": []
+        },
+        {
+          "device": "SM",
+          "width": 600,
+          "overflow": []
+        },
+        {
+          "device": "MD",
+          "width": 900,
+          "overflow": []
+        },
+        {
+          "device": "LG",
+          "width": 1200,
+          "overflow": []
+        },
+        {
+          "device": "XL",
+          "width": 1536,
+          "overflow": []
+        }
+      ],
+      "rows": []
+    },
+    {
+      "caseId": "page-free-law-firm-about",
+      "of": "control 15",
+      "answer": "e926ef0efad49a02",
+      "devices": [
+        {
+          "device": "XS",
+          "width": 390,
+          "overflow": []
+        },
+        {
+          "device": "SM",
+          "width": 600,
+          "overflow": []
+        },
+        {
+          "device": "MD",
+          "width": 900,
+          "overflow": []
+        },
+        {
+          "device": "LG",
+          "width": 1200,
+          "overflow": []
+        },
+        {
+          "device": "XL",
+          "width": 1536,
+          "overflow": []
+        }
+      ],
+      "rows": []
+    },
+    {
+      "caseId": "page-free-law-firm-about",
+      "of": "control 16",
       "answer": "e60aa9818574ff18",
       "devices": [
         {
@@ -884,7 +1058,7 @@
     },
     {
       "caseId": "page-free-law-firm-about",
-      "of": "control 13",
+      "of": "control 17",
       "answer": "fbb98dd838e03d58",
       "devices": [
         {

@@ -197,6 +197,50 @@ describe('a section that breaks the page’s rules', () => {
     )
   })
 
+  it('is refused for each Grid shape by what the model wrote of the section, which the page it is checked in no longer holds (AGL-3078)', () => {
+    // This brief's row of cards: b8 is the container of items b2, b4 and b6, in the column Stack b9 under its h2 b7.
+    const check = (edit: (nodes: Record<string, { componentId: string; props?: Record<string, unknown>; sx?: Record<string, unknown>; nodes?: string[] }>) => void) => {
+      const answer = structuredClone(fixture.answers[1])
+      edit(answer.nodes as never)
+      const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, uses: screen.sections[1].uses, inventory: fixture.inventory })({
+        tree: JSON.stringify(answer),
+      })
+      return result.violations.map(({ rule, code, message, nodeIds }) => ({ rule, code, message, nodeIds }))
+    }
+    // A container written as text: the page stores the row with no container at all.
+    expect(check((nodes) => (nodes['b8'].props = { container: 'True', spacing: '3' }))).toEqual([
+      {
+        rule: 12,
+        code: 'grid-container-text',
+        message: expect.stringContaining('This Grid\'s "container" is the text "True", not true'),
+        nodeIds: ['b8'],
+      },
+    ])
+    // The heading and the row stacked in a Grid with a column direction: the page stores no direction.
+    expect(check((nodes) => (nodes['b9'] = { componentId: 'muiGrid', props: { direction: 'column' }, nodes: ['b7', 'b8'] }))).toEqual([
+      {
+        rule: 12,
+        code: 'grid-as-stack',
+        message: expect.stringContaining('A Grid lays out rows and has no "column" direction'),
+        nodeIds: ['b9'],
+      },
+    ])
+    // The items in a Box inside their container.
+    expect(
+      check((nodes) => {
+        nodes['bbox'] = { componentId: 'muiBox', nodes: ['b2', 'b4', 'b6'] }
+        nodes['b8'].nodes = ['bbox']
+      }),
+    ).toEqual([
+      {
+        rule: 12,
+        code: 'grid-item-outside-container',
+        message: expect.stringContaining('this one sits in a Box'),
+        nodeIds: ['b2', 'b4', 'b6'],
+      },
+    ])
+  })
+
   it('is refused for a subhead cut short, an empty list item and a button that goes nowhere, each named by the model’s own id with what to write instead (AGL-3072)', () => {
     // The live Free About hero's three defects, written into this brief's hero.
     const answer = structuredClone(fixture.answers[0])

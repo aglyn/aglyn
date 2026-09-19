@@ -379,8 +379,18 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
     const section: AiPageSection = { rootId: sectionId, nodes: sectionNodes as unknown as NodesMap, load: null }
 
     const page = aiPageWithSection(input.page, section, input.sectionIds)
-    const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', input.context)
     const own = new Set(Object.keys(sectionNodes))
+    const drawnNodes = isRecord(drawn.tree) && isRecord(drawn.tree['nodes']) ? drawn.tree['nodes'] : {}
+    // The page check reads the section as the page stores it, where the palette
+    // validator has already dropped what it could not read, such as a
+    // `container` written as text; what the model wrote of each of the
+    // section's nodes is read from the section as it was drawn (AGL-3078).
+    const drawnIdOf = (stored: string): string =>
+      validated.sourceIds[stored === sectionId ? minted : stored] ?? stored
+    const report = validateAiDoctrineTree({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page }, 'page', {
+      ...input.context,
+      writtenNode: (id) => (own.has(id) ? drawnNodes[drawnIdOf(id)] : undefined),
+    })
     // The page check mints its ids afresh: its map leads back to the page's
     // ids, and the section's own lead back to the model's.
     const pageIds = report.tree?.sourceIds ?? {}
@@ -390,9 +400,8 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
     }
     // The page check reads the section as it is stored, where a line the
     // palette validator cut is already cut, so the cut is read from the
-    // section's own validation, first (AGL-3076).
-    const drawnNodes = isRecord(drawn.tree) && isRecord(drawn.tree['nodes']) ? drawn.tree['nodes'] : {}
-    // Copies of one item name one node the model wrote, once.
+    // section's own validation, first (AGL-3076). Copies of one item name one
+    // node the model wrote, once.
     const violations: AiDoctrineViolation[] = [
       ...detectCutLines(validated.repairs, drawnNodes, written),
       ...report.violations.map((violation) =>
