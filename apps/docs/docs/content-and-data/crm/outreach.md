@@ -101,6 +101,7 @@ below that.
 | **Active** | The mailbox can send. |
 | **Paused** | Somebody paused it. Nothing sends from it until it is resumed. |
 | **Reconnect required** | Google stopped accepting the connection — the password changed, access was removed from the Google account, or an administrator revoked it. Nothing sends until you connect the mailbox again. |
+| **Disconnected** | The mailbox was disconnected. Nothing sends from it until it is connected again. |
 
 **Health** shows the last seven days: messages sent, bounces and replies. A
 mailbox that has never sent shows zeros and **No sends yet**.
@@ -120,6 +121,12 @@ mailbox that has never sent shows zeros and **No sends yet**.
 Organization owners and admins can change the settings of, pause and
 disconnect any member's mailbox — a departing rep's mailbox has to be
 stoppable by somebody. Other members manage only their own.
+
+When a member deletes their account, Outreach deletes the mailboxes they
+connected and the access stored for them, and asks Google to revoke it; when
+an organization is deleted, it asks Google to revoke the access of every
+mailbox in it. Access another connected mailbox still uses is left in place
+for that mailbox, as with a disconnect.
 
 ## Related
 
