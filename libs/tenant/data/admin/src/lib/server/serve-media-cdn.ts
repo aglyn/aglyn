@@ -38,11 +38,13 @@ import {
   mediaCdnScopeRefusal,
   parseMediaCdnScope,
 } from '@aglyn/aglyn/app-utils/media-cdn-scope'
+import { mediaDeliveryProvider } from '@aglyn/aglyn/plugin-manager/media-delivery-provider'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { analyticsDayExpiresAt } from './analytics-retention'
 import { firebaseAdmin } from './firebase-admin'
 import { getPlatformLockdown } from './lockdown'
 import { mediaCdnRateLimitRefusal } from './media-cdn-rate-limit'
+import { mediaDeliveryOrgIdFor, mediaDeliveryRedirect } from './media-delivery'
 import { getMediaQuarantine } from './media-quarantine'
 import { verifyMediaAccess } from './media-signing'
 import { mediaStoragePathInScope } from './media-storage-path'
@@ -1295,6 +1297,81 @@ export async function serveMediaCdn(
         : rendition
           ? rendition.contentType
           : snapshot.get('contentType')
+    /*
+     * VIDEO FROM THE DELIVERY PROVIDER (AGL-2824).
+     *
+     * Every gate above has run: the scope, lockdown and quarantine, the
+     * private signature and the stale-pin redirect. With the representation
+     * chosen, a video whose current copy sits at the configured delivery
+     * provider is answered with a `302` to a short-lived signed URL there, and
+     * the provider serves the bytes and their ranges. `mediaDeliveryRedirect`
+     * says null for everything else — an image, a poster, no copy of this
+     * representation made from the current bytes, the release flag off for
+     * the owning org — and the request carries on below exactly as before.
+     *
+     * With no provider configured to deliver, nothing here runs: the check is
+     * synchronous and reads nothing.
+     *
+     * A download stays here, because its disposition is this route's to set.
+     * The redirect is decided before the ETag and the 304: it names a URL
+     * that expires, so it carries no validator and `private, no-store`, and a
+     * private asset's URL expires no later than the signature that reached
+     * it. It is not counted against the caller's delivery budget, which
+     * guards the bytes this route sends; a redirect sends none.
+     */
+    const deliveryProvider =
+      usePoster || useVariant || download ? null : mediaDeliveryProvider('deliver')
+    if (deliveryProvider) {
+      const delivery = await mediaDeliveryRedirect({
+        provider: deliveryProvider,
+        asset: { collection: isOrg ? 'orgs' : 'hosts', scopeId, mediaId },
+        document: snapshot,
+        rendition,
+        servedType: docServedType,
+        claims: {
+          scope: scopeSegment,
+          mediaId,
+          hostId: isOrg ? (scope.contextHostId ?? null) : scopeId,
+        },
+        orgId: () => mediaDeliveryOrgIdFor(isOrg ? 'orgs' : 'hosts', scopeId),
+        ...(isPrivate ? { notAfterMs: Number(req.query['exp']) } : {}),
+      }).catch((error) => {
+        // The provider is an alternative to the path below, never a reason
+        // for this request to fail.
+        console.error('[media-cdn] delivery redirect failed', scopeSegment, mediaId, error)
+        return null
+      })
+      if (delivery) {
+        res.setHeader('Cache-Control', 'private, no-store')
+        res.setHeader('Location', delivery.location)
+        // A play starts here, so it is counted here. `redirects` says how many
+        // of the serves left through the provider; the bytes are the
+        // provider's to measure, because none leave from this route.
+        if (req.method === 'GET') {
+          const day = new Date().toISOString().slice(0, 10)
+          void firestore
+            .collection(isOrg ? 'orgs' : 'hosts')
+            .doc(scopeId)
+            .collection('analytics')
+            .doc(day)
+            .set(
+              {
+                expiresAt: analyticsDayExpiresAt(day),
+                media: {
+                  [mediaId]: {
+                    serves: firebaseAdmin.firestore.FieldValue.increment(1),
+                    redirects: firebaseAdmin.firestore.FieldValue.increment(1),
+                  },
+                },
+              },
+              { merge: true },
+            )
+            .catch(() => undefined)
+        }
+        res.status(302).end()
+        return
+      }
+    }
     if (!hashed) {
       setCacheControl(stableCacheControlFor(docServedType))
       if (etag) res.setHeader('ETag', etag)

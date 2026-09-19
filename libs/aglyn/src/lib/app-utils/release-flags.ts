@@ -49,6 +49,7 @@ export type ReleaseFlagKey =
   | 'release_edit_bar'
   | 'release_assist'
   | 'release_video_uploads'
+  | 'release_video_delivery'
   | 'release_ai_generative'
 
 export interface ReleaseFlagDefinition {
@@ -276,6 +277,23 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'Off: refused with 403 video_uploads_paused, as DAM video delivery is ' +
       'not yet metered or bounded per org (AGL-2810, AGL-2812). Images, ' +
       'documents and stored videos are unaffected.',
+    defaultEnabled: false,
+  },
+  // Delivery, not ingress: this flag decides whether a video already in the
+  // library is COPIED to the configured delivery provider and served from it
+  // through a short-lived signed redirect (AGL-2824). Per org, with no staff
+  // preview on the server — a copy is customer data at the provider, so a
+  // grant goes to the org through its override. Off, or with no provider
+  // configured, every video serves from this platform exactly as before.
+  // `media-delivery.ts` in `tenant-data-admin` holds the gate.
+  {
+    key: 'release_video_delivery',
+    label: 'Video delivery',
+    description:
+      'Serves library video from a configured delivery provider through ' +
+      'short-lived signed redirects, and copies each video to it (AGL-2824). ' +
+      'OFF by default: video serves from this platform as before. Also ' +
+      "needs the provider's settings.",
     defaultEnabled: false,
   },
   // The generative doors share one runtime with Assist (AGL-2903) but not

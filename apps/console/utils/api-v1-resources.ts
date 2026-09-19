@@ -139,6 +139,7 @@ import {
 } from '@aglyn/aglyn/app-utils/sanitize-svg'
 import { resolveOrgMediaBand } from './server/media-storage-band'
 import { videoUploadsOpenForOrg } from './server/video-uploads'
+import { scheduleMediaDeliveryCopies } from './server/media-delivery-copies'
 import { folderStoragePath, mediaCdnPathUpdate } from './server/media-scope'
 import {
   claimHostForOrg,
@@ -2284,6 +2285,18 @@ async function createMedia(
         },
         { merge: true },
       )
+    // A video goes to the delivery provider after the response, like one
+    // uploaded in the console (AGL-2824). Nothing runs without a provider.
+    scheduleMediaDeliveryCopies({
+      scope: {
+        collection: scope.collection,
+        scopeId: scopeRef.id,
+        orgId: ctx.orgId,
+        scopeRef,
+      },
+      mediaId,
+      contentType,
+    })
 
     const view = mediaView(await scopeRef.collection('media').doc(mediaId).get(), origin)
     // Stored as 200 so a replay is distinguishable from the fresh 201.

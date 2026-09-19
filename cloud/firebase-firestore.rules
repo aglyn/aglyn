@@ -200,6 +200,13 @@ service cloud.firestore {
      * lock, on the same door, for the field that most resembles
      * `storagePath`.
      *
+     * `deliveryCopies` (AGL-2824) records the copies a delivery provider
+     * holds, and its keys are what a delivery URL is minted for. Every
+     * reader checks each key against the one derived from the document's
+     * own scope, id and hashes, so a written record can only name copies of
+     * the asset it sits on; freezing it here keeps a client from writing one
+     * at all.
+     *
      * The rest — `cdnPath`, `contentHash`, `createdAt`, `sizeBytes`,
      * `svgSanitized`, `uploadedBy`, `url`, `variants`, `variantsError` — are
      * lower stakes individually, and are frozen for the AGL-1367 reason:
@@ -226,14 +233,16 @@ service cloud.firestore {
         'storagePath', 'private', 'cdnPath', 'url', 'contentType',
         'contentHash', 'contentSha256', 'sizeBytes', 'variants',
         'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
-        'video', 'poster', 'posterError', 'videoRenditions']);
+        'video', 'poster', 'posterError', 'videoRenditions',
+        'deliveryCopies']);
     }
     function mediaObjectFieldsUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
         'storagePath', 'private', 'cdnPath', 'url', 'contentType',
         'contentHash', 'contentSha256', 'sizeBytes', 'variants',
         'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
-        'video', 'poster', 'posterError', 'videoRenditions']);
+        'video', 'poster', 'posterError', 'videoRenditions',
+        'deliveryCopies']);
     }
 
     /**

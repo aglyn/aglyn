@@ -502,20 +502,73 @@ function tenantOwnerWidenedDirective(
 }
 
 /**
+ * The origin library video is delivered from when a media delivery provider
+ * is configured (AGL-2824), or undefined when none is.
+ *
+ * With `release_video_delivery` on for a workspace, the media route and the
+ * gated-video stream answer a video request with a redirect to a short-lived
+ * signed URL on this origin. The browser checks `media-src` against every hop
+ * of a redirect, so a policy without it refuses the redirect and the video
+ * goes blank on every published page of that workspace.
+ *
+ * `MEDIA_VIDEO_DELIVERY_HOST` is read by the rules the provider mints URLs
+ * with, so the policy names exactly the origin a delivery URL can carry: a
+ * bare hostname means HTTPS; a full origin must be HTTPS, or HTTP on the
+ * loopback host for local testing; a value with a path, a query or
+ * credentials names no origin at all. The provider is a plugin and this file
+ * is CommonJS the middleware requires, so the rules are written twice, and a
+ * spec beside the provider holds both copies to the same answers.
+ *
+ * The flag is not consulted. The host serves only an object named by a token
+ * the platform signed, so admitting it on a site whose workspace has the flag
+ * off lets that site load nothing it could not load before.
+ */
+function mediaDeliveryOrigin(raw = process.env.MEDIA_VIDEO_DELIVERY_HOST) {
+  const value = String(raw || '').trim()
+  if (!value) return undefined
+  if (value.includes('://')) {
+    let url
+    try {
+      url = new URL(value)
+    } catch {
+      return undefined
+    }
+    if (url.username || url.password || url.search || url.hash) return undefined
+    if (url.pathname !== '/' && url.pathname !== '') return undefined
+    const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
+    if (url.protocol === 'https:' || (url.protocol === 'http:' && loopback)) {
+      return url.origin
+    }
+    return undefined
+  }
+  if (!/^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::\d{1,5})?$/i.test(value)) {
+    return undefined
+  }
+  return `https://${value.toLowerCase()}`
+}
+
+/**
  * Video and audio. `data:`/`blob:` because an uploaded clip may be either,
  * and `TENANT_IMAGE_ORIGINS` because an upload is an upload — a free-tier org
  * without the paid `mediaCdn` entitlement stores an absolute
  * `firebasestorage.googleapis.com` URL for a video exactly as it does for an
  * image. Pinned for the same reason and not owner-removable: dropping it would
  * blank a free-tier site's own uploads.
+ *
+ * The media delivery origin joins them when one is configured, for the same
+ * reason again: it is where the platform itself sends a library video, so no
+ * owner could know to approve it. See `mediaDeliveryOrigin`.
  */
 function tenantMediaSrcDirective(isProduction, approvedMediaHosts, siteOrigins) {
+  const delivery = mediaDeliveryOrigin()
   return tenantOwnerWidenedDirective(
     'media-src',
     isProduction,
     approvedMediaHosts,
     siteOrigins,
-    ['data:', 'blob:'].concat(TENANT_IMAGE_ORIGINS),
+    ['data:', 'blob:']
+      .concat(TENANT_IMAGE_ORIGINS)
+      .concat(delivery ? [delivery] : []),
   )
 }
 
@@ -1649,6 +1702,7 @@ module.exports = {
   scriptSrcReportOnlyDirective,
   tenantImgSrcDirective,
   TENANT_FONT_ORIGINS,
+  mediaDeliveryOrigin,
   tenantMediaSrcDirective,
   tenantFontSrcDirective,
   tenantFormActionDirective,
