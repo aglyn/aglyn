@@ -21,15 +21,8 @@ import {
   resolvePluginApiMatch,
   resolvePluginApiRequestSubject,
 } from '@aglyn/aglyn/server'
-import {
-  providerGrantRevokerFor,
-  unregisterProviderGrantRevoker,
-} from '@aglyn/tenant-data-admin/server/provider-grant-revokers'
 import { createSecretBoxKey, parseSecretBoxKeyring } from '@aglyn/shared-util-tools/secret-box'
 import { OUTREACH_API_ROUTES } from '../constants/api-routes'
-import { OUTREACH_COLLECTIONS } from '../model/outreach.types'
-import { GOOGLE_OAUTH_ENDPOINTS } from '../transport/google-oauth'
-import { sealMailboxRefreshToken } from './mailbox-credentials'
 import type { OutreachMailboxRouteDeps } from './mailbox-routes'
 import { mintOutreachOAuthState } from './oauth-state'
 import { registerOutreachMailboxRoutes } from './register-mailbox-routes'
@@ -37,43 +30,21 @@ import { registerOutreachMailboxRoutes } from './register-mailbox-routes'
 /**
  * The mailbox routes are REGISTERED as the console dispatcher needs them
  * (AGL-2978): every path, each with the release subject that lets the gate
- * ask about the right organization, and the grant revoker an org erasure
- * runs before it deletes.
+ * ask about the right organization.
  */
 
 const KEYRING = parseSecretBoxKeyring(Buffer.from(createSecretBoxKey(Buffer.alloc(32, 5)).material).toString('base64'))
 
-let credentials: Array<{ id: string; data: Record<string, unknown> }>
-let revoked: string[]
-
 function deps(): OutreachMailboxRouteDeps {
-  const firestore = {
-    collection: () => ({
-      where: (_field: string, _op: string, value: unknown) => ({
-        limit: () => ({
-          get: async () => {
-            const docs = credentials
-              .filter((entry) => entry.data['providerAccountId'] === value)
-              .map((entry) => ({ id: entry.id, get: (field: string) => entry.data[field] }))
-            return { docs, size: docs.length }
-          },
-        }),
-      }),
-    }),
-  } as unknown as FirebaseFirestore.Firestore
   return {
-    firestore: () => firestore,
+    firestore: () => ({}) as FirebaseFirestore.Firestore,
     gate: {} as OutreachMailboxRouteDeps['gate'],
     readConfig: () => ({ configured: true, config: { clientId: 'cid', clientSecret: 'secret', keyring: KEYRING } }),
     stateSigningConfigured: () => true,
     redirectUri: () => null,
     now: () => 0,
     transport: {
-      fetch: (async (url: string, init?: RequestInit) => {
-        if (url === GOOGLE_OAUTH_ENDPOINTS.revoke) {
-          revoked.push(new URLSearchParams(String(init?.body)).get('token') ?? '')
-          return new Response('{}', { status: 200 })
-        }
+      fetch: (async (url: string) => {
         throw new Error(`unscripted ${url}`)
       }) as typeof fetch,
       sleep: async () => undefined,
@@ -84,28 +55,8 @@ function deps(): OutreachMailboxRouteDeps {
   }
 }
 
-const stored = (mailboxId: string, orgId: string, account: string, token: string) => ({
-  id: mailboxId,
-  data: {
-    id: mailboxId,
-    orgId,
-    mailboxId,
-    provider: 'google',
-    providerAccountId: account,
-    connectedByUid: 'uid-rep',
-    email: 'avery@rep.example.com',
-    scopes: [],
-    ...sealMailboxRefreshToken(token, mailboxId, KEYRING),
-    createdAtMs: 1,
-    updatedAtMs: 1,
-  },
-})
-
 beforeEach(() => {
   process.env['TOKEN_SIGNING_SECRET'] = 'register-mailbox-routes-spec-secret'
-  credentials = []
-  revoked = []
-  unregisterProviderGrantRevoker(OUTREACH_COLLECTIONS.mailboxCredentials)
   registerOutreachMailboxRoutes(deps())
 })
 
@@ -148,33 +99,5 @@ describe('registerOutreachMailboxRoutes (AGL-2978)', () => {
     await expect(
       resolvePluginApiRequestSubject(OUTREACH_API_ROUTES.mailboxesOAuthCallback, callback(`${state}tampered`)),
     ).resolves.toBeNull()
-  })
-})
-
-describe('the grant revoker an org erasure runs (AGL-2978)', () => {
-  it('revokes an erased org’s grant at Google with its opened refresh token', async () => {
-    const revoke = providerGrantRevokerFor(OUTREACH_COLLECTIONS.mailboxCredentials)
-    expect(revoke).toBeDefined()
-    const credential = stored('gm_a', 'org-erased', 'google-account-1', 'refresh-a')
-    credentials = [credential]
-    await expect(revoke?.(credential, { erasingOrgId: 'org-erased' })).resolves.toBe('revoked')
-    expect(revoked).toEqual(['refresh-a'])
-  })
-
-  it('keeps a grant another organization still uses, and ignores the erased org’s own copies', async () => {
-    const revoke = providerGrantRevokerFor(OUTREACH_COLLECTIONS.mailboxCredentials)
-    const erased = stored('gm_a', 'org-erased', 'shared-account', 'refresh-a')
-    const sameOrgTwin = stored('gm_b', 'org-erased', 'shared-account', 'refresh-b')
-    const elsewhere = stored('gm_c', 'org-still-here', 'shared-account', 'refresh-c')
-    credentials = [erased, sameOrgTwin]
-    await expect(revoke?.(erased, { erasingOrgId: 'org-erased' })).resolves.toBe('revoked')
-    credentials = [erased, sameOrgTwin, elsewhere]
-    await expect(revoke?.(erased, { erasingOrgId: 'org-erased' })).resolves.toBe('kept')
-    expect(revoked).toEqual(['refresh-a'])
-  })
-
-  it('answers failed for a document that is not a credential', async () => {
-    const revoke = providerGrantRevokerFor(OUTREACH_COLLECTIONS.mailboxCredentials)
-    await expect(revoke?.({ id: 'x', data: { orgId: 'org-erased' } }, { erasingOrgId: 'org-erased' })).resolves.toBe('failed')
   })
 })

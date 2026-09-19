@@ -1,4 +1,6 @@
 /**
+ * @jest-environment node
+ *
  * @license
  * Copyright 2026 Aglyn LLC
  *
@@ -43,14 +45,18 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
  * 3. The plugin's client barrel never reaches it, nor the modules that open
  *    or seal a token — a console page importing `@aglyn/plugins-outreach`
  *    gets none of them.
- * 4. The plugin's server half is imported, outside the plugin, only by the
- *    console's generated server manifest; no tenant file names the plugin.
+ * 4. The plugin's server half and its console-only declarations are
+ *    imported, outside the plugin, only by the console's generated server
+ *    manifests; no tenant file names the plugin.
+ *
+ * It lives with the plugin because every fact it holds is the plugin's; it
+ * reads the whole tree, apps included, from here.
  *
  * Moving the read into a shared library, or naming the plugin from a tenant
  * manifest, fails here naming the file.
  */
 
-const REPO_ROOT = join(__dirname, '..', '..', '..')
+const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..')
 const SEARCH_ROOTS = ['apps', 'libs', 'tools', 'cloud'].map((dir) => join(REPO_ROOT, dir))
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.next', 'coverage', '.nx', 'tmp'])
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']
@@ -67,6 +73,7 @@ const PLUGIN_ROOT = join('libs', 'plugins', 'outreach') + sep
 const READER = join('libs', 'plugins', 'outreach', 'src', 'lib', 'mailboxes', 'outreach-config.ts')
 const CLIENT_BARREL = join('libs', 'plugins', 'outreach', 'src', 'index.ts')
 const SERVER_MANIFEST = join('apps', 'console', 'constants', 'plugins.server.generated.ts')
+const DECLARATIONS_MANIFEST = join('apps', 'console', 'constants', 'plugins.declarations.server.generated.ts')
 
 /** Modules that must never be in the client barrel's reach. */
 const SERVER_ONLY_MODULES = [
@@ -74,6 +81,9 @@ const SERVER_ONLY_MODULES = [
   join('libs', 'plugins', 'outreach', 'src', 'lib', 'mailboxes', 'mailbox-credentials.ts'),
   join('libs', 'plugins', 'outreach', 'src', 'lib', 'mailboxes', 'mailbox-transport.ts'),
   join('libs', 'plugins', 'outreach', 'src', 'lib', 'mailboxes', 'mailbox-routes.ts'),
+  join('libs', 'plugins', 'outreach', 'src', 'lib', 'mailboxes', 'mailbox-revoke.ts'),
+  join('libs', 'plugins', 'outreach', 'src', 'lib', 'mailboxes', 'mailbox-erasure.ts'),
+  join('libs', 'plugins', 'outreach', 'src', 'lib', 'declarations.console-server.ts'),
 ]
 
 function sourceFiles(dir: string): string[] {
@@ -119,7 +129,7 @@ function relativeImports(file: { path: string; text: string }): string[] {
 describe('the sweep can actually see the tree', () => {
   it('reads thousands of source files, including the reader, the barrel and the manifest', () => {
     expect(FILES.length).toBeGreaterThan(1000)
-    for (const path of [READER, CLIENT_BARREL, SERVER_MANIFEST]) {
+    for (const path of [READER, CLIENT_BARREL, SERVER_MANIFEST, DECLARATIONS_MANIFEST]) {
       expect([path, FILES.some((file) => file.path === path)]).toEqual([path, true])
     }
   })
@@ -169,12 +179,14 @@ describe('the plugin’s client barrel', () => {
   })
 })
 
-describe('the plugin’s server half', () => {
-  it('is imported outside the plugin only by the console server manifest', () => {
+describe('the plugin’s server half and console-only declarations', () => {
+  it('are imported outside the plugin only by the console’s server manifests', () => {
     const importers = SHIPPED.filter(
-      (file) => !file.path.startsWith(PLUGIN_ROOT) && /@aglyn\/plugins-outreach\/(server|mailboxes|transport)/.test(file.text),
+      (file) =>
+        !file.path.startsWith(PLUGIN_ROOT) &&
+        /@aglyn\/plugins-outreach\/(server|declarations\.console-server|mailboxes|transport)/.test(file.text),
     ).map((file) => file.path)
-    expect(importers).toEqual([SERVER_MANIFEST])
+    expect(importers.sort()).toEqual([DECLARATIONS_MANIFEST, SERVER_MANIFEST].sort())
   })
 
   it('is named by no file in the tenant app', () => {

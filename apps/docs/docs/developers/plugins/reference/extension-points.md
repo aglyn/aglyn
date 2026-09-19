@@ -22,6 +22,7 @@ The surface matrix: what a plugin can extend, from which entry
 | Billing webhook handlers | `/server` | Platform Stripe events | Per event; errors → redelivery |
 | Platform events (`registerPluginEventHandler`) | `/server` (`serverDeclarations`) | A core route's write — the AI add-on bought or dropped, a permission moved | After the write, in the route; errors logged, never the route's |
 | Account erasure (`registerPluginUserEraser`) | `/server` (`serverDeclarations`) | The data a plugin keeps about a person where core's deletes do not reach | During the erasure, once the memberships are removed; a failure recorded as `null`, never the erasure's |
+| Workspace erasure (`registerPluginOrgEraser`) | `/server` (`serverDeclarations` or `consoleServerDeclarations`) | What a plugin holds for an organization that the erasure's own deletes cannot finish — a grant to revoke at its provider | Before the erasure deletes anything; a failure recorded as `null`, never the erasure's; a plan counts and touches no provider |
 | Declarations (`declarations` / `serverDeclarations` / `consoleServerDeclarations` entries) | both (`consoleServerDeclarations`: the console's server only) | Every registry a core surface reads before the plugin has loaded | Once per process, at boot and with the console's plugin loader |
 | Config schemas (`registerPluginConfigSchema`) | both | Settings UI + typed reads | Declared at module scope |
 | Custom field types (`registerCustomFieldType`) | both | Dataset schema/record editors + validation | Declared at module scope |

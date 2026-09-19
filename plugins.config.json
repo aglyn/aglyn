@@ -72,6 +72,7 @@
       "register": {
         "console": "registerOutreachConsole",
         "consoleApi": "registerOutreachConsoleApi",
+        "consoleServerDeclarations": "registerOutreachConsoleServerDeclarations",
         "subprocessors": "outreachSubprocessors"
       },
       "apiPrefixes": [

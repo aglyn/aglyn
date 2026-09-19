@@ -36,12 +36,12 @@ import {
   runPluginUserErasers,
   type PluginUserErasureReport,
 } from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
+import {
+  runPluginOrgErasers,
+  type PluginOrgErasureReport,
+} from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 import { isBillingSubscription } from '@aglyn/aglyn/server'
 import { readOrgBilling } from './org-billing'
-import {
-  revokeProviderGrants,
-  type ProviderGrantRevocationTally,
-} from './provider-grant-revokers'
 import {
   disposeHostSendingDomain,
   readSendingDomainTeardownByLabel,
@@ -335,8 +335,7 @@ async function eraseOrgApiKeys(orgId: string, dryRun = false): Promise<number> {
 }
 
 /**
- * Revoke, then delete, every Outreach mailbox credential the org holds
- * (AGL-2974, AGL-2978).
+ * Delete every Outreach mailbox credential the org holds (AGL-2974).
  *
  * `outreachMailboxCredentials` is a TOP-LEVEL collection keyed by the mailbox
  * id and carrying `orgId` as a FIELD, so `recursiveDelete(orgRef)` cannot see
@@ -346,54 +345,25 @@ async function eraseOrgApiKeys(orgId: string, dryRun = false): Promise<number> {
  * person, held for an organization that no longer exists and that nobody can
  * ask to disconnect them.
  *
- * REVOCATION FIRST, when this process holds a revoker for the collection
- * (`provider-grant-revokers.ts`): the Outreach plugin's server half registers
- * one, and the console's erasure runner loads that half before it erases.
- * Deleting the platform's copy alone would leave the grant listed at Google
- * as an app with access until the person removed it by hand. A revoker that
- * fails, or a process with none (the operator script), changes nothing about
- * the delete that follows — the tally on the audit row says which happened.
- * A dry run touches no provider.
+ * This destroys the platform's copy of the grant; it does not call the
+ * provider's revocation endpoint, which needs the plugin's provider adapter.
+ * With the tokens gone the grant has nothing left to act through.
  *
  * Bounded by the `orgId` field, never a collection sweep: this collection
  * holds every other workspace's connected mailboxes too.
  *
- * Returns the number destroyed and the revocation tally, for the audit row —
- * an erasure trail that understates what it removed is the one record that
- * has to be right.
+ * Returns the number destroyed, for the audit row — an erasure trail that
+ * understates what it removed is the one record that has to be right.
  */
 async function eraseOrgOutreachMailboxCredentials(
   orgId: string,
   dryRun = false,
-  loadRevokers: (() => Promise<unknown>) | null = null,
-): Promise<{ deleted: number; revocations: ProviderGrantRevocationTally | null }> {
-  let revocations: ProviderGrantRevocationTally | null = null
-  if (!dryRun && orgId) {
-    const rows = await firebaseAdmin
-      .app()
-      .firestore()
-      .collection(OUTREACH_MAILBOX_CREDENTIALS_COLLECTION)
-      .where('orgId', '==', orgId)
-      .get()
-    if (rows.size && loadRevokers) {
-      // A load that fails costs the revocation and nothing else: the delete
-      // below runs either way.
-      await loadRevokers().catch((error: unknown) => {
-        console.error(`eraseOrg: grant revokers did not load for ${orgId}`, error)
-      })
-    }
-    revocations = await revokeProviderGrants(
-      OUTREACH_MAILBOX_CREDENTIALS_COLLECTION,
-      rows.docs.map((doc) => ({ id: doc.id, data: doc.data() ?? {} })),
-      { erasingOrgId: orgId },
-    )
-  }
-  const deleted = await deleteDocsByOrgId(
+): Promise<number> {
+  return deleteDocsByOrgId(
     OUTREACH_MAILBOX_CREDENTIALS_COLLECTION,
     orgId,
     dryRun,
   )
-  return { deleted, revocations }
 }
 
 /**
@@ -905,6 +875,7 @@ async function eraseOrgSupportTickets(
  * the first thing that can fail, and it destroys as it goes.
  */
 type EraseStep =
+  | 'plugins'
   | 'credentials'
   | 'support'
   | 'hosts'
@@ -957,19 +928,6 @@ export interface EraseOrgOptions {
    */
   tearDownSendingDomain?: TeardownSendingDomainDriver | null
   /**
-   * Loads the plugin halves that register provider grant revokers
-   * (`provider-grant-revokers.ts`, AGL-2978), called at most once and only
-   * when the organization holds a grant to revoke.
-   *
-   * Passed in rather than done here for the reason the sending-domain
-   * teardown is: a revoker opens a sealed token with a key only the console
-   * holds, so the loading happens in the console, where the plugins' server
-   * halves are allowed to run. A caller that passes nothing — the operator
-   * script — still deletes every grant; the audit row counts them
-   * `unrevoked`. Never consulted on a dry run.
-   */
-  loadProviderGrantRevokers?: (() => Promise<unknown>) | null
-  /**
    * Erase a workspace that carries NO erasure request at all (AGL-2585).
    *
    * ⛔ EXACTLY ONE CALLER, and the option exists so that caller has to say so
@@ -1003,14 +961,16 @@ export interface EraseOrgResult {
   members?: number
   /** API credentials destroyed (AGL-1444) — outside the org path. */
   apiKeys?: number
+  /**
+   * What each plugin's workspace eraser did (AGL-2978), keyed by plugin id:
+   * counts and flags, such as grants revoked at a provider. The erasers run
+   * before anything below is deleted. **`null` means that plugin's eraser
+   * failed** and its share may not be done; it is not zero. A plan carries
+   * each eraser's count of what it would do.
+   */
+  plugins?: Record<string, PluginOrgErasureReport | null>
   /** Outreach mailbox grants destroyed (AGL-2974) — outside the org path. */
   outreachMailboxCredentials?: number
-  /**
-   * What became of those grants at Google before they were destroyed
-   * (AGL-2978). `unrevoked` counts grants no revoker was registered for in
-   * the erasing process; `null` on a dry run, which touches no provider.
-   */
-  outreachGrantRevocations?: ProviderGrantRevocationTally | null
   /** Public SSO routing docs destroyed (AGL-1448) — outside the org path. */
   ssoDomains?: number
   /** Custom console domains released (AGL-1448) — outside the org path. */
@@ -1293,21 +1253,26 @@ export async function eraseOrg(
   // can no longer leave behind is the state that used to be the worst one: a
   // surviving workspace with its own complete dump already in the bucket.
   const progress: EraseProgress = {}
-  let step: EraseStep = 'credentials'
+  let step: EraseStep = 'plugins'
   try {
+    // The plugins' share first (AGL-2978), while the org, its roster and
+    // every record swept below still exist: an eraser that revokes a grant at
+    // its provider opens the stored grant to do it. Each eraser is isolated,
+    // so a failing one is recorded as `null` and stops nothing; on a plan
+    // each one counts and touches no provider.
+    progress.plugins = await runPluginOrgErasers({ orgId, dryRun })
+
+    step = 'credentials'
     // Credentials and routing BEFORE content (AGL-1444/AGL-1448). The org doc
     // survives until the recursiveDelete at the end, so a key presented — or a
     // sign-in routed, or a console domain resolved — mid-erasure would still
     // pass the org gate and reach a half-deleted workspace. Revoking first
     // closes that window as well as the permanent one.
     progress.apiKeys = await eraseOrgApiKeys(orgId, dryRun)
-    const outreachCredentials = await eraseOrgOutreachMailboxCredentials(
+    progress.outreachMailboxCredentials = await eraseOrgOutreachMailboxCredentials(
       orgId,
       dryRun,
-      options.loadProviderGrantRevokers ?? null,
     )
-    progress.outreachMailboxCredentials = outreachCredentials.deleted
-    progress.outreachGrantRevocations = outreachCredentials.revocations
     progress.ssoDomains = await eraseOrgSsoDomains(orgId, dryRun)
     progress.consoleDomains = await releaseOrgConsoleDomains(orgId, dryRun)
     progress.apiIdempotency = await eraseOrgIdempotencyKeys(orgId, dryRun)

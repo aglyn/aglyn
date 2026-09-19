@@ -36,11 +36,11 @@ import {
  * The client secret and the token key together are the power to send as
  * every connected rep, so neither may be reachable from the tenant runtime,
  * which serves the public internet. They are read here and nowhere else; this
- * module is imported only by Outreach's server half; and that half is loaded
- * only by the console's server plugin manifest.
- * `apps/console/specs/outreach-credential-isolation.spec.ts` holds all three
- * facts, the way `sending-domain-credential-isolation.spec.ts` holds the
- * Resend domains key's.
+ * module is imported only by Outreach's server half and its console-only
+ * declarations; and those are loaded only by the console's server manifests.
+ * `outreach-credential-isolation.spec.ts`, beside this plugin's other specs,
+ * holds all three facts, the way `sending-domain-credential-isolation.spec.ts`
+ * holds the Resend domains key's.
  *
  * Read in the bracket form, so Next never inlines a value into a build.
  */

@@ -16,7 +16,6 @@
  */
 
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
-import { SecretBoxError } from '@aglyn/shared-util-tools/secret-box'
 import type {
   OutreachMailbox,
   OutreachMailboxStatus,
@@ -30,7 +29,6 @@ import {
   OUTREACH_REQUIRED_GRANTED_SCOPES,
   pkceChallenge,
   readGoogleIdToken,
-  revokeGoogleToken,
   type GoogleTokenResponse,
 } from '../transport/google-oauth'
 import type { TransportDeps } from '../transport/http'
@@ -44,15 +42,14 @@ import {
   type OutreachMailboxDisconnectResponse,
 } from './mailbox-api'
 import {
-  countOtherCredentialsForAccount,
   mailboxCredentialsRef,
   mailboxRef,
-  openMailboxRefreshToken,
   outreachMailboxId,
   readMailboxCredentials,
   sealMailboxRefreshToken,
   type OutreachGoogleMailboxCredentials,
 } from './mailbox-credentials'
+import { revokeMailboxGrant } from './mailbox-revoke'
 import {
   outreachMemberGate,
   refusal,
@@ -716,34 +713,4 @@ function googleUnavailable(error: unknown): Response {
     'google-unavailable',
     error.retryable ? 'Google did not answer. Try again in a moment.' : `Google refused the request: ${error.message}`,
   )
-}
-
-/**
- * Revokes one stored grant at Google, unless another stored credential still
- * uses the same account — see `countOtherCredentialsForAccount`. Never
- * throws: a grant that cannot be revoked is still deleted by the caller.
- */
-export async function revokeMailboxGrant(
-  firestore: FirebaseFirestore.Firestore,
-  credential: OutreachGoogleMailboxCredentials,
-  deps: Pick<OutreachMailboxRouteDeps, 'readConfig' | 'transport'>,
-  options: { excludeOrgId?: string } = {},
-): Promise<OutreachMailboxDisconnectResponse['revocation']> {
-  try {
-    const others = await countOtherCredentialsForAccount(firestore, {
-      providerAccountId: credential.providerAccountId,
-      mailboxId: credential.mailboxId,
-      excludeOrgId: options.excludeOrgId,
-    })
-    if (others > 0) return 'kept-for-other-mailbox'
-    const config = deps.readConfig()
-    if (!config.configured) return 'failed'
-    const { refreshToken } = openMailboxRefreshToken(credential, config.config.keyring)
-    return await revokeGoogleToken(refreshToken, deps.transport)
-  } catch (error) {
-    if (!(error instanceof GmailTransportError) && !(error instanceof SecretBoxError)) {
-      console.error('[outreach] revoking a mailbox grant failed', error)
-    }
-    return 'failed'
-  }
 }

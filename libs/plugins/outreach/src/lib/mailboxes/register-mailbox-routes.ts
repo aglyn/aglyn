@@ -21,14 +21,10 @@ import {
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { tokenSigningSecret } from '@aglyn/tenant-data-admin/server/media-signing'
-import { registerProviderGrantRevoker } from '@aglyn/tenant-data-admin/server/provider-grant-revokers'
 import { OUTREACH_API_ROUTES } from '../constants/api-routes'
-import { OUTREACH_COLLECTIONS } from '../model/outreach.types'
-import { readMailboxCredentials } from './mailbox-credentials'
 import { readOrgId } from './mailbox-gate'
 import {
   createOutreachMailboxRoutes,
-  revokeMailboxGrant,
   type OutreachMailboxRouteDeps,
 } from './mailbox-routes'
 import { readOutreachOAuthState } from './oauth-state'
@@ -134,16 +130,4 @@ export function registerOutreachMailboxRoutes(
   registerPluginApiRoute(OUTREACH_API_ROUTES.mailboxesStatus, { web: routes.status }, orgSubject)
   registerPluginApiRoute(OUTREACH_API_ROUTES.mailboxesTest, { web: routes.test }, orgSubject)
   registerPluginApiRoute(OUTREACH_API_ROUTES.mailboxesDisconnect, { web: routes.disconnect }, orgSubject)
-
-  // An org erasure deletes the stored grants whether or not this runs; this
-  // tells Google too, when the erasing process loaded Outreach's server half.
-  // A grant another organization still uses is left alone.
-  registerProviderGrantRevoker(OUTREACH_COLLECTIONS.mailboxCredentials, async (stored, context) => {
-    const credential = readMailboxCredentials(stored.data)
-    if (!credential) return 'failed'
-    const outcome = await revokeMailboxGrant(deps.firestore(), credential, deps, {
-      excludeOrgId: context.erasingOrgId,
-    })
-    return outcome === 'kept-for-other-mailbox' ? 'kept' : outcome
-  })
 }

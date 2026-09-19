@@ -91,7 +91,16 @@ describe('the Outreach server entry', () => {
     expect(entry?.register).toEqual({
       console: 'registerOutreachConsole',
       consoleApi: 'registerOutreachConsoleApi',
+      // The workspace eraser that revokes Google grants (AGL-2978).
+      consoleServerDeclarations: 'registerOutreachConsoleServerDeclarations',
+      // Data the generator writes into the console's subprocessor manifest.
+      subprocessors: 'outreachSubprocessors',
     })
+    // Nothing the tenant runtime loads: no site surface, no tenant API, and
+    // no declarations entry, which both apps' manifests carry.
+    for (const surface of ['site', 'tenantApi', 'declarations', 'serverDeclarations']) {
+      expect([surface, entry?.register[surface]]).toEqual([surface, undefined])
+    }
     expect(entry?.apiPrefixes).toEqual(['outreach'])
   })
 

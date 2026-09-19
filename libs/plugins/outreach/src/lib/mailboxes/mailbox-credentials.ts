@@ -155,10 +155,18 @@ export function readMailboxCredentials(data: unknown): OutreachGoogleMailboxCred
  * the same shared inbox connected by two members, or one account connected
  * in two organizations — would silently break that mailbox. A disconnect or
  * an erasure asks this first and leaves the grant alone while it is shared.
+ *
+ * An erasure names what it is ending anyway — a whole organization's
+ * credentials, or every one of a person's — and those are not counted.
  */
 export async function countOtherCredentialsForAccount(
   firestore: FirebaseFirestore.Firestore,
-  input: { providerAccountId: string; mailboxId: string; excludeOrgId?: string },
+  input: {
+    providerAccountId: string
+    mailboxId: string
+    excludeOrgId?: string
+    excludeMailboxIds?: ReadonlySet<string>
+  },
 ): Promise<number> {
   if (!input.providerAccountId) return 0
   const snapshot = await firestore
@@ -167,7 +175,7 @@ export async function countOtherCredentialsForAccount(
     .limit(20)
     .get()
   return snapshot.docs.filter((doc) => {
-    if (doc.id === input.mailboxId) return false
+    if (doc.id === input.mailboxId || input.excludeMailboxIds?.has(doc.id)) return false
     return !input.excludeOrgId || doc.get('orgId') !== input.excludeOrgId
   }).length
 }

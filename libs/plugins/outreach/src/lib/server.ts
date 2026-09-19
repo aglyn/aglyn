@@ -70,8 +70,8 @@ export function registerOutreachConsoleApi(): void {
   // defaults.
   registerPluginPermissions(OUTREACH_PERMISSIONS)
   registerPluginApiRoute(OUTREACH_API_ROUTES.ping, outreachPingHandler)
-  // Connect a Google mailbox, its settings, pause, test and disconnect, and
-  // the grant revocation an org erasure runs (AGL-2978).
+  // Connect a Google mailbox, its settings, pause, test and disconnect
+  // (AGL-2978).
   registerOutreachMailboxRoutes()
 }
 

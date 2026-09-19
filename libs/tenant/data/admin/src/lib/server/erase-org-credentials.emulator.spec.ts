@@ -64,6 +64,10 @@
  *       --testPathPatterns erase-org-credentials.emulator
  */
 
+import {
+  registerPluginOrgEraser,
+  resetPluginOrgErasersForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { Timestamp, getFirestore, type Firestore } from 'firebase-admin/firestore'
 
@@ -111,25 +115,28 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
   let result: import('./erase').EraseOrgResult
 
   /**
-   * What the registered grant revoker saw (AGL-2978): each credential it was
-   * handed, whether that credential still existed when it was — revocation
-   * has to come BEFORE the delete, or there is no token left to revoke with —
-   * and how many times the erasure asked for revokers to be loaded.
+   * What a plugin's workspace eraser saw (AGL-2978): the request it was
+   * handed, and whether the org's API key and the org itself still existed
+   * when it ran. A plugin eraser that revokes a grant opens the stored grant
+   * to do it, so it has to run BEFORE the erasure deletes anything.
    */
-  const revokerCalls: Array<{ id: string; erasingOrgId: string; stillStored: boolean }> = []
-  let revokerLoads = 0
+  const eraserCalls: Array<{ orgId: string; dryRun: boolean; keyStillStored: boolean; orgStillStored: boolean }> = []
+  const FIXTURE_PLUGIN = 'erase-credentials-fixture'
 
   beforeAll(async () => {
     db = getFirestore()
     erase = await import('./erase')
     apiKeys = await import('./api-keys')
     organizations = await import('./organizations')
-    const revokers = await import('./provider-grant-revokers')
-    revokers.registerProviderGrantRevoker(MAILBOX_CREDENTIALS, async (credential, context) => {
-      const stored = await db.collection(MAILBOX_CREDENTIALS).doc(credential.id).get()
-      revokerCalls.push({ id: credential.id, erasingOrgId: context.erasingOrgId, stillStored: stored.exists })
-      return 'revoked'
-    })
+    registerPluginOrgEraser(
+      async ({ orgId, dryRun }) => {
+        const keys = await db.collection('apiKeys').where('orgId', '==', orgId).get()
+        const org = await db.collection('orgs').doc(orgId).get()
+        eraserCalls.push({ orgId, dryRun, keyStillStored: !keys.empty, orgStillStored: org.exists })
+        return { grants: 1, revoked: dryRun ? null : 1 }
+      },
+      { pluginId: FIXTURE_PLUGIN },
+    )
 
     // Leave no rows behind from an earlier run, or a stale key from the
     // previous pass would answer the assertion instead of this one's.
@@ -189,22 +196,15 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
       })
     }
 
-    // A plan first: it must count, and touch no provider.
-    const plan = await erase.eraseOrg(ORG, {
-      dryRun: true,
-      loadProviderGrantRevokers: async () => {
-        revokerLoads += 1
-      },
+    // A plan first: each plugin eraser is told it is one, and counts.
+    const plan = await erase.eraseOrg(ORG, { dryRun: true })
+    expect(plan).toMatchObject({
+      ok: false,
+      skippedReason: 'dry-run',
+      plugins: { [FIXTURE_PLUGIN]: { grants: 1, revoked: null } },
     })
-    expect(plan).toMatchObject({ ok: false, skippedReason: 'dry-run' })
-    expect(revokerCalls).toEqual([])
-    expect(revokerLoads).toBe(0)
 
-    result = await erase.eraseOrg(ORG, {
-      loadProviderGrantRevokers: async () => {
-        revokerLoads += 1
-      },
-    })
+    result = await erase.eraseOrg(ORG)
     // Guard the premise: if the erasure itself was skipped there is nothing
     // to assert about, and a green run would mean nothing.
     expect(result).toMatchObject({ ok: true })
@@ -219,19 +219,22 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
     await Promise.all(rows.docs.map((doc) => doc.ref.delete()))
     await db.collection(MAILBOX_CREDENTIALS).doc(BYSTANDER_MAILBOX).delete()
     await db.recursiveDelete(db.collection('orgs').doc(OTHER_ORG))
-    const revokers = await import('./provider-grant-revokers')
-    revokers.unregisterProviderGrantRevoker(MAILBOX_CREDENTIALS)
+    resetPluginOrgErasersForTests()
   }, 60_000)
 
-  it('revokes the erased org’s mailbox grant at its provider BEFORE deleting it (AGL-2978)', async () => {
-    expect(revokerLoads).toBe(1)
-    expect(revokerCalls).toEqual([{ id: ERASED_MAILBOX, erasingOrgId: ORG, stillStored: true }])
-    expect(result.outreachGrantRevocations).toEqual({
-      revoked: 1,
-      alreadyInvalid: 0,
-      kept: 0,
-      failed: 0,
-      unrevoked: 0,
+  it('runs a plugin’s workspace eraser BEFORE deleting anything, and records its report (AGL-2978)', async () => {
+    expect(eraserCalls).toEqual([
+      { orgId: ORG, dryRun: true, keyStillStored: true, orgStillStored: true },
+      { orgId: ORG, dryRun: false, keyStillStored: true, orgStillStored: true },
+    ])
+    expect(result.plugins).toEqual({ [FIXTURE_PLUGIN]: { grants: 1, revoked: 1 } })
+    const audit = await db
+      .collection('adminAudit')
+      .where('target', '==', `orgs/${ORG}`)
+      .where('action', '==', 'org.erased')
+      .get()
+    expect(audit.docs.map((doc) => doc.get('after.plugins'))).toContainEqual({
+      [FIXTURE_PLUGIN]: { grants: 1, revoked: 1 },
     })
   }, 60_000)
 

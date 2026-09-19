@@ -298,6 +298,36 @@ outlives the data. `null` in a field is a figure the eraser could not
 measure, and a `null` report says the plugin's data may remain — neither
 is zero.
 
+## Workspace erasure — `plugin-org-erasure` (`/server`)
+
+The workspace erasure destroys the organization's document tree, its sites
+and the top-level records keyed to it by a field. A plugin that holds
+something those deletes cannot finish on their own — a grant at a provider
+only the plugin can revoke, a record outside every path and field the
+erasure sweeps — registers an eraser from its declarations:
+
+```ts
+registerPluginOrgEraser(
+  async ({ orgId, dryRun }) => {
+    const { revokeGrantsFor } = await import('./server/grants')
+    return revokeGrantsFor(orgId, { dryRun })
+  },
+  { pluginId: 'acme-mail' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginOrgEraser(eraser, { pluginId? })` | One eraser per plugin, attributed like an event handler; registering again replaces it in place. Check `listPluginOrgErasers()` before registering again after a registry reset. |
+| `runPluginOrgErasers({ orgId, dryRun })` | What the erasure calls BEFORE it deletes anything of its own, so an eraser that acts through a record — opening a stored grant to revoke it — finds the record there. Every eraser in registration order; answers each plugin's report by plugin id, or `null` for an eraser that threw — logged, and never the erasure's failure. |
+
+The report lands under `plugins` on the erasure's result and audit record,
+on the same terms as an account erasure's. A plan (`dryRun: true`) is handed
+to every eraser, which then touches no provider and writes nothing: it
+counts, and a figure it did not measure is `null`. An eraser that opens a
+credential only the console holds registers from `consoleServerDeclarations`,
+which the tenant runtime never loads.
+
 ## Usage alerts — `plugin-manager/usage-alert-contributors`
 
 The usage-alerts sweep walks every org once, reads its usage, and sends core's
