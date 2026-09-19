@@ -1154,6 +1154,23 @@ jobs:
       - run: npm run test:lib-boundaries
       - run: npm run check:lib-boundaries
 
+      # AGL-3079 — every Firestore document the platform names is named by
+      # `createResourceUid()`, the 10-character id a member sees in the
+      # console's URLs and the public API routes by. AI-created screens,
+      # layouts and forms carried 20-character auto-ids and `<jobId>-c0`
+      # instead, and a sweep found the same class across CRM, commerce,
+      # support, media and forms. This parses every tracked source file (so
+      # a call split over lines is still one site) for a document named by
+      # an auto-id, by an id helper that is not the platform's, or by an id
+      # derived inline from other values, and refuses any site missing from
+      # `tools/scripts/id-minting-allowlist.json`, where each is RESOURCE (a
+      # debt under the area issue that fixes it), RECORD or DELIBERATE, with
+      # a reason. The list's size is pinned, so it only shrinks. The
+      # self-test runs first: its fixtures are the planted `.doc()` the
+      # guard exists to refuse, and the Sets and class lists it must not.
+      - run: npm run test:id-minting
+      - run: npm run check:id-minting
+
       # AGL-118, AGL-2823. Every path that creates, destroys or transfers a
       # durable customer object writes an activity entry, or is classified
       # with the reason it does not. The listed modules live under apps/ and
