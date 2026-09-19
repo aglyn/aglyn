@@ -170,7 +170,12 @@ export const publishLayoutHandler: PluginApiHandler = async (req, res) => {
       ''
     const sanitized = sanitizeMarketplaceDefinition(
       { rootId, nodes },
-      { extraComponentIds: [LAYOUT_SLOT_COMPONENT_ID] },
+      {
+        extraComponentIds: [LAYOUT_SLOT_COMPONENT_ID],
+        // A link or image bound whole to a Link or Image property travels
+        // bound (AGL-2933).
+        declaredProps: props.props,
+      },
     )
     // `=== false` rather than `!sanitized.ok`: the compiler does not narrow
     // the union on the negated form here, and publish-template hit the same
