@@ -137,12 +137,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'AGL-2193. The daily external-fact checker. Its hostnames are the checker\'s OWN self-test fixtures — including deliberate negative controls such as `aglyn.com.evil.net` that must NOT match. A build tool, never shipped, and the literals are the test data.',
   },
   {
-    file: 'tools/scripts/stripe-connect-reversal-drill.mjs',
-    count: 1,
-    reason:
-      'AGL-1956. `business_profile[url]` on a TEST-MODE Stripe drill account. A drill script, never shipped and never run against live.',
-  },
-  {
     file: 'apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/listing-social-card.ts',
     count: 1,
     reason:
