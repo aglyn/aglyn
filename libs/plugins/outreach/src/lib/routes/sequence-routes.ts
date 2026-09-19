@@ -41,7 +41,7 @@ import {
   readStoredOutreachMailbox,
   readStoredOutreachSequence,
 } from '../storage/outreach-records'
-import type { OutreachRouteDeps } from './route-deps'
+import { OUTREACH_SEQUENCE_ACTIVITY_TARGET, type OutreachRouteDeps } from './route-deps'
 import { outreachRouteGate, type OutreachRouteCaller } from './route-gate'
 import {
   outreachMethodNotAllowed,
@@ -215,7 +215,7 @@ async function mailboxIssues(
 export function createOutreachSequenceRoutes(deps: OutreachRouteDeps): OutreachSequenceRoutes {
   const activity = (caller: OutreachRouteCaller, action: string, sequence: Pick<OutreachSequence, 'id' | 'name'>) =>
     deps.logOrgActivity(caller.orgId, { uid: caller.uid, email: caller.email }, action, {
-      type: 'sequence',
+      type: OUTREACH_SEQUENCE_ACTIVITY_TARGET,
       id: sequence.id,
       name: sequence.name,
     })

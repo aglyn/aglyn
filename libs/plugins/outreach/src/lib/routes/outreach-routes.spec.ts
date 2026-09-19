@@ -17,7 +17,9 @@
  * limitations under the License.
  */
 
+import { activityTypeLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
+import { isPluginActivityTargetType } from '@aglyn/aglyn/plugin-manager/plugin-activity-actions'
 import type { DecodedIdToken } from 'firebase-admin/auth'
 import { OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
@@ -25,6 +27,7 @@ import type { OutreachEmailStep, OutreachTaskStep } from '../model/outreach.type
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
 import { createOutreachEnrollmentActionRoute } from './enrollment-routes'
 import { createOutreachPreviewRoute } from './preview-routes'
+import { OUTREACH_SEQUENCE_ACTIVITY_TARGET } from './route-deps'
 import type { OutreachRouteGateDeps } from './route-gate'
 import { createOutreachSequenceRoutes, OUTREACH_SEQUENCE_ACTIVITY } from './sequence-routes'
 
@@ -348,9 +351,17 @@ describe('outreach/sequences/save (AGL-2980)', () => {
     expect(activity).toEqual([
       {
         action: OUTREACH_SEQUENCE_ACTIVITY.create,
-        target: { type: 'sequence', id: body.sequence.id, name: 'Second locations' },
+        target: { type: 'outreach:sequence', id: body.sequence.id, name: 'Second locations' },
       },
     ])
+  })
+
+  it('files its rows under Outreach’s own namespaced target, which the org feed reads as a Sequence', () => {
+    // Core's activity targets name only core's resources; a plugin's rows
+    // go through the `pluginId:noun` seam (AGL-2978) instead.
+    expect(OUTREACH_SEQUENCE_ACTIVITY_TARGET).toBe('outreach:sequence')
+    expect(isPluginActivityTargetType(OUTREACH_SEQUENCE_ACTIVITY_TARGET)).toBe(true)
+    expect(activityTypeLabel(OUTREACH_SEQUENCE_ACTIVITY_TARGET)).toBe('Sequence')
   })
 
   it('refuses what the engine refuses, naming each field', async () => {
@@ -668,7 +679,7 @@ describe('outreach/enroll (AGL-2980)', () => {
     expect(typeof stored?.['nextDueAtMs']).toBe('number')
     expect(activity.at(-1)).toEqual({
       action: 'Enrolled 1 person in an Outreach sequence',
-      target: { type: 'sequence', id: sequenceId, name: 'Second locations' },
+      target: { type: 'outreach:sequence', id: sequenceId, name: 'Second locations' },
     })
   })
 
