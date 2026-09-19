@@ -144,7 +144,10 @@ async function connectedAccount() {
     'individual[address][state]': 'TX',
     'individual[address][postal_code]': '78701',
     'individual[address][country]': 'US',
-    'business_profile[url]': 'https://aglyn.com',
+    // Any address Stripe accepts. An Aglyn URL in a script that calls `fetch(`
+    // reads to the probe-header sweep as a live fetch of our own hosts, and this
+    // drill only ever calls api.stripe.com.
+    'business_profile[url]': 'https://example.com',
     'business_profile[mcc]': '5734',
     'tos_acceptance[date]': String(Math.floor(Date.now() / 1000)),
     'tos_acceptance[ip]': '8.8.8.8',
