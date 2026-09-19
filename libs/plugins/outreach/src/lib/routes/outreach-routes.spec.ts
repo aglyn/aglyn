@@ -447,6 +447,57 @@ describe('outreach/sequences/status (AGL-2980)', () => {
     expect(docs.get(org(`outreachSequences/${saved.body.sequence.id}`))?.['status']).toBe('draft')
   })
 
+  it('activates only onto a mailbox that is sending, and says why not in the page’s words', async () => {
+    const saved = await post(sequences().save, REP, { sequence: draft() })
+    const sequenceId = saved.body.sequence.id
+    const activate = () => post(sequences().status, REP, { sequenceId, action: 'activate' })
+    const mailbox = org(`outreachMailboxes/${MAILBOX}`)
+    const setMailboxStatus = (status: string) => docs.set(mailbox, { ...docs.get(mailbox), status })
+
+    setMailboxStatus('paused')
+    const paused = await activate()
+    expect(paused.status).toBe(409)
+    expect(paused.body).toMatchObject({
+      reason: 'activation-refused',
+      error: "This sequence's mailbox is paused. Resume it in Mailboxes, then activate the sequence.",
+    })
+    expect(paused.body.issues).toEqual([expect.objectContaining({ path: 'mailboxId', code: 'mailbox_not_sending' })])
+
+    setMailboxStatus('reconnect_required')
+    expect((await activate()).body.error).toBe(
+      "Google stopped accepting this sequence's mailbox. Reconnect it in Mailboxes, then activate the sequence.",
+    )
+
+    setMailboxStatus('disconnected')
+    const gone = await activate()
+    expect(gone.body.issues).toEqual([
+      expect.objectContaining({
+        code: 'mailbox_unknown',
+        message: "This sequence's mailbox is no longer connected. Choose another before activating it.",
+      }),
+    ])
+    expect(docs.get(org(`outreachSequences/${sequenceId}`))?.['status']).toBe('draft')
+
+    setMailboxStatus('connected')
+    const activated = await activate()
+    expect(activated.status).toBe(200)
+    expect(activated.body.sequence.status).toBe('active')
+  })
+
+  it('asks a sequence of tasks alone for a mailbox too, since its steps fall due in that mailbox’s hours', async () => {
+    const saved = await post(sequences().save, REP, { sequence: draft({ mailboxId: '', steps: [call] }) })
+    expect(saved.status).toBe(200)
+    const refused = await post(sequences().status, REP, { sequenceId: saved.body.sequence.id, action: 'activate' })
+    expect(refused.status).toBe(409)
+    expect(refused.body.issues).toEqual([
+      expect.objectContaining({
+        path: 'mailboxId',
+        code: 'mailbox_required',
+        message: 'Choose the mailbox this sequence sends from before activating it.',
+      }),
+    ])
+  })
+
   it('activates, pauses and refuses a transition the status does not allow', async () => {
     const saved = await post(sequences().save, REP, { sequence: draft() })
     const sequenceId = saved.body.sequence.id

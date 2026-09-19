@@ -27,9 +27,10 @@ import type {
   OutreachSequenceStatusResponse,
 } from '../model/outreach-api'
 import { OUTREACH_OPEN_ENROLLMENT_STATUSES } from '../engine/gates'
-import type { OutreachSequence, OutreachSequenceStatus } from '../model/outreach.types'
+import type { OutreachMailbox, OutreachSequence, OutreachSequenceStatus } from '../model/outreach.types'
 import {
   outreachEnrolledSequenceIssues,
+  outreachMailboxActivationIssue,
   readOutreachSequenceDraft,
   type OutreachSequenceDraft,
   type OutreachSequenceIssue,
@@ -78,7 +79,9 @@ import {
  *
  * `validateOutreachSequenceActivation`: everything a save refuses on, and an
  * organization whose footer cannot be written — no legal name, or no postal
- * address. Its mailbox must still be connected.
+ * address. And its mailbox must be sending (`outreachMailboxActivationIssue`):
+ * chosen, still connected, not paused, and not waiting to be reconnected —
+ * the same words the sequence page shows beside its disabled Activate.
  *
  * ## Archiving
  *
@@ -150,12 +153,15 @@ const issue = (
 /**
  * The organization-level facts a draft has to agree with: its site is the
  * organization's, its mailbox is connected and the caller may send from it,
- * and its countries are ones the organization allows.
+ * and its countries are ones the organization allows. `activating` adds
+ * that the mailbox is sending now — chosen, and neither paused nor waiting
+ * to be reconnected.
  */
 async function draftPlacementIssues(
   firestore: Firestore,
   caller: OutreachRouteCaller,
   draft: OutreachSequenceDraft,
+  options: { activating?: boolean } = {},
 ): Promise<OutreachSequenceIssue[]> {
   const issues: OutreachSequenceIssue[] = []
   if (draft.hostId) {
@@ -168,9 +174,19 @@ async function draftPlacementIssues(
   } else {
     issues.push(issue('hostId', 'host_unknown', "Choose the site whose contacts this sequence emails."))
   }
+  const mailbox = draft.mailboxId ? await loadMailbox(firestore, caller.orgId, draft.mailboxId) : null
+  const activation = options.activating ? outreachMailboxActivationIssue(draft.mailboxId, mailbox) : null
   if (draft.mailboxId) {
-    issues.push(...(await mailboxIssues(firestore, caller, draft.mailboxId)))
+    const placement = mailboxIssues(caller, mailbox)
+    // A mailbox that is gone is refused once, in activation's words when
+    // activating: they say what to do next.
+    issues.push(
+      ...(activation?.code === 'mailbox_unknown'
+        ? placement.filter((entry) => entry.code !== 'mailbox_unknown')
+        : placement),
+    )
   }
+  if (activation && !issues.some((entry) => entry.code === 'mailbox_not_yours')) issues.push(activation)
   const settings = await readOutreachComplianceSettingsDoc(firestore, caller.orgId)
   const outside = draft.settings.allowedCountries.filter(
     (code) => !settings.allowedCountries.includes(code),
@@ -187,16 +203,16 @@ async function draftPlacementIssues(
   return issues
 }
 
-/** Whether the mailbox is connected here, and the caller may send from it. */
-async function mailboxIssues(
-  firestore: Firestore,
-  caller: OutreachRouteCaller,
-  mailboxId: string,
-): Promise<OutreachSequenceIssue[]> {
+/** A mailbox of this organization's, as stored; `null` when there is none by that id. */
+async function loadMailbox(firestore: Firestore, orgId: string, mailboxId: string): Promise<OutreachMailbox | null> {
   const snapshot = readOutreachDocumentId(mailboxId)
-    ? await outreachOrgCollection(firestore, caller.orgId, 'mailboxes').doc(mailboxId).get()
+    ? await outreachOrgCollection(firestore, orgId, 'mailboxes').doc(mailboxId).get()
     : null
-  const mailbox = readStoredOutreachMailbox(mailboxId, snapshot?.exists ? snapshot.data() : undefined)
+  return readStoredOutreachMailbox(mailboxId, snapshot?.exists ? snapshot.data() : undefined)
+}
+
+/** Whether the mailbox is connected here, and the caller may send from it. */
+function mailboxIssues(caller: OutreachRouteCaller, mailbox: OutreachMailbox | null): OutreachSequenceIssue[] {
   if (!mailbox || mailbox.status === 'disconnected') {
     return [issue('mailboxId', 'mailbox_unknown', 'That mailbox is not connected to this organization.')]
   }
@@ -210,6 +226,17 @@ async function mailboxIssues(
     ]
   }
   return []
+}
+
+/** One issue per field and code: activation and the engine can both ask for a mailbox. */
+function distinctIssues(issues: readonly OutreachSequenceIssue[]): OutreachSequenceIssue[] {
+  const seen = new Set<string>()
+  return issues.filter((entry) => {
+    const key = `${entry.path}|${entry.code}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 export function createOutreachSequenceRoutes(deps: OutreachRouteDeps): OutreachSequenceRoutes {
@@ -243,7 +270,7 @@ export function createOutreachSequenceRoutes(deps: OutreachRouteDeps): OutreachS
     // admin's) to change — the stored mailbox as well as a new one: moving
     // a colleague's sequence onto your own mailbox is still changing theirs.
     if (existing?.mailboxId && existing.mailboxId !== draft.mailboxId) {
-      const stored = await mailboxIssues(firestore, caller, existing.mailboxId)
+      const stored = mailboxIssues(caller, await loadMailbox(firestore, caller.orgId, existing.mailboxId))
       const refused = stored.find((entry) => entry.code === 'mailbox_not_yours')
       if (refused) return outreachRefusal(403, 'permission', refused.message)
     }
@@ -305,10 +332,10 @@ export function createOutreachSequenceRoutes(deps: OutreachRouteDeps): OutreachS
 
     if (action === 'activate') {
       const orgSettings = await readOutreachComplianceSettingsDoc(firestore, caller.orgId)
-      const judged: OutreachSequenceIssue[] = [
+      const judged: OutreachSequenceIssue[] = distinctIssues([
         ...validateOutreachSequenceActivation(sequence, orgSettings),
-        ...(await draftPlacementIssues(firestore, caller, sequence)),
-      ].filter((entry) => entry.severity === 'error')
+        ...(await draftPlacementIssues(firestore, caller, sequence, { activating: true })),
+      ]).filter((entry) => entry.severity === 'error')
       if (judged.length) {
         const ownership = judged.find((entry) => entry.code === 'mailbox_not_yours')
         return ownership

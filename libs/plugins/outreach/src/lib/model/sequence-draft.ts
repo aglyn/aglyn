@@ -42,6 +42,7 @@ import {
 } from '../engine/sequence-validation'
 import {
   type OutreachEmailStep,
+  type OutreachMailbox,
   type OutreachSendWindow,
   type OutreachSequence,
   type OutreachSequenceSettings,
@@ -233,6 +234,7 @@ export type OutreachSequenceIssueCode =
   | 'host_unknown'
   | 'mailbox_unknown'
   | 'mailbox_not_yours'
+  | 'mailbox_not_sending'
   | 'country_not_in_org'
 
 export interface OutreachSequenceIssue extends Omit<OutreachValidationIssue, 'code'> {
@@ -271,4 +273,73 @@ export function outreachEnrolledSequenceIssues(
     )
   }
   return issues
+}
+
+/**
+ * Whether a sequence's mailbox can send right now, as activation asks it:
+ * `none` when no mailbox is chosen, `gone` when it was disconnected or is
+ * not this organization's, `paused` or `reconnect_required` while it is
+ * connected but not sending, and `sending` when it is connected.
+ */
+export type OutreachSequenceMailboxState =
+  | 'none'
+  | 'gone'
+  | 'paused'
+  | 'reconnect_required'
+  | 'sending'
+
+export function outreachSequenceMailboxState(
+  mailboxId: string,
+  mailbox: Pick<OutreachMailbox, 'status'> | null | undefined,
+): OutreachSequenceMailboxState {
+  if (!mailboxId) return 'none'
+  if (!mailbox || mailbox.status === 'disconnected') return 'gone'
+  if (mailbox.status === 'paused' || mailbox.status === 'reconnect_required') {
+    return mailbox.status
+  }
+  return 'sending'
+}
+
+/** What activation refuses with for each mailbox that cannot send. */
+const MAILBOX_ACTIVATION_ISSUES: Record<
+  Exclude<OutreachSequenceMailboxState, 'sending'>,
+  { code: OutreachSequenceIssueCode; message: string }
+> = {
+  none: {
+    code: 'mailbox_required',
+    message: 'Choose the mailbox this sequence sends from before activating it.',
+  },
+  gone: {
+    code: 'mailbox_unknown',
+    message: "This sequence's mailbox is no longer connected. Choose another before activating it.",
+  },
+  paused: {
+    code: 'mailbox_not_sending',
+    message: "This sequence's mailbox is paused. Resume it in Mailboxes, then activate the sequence.",
+  },
+  reconnect_required: {
+    code: 'mailbox_not_sending',
+    message:
+      "Google stopped accepting this sequence's mailbox. Reconnect it in Mailboxes, then activate the sequence.",
+  },
+}
+
+/**
+ * Why a sequence cannot be activated on its mailbox, or `null` when it can
+ * (AGL-2980). A sequence is activated only onto a mailbox that is sending:
+ * connected, not paused, and not waiting for its member to reconnect it —
+ * whether or not its steps include an email, because every step's due time
+ * is read in the mailbox's timezone and sending hours.
+ *
+ * The status route refuses with it, and the sequence page shows it beside
+ * a disabled Activate button, so the page says why before anyone clicks.
+ */
+export function outreachMailboxActivationIssue(
+  mailboxId: string,
+  mailbox: Pick<OutreachMailbox, 'status'> | null | undefined,
+): OutreachSequenceIssue | null {
+  const state = outreachSequenceMailboxState(mailboxId, mailbox)
+  if (state === 'sending') return null
+  const { code, message } = MAILBOX_ACTIVATION_ISSUES[state]
+  return { path: 'mailboxId', code, message, severity: 'error' }
 }
