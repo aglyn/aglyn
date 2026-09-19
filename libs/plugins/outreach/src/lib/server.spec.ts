@@ -30,6 +30,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   listPluginPermissions,
+  resolvePluginApiMatch,
   resolvePluginApiRoute,
 } from '@aglyn/aglyn/server'
 import { OUTREACH_API_ROUTES } from './constants/api-routes'
@@ -122,6 +123,16 @@ describe('the Outreach server entry', () => {
     const { status, body } = await call(OUTREACH_API_ROUTES.ping, 'GET')
     expect(status).toBe(200)
     expect(body).toEqual({ ok: true, plugin: 'outreach' })
+  })
+
+  it('registers every route under the outreach prefix, where the dispatcher gates it', () => {
+    registerOutreachConsoleApi()
+    // The dispatcher refuses a request while `release_outreach` is off for
+    // it only when the path's owner is this plugin, which the prefix is.
+    for (const route of Object.values(OUTREACH_API_ROUTES)) {
+      expect(route.startsWith('outreach/')).toBe(true)
+      expect(resolvePluginApiMatch(route)).toBeDefined()
+    }
   })
 
   it('refuses any other method on the ping', async () => {

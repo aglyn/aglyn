@@ -28,4 +28,8 @@
 export const OUTREACH_API_ROUTES = {
   /** `GET` — proves the server bundle loaded and registered; see `server.ts`. */
   ping: 'outreach/ping',
+  // Settings, sequences and enrollments (AGL-2980). Every one names its org
+  // (`orgId`, query or body); the contract is `model/outreach-api.ts`.
+  /** `GET ?orgId` — the compliance settings; `POST` — save them. */
+  settings: 'outreach/settings',
 } as const

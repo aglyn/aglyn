@@ -838,6 +838,15 @@ service cloud.firestore {
         allow read: if canReadOutreach();
         allow write: if false;
       }
+      // Compliance settings and the do-not-contact list (AGL-2980).
+      match /outreachSettings/{settingsId} {
+        allow read: if canReadOutreach();
+        allow write: if false;
+      }
+      match /outreachDoNotContact/{key} {
+        allow read: if canReadOutreach();
+        allow write: if false;
+      }
 
       /**
        * Per-user AI usage (AGL-2928): one document per person per month,

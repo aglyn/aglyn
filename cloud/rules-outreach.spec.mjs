@@ -16,8 +16,9 @@
  */
 
 /**
- * Outreach (AGL-2974): who may read a workspace's mailboxes, sequences and
- * enrollments, and that nobody reads a mailbox credential.
+ * Outreach (AGL-2974): who may read a workspace's mailboxes, sequences,
+ * enrollments, compliance settings and do-not-contact list (AGL-2980), and
+ * that nobody reads a mailbox credential.
  *
  * `outreachMailboxes`, `outreachSequences` and `outreachEnrollments` under
  * `orgs/{orgId}` are read through `canReadOutreach()`: an org-wide member,
@@ -107,13 +108,44 @@ const COLLECTIONS = [
       stoppedReason: 'replied',
     },
   },
+  // The compliance settings and the do-not-contact list (AGL-2980): read
+  // like the rest, and written only by the routes — a client that could
+  // write the footer's postal address, or take an address off the list,
+  // could send mail the law or the recipient forbids.
+  {
+    name: 'outreachSettings',
+    id: 'compliance',
+    data: {
+      legalName: 'Example Co LLC',
+      brandName: '',
+      postalAddress: '100 Example St\nSpringfield, IL 62701',
+      allowedCountries: ['US'],
+    },
+  },
+  {
+    name: 'outreachDoNotContact',
+    id: 'dnc-outreach-key-1',
+    data: {
+      key: 'dnc-outreach-key-1',
+      reason: 'manual',
+      source: 'member',
+      addedByUid: 'uid-outreach-owner',
+      addedAtMs: 1,
+    },
+  },
 ]
+
+// `firebase emulators:exec` exports the emulator's address; a run on other
+// ports than the shared default must not reach whichever emulator holds 8082.
+const [emulatorHost, emulatorPort] = (
+  process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8082'
+).split(':')
 
 const env = await initializeTestEnvironment({
   projectId: 'aglyn-main',
   firestore: {
-    host: '127.0.0.1',
-    port: 8082,
+    host: emulatorHost,
+    port: Number(emulatorPort),
     rules: readFileSync('cloud/firebase-firestore.rules', 'utf8'),
   },
 })

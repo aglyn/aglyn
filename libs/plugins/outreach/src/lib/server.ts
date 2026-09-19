@@ -47,6 +47,7 @@ import {
   OUTREACH_PERMISSIONS,
   OUTREACH_PLUGIN_ID,
 } from './constants/bundle-common'
+import { registerOutreachRoutes } from './routes/register-routes'
 
 /**
  * No auth, no org, no data: it answers whether this server bundle was loaded
@@ -69,4 +70,29 @@ export function registerOutreachConsoleApi(): void {
   // defaults.
   registerPluginPermissions(OUTREACH_PERMISSIONS)
   registerPluginApiRoute(OUTREACH_API_ROUTES.ping, outreachPingHandler)
+  // Compliance settings, sequences, enrollment and enrollment actions
+  // (AGL-2980).
+  registerOutreachRoutes()
 }
+
+// The organization's compliance settings and do-not-contact list
+// (AGL-2980), for the sending runtime: the footer is read before every send,
+// the list is checked before every send, and a reply that opts out, an
+// unsubscribe and a hard bounce each put the address on it.
+export {
+  outreachComplianceSettingsRef,
+  readOutreachComplianceSettingsDoc,
+  writeOutreachComplianceSettings,
+  type WriteOutreachComplianceSettingsInput,
+  type WriteOutreachComplianceSettingsResult,
+} from './storage/compliance-settings-store'
+export {
+  addOutreachDoNotContact,
+  getOutreachDoNotContactEntry,
+  isOutreachDoNotContact,
+  lookupOutreachDoNotContact,
+  outreachDoNotContactCollection,
+  readOutreachDoNotContactEntry,
+  type AddOutreachDoNotContactInput,
+  type AddOutreachDoNotContactResult,
+} from './storage/do-not-contact-store'
