@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { AglynEvent } from './emit-manager/emit-manager'
+
 /**
  * AGL-53 regression: evaluating the runtime module twice (what a client/
  * server graph split or the ESM/CJS dual-package hazard does in Next.js)
@@ -43,15 +45,11 @@ describe('aglyn runtime singleton (AGL-53)', () => {
     jest.isolateModules(() => {
       first = require('./aglyn')
     })
-    const before = first.emitter.listenerCount(
-      first.AglynEvent?.NODE_SET ?? 'node:set',
-    )
+    const before = first.emitter.listenerCount(AglynEvent.NODE_SET)
     jest.isolateModules(() => {
       second = require('./aglyn')
     })
-    const after = second.emitter.listenerCount(
-      second.AglynEvent?.NODE_SET ?? 'node:set',
-    )
+    const after = second.emitter.listenerCount(AglynEvent.NODE_SET)
     expect(after).toBe(before)
     expect(before).toBeGreaterThan(0)
   })
