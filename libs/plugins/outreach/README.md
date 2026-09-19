@@ -66,3 +66,23 @@ pure functions with no I/O, exported from the package root:
 `engine/do-not-contact` derives the do-not-contact document id with
 `node:crypto`, so it is not in the barrel: import
 `@aglyn/plugins-outreach/engine/do-not-contact` from server code.
+
+## The sending runtime
+
+`src/lib/runtime` (AGL-2981) runs the engine against real mailboxes, in the
+console alone — each run opens a rep's sealed grant:
+
+| module | does |
+| -- | -- |
+| `runtime/send-job` | `outreach-send`: due enrollments claimed in a transaction that reserves the mailbox's day, gates asked again, the email composed with its unsubscribe link and sent, the step recorded and filed on the contact's timeline; task steps file the rep's task |
+| `runtime/sync-job` | `outreach-sync`: replies, out-of-office answers, opt-outs and bounces read with `format=full` and classified by the engine; the mailbox's health evidence and its automatic pause |
+| `runtime/unsubscribe-link`, `runtime/unsubscribe-route` | the signed one-click link (`GET` and RFC 8058 `POST /api/outreach/unsubscribe`), a recipient link that outlives a paused rollout, and the `+unsubscribe` mailto |
+| `runtime/enrollment-events` | status changes as the engine's events, and an opt-out recorded on every list |
+| `runtime/timeline` | the contact's timeline, through the core's record-timeline seam |
+| `runtime/person-erasure` | the enrollments a person erasure deletes, and the do-not-contact entry it keeps |
+
+Both jobs are declared on the core's `plugin-console-crons` from the
+console-only declarations, which run them every fifteen minutes from
+`/api/admin/plugin-crons` and give each a row on `/api/health/crons`. Their
+dependencies are `runtime/runtime-deps`; `runtime/fixtures/fake-gmail` is the
+in-memory mailbox the emulator specs run them against.
