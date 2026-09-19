@@ -481,6 +481,56 @@ describe('a Screen Link to a collection listing (AGL-2799)', () => {
     expect(el.hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR)).toBe(true)
   })
 
+  /**
+   * An entry link on the besigner canvas (AGL-3119).
+   *
+   * The console's routing map holds screens, listings and feeds — never
+   * entries, which are searched rather than listed. So every element linking
+   * an entry would light up as broken in the editor if the marker were keyed
+   * off "this map cannot resolve it", and an author would repair a link that
+   * is perfectly good. `screenRoutesAnswerFor` compares by KIND, which is
+   * what makes the silence correct rather than lucky; this is the element
+   * end of it.
+   */
+  it('does not flag an entry link the console map cannot hold', () => {
+    renderOn(
+      {
+        screens: {
+          pricing: 'pricing',
+          'collection:blog': 'blog',
+          'feed:blog': 'blog/rss.xml',
+        },
+        suppressNavigation: true,
+        editorInert: true,
+      },
+      <ScreenLink screenId="entry:blog/9fKqR">{'Hello world'}</ScreenLink>,
+    )
+    const el = screen
+      .getByText('Hello world')
+      .closest('button, a, span') as HTMLElement
+    expect(el.getAttribute('title')).toBeNull()
+    expect(el.hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR)).toBe(false)
+  })
+
+  it('resolves that same link wherever the map DOES carry entries', () => {
+    // The tenant's map carries the entries a page references, and there the
+    // silence above becomes a real address — or a real broken-link marker.
+    renderOn(
+      {
+        screens: {
+          'collection:blog': 'blog',
+          'entry:blog/9fKqR': 'blog/hello-world',
+        },
+      },
+      <ScreenLink renderAs="link" screenId="entry:blog/9fKqR">
+        {'Hello world'}
+      </ScreenLink>,
+    )
+    expect(
+      screen.getByRole('link', { name: 'Hello world' }).getAttribute('href'),
+    ).toBe('/blog/hello-world')
+  })
+
   it('does not flag a listing link on the canvas before the collections load', () => {
     // The host's screens have arrived and its collections have not: the map
     // knows nothing about listings yet, so nothing about this one is wrong.
