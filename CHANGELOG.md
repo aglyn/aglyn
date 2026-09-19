@@ -9,6 +9,83 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.131 — 2026-09-19
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.130...v1.0.0-beta.131)
+
+### Added
+
+- **tools:** a document named by an id the platform did not mint is refused ([AGL-3079](https://linear.app/aglyn/issue/AGL-3079), [AGL-3083](https://linear.app/aglyn/issue/AGL-3083), [AGL-3084](https://linear.app/aglyn/issue/AGL-3084), [AGL-3085](https://linear.app/aglyn/issue/AGL-3085), [AGL-3086](https://linear.app/aglyn/issue/AGL-3086), [AGL-3087](https://linear.app/aglyn/issue/AGL-3087), [AGL-3088](https://linear.app/aglyn/issue/AGL-3088), [AGL-3089](https://linear.app/aglyn/issue/AGL-3089))
+- **tools:** check:tenant-wire-weight budgets what a published page loads before settle ([AGL-3082](https://linear.app/aglyn/issue/AGL-3082))
+- **media:** library video can serve from a delivery provider through signed redirects ([AGL-2824](https://linear.app/aglyn/issue/AGL-2824), [AGL-2825](https://linear.app/aglyn/issue/AGL-2825))
+- **outreach:** the transport reads threads whole and sends the engine's composed email ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978), [AGL-2981](https://linear.app/aglyn/issue/AGL-2981), [AGL-2979](https://linear.app/aglyn/issue/AGL-2979))
+- **aglyn:** plugin workspace erasers run before an org erasure deletes ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+- **tools:** a console-only server declarations surface for plugins ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+- **tools:** a plugin declares its activity mutation paths in plugins.config.json ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+- **aglyn:** a plugin files org activity under its own namespaced target ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+- **outreach:** the plugin declares its Google hosts and its token-endpoint use ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+- **aglyn:** a plugin declares its other hosts and its uses of declared ones ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978), [AGL-2984](https://linear.app/aglyn/issue/AGL-2984))
+- **outreach:** the mailboxes panel connects, configures, tests and disconnects ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+- **outreach:** connect a Google mailbox with a single-use state and a sealed grant ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978), [AGL-2975](https://linear.app/aglyn/issue/AGL-2975))
+- **outreach:** a fetch-based Gmail transport and a plain-text RFC 5322 writer ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+- **aglyn:** a plugin API route may name the subject its release gate asks about ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978), [AGL-2974](https://linear.app/aglyn/issue/AGL-2974))
+- **shared:** a generic AES-256-GCM secret box with key ids for rotation ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+
+### Fixed
+
+- **tools:** the emulator-guard sweep runs the Outreach plugin's emulator specs ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+- **ai:** a job and every draft it writes are named by a console resource id ([AGL-3079](https://linear.app/aglyn/issue/AGL-3079))
+- **tools:** the lifecycle backfill reads its stage table from crm-kinds.ts ([AGL-3082](https://linear.app/aglyn/issue/AGL-3082))
+- **video-delivery:** the plugin's package carries the repo version, 1.0.0-beta.130 ([AGL-2824](https://linear.app/aglyn/issue/AGL-2824))
+- **ai:** an automation draft's tool stays within every provider's schema limits ([AGL-3096](https://linear.app/aglyn/issue/AGL-3096))
+- **tools:** the AI page axe and width recordings are checked in CI, so a stale one fails ([AGL-3108](https://linear.app/aglyn/issue/AGL-3108))
+- **tools:** the probe-header sweep runs in CI, and the Stripe drill names no Aglyn host ([AGL-3108](https://linear.app/aglyn/issue/AGL-3108))
+- **aglyn:** a property condition's pattern matches in linear time and never 404s a page ([AGL-2893](https://linear.app/aglyn/issue/AGL-2893))
+- **ai:** a page's call to action may go to a section of the same page ([AGL-3097](https://linear.app/aglyn/issue/AGL-3097))
+- **ai:** a Grid that is not a container is told what its own shape needs ([AGL-3078](https://linear.app/aglyn/issue/AGL-3078))
+- **ai:** a refused answer leaves its node ids and a copy-free outline on the job ([AGL-3078](https://linear.app/aglyn/issue/AGL-3078))
+- **aglyn:** no server-only plugin registry on a published page ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+- **aglyn:** the release gate finds a route-named staff account in any auth pool ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978), [AGL-1122](https://linear.app/aglyn/issue/AGL-1122))
+- **outreach:** the Mailboxes panel shows the limit the runtime enforces ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978), [AGL-2979](https://linear.app/aglyn/issue/AGL-2979))
+- **outreach:** an account erasure revokes and deletes the person's mailboxes ([AGL-3106](https://linear.app/aglyn/issue/AGL-3106))
+- **marketplace:** a link or image a property feeds is published bound and rendered safe ([AGL-2933](https://linear.app/aglyn/issue/AGL-2933))
+- **console:** an author's live-page save refreshes the page, and a refused refresh warns ([AGL-2934](https://linear.app/aglyn/issue/AGL-2934))
+- **outreach:** no raw NUL bytes in source, firebase peers declared, barrel left alone ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+
+### Performance
+
+- **core:** the runtime singleton re-exports nothing, so a page's graph stops at it ([AGL-3082](https://linear.app/aglyn/issue/AGL-3082))
+- **media:** a JPEG or PNG gets a WebP at its own width, so ?w= at or above it is WebP ([AGL-3082](https://linear.app/aglyn/issue/AGL-3082))
+- **core:** the consent preferences panel is fetched when asked for, not with the banner ([AGL-3082](https://linear.app/aglyn/issue/AGL-3082))
+- **core:** the actions builder checks CRM kinds without the CRM record model ([AGL-3082](https://linear.app/aglyn/issue/AGL-3082))
+
+### Changed
+
+- **outreach:** a pending connect lives under its organization ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+
+### Documentation
+
+- **vendor:** fuse.js still reaches every published page through the always-on plugin ([AGL-3082](https://linear.app/aglyn/issue/AGL-3082))
+- **marketing:** the Datasets deck carries the copy decided on 9/19 ([AGL-2769](https://linear.app/aglyn/issue/AGL-2769), [AGL-3105](https://linear.app/aglyn/issue/AGL-3105), [AGL-3111](https://linear.app/aglyn/issue/AGL-3111), [AGL-3113](https://linear.app/aglyn/issue/AGL-3113))
+- **outreach:** the README names the console-only entries and the mailbox modules ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+- **outreach:** the Disconnected status, and what an erasure does to a mailbox ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+
+<details>
+<summary>Also in this release: 6 test, 4 chore</summary>
+
+- **ai:** a crashed or retried step finds the draft its recorded id names ([AGL-3079](https://linear.app/aglyn/issue/AGL-3079))
+- **ai:** the cache ledger measures the tools the form and grader doors send ([AGL-3109](https://linear.app/aglyn/issue/AGL-3109))
+- **tools:** the Linear ceiling is 3113, read from the workspace ([AGL-3113](https://linear.app/aglyn/issue/AGL-3113))
+- **tools:** the Week-One pre-flight no longer checks for a founding offer ([AGL-3103](https://linear.app/aglyn/issue/AGL-3103))
+- **aglyn:** the self-host allowlist drops the Stripe drill, which names no Aglyn host ([AGL-3108](https://linear.app/aglyn/issue/AGL-3108))
+- **tools:** the Linear ceiling is 3108, read from the workspace ([AGL-3108](https://linear.app/aglyn/issue/AGL-3108))
+- **outreach:** the erasers against a real Firestore ([AGL-3106](https://linear.app/aglyn/issue/AGL-3106))
+- **console:** the AI site-switch spec's server mock carries the route-subject reader ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+- **tools:** the Linear ceiling is 3106, read from the workspace ([AGL-3106](https://linear.app/aglyn/issue/AGL-3106))
+- **aglyn:** the route-subject and activity-target seams name a fixture plugin ([AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+
+</details>
+
 ## v1.0.0-beta.130 — 2026-09-19
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.129...v1.0.0-beta.130)
