@@ -1013,13 +1013,15 @@ export const AI_FREE_PRACTICE_AREAS_FIXTURE: AiFreePageFixture = freeBrief({
  * and then the page, which places the component and binds the form by the
  * ids the job built them under, and renders inside the layout.
  *
- * Those ids are the job's own with each creation's place in the plan, so the
- * section answers name them: the component is `<jobId>-c0`, the layout
- * `<jobId>-c1` and the form `<jobId>-c2`.
+ * Every draft is named by the id the job recorded for it before anything was
+ * built (AGL-3079): each creation by the id on its plan entry, which the
+ * section answers name, and the page by the id on the job's generation step.
  */
 export interface AiPageCreationFixture extends AiPageBriefFixture {
-  /** The job the page is built under, which every creation's id derives from. */
+  /** The job the page is built under. */
   jobId: string
+  /** The id the job recorded for its page on its generation step. */
+  screenId: string
   /** The layout step's golden answer: a header of screen links, the slot and a footer. */
   layout: AiGoldenSection
   /** The component step's golden, by its file under `jobs/goldens`. */
@@ -1030,9 +1032,12 @@ export interface AiPageCreationFixture extends AiPageBriefFixture {
 
 const CREATION_JOB = 'job-golden-creations'
 
+/** The ids the plan recorded for what it creates, as a kept plan carries them. */
+const CREATION_IDS = { component: 'tstmnlCard', layout: 'hrbrLayout', form: 'roofQuoteF' }
+
 export const AI_PAGE_CREATION_FIXTURE: AiPageCreationFixture = (() => {
-  const component = `${CREATION_JOB}-c0`
-  const form = `${CREATION_JOB}-c2`
+  const component = CREATION_IDS.component
+  const form = CREATION_IDS.form
   const opener = hero('a', {
     title: 'Roof repair in Harbor County',
     lead: 'A local crew that finds the leak, fixes it the same week and sends you photos of the work.',
@@ -1081,6 +1086,7 @@ export const AI_PAGE_CREATION_FIXTURE: AiPageCreationFixture = (() => {
           why: 'Three quotes share one card, and the site has no card yet.',
           duplicateOf: null,
           fields: ['quote:richText', 'name:text', 'role:text', 'photo:image'],
+          id: CREATION_IDS.component,
         },
         {
           kind: 'layout',
@@ -1088,6 +1094,7 @@ export const AI_PAGE_CREATION_FIXTURE: AiPageCreationFixture = (() => {
           why: 'The site has no layout, so every page would otherwise carry its own header and footer.',
           duplicateOf: null,
           fields: [],
+          id: CREATION_IDS.layout,
         },
         {
           kind: 'form',
@@ -1095,6 +1102,7 @@ export const AI_PAGE_CREATION_FIXTURE: AiPageCreationFixture = (() => {
           why: 'The site has no form to request a quote.',
           duplicateOf: null,
           fields: [],
+          id: CREATION_IDS.form,
         },
       ],
       screens: [
@@ -1114,6 +1122,7 @@ export const AI_PAGE_CREATION_FIXTURE: AiPageCreationFixture = (() => {
     answers: [opener.answer, quotes.answer, request.answer],
     seo,
     jobId: CREATION_JOB,
+    screenId: 'roofRepair',
     layout: {
       rootId: 'root',
       nodes: {

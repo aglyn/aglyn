@@ -15,19 +15,26 @@
  * limitations under the License.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import type { OutreachMailbox, OutreachSequence } from '../model/outreach.types'
+import type {
+  OutreachComplianceSettingsDocument,
+  OutreachMailbox,
+  OutreachSequence,
+} from '../model/outreach.types'
 import {
   OutreachSequenceDetail,
   type OutreachSequenceDetailProps,
 } from './sequence-detail'
 import { OutreachRouteError } from './use-outreach-api'
 import type { OutreachLoad } from './use-outreach-data'
+import type { OutreachMailboxesResult } from './use-outreach-mailboxes'
+import type { OutreachSettingsLoad } from './use-outreach-settings'
 
 /**
  * One sequence (AGL-2980): each state its read can be in, the actions each
- * status offers, the activation refusal and the issues behind it, the two
+ * status offers, what stops activation — said before a click, with Activate
+ * disabled — and the refusal when the route finds more, the two
  * confirmations, and the enroll dialog an active sequence opens. The editor,
  * the enrollments table and the dialog are stubbed to the props they were
  * handed; each has a spec of its own.
@@ -99,25 +106,56 @@ const sequence = (status: OutreachSequence['status']): OutreachSequence =>
   }) as OutreachSequence
 
 const SECTION = '/acme/outreach/sequences'
+const MAILBOXES = '/acme/outreach/mailboxes'
+const COMPLIANCE = '/acme/outreach/compliance'
+
+const footer: OutreachComplianceSettingsDocument = {
+  legalName: 'Example Shop LLC',
+  brandName: 'Example Shop',
+  postalAddress: '100 Example St\nSpringfield, IL 62701',
+  allowedCountries: ['US'],
+  updatedAtMs: 1,
+  updatedByUid: 'uid-owner',
+}
+const settingsOf = (
+  settings: OutreachComplianceSettingsDocument | null,
+  status: OutreachSettingsLoad['status'] = 'ready',
+): OutreachSettingsLoad => ({ status, settings, message: null, reload: jest.fn() })
+
+const mailboxesOf = (
+  status: OutreachMailbox['status'] | null,
+  loadStatus: OutreachMailboxesResult['status'] = 'ready',
+): OutreachMailboxesResult =>
+  ({
+    status: loadStatus,
+    mailboxes: status
+      ? [
+          {
+            id: 'mbx-1',
+            timezone: 'America/Chicago',
+            status,
+            connectedByUid: 'uid-rep',
+          } as OutreachMailbox,
+        ]
+      : [],
+  }) as OutreachMailboxesResult
+
 const renderDetail = (props: Partial<OutreachSequenceDetailProps> = {}) =>
   render(
     <OutreachSequenceDetail
       orgId="org-1"
       sectionPath={SECTION}
+      mailboxesPath={MAILBOXES}
+      compliancePath={COMPLIANCE}
       sequenceId="seq-1"
       tab="steps"
-      settings={{
-        status: 'ready',
-        settings: null,
-        message: null,
-        reload: jest.fn(),
-      }}
-      mailboxes={[
-        { id: 'mbx-1', timezone: 'America/Chicago' } as OutreachMailbox,
-      ]}
+      settings={settingsOf(footer)}
+      mailboxes={mailboxesOf('connected')}
       {...props}
     />,
   )
+
+const blockers = () => screen.queryByTestId('outreach-activation-blockers')
 
 const button = (name: string) =>
   screen.queryByRole('button', { name }) as HTMLButtonElement | null
@@ -289,5 +327,71 @@ describe('a sequence: what it does (AGL-2980)', () => {
     expect(
       screen.getByRole('dialog', { name: 'Enroll people' }).textContent,
     ).toBe('group:group-brand')
+  })
+})
+
+describe('a sequence: what stops activation, said before a click (AGL-2980)', () => {
+  it('names a mailbox that is not sending, and sends the member to Mailboxes', () => {
+    renderDetail({ mailboxes: mailboxesOf('paused') })
+    expect(button('Activate')?.disabled).toBe(true)
+    const said = blockers() as HTMLElement
+    expect(said.textContent).toContain(
+      "This sequence's mailbox is paused. Resume it in Mailboxes, then activate the sequence.",
+    )
+    fireEvent.click(within(said).getByRole('link', { name: 'Open Mailboxes' }))
+    expect(mockPush).toHaveBeenCalledWith(MAILBOXES)
+  })
+
+  it('names a mailbox waiting to be reconnected', () => {
+    renderDetail({ mailboxes: mailboxesOf('reconnect_required') })
+    expect(button('Activate')?.disabled).toBe(true)
+    expect(blockers()?.textContent).toContain(
+      "Google stopped accepting this sequence's mailbox. Reconnect it in Mailboxes, then activate the sequence.",
+    )
+  })
+
+  it('asks for a mailbox where there is none, or the one it named is gone, on its own steps', () => {
+    const gone = renderDetail({ mailboxes: mailboxesOf(null) })
+    expect(blockers()?.textContent).toContain(
+      "This sequence's mailbox is no longer connected. Choose another before activating it.",
+    )
+    fireEvent.click(within(blockers() as HTMLElement).getByRole('link', { name: 'Choose a mailbox' }))
+    expect(mockPush).toHaveBeenCalledWith(`${SECTION}/seq-1`)
+    gone.unmount()
+    mockSequence = { status: 'ready', data: { ...sequence('draft'), mailboxId: '' } }
+    renderDetail()
+    expect(button('Activate')?.disabled).toBe(true)
+    expect(blockers()?.textContent).toContain('Choose the mailbox this sequence sends from before activating it.')
+  })
+
+  it('names a footer the organization cannot write yet, and sends the member to Compliance', () => {
+    renderDetail({ settings: settingsOf({ ...footer, postalAddress: '' }) })
+    expect(button('Activate')?.disabled).toBe(true)
+    const said = blockers() as HTMLElement
+    expect(said.textContent).toContain("Add your organization's postal address in Outreach settings.")
+    fireEvent.click(within(said).getByRole('link', { name: 'Open Compliance' }))
+    expect(mockPush).toHaveBeenCalledWith(COMPLIANCE)
+  })
+
+  it('claims nothing while the mailboxes or the settings are still being read', () => {
+    renderDetail({
+      mailboxes: mailboxesOf(null, 'loading'),
+      settings: settingsOf(null, 'loading'),
+    })
+    expect(blockers()).toBeNull()
+    expect(button('Activate')?.disabled).toBe(false)
+  })
+
+  it('warns on an active sequence whose mailbox stopped sending, and stops enrolling onto one that is gone', () => {
+    mockSequence = { status: 'ready', data: sequence('active') }
+    const paused = renderDetail({ mailboxes: mailboxesOf('paused') })
+    expect(
+      screen.getByText(/This sequence’s mailbox is paused, so nothing is sent until it is resumed\./),
+    ).toBeTruthy()
+    expect(button('Enroll people')?.disabled).toBe(false)
+    paused.unmount()
+    renderDetail({ mailboxes: mailboxesOf('disconnected') })
+    expect(screen.getByText(/no longer connected, so nothing is sent from it\./)).toBeTruthy()
+    expect(button('Enroll people')?.disabled).toBe(true)
   })
 })

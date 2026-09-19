@@ -49,7 +49,7 @@ import {
   readStoredOutreachMailbox,
   readStoredOutreachSequence,
 } from '../storage/outreach-records'
-import type { OutreachRouteDeps } from './route-deps'
+import { OUTREACH_SEQUENCE_ACTIVITY_TARGET, type OutreachRouteDeps } from './route-deps'
 import { outreachRouteGate, type OutreachRouteCaller, type OutreachRouteExtraPermission } from './route-gate'
 import {
   outreachMethodNotAllowed,
@@ -437,7 +437,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
         caller.orgId,
         { uid: caller.uid, email: caller.email },
         outreachEnrolledActivity(enrolled),
-        { type: 'sequence', id: sequence.id, name: sequence.name },
+        { type: OUTREACH_SEQUENCE_ACTIVITY_TARGET, id: sequence.id, name: sequence.name },
       )
     }
     return outreachOk({ ok: true, results, enrolled } satisfies OutreachEnrollResponse)

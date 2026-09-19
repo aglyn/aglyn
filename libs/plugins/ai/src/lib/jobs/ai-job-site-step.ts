@@ -38,6 +38,7 @@ import {
 } from '../model/ai-site-job'
 import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
+import { aiRecordedJobDraftId } from './ai-job-draft-ids'
 import { aiConfirmedPlan, aiUnspentOutcome } from './ai-job-generation'
 import {
   AI_JOB_BRIEF_MAX_CHARS,
@@ -334,14 +335,28 @@ export function aiSiteBriefLines(
 }
 
 /**
+ * The id a unit's job is named by, and so the id its draft is written under
+ * (AGL-3079): the id the plan entry it builds recorded, or for the welcome
+ * email the id recorded on this job's step. A unit that writes no draft — a
+ * palette change — and a unit whose plan recorded no id are named by this
+ * job's id and the unit's slot, the name every draft of such a plan has.
+ */
+export function aiSiteUnitJobId(job: Pick<AiJob, '$id' | 'steps'>, unit: AiSiteUnit): string {
+  const recorded =
+    unit.creation?.id ?? unit.screen?.id ?? (unit.kind === 'email' ? aiRecordedJobDraftId(job, 'email') : null)
+  return recorded || `${job.$id}-${unit.slot}`
+}
+
+/**
  * The job a unit is built under: this job's org, site, creator and model,
  * the kind that owns the unit, and a plan narrowed to the unit alone.
  *
  * The derived job carries NO steps and NO outputs of the scaffold's: a page
  * job's step reads its own draft and its own plan, and what the other units
- * produced is not its business. Its `$id` is this job's with the unit's slot,
- * which is what every step already addresses its draft by, so a unit re-run
- * after its write finds its own draft rather than writing a second.
+ * produced is not its business. Its `$id` is the id the unit's draft is
+ * written under (`aiSiteUnitJobId`), which is what a step with no id of its
+ * own recorded names its draft by, so a unit re-run after its write finds its
+ * own draft rather than writing a second.
  *
  * A creation unit reuses what the plan reuses less what the plan's screens
  * place themselves (AGL-3031): a component a page's section places is the
@@ -420,7 +435,7 @@ export function aiSiteUnitJob(
   }
   return {
     ...job,
-    $id: `${job.$id}-${unit.slot}`,
+    $id: aiSiteUnitJobId(job, unit),
     kind: unit.jobKind,
     steps: [],
     outputs: [],

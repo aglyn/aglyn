@@ -17,6 +17,10 @@
 
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { checkQuota } from '@aglyn/aglyn/server'
+import {
+  removeMediaDeliveryCopies,
+  withoutMediaDeliveryCopies,
+} from './media-delivery'
 
 /**
  * What a DAM delete has to leave behind for an undo to be possible at all
@@ -216,6 +220,26 @@ export async function captureObjectGenerations(
   )
 }
 
+/**
+ * Removes the delivery provider's copies of a deleted asset (AGL-2824).
+ *
+ * Unlike the bucket's objects they are not kept for a restore — a restore
+ * copies the video again — and no tombstone records them. The library is
+ * read off the scope reference (`hosts/{id}` or `orgs/{id}`). Nothing runs
+ * when no provider is configured to store, and a failure is logged rather
+ * than answered, like the object deletes beside it.
+ */
+async function removeDeliveryCopies(
+  scopeRef: FirebaseFirestore.DocumentReference,
+  mediaId: string,
+): Promise<void> {
+  const collection = scopeRef.parent?.id
+  if (collection !== 'hosts' && collection !== 'orgs') return
+  await removeMediaDeliveryCopies({
+    asset: { collection, scopeId: scopeRef.id, mediaId },
+  })
+}
+
 export interface DeleteMediaResult {
   /** False when there was no document to delete (already gone). */
   deleted: boolean
@@ -264,6 +288,7 @@ export async function deleteMediaWithTombstone(options: {
     // sweep below still runs: an orphan object is exactly what this branch is
     // for, and it predates the tombstone.
     await bucket.file(objectPath).delete().catch(() => undefined)
+    await removeDeliveryCopies(scopeRef, mediaId)
     return { deleted: false }
   }
 
@@ -325,6 +350,7 @@ export async function deleteMediaWithTombstone(options: {
       bucket.file(path).delete().catch(() => undefined),
     ),
   )
+  await removeDeliveryCopies(scopeRef, mediaId)
 
   if (!committed) return { deleted: false }
   return { deleted: true, tombstone: { mediaId, expiresAt, fileName } }
@@ -521,7 +547,9 @@ export async function restoreMediaFromTombstone(options: {
       const fresh = await transaction.get(tombstoneRef)
       if (!fresh.exists) return false
       const record = fresh.data() as MediaTombstoneDoc
-      transaction.set(mediaRef, record.media)
+      // Without its delivery copy record: the delete removed those copies,
+      // and a record of them would name objects that are gone (AGL-2824).
+      transaction.set(mediaRef, withoutMediaDeliveryCopies(record.media))
       transaction.delete(tombstoneRef)
       transaction.set(
         counterRef,

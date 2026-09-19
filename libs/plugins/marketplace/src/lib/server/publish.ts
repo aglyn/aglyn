@@ -132,13 +132,6 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
     if (!definition || definition.deletedAt) {
       return res.status(404).json({ error: 'Unknown component' })
     }
-    const sanitized = sanitizeMarketplaceDefinition({
-      rootId: definition.rootId,
-      nodes: decodeStoredNodes<Record<string, any>>(definition.nodes) ?? {},
-    })
-    if (sanitized.ok === false) {
-      return res.status(422).json({ error: sanitized.error })
-    }
     // The properties the tree binds to (AGL-2933), read off the same document
     // the tree is: a publish copies a version's props onto it with its nodes.
     // A default the sanitizer refuses is cleared and its property kept — see
@@ -146,6 +139,18 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
     const props = sanitizeMarketplaceProps(definition.props)
     if (props.ok === false) {
       return res.status(422).json({ error: props.error })
+    }
+    // Held to the rule with those properties beside it, so a link or image
+    // bound whole to a Link or Image property travels bound.
+    const sanitized = sanitizeMarketplaceDefinition(
+      {
+        rootId: definition.rootId,
+        nodes: decodeStoredNodes<Record<string, any>>(definition.nodes) ?? {},
+      },
+      { declaredProps: props.props },
+    )
+    if (sanitized.ok === false) {
+      return res.status(422).json({ error: sanitized.error })
     }
 
     // One listing per source component: re-publish bumps latestVersion.

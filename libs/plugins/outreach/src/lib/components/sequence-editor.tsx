@@ -36,7 +36,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   isInThreadEmailStep,
   OUTREACH_SEQUENCE_NAME_MAX,
@@ -48,7 +48,6 @@ import {
   OUTREACH_MAX_STEPS,
   OUTREACH_TASK_KIND_LABELS,
   OUTREACH_TASK_KINDS,
-  type OutreachMailbox,
   type OutreachSequence,
   type OutreachSequenceStep,
   type OutreachTaskKind,
@@ -62,10 +61,12 @@ import {
   type OutreachSequenceIssue,
 } from '../model/sequence-draft'
 import { OutreachSendWindowFields } from './send-window-fields'
+import { OutreachSequenceMailboxPicker } from './sequence-mailbox-picker'
 import { OutreachSequencePreview } from './sequence-preview'
 import { OutreachStepCard } from './sequence-step-card'
 import { OutreachRouteError, useOutreachApi } from './use-outreach-api'
 import { useOutreachEmailTemplates } from './use-outreach-crm'
+import type { OutreachMailboxesResult } from './use-outreach-mailboxes'
 import type { OutreachSettingsLoad } from './use-outreach-settings'
 
 export interface OutreachSequenceEditorProps {
@@ -75,15 +76,13 @@ export interface OutreachSequenceEditorProps {
   sequence: OutreachSequence | null
   /** The organization's compliance settings: its countries, and the preview's footer. */
   settings: OutreachSettingsLoad
-  /** The organization's connected mailboxes: who the preview's emails are from. */
-  mailboxes: readonly OutreachMailbox[]
-  /** The mailbox picker, rendered in the sequence card beside the site. */
-  mailboxField?: (props: {
-    value: string
-    onChange(mailboxId: string): void
-    error?: string
-    disabled?: boolean
-  }) => ReactNode
+  /**
+   * The organization's mailboxes, from the Mailboxes section's listener:
+   * what the picker offers, and who the preview's emails are from.
+   */
+  mailboxes: OutreachMailboxesResult
+  /** The Mailboxes section, where the picker sends a member to connect one. */
+  mailboxesPath: string
   onSaved(sequence: OutreachSequence): void
   onCancel?(): void
 }
@@ -113,7 +112,8 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
   const uid = user?.uid ?? null
-  const hosts = orgMount?.hosts ?? []
+  const mountedHosts = orgMount?.hosts
+  const hosts = useMemo(() => mountedHosts ?? [], [mountedHosts])
   const orgCountries = settings.settings?.allowedCountries ?? ['US']
 
   const [draft, setDraft] = useState<OutreachSequenceDraft>(() =>
@@ -152,9 +152,21 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
       setDraft((previous) => ({ ...previous, hostId: hosts[0].id }))
   }, [sequence, draft.hostId, hosts])
 
+  // A new sequence starts on the member's own mailbox when they have exactly
+  // one that is sending.
+  const ownSending = props.mailboxes.mailboxes.filter(
+    (entry) => entry.connectedByUid === uid && entry.status === 'connected',
+  )
+  const onlyOwnMailbox = ownSending.length === 1 ? ownSending[0].id : ''
+  useEffect(() => {
+    if (!sequence && !draft.mailboxId && onlyOwnMailbox)
+      setDraft((previous) => ({ ...previous, mailboxId: onlyOwnMailbox }))
+  }, [sequence, draft.mailboxId, onlyOwnMailbox])
+
   const templates = useOutreachEmailTemplates(orgId, draft.hostId || null, uid)
   const mailbox =
-    props.mailboxes.find((entry) => entry.id === draft.mailboxId) ?? null
+    props.mailboxes.mailboxes.find((entry) => entry.id === draft.mailboxId) ??
+    null
   const archived = sequence?.status === 'archived'
 
   const issues = useMemo(() => {
@@ -303,16 +315,16 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
                   </MenuItem>
                 ))}
               </TextField>
-              {props.mailboxField ? (
-                props.mailboxField({
-                  value: draft.mailboxId,
-                  onChange: (mailboxId) => update({ mailboxId }),
-                  error: issueAt('mailboxId'),
-                  disabled: archived,
-                })
-              ) : issueAt('mailboxId') ? (
-                <Alert severity="error">{issueAt('mailboxId')}</Alert>
-              ) : null}
+              <OutreachSequenceMailboxPicker
+                orgId={orgId}
+                uid={uid}
+                mailboxes={props.mailboxes}
+                mailboxesPath={props.mailboxesPath}
+                value={draft.mailboxId}
+                onChange={(mailboxId) => update({ mailboxId })}
+                error={issueAt('mailboxId')}
+                disabled={archived}
+              />
             </Stack>
           </CardDisplay>
 

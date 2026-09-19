@@ -17,6 +17,7 @@
 
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
+import { eraseMediaDeliveryScope } from './media-delivery'
 import { deleteHostProjectionForAllMembers } from './host-memberships'
 import { detachWorkspaceDomain } from './workspace-domains'
 import {
@@ -218,6 +219,10 @@ export async function eraseHost(
   } catch (error) {
     console.error(`eraseHost: storage cleanup failed for ${hostId}`, error)
   }
+  // And the delivery provider's copies of the site's video (AGL-2824), held
+  // under the same library prefix. Nothing runs when no provider is
+  // configured to store; a failure is logged, like the bucket's.
+  await eraseMediaDeliveryScope({ collection: 'hosts', scopeId: hostId })
 
   // Dead-lettered supplier deliveries (AGL-1448). See the note on
   // SUPPLIER_DELIVERY_COLLECTION below for why this is here and not implied
@@ -1341,6 +1346,9 @@ export async function eraseOrg(
       } catch (error) {
         console.error(`eraseOrg: org storage cleanup failed for ${orgId}`, error)
       }
+      // The org library's copies at the delivery provider (AGL-2824); each
+      // site's went with its `eraseHost` above.
+      await eraseMediaDeliveryScope({ collection: 'orgs', scopeId: orgId })
     }
 
     // Stripe: the customer at the processor, AND the local reverse index that

@@ -18,6 +18,7 @@
 import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { OUTREACH_API_ROUTES } from '../constants/api-routes'
+import { outreachOrgSubject } from '../mailboxes/register-mailbox-routes'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
 import { createOutreachEnrollmentActionRoute } from './enrollment-routes'
 import { createOutreachPreviewRoute } from './preview-routes'
@@ -29,6 +30,13 @@ import { createOutreachSettingsRoute } from './settings-routes'
  * Wires the settings, sequence and enrollment routes into the console
  * dispatcher (AGL-2980) with the platform's own dependencies. Specs build
  * their own.
+ *
+ * Every one names its organization (`orgId`, in the query or the JSON body)
+ * and none names a site, so each declares the mailbox routes' subject reader:
+ * the dispatcher's release gate then asks about that organization, and a
+ * `release_outreach` override for one organization reaches these routes as it
+ * reaches Mailboxes. Without it the gate reads the request as anonymous, which
+ * only a fully enabled flag or a staff session passes.
  */
 
 /** The platform's heavier modules, loaded the first time a request needs one. */
@@ -66,14 +74,17 @@ export function registerOutreachRoutes(
 ): void {
   const sequences = createOutreachSequenceRoutes(deps)
   const enroll = createOutreachEnrollRoutes(deps)
-  registerPluginApiRoute(OUTREACH_API_ROUTES.settings, { web: createOutreachSettingsRoute(deps) })
-  registerPluginApiRoute(OUTREACH_API_ROUTES.sequencesSave, { web: sequences.save })
-  registerPluginApiRoute(OUTREACH_API_ROUTES.sequencesStatus, { web: sequences.status })
-  registerPluginApiRoute(OUTREACH_API_ROUTES.sequencesDelete, { web: sequences.remove })
-  registerPluginApiRoute(OUTREACH_API_ROUTES.enrollPreview, { web: enroll.preview })
-  registerPluginApiRoute(OUTREACH_API_ROUTES.enroll, { web: enroll.confirm })
-  registerPluginApiRoute(OUTREACH_API_ROUTES.enrollmentsAction, {
-    web: createOutreachEnrollmentActionRoute(deps),
-  })
-  registerPluginApiRoute(OUTREACH_API_ROUTES.preview, { web: createOutreachPreviewRoute(deps) })
+  const orgSubject = { subject: outreachOrgSubject }
+  registerPluginApiRoute(OUTREACH_API_ROUTES.settings, { web: createOutreachSettingsRoute(deps) }, orgSubject)
+  registerPluginApiRoute(OUTREACH_API_ROUTES.sequencesSave, { web: sequences.save }, orgSubject)
+  registerPluginApiRoute(OUTREACH_API_ROUTES.sequencesStatus, { web: sequences.status }, orgSubject)
+  registerPluginApiRoute(OUTREACH_API_ROUTES.sequencesDelete, { web: sequences.remove }, orgSubject)
+  registerPluginApiRoute(OUTREACH_API_ROUTES.enrollPreview, { web: enroll.preview }, orgSubject)
+  registerPluginApiRoute(OUTREACH_API_ROUTES.enroll, { web: enroll.confirm }, orgSubject)
+  registerPluginApiRoute(
+    OUTREACH_API_ROUTES.enrollmentsAction,
+    { web: createOutreachEnrollmentActionRoute(deps) },
+    orgSubject,
+  )
+  registerPluginApiRoute(OUTREACH_API_ROUTES.preview, { web: createOutreachPreviewRoute(deps) }, orgSubject)
 }

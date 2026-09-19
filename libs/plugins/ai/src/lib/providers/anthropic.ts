@@ -26,6 +26,7 @@ import {
   type AiProviderRequest,
   type AiResult,
   type AiStreamEvent,
+  type AiToolSchemaLimits,
   type AiToolUse,
   type AiUsage,
 } from './contract'
@@ -57,6 +58,19 @@ const ANTHROPIC_VERSION = '2023-06-01'
 
 /** The Messages API accepts at most this many `cache_control` markers. */
 export const ANTHROPIC_MAX_CACHE_BREAKPOINTS = 4
+
+/**
+ * What the Messages API compiles of one request's strict schemas, as its
+ * structured-outputs documentation states the limits: 20 strict tools, 24
+ * optional parameters and 16 parameters with union types, each a total over
+ * every strict schema the request carries. Past any of them the request is
+ * refused with a 400 before the model runs.
+ */
+export const ANTHROPIC_TOOL_SCHEMA_LIMITS: AiToolSchemaLimits = {
+  strictTools: 20,
+  optionalParameters: 24,
+  unionParameters: 16,
+}
 
 /**
  * Whether a provider failure is the kind that clears on its own. Matched on
@@ -366,6 +380,7 @@ export const anthropicProvider: AiProvider = {
   apiKeyEnv: ANTHROPIC_API_KEY_ENV,
   readApiKey: () => process.env.ANTHROPIC_API_KEY?.trim() || undefined,
   endpointHost: ANTHROPIC_HOST,
+  toolSchemaLimits: ANTHROPIC_TOOL_SCHEMA_LIMITS,
   models(): readonly AiModelDescriptor[] {
     return aiModelIdsForProvider(ANTHROPIC_PROVIDER_ID)
       .map((id) => aiCatalogEntry(id))

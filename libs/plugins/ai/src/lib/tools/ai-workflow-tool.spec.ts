@@ -62,6 +62,10 @@ function objectSchemas(node: unknown, found: Schema[] = []): Schema[] {
 const ALL = { crm: true, webhooks: true, bookings: true }
 const NONE = { crm: false, webhooks: false, bookings: false }
 
+/** A step as the tool carries one: its type, its `when` list and its own fields. */
+const step = (type: string, fields: Record<string, unknown> = {}) => ({ type, when: [], ...fields })
+
+/** A step as the reader gives it back: every field it does not use `null`. */
 const NULL_STEP = {
   when: null,
   list: null,
@@ -85,7 +89,7 @@ const NULL_STEP = {
   activityKind: null,
 }
 
-const step = (type: string, fields: Record<string, unknown> = {}) => ({ type, ...NULL_STEP, ...fields })
+const readStep = (type: string, fields: Record<string, unknown> = {}) => ({ type, ...NULL_STEP, ...fields })
 
 function answer(patch: Record<string, unknown> = {}) {
   return {
@@ -112,7 +116,8 @@ describe('the tools', () => {
         expect([...object['required']].sort()).toEqual(Object.keys(object['properties']).sort())
       }
     }
-    expect(objectSchemas(aiAutomationTool().inputSchema)).toHaveLength(5)
+    // The answer, its trigger, the one condition every condition refers to, and a variant per step type.
+    expect(objectSchemas(aiAutomationTool().inputSchema)).toHaveLength(3 + AI_AUTOMATION_STEP_TYPES.length)
     expect([aiAutomationTool().name, aiWorkflowExplanationTool().name]).toEqual([
       AI_AUTOMATION_TOOL_NAME,
       AI_WORKFLOW_EXPLANATION_TOOL_NAME,
@@ -127,7 +132,10 @@ describe('the tools', () => {
   it('offers every host event as a trigger, and only the steps that act on the person an event names', () => {
     const properties = aiAutomationTool().inputSchema['properties'] as Schema
     expect(properties['trigger'].properties.event.enum).toEqual([...HOST_EVENT_TYPES])
-    expect(properties['steps'].items.properties.type.enum).toEqual([...AI_AUTOMATION_STEP_TYPES])
+    const variants = properties['steps'].items.anyOf as Schema[]
+    expect(variants.map((variant) => variant['properties'].type.enum)).toEqual(
+      AI_AUTOMATION_STEP_TYPES.map((type) => [type]),
+    )
     expect(properties['unsupported'].anyOf[0].enum).toEqual([...AI_AUTOMATION_UNSUPPORTED])
     for (const type of AI_AUTOMATION_STEP_TYPES) expect(HOST_ACTION_STEP_LABELS[type]).toBeTruthy()
     // The on-page steps need a selector on a page a description cannot name.
@@ -135,6 +143,30 @@ describe('the tools', () => {
     // whose request raised the event.
     const onPage = AI_AUTOMATION_STEP_TYPES.filter((type) => CLIENT_ACTION_STEP_TYPES.has(type))
     expect(onPage).toEqual(['siteAlert'])
+  })
+
+  it('gives each step type a variant of its own fields, none a union, which the reader reads back whole', () => {
+    const variants = (aiAutomationTool().inputSchema['properties'] as Schema)['steps'].items.anyOf as Schema[]
+    const samples: Record<string, unknown> = { owner: 'round robin', toField: 'workEmail', tag: 'vip' }
+    for (const variant of variants) {
+      const type = variant['properties'].type.enum[0]
+      expect([type, variant['properties'].when]).toEqual([type, { $ref: '#/$defs/when' }])
+      const fields = Object.keys(variant['properties']).filter((key) => key !== 'type' && key !== 'when')
+      const filled = Object.fromEntries(
+        fields.map((key) => {
+          const field = variant['properties'][key]
+          expect([type, key, field.anyOf, typeof field.type]).toEqual([type, key, undefined, 'string'])
+          return [key, field.enum ? field.enum[0] : field.type === 'integer' ? 1 : (samples[key] ?? 'Welcome')]
+        }),
+      )
+      const read = readAiAutomationAnswer(answer({ steps: [step(type, filled)] }), ALL)
+      expect([type, read.violations]).toEqual([type, []])
+      // The reader keeps every field the variant carries, and no other.
+      const kept = Object.entries(read.value?.steps[0] ?? {})
+        .filter(([key, value]) => key !== 'type' && value !== null)
+        .map(([key]) => key)
+      expect([type, kept.sort()]).toEqual([type, fields.sort()])
+    }
   })
 })
 
@@ -169,9 +201,9 @@ describe('reading an automation', () => {
         combinator: 'or',
       },
       steps: [
-        step('sendEmail', { subject: 'Hello', body: 'Thanks [first name].' }),
-        step('siteAlert', { message: 'Thanks!', severity: 'info' }),
-        step('assignContactOwner', { owner: 'round robin' }),
+        readStep('sendEmail', { subject: 'Hello', body: 'Thanks [first name].' }),
+        readStep('siteAlert', { message: 'Thanks!', severity: 'info' }),
+        readStep('assignContactOwner', { owner: 'round robin' }),
       ],
       notes: ['Pick who follows up.', 'A', 'B'],
       unsupported: null,
@@ -214,7 +246,7 @@ describe('reading an automation', () => {
     // form by name: a form's id is what a contact created by a form carries.
     expect(
       readAiAutomationAnswer(
-        answer({ trigger: { event: 'formSubmission', conditions: [{ field: 'budget', op: 'notEmpty', value: null }] } }),
+        answer({ trigger: { event: 'formSubmission', conditions: [{ field: 'budget', op: 'notEmpty', value: '' }] } }),
         ALL,
       ).value?.trigger.conditions,
     ).toEqual([{ field: 'budget', op: 'notEmpty', value: null }])
@@ -254,19 +286,41 @@ describe('reading an automation', () => {
   })
 
   it('lets only a step’s own condition read whether the wait before it ran out of time', () => {
-    const timedOut = { field: '_waitTimedOut', op: 'notEmpty', value: null }
+    const timedOut = { field: '_waitTimedOut', op: 'notEmpty', value: '' }
     expect(
       readAiAutomationAnswer(
         answer({
           trigger: { event: 'lead', conditions: [] },
-          steps: [step('waitForEvent', { event: 'booking', minutes: 1440 }), step('exitFlow', { when: timedOut })],
+          steps: [step('waitForEvent', { event: 'booking', minutes: 1440 }), step('exitFlow', { when: [timedOut] })],
         }),
         ALL,
       ).value?.steps[1].when,
-    ).toEqual(timedOut)
+    ).toEqual({ ...timedOut, value: null })
     expect(
       codes(readAiAutomationAnswer(answer({ trigger: { event: 'lead', conditions: [timedOut] } }), ALL)),
     ).toEqual(['automation-condition'])
+  })
+
+  it('reads a step’s when as a list of one condition at most, and a lone condition or none as the list it stands for', () => {
+    const guard = { field: 'formName', op: 'equals', value: 'Quote request' }
+    const whenOf = (when: unknown) =>
+      readAiAutomationAnswer(answer({ steps: [step('notifyAdmins', { title: 'New quote', when })] }), ALL)
+    expect(whenOf([]).value?.steps[0].when).toBeNull()
+    expect(whenOf(null).value?.steps[0].when).toBeNull()
+    expect(whenOf([guard]).value?.steps[0].when).toEqual(guard)
+    expect(whenOf(guard).value?.steps[0].when).toEqual(guard)
+    const two = whenOf([guard, guard])
+    expect(two.value).toBeNull()
+    expect(messages(two)).toEqual([`Step 1 (${HOST_ACTION_STEP_LABELS.notifyAdmins}): when holds one condition at most.`])
+  })
+
+  it('reads an empty address field as the default one, which the step leaves out', () => {
+    const read = readAiAutomationAnswer(
+      answer({ steps: [step('sendEmail', { subject: 'Hi', body: 'Thanks.', toField: '' })] }),
+      ALL,
+    )
+    expect(read.violations).toEqual([])
+    expect(read.value?.steps[0]).toEqual(readStep('sendEmail', { subject: 'Hi', body: 'Thanks.' }))
   })
 
   it('holds each step to the fields it needs, in the bounds the executor keeps', () => {
@@ -315,7 +369,7 @@ describe('reading an automation', () => {
 
   it('takes a reason nothing was drafted only from the reasons offered, and never one the workspace disproves', () => {
     const noTrigger = readAiAutomationAnswer(
-      answer({ trigger: { event: 'dealWon', conditions: [{ field: 'x', op: 'notEmpty', value: null }] }, steps: [], unsupported: 'no-trigger' }),
+      answer({ trigger: { event: 'dealWon', conditions: [{ field: 'x', op: 'notEmpty', value: '' }] }, steps: [], unsupported: 'no-trigger' }),
       NONE,
     )
     expect(noTrigger.violations).toEqual([])

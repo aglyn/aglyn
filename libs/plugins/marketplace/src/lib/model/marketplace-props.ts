@@ -43,6 +43,7 @@ import {
   type AuthorHtmlRemoval,
 } from '@aglyn/aglyn/app-utils/author-html'
 import { COMPONENT_PROP_NAME_PATTERN } from '@aglyn/aglyn/app-utils/reusable-component-keys'
+import { reusablePropPatternProblem } from '@aglyn/aglyn/app-utils/reusable-prop-values'
 import { FieldComponentType } from '@aglyn/aglyn/foundation/definitions/components.types'
 import {
   isReusablePropType,
@@ -371,11 +372,15 @@ function sanitizeCondition(
     const entry = value[key]
     if (typeof entry === 'number' && Number.isFinite(entry)) rule[key] = entry
   }
-  if (typeof value['pattern'] === 'string' && value['pattern'].length <= 500) {
-    rule.pattern = value['pattern']
-  }
-  if (typeof value['flags'] === 'string' && /^[dgimsuvy]{0,8}$/.test(value['flags'])) {
-    rule.flags = value['flags']
+  // A pattern every page can match, with its flags, or no rule at all: the
+  // rest of a pattern rule means nothing without it, and a pattern no page can
+  // match holds nothing wherever it is evaluated (AGL-2893).
+  if (value['pattern']) {
+    if (reusablePropPatternProblem(value['pattern'], value['flags'])) {
+      return undefined
+    }
+    rule.pattern = value['pattern'] as string
+    if (value['flags']) rule.flags = value['flags'] as string
   }
   return rule
 }

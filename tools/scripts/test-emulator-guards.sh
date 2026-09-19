@@ -136,6 +136,9 @@ PROJECTS=(
   libs/tenant/data/admin
   libs/tenant/runtime
   libs/tenant/feature/instance
+  # Plugins own emulator specs too: Outreach proves its Google mailbox connect
+  # against the real emulator.
+  libs/plugins/outreach
 )
 
 REPORT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/emulator-guard-reports.XXXXXX")"

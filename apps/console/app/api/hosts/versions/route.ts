@@ -32,6 +32,7 @@ import {
   logHostActivity,
   type HostActivityTarget,
 } from '@aglyn/tenant-data-admin'
+import { withMatchableConditions } from '@aglyn/aglyn/app-utils/reusable-prop-values'
 import { Timestamp } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -265,6 +266,11 @@ async function handler(request: Request): Promise<Response> {
         data as Record<string, unknown>,
       )) {
         if (VERSION_KEYS.has(key) && value !== undefined) payload[key] = value
+      }
+      // A seeded declaration's condition rule whose pattern no page can match
+      // is not stored (AGL-2893).
+      if (payload['props'] !== undefined) {
+        payload['props'] = withMatchableConditions(payload['props'])
       }
     }
 

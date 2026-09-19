@@ -17,7 +17,9 @@
  * limitations under the License.
  */
 
+import { activityTypeLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
+import { isPluginActivityTargetType } from '@aglyn/aglyn/plugin-manager/plugin-activity-actions'
 import type { DecodedIdToken } from 'firebase-admin/auth'
 import { OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
@@ -25,6 +27,7 @@ import type { OutreachEmailStep, OutreachTaskStep } from '../model/outreach.type
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
 import { createOutreachEnrollmentActionRoute } from './enrollment-routes'
 import { createOutreachPreviewRoute } from './preview-routes'
+import { OUTREACH_SEQUENCE_ACTIVITY_TARGET } from './route-deps'
 import type { OutreachRouteGateDeps } from './route-gate'
 import { createOutreachSequenceRoutes, OUTREACH_SEQUENCE_ACTIVITY } from './sequence-routes'
 
@@ -348,9 +351,17 @@ describe('outreach/sequences/save (AGL-2980)', () => {
     expect(activity).toEqual([
       {
         action: OUTREACH_SEQUENCE_ACTIVITY.create,
-        target: { type: 'sequence', id: body.sequence.id, name: 'Second locations' },
+        target: { type: 'outreach:sequence', id: body.sequence.id, name: 'Second locations' },
       },
     ])
+  })
+
+  it('files its rows under Outreach’s own namespaced target, which the org feed reads as a Sequence', () => {
+    // Core's activity targets name only core's resources; a plugin's rows
+    // go through the `pluginId:noun` seam (AGL-2978) instead.
+    expect(OUTREACH_SEQUENCE_ACTIVITY_TARGET).toBe('outreach:sequence')
+    expect(isPluginActivityTargetType(OUTREACH_SEQUENCE_ACTIVITY_TARGET)).toBe(true)
+    expect(activityTypeLabel(OUTREACH_SEQUENCE_ACTIVITY_TARGET)).toBe('Sequence')
   })
 
   it('refuses what the engine refuses, naming each field', async () => {
@@ -434,6 +445,57 @@ describe('outreach/sequences/status (AGL-2980)', () => {
     expect(body.reason).toBe('activation-refused')
     expect(body.issues.map((entry: { path: string }) => entry.path)).toContain('orgSettings.postalAddress')
     expect(docs.get(org(`outreachSequences/${saved.body.sequence.id}`))?.['status']).toBe('draft')
+  })
+
+  it('activates only onto a mailbox that is sending, and says why not in the page’s words', async () => {
+    const saved = await post(sequences().save, REP, { sequence: draft() })
+    const sequenceId = saved.body.sequence.id
+    const activate = () => post(sequences().status, REP, { sequenceId, action: 'activate' })
+    const mailbox = org(`outreachMailboxes/${MAILBOX}`)
+    const setMailboxStatus = (status: string) => docs.set(mailbox, { ...docs.get(mailbox), status })
+
+    setMailboxStatus('paused')
+    const paused = await activate()
+    expect(paused.status).toBe(409)
+    expect(paused.body).toMatchObject({
+      reason: 'activation-refused',
+      error: "This sequence's mailbox is paused. Resume it in Mailboxes, then activate the sequence.",
+    })
+    expect(paused.body.issues).toEqual([expect.objectContaining({ path: 'mailboxId', code: 'mailbox_not_sending' })])
+
+    setMailboxStatus('reconnect_required')
+    expect((await activate()).body.error).toBe(
+      "Google stopped accepting this sequence's mailbox. Reconnect it in Mailboxes, then activate the sequence.",
+    )
+
+    setMailboxStatus('disconnected')
+    const gone = await activate()
+    expect(gone.body.issues).toEqual([
+      expect.objectContaining({
+        code: 'mailbox_unknown',
+        message: "This sequence's mailbox is no longer connected. Choose another before activating it.",
+      }),
+    ])
+    expect(docs.get(org(`outreachSequences/${sequenceId}`))?.['status']).toBe('draft')
+
+    setMailboxStatus('connected')
+    const activated = await activate()
+    expect(activated.status).toBe(200)
+    expect(activated.body.sequence.status).toBe('active')
+  })
+
+  it('asks a sequence of tasks alone for a mailbox too, since its steps fall due in that mailbox’s hours', async () => {
+    const saved = await post(sequences().save, REP, { sequence: draft({ mailboxId: '', steps: [call] }) })
+    expect(saved.status).toBe(200)
+    const refused = await post(sequences().status, REP, { sequenceId: saved.body.sequence.id, action: 'activate' })
+    expect(refused.status).toBe(409)
+    expect(refused.body.issues).toEqual([
+      expect.objectContaining({
+        path: 'mailboxId',
+        code: 'mailbox_required',
+        message: 'Choose the mailbox this sequence sends from before activating it.',
+      }),
+    ])
   })
 
   it('activates, pauses and refuses a transition the status does not allow', async () => {
@@ -668,7 +730,7 @@ describe('outreach/enroll (AGL-2980)', () => {
     expect(typeof stored?.['nextDueAtMs']).toBe('number')
     expect(activity.at(-1)).toEqual({
       action: 'Enrolled 1 person in an Outreach sequence',
-      target: { type: 'sequence', id: sequenceId, name: 'Second locations' },
+      target: { type: 'outreach:sequence', id: sequenceId, name: 'Second locations' },
     })
   })
 

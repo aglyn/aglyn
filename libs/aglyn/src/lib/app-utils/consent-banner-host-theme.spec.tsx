@@ -110,7 +110,7 @@ describe('the consent surface on a published site', () => {
     expect(getComputedStyle(pill()).backgroundColor).not.toBe(HOST_PAPER)
   })
 
-  it('carries the palette into the preferences panel behind it', () => {
+  it('carries the palette into the preferences panel behind it', async () => {
     /*
      * The panel is a PORTAL, which is the specific reason to assert this
      * rather than assume it: portalled content escapes the DOM tree but not
@@ -119,7 +119,7 @@ describe('the consent surface on a published site', () => {
      */
     renderWith(hostTheme)
     fireEvent.click(pill())
-    const surface = screen.getByRole('dialog')
+    const surface = await screen.findByRole('dialog')
     const paper = surface.querySelector('.MuiPaper-root') ?? surface
     expect(getComputedStyle(paper).backgroundColor).toBe(HOST_PAPER)
   })

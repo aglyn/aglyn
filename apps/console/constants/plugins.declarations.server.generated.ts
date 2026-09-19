@@ -18,6 +18,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-outreach/declarations.console-server')).registerOutreachConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations')).registerAiDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations.server')).registerAiServerDeclarations()
+    ;(await import('@aglyn/plugins-video-delivery/declarations.server')).registerVideoDeliveryServerDeclarations()
   })()
   return done
 }

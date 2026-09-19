@@ -85,6 +85,7 @@ import {
 } from '../tools/ai-workflow-tool'
 import { registerAiJobAdmission, type AiJobAdmission, type AiJobAdmissionRefusal } from './ai-job-admission'
 import { aiJobStepBudget } from './ai-job-budget'
+import { aiJobDraftId } from './ai-job-draft-ids'
 import { aiDoctrineReview, aiGenerationSpent, aiLimitReview, aiUnspentOutcome } from './ai-job-generation'
 import {
   aiPluginDraftAdmissionRefusal,
@@ -215,7 +216,7 @@ export const AI_JOB_WORKFLOW_DRAFT_INSTRUCTIONS: readonly AiSystemBlock[] = [
     text: [
       `You turn a description into one automation for the Actions page of a website builder: something that happens on the site (the trigger), the conditions it must meet, and the steps that run, in order. Answer by calling ${AI_AUTOMATION_TOOL_NAME} exactly once. A reply in prose cannot be used.`,
       '',
-      'Use only these triggers and steps. Each step lists the fields it takes; every other field of that step is null.',
+      'Use only these triggers and steps. Each step lists the fields it takes, and it carries only those.',
       '',
       'Triggers, with the fields their conditions can read:',
       ...AI_AUTOMATION_TRIGGERS.map(triggerLine),
@@ -228,7 +229,7 @@ export const AI_JOB_WORKFLOW_DRAFT_INSTRUCTIONS: readonly AiSystemBlock[] = [
       '- A form is named by the id or the name the request lists: formId on contactCreated, formName on formSubmission. A form the description names that the request does not list is written in the description’s words.',
       '- A deal stage in a condition on stageId or previousStageId is written as the stage’s name.',
       `- A lifecycle stage is one of: ${CONTACT_LIFECYCLE_STAGES.join(', ')}. A new lead is the stage lead.`,
-      `- The trigger holds at most ${ACTION_MAX_CONDITIONS} conditions; combinator is and unless the description means any of them. A step's when is one condition of its own, over the same fields. After waitForEvent, when on the field "${FLOW_TIMED_OUT_FIELD}" with notEmpty means the wait ran out of time.`,
+      `- The trigger holds at most ${ACTION_MAX_CONDITIONS} conditions; combinator is and unless the description means any of them. A step's when holds one condition of its own at most, over the same fields. After waitForEvent, when on the field "${FLOW_TIMED_OUT_FIELD}" with notEmpty means the wait ran out of time.`,
       `- At most ${ACTION_MAX_STEPS} steps. minutes are whole minutes, at most ${FLOW_WAIT_MAX_MINUTES}; dueInDays is from 0 to ${CRM_TASK_MAX_DUE_DAYS}; a tag is at most ${CONTACT_TAG_MAX_LENGTH} characters.`,
       '- An owner is "round robin", or the teammate’s email address when the description gives one. A teammate named without an address goes in notes.',
       '- Write an email’s subject and body, and any title or message, in the site’s voice and the language of the description. Where the description lacks a fact such as a phone number, an address or a price, write a short description of it in square brackets instead of inventing it.',
@@ -410,8 +411,9 @@ export function createAiJobWorkflowStep(deps: AiJobWorkflowStepDeps = {}): AiJob
       const writer = writerFor(AI_AUTOMATION_RESOURCE)
       if (!writer) return unspent(AI_WORKFLOW_UNAVAILABLE_COPY)
       const place = { hostId, hostSubdomain }
-      // What an earlier run of this same job already wrote.
-      const written = await writer.read({ hostId, id: job.$id })
+      // What an earlier run of this same job already wrote, under the id the job recorded.
+      const draftId = aiJobDraftId(job, 'workflow')
+      const written = await writer.read({ hostId, id: draftId })
       if (written) {
         return aiUnspentOutcome(model, {
           outputs: [draftOutput(written.id, written.name, place, 'It is off until you switch it on.')],
@@ -444,7 +446,7 @@ export function createAiJobWorkflowStep(deps: AiJobWorkflowStepDeps = {}): AiJob
       const draft = aiAutomationDraft(answer, records)
       const write = await writer.write({
         ...context,
-        id: job.$id,
+        id: draftId,
         name: draft.action.name,
         content: { action: draft.action },
       })

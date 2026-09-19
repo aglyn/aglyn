@@ -23,6 +23,7 @@
  *   node tools/scripts/generate-video-renditions.mjs --write --limit 3
  *   node tools/scripts/generate-video-renditions.mjs --write --webm
  *   node tools/scripts/generate-video-renditions.mjs --write --media orgs/ID/media/ID
+ *   node tools/scripts/generate-video-renditions.mjs --write --delivery-only
  *
  * REPORT-ONLY IS THE DEFAULT, for the reason `backfill-media-variants.mjs`
  * states: this writes objects to the production bucket and mutates media
@@ -78,6 +79,21 @@
  *   and the file is already on disk by then.
  * - Never touches the master object. A rendition is additive; deleting one
  *   returns the asset to serving its original, which is what it does today.
+ *
+ * ## Delivery copies (AGL-2824)
+ *
+ * When a delivery provider is configured to store, every asset this run
+ * records renditions for is copied to it afterwards — the master and each
+ * rendition, keyed by content hash — through the same copy step the console's
+ * upload, replace and restore routes run (`syncMediaDeliveryCopies`). The
+ * provider is registered the way both apps register it at boot, from the
+ * generated server-declarations manifest, so this script names no provider.
+ * The release flag still decides per org: an org without it gets no copy.
+ *
+ * `--delivery-only` encodes nothing. It runs that copy step over every video
+ * in the report, which is how videos stored before an org's flag turned on
+ * get their copies. With no provider configured it copies nothing and says
+ * so.
  */
 
 import { execFile } from 'node:child_process'
@@ -94,6 +110,7 @@ const run = promisify(execFile)
 
 const WRITE = process.argv.includes('--write')
 const WEBM = process.argv.includes('--webm')
+const DELIVERY_ONLY = process.argv.includes('--delivery-only')
 const limitArg = process.argv.indexOf('--limit')
 const LIMIT = limitArg > -1 ? Number(process.argv[limitArg + 1]) : Infinity
 const mediaArg = process.argv.indexOf('--media')
@@ -274,7 +291,8 @@ if (!projectId || !clientEmail || !privateKey || !bucketName) {
 // Checked BEFORE Firebase is touched: a missing encoder is the commonest way
 // to run this by mistake, and discovering it after a 200 MB download is an
 // expensive way to be told to `brew install ffmpeg`.
-for (const binary of ['ffmpeg', 'ffprobe']) {
+// `--delivery-only` encodes nothing, so it needs no encoder.
+for (const binary of DELIVERY_ONLY ? [] : ['ffmpeg', 'ffprobe']) {
   try {
     await run(binary, ['-version'])
   } catch {
@@ -334,6 +352,74 @@ console.log(
 
 const snapshot = await firestore.collectionGroup('media').get()
 console.log(`media documents: ${snapshot.size}`)
+
+/**
+ * The delivery copy step (AGL-2824), or null when no provider is configured
+ * to store. Plugins register their server declarations from the generated
+ * manifest, as both apps do at boot; the copy is the console routes' own
+ * function, loaded through the same jiti aliases, so there is one copy rule.
+ *
+ * Loaded only when this run will write, because the declarations and the copy
+ * module pull in the platform's server modules.
+ */
+async function loadDeliveryCopies() {
+  const { importWorkspaceModule, registerWorkspacePluginServerDeclarations } =
+    await import('./lib/workspace-module.mjs')
+  await registerWorkspacePluginServerDeclarations()
+  const { mediaDeliveryProvider } = await importWorkspaceModule(
+    'libs/aglyn/src/lib/plugin-manager/media-delivery-provider.ts',
+  )
+  if (!mediaDeliveryProvider('store')) return null
+  const { syncMediaDeliveryCopies } = await importWorkspaceModule(
+    'libs/tenant/data/admin/src/lib/server/media-delivery.ts',
+  )
+  return async (ref) => {
+    // `{hosts|orgs}/{scopeId}/media/{mediaId}` — the only two libraries.
+    const [collection, scopeId, media, mediaId] = ref.path.split('/')
+    if ((collection !== 'hosts' && collection !== 'orgs') || media !== 'media') {
+      return { status: 'no-asset', copied: [], kept: [], removed: [], failed: [] }
+    }
+    return syncMediaDeliveryCopies({
+      docRef: ref,
+      asset: { collection, scopeId, mediaId },
+      bucket,
+    })
+  }
+}
+
+const copyToDelivery = WRITE ? await loadDeliveryCopies() : null
+if (WRITE) {
+  console.log(
+    copyToDelivery
+      ? 'delivery: a provider is configured, so each video written is copied to it'
+      : 'delivery: no provider configured to store; nothing is copied',
+  )
+}
+
+if (DELIVERY_ONLY) {
+  if (!WRITE) {
+    console.log('--delivery-only copies, so it needs --write too')
+    process.exit(1)
+  }
+  if (!copyToDelivery) process.exit(0)
+  const tally = {}
+  for (const doc of snapshot.docs) {
+    const d = doc.data()
+    if (d.deletedAt || !String(d.contentType ?? '').startsWith('video/')) continue
+    if (ONLY && doc.ref.path !== ONLY) continue
+    const result = await copyToDelivery(doc.ref)
+    tally[result.status] = (tally[result.status] ?? 0) + 1
+    if (result.copied.length || result.failed.length || result.removed.length) {
+      console.log(
+        `  ${doc.ref.path}  copied [${result.copied.join(', ')}]` +
+          `${result.failed.length ? `  FAILED [${result.failed.join(', ')}]` : ''}` +
+          `${result.removed.length ? `  removed ${result.removed.length}` : ''}`,
+      )
+    }
+  }
+  console.log(`delivery: ${JSON.stringify(tally)}`)
+  process.exit(0)
+}
 
 const plan = []
 let skippedNonVideo = 0
@@ -524,6 +610,17 @@ for (const item of plan.slice(0, LIMIT)) {
       { merge: true },
     )
     encoded++
+    // The new renditions, and the master if it has no copy yet, go to the
+    // delivery provider once the document names them (AGL-2824). A copy that
+    // fails leaves the asset serving from the platform, as it did before.
+    if (copyToDelivery) {
+      const delivered = await copyToDelivery(item.ref)
+      console.log(
+        `  delivery: ${delivered.status}` +
+          `${delivered.copied.length ? `, copied [${delivered.copied.join(', ')}]` : ''}` +
+          `${delivered.failed.length ? `, FAILED [${delivered.failed.join(', ')}]` : ''}`,
+      )
+    }
   } catch (error) {
     failed++
     console.log(`  FAILED — ${error?.message ?? error}`)

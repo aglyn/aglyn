@@ -1206,10 +1206,6 @@ export interface OrgActivityTarget {
     // A theme proposal a job produced (AGL-2938), filed under the site's
     // theme the way the host feed files a saved theme.
     | 'theme'
-    // An Outreach sequence created, activated, paused, archived or deleted,
-    // and the people enrolled in one (AGL-2980): an organization-level
-    // resource, since a sequence enrolls people from every site.
-    | 'sequence'
     // A plugin's own resource, `pluginId:noun` (AGL-2978). Plugins file
     // their rows under their own namespace, so this list names none of them.
     | PluginActivityTargetType

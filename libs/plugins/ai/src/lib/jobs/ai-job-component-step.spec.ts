@@ -233,6 +233,9 @@ const PLAN: AiJobPlan = {
   confirmedBy: 'uid-1',
 }
 
+/** The id the job recorded for its component when it was created (AGL-3079). */
+const COMPONENT_ID = 'drftCompnt'
+
 function job(patch: Partial<AiJob> = {}): AiJob {
   return {
     $id: 'job-1',
@@ -244,7 +247,7 @@ function job(patch: Partial<AiJob> = {}): AiJob {
     inputs: {},
     steps: [
       { name: 'plan', status: 'done', creditsSpent: 3 },
-      { name: 'generate', status: 'running', creditsSpent: 0 },
+      { name: 'generate', status: 'running', creditsSpent: 0, draftIds: { component: COMPONENT_ID } },
     ],
     outputs: [],
     creditsReserved: 50,
@@ -321,7 +324,7 @@ describe('the component step', () => {
       outputs: [
         {
           resource: 'reusableComponent',
-          id: 'job-1',
+          id: COMPONENT_ID,
           versionId: null,
           hostId: 'host-1',
           hostSubdomain: 'acme',
@@ -355,14 +358,14 @@ describe('the component step', () => {
     expect(() => validateAiSystemBlocks(request.system)).not.toThrow()
 
     // One document, the component, holding its tree and the properties as the dialog stores them.
-    expect(commits).toEqual(['hosts/host-1/components/job-1'])
-    expect(mockDocs.get('hosts/host-1/components/job-1')).toMatchObject({
+    expect(commits).toEqual([`hosts/host-1/components/${COMPONENT_ID}`])
+    expect(mockDocs.get(`hosts/host-1/components/${COMPONENT_ID}`)).toMatchObject({
       displayName: 'Testimonial card',
       rootId: CANVAS_ROOT_ELEMENT_ID,
       props: TESTIMONIAL.stored,
       createdBy: 'uid-1',
     })
-    const nodes = storedNodes('hosts/host-1/components/job-1')
+    const nodes = storedNodes(`hosts/host-1/components/${COMPONENT_ID}`)
     expect(nodes.find((node) => node.componentId === 'image')?.props).toMatchObject({
       src: '{{prop.photo}}',
       alt: 'Portrait of {{prop.name}}',
@@ -486,9 +489,9 @@ describe('the component step', () => {
     expect(reask).toContain('The confirmed plan lists "icon" as an icon, and the component declares it as a Text.')
     expect(outcome.review).toBeUndefined()
     expect(outcome.outputs).toEqual([expect.objectContaining({ resource: 'reusableComponent', label: 'Practice area card' })])
-    const stored = mockDocs.get('hosts/host-1/components/job-1')
+    const stored = mockDocs.get(`hosts/host-1/components/${COMPONENT_ID}`)
     expect(stored?.['props']).toContainEqual({ name: 'icon', type: 'icon', label: 'Icon' })
-    expect(storedNodes('hosts/host-1/components/job-1').find((node) => node.componentId === 'icon')?.props).toEqual({
+    expect(storedNodes(`hosts/host-1/components/${COMPONENT_ID}`).find((node) => node.componentId === 'icon')?.props).toEqual({
       iconId: '{{prop.icon}}',
     })
   })
@@ -509,7 +512,7 @@ describe('the component step', () => {
     )
     expect(outcome.review).toBeUndefined()
     expect(
-      storedNodes('hosts/host-1/components/job-1').find((node) => node.props?.['children'] === '{{prop.name}}' && node.props?.['component'] === 'h3'),
+      storedNodes(`hosts/host-1/components/${COMPONENT_ID}`).find((node) => node.props?.['children'] === '{{prop.name}}' && node.props?.['component'] === 'h3'),
     ).toBeDefined()
   })
 
@@ -567,7 +570,7 @@ describe('the component step', () => {
     expect(again.outputs).toEqual([
       {
         resource: 'reusableComponent',
-        id: 'job-1',
+        id: COMPONENT_ID,
         versionId: null,
         hostId: 'host-1',
         hostSubdomain: 'acme',

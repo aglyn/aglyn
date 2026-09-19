@@ -48,6 +48,13 @@
 import type { AglynPostalAddress, OrgCrmAssignmentRule } from '../foundation'
 import { type ConsentGroup, consentGroupScope } from './consent-groups'
 import {
+  CONTACT_LIFECYCLE_STAGES,
+  type ContactLifecycleStage,
+  type CrmActivityKind,
+  type CrmTaskKind,
+  isContactLifecycleStage,
+} from './crm-kinds'
+import {
   CONTACT_FACETS_FIELD,
   CONTACT_SOURCE_LABELS,
   type ContactInteraction,
@@ -57,6 +64,10 @@ import {
   readContactFacet,
 } from './contacts'
 import { MAX_SCOPE_HOSTS, ORG_SCOPE_TOKEN, type ScopeToken } from './scope-tokens'
+
+// The fixed vocabularies and their guards live in a leaf module; every name
+// stays importable from here.
+export * from './crm-kinds'
 
 /**
  * The CRM's collections, every one under `orgs/{orgId}/`.
@@ -185,28 +196,6 @@ export function crmActivityLogHasRoom(existing: number): boolean {
   return !(Number.isFinite(count) && count >= CRM_ACTIVITIES_PER_RECORD_CEILING)
 }
 
-/**
- * Where a person sits in the relationship, as one of a fixed list.
- *
- * A fixed list rather than free text so that a report can count people per
- * stage and a filter can select one, and in the order a person usually moves
- * through them so a picker reads as a progression. `other` is the escape
- * hatch for a business whose funnel has a step none of these name; it is a
- * deliberate stage, not an absent one.
- */
-export const CONTACT_LIFECYCLE_STAGES = [
-  'subscriber',
-  'lead',
-  'marketing-qualified',
-  'sales-qualified',
-  'opportunity',
-  'customer',
-  'evangelist',
-  'other',
-] as const
-
-export type ContactLifecycleStage = (typeof CONTACT_LIFECYCLE_STAGES)[number]
-
 /** How a lifecycle stage reads on screen — typed so a stage cannot ship unlabeled. */
 export const CONTACT_LIFECYCLE_STAGE_LABELS: Record<ContactLifecycleStage, string> = {
   subscriber: 'Subscriber',
@@ -217,15 +206,6 @@ export const CONTACT_LIFECYCLE_STAGE_LABELS: Record<ContactLifecycleStage, strin
   customer: 'Customer',
   evangelist: 'Evangelist',
   other: 'Other',
-}
-
-export function isContactLifecycleStage(
-  value: unknown,
-): value is ContactLifecycleStage {
-  return (
-    typeof value === 'string' &&
-    (CONTACT_LIFECYCLE_STAGES as readonly string[]).includes(value)
-  )
 }
 
 /**
@@ -505,38 +485,12 @@ export interface CrmDeal extends CrmScoped {
   mediaIds?: string[]
 }
 
-/**
- * What a task is, as a fixed list.
- *
- * A const array rather than a bare union because two surfaces have to
- * enumerate it — the task form's picker and the automation step that creates
- * a task without a form — and a union cannot be iterated at run time.
- */
-export const CRM_TASK_KINDS = ['call', 'email', 'meeting', 'todo'] as const
-export type CrmTaskKind = (typeof CRM_TASK_KINDS)[number]
-
 export const CRM_TASK_KIND_LABELS: Record<CrmTaskKind, string> = {
   call: 'Call',
   email: 'Email',
   meeting: 'Meeting',
   todo: 'To-do',
 }
-
-export function isCrmTaskKind(value: unknown): value is CrmTaskKind {
-  return (
-    typeof value === 'string' &&
-    (CRM_TASK_KINDS as readonly string[]).includes(value)
-  )
-}
-
-/**
- * How far ahead an automation may date a task, in days.
- *
- * A year, because the longest follow-up anybody schedules from a trigger is
- * an annual renewal check, and a task dated further out than that is one
- * nobody will find on the list when it comes due.
- */
-export const CRM_TASK_MAX_DUE_DAYS = 365
 
 export type CrmTaskPriority = 'low' | 'normal' | 'high'
 export type CrmTaskStatus = 'open' | 'done'
@@ -605,19 +559,6 @@ export interface CrmTask extends Omit<CrmScoped, 'hostId'> {
   reminderSentAtMs?: number
 }
 
-/**
- * What a person can log, in the order the picker offers them (AGL-2600).
- *
- * A fixed list rather than free text for the reason the lifecycle stages are
- * one: a report counts calls per week and a filter selects meetings, and
- * neither can be done over a string somebody typed. `note` is the plain
- * entry — something worth writing down that was not a conversation — and
- * `other` the escape hatch for the kind none of these name.
- */
-export const CRM_ACTIVITY_KINDS = ['call', 'email', 'meeting', 'note', 'other'] as const
-
-export type CrmActivityKind = (typeof CRM_ACTIVITY_KINDS)[number]
-
 /** How an activity kind reads on screen — typed so a kind cannot ship unlabeled. */
 export const CRM_ACTIVITY_KIND_LABELS: Record<CrmActivityKind, string> = {
   call: 'Call',
@@ -625,13 +566,6 @@ export const CRM_ACTIVITY_KIND_LABELS: Record<CrmActivityKind, string> = {
   meeting: 'Meeting',
   note: 'Note',
   other: 'Other',
-}
-
-export function isCrmActivityKind(value: unknown): value is CrmActivityKind {
-  return (
-    typeof value === 'string' &&
-    (CRM_ACTIVITY_KINDS as readonly string[]).includes(value)
-  )
 }
 
 /**

@@ -22,6 +22,7 @@
  * no app at all.
  */
 import { FieldValue } from 'firebase-admin/firestore'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { checkEntitlement } from '@aglyn/aglyn/server'
 import {
   assistCreditsFromUsd,
@@ -65,6 +66,7 @@ import {
 } from '../runtime/ai-runtime'
 import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
 import { AI_JOB_INLINE_BUDGET_MS, AI_JOB_SWEEP_BUDGET_MS } from './ai-job-budget'
+import { aiMintJobDraftIds } from './ai-job-draft-ids'
 import {
   AI_JOB_TEXT_STEP_MINIMUM_MS,
   runAiJobTextStep,
@@ -480,6 +482,9 @@ export async function createAiJob(
 ): Promise<AiJob> {
   const brief = input.brief.trim()
   if (!brief) throw new Error('an AI job needs a brief')
+  // The drafts the kind always writes are named before any step runs, on the
+  // step that writes them, so a run repeated after its write finds them.
+  const draftIds = aiMintJobDraftIds(input.kind)
   const steps: AiJobStep[] = aiJobStepNames(input.kind).map((name) => ({
     name,
     status: 'pending',
@@ -488,8 +493,10 @@ export async function createAiJob(
     creditsSpent: 0,
     error: null,
     attempts: 0,
+    ...(draftIds && name !== AI_JOB_PLAN_STEP ? { draftIds } : {}),
   }))
-  const ref = jobsCollection(firestore, input.orgId).doc()
+  // A job is a resource the console lists and routes to, named as one.
+  const ref = jobsCollection(firestore, input.orgId).doc(createResourceUid())
   const data = {
     orgId: input.orgId,
     hostId: input.hostId ?? null,

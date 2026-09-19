@@ -38,6 +38,7 @@ import { AI_SEO_FIELDS_MAX_TOKENS, generateSeoFields } from '../runtime/seo-fiel
 import { readSiteInventory } from '../runtime/site-inventory'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiGenerationWorstCaseMs } from './ai-job-budget'
+import { aiJobDraftId } from './ai-job-draft-ids'
 import {
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
@@ -380,6 +381,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const name = screen.title || AI_JOB_PAGE_DEFAULT_NAME
     const slug = aiPageDraftSlug(screen)
     const sectionIds = screen.sections.map((_, index) => aiPageSectionNodeId(job.$id, index))
+    // The draft screen, by the id the job recorded for it: every pass writes and finds the same one.
+    const draftId = aiJobDraftId(job, 'screen')
 
     const output = (
       draft: Pick<AiDraftRecord, 'id' | 'versionId' | 'name' | 'hostSubdomain'>,
@@ -402,7 +405,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     const [inventory, orgSnapshot, written] = await Promise.all([
       readInventory(job.orgId, hostId, { firestore }),
       firestore.collection('orgs').doc(job.orgId).get(),
-      readAiDraft(firestore, { kind: 'screen', hostId, id: job.$id }),
+      readAiDraft(firestore, { kind: 'screen', hostId, id: draftId }),
     ])
     const org = (orgSnapshot.data() ?? null) as Partial<AglynOrgBilling> | null
     if (written?.deleted) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_DELETED_COPY }
@@ -435,7 +438,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       }
     }
 
-    const stored = written ? await readAiDraftNodes(firestore, { kind: 'screen', hostId, id: job.$id }) : null
+    const stored = written ? await readAiDraftNodes(firestore, { kind: 'screen', hostId, id: draftId }) : null
     if (written && !stored) return { ...aiUnspentOutcome(model), failure: AI_JOB_PAGE_DELETED_COPY }
     const page = stored?.nodes ?? aiEmptyPage()
     const index = sectionIds.findIndex((id) => !(id in page))
@@ -502,7 +505,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             }
           }
         }
-        await writeAiDraftScreenSeo(firestore, { hostId, id: job.$id, seo: values, now })
+        await writeAiDraftScreenSeo(firestore, { hostId, id: draftId, seo: values, now })
       }
       // The facts the brief did not give, on the page or in the defaults its components show (AGL-3056).
       const note = aiBracketedFactsNote({
@@ -554,7 +557,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       const draft = await writeAiDraft(firestore, {
         kind: 'screen',
         hostId,
-        id: job.$id,
+        id: draftId,
         uid: job.createdBy,
         org,
         name,
@@ -572,7 +575,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       const update = await updateAiDraftNodes(firestore, {
         kind: 'screen',
         hostId,
-        id: job.$id,
+        id: draftId,
         now,
         // A pass run again after its write finds its section and changes nothing.
         update: (nodes) =>

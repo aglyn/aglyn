@@ -384,6 +384,7 @@ What does work:
 | What does the eager first-load graph contain? | `npm run check:jsx-barrel` / `check:aglyn-barrel` — computed from source, reported in **gzipped** bytes |
 | What is in a BUILT chunk, and what is in there twice? | `npm run analyze:chunks` — per-module emitted bytes decoded from the chunk's own source map |
 | Did a change do anything? | `npm run analyze:chunks -- --json > before.json`, rebuild, then `-- --json --against before.json` |
+| What does a published page download before it settles? | `npm run check:tenant-wire-weight` after a tenant production build — the eager chunks plus the `import()`s that fire on their own, per group, in brotli q3/w18 (production's served script bytes to 0.1%, so not gzip) |
 | Is a change worth landing before it ships? | Lighthouse `blockedUrlPatterns` against the live page isolates one resource without a deploy |
 
 Always quote **gzipped** figures. Raw byte counts on this codebase run 3–4× the transferred

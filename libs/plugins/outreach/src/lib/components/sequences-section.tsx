@@ -49,17 +49,14 @@ import {
   OutreachSequenceDetail,
   type OutreachSequenceTab,
 } from './sequence-detail'
-import {
-  OutreachSequenceEditor,
-  type OutreachSequenceEditorProps,
-} from './sequence-editor'
+import { OutreachSequenceEditor } from './sequence-editor'
 import { useOutreachApi } from './use-outreach-api'
 import {
   type OutreachSequenceCounts,
-  useOutreachMailboxList,
   useOutreachSequenceCounts,
   useOutreachSequences,
 } from './use-outreach-data'
+import { useOutreachMailboxes } from './use-outreach-mailboxes'
 import { useOutreachComplianceSettings } from './use-outreach-settings'
 
 export interface OutreachSequencesSectionProps {
@@ -71,7 +68,10 @@ export interface OutreachSequencesSectionProps {
   sectionPath: string
   /** The path below the section: `[]`, `['new']`, `[id]` or `[id, 'enrollments']`. */
   subpath: readonly string[]
-  mailboxField?: OutreachSequenceEditorProps['mailboxField']
+  /** The Mailboxes section: `/[orgSlug]/outreach/mailboxes`. */
+  mailboxesPath: string
+  /** The Compliance section: `/[orgSlug]/outreach/compliance`. */
+  compliancePath: string
 }
 
 /** The new-sequence page's segment below the section. */
@@ -86,7 +86,7 @@ export function OutreachSequencesSection(props: OutreachSequencesSectionProps) {
   const { orgId, sectionPath, subpath } = props
   const api = useOutreachApi(orgId)
   const settings = useOutreachComplianceSettings(api, orgId)
-  const mailboxes = useOutreachMailboxList(orgId)
+  const mailboxes = useOutreachMailboxes(orgId)
   const navigate = useOutreachNavigate()
 
   if (!orgId) return <OutreachLoading label="Loading sequences…" />
@@ -103,8 +103,8 @@ export function OutreachSequencesSection(props: OutreachSequencesSectionProps) {
           orgMount={props.orgMount}
           sequence={null}
           settings={settings}
-          mailboxes={mailboxes.mailboxes}
-          mailboxField={props.mailboxField}
+          mailboxes={mailboxes}
+          mailboxesPath={props.mailboxesPath}
           onSaved={(sequence) => navigate(`${sectionPath}/${sequence.id}`)}
           onCancel={() => navigate(sectionPath)}
         />
@@ -125,8 +125,9 @@ export function OutreachSequencesSection(props: OutreachSequencesSectionProps) {
             : 'steps') as OutreachSequenceTab
         }
         settings={settings}
-        mailboxes={mailboxes.mailboxes}
-        mailboxField={props.mailboxField}
+        mailboxes={mailboxes}
+        mailboxesPath={props.mailboxesPath}
+        compliancePath={props.compliancePath}
       />
     )
   }

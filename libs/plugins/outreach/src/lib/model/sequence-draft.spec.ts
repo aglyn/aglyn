@@ -23,6 +23,8 @@ import {
   newOutreachTaskStep,
   OUTREACH_DEFAULT_FOLLOW_UP_DAYS,
   outreachEnrolledSequenceIssues,
+  outreachMailboxActivationIssue,
+  outreachSequenceMailboxState,
   readOutreachSequenceDraft,
 } from './sequence-draft'
 
@@ -139,5 +141,34 @@ describe('outreachEnrolledSequenceIssues (AGL-2980)', () => {
     expect(codes({ ...stored, steps: [email, { ...email, id: task.id }] })).toEqual(['steps_locked'])
     expect(codes({ ...stored, hostId: 'host-2' })).toEqual(['host_locked'])
     expect(codes({ ...stored, mailboxId: 'mbx-2' })).toEqual(['mailbox_locked'])
+  })
+})
+
+describe('outreachMailboxActivationIssue (AGL-2980)', () => {
+  it('reads where the mailbox stands: none chosen, gone, paused, waiting to be reconnected, or sending', () => {
+    expect(outreachSequenceMailboxState('', null)).toBe('none')
+    expect(outreachSequenceMailboxState('mbx-1', null)).toBe('gone')
+    expect(outreachSequenceMailboxState('mbx-1', { status: 'disconnected' })).toBe('gone')
+    expect(outreachSequenceMailboxState('mbx-1', { status: 'paused' })).toBe('paused')
+    expect(outreachSequenceMailboxState('mbx-1', { status: 'reconnect_required' })).toBe('reconnect_required')
+    expect(outreachSequenceMailboxState('mbx-1', { status: 'connected' })).toBe('sending')
+  })
+
+  it('lets a sequence activate only onto a sending mailbox, and says what to do otherwise', () => {
+    expect(outreachMailboxActivationIssue('mbx-1', { status: 'connected' })).toBeNull()
+    expect(outreachMailboxActivationIssue('', null)).toEqual({
+      path: 'mailboxId',
+      code: 'mailbox_required',
+      message: 'Choose the mailbox this sequence sends from before activating it.',
+      severity: 'error',
+    })
+    expect(outreachMailboxActivationIssue('mbx-1', { status: 'disconnected' })?.code).toBe('mailbox_unknown')
+    expect(outreachMailboxActivationIssue('mbx-1', { status: 'paused' })).toMatchObject({
+      code: 'mailbox_not_sending',
+      message: "This sequence's mailbox is paused. Resume it in Mailboxes, then activate the sequence.",
+    })
+    expect(outreachMailboxActivationIssue('mbx-1', { status: 'reconnect_required' })?.message).toMatch(
+      /^Google stopped accepting this sequence's mailbox\. Reconnect it in Mailboxes/,
+    )
   })
 })

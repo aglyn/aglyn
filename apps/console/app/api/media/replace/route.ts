@@ -69,6 +69,10 @@ import {
 } from '../../../../utils/media-upload-limits'
 import { videoUploadFields } from '../../../../utils/server/media-video-fields'
 import { videoUploadPausedRefusal } from '../../../../utils/server/video-uploads'
+import {
+  removeAssetDeliveryCopies,
+  scheduleMediaDeliveryCopies,
+} from '../../../../utils/server/media-delivery-copies'
 import { createHash, randomUUID } from 'crypto'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -757,6 +761,14 @@ async function handler(request: Request): Promise<Response> {
         poster: videoFields['poster'] ?? remove,
         posterError: videoFields['posterError'] ?? remove,
         videoRenditions: remove,
+        // The delivery provider's copies were made from the previous bytes
+        // (AGL-2824). The new `contentHash` already stops them being served;
+        // clearing the record says so, and the copies themselves are removed
+        // below. Only when there is a record, so a document that never had
+        // one is written exactly as before.
+        ...(mediaSnapshot.get('deliveryCopies') !== undefined
+          ? { deliveryCopies: remove }
+          : {}),
         // Stable, mediaId-keyed CDN URL (AGL-829): unchanged by replace, so
         // the entry keeps resolving to the new bytes automatically — unless
         // the plan or the private flag says there should be no path at all,
@@ -793,6 +805,17 @@ async function handler(request: Request): Promise<Response> {
         },
         { merge: true },
       )
+
+    // The previous bytes' copies at the delivery provider go (AGL-2824) —
+    // the master's and every rendition's, whose keys carry the old hash —
+    // and the new bytes are copied after the response. Both do nothing when
+    // no provider is configured to store.
+    await removeAssetDeliveryCopies({
+      collection: scope.collection,
+      scopeId: scope.scopeId,
+      mediaId,
+    })
+    scheduleMediaDeliveryCopies({ scope, mediaId, contentType })
 
     return Response.json({ replaced: true, url, contentHash }, { status: 200 })
   } catch (error) {

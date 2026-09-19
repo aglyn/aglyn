@@ -33,12 +33,10 @@ import {
   OUTREACH_COLLECTIONS,
   type OutreachEnrollment,
   type OutreachEnrollmentStatus,
-  type OutreachMailbox,
   type OutreachSequence,
 } from '../model/outreach.types'
 import {
   readStoredOutreachEnrollment,
-  readStoredOutreachMailbox,
   readStoredOutreachSequence,
 } from '../model/stored-records'
 
@@ -134,46 +132,6 @@ export function useOutreachSequence(
       (error) => setResult(failed(null, error, 'the sequence')),
     )
   }, [firestore, orgId, sequenceId])
-  return result
-}
-
-/**
- * The organization's connected mailboxes, live, in the shape the Mailboxes
- * panel's own listener answers — what a sequence names as its mailbox, the
- * zone its times are read in, and the name its emails are from.
- */
-export interface OutreachMailboxList {
-  status: 'loading' | 'ready' | 'error'
-  mailboxes: OutreachMailbox[]
-}
-
-export function useOutreachMailboxList(
-  orgId: string | null,
-): OutreachMailboxList {
-  const firestore = useFirestore()
-  const [result, setResult] = useState<OutreachMailboxList>({
-    status: 'loading',
-    mailboxes: [],
-  })
-  useEffect(() => {
-    setResult({ status: 'loading', mailboxes: [] })
-    if (!orgId) return undefined
-    return onSnapshot(
-      collection(firestore, 'orgs', orgId, OUTREACH_COLLECTIONS.mailboxes),
-      (snapshot) =>
-        setResult({
-          status: 'ready',
-          mailboxes: snapshot.docs
-            .map((entry) => readStoredOutreachMailbox(entry.id, entry.data()))
-            .filter((mailbox): mailbox is OutreachMailbox => mailbox !== null)
-            .sort((a, b) => (a.createdAtMs ?? 0) - (b.createdAtMs ?? 0)),
-        }),
-      (error) => {
-        console.error('[outreach] mailboxes could not be read', error)
-        setResult({ status: 'error', mailboxes: [] })
-      },
-    )
-  }, [firestore, orgId])
   return result
 }
 
