@@ -72,6 +72,9 @@ import { PLUGIN_SUBPROCESSORS } from './plugins.subprocessors.generated'
  * entries below through `foldPluginSubprocessors`, which refuses a host
  * declared twice. The plugin's declaration is the one place that row's
  * wording lives, and it owes the same `publishedOn` date as every entry here.
+ * The same goes for a host only a plugin's code names that is no recipient,
+ * and for a plugin's own use of a host declared here: the plugin writes it,
+ * and the fold carries it in.
  *
  * ## ⚠️ NO NOTICE-PERIOD ARITHMETIC LIVES HERE, AND THAT IS DELIBERATE
  *
@@ -833,11 +836,17 @@ for (const host of SUPERVISORY_AUTHORITY_HOSTS) {
 /**
  * Every third-party host named in `apps/`, `libs/` and `tools/`, keyed by
  * host, checked in both directions by `subprocessor-inventory.spec.ts`: the
- * declarations above, and every recipient a plugin declares. A plugin
- * declares only what the published list carries, so each of its hosts is a
- * `subprocessor`, and `foldPluginSubprocessors` throws when this module
- * loads if a plugin claims a host this registry or another plugin already
- * declares.
+ * declarations above, and every host a plugin declares.
+ *
+ * A plugin's recipients fold in as `subprocessor` entries carrying their
+ * published row; its other hosts fold in with the disposition and the
+ * evidence it wrote for them, on the terms `EgressDisposition` sets for
+ * every entry here; and its use of a host declared elsewhere is appended to
+ * that host's own entry — reason after reason, data after data — so the host
+ * keeps one disposition and one published row while its entry names every
+ * use. `foldPluginSubprocessors` throws when this module loads if a plugin
+ * claims a host this registry or another plugin already declares, or uses a
+ * host nothing declares.
  */
 export const EGRESS_HOSTS: Record<string, EgressHost> = foldPluginSubprocessors<EgressHost>(
   DECLARED_EGRESS_HOSTS,
@@ -851,6 +860,18 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = foldPluginSubprocessors<
     reason: declaration.reason,
     dataReceived: declaration.dataReceived,
   }),
+  {
+    toHostEntry: (declaration) => ({
+      disposition: declaration.disposition,
+      reason: declaration.reason,
+      dataReceived: declaration.dataReceived,
+    }),
+    withUse: (entry, use) => ({
+      ...entry,
+      reason: `${entry.reason} ${use.reason}`,
+      dataReceived: `${entry.dataReceived} ${use.dataReceived}`,
+    }),
+  },
 )
 
 /**

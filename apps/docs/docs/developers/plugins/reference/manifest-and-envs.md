@@ -145,6 +145,17 @@ inventory and refuses a host declared twice, by the inventory or by another
 plugin. Regenerate after changing a declaration; `--check` refuses a stale
 manifest.
 
+The inventory keys on every host the code names, so the function may answer
+an object instead of a list: `{ subprocessors, hosts, uses }`. `hosts` are
+the hosts the plugin's code names that are not published recipients, each
+`not-a-subprocessor` (a request is made, and nothing personal reaches the
+host, or the customer chose it) or `no-request` (nothing of ours requests
+it), with the reason and what the host receives. `uses` are hosts the
+inventory or another plugin already declares that the plugin's code reaches
+as well: the host keeps its one declaration, and the plugin's reason and
+data are appended to that entry. A use of a host nothing declares is
+refused — declare the host instead.
+
 A **staff** entry names the registrar the console's staff area loads,
 usually the same function as `console`. The org routes load each
 workspace's enabled plugins and a staff page names no workspace, so the
