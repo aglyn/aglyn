@@ -28,6 +28,7 @@ import {
   type ReleaseFlagKey,
   type ReleaseFlagValue,
 } from '@aglyn/aglyn/server'
+import { findUserByUidAcrossPools } from './auth-pools'
 import { firebaseAdmin } from './firebase-admin'
 
 /**
@@ -270,12 +271,13 @@ export async function filterEnabledPluginsByReleaseFlags(
     // member's own provider redirect carries no token, and previewing a dark
     // plugin has to survive the round trip their session started. Paid only
     // when a flag actually subtracted something and a route vouched for the
-    // account.
+    // account. Across every auth pool (AGL-1122): a staff member who signs in
+    // through SSO is a tenant user the project pool does not hold.
     try {
-      const account = await firebaseAdmin.app().auth().getUser(options.subjectUid)
-      if (account.customClaims?.['staff'] === true) return [...pluginIds]
+      const account = await findUserByUidAcrossPools(options.subjectUid)
+      if (account?.record.customClaims?.['staff'] === true) return [...pluginIds]
     } catch {
-      // No such account, or Auth did not answer — gate as anonymous.
+      // Auth did not answer — gate as anonymous.
     }
   }
   return filtered

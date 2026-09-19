@@ -32,7 +32,7 @@
 
 const mockGetTemplate = jest.fn()
 const mockOrgGet = jest.fn()
-const mockGetUser = jest.fn()
+const mockFindUser = jest.fn()
 const mockVerifyIdToken = jest.fn()
 
 jest.mock('./firebase-admin', () => ({
@@ -43,10 +43,23 @@ jest.mock('./firebase-admin', () => ({
       firestore: () => ({
         collection: () => ({ doc: () => ({ get: mockOrgGet }) }),
       }),
-      auth: () => ({ getUser: mockGetUser, verifyIdToken: mockVerifyIdToken }),
+      auth: () => ({ verifyIdToken: mockVerifyIdToken }),
     }),
   },
 }))
+
+// The account is looked up across every auth pool (AGL-1122), so an SSO
+// staff member held by a tenant pool is found too.
+jest.mock('./auth-pools', () => ({
+  __esModule: true,
+  findUserByUidAcrossPools: (uid: string) => mockFindUser(uid),
+}))
+
+/** What the pool-aware lookup answers for an account with these claims. */
+const pooled = (customClaims: Record<string, unknown>, tenantId: string | null = null) => ({
+  record: { customClaims },
+  tenantId,
+})
 
 import {
   __resetReleaseFlagCaches,
@@ -70,27 +83,38 @@ beforeEach(() => {
 
 describe('filterEnabledPluginsByReleaseFlags — subjectUid (AGL-2978)', () => {
   it('admits a tokenless request for a staff account its route named', async () => {
-    mockGetUser.mockResolvedValue({ customClaims: { staff: true } })
+    mockFindUser.mockResolvedValue(pooled({ staff: true }))
     await expect(
       filterEnabledPluginsByReleaseFlags([PLUGIN], { orgId: 'org-1', subjectUid: 'staff-1' }),
     ).resolves.toEqual([PLUGIN])
-    expect(mockGetUser).toHaveBeenCalledWith('staff-1')
+    expect(mockFindUser).toHaveBeenCalledWith('staff-1')
+  })
+
+  it('finds a staff account an SSO tenant pool holds, not only the project pool', async () => {
+    mockFindUser.mockResolvedValue(pooled({ staff: true }, 'aglyn-sso-tenant'))
+    await expect(
+      filterEnabledPluginsByReleaseFlags([PLUGIN], { orgId: 'org-1', subjectUid: 'staff-sso' }),
+    ).resolves.toEqual([PLUGIN])
   })
 
   it('refuses a named account that is not staff, or cannot be looked up', async () => {
-    mockGetUser.mockResolvedValueOnce({ customClaims: { staff: false } })
+    mockFindUser.mockResolvedValueOnce(pooled({ staff: false }))
     await expect(
       filterEnabledPluginsByReleaseFlags([PLUGIN], { orgId: 'org-1', subjectUid: 'member-1' }),
     ).resolves.toEqual([])
-    mockGetUser.mockRejectedValueOnce(new Error('auth/user-not-found'))
+    mockFindUser.mockResolvedValueOnce(null)
     await expect(
       filterEnabledPluginsByReleaseFlags([PLUGIN], { orgId: 'org-1', subjectUid: 'gone-1' }),
+    ).resolves.toEqual([])
+    mockFindUser.mockRejectedValueOnce(new Error('auth unavailable'))
+    await expect(
+      filterEnabledPluginsByReleaseFlags([PLUGIN], { orgId: 'org-1', subjectUid: 'staff-1' }),
     ).resolves.toEqual([])
   })
 
   it('never consults the named account when the request carries a token', async () => {
     mockVerifyIdToken.mockResolvedValue({ uid: 'member-1', staff: false })
-    mockGetUser.mockResolvedValue({ customClaims: { staff: true } })
+    mockFindUser.mockResolvedValue(pooled({ staff: true }))
     await expect(
       filterEnabledPluginsByReleaseFlags([PLUGIN], {
         orgId: 'org-1',
@@ -98,7 +122,7 @@ describe('filterEnabledPluginsByReleaseFlags — subjectUid (AGL-2978)', () => {
         subjectUid: 'staff-1',
       }),
     ).resolves.toEqual([])
-    expect(mockGetUser).not.toHaveBeenCalled()
+    expect(mockFindUser).not.toHaveBeenCalled()
   })
 
   it('pays for no lookup when nothing was subtracted', async () => {
@@ -108,6 +132,6 @@ describe('filterEnabledPluginsByReleaseFlags — subjectUid (AGL-2978)', () => {
     await expect(
       filterEnabledPluginsByReleaseFlags([PLUGIN], { orgId: 'org-1', subjectUid: 'staff-1' }),
     ).resolves.toEqual([PLUGIN])
-    expect(mockGetUser).not.toHaveBeenCalled()
+    expect(mockFindUser).not.toHaveBeenCalled()
   })
 })
