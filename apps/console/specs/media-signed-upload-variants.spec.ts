@@ -342,7 +342,9 @@ describe('the signed finalize lands the same document as the base64 route (AGL-1
     // Status proves nothing here — the broken route answers 200 too — but a
     // non-200 would mean the suite is measuring the wrong thing.
     expect(response.status).toBe(200)
-    expect(writtenDocument()['variants']).toEqual([320, 640])
+    // A 1200px PNG: the two narrower widths, and the two at or above it as
+    // WebP at its own width (AGL-3082).
+    expect(writtenDocument()['variants']).toEqual([320, 640, 1280, 1920])
   })
 
   it('produces variants that are genuinely SMALLER, in bytes', async () => {

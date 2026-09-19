@@ -3,7 +3,13 @@
   "specifiers": [
     "./lib/aglyn",
     "./lib/app-utils",
-    "./lib/foundation"
+    "./lib/canvas-manager",
+    "./lib/components-manager",
+    "./lib/emit-manager",
+    "./lib/foundation",
+    "./lib/plugin-manager",
+    "./lib/types",
+    "./lib/utils"
   ],
   "packages": [
     "@msgpack/msgpack",

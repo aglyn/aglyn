@@ -204,6 +204,9 @@ function completion(input: unknown, name = 'submit_automation') {
   }
 }
 
+/** The id the job recorded for its automation when it was created (AGL-3079). */
+const WORKFLOW_ID = 'drftAutomn'
+
 function job(patch: Partial<AiJob> = {}): AiJob {
   return {
     $id: 'job-1',
@@ -214,7 +217,7 @@ function job(patch: Partial<AiJob> = {}): AiJob {
     brief:
       'When a form is submitted, add the contact to the newsletter list, create a CRM lead and send a welcome email',
     inputs: {},
-    steps: [{ name: 'generate', status: 'running', creditsSpent: 0 }],
+    steps: [{ name: 'generate', status: 'running', creditsSpent: 0, draftIds: { workflow: WORKFLOW_ID } }],
     outputs: [],
     creditsReserved: 50,
     creditsSpent: 0,
@@ -300,7 +303,7 @@ describe('drafting an automation', () => {
     expect(outcome.review).toBeUndefined()
     expect(drafts).toHaveLength(1)
     const { action } = drafts[0]
-    expect(drafts[0].id).toBe('job-1')
+    expect(drafts[0].id).toBe(WORKFLOW_ID)
     expect(action.enabled).toBe(false)
     expect(action.trigger).toEqual({
       event: 'formSubmission',
@@ -320,7 +323,7 @@ describe('drafting an automation', () => {
     expect(outcome.outputs).toEqual([
       {
         resource: 'workflow',
-        id: 'job-1',
+        id: WORKFLOW_ID,
         versionId: null,
         hostId: 'host-1',
         hostSubdomain: 'brightside',
@@ -463,7 +466,7 @@ describe('drafting an automation', () => {
     const again = await runStep()
     expect(mockRunAiRequest).not.toHaveBeenCalled()
     expect(again.usage).toEqual(AI_JOB_ZERO_USAGE)
-    expect(again.outputs.map((output) => [output.resource, output.id])).toEqual([['workflow', 'job-1']])
+    expect(again.outputs.map((output) => [output.resource, output.id])).toEqual([['workflow', WORKFLOW_ID]])
     expect(drafts).toHaveLength(1)
   })
 

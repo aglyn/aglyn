@@ -18,19 +18,17 @@
 import { Logger } from '@aglyn/shared-util-logger'
 // Deep import, NOT the package root (AGL-1151) — see the note in lifecycle.ts.
 import { timestampNowJson } from '@aglyn/shared-util-timestamp/timestamp-json'
-import CanvasManager from './canvas-manager'
-import ComponentManager from './components-manager'
-import EmitManager, { AglynEvent } from './emit-manager'
+// Each manager from the module that defines it, and nothing re-exported:
+// this module is the runtime singleton and only that. It is what a published
+// page imports for `canvas` and `emitter`, and every name it re-exported would
+// sit in that page's static graph — the plugin-manager barrel alone reaches
+// the entitlement, billing and service seams. The package root re-exports the
+// managers, their barrels and the types beside this module instead.
+import CanvasManager from './canvas-manager/canvas-manager'
+import ComponentManager from './components-manager/components-manager'
+import EmitManager, { AglynEvent } from './emit-manager/emit-manager'
 import { namespace } from './foundation/constants/app'
-import PluginManager from './plugin-manager'
-
-export * from './types'
-export * from './utils'
-
-export * from './components-manager'
-export * from './emit-manager'
-export * from './plugin-manager'
-export * from './canvas-manager'
+import PluginManager from './plugin-manager/plugin-manager'
 
 export class Aglyn extends EmitManager {
   logger: Logger

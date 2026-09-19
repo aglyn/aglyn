@@ -264,7 +264,7 @@ describe('withdrawing consent removes the analytics cookies (AGL-1606)', () => {
       plantAnalyticsCookies()
 
       fireEvent.click(pill() as Element)
-      fireEvent.click(screen.getByRole('switch'))
+      fireEvent.click(await screen.findByRole('switch'))
       fireEvent.click(screen.getByText('Save choices'))
 
       expect(cookieNames()).toEqual(['aglyn_cart_x'])

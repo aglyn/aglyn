@@ -28,7 +28,7 @@ import {
   isContactLifecycleStage,
   isCrmActivityKind,
   isCrmTaskKind,
-} from './crm'
+} from './crm-kinds'
 import { HOST_EVENT_TYPES } from './workflows'
 
 /**

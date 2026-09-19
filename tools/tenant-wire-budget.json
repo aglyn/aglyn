@@ -1,0 +1,55 @@
+{
+  "route": "[host]/[scheme]/[[...slug]]",
+  "basis": "Brotli quality 3, window 2^18, of each chunk a published page loads before it settles, read from a tenant production build (check-tenant-wire-weight.mjs). That setting reproduced production's served script bytes to 0.1% on beta.129. Each group counts only the chunks no earlier group loads.",
+  "groups": [
+    {
+      "name": "every published page",
+      "why": "The document's own chunks, plus the three imports every published page makes before it settles.",
+      "loads": [
+        {
+          "from": "apps/tenant/utils/plugins.client.generated.ts",
+          "import": "@aglyn/plugins-mui",
+          "why": "The always-on site plugin: it registers the components every page's nodes render with."
+        },
+        {
+          "from": "apps/tenant/app/[host]/[scheme]/[[...slug]]/site-analytics.tsx",
+          "import": "./consent-banner-chunk",
+          "why": "The consent banner or the persistent opt-out pill, drawn once the visitor's consent state resolves."
+        },
+        {
+          "from": "libs/aglyn/src/lib/app-utils/web-vitals-rum.ts",
+          "import": "web-vitals",
+          "why": "Real-user vitals, measured on every page."
+        }
+      ],
+      "baselineBytes": 510210,
+      "budgetBytes": 536576
+    },
+    {
+      "name": "a site with the marketing plugin",
+      "why": "What the marketing plugin's site runtime adds on a site that enables it, as aglyn.com does.",
+      "loads": [
+        {
+          "from": "apps/tenant/utils/plugins.client.generated.ts",
+          "import": "@aglyn/plugins-marketing",
+          "why": "Its site runtime (overlays, experiments, client automations) mounts on every page of the site."
+        }
+      ],
+      "baselineBytes": 18549,
+      "budgetBytes": 20480
+    },
+    {
+      "name": "a site with a realm plugin",
+      "why": "What a trusted realm install adds: the host ABI hands a remote bundle the whole core namespace, so this group grows with every export added to @aglyn/aglyn.",
+      "loads": [
+        {
+          "from": "apps/tenant/utils/realm-plugins.client.ts",
+          "import": "./realm-plugin-host.client",
+          "why": "Composes __AGLYN_PLUGIN_HOST__ before any realm bundle runs."
+        }
+      ],
+      "baselineBytes": 224891,
+      "budgetBytes": 236544
+    }
+  ]
+}

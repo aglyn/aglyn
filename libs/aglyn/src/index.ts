@@ -16,5 +16,11 @@
  */
 
 export * from './lib/aglyn'
+export * from './lib/types'
+export * from './lib/utils'
+export * from './lib/components-manager'
+export * from './lib/emit-manager'
+export * from './lib/plugin-manager'
+export * from './lib/canvas-manager'
 export * from './lib/app-utils'
 export * from './lib/foundation'

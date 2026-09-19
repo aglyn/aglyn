@@ -123,6 +123,12 @@ export interface AiBuildPlanCreate {
    * palette paths it adds or changes.
    */
   fields: string[]
+  /**
+   * The id the draft this creation becomes is written under, where a unit of
+   * the job builds it (AGL-3079). Minted when the job keeps the plan, never
+   * part of the model's answer.
+   */
+  id?: string
 }
 
 export interface AiBuildPlanSection {
@@ -148,6 +154,12 @@ export interface AiBuildPlanScreen {
   seoTitle: string
   seoDescription: string
   sections: AiBuildPlanSection[]
+  /**
+   * The id the draft screen is written under, where a unit of the job builds
+   * it (AGL-3079). Minted when the job keeps the plan, never part of the
+   * model's answer.
+   */
+  id?: string
 }
 
 export interface AiBuildPlan {

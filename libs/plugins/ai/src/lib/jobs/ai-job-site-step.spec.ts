@@ -130,6 +130,8 @@ function confirmedPlan(overrides: Partial<AiJobPlan> = {}): AiJobPlan {
         title: `Page ${index}`,
         slug: `page-${index}`,
         nav: index === 0,
+        // The id the plan recorded for the page when the job kept it (AGL-3079).
+        id: `drftPage0${index}`,
       }),
     ),
     status: 'confirmed',
@@ -154,7 +156,8 @@ function siteJob(overrides: Partial<AiJob> = {}): AiJob {
       pages: AI_SITE_PAGES.min,
       welcomeEmail: false,
     },
-    steps: [],
+    // The welcome email's id, recorded on the step when the job was created (AGL-3079).
+    steps: [{ name: 'generate', status: 'running', creditsSpent: 0, draftIds: { email: 'drftWelcom' } }],
     outputs: [],
     creditsReserved: 0,
     creditsSpent: 0,
@@ -187,6 +190,7 @@ const LAYOUT = {
   why: 'every page renders in it',
   duplicateOf: null,
   fields: [],
+  id: 'drftFrameL',
 }
 const FORM = {
   kind: 'form' as const,
@@ -194,6 +198,7 @@ const FORM = {
   why: 'rule 3',
   duplicateOf: null,
   fields: ['email'],
+  id: 'drftContct',
 }
 const PALETTE = {
   kind: 'theme-change' as const,
@@ -296,10 +301,11 @@ describe('the job each unit is built under', () => {
           { name: 'hero', uses: [], items: 0 },
           { name: 'contact', uses: ['new:Contact', 'new:Palette'], items: 0 },
         ],
+        id: 'drftHomePg',
       }),
-      planScreen({ title: 'About', slug: 'about' }),
-      planScreen({ title: 'Services', slug: 'services' }),
-      planScreen({ title: 'Contact', slug: 'contact' }),
+      planScreen({ title: 'About', slug: 'about', id: 'drftAbout0' }),
+      planScreen({ title: 'Services', slug: 'services', id: 'drftServcs' }),
+      planScreen({ title: 'Contact', slug: 'contact', id: 'drftContPg' }),
     ],
   })
   const units = aiSiteJobUnits(plan, { welcomeEmail: true })
@@ -308,9 +314,29 @@ describe('the job each unit is built under', () => {
     output('form', 'form-1', 'Contact'),
   ])
 
-  it('gives each unit its own id, so a re-run finds its own draft', () => {
+  it('names each unit by the id its draft was recorded under, so a re-run finds its own draft (AGL-3079)', () => {
     const job = siteJob({ plan })
     expect(units.map((unit) => aiSiteUnitJob(job, unit, built).$id)).toEqual([
+      'drftFrameL',
+      'drftContct',
+      'drftHomePg',
+      'drftAbout0',
+      'drftServcs',
+      'drftContPg',
+      'drftWelcom',
+    ])
+    // Never the scaffold's own id, nor one derived from it.
+    for (const unit of units) expect(aiSiteUnitJob(job, unit, built).$id).not.toContain('job-1')
+  })
+
+  it('names a unit whose plan and step recorded no id by the job’s id and its slot, as every such draft was written', () => {
+    const unrecorded = confirmedPlan({
+      create: plan.create.map((entry) => ({ ...entry, id: undefined })),
+      screens: plan.screens.map((screen) => ({ ...screen, id: undefined })),
+    })
+    const job = siteJob({ plan: unrecorded, steps: [] })
+    const legacy = aiSiteJobUnits(unrecorded, { welcomeEmail: true })
+    expect(legacy.map((unit) => aiSiteUnitJob(job, unit, built).$id)).toEqual([
       'job-1-l',
       'job-1-f',
       'job-1-p0',
@@ -319,6 +345,10 @@ describe('the job each unit is built under', () => {
       'job-1-p3',
       'job-1-e',
     ])
+    // A palette change writes no draft, so no id is recorded for it.
+    const palette = aiCreationUnit(PALETTE, 't')
+    if (!palette) throw new Error('a palette change is a unit')
+    expect(aiSiteUnitJob(siteJob(), palette, new Map()).$id).toBe('job-1-t')
   })
 
   it('hands a creation unit its own creation and nothing else', () => {
@@ -405,7 +435,7 @@ describe('one unit a pass', () => {
       })),
     })
     const outcome = await step(context(siteJob()))
-    expect(pages.map((job) => job.$id)).toEqual(['job-1-p0'])
+    expect(pages.map((job) => job.$id)).toEqual(['drftPage00'])
     expect(outcome.outputs).toEqual([output('screen', 'screen-0')])
     expect(outcome.continue).toBe(true)
   })
@@ -424,7 +454,7 @@ describe('one unit a pass', () => {
         }),
       ),
     )
-    expect(pages.map((job) => job.$id)).toEqual(['job-1-p2'])
+    expect(pages.map((job) => job.$id)).toEqual(['drftPage02'])
   })
 
   it('stops asking to continue once the last unit reports', async () => {
@@ -445,7 +475,7 @@ describe('one unit a pass', () => {
       page: fakeRunner(pages, () => ({ continue: true })),
     })
     const outcome = await step(context(siteJob()))
-    expect(pages.map((job) => job.$id)).toEqual(['job-1-p0'])
+    expect(pages.map((job) => job.$id)).toEqual(['drftPage00'])
     expect(outcome.continue).toBe(true)
     expect(outcome.outputs).toEqual([])
   })
@@ -540,7 +570,7 @@ describe('one unit a pass', () => {
         outputs: [output('emailScreen', 'email-1')],
       })),
     })(context(job))
-    expect(emails.map((each) => each.$id)).toEqual(['job-1-e'])
+    expect(emails.map((each) => each.$id)).toEqual(['drftWelcom'])
     expect(emails[0].brief).toContain('welcome email')
     expect(outcome.continue).toBeUndefined()
   })
@@ -670,6 +700,7 @@ describe('the unit machinery a page job shares (AGL-3031)', () => {
     why: 'Three tiers repeat.',
     duplicateOf: null,
     fields: ['tier:text'],
+    id: 'drftPriceT',
   }
 
   it('builds a creation as the unit of its kind, and a creation no unit builds as none', () => {
@@ -690,10 +721,10 @@ describe('the unit machinery a page job shares (AGL-3031)', () => {
   it('resolves a built component into an id a page places', () => {
     const units = [aiCreationUnit(CARD, 'c0'), aiCreationUnit(LAYOUT, 'c1')].filter((unit) => unit !== null)
     const built = aiSiteBuiltRefs(units, [
-      output('reusableComponent', 'job-1-c0', 'Price tier'),
-      output('layout', 'job-1-c1', 'Site frame'),
+      output('reusableComponent', 'drftPriceT', 'Price tier'),
+      output('layout', 'drftFrameL', 'Site frame'),
     ])
-    expect(built.get('price tier')).toEqual({ id: 'job-1-c0', label: 'Price tier', kind: 'component' })
+    expect(built.get('price tier')).toEqual({ id: 'drftPriceT', label: 'Price tier', kind: 'component' })
   })
 
   it('tells a creation the plan’s reuse, less what the plan’s screens place themselves', () => {
@@ -727,9 +758,9 @@ describe('the unit machinery a page job shares (AGL-3031)', () => {
         runner: fakeRunner(seen, () => outcome),
         emptyCopy: 'Nothing was built.',
       })
-    const card = output('reusableComponent', 'job-1-c0', 'Price tier')
+    const card = output('reusableComponent', 'drftPriceT', 'Price tier')
     expect(await run({ outputs: [card] })).toMatchObject({ built: true, outcome: { outputs: [card] } })
-    expect(seen[0]).toMatchObject({ $id: 'job-1-c0', kind: 'component', steps: [], outputs: [] })
+    expect(seen[0]).toMatchObject({ $id: 'drftPriceT', kind: 'component', steps: [], outputs: [] })
     expect(await run({ continue: true })).toMatchObject({ built: false, outcome: { continue: true } })
     const review = { reason: 'limit' as const, message: 'No room.', findings: [] }
     expect(await run({ review })).toMatchObject({ built: false, outcome: { review } })

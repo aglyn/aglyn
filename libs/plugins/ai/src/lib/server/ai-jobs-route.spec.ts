@@ -676,7 +676,12 @@ describe('parseCreateAiJobBody', () => {
 describe('GET /api/ai/jobs — the read gate and the list', () => {
   async function seedJobs() {
     armCompletion()
-    await createJob(post({ ...VALID, brief: 'first' }))
+    const { job: first } = await (await createJob(post({ ...VALID, brief: 'first' }))).json()
+    // A job's id is random (AGL-3079), so two jobs created inside one
+    // millisecond would list in either order: the first is dated a second
+    // earlier, as a request made before the other would be.
+    const firstPath = `orgs/${ORG}/aiJobs/${first.id}`
+    mockDocs.set(firstPath, { ...mockDocs.get(firstPath), createdAt: new Date(Date.now() - 1_000) })
     mockRunAiRequest.mockRejectedValue(
       Object.assign(new Error('timed out'), { name: 'TimeoutError' }),
     )

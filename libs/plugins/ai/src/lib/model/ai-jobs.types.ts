@@ -151,7 +151,28 @@ export interface AiJobStep {
    * over every run that reached the provider. Absent on a step none has.
    */
   tokens?: AiJobStepTokens
+  /**
+   * The ids the step writes its drafts under, by draft (AGL-3079): minted
+   * when the job is created, so every run of the step names the same drafts.
+   * Absent on a step that writes none; a step that records none names its
+   * drafts by the job's own id.
+   */
+  draftIds?: Partial<Record<AiJobDraftSlot, string>>
 }
+
+/**
+ * A draft a job's kind always writes (AGL-3079): a screen, layout, template,
+ * form or component; an email design; a campaign; an automation.
+ */
+export type AiJobDraftSlot =
+  | 'screen'
+  | 'layout'
+  | 'template'
+  | 'form'
+  | 'component'
+  | 'email'
+  | 'campaign'
+  | 'workflow'
 
 /**
  * A step's measure (AGL-2937): the four token counts the meter prices, the

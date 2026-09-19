@@ -72,7 +72,7 @@ import { join } from 'node:path'
  * WHAT THE TREE SAYS, RESTATED.
  *=========================================*/
 
-/** `CONTACT_LIFECYCLE_STAGES` in `crm.ts` — order is the whole contract. */
+/** `CONTACT_LIFECYCLE_STAGES` in `crm-kinds.ts` — order is the whole contract. */
 export const CONTACT_LIFECYCLE_STAGES = [
   'subscriber',
   'lead',
@@ -726,17 +726,17 @@ export function stripComments(source) {
 }
 
 /**
- * Whether `crm.ts` still lists the stages this file lists, in this order.
+ * Whether `crm-kinds.ts` still lists the stages this file lists, in this order.
  * Parsed from the array literal rather than matched as text, so a stage
  * added, removed or moved is named in the refusal.
  */
-export function stageTableMatches(crmSource) {
-  const source = stripComments(crmSource)
+export function stageTableMatches(kindsSource) {
+  const source = stripComments(kindsSource)
   const match = source.match(
     /export const CONTACT_LIFECYCLE_STAGES = \[([^\]]*)\] as const/,
   )
   if (!match) {
-    return { ok: false, why: 'CONTACT_LIFECYCLE_STAGES is no longer an array literal in crm.ts' }
+    return { ok: false, why: 'CONTACT_LIFECYCLE_STAGES is no longer an array literal in crm-kinds.ts' }
   }
   const listed = [...match[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1])
   const same =
@@ -746,7 +746,7 @@ export function stageTableMatches(crmSource) {
     ? { ok: true, why: 'the stage table agrees' }
     : {
         ok: false,
-        why: `the stage table moved: crm.ts lists ${listed.join(' → ')}`,
+        why: `the stage table moved: crm-kinds.ts lists ${listed.join(' → ')}`,
       }
 }
 
@@ -843,7 +843,11 @@ export function preconditionsForTree(repoRoot) {
   }
   const crm = read('libs/aglyn/src/lib/app-utils/crm.ts')
   if (!crm) return { ok: false, why: 'crm.ts could not be read' }
-  const verdicts = [stageTableMatches(crm), advanceNeverDowngrades(crm)]
+  // The stage table is a leaf module of its own; `crm.ts` re-exports it and
+  // still holds the rule that advances a stage.
+  const kinds = read('libs/aglyn/src/lib/app-utils/crm-kinds.ts')
+  if (!kinds) return { ok: false, why: 'crm-kinds.ts could not be read' }
+  const verdicts = [stageTableMatches(kinds), advanceNeverDowngrades(crm)]
   for (const door of DOOR_FLOORS) {
     const source = read(door.path)
     if (!source) {
