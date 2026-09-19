@@ -45,6 +45,8 @@ properties with it. A property's default is checked before it reaches your site 
 way the published design is: a link, an image address, or formatted text that could run
 script is removed, and the property arrives with no default instead. The property itself
 always comes through, so its field still shows wherever you use the component or layout.
+A link or image the design takes from a **Link** or **Image** property arrives still bound
+to it, so each page that places the component sets its own address.
 
 ## Saving something as a template
 

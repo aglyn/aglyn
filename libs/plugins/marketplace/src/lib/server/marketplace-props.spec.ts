@@ -27,6 +27,7 @@
  * configured with, and a default each kind's rule admits.
  */
 
+import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { REUSABLE_PROP_KINDS } from '@aglyn/aglyn/foundation/definitions/property-kinds'
 import type {
   ReusableComponentProp,
@@ -385,7 +386,13 @@ const LAYOUT_NODES = {
   slot: { componentId: 'layoutSlot', parentId: ROOT },
 }
 
-function seedSource(props: unknown) {
+function seedSource(
+  props: unknown,
+  trees: {
+    component?: Record<string, unknown>
+    layout?: Record<string, unknown>
+  } = {},
+) {
   for (const key of Object.keys(state.store)) delete state.store[key]
   const admins = { memberRoles: { 'uid-admin': 'admin' } }
   state.store['hosts/source'] = { ...admins }
@@ -393,12 +400,12 @@ function seedSource(props: unknown) {
   state.store['hosts/source/components/cmp-1'] = {
     displayName: 'Hero',
     rootId: ROOT,
-    nodes: COMPONENT_NODES,
+    nodes: trees.component ?? COMPONENT_NODES,
     ...(props === undefined ? {} : { props }),
   }
   state.store['hosts/source/layouts/layout-1'] = { versionId: 'v1' }
   state.store['hosts/source/layouts/layout-1/versions/v1'] = {
-    nodes: LAYOUT_NODES,
+    nodes: trees.layout ?? LAYOUT_NODES,
     ...(props === undefined ? {} : { props }),
   }
 }
@@ -643,6 +650,216 @@ describe('a published layout keeps its properties (AGL-2933)', () => {
 
     expect(result.status).toBe(200)
     expect(installedLayouts()[0]).not.toHaveProperty('props')
+  })
+})
+
+/* ------------------------------------------------------------------------ */
+/* Links and images a property feeds                                         */
+/* ------------------------------------------------------------------------ */
+
+/** The Link and Image properties a published design feeds its URLs from. */
+const URL_PROPS: ReusableComponentProp[] = [
+  {
+    name: 'ctaLink',
+    type: 'href',
+    label: 'Button link',
+    defaultValue: 'https://example.com/pricing',
+  },
+  {
+    name: 'heroImage',
+    type: 'image',
+    label: 'Hero image',
+    defaultValue: 'https://cdn.example.com/hero.png',
+  },
+  { name: 'ctaLabel', type: 'text', defaultValue: 'See pricing' },
+]
+
+/**
+ * A component whose button, image and link take their `href` and `src` from
+ * those properties — and, beside them, the bindings the rule still refuses.
+ */
+const URL_BOUND_COMPONENT_NODES = {
+  [ROOT]: {
+    componentId: 'div',
+    nodes: ['cta', 'hero', 'spaced', 'textFed', 'ghost', 'crossed', 'spliced', 'script'],
+  },
+  cta: {
+    componentId: 'muiButton',
+    parentId: ROOT,
+    props: { href: '{{prop.ctaLink}}', children: '{{prop.ctaLabel}}' },
+  },
+  hero: {
+    componentId: 'image',
+    parentId: ROOT,
+    props: { src: '{{prop.heroImage}}', href: '{{prop.ctaLink}}', alt: 'Hero' },
+  },
+  spaced: {
+    componentId: 'muiScreenLink',
+    parentId: ROOT,
+    props: { href: '  {{ prop.ctaLink }}  ', children: 'Pricing' },
+  },
+  // A Text property's default is held to no URL rule, so it cannot feed one.
+  textFed: {
+    componentId: 'muiScreenLink',
+    parentId: ROOT,
+    props: { href: '{{prop.ctaLabel}}' },
+  },
+  // Undeclared: nothing substitutes it, so nothing holds it to a rule.
+  ghost: {
+    componentId: 'muiButton',
+    parentId: ROOT,
+    props: { href: '{{prop.nowhere}}' },
+  },
+  // A Link default is held to the link rule, which is not the image rule.
+  crossed: {
+    componentId: 'image',
+    parentId: ROOT,
+    props: { src: '{{prop.ctaLink}}' },
+  },
+  // A binding that is only part of the value leaves the rest to the publisher.
+  spliced: {
+    componentId: 'muiButton',
+    parentId: ROOT,
+    props: { href: 'javascript:{{prop.ctaLink}}' },
+  },
+  script: {
+    componentId: 'muiButton',
+    parentId: ROOT,
+    props: { href: 'javascript:alert(1)' },
+  },
+}
+
+/** A layout whose header links home and draws its logo from properties. */
+const URL_BOUND_LAYOUT_NODES = {
+  [ROOT]: { componentId: 'div', nodes: ['bar', 'slot'] },
+  bar: { componentId: 'muiAppBar', parentId: ROOT, nodes: ['home', 'logo'] },
+  home: {
+    componentId: 'muiScreenLink',
+    parentId: 'bar',
+    props: { href: '{{prop.ctaLink}}', children: 'Home' },
+  },
+  logo: {
+    componentId: 'image',
+    parentId: 'bar',
+    props: { src: '{{prop.heroImage}}', alt: 'Logo' },
+  },
+  slot: { componentId: 'layoutSlot', parentId: ROOT },
+}
+
+/** A node map as the listing, or the installed copy, stores it. */
+const nodesOf = (stored: unknown) =>
+  decodeStoredNodes<Record<string, { props?: Record<string, unknown> }>>(stored) ?? {}
+
+/** Every binding the rule keeps, and every one it refuses, in one tree. */
+function expectComponentBindings(stored: unknown) {
+  const nodes = nodesOf(stored)
+  expect(nodes['cta']?.props).toEqual({
+    href: '{{prop.ctaLink}}',
+    children: '{{prop.ctaLabel}}',
+  })
+  expect(nodes['hero']?.props).toEqual({
+    src: '{{prop.heroImage}}',
+    href: '{{prop.ctaLink}}',
+    alt: 'Hero',
+  })
+  expect(nodes['spaced']?.props?.['href']).toBe('{{ prop.ctaLink }}')
+  expect(nodes['textFed']?.props).not.toHaveProperty('href')
+  expect(nodes['ghost']?.props).not.toHaveProperty('href')
+  expect(nodes['crossed']?.props).not.toHaveProperty('src')
+  expect(nodes['spliced']?.props).not.toHaveProperty('href')
+  expect(nodes['script']?.props).not.toHaveProperty('href')
+}
+
+describe('a published design keeps the links and images its properties feed (AGL-2933)', () => {
+  beforeEach(() =>
+    seedSource(URL_PROPS, {
+      component: URL_BOUND_COMPONENT_NODES,
+      layout: URL_BOUND_LAYOUT_NODES,
+    }),
+  )
+
+  it('keeps an href bound to a Link property and a src bound to an Image property, through publish and install', async () => {
+    const listingId = await publishComponent()
+    expectComponentBindings(
+      state.store[`marketplaceListings/${listingId}/versions/1`].nodes,
+    )
+
+    const result = await call(installHandler, { listingId, hostId: 'target' })
+
+    expect(result.status).toBe(200)
+    expectComponentBindings(installedComponents()[0].nodes)
+  })
+
+  it('keeps them through an update, in merge and copy mode', async () => {
+    const listingId = await publishComponent()
+    await call(installHandler, { listingId, hostId: 'target' })
+    // The publisher ships a second version through the same publish route.
+    state.store['hosts/source/components/cmp-1'].displayName = 'Hero v2'
+    await publishComponent()
+
+    const merged = await call(updateArtifactHandler, {
+      listingId,
+      hostId: 'target',
+      action: 'apply',
+      mode: 'merge',
+    })
+    expect(merged.status).toBe(200)
+    expectComponentBindings(installedComponents()[0].nodes)
+
+    await publishComponent()
+    const copied = await call(updateArtifactHandler, {
+      listingId,
+      hostId: 'target',
+      action: 'apply',
+      mode: 'copy',
+    })
+    expect(copied.status).toBe(200)
+    expectComponentBindings(
+      state.store[`hosts/target/components/${copied.body.newId}`].nodes,
+    )
+  })
+
+  it('keeps a layout’s bindings through publish, install and update', async () => {
+    const listingId = await publishLayout()
+    const expectLayoutBindings = (stored: unknown) => {
+      const nodes = nodesOf(stored)
+      expect(nodes['home']?.props?.['href']).toBe('{{prop.ctaLink}}')
+      expect(nodes['logo']?.props?.['src']).toBe('{{prop.heroImage}}')
+    }
+    expectLayoutBindings(
+      state.store[`marketplaceListings/${listingId}/versions/1`].layout.nodes,
+    )
+
+    await call(installLayoutHandler, { listingId, hostId: 'target' })
+    expectLayoutBindings(installedLayouts()[0].nodes)
+
+    await publishLayout()
+    const updated = await call(updateArtifactHandler, {
+      listingId,
+      hostId: 'target',
+      action: 'apply',
+      mode: 'merge',
+    })
+    expect(updated.status).toBe(200)
+    expectLayoutBindings(installedLayouts()[0].nodes)
+  })
+
+  it('still clears a script-scheme default on the property the binding reads', async () => {
+    seedSource(
+      [
+        { ...URL_PROPS[0], defaultValue: 'javascript:alert(document.cookie)' },
+        { ...URL_PROPS[1], defaultValue: 'data:text/html,<script>alert(1)</script>' },
+        URL_PROPS[2],
+      ],
+      { component: URL_BOUND_COMPONENT_NODES },
+    )
+    const listingId = await publishComponent()
+    await call(installHandler, { listingId, hostId: 'target' })
+
+    const [installed] = installedComponents()
+    expectComponentBindings(installed.nodes)
+    expect(installed.props[0]).not.toHaveProperty('defaultValue')
+    expect(installed.props[1]).not.toHaveProperty('defaultValue')
   })
 })
 

@@ -170,6 +170,12 @@ typing the token.
 A Link property can be bound into either of a linking element's two fields — **Link to
 screen** or **External URL** — and resolves the same way in both.
 
+Whatever a page sets on a property bound into an address — a link's **External URL**, an
+image's **Image source** — has to be one when the page renders: a web address, a path, a
+`mailto:` or `tel:` link, or a screen; for an image, an `https://` address, a path or a
+media library pick. Anything else, such as a `javascript:` address, is left off the element,
+which renders as though that field were empty.
+
 Fields you do not type into have a `{}` too, beside their help icon, and it lists only the
 properties that hold the kind of value that field holds:
 
