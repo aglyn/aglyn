@@ -65,8 +65,10 @@ export function outreachUnsubscribePage(input: { title: string; body: string }, 
   const html =
     '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    // The reader's own colors, light or dark: the page has no theme to take.
+    '<meta name="color-scheme" content="light dark">' +
     `<title>${escapeHtml(input.title)}</title>` +
-    '<style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;line-height:1.5;color:#1f2328;background:#fff}h1{font-size:1.5rem}</style>' +
+    '<style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;line-height:1.5}h1{font-size:1.5rem}</style>' +
     `</head><body><main><h1>${escapeHtml(input.title)}</h1><p>${escapeHtml(input.body)}</p></main></body></html>`
   return new Response(html, { status, headers: PAGE_HEADERS })
 }
