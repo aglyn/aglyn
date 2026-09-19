@@ -1003,6 +1003,14 @@ interface LinkDialogState {
   editLinkIndex?: number
 }
 
+/** The clicked link, and what the popover over it acts on. */
+interface LinkPopoverState {
+  anchor: HTMLElement
+  rowKey: string
+  linkIndex: number
+  href: string
+}
+
 const MarkdownVisualEditor = forwardRef<
   MarkdownVisualEditorHandle,
   MarkdownVisualEditorProps
