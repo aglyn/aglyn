@@ -68,4 +68,9 @@ export const OUTREACH_API_ROUTES = {
   enrollmentsAction: 'outreach/enrollments/action',
   /** `POST` — one email of a saved sequence, for a contact or a sample person. */
   preview: 'outreach/preview',
+  // The one route a RECIPIENT reaches (AGL-2981): no session, a signed
+  // token instead, and registered as a recipient link so it answers whether
+  // or not Outreach is released for the organization now.
+  /** `GET` and the RFC 8058 one-click `POST` — `?t=<signed token>`. */
+  unsubscribe: 'outreach/unsubscribe',
 } as const

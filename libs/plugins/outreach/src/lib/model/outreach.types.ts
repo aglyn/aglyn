@@ -164,6 +164,42 @@ export interface OutreachMailboxHealth {
    * days older than a week. Absent, or empty, until the first send.
    */
   daily?: Record<string, OutreachMailboxDailyHealth>
+  /**
+   * The mailbox's most recent sends, newest last, at most
+   * `OUTREACH_BOUNCE_RATE_WINDOW_SENDS` of them, each marked when a hard
+   * bounce came back for it (AGL-2981): the window the bounce-rate pause is
+   * judged over. A send is named by a digest of its `Message-ID`, never by
+   * its recipient.
+   */
+  recentSends?: OutreachRecentSend[]
+  /** When a reply last called this mailbox's email spam (AGL-2981). */
+  lastComplaintAtMs?: number | null
+}
+
+/** One send in {@link OutreachMailboxHealth.recentSends}. */
+export interface OutreachRecentSend {
+  /** A digest of the send's `Message-ID`: what a bounce is matched to. */
+  id: string
+  atMs: number
+  bounced: boolean
+}
+
+/** Why a mailbox paused itself (AGL-2981): the engine's health decision, kept. */
+export interface OutreachMailboxAutoPause {
+  reason: 'bounces_today' | 'bounce_rate' | 'complaint'
+  /** The sentence the mailbox's card shows. */
+  message: string
+  atMs: number
+  /** For a complaint, when resuming stops being premature; `null` otherwise. */
+  untilMs: number | null
+}
+
+/** Where a mailbox's reply and bounce sync has read to (AGL-2981). */
+export interface OutreachMailboxSync {
+  /** Everything received before this was read by an earlier run, epoch ms. */
+  throughMs: number
+  /** Gmail ids of messages outside any enrollment's thread already handled. */
+  handledMessageIds: string[]
 }
 
 /**
@@ -218,6 +254,13 @@ export interface OutreachMailbox extends OutreachTimestamps {
   connectedByUid: string
   /** When the grant behind it was last connected (AGL-2978). */
   connectedAtMs: number
+  /**
+   * Set when the mailbox paused ITSELF on its health (AGL-2981), and cleared
+   * when a member pauses or resumes it; absent otherwise.
+   */
+  autoPause?: OutreachMailboxAutoPause | null
+  /** The reply and bounce sync's place in the mailbox (AGL-2981). */
+  sync?: OutreachMailboxSync | null
 }
 
 /**
@@ -538,6 +581,48 @@ export interface OutreachEnrollment extends OutreachTimestamps {
   messageIds: string[]
   /** When the last step ran. */
   lastSentAtMs: number | null
+  /**
+   * A sending run's hold on the step it is running (AGL-2981): taken in a
+   * transaction before the step runs, cleared when it is recorded. Absent
+   * or `null` while no run holds one.
+   */
+  sendClaim?: OutreachSendClaim | null
+  /** Every step the runtime ran, oldest first (AGL-2981). */
+  stepRecords?: OutreachStepRecord[]
+  /** Gmail ids of this enrollment's thread messages the sync has handled, the last hundred. */
+  syncedMessageIds?: string[]
+}
+
+/** A sending run's claim on one enrollment's step (AGL-2981). */
+export interface OutreachSendClaim {
+  /** The run that holds it. */
+  token: string
+  atMs: number
+  stepIndex: number
+  /**
+   * The `Message-ID` an email step goes out with, minted before the send, so
+   * a claim a run died holding is settled by looking for the message rather
+   * than by sending it again. `null` for a task step.
+   */
+  messageId: string | null
+}
+
+/** One step the runtime ran for an enrollment (AGL-2981). */
+export interface OutreachStepRecord {
+  stepIndex: number
+  stepId: string
+  kind: 'email' | 'task'
+  atMs: number
+  /** Gmail's id for the sent message. */
+  gmailMessageId?: string
+  /** Gmail's thread the message went into. */
+  gmailThreadId?: string
+  /** The `Message-ID` it went out with, angle brackets included. */
+  messageId?: string
+  /** The subject as sent. */
+  subject?: string
+  /** The record system's task for a task step; `null` when none could be filed. */
+  taskId?: string | null
 }
 
 /*==========================================

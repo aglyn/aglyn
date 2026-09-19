@@ -17,15 +17,18 @@
 
 // Each registry from its own module, not the `@aglyn/aglyn/server` barrel:
 // boot needs one registry, not the whole server surface.
+import { registerPluginConsoleCron } from '@aglyn/aglyn/plugin-manager/plugin-console-crons'
 import {
   listPluginOrgErasers,
   registerPluginOrgEraser,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
+import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import {
   listPluginUserErasers,
   registerPluginUserEraser,
 } from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
 import { OUTREACH_PLUGIN_ID } from './constants/bundle-common'
+import { OUTREACH_SEND_JOB_ID, OUTREACH_SYNC_JOB_ID } from './constants/runtime-jobs'
 
 /**
  * Outreach's CONSOLE-ONLY server declarations (AGL-2978), named under
@@ -40,8 +43,13 @@ import { OUTREACH_PLUGIN_ID } from './constants/bundle-common'
  * that does (`outreach-credential-isolation.spec.ts`). Every erasure runs in
  * the console, so this is where the erasers are needed.
  *
- * Light at boot: the erasers' module is imported when an erasure first asks
- * for it, so the boot cost is the registration.
+ * The sending runtime (AGL-2981) is declared here too, for the same reason:
+ * the send and sync jobs open each rep's sealed grant, so they run on the
+ * console's `plugin-console-crons` tick and nowhere else, and the person
+ * eraser removes the enrollments a workspace kept about someone it erases.
+ *
+ * Light at boot: every module that does the work is imported when a job, an
+ * erasure or a tick first asks for it, so the boot cost is the registration.
  */
 export function registerOutreachConsoleServerDeclarations(): void {
   // Idempotent against the REGISTRY, so a reset (a spec) registers again.
@@ -67,4 +75,40 @@ export function registerOutreachConsoleServerDeclarations(): void {
       { pluginId: OUTREACH_PLUGIN_ID },
     )
   }
+  // A person erased from a workspace takes their enrollments with them; the
+  // do-not-contact entry stays, stripped of anything that names them.
+  registerPluginPersonEraser(
+    async (request) => (await runtime()).platformOutreachPersonEraser()(request),
+    { pluginId: OUTREACH_PLUGIN_ID },
+  )
+  // The sending runtime, on the console's fifteen-minute tick.
+  registerPluginConsoleCron(
+    {
+      id: OUTREACH_SEND_JOB_ID,
+      label: 'Outreach sends',
+      drives:
+        'Sends every Outreach sequence step that has come due, from the rep’s own connected mailbox, and files each on the contact’s timeline. If it stops, no sequence sends anything and every task step waits.',
+      run: async (context) => {
+        const [{ runOutreachSendJob }, platform] = await Promise.all([import('./runtime/send-job'), runtime()])
+        return runOutreachSendJob(platform.platformOutreachRuntimeDeps(), context)
+      },
+    },
+    { pluginId: OUTREACH_PLUGIN_ID },
+  )
+  registerPluginConsoleCron(
+    {
+      id: OUTREACH_SYNC_JOB_ID,
+      label: 'Outreach replies and bounces',
+      drives:
+        'Reads each connected mailbox for replies, out-of-office answers, opt-outs and bounces, and stops or postpones the sequence each one is about. If it stops, a person who replied or asked to be left alone keeps getting follow-ups, and a mailbox that bounces never pauses itself.',
+      run: async (context) => {
+        const [{ runOutreachSyncJob }, platform] = await Promise.all([import('./runtime/sync-job'), runtime()])
+        return runOutreachSyncJob(platform.platformOutreachRuntimeDeps(), context)
+      },
+    },
+    { pluginId: OUTREACH_PLUGIN_ID },
+  )
 }
+
+/** The runtime's platform reach, loaded when a job or an erasure first runs. */
+const runtime = () => import('./runtime/platform-runtime-deps')
