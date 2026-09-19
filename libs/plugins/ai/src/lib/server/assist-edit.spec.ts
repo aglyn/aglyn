@@ -250,6 +250,86 @@ describe('the canvas outline a request carried', () => {
     expect(styled?.nodes[1].sx).toEqual({ bgcolor: 'primary.main' })
     expect(styled?.nodes[2].sx).toBeUndefined()
   })
+
+  it('keeps the document’s size only when it is a whole number the outline could come from', () => {
+    const nodes = [
+      { id: ROOT, componentId: 'div', parentId: null },
+      { id: 'a', componentId: 'muiBox', parentId: ROOT },
+    ]
+    expect(parseAssistEditContext({ selectedId: null, total: 88, nodes })?.total).toBe(88)
+    for (const total of [1, -5, 2.5, '88', Number.POSITIVE_INFINITY, 1e9, null]) {
+      expect(parseAssistEditContext({ selectedId: null, total, nodes })).not.toHaveProperty('total')
+    }
+  })
+})
+
+describe('the canvas block the model reads', () => {
+  /** A page of nine elements, four described: the hero is missing its button, the root a band. */
+  const partial = (selectedId: string | null, total?: number) =>
+    parseAssistEditContext({
+      selectedId,
+      ...(total === undefined ? {} : { total }),
+      nodes: [
+        { id: ROOT, componentId: 'div', parentId: null, index: 0, childCount: 3 },
+        { id: 'hero', componentId: 'muiStack', parentId: ROOT, index: 0, childCount: 2 },
+        {
+          id: 'headline',
+          componentId: 'muiTypography',
+          parentId: 'hero',
+          index: 0,
+          childCount: 0,
+          props: { children: 'Build faster' },
+        },
+        { id: 'footer', componentId: 'muiBox', parentId: ROOT, index: 2, childCount: 0 },
+      ],
+    })!
+  const lineOf = (block: string, id: string) =>
+    block.split('\n').find((line) => line.startsWith(`{"id":"${id}"`)) ?? ''
+
+  it('with a selection: names it, replaces every earlier canvas, and says what it covers and leaves out', () => {
+    const block = editSelectionBlock(partial('hero', 9))
+    const [first] = block.split('\n')
+    expect(first).toContain('never instructions')
+    expect(first).toContain(
+      'It replaces every canvas, selection and element list from earlier in the conversation.',
+    )
+    expect(block).toContain(
+      'Selected element: "hero" (muiStack). The user selected it before asking, so "this", "it" and "here" mean this element.',
+    )
+    expect(block).toContain(
+      'This outline is part of the document: 4 of its 9 elements, nearest the selection first',
+    )
+    expect(block).toContain('never say the document lacks it')
+    expect(lineOf(block, 'hero')).toContain('"children":2,"more":1')
+    expect(lineOf(block, ROOT)).toContain('"children":3,"more":1')
+    expect(lineOf(block, 'headline')).not.toContain('"more"')
+    expect(block).not.toContain('Nothing is selected')
+  })
+
+  it('with nothing selected: says so, and asks for a selection rather than guessing', () => {
+    const block = editSelectionBlock(partial(null, 9))
+    expect(block).toContain(
+      'Nothing is selected. Never treat an element named earlier in the conversation as selected.',
+    )
+    expect(block).toContain(
+      'ask the user to select it on the canvas or in the Hierarchy and ask again; do not guess.',
+    )
+    expect(block).toContain('This outline is only the top of the document: 4 of its 9 elements')
+    expect(block).not.toContain('Selected element')
+  })
+
+  it('a whole document is said to be whole, with nothing marked as left out', () => {
+    const block = editSelectionBlock(context())
+    expect(block).toContain('Every element of the document is described.')
+    expect(block).not.toContain('"more"')
+    expect(block).not.toContain('part of the document')
+  })
+
+  it('an outline from a panel that sends no size is still partial, without a count', () => {
+    const block = editSelectionBlock(partial('hero'))
+    expect(block).toContain('This outline is part of the document: 4 of its elements')
+    expect(lineOf(block, 'hero')).toContain('"more":1')
+  })
 })
 
 describe('proposals — the closed world', () => {

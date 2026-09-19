@@ -132,6 +132,12 @@ export interface AssistEditCanvasNode {
 export interface AssistEditCanvasContext {
   /** The element the author has selected, or null. */
   selectedId: string | null
+  /**
+   * Elements in the whole document, the root included, so the prompt can say
+   * how much of it `nodes` leaves out. Absent from an outline sent by a panel
+   * that predates it.
+   */
+  total?: number
   nodes: AssistEditCanvasNode[]
 }
 
