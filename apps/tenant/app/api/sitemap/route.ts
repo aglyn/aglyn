@@ -338,11 +338,14 @@ async function buildSitemapIndex(
         }),
     )
     for (const { slug, entries } of counted) {
-      // At least one file, always: the listing URL itself lives on page 1 and
-      // exists whether or not anything has been published into the collection.
+      // No published entry, no child (AGL-3101). The listing on page 1 is not
+      // a page until an entry in the collection is published — it 404s until
+      // then — so a zero count names no file rather than one holding a dead
+      // URL. Only a count that SUCCEEDED can say zero; one that throws lands
+      // in the catch below, which degrades the index instead.
       sections.push({
         section: contentSitemapSection(slug),
-        pages: Math.max(1, sitemapPageCount(entries)),
+        pages: sitemapPageCount(entries),
       })
     }
   } catch {
@@ -704,7 +707,11 @@ async function buildContentUrls(
       }
     }
 
-    if (page === 1) {
+    // The listing and its categories ride on page 1 only while something is
+    // published (AGL-3101). Page 1 starts at the first published entry, so an
+    // empty read here means the collection has none, its listing 404s, and a
+    // crawler still holding this child's URL gets an empty `<urlset>`.
+    if (page === 1 && entries.docs.length) {
       // A listing is dated by the newest entry it lists, which this page can
       // only answer when it holds the WHOLE collection: entries page by id,
       // so a full first page of a larger collection is not the newest set,

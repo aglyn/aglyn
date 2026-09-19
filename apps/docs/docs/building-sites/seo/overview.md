@@ -146,7 +146,8 @@ real address (your custom domain when you have one), and includes:
 - your **product** and catalog **collection** URLs, once a product-page or
   collection-page template is set;
 - your **content collections** — each collection's list URL and its **published**
-  entries. A scheduled entry joins the sitemap once its publish time passes.
+  entries. A scheduled entry joins the sitemap once its publish time passes, and a
+  collection with nothing published yet is left out until its first entry is.
 
 ### One index, one file per section
 
@@ -163,8 +164,8 @@ https://your-site/sitemap.xml
 ```
 
 Submit `sitemap.xml` and nothing else — every search engine follows an index to its
-children on its own. You never write these child URLs yourself, and the index adds and
-drops them as you add and remove collections.
+children on its own. You never write these child URLs yourself, and the index adds a
+collection's file with its first published entry and drops it once nothing is published.
 
 The split is what keeps a growing site correct. A single sitemap may hold at most
 **50,000 URLs**, and anything past that is not submitted at all — silently. A section
@@ -253,8 +254,9 @@ there is no Markdown version to serve and it stays HTML.
 ### `/llms.txt`
 
 A short guide at `https://your-site/llms.txt` telling an agent what the site is for and
-which addresses answer what — your collections and their entry counts, search, the
-sitemap, the API description, and a contact route when you publish one.
+which addresses answer what — your collections that have published entries and their
+entry counts, search, the sitemap, the API description, and a contact route when you
+publish one.
 
 You can lead it with your own words. **Setup → SEO → AI agents** has two boxes:
 

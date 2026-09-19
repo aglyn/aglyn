@@ -21,6 +21,12 @@ fully designed in the besigner via **template screens**.
 
 In **Content**, create a **collection** for your posts. Manage entries from the console.
 
+A new collection is not a page yet. Its listing at `/{collection}` goes live with the **first
+entry you publish** (or a scheduled one, once its time comes), and so do its paged and
+category listings and its RSS feed. Until then those addresses answer 404 and your sitemap
+and `/llms.txt` leave the collection out, so an empty section never shows up on your site or
+in search. Unpublish or delete every entry and the listing comes down the same way.
+
 ### Delete a collection
 
 **Delete collection** is at the bottom of **Collection settings**, the panel under the
@@ -443,12 +449,13 @@ listing is its own cacheable, linkable, indexable page — it can be shared, ope
 new tab, and crawled. **All** is the bare `/{collection}`, so the unfiltered listing
 never gains a second address.
 
-A category with nothing published in it still renders — the page, the pills and the rest
-of your template, with **zero entry rows** — so a reader can pick another pill instead of
-hitting a 404. The built-in listing writes *"Nothing published in Guides yet."* in that
-gap; **on your own list template nothing fills it**, so add your own empty-state message
-under the Collection Entries block if you expect thin categories. A category segment that
-matches nothing at all renders the same empty listing and is marked `noindex`.
+Once the collection has a published entry, a category with nothing published in it still
+renders — the page, the pills and the rest of your template, with **zero entry rows** — so
+a reader can pick another pill instead of hitting a 404. The built-in listing writes
+*"Nothing published in Guides yet."* in that gap; **on your own list template nothing
+fills it**, so add your own empty-state message under the Collection Entries block if you
+expect thin categories. A category segment that matches nothing at all renders the same
+empty listing and is marked `noindex`.
 
 Pagination composes with the filter: page 2 of a category lives at
 `/{collection}/category/{category}/page/2`, and page counts describe the filtered set.
@@ -530,11 +537,13 @@ on every route without building a variant of the screen for each.
 
 ## 4. Publish & syndicate
 
-Publish the collection. Blog pages join the site's **sitemap** automatically, and each
-entry's `<head>` uses its SEO title/description (falling back to title/excerpt) and its
-cover image as the social card.
+There is no publish step for the collection itself: publishing its first entry is what
+takes it live (see [Create a collection](#1-create-a-collection)). From then on its pages
+join the site's **sitemap** automatically, and each entry's `<head>` uses its SEO
+title/description (falling back to title/excerpt) and its cover image as the social card.
 
-Aglyn also generates an **RSS feed** per collection, at:
+Aglyn also generates an **RSS feed** per collection, live from its first published entry,
+at:
 
 ```
 https://your-domain.com/<collection-slug>/rss.xml

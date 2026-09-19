@@ -29,8 +29,9 @@ export const dynamic = 'force-dynamic'
  * Feed readers poll relentlessly, and every poll re-read the collection and
  * its entries (AGL-1302). The rendered XML is a pure function of the host
  * doc and the collection's published entries, so it caches whole for 5
- * minutes under the `tenant-data:{hostId}` tag every publish busts. A
- * missing collection is never cached — creating one shows up immediately.
+ * minutes under the `tenant-data:{hostId}` tag every publish busts. A slug
+ * with no feed — no such collection, or nothing in it live yet (AGL-3101) —
+ * is never cached, so the feed appears with the collection's first live entry.
  */
 const RSS_TTL_SECONDS = 300
 
@@ -125,9 +126,11 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 /**
- * The rendered feed, or null when the slug names no content collection.
- * Pure function of published data + `base`, which is what makes it safe to
- * cache whole.
+ * The rendered feed, or null when the slug names no content collection — or
+ * one with nothing live in it, which `getCollectionContent` answers the same
+ * way (AGL-3101), so an unpublished collection 404s here instead of serving an
+ * empty channel. Pure function of published data + `base`, which is what
+ * makes it safe to cache whole.
  */
 async function buildRssXml(
   hostId: string,
