@@ -119,7 +119,17 @@ const RECIPES: Record<DuplicableHostResourceKind, KindRecipe> = {
   screen: {
     collection: 'screens',
     nameField: 'displayName',
-    fields: ['description', 'seo', 'kind', 'visibility', 'locale', 'protection'],
+    fields: [
+      'description',
+      'seo',
+      'kind',
+      'visibility',
+      'locale',
+      'protection',
+      // The shared-layout binding. A version inherits it from its screen, so
+      // a copy without it renders with no header or footer (AGL-3120).
+      'layoutId',
+    ],
     versionParentField: 'screenId',
     quotaKey: 'screensPerHost',
     slug: true,

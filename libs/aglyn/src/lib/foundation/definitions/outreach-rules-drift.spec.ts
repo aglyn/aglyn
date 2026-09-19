@@ -30,7 +30,7 @@
  *
  * So both halves of that argument are held here: the helper reads the override
  * and names no plan, and no plan in `PLAN_ENTITLEMENTS` carries the feature. A
- * predicate nobody calls enforces nothing, so the three Outreach reads — and
+ * predicate nobody calls enforces nothing, so every Outreach read — and
  * the writes and the credential collection that must stay closed — are read
  * out of the same file.
  *
@@ -79,6 +79,9 @@ const OUTREACH_COLLECTIONS: ReadonlyArray<readonly [string, string]> = [
   ['outreachMailboxes', 'mailboxId'],
   ['outreachSequences', 'sequenceId'],
   ['outreachEnrollments', 'enrollmentId'],
+  // The compliance settings and the do-not-contact list (AGL-2980).
+  ['outreachSettings', 'settingsId'],
+  ['outreachDoNotContact', 'key'],
 ]
 
 /** Whitespace collapsed, so a re-wrapped expression reads the same. */

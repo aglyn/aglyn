@@ -23,7 +23,7 @@
  * constants only, nothing that reaches Firestore.
  *
  * EVERY DOCUMENT HERE IS SERVER-WRITTEN. The Firestore rules let an
- * org-wide member holding `outreach.use` READ the three org collections on a
+ * org-wide member holding `outreach.use` READ the org collections on a
  * workspace that carries `features.outreach`, and refuse every client write,
  * because these documents are the sending engine's state: a client that
  * could write a mailbox could lift its daily cap, and one that could write
@@ -39,12 +39,14 @@
 /**
  * Where Outreach keeps its records.
  *
- * Three collections under the organization, and one at the top level. The
- * top-level one holds credentials, so it is keyed by an `orgId` FIELD that a
- * path-scoped delete of `orgs/{orgId}` cannot see: the org erasure sweeps it
- * by that field (`libs/tenant/data/admin/src/lib/server/erase.ts` names it as
- * a literal, which the boundary forces, and `outreach.types.spec.ts` holds
- * the two spellings together, along with the rules').
+ * Five collections under the organization, and one at the top level. The
+ * org-scoped ones are erased with the org, whose erasure deletes the whole
+ * `orgs/{orgId}` tree. The top-level one holds credentials, so it is keyed by
+ * an `orgId` FIELD that a path-scoped delete of `orgs/{orgId}` cannot see:
+ * the org erasure sweeps it by that field
+ * (`libs/tenant/data/admin/src/lib/server/erase.ts` names it as a literal,
+ * which the boundary forces, and `outreach.types.spec.ts` holds the two
+ * spellings together, along with the rules').
  */
 export const OUTREACH_COLLECTIONS = {
   /** `orgs/{orgId}/outreachMailboxes/{mailboxId}` — a connected mailbox. */
@@ -53,6 +55,17 @@ export const OUTREACH_COLLECTIONS = {
   sequences: 'outreachSequences',
   /** `orgs/{orgId}/outreachEnrollments/{enrollmentId}` — one person in one sequence. */
   enrollments: 'outreachEnrollments',
+  /**
+   * `orgs/{orgId}/outreachSettings/{settingsId}` — the organization's own
+   * Outreach settings, one document per concern. `compliance` holds who
+   * every email says sent it and the countries Outreach may send to.
+   */
+  settings: 'outreachSettings',
+  /**
+   * `orgs/{orgId}/outreachDoNotContact/{key}` — the addresses Outreach never
+   * emails for this organization, keyed by `outreachDoNotContactKey`.
+   */
+  doNotContact: 'outreachDoNotContact',
   /**
    * `outreachMailboxCredentials/{mailboxId}` — the provider grant behind a
    * mailbox. TOP-LEVEL and closed to every client, staff included, so the
@@ -479,6 +492,12 @@ export interface OutreachEnrollment extends OutreachTimestamps {
   sequenceId: string
   /** The CRM contact the person is. */
   contactId: string
+  /**
+   * The contact's name as the sending site knew it at enrollment, `''` when
+   * it had none — what the enrollments table shows beside the address,
+   * without a read of every contact on the page (AGL-2980).
+   */
+  contactName: string
   /** The address the steps go to, normalized, captured at enrollment. */
   email: string
   hostId: string
@@ -546,4 +565,82 @@ export interface OutreachOrgSettings {
    * commas.
    */
   postalAddress: string
+}
+
+/** The id of the compliance document in the `settings` collection. */
+export const OUTREACH_COMPLIANCE_SETTINGS_ID = 'compliance'
+
+/**
+ * The organization's Outreach compliance settings
+ * (`orgs/{orgId}/outreachSettings/compliance`): the footer's sender identity,
+ * and the countries Outreach may send to at all.
+ *
+ * `allowedCountries` is a CEILING over every sequence's own list — a
+ * sequence sends only to the countries both name — so narrowing it here
+ * narrows every sequence at once, without editing any of them. Default
+ * {@link OUTREACH_DEFAULT_ALLOWED_COUNTRIES}.
+ */
+export interface OutreachComplianceSettings extends OutreachOrgSettings {
+  /** ISO-3166-1 alpha-2 codes, uppercase, in the order they were chosen. */
+  allowedCountries: string[]
+}
+
+/** The compliance settings as stored, with who changed them last. */
+export interface OutreachComplianceSettingsDocument
+  extends OutreachComplianceSettings {
+  /** `0` until the organization first saves them. */
+  updatedAtMs: number
+  updatedByUid: string | null
+}
+
+/*==========================================
+ * DO NOT CONTACT (AGL-2980).
+ *
+ * The organization's own list of addresses Outreach never emails, whoever
+ * enrolls them and from whichever site. A member adds one by hand; the
+ * sending runtime adds one when a reply asks to be left alone, when the
+ * unsubscribe link is used, and when an address bounces for good.
+ *
+ * AN ENTRY CARRIES NO ADDRESS. Its id is `outreachDoNotContactKey(email)` —
+ * the same hash the platform's suppression lists key by — and that is all a
+ * lookup needs, since every caller holds the address it is about to use.
+ * So the list keeps working after a person is erased from the workspace,
+ * which is exactly when a promise not to email them must still hold, while
+ * holding nothing that identifies them.
+ *==========================================*/
+
+/** Why an address is on the list. */
+export const OUTREACH_DO_NOT_CONTACT_REASONS = [
+  /** A member put it there. */
+  'manual',
+  /** A reply asked not to be emailed again. */
+  'opt_out_reply',
+  /** The unsubscribe link or header was used. */
+  'unsubscribe',
+  /** Mail to it bounced for good. */
+  'hard_bounce',
+] as const
+export type OutreachDoNotContactReason =
+  (typeof OUTREACH_DO_NOT_CONTACT_REASONS)[number]
+
+/** What put an address on the list: a member, or the sending runtime. */
+export const OUTREACH_DO_NOT_CONTACT_SOURCES = ['member', 'runtime'] as const
+export type OutreachDoNotContactSource =
+  (typeof OUTREACH_DO_NOT_CONTACT_SOURCES)[number]
+
+/** One address on the list (`orgs/{orgId}/outreachDoNotContact/{key}`). */
+export interface OutreachDoNotContactEntry {
+  /** `outreachDoNotContactKey` of the address, which is also the document id. */
+  key: string
+  reason: OutreachDoNotContactReason
+  source: OutreachDoNotContactSource
+  /** The member who added it; `null` when the runtime did. */
+  addedByUid: string | null
+  addedAtMs: number
+  /** The enrollment that led here, when one did. */
+  enrollmentId: string | null
+  /** That enrollment's sequence. */
+  sequenceId: string | null
+  /** Plain-language detail: why the member added it, the bounce's diagnostic. */
+  detail: string | null
 }
