@@ -168,6 +168,45 @@ describe('MailboxCard — status and health (AGL-2978)', () => {
     expect(mockEnqueueSnackbar).toHaveBeenCalledWith('Mailbox resumed', expect.objectContaining({ variant: 'success' }))
   })
 
+  it('says why a mailbox paused itself, in the engine’s own words, until a member resumes it (AGL-2981)', async () => {
+    const { props } = renderCard({
+      mailbox: {
+        status: 'paused',
+        autoPause: {
+          reason: 'bounces_today',
+          message: 'Paused after 2 hard bounces today. Re-check the addresses in your sequences before resuming.',
+          atMs: NOW,
+          untilMs: null,
+        },
+      },
+    })
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Outreach paused this mailbox on Sep 15, 2026. Paused after 2 hard bounces today. Re-check the addresses in your sequences before resuming. Nothing sends from it until it is resumed.',
+    )
+    fireEvent.click(button(MAILBOX_ACTION_LABELS.resume) as HTMLElement)
+    await waitFor(() => expect(props.api.setPaused).toHaveBeenCalledWith('gm_1', false))
+  })
+
+  it('names the day a complaint’s pause may end, and says nothing of a member’s own pause (AGL-2981)', () => {
+    renderCard({
+      mailbox: {
+        status: 'paused',
+        autoPause: {
+          reason: 'complaint',
+          message: 'Paused for a week after a reply called an email spam. Review who your sequences are reaching.',
+          atMs: NOW,
+          untilMs: NOW + 7 * DAY,
+        },
+      },
+    })
+    expect(screen.getByRole('alert').textContent).toContain('Wait until Sep 22, 2026 before resuming it.')
+  })
+
+  it('shows no automatic-pause banner on a mailbox a member paused', () => {
+    renderCard({ mailbox: { status: 'paused', autoPause: null } })
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('pauses an active mailbox', async () => {
     const { props } = renderCard()
     fireEvent.click(button(MAILBOX_ACTION_LABELS.pause) as HTMLElement)

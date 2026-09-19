@@ -18,9 +18,18 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  listPluginConsoleCrons,
+  pluginConsoleCronScheduledJobs,
+  resetPluginConsoleCronsForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-console-crons'
+import {
   listPluginOrgErasers,
   resetPluginOrgErasersForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
+import {
+  listPluginPersonErasers,
+  resetPluginPersonErasersForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import {
   listPluginUserErasers,
   resetPluginUserErasersForTests,
@@ -39,6 +48,8 @@ const REPO_ROOT = join(__dirname, '../../../../..')
 beforeEach(() => {
   resetPluginOrgErasersForTests()
   resetPluginUserErasersForTests()
+  resetPluginPersonErasersForTests()
+  resetPluginConsoleCronsForTests()
 })
 
 describe('registerOutreachConsoleServerDeclarations (AGL-2978)', () => {
@@ -56,6 +67,28 @@ describe('registerOutreachConsoleServerDeclarations (AGL-2978)', () => {
     registerOutreachConsoleServerDeclarations()
     expect(listPluginOrgErasers()).toEqual(['outreach'])
     expect(listPluginUserErasers()).toEqual(['outreach'])
+  })
+
+  it('declares the send and sync jobs on the console tick, and the person eraser, once (AGL-2981)', () => {
+    registerOutreachConsoleServerDeclarations()
+    registerOutreachConsoleServerDeclarations()
+    expect(listPluginConsoleCrons().map((job) => [job.pluginId, job.id])).toEqual([
+      ['outreach', 'outreach-send'],
+      ['outreach', 'outreach-sync'],
+    ])
+    expect(listPluginPersonErasers()).toEqual(['outreach'])
+    // Each job has its own row on /api/health/crons, saying what stops with it.
+    for (const row of pluginConsoleCronScheduledJobs()) {
+      expect(row).toMatchObject({ cron: '*/15 * * * *', runner: 'cloud-scheduler', graceMinutes: 45 })
+      expect(row.drives.length).toBeGreaterThan(40)
+    }
+  })
+
+  it('declares without loading the runtime: the jobs and the eraser import it when they first run', () => {
+    const source = readFileSync(join(__dirname, 'declarations.console-server.ts'), 'utf8')
+    expect(source).not.toMatch(/^import[^\n]*from '\.\/runtime\//m)
+    expect(source).toContain("import('./runtime/send-job')")
+    expect(source).toContain("import('./runtime/sync-job')")
   })
 
   it('is called by the console’s server declarations manifest and by no tenant manifest', () => {

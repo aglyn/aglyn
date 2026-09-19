@@ -52,9 +52,9 @@ export const OUTREACH_GMAIL_HOST: PluginEgressHostDeclaration = {
   host: new URL(GMAIL_API_BASE).host,
   disposition: 'not-a-subprocessor',
   reason:
-    "Customer-chosen destination. The Gmail REST API of the rep's own Google Workspace mailbox, which the rep connects in Outreach → Mailboxes (`libs/plugins/outreach/src/lib/transport/gmail-client.ts`): the account's profile and verified send-as addresses at connect, a plain-text test the rep sends to themselves, and — for the sending runtime — the sequence messages, thread headers and the reply and bounce searches in that same mailbox. The provider is the one the customer runs its mail on; nothing is sent to a mailbox the rep did not connect.",
+    "Customer-chosen destination. The Gmail REST API of the rep's own Google Workspace mailbox, which the rep connects in Outreach → Mailboxes (`libs/plugins/outreach/src/lib/transport/gmail-client.ts`): the account's profile and verified send-as addresses at connect, a plain-text test the rep sends to themselves, and — for the sending runtime (AGL-2981) — the sequence messages it sends, and the reads and searches of that same mailbox that find what came back: replies, out-of-office answers, bounces and unsubscribe requests. The provider is the one the customer runs its mail on; nothing is sent to a mailbox the rep did not connect.",
   dataReceived:
-    "The rep's own OAuth access token, and the mail the rep sends from their own mailbox — each recipient's address, the subject and the plain-text body — plus the reads of the rep's own mailbox listed above. No other customer record, and nothing about a site visitor.",
+    "The rep's own OAuth access token, and the mail the rep sends from their own mailbox — each recipient's address, the subject and the plain-text body. The runtime's searches carry the addresses of the people the rep is writing to, the rep's `+unsubscribe` address and the Message-IDs of mail it sent. What the runtime reads back is the rep's own mail: the ids of newly received messages, and whole messages — headers and plain-text or HTML bodies, delivery reports included — of the rep's Outreach threads and of the replies, bounces and unsubscribe requests its searches find. No other customer record, and nothing about a site visitor.",
 }
 
 /** Google's consent address, which only the rep's browser opens. */

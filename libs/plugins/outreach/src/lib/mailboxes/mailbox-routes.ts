@@ -603,14 +603,20 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     const next: OutreachMailboxStatus = body['paused'] ? 'paused' : 'connected'
     if (mailbox.status === next) return ok({ ok: true, mailbox })
     const nowMs = deps.now()
-    await mailboxRef(deps.firestore(), gate.orgId, mailbox.id).update({ status: next, updatedAtMs: nowMs })
+    // A member's pause or resume answers an automatic pause (AGL-2981): its
+    // reason goes, and the next bounce is judged as new evidence.
+    await mailboxRef(deps.firestore(), gate.orgId, mailbox.id).update({
+      status: next,
+      autoPause: null,
+      updatedAtMs: nowMs,
+    })
     await deps.logOrgActivity(
       gate.orgId,
       { uid: gate.uid, email: gate.email },
       next === 'paused' ? 'Paused an Outreach mailbox' : 'Resumed an Outreach mailbox',
       { type: OUTREACH_MAILBOX_ACTIVITY_TARGET, id: mailbox.id, name: activityName(mailbox) },
     )
-    return ok({ ok: true, mailbox: { ...mailbox, status: next, updatedAtMs: nowMs } })
+    return ok({ ok: true, mailbox: { ...mailbox, status: next, autoPause: null, updatedAtMs: nowMs } })
   }
 
   const test: PluginWebApiHandler = async (request) => {

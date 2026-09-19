@@ -29,6 +29,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  isPluginRecipientLinkRoute,
   listPluginPermissions,
   resolvePluginApiMatch,
   resolvePluginApiRoute,
@@ -141,6 +142,15 @@ describe('the Outreach server entry', () => {
     for (const route of Object.values(OUTREACH_API_ROUTES)) {
       expect(route.startsWith('outreach/')).toBe(true)
       expect(resolvePluginApiMatch(route)).toBeDefined()
+    }
+  })
+
+  it('registers the unsubscribe as a recipient link, and nothing else as one (AGL-2981)', () => {
+    registerOutreachConsoleApi()
+    // A recipient's way out answers whether or not Outreach is released; every
+    // member's door still waits on the release gate.
+    for (const route of Object.values(OUTREACH_API_ROUTES)) {
+      expect([route, isPluginRecipientLinkRoute(route)]).toEqual([route, route === OUTREACH_API_ROUTES.unsubscribe])
     }
   })
 

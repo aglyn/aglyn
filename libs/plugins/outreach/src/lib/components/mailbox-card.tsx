@@ -70,6 +70,26 @@ export interface MailboxCardProps {
   nowMs?: number
 }
 
+/**
+ * What the card says about a mailbox that paused ITSELF (AGL-2981): the
+ * engine's own sentence, when it paused, and — after a complaint — the day
+ * resuming stops being premature. Nothing sends from it until a member
+ * resumes it.
+ */
+export function autoPauseSentence(mailbox: Pick<OutreachMailbox, 'autoPause' | 'timezone'>): string {
+  const pause = mailbox.autoPause
+  if (!pause) return ''
+  const day = (atMs: number) => {
+    try {
+      return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: mailbox.timezone }).format(atMs)
+    } catch {
+      return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'UTC' }).format(atMs)
+    }
+  }
+  const until = typeof pause.untilMs === 'number' ? ` Wait until ${day(pause.untilMs)} before resuming it.` : ''
+  return `Outreach paused this mailbox on ${day(pause.atMs)}. ${pause.message}${until} Nothing sends from it until it is resumed.`
+}
+
 /** Accessible names of the card's actions, spelled once for the specs. */
 export const MAILBOX_ACTION_LABELS = {
   save: 'Save settings',
@@ -292,6 +312,11 @@ export function MailboxCard(props: MailboxCardProps) {
                 ? 'Nothing sends from it until you connect it again.'
                 : 'Only the member who connected it can reconnect it.'
             }`}
+          </Alert>
+        ) : null}
+        {mailbox.status === 'paused' && mailbox.autoPause ? (
+          <Alert severity="error" role="alert">
+            {autoPauseSentence(mailbox)}
           </Alert>
         ) : null}
 

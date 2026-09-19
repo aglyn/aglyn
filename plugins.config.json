@@ -81,7 +81,8 @@
       "activityMutationPaths": [
         "libs/plugins/outreach/src/lib/mailboxes/mailbox-routes.ts",
         "libs/plugins/outreach/src/lib/routes/sequence-routes.ts",
-        "libs/plugins/outreach/src/lib/routes/enroll-routes.ts"
+        "libs/plugins/outreach/src/lib/routes/enroll-routes.ts",
+        "libs/plugins/outreach/src/lib/runtime/mailbox-health-store.ts"
       ]
     },
     {

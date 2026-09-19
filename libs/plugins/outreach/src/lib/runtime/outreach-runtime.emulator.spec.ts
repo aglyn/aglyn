@@ -53,6 +53,7 @@ import { FakeGmail } from './fixtures/fake-gmail'
 import type { OutreachRuntimeDeps } from './runtime-deps'
 import { runOutreachSendJob } from './send-job'
 import { runOutreachSyncJob } from './sync-job'
+import { createOutreachPersonEraser } from './person-erasure'
 import { mintOutreachUnsubscribeToken, outreachUnsubscribeUrl } from './unsubscribe-link'
 import { createOutreachUnsubscribeRoute } from './unsubscribe-route'
 
@@ -745,5 +746,55 @@ describeEmulated('the one-click unsubscribe (AGL-2981)', () => {
     expect(
       (await org().collection('outreachDoNotContact').doc(String(outreachDoNotContactKey(one.email))).get()).exists,
     ).toBe(false)
+  })
+})
+
+describeEmulated('the person eraser (AGL-2981)', () => {
+  it('deletes the person’s enrollments and keeps their do-not-contact entry, stripped of what names them', async () => {
+    await seedOrg()
+    const one = await enroll(1)
+    const byContact = await enroll(2, { id: 'seq-2_contact-1', sequenceId: 'seq-2', contactId: 'contact-1', email: 'old-address@example.org' })
+    const someoneElse = await enroll(3)
+    const key = String(outreachDoNotContactKey(one.email))
+    await org().collection('outreachDoNotContact').doc(key).set({
+      key,
+      reason: 'hard_bounce',
+      source: 'runtime',
+      addedByUid: null,
+      addedAtMs: 1,
+      enrollmentId: one.id,
+      sequenceId: SEQUENCE.id,
+      detail: '550 5.1.1 the address: no such user',
+    })
+    const eraser = createOutreachPersonEraser({ firestore: () => firestore })
+    const request = { orgId, email: one.email, key, contactIds: ['contact-1'] }
+
+    // A plan counts and writes nothing.
+    expect(await eraser({ ...request, dryRun: true })).toEqual({
+      enrollments: 2,
+      doNotContactKept: true,
+      doNotContactScrubbed: null,
+    })
+    expect((await org().collection('outreachEnrollments').doc(one.id).get()).exists).toBe(true)
+
+    expect(await eraser({ ...request, dryRun: false })).toEqual({
+      enrollments: 2,
+      doNotContactKept: true,
+      doNotContactScrubbed: true,
+    })
+    expect((await org().collection('outreachEnrollments').doc(one.id).get()).exists).toBe(false)
+    expect((await org().collection('outreachEnrollments').doc(byContact.id).get()).exists).toBe(false)
+    expect((await org().collection('outreachEnrollments').doc(someoneElse.id).get()).exists).toBe(true)
+    // The promise stays, and nothing in it points back at the person.
+    expect((await org().collection('outreachDoNotContact').doc(key).get()).data()).toEqual({
+      key,
+      reason: 'hard_bounce',
+      source: 'runtime',
+      addedByUid: null,
+      addedAtMs: 1,
+      enrollmentId: null,
+      sequenceId: SEQUENCE.id,
+      detail: null,
+    })
   })
 })
