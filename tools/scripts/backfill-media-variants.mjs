@@ -42,9 +42,10 @@
  *
  * - Only `image/*`, never `image/svg+xml` — there is nothing to downscale in a
  *   vector and rasterising it would be a different asset.
- * - Only widths BELOW the source width, which is `mediaVariantWidthsFor`'s own
- *   rule, reused rather than restated. An 800px logo gains nothing and is
- *   skipped, not upscaled.
+ * - The widths `mediaVariantWidthsFor` names, its own rule reused rather than
+ *   restated: every width below the source, and for a JPEG or PNG the widths
+ *   at and above it as a WebP at the source's own width. Nothing is upscaled,
+ *   and a source narrower than every width is skipped.
  * - Regenerates the full eligible set rather than only the new width. That is
  *   deliberate: AGL-1442 noted assets whose generation was interrupted, and a
  *   full pass is self-healing where a diff would preserve the gap. Output is
