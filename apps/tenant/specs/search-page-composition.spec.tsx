@@ -64,6 +64,18 @@ jest.mock('../app/[host]/[scheme]/search/search-results.component', () => ({
   __esModule: true,
   default: 'SearchResults',
 }))
+// The built-in body is the branch this suite is about, so the host's own
+// chrome (AGL-2513) is declined here rather than left to fail on its own.
+// `composeSearchPage` reaches Firestore and answers null when it cannot, so
+// without this double the suite asserted the built-in branch only while
+// firebase-admin had no credentials: a checkout carrying `apps/tenant/.env`
+// composed successfully and failed all five, and CI passed for the absence
+// of a file. A spec whose branch is chosen by ambient credentials tests the
+// environment, not the page.
+jest.mock('@aglyn/tenant-runtime/compose-search-page', () => ({
+  __esModule: true,
+  composeSearchPage: jest.fn(async () => null),
+}))
 
 import type { SearchResult } from '../utils/search-content'
 import searchContent from '../utils/search-content'
