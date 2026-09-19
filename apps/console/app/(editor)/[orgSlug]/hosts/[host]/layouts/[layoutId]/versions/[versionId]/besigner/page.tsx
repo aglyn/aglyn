@@ -84,6 +84,7 @@ import BesignerVersionsComponent, {
   type BesignerVersionsActions,
 } from '../../../../../../../../../../components/besigner-versions.component'
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
+import LinkTargetSearchProvider from '../../../../../../../../../../components/link-target-search-provider.component'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
 import BesignerWordmark from '../../../../../../../../../../components/layouts/besigner-wordmark.component'
@@ -664,6 +665,13 @@ function LayoutBesignerPage(props) {
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
       <ScreenLinkContext.Provider value={screenLinks}>
+        {/* Entries as link targets (AGL-3119): the link pickers below search
+            this host's collections as the author types, rather than reading
+            every entry into a dropdown. */}
+        <LinkTargetSearchProvider
+          hostId={hostId}
+          collections={collectionTemplates.listingTargets}
+        >
         <EntityPickerProvider hostId={hostId}>
           <ReusableComponentsProvider hostId={hostId}>
             <BindingPickerProvider hostId={hostId}>
@@ -881,6 +889,7 @@ function LayoutBesignerPage(props) {
             </BindingPickerProvider>
           </ReusableComponentsProvider>
         </EntityPickerProvider>
+        </LinkTargetSearchProvider>
       </ScreenLinkContext.Provider>
     </HostThemeDocumentContext.Provider>
   )

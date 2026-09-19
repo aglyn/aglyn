@@ -35,8 +35,15 @@
  * The title comes from `./layout.tsx`.
  */
 import EntryDetailPage from '../../../../../../../../../components/content/entry-detail-page.component'
+import EntryLinkTargetsProvider from '../../../../../../../../../components/content/entry-link-targets-provider.component'
 
 export default function HostContentEntryPage() {
-  return <EntryDetailPage />
+  // A link in a body names its target by reference (AGL-3119), so the editor
+  // needs the site's pages and entries to pick one from.
+  return (
+    <EntryLinkTargetsProvider>
+      <EntryDetailPage />
+    </EntryLinkTargetsProvider>
+  )
 }
 HostContentEntryPage.displayName = 'Page:HostContentEntry'
