@@ -31,43 +31,21 @@ import { createOutreachSettingsRoute } from './settings-routes'
  * their own.
  */
 
-/**
- * The gate's reach into the platform.
- *
- * The permission resolver, the lockdown verdict and the activity log are
- * imported when a request first needs them rather than when the bundle
- * registers: `org-permissions` reaches the whole tenant data barrel, and the
- * manifest loads this bundle into every console API process whether or not
- * an Outreach route is ever called.
- */
+/** The platform's heavier modules, loaded the first time a request needs one. */
+const platform = () => import('./platform-deps')
+
+/** The gate's reach into the platform. */
 export function defaultOutreachRouteGateDeps(): OutreachRouteGateDeps {
   return {
     verifyIdToken: (idToken) => firebaseAdmin.app().auth().verifyIdToken(idToken),
-    resolveOrgPermissions: async (uid, context) =>
-      (await import('@aglyn/tenant-runtime/org-permissions')).resolveOrgPermissions(uid, context),
-    holdsOrgCatalogPermission: async (uid, orgId, key) => {
-      try {
-        const organizations = await import('@aglyn/tenant-data-admin/server/organizations')
-        const membership = await organizations.resolveOrgMembership(uid, orgId)
-        if (!membership?.member) return false
-        return (
-          (await organizations.memberHasOrgPermission(
-            orgId,
-            membership.member,
-            key as Parameters<typeof organizations.memberHasOrgPermission>[2],
-          )) === true
-        )
-      } catch {
-        // A lookup that failed has not shown the member holds it.
-        return false
-      }
-    },
+    resolveOrgPermissions: async (uid, context) => (await platform()).resolveOrgPermissions(uid, context),
+    holdsOrgCatalogPermission: async (uid, orgId, key) =>
+      (await platform()).holdsOrgCatalogPermission(uid, orgId, key),
     readOrg: async (orgId) => {
       const snapshot = await firebaseAdmin.app().firestore().collection('orgs').doc(orgId).get()
       return snapshot.exists ? (snapshot.data() ?? {}) : null
     },
-    lockdownRefusal: async (options) =>
-      (await import('@aglyn/tenant-data-admin/server/lockdown')).lockdownRefusal(options),
+    lockdownRefusal: async (options) => (await platform()).lockdownRefusal(options),
   }
 }
 
@@ -78,19 +56,8 @@ export function defaultOutreachRouteDeps(): OutreachEnrollRouteDeps {
     now: Date.now,
     random: Math.random,
     logOrgActivity: async (orgId, actor, action, target) =>
-      (await import('@aglyn/tenant-data-admin/server/organizations')).logOrgActivity(
-        orgId,
-        actor,
-        action,
-        target,
-      ),
-    crmViewEmails: async ({ hostId, viewId }) => {
-      const { collectDynamicListCandidates } = await import(
-        '@aglyn/tenant-data-admin/server/dynamic-list-materialize'
-      )
-      const scan = await collectDynamicListCandidates({ hostId, rule: { sources: ['contacts'], viewId } })
-      return { emails: scan.candidates.map((candidate) => candidate.email), complete: scan.complete }
-    },
+      (await platform()).logOrgActivity(orgId, actor, action, target),
+    crmViewEmails: async (input) => (await platform()).crmViewEmails(input),
   }
 }
 
