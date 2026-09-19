@@ -375,6 +375,88 @@ describe('buildPageMarkdown', () => {
     ).toBe('Blog\n')
   })
 
+  it('resolves an entry link from either slot of a linking element (AGL-3118)', () => {
+    /*
+      An entry link stores both ids, and the page carries the entries its own
+      links name under `entry:<collectionId>/<entryId>` — the same lookup the
+      HTML renders them through, so the twin follows a renamed post too.
+    */
+    const nodes = page(
+      {
+        a: {
+          componentId: 'muiScreenLink',
+          props: { screenId: 'entry:blog/e1', children: 'Launch post' },
+        },
+        b: {
+          componentId: 'muiButton',
+          props: { href: 'entry:blog/e1', children: 'Read it' },
+        },
+      },
+      ['a', 'b'],
+    )
+    const markdown = buildPageMarkdown({
+      nodes,
+      context: {
+        origin: ORIGIN,
+        screenRoutes: { 'entry:blog/e1': 'blog/we-launched' },
+      },
+    })
+    expect(markdown).toBe(
+      '[Launch post](https://example.test/blog/we-launched)\n\n' +
+        '[Read it](https://example.test/blog/we-launched)\n',
+    )
+    expect(markdown).not.toContain('entry:')
+  })
+
+  it('emits the label alone for an entry that is not live (AGL-3118)', () => {
+    const nodes = page(
+      {
+        link: {
+          componentId: 'muiScreenLink',
+          props: { screenId: 'entry:blog/draft', children: 'Coming soon' },
+        },
+      },
+      ['link'],
+    )
+    expect(
+      buildPageMarkdown({
+        nodes,
+        context: { origin: ORIGIN, screenRoutes: { 'entry:blog/e1': 'blog/x' } },
+      }),
+    ).toBe('Coming soon\n')
+  })
+
+  it('resolves the link references in a markdown block, and drops a dead one to its text (AGL-3118)', () => {
+    const nodes = page(
+      {
+        md: {
+          componentId: 'markdown',
+          props: {
+            content:
+              '## Further reading\n\n- [Launch](entry:blog/e1)\n' +
+              '- [Draft](entry:blog/draft)\n- [All posts](collection:blog)\n' +
+              '- [About](/about)',
+          },
+        },
+      },
+      ['md'],
+    )
+    const markdown = buildPageMarkdown({
+      nodes,
+      context: {
+        origin: ORIGIN,
+        screenRoutes: {
+          'entry:blog/e1': 'blog/we-launched',
+          'collection:blog': 'blog',
+        },
+      },
+    })
+    expect(markdown).toBe(
+      '## Further reading\n\n- [Launch](https://example.test/blog/we-launched)\n' +
+        '- Draft\n- [All posts](https://example.test/blog)\n- [About](/about)\n',
+    )
+  })
+
   it('refuses a link target the page itself would refuse to render', () => {
     const nodes = page(
       {
@@ -411,6 +493,26 @@ describe('buildPageMarkdown', () => {
         front: { title: 'Post' },
       }),
     ).toBe('# Post\n\n## Entry\n\nProse.\n')
+  })
+
+  it('resolves the link references of an entry body (AGL-3118)', () => {
+    expect(
+      buildPageMarkdown({
+        body: 'Read [the launch](entry:blog/e1) and [the draft](entry:blog/draft).',
+        context: {
+          origin: ORIGIN,
+          screenRoutes: { 'entry:blog/e1': 'blog/we-launched' },
+        },
+      }),
+    ).toBe('Read [the launch](https://example.test/blog/we-launched) and the draft.\n')
+  })
+
+  it('never carries a reference out of a body, even with no routing map (AGL-3118)', () => {
+    // A stored `entry:…` is not a URL any reader can follow, so a body with
+    // nothing to resolve it against reads as prose rather than dead links.
+    expect(
+      buildPageMarkdown({ body: 'See [the launch](entry:blog/e1).' }),
+    ).toBe('See the launch.\n')
   })
 
   it('emits a dateline for a content entry', () => {
