@@ -90,6 +90,9 @@ export function useOutreachSequences(
     return onSnapshot(
       query(
         collection(firestore, 'orgs', orgId, OUTREACH_COLLECTIONS.sequences),
+        // Ordered, so the cap keeps the newest rather than an arbitrary set;
+        // every sequence carries `createdAtMs`, stamped by the save route.
+        orderBy('createdAtMs', 'desc'),
         limit(OUTREACH_SEQUENCES_LIMIT),
       ),
       (snapshot) => {
@@ -265,7 +268,8 @@ const COUNTED: ReadonlyArray<
 /**
  * Each sequence's enrollment counts, by server-side aggregation — one count
  * per figure, never a read of the enrollments themselves. Recounted when the
- * list of sequences changes; absent while counting, or if a count failed.
+ * sequences asked about change — the list asks about the page on screen —
+ * and absent while counting, or if a count failed.
  */
 export function useOutreachSequenceCounts(
   orgId: string | null,

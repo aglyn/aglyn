@@ -162,13 +162,14 @@ export function OutreachSequenceList(props: {
   const narrow = useMediaQuery(theme.breakpoints.down('md'))
   const navigate = useOutreachNavigate()
   const sequences = useOutreachSequences(orgId)
-  const counts = useOutreachSequenceCounts(
-    orgId,
-    sequences.data.map((sequence) => sequence.id),
-  )
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const pageRows = sequences.data.slice(page * pageSize, (page + 1) * pageSize)
+  // Counted for the page on screen only: five aggregations a sequence.
+  const counts = useOutreachSequenceCounts(
+    orgId,
+    pageRows.map((sequence) => sequence.id),
+  )
   const footer = (
     <ListPagination
       page={page}
