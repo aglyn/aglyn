@@ -223,6 +223,28 @@ registerPluginService(AI_PROVIDERS, ollamaProvider, { pluginId: 'acme-llm', prio
 const providers = resolvePluginServices(AI_PROVIDERS) // acme-llm first, then ai
 ```
 
+## Media delivery — `media-delivery-provider` (`/server`)
+
+A slot one plugin holds (`core.media-delivery`, built on the service contracts
+above): an object store with its own edge, which serves library video in place
+of the platform's media route. Core keeps every access decision and the copy
+rules; the provider stores copies and mints URLs. Register it from a
+`serverDeclarations` entry, so both apps hold it before the first request.
+
+| API | Semantics |
+| --- | --- |
+| `registerMediaDeliveryProvider(provider, { pluginId? })` | Fills the slot. The same plugin registering again replaces its provider; a second plugin throws naming both. |
+| `mediaDeliveryProvider(capability)` | The provider when it is configured for `'store'` (copies) or `'deliver'` (URLs), else `null`. Synchronous and free of I/O, so a hot path asks it first. |
+
+A provider implements `isConfigured(capability)`, `putObject({ key, body,
+contentLength, contentType })`, `deleteObject(key)`,
+`deleteObjectsWithPrefix(prefix)` and `deliveryUrl({ key, expiresAtMs, claims })`.
+Keys come from core and carry the content hash they were copied from; claims
+carry the org, site, scope and media id a URL was minted for, and grant nothing.
+A video is served from the provider only when the `release_video_delivery` flag,
+off by default, is on for its org and a copy of its current bytes exists;
+everything else serves from the platform exactly as before.
+
 ## Platform events — `plugin-events` (`/server`)
 
 Core raises the events; a plugin that must react to what a core route did

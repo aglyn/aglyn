@@ -51,7 +51,10 @@
 // which case an empty list is NOT evidence that there was nothing to replay.
 
 import { getApps, initializeApp, cert } from 'firebase-admin/app'
-import { importWorkspaceModule } from './lib/workspace-module.mjs'
+import {
+  importWorkspaceModule,
+  registerWorkspacePluginServerDeclarations,
+} from './lib/workspace-module.mjs'
 
 const EMULATED = Boolean(process.env.FIRESTORE_EMULATOR_HOST)
 
@@ -123,6 +126,9 @@ async function main() {
   }
 
   initAdmin()
+  // As the console registers them at boot, so a replayed erasure reaches what
+  // a plugin holds too — the media delivery provider's copies among them.
+  await registerWorkspacePluginServerDeclarations()
   const { replayErasuresSince } = await importWorkspaceModule(
     'libs/tenant/data/admin/src/lib/server/replay-erasures.ts',
   )

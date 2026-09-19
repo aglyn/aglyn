@@ -70,7 +70,10 @@
 
 import { getApps, initializeApp, cert } from 'firebase-admin/app'
 import { runEraseOrgCli } from './lib/erase-org-cli.mjs'
-import { importWorkspaceModule } from './lib/workspace-module.mjs'
+import {
+  importWorkspaceModule,
+  registerWorkspacePluginServerDeclarations,
+} from './lib/workspace-module.mjs'
 
 const EMULATED = Boolean(process.env.FIRESTORE_EMULATOR_HOST)
 
@@ -120,6 +123,11 @@ function initAdmin() {
 
 async function main() {
   initAdmin()
+  // The plugins' server declarations, registered as the console registers
+  // them at boot: `eraseOrg` also removes what a plugin holds for the
+  // workspace, such as the media delivery provider's copies (AGL-2824), and
+  // finds nothing to remove on a seam nobody registered.
+  await registerWorkspacePluginServerDeclarations()
   const { eraseOrg } = await importWorkspaceModule(
     'libs/tenant/data/admin/src/lib/server/erase.ts',
   )

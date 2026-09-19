@@ -1,0 +1,30 @@
+// The delivery Worker for library video (AGL-2824). Source:
+// src/lib/worker/video-worker.ts, which shares its token format with the
+// platform through src/lib/delivery-token.ts.
+//
+// Deploy from the repository root, logged in to the account that owns the
+// bucket (`wrangler login`):
+//
+//   npx wrangler@4 deploy --config libs/plugins/video-delivery/wrangler.jsonc
+//   npx wrangler@4 secret put MEDIA_VIDEO_DELIVERY_SECRET --config libs/plugins/video-delivery/wrangler.jsonc
+//
+// Until the secret is set, the Worker answers every request 503.
+//
+// The secret is the same value the platform's MEDIA_VIDEO_DELIVERY_SECRET
+// holds. No account id and no secret belong in this file: wrangler takes the
+// account from the login (or CLOUDFLARE_ACCOUNT_ID), and the secret lives
+// only in the Worker's own settings.
+{
+  "name": "video",
+  "main": "src/lib/worker/video-worker.ts",
+  "compatibility_date": "2026-09-01",
+  // Served on the account's workers.dev subdomain; the platform mints URLs
+  // on whatever MEDIA_VIDEO_DELIVERY_HOST names.
+  "workers_dev": true,
+  "r2_buckets": [
+    {
+      "binding": "VIDEO_BUCKET",
+      "bucket_name": "aglyn-video"
+    }
+  ]
+}

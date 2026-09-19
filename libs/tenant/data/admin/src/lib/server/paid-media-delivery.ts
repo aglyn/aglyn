@@ -17,17 +17,29 @@
 
 import {
   hostQualifiedScope,
+  MEDIA_CDN_RENDITION_AUTO,
+  MEDIA_CDN_RENDITION_PARAM,
   MEDIA_CDN_ROUTE,
   paidMediaAssetOfObject,
+  parseMediaRenditions,
   parsePaidMediaSource,
 } from '@aglyn/aglyn/server'
+import {
+  type MediaDeliveryProvider,
+  mediaDeliveryProvider,
+} from '@aglyn/aglyn/plugin-manager/media-delivery-provider'
+import { mediaDeliveryRedirect } from './media-delivery'
 import {
   assertMediaSignatureTtl,
   mediaSignatureQuery,
   mintMediaSignature,
 } from './media-signing'
 import { isMediaStoragePathInScope } from './media-storage-path'
-import { mediaCdnScopeRefusal, parseMediaCdnScope } from './serve-media-cdn'
+import {
+  mediaCdnScopeRefusal,
+  parseMediaCdnScope,
+  selectAutoRendition,
+} from './serve-media-cdn'
 
 /**
  * Turning a URL stored on a product into a link a buyer may follow (AGL-2814).
@@ -61,6 +73,15 @@ import { mediaCdnScopeRefusal, parseMediaCdnScope } from './serve-media-cdn'
  * 4. **A hotlink to somebody else's server passes through unchanged.** No code
  *    of ours runs there and nothing here can make its URL expire. That is the
  *    author's hosting decision, and the docs say so.
+ *
+ * ## A video with a copy at the delivery provider (AGL-2824)
+ *
+ * A caller that asks for it with `delivery` gets, for a video that passes
+ * rule 1, the delivery provider's own short-lived URL instead of the signed CDN
+ * URL, whenever `mediaDeliveryRedirect` finds a current copy and the release
+ * flag is on for the owning org. It is the URL the CDN would redirect the
+ * signed request to anyway, minted one hop earlier and bounded by the same
+ * lifetime. Anything else takes the signed CDN URL exactly as before.
  */
 
 /** Why a stored URL was not turned into a link. */
@@ -94,6 +115,15 @@ export type PaidMediaDelivery =
       objectPath: string
     }
   | { ok: true; via: 'external'; location: string }
+  | {
+      ok: true
+      via: 'delivery'
+      location: string
+      expiresAtMs: number
+      /** The scope segment the delivery was minted for. */
+      scope: string
+      mediaId: string
+    }
   | { ok: false; refusal: PaidMediaRefusal }
 
 /** A document read, reduced to what this module asks of one. */
@@ -132,6 +162,17 @@ export async function resolvePaidMediaDelivery(options: {
   /** The lifetime of the link; bounded by `assertMediaSignatureTtl`. */
   ttlMs: number
   cdnParams?: ReadonlyArray<readonly [string, string]>
+  /**
+   * Hand a video with a current copy at the delivery provider its URL there
+   * (AGL-2824). `accept` is the request's `Accept`, which chooses the
+   * rendition when `cdnParams` asks for `?r=auto`. The provider and the flag
+   * verdict default to the registered provider and the release flag.
+   */
+  delivery?: {
+    accept?: unknown
+    provider?: MediaDeliveryProvider | null
+    enabled?: (orgId: string | null) => Promise<boolean>
+  }
   nowMs?: number
   io: PaidMediaDeliveryIo
 }): Promise<PaidMediaDelivery> {
@@ -146,6 +187,62 @@ export async function resolvePaidMediaDelivery(options: {
   // One lookup per call, and only for the forms that need to know the org.
   let orgId: Promise<string | null> | undefined
   const siteOrgId = () => (orgId ??= io.orgIdForHost(hostId))
+
+  /**
+   * The delivery provider's URL for a private library video, or null for
+   * the signed CDN URL. The representation is the one the CDN would pick for
+   * the same `?r=` and `Accept`, so the buyer gets the copy the signed URL
+   * would have been redirected to.
+   */
+  const deliverFromProvider = async (
+    delivery: NonNullable<typeof options.delivery>,
+    asset: {
+      collection: 'hosts' | 'orgs'
+      scopeId: string
+      orgScope: boolean
+      deliveryScope: string
+      mediaId: string
+      document: PaidMediaDocument
+    },
+  ): Promise<PaidMediaDelivery | null> => {
+    const provider =
+      delivery.provider === undefined ? mediaDeliveryProvider('deliver') : delivery.provider
+    if (!provider) return null
+    const requested = (options.cdnParams ?? []).find(
+      ([key]) => key === MEDIA_CDN_RENDITION_PARAM,
+    )?.[1]
+    const renditions = parseMediaRenditions(asset.document.get('videoRenditions'))
+    const rendition = !requested
+      ? undefined
+      : requested === MEDIA_CDN_RENDITION_AUTO
+        ? selectAutoRendition(renditions, delivery.accept)
+        : renditions.find((entry) => entry.key === requested)
+    const redirect = await mediaDeliveryRedirect({
+      provider,
+      asset: {
+        collection: asset.collection,
+        scopeId: asset.scopeId,
+        mediaId: asset.mediaId,
+      },
+      document: asset.document,
+      rendition,
+      servedType: rendition ? rendition.contentType : asset.document.get('contentType'),
+      claims: { scope: asset.deliveryScope, mediaId: asset.mediaId, hostId },
+      orgId: async () => (asset.orgScope ? asset.scopeId : await siteOrgId()),
+      ...(delivery.enabled ? { deliveryEnabled: delivery.enabled } : {}),
+      ttlMs,
+      nowMs,
+    }).catch(() => null)
+    if (!redirect) return null
+    return {
+      ok: true,
+      via: 'delivery',
+      location: redirect.location,
+      expiresAtMs: redirect.expiresAtMs,
+      scope: asset.deliveryScope,
+      mediaId: asset.mediaId,
+    }
+  }
 
   const deliverAsset = async (
     scope: string,
@@ -177,6 +274,18 @@ export async function resolvePaidMediaDelivery(options: {
       return refuse('not-found')
     }
     if (document.get('private') !== true) return refuse('not-private')
+    assertMediaSignatureTtl(ttlMs)
+    const delivered = options.delivery
+      ? await deliverFromProvider(options.delivery, {
+          collection,
+          scopeId: parsed.scopeId,
+          orgScope: parsed.isOrg,
+          deliveryScope,
+          mediaId,
+          document,
+        })
+      : null
+    if (delivered) return delivered
     const signature = mintMediaSignature(deliveryScope, mediaId, nowMs, ttlMs)
     const params = new URLSearchParams()
     for (const [key, value] of options.cdnParams ?? []) {

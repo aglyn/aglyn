@@ -152,6 +152,12 @@
       "@aglyn/plugins-redirects/*": [
         "../../libs/plugins/redirects/src/lib/*"
       ],
+      "@aglyn/plugins-video-delivery": [
+        "../../libs/plugins/video-delivery/src/index.ts"
+      ],
+      "@aglyn/plugins-video-delivery/*": [
+        "../../libs/plugins/video-delivery/src/lib/*"
+      ],
       "@aglyn/shared-data-enums": [
         "../../libs/shared/data/enums/src/index.ts"
       ],

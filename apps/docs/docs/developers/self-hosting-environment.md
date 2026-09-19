@@ -711,6 +711,43 @@ quietly downgraded to a cheaper model.
 
 ---
 
+## Video delivery {#video-delivery}
+
+Optional. Without these, a video in the media library serves from this
+install's own media route, as it always has. With them, and the
+`release_video_delivery` flag on for a workspace (**off** by default in Remote
+Config), each video is copied to an object store and served from it: the media
+route and the gated-video stream answer with a short-lived signed redirect, and
+the store's edge sends the bytes and their ranges. The `video-delivery` plugin
+ships the adapter for Cloudflare R2 behind a Worker; the Worker's source and its
+`wrangler.jsonc` are in `libs/plugins/video-delivery`.
+
+Your own bucket keeps every video either way, and storage is counted once.
+Cloudflare receives the videos and, while it serves them, your viewers' IP
+addresses and user agents, so list it wherever you name the vendors your
+install uses before you turn the flag on.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `R2_ACCOUNT_ID` | Feature *(console)* | Runtime | The Cloudflare account that owns the bucket: 32 hex characters, shown on the account's R2 overview. Only the console writes copies, so only the console needs the four `R2_*` values. |
+| `R2_ACCESS_KEY_ID` | Feature *(console)* | Runtime | The access key id of an R2 API token scoped to **Object Read & Write** on the one bucket. |
+| `R2_SECRET_ACCESS_KEY` | Feature *(console)* | Runtime | That token's secret access key. |
+| `R2_VIDEO_BUCKET` | Feature *(console)* | Runtime | The bucket's name. Keep the bucket private, with no public `r2.dev` URL: the Worker reads it through its binding. |
+| `MEDIA_VIDEO_DELIVERY_HOST` | Feature | Runtime | The Worker's hostname, such as `video.<your-subdomain>.workers.dev`. A full origin is accepted for local testing with `wrangler dev` (`http://localhost:8787`); plain HTTP is refused anywhere else. Console **and** tenant. |
+| `MEDIA_VIDEO_DELIVERY_SECRET` | Feature | Runtime | Signs every delivery URL. At least 32 characters (`openssl rand -hex 32`); a shorter value reads as unset. Console **and** tenant, and the same value as the Worker's own `MEDIA_VIDEO_DELIVERY_SECRET` secret. It is deliberately **not** `TOKEN_SIGNING_SECRET`. Rotating it breaks every delivery URL already handed out, so a viewer mid-film reloads the page. |
+
+Delivery needs only the last two, so a workspace's videos redirect from the
+tenant app with no storage credentials there. A video is redirected only once a
+copy made from its current bytes exists; until then, and whenever the flag is
+off, it serves from this install as before.
+
+Published pages admit `MEDIA_VIDEO_DELIVERY_HOST` in their `media-src` policy
+by themselves, read from the same variable, so no site owner approves it in the
+Security tab. A value the platform would not mint a URL on is left out of the
+policy as well.
+
+---
+
 ## Scheduled jobs {#cron}
 
 Three separate mechanisms, and missing any of them is quiet rather than loud.

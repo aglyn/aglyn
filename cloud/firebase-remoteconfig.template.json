@@ -133,6 +133,13 @@
       "description": "New video in the media library, on every upload path (AGL-2830). OFF by default: a video is refused with 403 video_uploads_paused. Images, documents and stored videos are unaffected; grant one org through its release-flag override.",
       "valueType": "JSON"
     },
+    "release_video_delivery": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "Serves library video from a configured delivery provider through short-lived signed redirects, and copies each video to it (AGL-2824). OFF by default: video serves from this platform as before. Also needs the provider's settings.",
+      "valueType": "JSON"
+    },
     "release_ai_generative": {
       "defaultValue": {
         "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
