@@ -17,6 +17,42 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { getHostDocAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { resolveEntryLinkRoutes } from './entry-link-routes'
+import { getTemplateScreenRouting } from './template-screens'
+
+/**
+ * Where the entries a gated tree links to are served (AGL-3118), or
+ * `undefined` when it names none that are live.
+ *
+ * The page's routing map was built before the gate opened, from a tree it
+ * did not have, so it holds no entry a gated page links to; these travel
+ * with the nodes for the reason the enricher slice does. A tree that names
+ * no entry costs no read.
+ *
+ * Never rejects, so the caller can start it early and abandon it on a
+ * failure of its own.
+ */
+async function gatedEntryLinkRoutes(
+  hostId: string,
+  nodes: unknown,
+): Promise<Record<string, string> | undefined> {
+  try {
+    const refs = Aglyn.collectEntryLinkRefs({
+      nodes: [nodes as Record<string, unknown> | null],
+    })
+    if (!refs.length) return undefined
+    const routing = await getTemplateScreenRouting({ hostId })
+    const routes = await resolveEntryLinkRoutes({
+      hostId,
+      refs,
+      collectionSlugs: routing.collectionListings,
+    })
+    return Object.keys(routes).length ? routes : undefined
+  } catch (error) {
+    console.error('gated page entry links failed', error)
+    return undefined
+  }
+}
 
 /**
  * The enricher slice for a screen whose nodes are withheld from the page and
@@ -48,6 +84,12 @@ import { getHostDocAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
  * runs. A screen missing from the map (never routed) gets the site root,
  * which is what an unrouted screen's own address would be.
  *
+ * ## The entry links
+ *
+ * `entryRoutes` rides along when the tree links to a live content entry
+ * (AGL-3118), and the client adds those keys to the page's routing map — see
+ * {@link gatedEntryLinkRoutes}.
+ *
  * Fail-open to `{}` — an enricher slice is behavior on top of a page, and no
  * failure here may cost a visitor the content they just unlocked.
  */
@@ -64,6 +106,8 @@ export async function enrichGatedScreenPage(options: {
 }): Promise<Record<string, unknown>> {
   const { hostId, screenId, screen, nodes } = options
   try {
+    // Started first: its reads share nothing with the enrichers'.
+    const entryRoutesPromise = gatedEntryLinkRoutes(hostId, nodes)
     const [host, orgRes] = await Promise.all([
       options.host !== undefined ? options.host : getHostDocAdmin(hostId),
       getOrgForHost(hostId),
@@ -81,7 +125,8 @@ export async function enrichGatedScreenPage(options: {
       screen,
       nodes,
     })
-    return enriched.props
+    const entryRoutes = await entryRoutesPromise
+    return entryRoutes ? { ...enriched.props, entryRoutes } : enriched.props
   } catch (error) {
     console.error('gated page enrichment failed', error)
     return {}
