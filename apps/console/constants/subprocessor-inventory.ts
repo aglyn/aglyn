@@ -433,9 +433,8 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       'Primary application database, file storage, authentication, backups, and platform logging',
     publishedOn: '2026-08-05',
     reason:
-      "Service-account token exchange for the Drive reads above and for the admin surfaces. Since AGL-2978 also Outreach's OAuth token endpoint for a rep's own Google mailbox grant — the code exchange at connect, the access-token refresh before each Gmail call, and the revocation on disconnect or org erasure — which is the rep's own account at the rep's own provider, the same footing as `gmail.googleapis.com` below.",
-    dataReceived:
-      "Aglyn's own service-account assertion, with no customer data. For Outreach: the deployment's OAuth client credentials and, for the rep's own grant, the authorization code, PKCE verifier, refresh token and access token Google itself issued — credentials, never message content. ⚑ Legal to confirm the Annex III cell needs no change for the Outreach use.",
+      'Service-account token exchange for the Drive reads above and for the admin surfaces.',
+    dataReceived: "Aglyn's own service-account assertion. No customer data.",
   },
 
   /**
@@ -584,31 +583,6 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       'Placeholder imagery in the demo-seed and screenshot-capture scripts. It reaches production only as image URLs on Aglyn-owned demo orgs; no customer site is seeded with it, and no customer record ever names it.',
     dataReceived:
       "A demo page visitor's IP and user-agent when their browser loads the placeholder. No customer data exists on those orgs to send.",
-  },
-
-  // Outreach (AGL-2978) sends a rep's one-to-one mail from the rep's OWN
-  // Google mailbox, through the Gmail API, under an OAuth grant the rep gives
-  // from their own Google account. `not-a-subprocessor` on the SECOND
-  // admissible reason: the mailbox provider is the customer's, engaged by the
-  // customer for their own mail, and Outreach acts in it at the rep's
-  // direction — Aglyn selects no mail vendor for this, any more than it
-  // selects the video host an author embeds. ⚑ A classification for legal to
-  // confirm when Outreach leaves staff preview; the consent screen is
-  // Internal to the aglyn.com Workspace until then.
-
-  'gmail.googleapis.com': {
-    disposition: 'not-a-subprocessor',
-    reason:
-      "Customer-chosen destination. The Gmail REST API of the rep's own Google Workspace mailbox, which the rep connects in Outreach → Mailboxes (`libs/plugins/outreach/src/lib/transport/gmail-client.ts`): the account's profile and verified send-as addresses at connect, a plain-text test the rep sends to themselves, and — for the sending runtime — the sequence messages, thread headers and the reply and bounce searches in that same mailbox. The provider is the one the customer runs its mail on; nothing is sent to a mailbox the rep did not connect.",
-    dataReceived:
-      "The rep's own OAuth access token, and the mail the rep sends from their own mailbox — each recipient's address, the subject and the plain-text body — plus the reads of the rep's own mailbox listed above. No other customer record, and nothing about a site visitor.",
-  },
-  'accounts.google.com': {
-    disposition: 'no-request',
-    reason:
-      "Google's OAuth consent address, built by `buildGoogleAuthorizationUrl` in `libs/plugins/outreach/src/lib/transport/google-oauth.ts` and handed to the rep's own browser, which opens it to grant Outreach access to the rep's own mailbox. No server of ours requests it; the browser's visit is between the rep and their Google account.",
-    dataReceived:
-      "Nothing from our servers. The rep's browser carries the OAuth client id, the requested scopes, a signed state, a PKCE challenge and a login hint — the rep's own sign-in address.",
   },
 
   // The two Google control-plane endpoints `check:app-check-debug-tokens`
