@@ -29,13 +29,18 @@ import {
   outreachEffectiveDailyCap,
   outreachLastSevenDays,
   outreachLocalDay,
-  outreachRampLimit,
+  OUTREACH_RAMP_STEPS,
   summarizeMailboxHealth,
   validateDailyCap,
   validateDisplayName,
   validateSendWindow,
   verifiedSendAsAddresses,
 } from './mailbox-settings'
+import {
+  OUTREACH_DAILY_CAP_MAX,
+  OUTREACH_RAMP_DAILY_CAPS,
+  outreachDailyCap,
+} from '../engine/sending-capacity'
 
 /**
  * A mailbox's settings rules (AGL-2978) — the ones the panel and the routes
@@ -58,20 +63,41 @@ describe('the daily cap and the warm-up ramp (AGL-2978)', () => {
     expect(clampDailyCap(undefined)).toBe(20)
   })
 
-  it('ramps 10 in week one, 20 in week two and 30 from week three', () => {
-    expect(outreachRampLimit(START, START)).toBe(10)
-    expect(outreachRampLimit(START, START + 7 * DAY - 1)).toBe(10)
-    expect(outreachRampLimit(START, START + 7 * DAY)).toBe(20)
-    expect(outreachRampLimit(START, START + 14 * DAY)).toBe(30)
-    expect(outreachRampLimit(START, START + 400 * DAY)).toBe(30)
-    expect(outreachRampLimit(null, START)).toBeNull()
+  it('prints the engine’s ramp: 10 in week one, 20 in week two and 30 from week three', () => {
+    expect(OUTREACH_RAMP_STEPS).toEqual([
+      { week: 1, limit: 10 },
+      { week: 2, limit: 20 },
+      { week: 3, limit: 30 },
+    ])
+    expect(OUTREACH_RAMP_STEPS.map((step) => step.limit)).toEqual([...OUTREACH_RAMP_DAILY_CAPS])
+    expect(OUTREACH_MAX_DAILY_CAP).toBe(OUTREACH_DAILY_CAP_MAX)
   })
 
   it('sends today at the lower of the cap and the ramp', () => {
-    expect(outreachEffectiveDailyCap({ dailyCap: 50, rampStartedAtMs: START }, START + DAY)).toBe(10)
-    expect(outreachEffectiveDailyCap({ dailyCap: 20, rampStartedAtMs: START }, START + 20 * DAY)).toBe(20)
-    expect(outreachEffectiveDailyCap({ dailyCap: 50, rampStartedAtMs: START }, START + 20 * DAY)).toBe(30)
-    expect(outreachEffectiveDailyCap({ dailyCap: 45, rampStartedAtMs: null }, START)).toBe(45)
+    const utc = { timezone: 'UTC' }
+    expect(outreachEffectiveDailyCap({ ...utc, dailyCap: 50, rampStartedAtMs: START }, START + DAY)).toBe(10)
+    expect(outreachEffectiveDailyCap({ ...utc, dailyCap: 20, rampStartedAtMs: START }, START + 20 * DAY)).toBe(20)
+    expect(outreachEffectiveDailyCap({ ...utc, dailyCap: 50, rampStartedAtMs: START }, START + 20 * DAY)).toBe(30)
+    expect(outreachEffectiveDailyCap({ ...utc, dailyCap: 45, rampStartedAtMs: null }, START)).toBe(45)
+  })
+
+  it('shows exactly the limit the runtime enforces, weeks counted in the mailbox’s own calendar days', () => {
+    // Seven calendar days after the start is week two in the mailbox's zone,
+    // though fewer than seven full days have passed.
+    const almostAWeek = START + 7 * DAY - 60 * 60 * 1000
+    for (const timezone of ['UTC', 'America/Chicago', 'Asia/Tokyo']) {
+      for (const nowMs of [START, START + DAY, almostAWeek, START + 7 * DAY, START + 15 * DAY]) {
+        const mailbox = { dailyCap: 50, rampStartedAtMs: START, timezone }
+        expect([timezone, nowMs, outreachEffectiveDailyCap(mailbox, nowMs)]).toEqual([
+          timezone,
+          nowMs,
+          outreachDailyCap({ configuredCap: 50, rampStartedAtMs: START, nowMs, timeZone: timezone }),
+        ])
+      }
+    }
+    expect(outreachEffectiveDailyCap({ dailyCap: 50, rampStartedAtMs: START, timezone: 'UTC' }, almostAWeek)).toBe(20)
+    // A stored zone the runtime does not know reads as UTC rather than throwing.
+    expect(outreachEffectiveDailyCap({ dailyCap: 50, rampStartedAtMs: START, timezone: 'Mars/Olympus' }, START)).toBe(10)
   })
 })
 

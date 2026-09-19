@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+import { isValidTimeZone, zonedDayKey } from '@aglyn/shared-util-timestamp/zoned-time'
+import {
+  OUTREACH_DAILY_CAP_MAX,
+  OUTREACH_RAMP_DAILY_CAPS,
+  outreachDailyCap,
+} from '../engine/sending-capacity'
 import type {
   OutreachMailbox,
   OutreachMailboxHealth,
@@ -29,28 +35,28 @@ import type {
  * The rules a mailbox's settings are held to — the cap, the ramp, the sending
  * window, the timezone, which send-as addresses count — in one client-safe
  * module, so the panel that greys out a field and the route that refuses the
- * write give the same answer, and the sending runtime reads today's limit the
- * way the panel shows it.
+ * write give the same answer.
+ *
+ * The ceiling, the ramp and a mailbox's day are the engine's
+ * (`../engine/sending-capacity.ts`, AGL-2979) and the shared zoned-time
+ * helpers': the panel shows today's limit with the very function the sending
+ * runtime enforces it with, so the two cannot drift.
  */
 
 /** The daily cap a new mailbox starts with. */
 export const OUTREACH_DEFAULT_DAILY_CAP = 20
 
-/** The most a mailbox may send in one day, whatever it is set to. */
-export const OUTREACH_MAX_DAILY_CAP = 50
+/** The most a mailbox may send in one day, whatever it is set to: the engine's ceiling. */
+export const OUTREACH_MAX_DAILY_CAP = OUTREACH_DAILY_CAP_MAX
 
 /**
- * The warm-up ramp: the most a mailbox sends a day in its first week, its
- * second, and every week after. The cap still applies on top, so a mailbox
+ * The warm-up ramp, as the panel prints it: the most a mailbox sends a day in
+ * its first week, its second, and every week after — the engine's
+ * `OUTREACH_RAMP_DAILY_CAPS`. The cap still applies on top, so a mailbox
  * capped at 20 sends 20 in week three, not 30.
  */
-export const OUTREACH_RAMP_STEPS = [
-  { week: 1, limit: 10 },
-  { week: 2, limit: 20 },
-  { week: 3, limit: 30 },
-] as const
-
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+export const OUTREACH_RAMP_STEPS: ReadonlyArray<{ week: number; limit: number }> =
+  OUTREACH_RAMP_DAILY_CAPS.map((limit, index) => ({ week: index + 1, limit }))
 
 /** Mon–Fri, 9:00 to 17:00 — the window a new mailbox starts with. */
 export const OUTREACH_DEFAULT_WINDOW: OutreachSendWindow = {
@@ -69,27 +75,20 @@ export const OUTREACH_DISPLAY_NAME_MAX = 100
 export const OUTREACH_WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
 
 /**
- * The ramp's limit for a day, or `null` when the mailbox is not ramping.
- * Week one is the seven days from `rampStartedAtMs`.
+ * Today's limit: the cap, lowered by the ramp while it runs — the engine's
+ * `outreachDailyCap`, read in the mailbox's zone (UTC for one it does not
+ * know), with the stored cap read defensively first.
  */
-export function outreachRampLimit(
-  rampStartedAtMs: number | null | undefined,
-  nowMs: number,
-): number | null {
-  if (typeof rampStartedAtMs !== 'number' || !Number.isFinite(rampStartedAtMs)) return null
-  const week = Math.floor(Math.max(0, nowMs - rampStartedAtMs) / WEEK_MS) + 1
-  const step = OUTREACH_RAMP_STEPS.find((entry) => entry.week === Math.min(week, OUTREACH_RAMP_STEPS.length))
-  return step?.limit ?? null
-}
-
-/** Today's limit: the cap, lowered by the ramp while it runs. */
 export function outreachEffectiveDailyCap(
-  mailbox: Pick<OutreachMailbox, 'dailyCap' | 'rampStartedAtMs'>,
+  mailbox: Pick<OutreachMailbox, 'dailyCap' | 'rampStartedAtMs' | 'timezone'>,
   nowMs: number,
 ): number {
-  const cap = clampDailyCap(mailbox.dailyCap)
-  const ramp = outreachRampLimit(mailbox.rampStartedAtMs, nowMs)
-  return ramp === null ? cap : Math.min(cap, ramp)
+  return outreachDailyCap({
+    configuredCap: clampDailyCap(mailbox.dailyCap),
+    rampStartedAtMs: mailbox.rampStartedAtMs,
+    nowMs,
+    timeZone: isValidTimezone(mailbox.timezone) ? mailbox.timezone : 'UTC',
+  })
 }
 
 /** A stored cap read defensively: an integer from 1 to the maximum. */
@@ -136,15 +135,9 @@ export function validateSendWindow(value: unknown): OutreachSendWindow | Outreac
   return { days: unique.sort((a, b) => a - b), startMinute: start, endMinute: end }
 }
 
-/** Whether a string names an IANA timezone this runtime knows. */
+/** Whether a string names an IANA timezone this runtime knows, of a sane length to store. */
 export function isValidTimezone(value: unknown): value is string {
-  if (typeof value !== 'string' || !value || value.length > 64) return false
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: value })
-    return true
-  } catch {
-    return false
-  }
+  return typeof value === 'string' && value.length <= 64 && isValidTimeZone(value)
 }
 
 /** Whether text holds a character below space, or DEL — a line break included. */
@@ -182,17 +175,12 @@ export const OUTREACH_MAILBOX_STATUS_LABELS: Record<OutreachMailboxStatus, strin
   disconnected: 'Disconnected',
 }
 
-/** `YYYY-MM-DD` for an instant, in a timezone (UTC for an unknown one). */
+/**
+ * `YYYY-MM-DD` for an instant, in a timezone (UTC for an unknown one) — the
+ * day key the sending runtime counts a mailbox's sends under.
+ */
 export function outreachLocalDay(nowMs: number, timezone: string): string {
-  const zone = isValidTimezone(timezone) ? timezone : 'UTC'
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: zone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date(nowMs))
-  const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? '00'
-  return `${part('year')}-${part('month')}-${part('day')}`
+  return zonedDayKey(nowMs, isValidTimezone(timezone) ? timezone : 'UTC')
 }
 
 /** The seven mailbox-local days ending today, newest first. */

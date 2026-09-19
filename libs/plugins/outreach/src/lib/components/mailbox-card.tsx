@@ -161,7 +161,11 @@ export function MailboxCard(props: MailboxCardProps) {
   const invalid =
     typeof capCheck !== 'number' || !('days' in windowCheck) || typeof nameCheck !== 'string' || !timezoneValid
   const todayLimit = outreachEffectiveDailyCap(
-    { dailyCap: typeof capCheck === 'number' ? capCheck : mailbox.dailyCap, rampStartedAtMs: mailbox.rampStartedAtMs },
+    {
+      dailyCap: typeof capCheck === 'number' ? capCheck : mailbox.dailyCap,
+      rampStartedAtMs: mailbox.rampStartedAtMs,
+      timezone: timezoneValid ? draft.timezone : mailbox.timezone,
+    },
     nowMs,
   )
 
@@ -279,9 +283,15 @@ export function MailboxCard(props: MailboxCardProps) {
               ) : undefined
             }
           >
-            {isMine
-              ? 'Google stopped accepting this mailbox’s connection. Nothing sends from it until you connect it again.'
-              : 'Google stopped accepting this mailbox’s connection. Only the member who connected it can reconnect it.'}
+            {`${
+              mailbox.status === 'disconnected'
+                ? 'This mailbox was disconnected.'
+                : 'Google stopped accepting this mailbox’s connection.'
+            } ${
+              isMine
+                ? 'Nothing sends from it until you connect it again.'
+                : 'Only the member who connected it can reconnect it.'
+            }`}
           </Alert>
         ) : null}
 

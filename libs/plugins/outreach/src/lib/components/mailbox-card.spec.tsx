@@ -196,6 +196,20 @@ describe('MailboxCard — status and health (AGL-2978)', () => {
     ).toBeTruthy()
     expect(button(MAILBOX_ACTION_LABELS.reconnect)).toBeNull()
   })
+
+  it('shows a disconnected mailbox as disconnected, offering its member a reconnect and nothing that sends', () => {
+    const onReconnect = jest.fn()
+    renderCard({ mailbox: { status: 'disconnected' }, onReconnect })
+    expect(within(screen.getByTestId('status')).getByText('Disconnected')).toBeTruthy()
+    expect(
+      screen.getByText('This mailbox was disconnected. Nothing sends from it until you connect it again.'),
+    ).toBeTruthy()
+    fireEvent.click(button(MAILBOX_ACTION_LABELS.reconnect) as HTMLElement)
+    expect(onReconnect).toHaveBeenCalledTimes(1)
+    expect(button(MAILBOX_ACTION_LABELS.test)).toBeNull()
+    expect(button(MAILBOX_ACTION_LABELS.pause)).toBeNull()
+    expect(button(MAILBOX_ACTION_LABELS.resume)).toBeNull()
+  })
 })
 
 describe('MailboxCard — who sees what (AGL-2978)', () => {
