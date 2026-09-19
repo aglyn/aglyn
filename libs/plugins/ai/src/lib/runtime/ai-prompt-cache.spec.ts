@@ -624,7 +624,10 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       form: { prefixTokens: 2_730, minimum: 1_024, caches: true, toolsStable: true },
       'page-section': { prefixTokens: 4_598, minimum: 1_024, caches: true, toolsStable: true },
       theme: { prefixTokens: 3_326, minimum: 1_024, caches: true, toolsStable: true },
-      'workflow-draft': { prefixTokens: 4_564, minimum: 1_024, caches: true, toolsStable: true },
+      // The automation tool carries a variant per step type, each with only its
+      // own fields and none a `null` union: the bytes that keep a request
+      // within a provider's union limit (AGL-3096).
+      'workflow-draft': { prefixTokens: 5_015, minimum: 1_024, caches: true, toolsStable: true },
       'workflow-explain': { prefixTokens: 2_212, minimum: 1_024, caches: true, toolsStable: true },
       'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
       'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },

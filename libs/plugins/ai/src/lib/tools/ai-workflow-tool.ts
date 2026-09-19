@@ -74,10 +74,17 @@ import { HOSTILE_TEXT } from '../runtime/ai-node-tree'
  * `submit_explanation` carries a plain-words account of one automation, or of
  * why one of its runs failed.
  *
- * Both schemas are strict: every object forbids extra keys, every key is
- * required, and a field a step does not use is `null`. Bounds a strict schema
- * cannot state are stated in the descriptions and held by the readers below,
- * whose refusals name the field so the one re-ask can fix it.
+ * Both schemas are strict: every object forbids extra keys and requires every
+ * key it has. A step is one variant per step type that carries only that
+ * step's own fields, so a field a step does not use is absent from its variant
+ * rather than a `null`. A provider compiles only so many union-typed
+ * parameters in one request (`AiToolSchemaLimits`), and a `null` union costs
+ * one for every field it is written on. Where a step may go without something,
+ * the absence is an empty list or an empty string instead: a step that always
+ * runs has an empty `when`, and a notEmpty condition compares against nothing.
+ * Bounds a strict schema cannot state are stated in the descriptions and held
+ * by the readers below, whose refusals name the field so the one re-ask can
+ * fix it.
  */
 
 export const AI_AUTOMATION_TOOL_NAME = 'submit_automation'
@@ -102,7 +109,8 @@ export const AI_AUTOMATION_NOTE_MAX_CHARS = 300
  * The longest a whole answer may be, written out as JSON: what the routing
  * ceiling for `job.workflow` holds at three characters a token with as much
  * again to think in (`ai-job-workflow-step.spec.ts` measures it). Ten steps
- * with two emails of a paragraph or two each come to about 5,000.
+ * with two emails of a paragraph or two each come to about 2,400, each step
+ * carrying only its own fields.
  */
 export const AI_AUTOMATION_ANSWER_MAX_CHARS = 6_000
 
@@ -115,12 +123,19 @@ export const AI_WORKFLOW_LINE_MAX_CHARS = 300
 const SEVERITIES = ['info', 'success', 'warning', 'error'] as const
 type Severity = (typeof SEVERITIES)[number]
 
-const nullable = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: 'null' }] })
+type Schema = Record<string, unknown>
 
-function conditionSchema(description: string): Record<string, unknown> {
-  return {
+const nullable = (schema: Schema): Schema => ({ anyOf: [schema, { type: 'null' }] })
+
+/**
+ * What the schema defines once and refers to where it is used: a condition,
+ * which the trigger and every step's `when` share, and the `when` itself,
+ * which every step variant carries. Written out in every variant instead, the
+ * two would be most of the tool.
+ */
+const DEFINITIONS: Schema = {
+  condition: {
     type: 'object',
-    description,
     additionalProperties: false,
     required: ['field', 'op', 'value'],
     properties: {
@@ -129,19 +144,91 @@ function conditionSchema(description: string): Record<string, unknown> {
         description: 'The field of the event the condition reads, as the trigger lists its fields.',
       },
       op: { type: 'string', enum: [...TRIGGER_CONDITION_OPS] },
-      value: nullable({
+      value: {
         type: 'string',
-        description: 'What equals or contains compares against; null for notEmpty.',
-      }),
+        description: 'What equals or contains compares against; empty for notEmpty.',
+      },
     },
-  }
+  },
+  // A list rather than a condition or `null`: a step goes without one by an
+  // empty list, which costs no union.
+  when: {
+    type: 'array',
+    description: 'At most one condition: the step runs only when it holds. Empty when the step always runs.',
+    items: { $ref: '#/$defs/condition' },
+  },
 }
 
-const words = (what: string) =>
-  nullable({
-    type: 'string',
-    description: `${what}, in the words of the description, such as "newsletter". Never an id.`,
-  })
+/** A record a step names, in the description's words; the step finds the site's record by them. */
+const reference = (what: string): Schema => ({
+  type: 'string',
+  description: `The ${what}, in the words of the description, such as "newsletter". Never an id.`,
+})
+
+const minutes = (what: string): Schema => ({
+  type: 'integer',
+  description: `${what}, in whole minutes from ${FLOW_WAIT_MIN_MINUTES} to ${FLOW_WAIT_MAX_MINUTES}; an hour is 60 and a day 1440.`,
+})
+
+/** The fields each step carries beside its type and its `when`, and only those. */
+const STEP_FIELDS: Readonly<Record<AiAutomationStepType, Readonly<Record<string, Schema>>>> = {
+  sendEmail: {
+    subject: { type: 'string', description: 'The subject line.' },
+    body: { type: 'string', description: 'The email, as plain text.' },
+    toField: {
+      type: 'string',
+      description: 'The event field holding the address: "email" unless the description names another.',
+    },
+  },
+  notifyAdmins: { title: { type: 'string', description: 'The notification.' } },
+  enrollList: { list: reference('email list') },
+  assignCampaign: { campaign: reference('campaign') },
+  runWorkflow: { workflow: reference('workflow') },
+  datasetAppend: { dataset: reference('dataset') },
+  updateDataset: { dataset: reference('dataset') },
+  webhookPost: { webhook: reference('outbound webhook') },
+  siteAlert: {
+    message: { type: 'string', description: 'What the visitor reads.' },
+    severity: { type: 'string', enum: [...SEVERITIES] },
+  },
+  wait: { minutes: minutes('How long to wait') },
+  waitForEvent: {
+    event: { type: 'string', enum: [...HOST_EVENT_TYPES], description: 'What the automation waits for.' },
+    minutes: minutes('When to give up'),
+  },
+  exitFlow: {},
+  setContactStage: { stage: { type: 'string', enum: [...CONTACT_LIFECYCLE_STAGES] } },
+  addContactTag: { tag: { type: 'string', description: `At most ${CONTACT_TAG_MAX_LENGTH} characters.` } },
+  assignContactOwner: {
+    owner: {
+      type: 'string',
+      description: '"round robin", or the teammate’s email address the description gives.',
+    },
+  },
+  createCrmTask: {
+    title: { type: 'string', description: 'The task.' },
+    taskKind: { type: 'string', enum: [...CRM_TASK_KINDS] },
+    dueInDays: {
+      type: 'integer',
+      description: `Days from the run, 0 for today, at most ${CRM_TASK_MAX_DUE_DAYS}.`,
+    },
+  },
+  logCrmActivity: {
+    activityKind: { type: 'string', enum: [...CRM_ACTIVITY_KINDS] },
+    body: { type: 'string', description: 'What happened.' },
+  },
+}
+
+/** One step type's variant: its type, its `when`, and its own fields, every one required. */
+function stepSchema(type: AiAutomationStepType): Schema {
+  const fields = STEP_FIELDS[type]
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'when', ...Object.keys(fields)],
+    properties: { type: { type: 'string', enum: [type] }, when: { $ref: '#/$defs/when' }, ...fields },
+  }
+}
 
 /** The automation tool. The same bytes on every request, so it sits inside the cached prefix. */
 export function aiAutomationTool(): AiTool {
@@ -166,90 +253,16 @@ export function aiAutomationTool(): AiTool {
             event: { type: 'string', enum: [...HOST_EVENT_TYPES] },
             conditions: {
               type: 'array',
-              description: `At most ${ACTION_MAX_CONDITIONS}; empty when it runs every time.`,
-              items: conditionSchema('A condition the event must meet.'),
+              description: `What the event must meet: at most ${ACTION_MAX_CONDITIONS} conditions, empty when it runs every time.`,
+              items: { $ref: '#/$defs/condition' },
             },
             combinator: { type: 'string', enum: [...TRIGGER_COMBINATORS] },
           },
         },
         steps: {
           type: 'array',
-          description: `The steps in order, at most ${ACTION_MAX_STEPS}. Empty only with unsupported.`,
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            required: [
-              'type',
-              'when',
-              'list',
-              'campaign',
-              'workflow',
-              'webhook',
-              'dataset',
-              'subject',
-              'body',
-              'toField',
-              'title',
-              'message',
-              'severity',
-              'minutes',
-              'event',
-              'stage',
-              'tag',
-              'owner',
-              'taskKind',
-              'dueInDays',
-              'activityKind',
-            ],
-            properties: {
-              type: { type: 'string', enum: [...AI_AUTOMATION_STEP_TYPES] },
-              when: nullable(conditionSchema('The step runs only when this holds; null for always.')),
-              list: words('enrollList: the email list'),
-              campaign: words('assignCampaign: the campaign'),
-              workflow: words('runWorkflow: the workflow'),
-              webhook: words('webhookPost: the outbound webhook'),
-              dataset: words('datasetAppend and updateDataset: the dataset'),
-              subject: nullable({ type: 'string', description: 'sendEmail: the subject line.' }),
-              body: nullable({
-                type: 'string',
-                description: 'sendEmail: the email as plain text. logCrmActivity: what happened.',
-              }),
-              toField: nullable({
-                type: 'string',
-                description: 'sendEmail: the event field holding the address; null for "email".',
-              }),
-              title: nullable({
-                type: 'string',
-                description: 'notifyAdmins: the notification. createCrmTask: the task.',
-              }),
-              message: nullable({ type: 'string', description: 'siteAlert: what the visitor reads.' }),
-              severity: nullable({ type: 'string', enum: [...SEVERITIES] }),
-              minutes: nullable({
-                type: 'integer',
-                description: `wait: how long to wait. waitForEvent: when to give up. Whole minutes from ${FLOW_WAIT_MIN_MINUTES} to ${FLOW_WAIT_MAX_MINUTES}; an hour is 60 and a day 1440.`,
-              }),
-              event: nullable({
-                type: 'string',
-                enum: [...HOST_EVENT_TYPES],
-                description: 'waitForEvent: what the automation waits for.',
-              }),
-              stage: nullable({ type: 'string', enum: [...CONTACT_LIFECYCLE_STAGES] }),
-              tag: nullable({
-                type: 'string',
-                description: `addContactTag: at most ${CONTACT_TAG_MAX_LENGTH} characters.`,
-              }),
-              owner: nullable({
-                type: 'string',
-                description: 'assignContactOwner: "round robin", or the teammate’s email address the description gives.',
-              }),
-              taskKind: nullable({ type: 'string', enum: [...CRM_TASK_KINDS] }),
-              dueInDays: nullable({
-                type: 'integer',
-                description: `createCrmTask: days from the run, 0 for today, at most ${CRM_TASK_MAX_DUE_DAYS}.`,
-              }),
-              activityKind: nullable({ type: 'string', enum: [...CRM_ACTIVITY_KINDS] }),
-            },
-          },
+          description: `The steps in order, at most ${ACTION_MAX_STEPS}, each carrying only its own fields. Empty only with unsupported.`,
+          items: { anyOf: AI_AUTOMATION_STEP_TYPES.map(stepSchema) },
         },
         notes: {
           type: 'array',
@@ -262,6 +275,7 @@ export function aiAutomationTool(): AiTool {
           description: 'Why no automation can be built from this description; null when one is built.',
         }),
       },
+      $defs: DEFINITIONS,
     },
   }
 }
@@ -305,7 +319,7 @@ export interface AiAutomationCondition {
   value: string | null
 }
 
-/** One step as the answer gives it, every field the step does not use `null`. */
+/** One step as the reader gives it back, every field the step does not use `null`. */
 export interface AiAutomationAnswerStep {
   type: AiAutomationStepType
   when: AiAutomationCondition | null
@@ -565,8 +579,14 @@ function readStep(
     dueInDays: null,
     activityKind: null,
   }
-  if (raw['when'] !== null && raw['when'] !== undefined) {
-    step.when = readCondition(reader, raw['when'], `${path}.when`, event, true)
+  // A step's `when` is a list of at most one condition; a lone condition, or
+  // none, reads as the list it stands for.
+  const when = raw['when']
+  const guards = Array.isArray(when) ? when : when === null || when === undefined ? [] : [when]
+  if (guards.length > 1) {
+    refuse(reader, 'automation-condition', `${what}: when holds one condition at most.`, `${path}.when`, when)
+  } else if (guards.length === 1) {
+    step.when = readCondition(reader, guards[0], `${path}.when`, event, true)
   }
   const reference = (key: 'list' | 'campaign' | 'workflow' | 'webhook' | 'dataset') => {
     step[key] = requireText(reader, raw, key, AI_AUTOMATION_REFERENCE_MAX_CHARS, path, what)
