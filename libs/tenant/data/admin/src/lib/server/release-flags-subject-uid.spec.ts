@@ -20,8 +20,8 @@
  *
  * A released-off plugin admits staff through a bearer token's `staff` claim.
  * A provider's OAuth redirect back to the platform carries no token, so a
- * staff member previewing Outreach could start a Google connect and then be
- * 404'd on the way back. The route proves the account from its own signed
+ * staff member previewing a dark plugin could start a provider connect and
+ * then be 404'd on the way back. The route proves the account from its own signed
  * state and hands the uid over as `subjectUid`; the gate reads the same claim
  * off that account.
  *

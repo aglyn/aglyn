@@ -28,7 +28,7 @@
  * surface names no site, and a provider's OAuth redirect carries no bearer
  * token, so both reached the gate as anonymous: a plugin released to one
  * organization by override 404'd that organization's own requests, and a
- * staff member previewing a dark plugin could not come back from Google.
+ * staff member previewing a dark plugin could not come back from the provider.
  *
  * The registry is REAL here — the route is registered with its resolver and
  * the dispatcher finds it the way it finds any route — and only the gate and
@@ -70,7 +70,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getHostDocAdmin: jest.fn(async () => ({ id: 'host-1' })),
   getOrgForHost: jest.fn(async () => ({
     orgId: 'org-of-host',
-    org: { enabledPlugins: ['outreach'] },
+    org: { enabledPlugins: ['acme-mail'] },
   })),
 }))
 
@@ -80,7 +80,7 @@ jest.mock('@aglyn/aglyn/server', () => {
     __esModule: true,
     ...jest.requireActual('../../../libs/aglyn/src/lib/plugin-manager/enabled-plugins'),
     lockdownFeaturesForPluginApiPath: jest.fn(() => []),
-    pluginIdForRegisteredApiPath: jest.fn(() => 'outreach'),
+    pluginIdForRegisteredApiPath: jest.fn(() => 'acme-mail'),
     resolvePluginApiMatch: registry.resolvePluginApiMatch,
     resolvePluginApiRequestSubject: registry.resolvePluginApiRequestSubject,
     runPluginApiMatch: registry.runPluginApiMatch,
@@ -97,7 +97,7 @@ jest.mock('../utils/server-plugin-loader', () => ({
   __esModule: true,
   serverPluginLoader: {
     ensureAll: jest.fn(async () => undefined),
-    pluginIdForApiPath: jest.fn(() => 'outreach'),
+    pluginIdForApiPath: jest.fn(() => 'acme-mail'),
   },
 }))
 
@@ -107,8 +107,8 @@ import {
 } from '@aglyn/aglyn/app-utils/api-plugins'
 import { GET, POST } from '../app/api/[...pluginApi]/route'
 
-const ORG_ROUTE = 'outreach/example-org-route'
-const REDIRECT_ROUTE = 'outreach/example-redirect'
+const ORG_ROUTE = 'acme-mail/example-org-route'
+const REDIRECT_ROUTE = 'acme-mail/example-redirect'
 
 const params = (path: string) =>
   Promise.resolve({ pluginApi: path.split('/') })

@@ -53,48 +53,48 @@ describe('plugin API registry — a route-declared subject', () => {
     const subject = jest.fn((incoming: Request) => ({
       orgId: new URL(incoming.url).searchParams.get('orgId'),
     }))
-    registerPluginApiRoute('outreach/mailboxes/list', jest.fn(), { subject })
-    registerPluginApiRoute('outreach/mailboxes/:mailboxId/pause', jest.fn(), { subject })
+    registerPluginApiRoute('acme-mail/mailboxes/list', jest.fn(), { subject })
+    registerPluginApiRoute('acme-mail/mailboxes/:mailboxId/pause', jest.fn(), { subject })
 
     await expect(
       resolvePluginApiRequestSubject(
-        '/outreach/mailboxes/list/',
-        request('https://x.example/api/outreach/mailboxes/list?orgId=org-1'),
+        '/acme-mail/mailboxes/list/',
+        request('https://x.example/api/acme-mail/mailboxes/list?orgId=org-1'),
       ),
     ).resolves.toEqual({ orgId: 'org-1' })
     await expect(
       resolvePluginApiRequestSubject(
-        'outreach/mailboxes/mb-1/pause',
-        request('https://x.example/api/outreach/mailboxes/mb-1/pause?orgId=org-2'),
+        'acme-mail/mailboxes/mb-1/pause',
+        request('https://x.example/api/acme-mail/mailboxes/mb-1/pause?orgId=org-2'),
       ),
     ).resolves.toEqual({ orgId: 'org-2' })
     // The same matcher decides the route, so the two cannot disagree.
-    expect(resolvePluginApiMatch('outreach/mailboxes/mb-1/pause')?.params).toEqual({
+    expect(resolvePluginApiMatch('acme-mail/mailboxes/mb-1/pause')?.params).toEqual({
       mailboxId: 'mb-1',
     })
   })
 
   it('carries a uid only when the route named one', async () => {
-    registerPluginApiRoute('outreach/callback', jest.fn(), {
+    registerPluginApiRoute('acme-mail/callback', jest.fn(), {
       subject: () => ({ orgId: 'org-1', uid: 'member-1' }),
     })
     await expect(
-      resolvePluginApiRequestSubject('outreach/callback', request('https://x.example/api/outreach/callback')),
+      resolvePluginApiRequestSubject('acme-mail/callback', request('https://x.example/api/acme-mail/callback')),
     ).resolves.toEqual({ orgId: 'org-1', uid: 'member-1' })
   })
 
   it('reads a clone, leaving the body for the handler', async () => {
-    registerPluginApiRoute('outreach/connect', jest.fn(), {
+    registerPluginApiRoute('acme-mail/connect', jest.fn(), {
       subject: async (incoming) => {
         const body = (await incoming.json()) as { orgId: string }
         return { orgId: body.orgId }
       },
     })
-    const original = request('https://x.example/api/outreach/connect', {
+    const original = request('https://x.example/api/acme-mail/connect', {
       method: 'POST',
       body: JSON.stringify({ orgId: 'org-3' }),
     })
-    await expect(resolvePluginApiRequestSubject('outreach/connect', original)).resolves.toEqual({
+    await expect(resolvePluginApiRequestSubject('acme-mail/connect', original)).resolves.toEqual({
       orgId: 'org-3',
     })
     await expect(original.json()).resolves.toEqual({ orgId: 'org-3' })
@@ -118,7 +118,7 @@ describe('plugin API registry — a route-declared subject', () => {
   })
 
   it('forgets a subject when the route is registered again without one, or removed', async () => {
-    const path = 'outreach/re-registered'
+    const path = 'acme-mail/re-registered'
     registerPluginApiRoute(path, jest.fn(), { subject: () => ({ orgId: 'org-1' }) })
     registerPluginApiRoute(path, jest.fn())
     await expect(

@@ -36,7 +36,7 @@ export type PluginActivityScope = 'org' | 'host' | 'staff'
 
 /**
  * A resource a PLUGIN files an org activity row under (AGL-2978): the
- * plugin's id, a colon and the plugin's own noun — `outreach:mailbox`.
+ * plugin's id, a colon and the plugin's own noun — `acme-mail:mailbox`.
  *
  * Core's activity targets are a closed list of core's own resources. A
  * plugin's resource is not one of them and is never added to that list; the
@@ -55,7 +55,7 @@ export function isPluginActivityTargetType(type: unknown): type is PluginActivit
 }
 
 /**
- * The noun a plugin's namespaced type names — `outreach:mailbox` →
+ * The noun a plugin's namespaced type names — `acme-mail:mailbox` →
  * `mailbox` — or `undefined` for any other type.
  */
 export function pluginActivityTargetNoun(type: unknown): string | undefined {

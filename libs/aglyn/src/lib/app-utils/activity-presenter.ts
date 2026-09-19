@@ -140,7 +140,7 @@ const ORG_CRM_SECTIONS: Record<string, string> = {
 /**
  * Human noun for a target type, e.g. `'screen'` → `'Screen'`. A plugin's
  * own resource is stored as `pluginId:noun` (AGL-2978), and a reader sees
- * the noun: `outreach:mailbox` → `Mailbox`.
+ * the noun: `acme-mail:mailbox` → `Mailbox`.
  */
 export function activityTypeLabel(type: string | undefined): string {
   if (!type) return 'Item'

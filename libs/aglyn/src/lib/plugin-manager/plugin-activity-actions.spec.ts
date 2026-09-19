@@ -125,9 +125,9 @@ describe('isPluginStaffAuditAccess', () => {
 
 describe('a plugin’s namespaced activity target (AGL-2978)', () => {
   it('reads `pluginId:noun` and nothing else', () => {
-    expect(isPluginActivityTargetType('outreach:mailbox')).toBe(true)
-    expect(pluginActivityTargetNoun('outreach:mailbox')).toBe('mailbox')
-    for (const type of ['mailbox', 'aiJob', ':mailbox', 'outreach:', 'a:b:c', 'Outreach:mailbox', 'outreach:mail box', 42, null]) {
+    expect(isPluginActivityTargetType('acme-mail:mailbox')).toBe(true)
+    expect(pluginActivityTargetNoun('acme-mail:mailbox')).toBe('mailbox')
+    for (const type of ['mailbox', 'aiJob', ':mailbox', 'acme-mail:', 'a:b:c', 'Acme-mail:mailbox', 'acme-mail:mail box', 42, null]) {
       expect([type, isPluginActivityTargetType(type)]).toEqual([type, false])
       expect([type, pluginActivityTargetNoun(type)]).toEqual([type, undefined])
     }
