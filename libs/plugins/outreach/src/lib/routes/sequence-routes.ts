@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { applyOutreachEnrollmentEvent } from '../engine/enrollment-state'
 import {
@@ -291,7 +292,7 @@ export function createOutreachSequenceRoutes(deps: OutreachRouteDeps): OutreachS
     const nowMs = deps.now()
     const ref = existing
       ? outreachOrgCollection(firestore, caller.orgId, 'sequences').doc(existing.id)
-      : outreachOrgCollection(firestore, caller.orgId, 'sequences').doc()
+      : outreachOrgCollection(firestore, caller.orgId, 'sequences').doc(createResourceUid())
     const sequence: OutreachSequence = {
       id: ref.id,
       ...draft,
