@@ -64,6 +64,10 @@
  *       --testPathPatterns erase-org-credentials.emulator
  */
 
+import {
+  registerPluginOrgEraser,
+  resetPluginOrgErasersForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { Timestamp, getFirestore, type Firestore } from 'firebase-admin/firestore'
 
@@ -110,11 +114,29 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
   let bystanderToken: string
   let result: import('./erase').EraseOrgResult
 
+  /**
+   * What a plugin's workspace eraser saw (AGL-2978): the request it was
+   * handed, and whether the org's API key and the org itself still existed
+   * when it ran. A plugin eraser that revokes a grant opens the stored grant
+   * to do it, so it has to run BEFORE the erasure deletes anything.
+   */
+  const eraserCalls: Array<{ orgId: string; dryRun: boolean; keyStillStored: boolean; orgStillStored: boolean }> = []
+  const FIXTURE_PLUGIN = 'erase-credentials-fixture'
+
   beforeAll(async () => {
     db = getFirestore()
     erase = await import('./erase')
     apiKeys = await import('./api-keys')
     organizations = await import('./organizations')
+    registerPluginOrgEraser(
+      async ({ orgId, dryRun }) => {
+        const keys = await db.collection('apiKeys').where('orgId', '==', orgId).get()
+        const org = await db.collection('orgs').doc(orgId).get()
+        eraserCalls.push({ orgId, dryRun, keyStillStored: !keys.empty, orgStillStored: org.exists })
+        return { grants: 1, revoked: dryRun ? null : 1 }
+      },
+      { pluginId: FIXTURE_PLUGIN },
+    )
 
     // Leave no rows behind from an earlier run, or a stale key from the
     // previous pass would answer the assertion instead of this one's.
@@ -174,6 +196,14 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
       })
     }
 
+    // A plan first: each plugin eraser is told it is one, and counts.
+    const plan = await erase.eraseOrg(ORG, { dryRun: true })
+    expect(plan).toMatchObject({
+      ok: false,
+      skippedReason: 'dry-run',
+      plugins: { [FIXTURE_PLUGIN]: { grants: 1, revoked: null } },
+    })
+
     result = await erase.eraseOrg(ORG)
     // Guard the premise: if the erasure itself was skipped there is nothing
     // to assert about, and a green run would mean nothing.
@@ -189,7 +219,25 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
     await Promise.all(rows.docs.map((doc) => doc.ref.delete()))
     await db.collection(MAILBOX_CREDENTIALS).doc(BYSTANDER_MAILBOX).delete()
     await db.recursiveDelete(db.collection('orgs').doc(OTHER_ORG))
+    resetPluginOrgErasersForTests()
   }, 60_000)
+
+  it('runs a plugin’s workspace eraser BEFORE deleting anything, and records its report (AGL-2978)', async () => {
+    expect(eraserCalls).toEqual([
+      { orgId: ORG, dryRun: true, keyStillStored: true, orgStillStored: true },
+      { orgId: ORG, dryRun: false, keyStillStored: true, orgStillStored: true },
+    ])
+    expect(result.plugins).toEqual({ [FIXTURE_PLUGIN]: { grants: 1, revoked: 1 } })
+    const audit = await db
+      .collection('adminAudit')
+      .where('target', '==', `orgs/${ORG}`)
+      .where('action', '==', 'org.erased')
+      .get()
+    expect(audit.docs.map((doc) => doc.get('after.plugins'))).toContainEqual({
+      [FIXTURE_PLUGIN]: { grants: 1, revoked: 1 },
+    })
+  }, 60_000)
+
 
   it('THE DEFECT: no apiKeys document still references the erased org', async () => {
     const rows = await db.collection('apiKeys').where('orgId', '==', ORG).get()

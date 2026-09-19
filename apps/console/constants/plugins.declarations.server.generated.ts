@@ -15,6 +15,7 @@ let done: Promise<void> | undefined
 /** Registers every plugin's server declarations once per process. */
 export function registerPluginServerDeclarations(): Promise<void> {
   done ??= (async () => {
+    ;(await import('@aglyn/plugins-outreach/declarations.console-server')).registerOutreachConsoleServerDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations')).registerAiDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations.server')).registerAiServerDeclarations()
     ;(await import('@aglyn/plugins-video-delivery/declarations.server')).registerVideoDeliveryServerDeclarations()

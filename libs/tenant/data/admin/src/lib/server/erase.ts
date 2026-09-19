@@ -37,6 +37,10 @@ import {
   runPluginUserErasers,
   type PluginUserErasureReport,
 } from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
+import {
+  runPluginOrgErasers,
+  type PluginOrgErasureReport,
+} from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 import { isBillingSubscription } from '@aglyn/aglyn/server'
 import { readOrgBilling } from './org-billing'
 import {
@@ -876,6 +880,7 @@ async function eraseOrgSupportTickets(
  * the first thing that can fail, and it destroys as it goes.
  */
 type EraseStep =
+  | 'plugins'
   | 'credentials'
   | 'support'
   | 'hosts'
@@ -961,6 +966,14 @@ export interface EraseOrgResult {
   members?: number
   /** API credentials destroyed (AGL-1444) — outside the org path. */
   apiKeys?: number
+  /**
+   * What each plugin's workspace eraser did (AGL-2978), keyed by plugin id:
+   * counts and flags, such as grants revoked at a provider. The erasers run
+   * before anything below is deleted. **`null` means that plugin's eraser
+   * failed** and its share may not be done; it is not zero. A plan carries
+   * each eraser's count of what it would do.
+   */
+  plugins?: Record<string, PluginOrgErasureReport | null>
   /** Outreach mailbox grants destroyed (AGL-2974) — outside the org path. */
   outreachMailboxCredentials?: number
   /** Public SSO routing docs destroyed (AGL-1448) — outside the org path. */
@@ -1245,8 +1258,16 @@ export async function eraseOrg(
   // can no longer leave behind is the state that used to be the worst one: a
   // surviving workspace with its own complete dump already in the bucket.
   const progress: EraseProgress = {}
-  let step: EraseStep = 'credentials'
+  let step: EraseStep = 'plugins'
   try {
+    // The plugins' share first (AGL-2978), while the org, its roster and
+    // every record swept below still exist: an eraser that revokes a grant at
+    // its provider opens the stored grant to do it. Each eraser is isolated,
+    // so a failing one is recorded as `null` and stops nothing; on a plan
+    // each one counts and touches no provider.
+    progress.plugins = await runPluginOrgErasers({ orgId, dryRun })
+
+    step = 'credentials'
     // Credentials and routing BEFORE content (AGL-1444/AGL-1448). The org doc
     // survives until the recursiveDelete at the end, so a key presented — or a
     // sign-in routed, or a console domain resolved — mid-erasure would still

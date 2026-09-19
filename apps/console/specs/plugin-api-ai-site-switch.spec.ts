@@ -86,6 +86,9 @@ jest.mock('@aglyn/aglyn/server', () => {
     lockdownFeaturesForPluginApiPath: () => [],
     pluginIdForRegisteredApiPath: registry.pluginIdForRegisteredApiPath,
     resolvePluginApiMatch: registry.resolvePluginApiMatch,
+    // The real subject reader over the same registry (AGL-2978): the AI
+    // routes declare no subject, so a request naming no site stays anonymous.
+    resolvePluginApiRequestSubject: registry.resolvePluginApiRequestSubject,
     runPluginApiMatch: registry.runPluginApiMatch,
     runLegacyHandler: jest.fn(async () => Response.json({ ok: true })),
     resolveHostEnabledPlugins: catalog.resolveHostEnabledPlugins,

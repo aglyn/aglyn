@@ -74,7 +74,7 @@ import {
   AI_WORKFLOW_UNAVAILABLE_COPY,
 } from '../model/ai-workflow-job'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
-import { AI_AUTOMATION_ANSWER_MAX_CHARS, readAiAutomationAnswer } from '../tools/ai-workflow-tool'
+import { AI_AUTOMATION_ANSWER_MAX_CHARS, aiAutomationTool, readAiAutomationAnswer } from '../tools/ai-workflow-tool'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import {
@@ -170,30 +170,8 @@ beforeAll(() => {
 
 // ── Fixtures ─────────────────────────────────────────────────────────────
 
-const NULL_STEP = {
-  when: null,
-  list: null,
-  campaign: null,
-  workflow: null,
-  webhook: null,
-  dataset: null,
-  subject: null,
-  body: null,
-  toField: null,
-  title: null,
-  message: null,
-  severity: null,
-  minutes: null,
-  event: null,
-  stage: null,
-  tag: null,
-  owner: null,
-  taskKind: null,
-  dueInDays: null,
-  activityKind: null,
-}
-
-const step = (type: string, fields: Record<string, unknown> = {}) => ({ type, ...NULL_STEP, ...fields })
+/** A step as `submit_automation` carries one: its type, its `when` list and its own fields. */
+const step = (type: string, fields: Record<string, unknown> = {}) => ({ type, when: [], ...fields })
 
 /** The issue's own description, answered the way a good answer is. */
 const EXAMPLE = {
@@ -368,6 +346,20 @@ describe('drafting an automation', () => {
     expect(user).toContain('Brief: When a form is submitted')
     // The cached prefix is the platform's, never this site's.
     expect(system).not.toContain('Newsletter sign-up')
+  })
+
+  it('lists each step with the fields its variant of the tool carries, in order, and no other', () => {
+    const lines = AI_JOB_WORKFLOW_DRAFT_INSTRUCTIONS[0].text.split('\n')
+    const properties = aiAutomationTool().inputSchema['properties'] as Record<string, { items?: { anyOf?: unknown[] } }>
+    const variants = (properties['steps'].items?.anyOf ?? []) as Array<{ properties: Record<string, { enum?: string[] }> }>
+    expect(variants.length).toBeGreaterThan(0)
+    for (const variant of variants) {
+      const type = variant.properties['type'].enum?.[0]
+      const line = lines.find((row) => row.startsWith(`- ${type} (`)) ?? ''
+      const listed = (line.split('Fields: ')[1] ?? '').split('.')[0].replace(/\s*\([^)]*\)/g, '')
+      const carried = Object.keys(variant.properties).filter((key) => key !== 'type' && key !== 'when')
+      expect([type, listed === 'none' ? [] : listed.split(', ')]).toEqual([type, carried])
+    }
   })
 
   it('never shows the model the site’s lists, campaigns, workflows, webhooks or pipeline stages', async () => {
@@ -709,11 +701,11 @@ describe('a measured budget', () => {
       steps: [
         step('enrollList', { list: 'newsletter' }),
         step('setContactStage', { stage: 'lead' }),
-        step('sendEmail', { subject: 'Welcome, and thanks for signing up', body: paragraphs }),
+        step('sendEmail', { subject: 'Welcome, and thanks for signing up', body: paragraphs, toField: 'email' }),
         step('wait', { minutes: 4320 }),
-        step('sendEmail', { subject: 'A few things you might like', body: paragraphs }),
+        step('sendEmail', { subject: 'A few things you might like', body: paragraphs, toField: 'email' }),
         step('waitForEvent', { event: 'formSubmission', minutes: 10080 }),
-        step('exitFlow', { when: { field: '_waitTimedOut', op: 'notEmpty', value: null } }),
+        step('exitFlow', { when: [{ field: '_waitTimedOut', op: 'notEmpty', value: '' }] }),
         step('createCrmTask', { title: 'Call the new lead', taskKind: 'call', dueInDays: 2 }),
         step('addContactTag', { tag: 'newsletter' }),
         step('notifyAdmins', { title: 'A new lead joined the newsletter' }),
@@ -721,6 +713,8 @@ describe('a measured budget', () => {
       notes: ['Pick the teammate who calls new leads.'],
     }
     expect(paragraphs.length).toBeGreaterThan(700)
+    // Each step carries only its own fields, so the whole comes to about 2,400.
+    expect(JSON.stringify(ten).length).toBeLessThan(2_500)
     const read = readAiAutomationAnswer(ten, { crm: true, webhooks: false, bookings: false })
     expect(read.violations).toEqual([])
     expect(read.value?.steps).toHaveLength(10)

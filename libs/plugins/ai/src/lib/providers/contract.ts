@@ -47,6 +47,8 @@ import { UpstreamServiceError } from '@aglyn/shared-util-errors'
  * adapter delivers `input` as an object; a stream assembles it from
  * fragments and parses the whole once, at the block's end. Nothing
  * string-matches the serialized form: models differ in how they escape it.
+ * A provider bounds how much strict schema one request may carry, and an
+ * adapter declares those bounds as `toolSchemaLimits`.
  *
  * ── Thinking ──────────────────────────────────────────────────────────────
  *
@@ -86,6 +88,107 @@ export interface AiTool {
   /** A JSON schema of `type: 'object'`; `additionalProperties` is forced off. */
   inputSchema: Record<string, unknown>
   strict: true
+}
+
+/**
+ * How much of a request's strict tools a provider can compile (AGL-3096). A
+ * provider that constrains decoding to a tool's schema compiles every strict
+ * schema of a request together, before the model runs, and refuses a request
+ * whose schemas are past its bounds. That refusal is permanent: the schema is
+ * the same on every retry. Each bound is a TOTAL over every strict tool one
+ * request sends, as `aiToolSchemaCounts` counts them. A bound left out is one
+ * the provider does not state.
+ */
+export interface AiToolSchemaLimits {
+  /** The most strict tools one request may send. */
+  strictTools?: number
+  /** The most properties, across every strict schema, left out of their object's `required`. */
+  optionalParameters?: number
+  /** The most schemas, across every strict schema, that are a union: an `anyOf` or `oneOf`, or a list of types. */
+  unionParameters?: number
+}
+
+/** A request's strict tools, counted on the measures `AiToolSchemaLimits` bounds. */
+export type AiToolSchemaCounts = Required<AiToolSchemaLimits>
+
+function isSchemaObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** The schema a local `$ref` (`#/…`) points at, or `undefined`. */
+function localSchemaAt(root: Record<string, unknown>, ref: string): unknown {
+  if (!ref.startsWith('#/')) return undefined
+  return ref
+    .slice(2)
+    .split('/')
+    .map((key) => key.replace(/~1/g, '/').replace(/~0/g, '~'))
+    .reduce<unknown>((node, key) => (isSchemaObject(node) ? node[key] : undefined), root)
+}
+
+function countSchema(
+  node: unknown,
+  root: Record<string, unknown>,
+  counts: AiToolSchemaCounts,
+  resolving: ReadonlySet<string>,
+): void {
+  if (!isSchemaObject(node)) return
+  if (Array.isArray(node['anyOf']) || Array.isArray(node['oneOf']) || Array.isArray(node['type'])) {
+    counts.unionParameters += 1
+  }
+  const ref = node['$ref']
+  if (typeof ref === 'string' && !resolving.has(ref)) {
+    countSchema(localSchemaAt(root, ref), root, counts, new Set([...resolving, ref]))
+  }
+  const properties = node['properties']
+  if (isSchemaObject(properties)) {
+    const required = Array.isArray(node['required']) ? node['required'] : []
+    for (const [key, property] of Object.entries(properties)) {
+      if (!required.includes(key)) counts.optionalParameters += 1
+      countSchema(property, root, counts, resolving)
+    }
+  }
+  const items = node['items']
+  for (const item of Array.isArray(items) ? items : [items]) countSchema(item, root, counts, resolving)
+  for (const key of ['anyOf', 'allOf', 'oneOf']) {
+    const branches = node[key]
+    if (Array.isArray(branches)) for (const branch of branches) countSchema(branch, root, counts, resolving)
+  }
+}
+
+/**
+ * The strict tools of one request, counted on each measure a provider bounds.
+ * Every tool the contract sends is strict. Each schema is walked whole: every
+ * property, every `items`, every branch of an `anyOf`, `allOf` or `oneOf`, and
+ * a local `$ref` at each place it is used. A union nested in an array's items
+ * or in another union's branch counts on its own, as it does for a provider
+ * that compiles it; a `$ref` counted where it is used errs toward more.
+ */
+export function aiToolSchemaCounts(tools: readonly AiTool[]): AiToolSchemaCounts {
+  const counts: AiToolSchemaCounts = { strictTools: tools.length, optionalParameters: 0, unionParameters: 0 }
+  for (const tool of tools) countSchema(tool.inputSchema, tool.inputSchema, counts, new Set())
+  return counts
+}
+
+const TOOL_SCHEMA_MEASURES: ReadonlyArray<[keyof AiToolSchemaLimits, string, string]> = [
+  ['strictTools', 'strict tool', 'strict tools'],
+  ['optionalParameters', 'optional parameter', 'optional parameters'],
+  ['unionParameters', 'union-typed parameter', 'union-typed parameters'],
+]
+
+/** Each bound a request's tools are past, as a sentence; empty when every one holds. */
+export function aiToolSchemaBreaches(
+  tools: readonly AiTool[],
+  limits: AiToolSchemaLimits | undefined,
+): string[] {
+  if (!limits) return []
+  const counts = aiToolSchemaCounts(tools)
+  return TOOL_SCHEMA_MEASURES.flatMap(([measure, one, many]) => {
+    const limit = limits[measure]
+    const count = counts[measure]
+    return limit !== undefined && count > limit
+      ? [`${count} ${count === 1 ? one : many} in one request, over the ${limit} the provider compiles`]
+      : []
+  })
 }
 
 export type AiEffort = 'low' | 'medium' | 'high'
@@ -322,6 +425,13 @@ export interface AiProvider {
   readApiKey(): string | undefined
   /** The host the provider is reached at, for the subprocessor inventory. */
   readonly endpointHost: string
+  /**
+   * How much of one request's strict tools this provider compiles, where it
+   * states a bound. The doors never read it: a spec holds every tool set a
+   * door sends to every registered provider's limits, so a schema a provider
+   * would refuse is red before it ships rather than a 400 on every request.
+   */
+  readonly toolSchemaLimits?: AiToolSchemaLimits
   models(): readonly AiModelDescriptor[]
   complete(request: AiProviderRequest): Promise<AiResult>
   /**

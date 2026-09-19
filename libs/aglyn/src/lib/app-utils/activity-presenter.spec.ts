@@ -53,6 +53,14 @@ describe('activityTypeLabel', () => {
   it('has a fallback for a missing type', () => {
     expect(activityTypeLabel(undefined)).toBe('Item')
   })
+
+  it('names a plugin’s namespaced resource by its noun (AGL-2978)', () => {
+    expect(activityTypeLabel('widgets:gadget')).toBe('Gadget')
+    expect(activityTargetLabel({ type: 'widgets:gadget', id: 'g1' })).toBe('Gadget')
+    expect(activityTargetLabel({ type: 'widgets:gadget', name: 'Front desk' })).toBe('Front desk')
+    // No link is invented for a resource core has no address for.
+    expect(activityHref({ target: { type: 'widgets:gadget', id: 'g1' } }, { orgSlug: 'acme' })).toBeUndefined()
+  })
 })
 
 describe('activityTargetLabel', () => {

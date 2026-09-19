@@ -35,14 +35,15 @@
 //   1  at least one item FAILED — P4 is not done
 //   2  at least one item is UNKNOWN (could not be evaluated) and none failed
 //
-// WHAT THIS CANNOT DO. Minting the live Stripe coupon, naming twenty people,
-// and confirming zero enabled Google Ads campaigns are console actions a
-// person takes by hand. This script
-// still checks the first (a live read is not a live write) and the second
-// (the names land in a file), and prints the third as an explicit manual
-// item rather than pretending silence is a pass.
+// WHAT THIS CANNOT DO. Naming twenty people and confirming zero enabled
+// Google Ads campaigns are things a person does by hand. This script still
+// checks the first (the names land in a file), and prints the second as an
+// explicit manual item rather than pretending silence is a pass.
+//
+// The ids are the runbook's own (`Week-One-Runbook.md` §Pre-flight). Its
+// retired items keep their numbers there, so the gaps here — no P4.1, no
+// P4.4a — are not checks this file forgot.
 
-import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -70,7 +71,10 @@ const PASS = 'PASS'
 const FAIL = 'FAIL'
 const UNKNOWN = 'UNKNOWN'
 
-/** The four legal pages the founding offer links people at. */
+/**
+ * The live legal pages a prospect reaches from any outreach link to the site.
+ * Mutable so `--self-test` can point the census at a page it controls.
+ */
 const LEGAL_URLS = [
   'https://aglyn.com/legal/cookies',
   'https://aglyn.com/legal/dmca',
@@ -158,93 +162,6 @@ async function fetchPage(url) {
   }
 }
 
-// ── P4.1a — the five offer decisions are recorded as resolved ───────────────
-function checkDecisions() {
-  const doc = readDoc('Founding-Customer-Offer.md')
-  if (doc === null)
-    return record(
-      'P4.1a',
-      'Offer decisions 1–5 recorded',
-      UNKNOWN,
-      'Founding-Customer-Offer.md not found',
-    )
-  const open = []
-  for (const n of [1, 2, 3, 4, 5]) {
-    // A decision is settled when its bullet is struck through AND resolved.
-    // "⚖️ DECISION 4" with no strike is precisely the shape that reads as
-    // pending after the decision has actually been made.
-    const struck = new RegExp(`~~DECISION ${n}~~[^\\n]*RESOLVED`).test(doc)
-    if (!struck) open.push(n)
-  }
-  return record(
-    'P4.1a',
-    'Offer decisions 1–5 recorded',
-    open.length === 0 ? PASS : FAIL,
-    open.length === 0
-      ? 'all five struck through and marked RESOLVED'
-      : `not resolved: ${open.join(', ')}`,
-  )
-}
-
-// ── P4.1b — the live coupon exists ─────────────────────────────────────────
-function checkCoupon() {
-  let out
-  try {
-    out = execFileSync(
-      'stripe',
-      ['coupons', 'list', '--live', '--limit', '100'],
-      {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      },
-    )
-  } catch {
-    return record(
-      'P4.1b',
-      'Live coupon founding-cohort-1 exists',
-      UNKNOWN,
-      'stripe CLI unavailable or not authenticated for live mode',
-    )
-  }
-  let parsed
-  try {
-    parsed = JSON.parse(out)
-  } catch {
-    return record(
-      'P4.1b',
-      'Live coupon founding-cohort-1 exists',
-      UNKNOWN,
-      'could not parse stripe output',
-    )
-  }
-  const found = (parsed.data ?? []).find(
-    (c) => c.id === 'founding-cohort-1' || c.name === 'founding-cohort-1',
-  )
-  if (!found)
-    return record(
-      'P4.1b',
-      'Live coupon founding-cohort-1 exists',
-      FAIL,
-      `absent — live account holds ${(parsed.data ?? []).length} coupon(s): ${
-        (parsed.data ?? []).map((c) => c.id).join(', ') || 'none'
-      }`,
-    )
-  // Existence is not enough: the wrong percent or the wrong product list is a
-  // pricing error that reaches a customer's invoice.
-  const problems = []
-  if (found.percent_off !== 25)
-    problems.push(`percent_off=${found.percent_off}`)
-  if (found.duration !== 'once') problems.push(`duration=${found.duration}`)
-  return record(
-    'P4.1b',
-    'Live coupon founding-cohort-1 exists',
-    problems.length ? FAIL : PASS,
-    problems.length
-      ? `exists but ${problems.join(', ')}`
-      : 'exists, 25% off, once',
-  )
-}
-
 // ── P4.2 — twenty names, ranked A/B ────────────────────────────────────────
 function parseTracker() {
   const csv = readDoc('Per-Lead-Tracker.csv')
@@ -327,31 +244,6 @@ async function checkLegal() {
     hits.length
       ? hits.join('; ')
       : `0 markers across ${LEGAL_URLS.length} pages`,
-  )
-}
-
-// ── P4.4a — the founding-agreement email template ──────────────────────────
-function checkAgreementTemplate() {
-  const doc = readDoc('Founding-Agreement-Email-Template.md')
-  if (doc === null)
-    return record(
-      'P4.4a',
-      'Founding-agreement email template ready to send',
-      FAIL,
-      'Founding-Agreement-Email-Template.md does not exist',
-    )
-  if (/\*\*Status:\*\*\s*DRAFT/i.test(doc))
-    return record(
-      'P4.4a',
-      'Founding-agreement email template ready to send',
-      FAIL,
-      'exists but still marked DRAFT — awaiting the voice pass',
-    )
-  return record(
-    'P4.4a',
-    'Founding-agreement email template ready to send',
-    PASS,
-    'exists and is not marked DRAFT',
   )
 }
 
@@ -540,32 +432,38 @@ function checkNoPaidSpend() {
 // ── Self-test: every check must be able to go red ───────────────────────────
 async function runSelfTest() {
   const dir = mkdtempSync(join(tmpdir(), 'p4-selftest-'))
-  // Deliberately broken artifacts: an unresolved decision, a 1-of-20 list, a
-  // DRAFT template, a placeholder booking link, a short tracker.
-  writeFileSync(
-    join(dir, 'Founding-Customer-Offer.md'),
-    '- ⚖️ DECISION 1 pending\n- ~~DECISION 2~~ **RESOLVED**\n',
-  )
+  // Deliberately broken artifacts: a 1-of-20 list, a placeholder booking link,
+  // a short tracker, and a GTM plan that no longer gates the search spend.
   writeFileSync(
     join(dir, 'Per-Lead-Tracker.csv'),
     'Tranche,Name,Source\nA,Only One,warm\n',
   )
   writeFileSync(
-    join(dir, 'Founding-Agreement-Email-Template.md'),
-    '**Status:** DRAFT for the voice pass\n',
-  )
-  writeFileSync(
     join(dir, 'Design-Partner-Outreach.md'),
     'Book here: {booking link}\n',
+  )
+  writeFileSync(
+    join(dir, 'GTM-Marketing-Advertising-Plan.md'),
+    'Paid search runs from the first day of the beta.\n',
   )
 
   docsRoot = dir
   results.length = 0
-  checkDecisions()
   checkNames()
-  checkAgreementTemplate()
   checkBookingLink()
   checkTracker()
+  checkNoPaidSpend()
+  // A legal page that passes the positive control and still carries a
+  // drafting marker, so the census has to find the marker to go red. A
+  // `data:` URL answers 200 with exactly this body and never touches the
+  // network, so this leg is the same offline as in CI.
+  const savedLegal = LEGAL_URLS.splice(
+    0,
+    LEGAL_URLS.length,
+    `data:text/html,${encodeURIComponent('<h2>Designated Agent</h2><p>[verify]</p>')}`,
+  )
+  await checkLegal()
+  LEGAL_URLS.splice(0, LEGAL_URLS.length, ...savedLegal)
   // A host that certainly does not serve Aglyn brand content.
   const savedHosts = DEMO_HOSTS.splice(0, DEMO_HOSTS.length)
   DEMO_HOSTS.push([
@@ -612,11 +510,8 @@ if (selfTest) {
     )
     process.exit(2)
   }
-  checkDecisions()
-  checkCoupon()
   checkNames()
   await checkLegal()
-  checkAgreementTemplate()
   checkBookingLink()
   await checkDemoOrg()
   checkTracker()

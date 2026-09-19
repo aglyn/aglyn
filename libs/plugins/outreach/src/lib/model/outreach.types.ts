@@ -117,6 +117,15 @@ export interface OutreachSendWindow {
 }
 
 /**
+ * One mailbox-local day's sending, as the health panel sums it (AGL-2978).
+ */
+export interface OutreachMailboxDailyHealth {
+  sent: number
+  bounces: number
+  replies: number
+}
+
+/**
  * The counters a mailbox's sending is judged by.
  *
  * `sentToday` is what `dailyCap` refuses against, and it belongs to one
@@ -135,6 +144,28 @@ export interface OutreachMailboxHealth {
   /** The last provider error, kept until a later send succeeds. */
   lastErrorAtMs: number | null
   lastErrorCode: string | null
+  /**
+   * Per mailbox-local day (`YYYY-MM-DD`), the sends, bounces and replies
+   * counted on it (AGL-2978). The Mailboxes panel shows the last seven days
+   * summed; the sending runtime increments the day it counts on and may drop
+   * days older than a week. Absent, or empty, until the first send.
+   */
+  daily?: Record<string, OutreachMailboxDailyHealth>
+}
+
+/**
+ * An address a connected Google account may send as, which Gmail has
+ * verified — its own address, or an alias whose ownership Gmail confirmed
+ * (AGL-2978). Only these are offered as a mailbox's `sendAs`.
+ */
+export interface OutreachSendAsAddress {
+  email: string
+  /** The name Gmail holds for the address, `''` when it holds none. */
+  displayName: string
+  /** The account's own address. */
+  isPrimary: boolean
+  /** The address Gmail sends as by default. */
+  isDefault: boolean
 }
 
 /**
@@ -150,6 +181,11 @@ export interface OutreachMailbox extends OutreachTimestamps {
   email: string
   /** The address mail goes out as: the account's, or an alias it may send as. */
   sendAs: string
+  /**
+   * The verified addresses `sendAs` may be, as Gmail listed them at the last
+   * connect (AGL-2978). A changed alias shows up here on the next reconnect.
+   */
+  sendAsOptions: OutreachSendAsAddress[]
   /** The From name recipients see. */
   displayName: string
   status: OutreachMailboxStatus
@@ -167,6 +203,8 @@ export interface OutreachMailbox extends OutreachTimestamps {
   health: OutreachMailboxHealth
   /** The member who connected it, and whose mail it is. */
   connectedByUid: string
+  /** When the grant behind it was last connected (AGL-2978). */
+  connectedAtMs: number
 }
 
 /**

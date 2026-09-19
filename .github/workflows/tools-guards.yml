@@ -308,7 +308,7 @@ jobs:
       - run: npm run test:media-counter
 
       # AGL-1734. The demo org has to be several visibly different businesses:
-      # the founding demo spends its largest block switching between sites in
+      # the 30-minute demo spends its largest block switching between sites in
       # one org, and a switcher showing one bakery three times argues the
       # opposite of the pitch. The guard runs the seed engine over every brand
       # pack and compares the documents, so it fails both when the packs
@@ -399,7 +399,7 @@ jobs:
       #
       # This step runs `--self-test`, NOT the live check, and the distinction
       # is the whole design. The live run reads a Google Drive shared drive
-      # and live Stripe; in CI it can only ever exit 2 (could-not-evaluate),
+      # and our live pages; in CI it can only ever exit 2 (could-not-evaluate),
       # which is a check that cannot pass — theatre, not wiring. The
       # self-test runs every check against a deliberately broken fixture in
       # its own mkdtemp and FAILS IF ANY CHECK STAYS GREEN, so what this

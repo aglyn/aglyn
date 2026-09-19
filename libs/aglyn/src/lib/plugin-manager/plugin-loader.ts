@@ -53,7 +53,9 @@ export interface PluginLoader {
   pluginIdForApiPath(path: string): string | undefined
 }
 
-import { setRegisteringPluginId } from '../app-utils/api-plugins'
+// From the leaf module, not the API route registry that re-exports it: this
+// loader is on every published page, and the registry is server-only.
+import { setRegisteringPluginId } from '../app-utils/registering-plugin'
 import { plugins } from '../aglyn'
 
 export function createPluginLoader(manifest: PluginLoadManifest): PluginLoader {

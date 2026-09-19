@@ -46,6 +46,7 @@ jest.mock('./email-metering', () => ({
 import {
   addMemberEmailAlias,
   confirmMemberEmailAlias,
+  confirmMemberEmailAliasesByProvider,
   listMemberEmailAliases,
   memberEmailAliasConfirmUrl,
   mintMemberEmailAliasToken,
@@ -277,6 +278,47 @@ describe('confirming an address', () => {
     expect(await confirmMemberEmailAlias(firestore, { token, callerUid: AVERY, nowMs: T0 })).toMatchObject({
       refusal: 'not-a-member',
     })
+  })
+})
+
+describe('confirming addresses a connected mail account proves (AGL-2978)', () => {
+  const byProvider = (addresses: unknown[], uid = AVERY, nowMs = T0 + 5_000) =>
+    confirmMemberEmailAliasesByProvider(firestore, { orgId: ORG, uid, addresses, nowMs })
+
+  it('confirms the pending addresses the provider verified, and only those', async () => {
+    await add('avery@example.org', AVERY, T0)
+    await add('sales@example.org', AVERY, T0 + 1)
+    await add('pending@example.org', AVERY, T0 + 2)
+    expect(await byProvider([' Avery@Example.org', 'SALES@example.org', 'someone-else@example.org'])).toEqual({
+      ok: true,
+      confirmed: ['avery@example.org', 'sales@example.org'],
+    })
+    expect(store.get(ALIASES(AVERY))?.['aliases']).toEqual([
+      { address: 'avery@example.org', addedAtMs: T0, verifiedAtMs: T0 + 5_000 },
+      { address: 'sales@example.org', addedAtMs: T0 + 1, verifiedAtMs: T0 + 5_000 },
+      { address: 'pending@example.org', addedAtMs: T0 + 2 },
+    ])
+  })
+
+  it('never adds an address the member did not add, and keeps an earlier confirmation', async () => {
+    await add('avery@example.org', AVERY, T0)
+    await byProvider(['avery@example.org'], AVERY, T0 + 10)
+    expect(await byProvider(['avery@example.org', 'unasked@example.org'], AVERY, T0 + 20)).toEqual({
+      ok: true,
+      confirmed: [],
+    })
+    expect(store.get(ALIASES(AVERY))?.['aliases']).toEqual([
+      { address: 'avery@example.org', addedAtMs: T0, verifiedAtMs: T0 + 10 },
+    ])
+    expect(await byProvider(['unasked@example.org'], KIM)).toEqual({ ok: true, confirmed: [] })
+    expect(store.has(ALIASES(KIM))).toBe(false)
+  })
+
+  it('confirms nothing for a member no longer in the workspace', async () => {
+    await add('avery@example.org', AVERY, T0)
+    store.delete(`orgs/${ORG}/members/${AVERY}`)
+    expect(await byProvider(['avery@example.org'])).toMatchObject({ ok: false, refusal: 'not-a-member' })
+    expect(store.get(ALIASES(AVERY))?.['aliases'][0].verifiedAtMs).toBeUndefined()
   })
 })
 
