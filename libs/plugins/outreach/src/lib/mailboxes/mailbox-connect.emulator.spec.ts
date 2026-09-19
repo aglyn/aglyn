@@ -28,7 +28,11 @@
  * - two concurrent consumes of one state: exactly one succeeds;
  * - a whole connect through the real routes, the real sealed write and the
  *   real alias store (AGL-2975), with only Google and the session faked;
- * - a disconnect that leaves nothing behind.
+ * - a disconnect that leaves nothing behind;
+ * - the erasers (AGL-2978, AGL-3106) against real queries and batched
+ *   deletes: a workspace plan counts and revokes nothing, and the account
+ *   eraser revokes the grant and deletes the mailbox, the credential and the
+ *   pending connect.
  *
  * Skipped unless FIRESTORE_EMULATOR_HOST is set. Start an emulator on ports
  * of your own and point this at it:
@@ -47,11 +51,13 @@ import { GMAIL_API_BASE } from '../transport/gmail-client'
 import { GMAIL_READONLY_SCOPE, GMAIL_SEND_SCOPE, GOOGLE_OAUTH_ENDPOINTS } from '../transport/google-oauth'
 import { parseConnectReturnFragment } from './mailbox-api'
 import { refreshTokenSealContext } from './mailbox-credentials'
+import { createOutreachOrgEraser, createOutreachUserEraser } from './mailbox-erasure'
 import { createOutreachMailboxRoutes, type OutreachMailboxRouteDeps } from './mailbox-routes'
 import {
   consumeOutreachOAuthState,
   mintOutreachOAuthState,
   OUTREACH_OAUTH_STATES_COLLECTION,
+  outreachOAuthStateRef,
   recordOutreachOAuthState,
 } from './oauth-state'
 
@@ -64,6 +70,8 @@ const REP = 'e2e-outreach-connect-rep'
 const KEYRING = parseSecretBoxKeyring(Buffer.from(createSecretBoxKey(Buffer.alloc(32, 4)).material).toString('base64'))
 const REFRESH_TOKEN = '1//e2e-refresh-token'
 let consentNonce = ''
+/** Every refresh token Google was asked to revoke. */
+const revokedTokens: string[] = []
 
 const googleFetch = (async (input: string | URL, init?: RequestInit) => {
   const url = String(input)
@@ -93,7 +101,10 @@ const googleFetch = (async (input: string | URL, init?: RequestInit) => {
       ].join('.'),
     })
   }
-  if (url === GOOGLE_OAUTH_ENDPOINTS.revoke) return json({})
+  if (url === GOOGLE_OAUTH_ENDPOINTS.revoke) {
+    revokedTokens.push(new URLSearchParams(String(init?.body ?? '')).get('token') ?? '')
+    return json({})
+  }
   if (url === `${GMAIL_API_BASE}/profile`) return json({ emailAddress: 'avery@rep.example.com' })
   if (url === `${GMAIL_API_BASE}/settings/sendAs`) {
     return json({
@@ -177,8 +188,8 @@ describeEmulated('a mailbox connect against Firestore (AGL-2978)', () => {
     expect(outcomes.filter((outcome) => !outcome.ok)).toEqual([{ ok: false, refusal: 'state-replayed' }])
   }, 60_000)
 
-  it('connects, seals, confirms the member’s pending alias, and disconnects to nothing', async () => {
-    const routes = createOutreachMailboxRoutes(deps())
+  /** Connects the rep's mailbox through the real routes; answers the connect's result. */
+  async function connectMailbox(routes: ReturnType<typeof createOutreachMailboxRoutes>) {
     const connected = await routes.connect(post('outreach/mailboxes/connect', { orgId: ORG }), { params: {} })
     const url = new URL(((await connected.json()) as { url: string }).url)
     consentNonce = url.searchParams.get('nonce') ?? ''
@@ -194,7 +205,12 @@ describeEmulated('a mailbox connect against Firestore (AGL-2978)', () => {
       { params: {} },
     )
     expect(done.status).toBe(200)
-    const { mailbox, confirmedAliases } = (await done.json()) as { mailbox: { id: string }; confirmedAliases: string[] }
+    return (await done.json()) as { mailbox: { id: string }; confirmedAliases: string[] }
+  }
+
+  it('connects, seals, confirms the member’s pending alias, and disconnects to nothing', async () => {
+    const routes = createOutreachMailboxRoutes(deps())
+    const { mailbox, confirmedAliases } = await connectMailbox(routes)
     expect(confirmedAliases).toEqual(['sales@rep.example.com'])
 
     const stored = await db.collection('orgs').doc(ORG).collection('outreachMailboxes').doc(mailbox.id).get()
@@ -217,5 +233,38 @@ describeEmulated('a mailbox connect against Firestore (AGL-2978)', () => {
     expect(await disconnected.json()).toEqual({ ok: true, revocation: 'revoked' })
     expect((await db.collection('outreachMailboxCredentials').doc(mailbox.id).get()).exists).toBe(false)
     expect((await db.collection('orgs').doc(ORG).collection('outreachMailboxes').doc(mailbox.id).get()).exists).toBe(false)
+  }, 60_000)
+
+  it('ends a connected mailbox with the erasers: a plan touches nothing, the account eraser revokes and deletes', async () => {
+    const routes = createOutreachMailboxRoutes(deps())
+    const { mailbox } = await connectMailbox(routes)
+    // A connect the rep started again and abandoned.
+    const nowMs = Date.now()
+    const { claims } = mintOutreachOAuthState({ orgId: ORG, uid: REP, nowMs })
+    await recordOutreachOAuthState(db, { claims, redirectUri: 'https://console.example.com/cb', nowMs })
+    const erasureDeps = { firestore: () => db, readConfig: deps().readConfig, transport: deps().transport }
+    revokedTokens.length = 0
+
+    await expect(createOutreachOrgEraser(erasureDeps)({ orgId: ORG, dryRun: true })).resolves.toEqual({
+      grants: 1,
+      revoked: null,
+      alreadyInvalid: null,
+      kept: null,
+      failed: null,
+    })
+    expect(revokedTokens).toEqual([])
+
+    await expect(createOutreachUserEraser(erasureDeps)({ uid: REP, orgIds: [ORG] })).resolves.toEqual({
+      mailboxes: 1,
+      grants: 1,
+      revoked: 1,
+      alreadyInvalid: 0,
+      kept: 0,
+      failed: 0,
+    })
+    expect(revokedTokens).toEqual([REFRESH_TOKEN])
+    expect((await db.collection('outreachMailboxCredentials').doc(mailbox.id).get()).exists).toBe(false)
+    expect((await db.collection('orgs').doc(ORG).collection('outreachMailboxes').doc(mailbox.id).get()).exists).toBe(false)
+    expect((await outreachOAuthStateRef(db, ORG, REP).get()).exists).toBe(false)
   }, 60_000)
 })
