@@ -219,6 +219,7 @@
     "generate:plugin-manifests:check": "node tools/scripts/generate-plugin-manifests.mjs --check",
     "generate:ai-palette": "node tools/scripts/generate-ai-palette.mts",
     "check:ai-palette": "node tools/scripts/generate-ai-palette.mts --check",
+    "check:ai-page-axe": "node tools/scripts/record-ai-page-axe.mts --check",
     "check:ai-in-core": "node tools/scripts/check-ai-in-core.mjs",
     "test:ai-in-core": "node tools/scripts/check-ai-in-core.mjs --fixture",
     "test:ai-eval": "jest -c libs/plugins/ai/jest.config.ts libs/plugins/ai/src/lib/runtime/ai-eval.spec.ts",
