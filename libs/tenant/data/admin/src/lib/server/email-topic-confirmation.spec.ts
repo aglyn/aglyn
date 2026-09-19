@@ -37,6 +37,7 @@ import { emailSuppressionKey } from './email-suppression'
 import {
   confirmTopicSubscription,
   recordPendingTopicConfirmation,
+  recordTopicOptOut,
   siteRequiresDoubleOptIn,
 } from './email-topic-confirmation'
 import { fakeFirestore } from './test-firestore'
@@ -390,5 +391,48 @@ describe('the site default', () => {
       .mockImplementation(() => undefined)
     await expect(siteRequiresDoubleOptIn(HOST, broken)).resolves.toBe(false)
     consoleError.mockRestore()
+  })
+})
+
+/**
+ * Leaving one topic, from a sender that is not the preference page — a sales
+ * email's unsubscribe link (AGL-2981). The same record, on the preference
+ * page's rules.
+ */
+describe('leaving one topic', () => {
+  it('takes a subscribed address off the topic, and the send path reads it as gone', async () => {
+    const firestore = fakeFirestore()
+    await expect(recordTopicOptOut(HOST, ' Dana@Example.com ', 'sales', { firestore })).resolves.toBe('opted-out')
+    const stored = firestore.docs(OPT_OUTS)[KEY]
+    expect(stored.email).toBe(ADDRESS)
+    expect(readTopicSubscriptionState(stored.topics.sales)).toBe('opted-out')
+    // Only that topic: the others are untouched.
+    expect(readTopicSubscriptionState(stored.topics[TOPIC])).toBe('subscribed')
+  })
+
+  it('keeps the moment somebody first left, and says so', async () => {
+    const firestore = seeded({ sales: { optedOutAt: NOW - 1000, resubscribedAt: null } })
+    await expect(recordTopicOptOut(HOST, ADDRESS, 'sales', { firestore })).resolves.toBe('already-opted-out')
+    expect(firestore.docs(OPT_OUTS)[KEY].topics.sales.optedOutAt).toBe(NOW - 1000)
+  })
+
+  it('carries a confirmation forward beside the opt-out, and clears a rejoin', async () => {
+    const firestore = seeded({
+      sales: { pendingAt: NOW - 3000, confirmedAt: NOW - 2000, optedOutAt: NOW - 1500, resubscribedAt: NOW - 1000 },
+      [TOPIC]: { pendingAt: NOW - 3000, confirmedAt: NOW - 2000 },
+    })
+    await expect(recordTopicOptOut(HOST, ADDRESS, 'sales', { firestore })).resolves.toBe('opted-out')
+    const sales = firestore.docs(OPT_OUTS)[KEY].topics.sales
+    expect(sales).toMatchObject({ pendingAt: NOW - 3000, confirmedAt: NOW - 2000, resubscribedAt: null })
+    expect(readTopicSubscriptionState(sales)).toBe('opted-out')
+    expect(firestore.docs(OPT_OUTS)[KEY].topics[TOPIC]).toEqual({ pendingAt: NOW - 3000, confirmedAt: NOW - 2000 })
+  })
+
+  it('writes nothing for a value that is not an address, or not a topic id', async () => {
+    const firestore = fakeFirestore()
+    await expect(recordTopicOptOut(HOST, 'not-an-address', 'sales', { firestore })).resolves.toBe('unusable')
+    await expect(recordTopicOptOut(HOST, ADDRESS, 'not/a-topic', { firestore })).resolves.toBe('unusable')
+    await expect(recordTopicOptOut('', ADDRESS, 'sales', { firestore })).resolves.toBe('unusable')
+    expect(firestore.docs(OPT_OUTS)[KEY]).toBeUndefined()
   })
 })

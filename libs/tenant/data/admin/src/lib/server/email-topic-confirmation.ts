@@ -294,3 +294,68 @@ export async function siteRequiresDoubleOptIn(
     return false
   }
 }
+
+/** What asking to leave one topic did. */
+export type TopicOptOutResult =
+  /** Recorded now. The address is not mailable about this topic. */
+  | 'opted-out'
+  /** They had already left it; the moment they left is kept. */
+  | 'already-opted-out'
+  /** Not an address, or not a topic id. Nothing was written. */
+  | 'unusable'
+
+/**
+ * Takes one address off one topic on one site (AGL-2981) — the opt-out a
+ * sender that is not the preference page records: a sales email's
+ * unsubscribe link, a reply that asks to be left alone.
+ *
+ * The same record the preference page writes (`writeTopicOptOuts` in the
+ * email plugin) and the send path reads, on the same rules:
+ *
+ *  - an address that already left keeps the moment it left — a second
+ *    request is not a later one;
+ *  - the entry is carried forward rather than replaced, so a confirmation
+ *    the person once gave stays on the record beside the opt-out;
+ *  - a rejoin stamped earlier is cleared, because leaving is now the more
+ *    recent act.
+ *
+ * A transaction, and its verdict comes out of it rather than through a
+ * variable beside it: a retried attempt must not describe itself as the one
+ * that committed.
+ */
+export async function recordTopicOptOut(
+  hostId: string,
+  email: string,
+  topicId: string,
+  options?: { firestore?: any },
+): Promise<TopicOptOutResult> {
+  const key = emailSuppressionKey(email)
+  if (!key || !hostId || !isEmailTopicId(topicId)) return 'unusable'
+  const db = options?.firestore ?? defaultFirestore()
+  const ref = optOutDoc(hostId, key, db)
+  return db.runTransaction(async (transaction: any): Promise<TopicOptOutResult> => {
+    const snapshot = await transaction.get(ref)
+    const stored = ((snapshot.exists ? snapshot.get('topics') : null) ??
+      {}) as Record<string, TopicSubscriptionEntry>
+    const previous = stored[topicId]
+    if (readTopicSubscriptionState(previous) === 'opted-out') return 'already-opted-out'
+    transaction.set(
+      ref,
+      {
+        email: String(email).trim().toLowerCase(),
+        topics: {
+          ...stored,
+          [topicId]: {
+            ...(previous ?? {}),
+            optedOutAt: FieldValue.serverTimestamp(),
+            resubscribedAt: null,
+          },
+        },
+        updatedAt: FieldValue.serverTimestamp(),
+        ...(snapshot.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+      },
+      { merge: true },
+    )
+    return 'opted-out'
+  })
+}
