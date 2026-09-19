@@ -126,11 +126,6 @@ const MUTATION_PATHS = [
   // `app/api` one, which is why a glob over the app would never have listed
   // it — the same shape as the provisioning module above.
   'libs/plugins/crm/src/lib/server.ts',
-  // Outreach's mailbox routes (AGL-2978): `outreach/mailboxes/connect/complete`
-  // brings a connected mailbox and the grant to send as a rep into being,
-  // and `outreach/mailboxes/disconnect` destroys both. Plugin routes again,
-  // written through the route module's injected `logOrgActivity`.
-  'libs/plugins/outreach/src/lib/mailboxes/mailbox-routes.ts',
   // Converting a lead brings a contact, a company and a deal into being from
   // one lead. `convertHostLead` performs every write and writes the entry,
   // and both doors call it: the console's `crm/lead-convert` route and the
@@ -144,6 +139,25 @@ const MUTATION_PATHS = [
   // call, so the module that performs the delete is the one listed.
   'libs/tenant/data/admin/src/lib/server/contact-merge.ts',
 ]
+
+/**
+ * The mutation paths each plugin declares for itself (AGL-2978), under
+ * `activityMutationPaths` in `plugins.config.json` — repo-relative, like the
+ * list above. A plugin's routes are the plugin's facts, so the plugin names
+ * them in the registry that already maps it, and this list names no plugin.
+ * A declared path is held to exactly the rule above: it logs, or it is
+ * classified, and one that no longer exists fails as stale.
+ */
+function pluginMutationPaths() {
+  const config = JSON.parse(readFileSync(`${repoRoot}plugins.config.json`, 'utf8'))
+  return (config.plugins ?? []).flatMap((plugin) => {
+    const paths = plugin.activityMutationPaths ?? []
+    if (!Array.isArray(paths) || paths.some((path) => typeof path !== 'string' || !path)) {
+      throw new Error(`plugins.config.json: ${plugin.id} has activityMutationPaths that are not a list of paths`)
+    }
+    return paths
+  })
+}
 
 /**
  * Paths that legitimately write no activity entry, each with the reason.
@@ -253,7 +267,7 @@ const covered = []
 const classified = []
 const unlogged = []
 const missing = []
-for (const relative of MUTATION_PATHS) {
+for (const relative of [...MUTATION_PATHS, ...pluginMutationPaths()]) {
   const verdict = verdictFor(relative)
   if (verdict === 'COVERED') covered.push(relative)
   else if (verdict === 'CLASSIFIED') classified.push(relative)

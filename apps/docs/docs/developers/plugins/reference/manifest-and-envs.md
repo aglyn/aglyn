@@ -116,7 +116,9 @@ publish ──▶ submitted ──▶ in_review ──▶ listed ──▶ verif
 The single source mapping plugin ids to packages, register entry points
 per surface (`site`, `console`, `staff`, `tenantApi`, `consoleApi`, the
 two declaration surfaces `declarations` and `serverDeclarations`, and
-`subprocessors`), and `apiPrefixes`.
+`subprocessors`), `apiPrefixes`, and `activityMutationPaths` — the plugin's
+modules that create, transfer or destroy a durable customer object, which
+`check-activity-coverage.mjs` holds to writing an activity entry.
 `node tools/scripts/generate-plugin-manifests.mjs` turns it into the four
 generated loader manifests, the three declarations manifests and the
 subprocessors manifest — the only files allowed to reference
