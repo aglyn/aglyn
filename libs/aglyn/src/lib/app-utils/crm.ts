@@ -1454,40 +1454,118 @@ export function normalizeCompanyWebsite(input: unknown): string | null {
 }
 
 /**
- * Mailbox providers whose domain names nobody's company.
+ * Mailbox domains that belong to people rather than to a business: the
+ * providers anybody can sign up with, and the ones an internet provider
+ * hands its subscribers.
  *
  * Auto-associating a contact with a company by email domain is the whole
  * reason {@link companyDomainForEmail} exists, and it is wrong for every
  * address at a public mailbox: `gmail.com` is not a company, and a rule
  * that treated it as one would file half of a consumer list under a single
- * phantom account.
+ * phantom account. It is also the fact a cold email has to know — an
+ * address here is a person's own, not their work address — which is why the
+ * list is exported with {@link isPublicMailboxDomain}: a second list kept
+ * for that question would drift from this one.
+ *
+ * Exact domains, not suffixes: a subscriber's regional host (`nc.rr.com`)
+ * is not listed, and neither is a company that happens to end in `mail.com`.
  */
-const PUBLIC_MAILBOX_DOMAINS: ReadonlySet<string> = new Set([
+export const PUBLIC_MAILBOX_DOMAINS: ReadonlySet<string> = new Set([
+  // Google, Yahoo, Microsoft, Apple, AOL.
   'gmail.com',
   'googlemail.com',
   'yahoo.com',
   'yahoo.co.uk',
+  'yahoo.ca',
+  'yahoo.com.au',
+  'yahoo.co.in',
+  'yahoo.fr',
+  'yahoo.de',
   'ymail.com',
+  'rocketmail.com',
   'hotmail.com',
   'hotmail.co.uk',
+  'hotmail.fr',
+  'hotmail.de',
+  'hotmail.it',
   'outlook.com',
   'live.com',
+  'live.co.uk',
+  'live.ca',
   'msn.com',
   'icloud.com',
   'me.com',
   'mac.com',
   'aol.com',
+  'aim.com',
+  // Independent and privacy-first providers.
   'proton.me',
   'protonmail.com',
+  'protonmail.ch',
   'pm.me',
+  'tutanota.com',
+  'tuta.io',
+  'hushmail.com',
   'gmx.com',
   'gmx.net',
+  'gmx.de',
+  'web.de',
   'mail.com',
   'yandex.com',
+  'yandex.ru',
   'zoho.com',
+  'zohomail.com',
   'fastmail.com',
   'hey.com',
+  // The largest consumer providers outside the US and Europe.
+  'qq.com',
+  '163.com',
+  '126.com',
+  'sina.com',
+  'naver.com',
+  'hanmail.net',
+  'rediffmail.com',
+  // US internet providers' subscriber mailboxes.
+  'comcast.net',
+  'att.net',
+  'sbcglobal.net',
+  'bellsouth.net',
+  'pacbell.net',
+  'verizon.net',
+  'cox.net',
+  'charter.net',
+  'earthlink.net',
+  'optonline.net',
+  'frontier.com',
+  'windstream.net',
+  'centurylink.net',
+  'juno.com',
+  'netzero.net',
+  // Subscriber mailboxes at the largest providers in Canada, the UK, France,
+  // Germany, Italy and Australia.
+  'shaw.ca',
+  'sympatico.ca',
+  'btinternet.com',
+  'sky.com',
+  'virginmedia.com',
+  'orange.fr',
+  'free.fr',
+  'laposte.net',
+  't-online.de',
+  'libero.it',
+  'bigpond.com',
 ])
+
+/**
+ * Whether a domain — or the domain of an address — is one of the
+ * {@link PUBLIC_MAILBOX_DOMAINS}. Read the way a company domain is, so case,
+ * a trailing dot and a pasted `www.` do not hide one.
+ */
+export function isPublicMailboxDomain(domainOrEmail: unknown): boolean {
+  const value = String(domainOrEmail ?? '').trim()
+  const domain = normalizeCompanyDomain(value.slice(value.lastIndexOf('@') + 1))
+  return domain !== null && PUBLIC_MAILBOX_DOMAINS.has(domain)
+}
 
 /**
  * The company domain an email address implies, or `null` when it implies

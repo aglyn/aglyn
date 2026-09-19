@@ -1,0 +1,63 @@
+Delivered-To: avery@example.org
+Return-Path: <>
+Content-Type: multipart/report; boundary="0000000000007f2e3d0626f2a901"; report-type=delivery-status
+From: Mail Delivery Subsystem <mailer-daemon@googlemail.com>
+To: avery@example.org
+Auto-Submitted: auto-replied
+Subject: Delivery Status Notification (Delay)
+References: <CAOutreachStep2-d4e5f6@mail.gmail.com>
+In-Reply-To: <CAOutreachStep2-d4e5f6@mail.gmail.com>
+Message-ID: <66e5c1a2.050a0220.1f2e3d.0002.GMR@mx.google.com>
+Date: Thu, 17 Sep 2026 12:05:10 -0700 (PDT)
+
+--0000000000007f2e3d0626f2a901
+Content-Type: multipart/related; boundary="0000000000007f2e3e0626f2a902"
+
+--0000000000007f2e3e0626f2a902
+Content-Type: multipart/alternative; boundary="0000000000007f2e3e0626f2a903"
+
+--0000000000007f2e3e0626f2a903
+Content-Type: text/plain; charset="UTF-8"
+
+
+** Message not delivered yet **
+
+We're having trouble delivering your message to casey@example.com. Gmail will retry for 46 more hours. You'll be notified if the delivery fails permanently.
+
+The response from the remote server was:
+
+421 4.7.0 Try again later, closing connection.
+
+--0000000000007f2e3e0626f2a903
+Content-Type: text/html; charset="UTF-8"
+
+<html><body><p>Message not delivered yet</p></body></html>
+
+--0000000000007f2e3e0626f2a903--
+--0000000000007f2e3e0626f2a902--
+--0000000000007f2e3d0626f2a901
+Content-Type: message/delivery-status
+
+Reporting-MTA: dns; googlemail.com
+Received-From-MTA: dns; avery@example.org
+Arrival-Date: Thu, 17 Sep 2026 10:05:01 -0700 (PDT)
+X-Original-Message-ID: <CAOutreachStep2-d4e5f6@mail.gmail.com>
+
+Final-Recipient: rfc822; casey@example.com
+Action: delayed
+Status: 4.7.0
+Remote-MTA: dns; mx.example.com. (198.51.100.20, the server for the domain example.com.)
+Diagnostic-Code: smtp; 421 4.7.0 Try again later, closing connection.
+Last-Attempt-Date: Thu, 17 Sep 2026 12:05:10 -0700 (PDT)
+Will-Retry-Until: Sat, 19 Sep 2026 10:05:01 -0700 (PDT)
+
+--0000000000007f2e3d0626f2a901
+Content-Type: text/rfc822-headers
+
+From: Avery Quinn <avery@example.org>
+Date: Thu, 17 Sep 2026 12:05:00 -0500
+Message-ID: <CAOutreachStep2-d4e5f6@mail.gmail.com>
+Subject: Re: Example Agency's client sites
+To: casey@example.com
+
+--0000000000007f2e3d0626f2a901--

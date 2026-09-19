@@ -25,6 +25,9 @@ import {
   formatCrmBookingRef,
 } from '@aglyn/aglyn/app-utils/crm-booking'
 import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
+// The leaf entry: the package root extends the Firestore SDK's `Timestamp`,
+// and this model is read on published pages.
+import { zonedDateTime } from '@aglyn/shared-util-timestamp/zoned-time'
 
 /**
  * Bookings v1 (AGL-159): services with weekly availability windows and
@@ -114,35 +117,6 @@ export function isBookingReminderDue(
   )
 }
 
-/** Weekday (0-6) and minutes-since-midnight of an instant in a timezone. */
-function localParts(
-  atMs: number,
-  timezone: string,
-): { weekday: number; minutes: number; dayKey: string } {
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    weekday: 'short',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
-  const parts: Record<string, string> = {}
-  for (const part of formatter.formatToParts(new Date(atMs))) {
-    parts[part.type] = part.value
-  }
-  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  return {
-    weekday: weekdays.indexOf(parts['weekday'] ?? 'Sun'),
-    // "24" appears for midnight under hour12:false in some engines.
-    minutes: (Number(parts['hour'] === '24' ? 0 : parts['hour']) % 24) * 60 +
-      Number(parts['minute']),
-    dayKey: `${parts['year']}-${parts['month']}-${parts['day']}`,
-  }
-}
-
 export interface BookingSlot {
   startsAtMs: number
   endsAtMs: number
@@ -185,7 +159,8 @@ export function computeOpenSlots(
     atMs + durationMs <= horizonMs && slots.length < limit;
     atMs += stepMs
   ) {
-    const { weekday, minutes } = localParts(atMs, timezone)
+    const { weekday, hour, minute } = zonedDateTime(atMs, timezone)
+    const minutes = hour * 60 + minute
     const windows = service.windows?.[weekday] ?? []
     const fitsWindow = windows.some(
       (window) =>

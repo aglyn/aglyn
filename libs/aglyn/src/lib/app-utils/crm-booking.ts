@@ -27,6 +27,11 @@
  * task falls due — lives here, in the library both already read.
  */
 
+import {
+  isValidTimeZone,
+  zonedDateTime,
+} from '@aglyn/shared-util-timestamp/zoned-time'
+
 /**
  * The query key a booking link carries the record on: `?crm=contact:abc`.
  *
@@ -131,23 +136,13 @@ export function crmBookingFollowUpTitle(serviceName: string): string {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-/** Weekday (0 = Sunday … 6 = Saturday) of an instant in a timezone. */
+/**
+ * Weekday (0 = Sunday … 6 = Saturday) of an instant in a timezone, read in
+ * UTC when the zone name is one `Intl` does not know — for the reason
+ * `formatSlot` gives.
+ */
 function weekdayIn(atMs: number, timezone: string): number {
-  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  let label: string
-  try {
-    label = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      weekday: 'short',
-    }).format(new Date(atMs))
-  } catch {
-    label = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'UTC',
-      weekday: 'short',
-    }).format(new Date(atMs))
-  }
-  const index = weekdays.indexOf(label)
-  return index < 0 ? 0 : index
+  return zonedDateTime(atMs, isValidTimeZone(timezone) ? timezone : 'UTC').weekday
 }
 
 /**

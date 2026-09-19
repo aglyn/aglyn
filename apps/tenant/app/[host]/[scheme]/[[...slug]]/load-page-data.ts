@@ -842,7 +842,10 @@ const loadPageDataCached = cache(
               }
             : {}),
         })
-        // A paged list beyond the last page 404s (page 1 always renders).
+        // A paged list beyond the last page 404s. Page 1 always renders, but
+        // only for a collection with something live in it: one with nothing
+        // live comes back with no collection and falls through to the 404
+        // below, at every listing address (AGL-3101).
         const pageInRange =
           !content.pagination || page <= content.pagination.totalPages
         if (content.collection && (isList ? pageInRange : content.entry)) {

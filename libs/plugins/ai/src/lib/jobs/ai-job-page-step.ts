@@ -408,7 +408,13 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
 
     // The plan starts from a copy of a screen the site has (rule 15): the copy
     // is the draft — unrouted, as every copy is — and nothing is generated.
-    if (!written && screen.duplicateOf && inventory.screens.some((row) => row.id === screen.duplicateOf)) {
+    // Only a page is a page's start: a collection entry template's copy stays
+    // a template, so a plan naming one builds the page instead.
+    if (
+      !written &&
+      screen.duplicateOf &&
+      inventory.screens.some((row) => row.id === screen.duplicateOf && !row.template)
+    ) {
       const copy = await duplicate('screen', {
         orgId: job.orgId,
         hostId,

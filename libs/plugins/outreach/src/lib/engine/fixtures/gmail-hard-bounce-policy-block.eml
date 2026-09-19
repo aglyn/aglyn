@@ -1,0 +1,45 @@
+Delivered-To: avery@example.org
+Return-Path: <>
+Content-Type: multipart/report; boundary="00000000000031a2b30626f3b701"; report-type=delivery-status
+From: Mail Delivery Subsystem <mailer-daemon@googlemail.com>
+To: avery@example.org
+Auto-Submitted: auto-replied
+Subject: Delivery Status Notification (Failure)
+References: <CAOutreachStep1-g7h8i9@mail.gmail.com>
+In-Reply-To: <CAOutreachStep1-g7h8i9@mail.gmail.com>
+X-Failed-Recipients: riley@example.net
+Message-ID: <66e5d311.620a0220.4b5c6d.0003.GMR@mx.google.com>
+Date: Tue, 15 Sep 2026 09:12:44 -0700 (PDT)
+
+--00000000000031a2b30626f3b701
+Content-Type: multipart/alternative; boundary="00000000000031a2b40626f3b702"
+
+--00000000000031a2b40626f3b702
+Content-Type: text/plain; charset="UTF-8"
+
+
+** Message blocked **
+
+Your message to riley@example.net has been blocked. See technical details below for more information.
+
+The response was:
+
+The message was rejected because of the recipient's domain policy.
+
+--00000000000031a2b40626f3b702--
+--00000000000031a2b30626f3b701
+Content-Type: message/delivery-status
+
+Reporting-MTA: dns; googlemail.com
+Received-From-MTA: dns; avery@example.org
+Arrival-Date: Tue, 15 Sep 2026 09:12:40 -0700 (PDT)
+X-Original-Message-ID: <CAOutreachStep1-g7h8i9@mail.gmail.com>
+
+Final-Recipient: rfc822; riley@example.net
+Action: failed
+Status: 5.7.1
+Remote-MTA: dns; inbound.example.net. (203.0.113.7, the server for the domain example.net.)
+Diagnostic-Code: smtp; 550 5.7.1 Message rejected due to recipient domain policy
+Last-Attempt-Date: Tue, 15 Sep 2026 09:12:44 -0700 (PDT)
+
+--00000000000031a2b30626f3b701--
