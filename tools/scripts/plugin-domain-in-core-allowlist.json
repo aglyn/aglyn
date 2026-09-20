@@ -702,7 +702,8 @@
       "rules": [
         "plugin-id"
       ],
-      "lane": "plugin-id"
+      "lane": "stays",
+      "why": "`'inbox'` here is the notification tray's own tab, beside `'archive'` — a user's unread notifications. It is not the Inbox plugin and reads nothing of it."
     },
     {
       "path": "apps/console/components/org-licences-panel.component.tsx",
@@ -1856,118 +1857,6 @@
       "why": "Generic field definitions for any data-driven form; nothing of the forms plugin."
     },
     {
-      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-inbox.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-shopping.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-tray-alert.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-tray-full.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-tray-minus.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-tray-plus.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-tray-remove.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-tray.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-inbox.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-shopping.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-tray-alert.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-tray-full.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-tray-minus.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-tray-plus.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-tray-remove.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-tray.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "libs/shared/ui/email-campaigns/src/lib/components/campaign-picker.component.tsx",
       "rules": [
         "domain-name",
@@ -2083,7 +1972,8 @@
       "rules": [
         "plugin-id"
       ],
-      "lane": "plugin-id"
+      "lane": "stays",
+      "why": "`'marketing'` here is a SEND PURPOSE, the legal category opposite `'transactional'` that decides which identity and which consent rules apply to a message. Any sender has it, whether or not the Marketing plugin exists."
     },
     {
       "path": "libs/shared/util/email/src/lib/tenant-email-catalog.ts",
