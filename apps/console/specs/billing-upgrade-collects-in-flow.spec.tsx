@@ -545,7 +545,7 @@ describe('Upgrade with nothing on file', () => {
     expect(callLog.indexOf('profile:set-billing-address')).toBeLessThan(
       callLog.indexOf('checkout:preview'),
     )
-    expect(previews()[0]).toMatchObject({ interval: 'month' })
+    expect(previews()[0]).toMatchObject({ interval: 'year' })
 
     // ── 3. the payment method, SAVED to the customer ──
     await pressIn(dialog, 'Add new card')
@@ -571,7 +571,7 @@ describe('Upgrade with nothing on file', () => {
     await pressIn(dialog, /^Subscribe to/)
     await waitFor(() => expect(subscribes()).toHaveLength(1))
     expect(subscribes()[0]).toMatchObject({
-      interval: 'month',
+      interval: 'year',
       orgId: 'org-1',
     })
     expect(typeof subscribes()[0].plan).toBe('string')
