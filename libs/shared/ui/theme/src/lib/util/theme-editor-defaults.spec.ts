@@ -36,32 +36,32 @@ const CUSTOMER_SITE = 'ready-to-roll'
 
 describe('inheritedThemeColor', () => {
   it('reports the tenant default for a customer site', () => {
-    expect(inheritedThemeColor('light', 'primary.main', CUSTOMER_SITE)).toBe(
+    expect(inheritedThemeColor('light', 'primary', CUSTOMER_SITE)).toBe(
       tenantThemeLight.palette.primary.main,
     )
-    expect(inheritedThemeColor('dark', 'secondary.main', CUSTOMER_SITE)).toBe(
+    expect(inheritedThemeColor('dark', 'secondary', CUSTOMER_SITE)).toBe(
       tenantThemeDark.palette.secondary.main,
     )
   })
 
   it('reports the platform brand for the operator’s own host', () => {
-    expect(inheritedThemeColor('light', 'primary.main', PLATFORM_SITE)).toBe(
+    expect(inheritedThemeColor('light', 'primary', PLATFORM_SITE)).toBe(
       consoleThemeLight.palette.primary.main,
     )
-    expect(inheritedThemeColor('dark', 'primary.main', PLATFORM_SITE)).toBe(
+    expect(inheritedThemeColor('dark', 'primary', PLATFORM_SITE)).toBe(
       consoleThemeDark.palette.primary.main,
     )
   })
 
   it('does not report one site’s default to the other', () => {
-    expect(inheritedThemeColor('light', 'primary.main', CUSTOMER_SITE)).not.toBe(
-      inheritedThemeColor('light', 'primary.main', PLATFORM_SITE),
+    expect(inheritedThemeColor('light', 'primary', CUSTOMER_SITE)).not.toBe(
+      inheritedThemeColor('light', 'primary', PLATFORM_SITE),
     )
   })
 
   it('treats an unnamed site as a customer site, as the tenant does', () => {
-    expect(inheritedThemeColor('light', 'primary.main')).toBe(
-      inheritedThemeColor('light', 'primary.main', CUSTOMER_SITE),
+    expect(inheritedThemeColor('light', 'primary')).toBe(
+      inheritedThemeColor('light', 'primary', CUSTOMER_SITE),
     )
   })
 
