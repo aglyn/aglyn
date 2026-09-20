@@ -236,7 +236,7 @@ describe('buildRfc5322Message — reply and unsubscribe headers (AGL-2978)', () 
         References: '<first@rep.example.com> <second@rep.example.com>',
         'List-Unsubscribe': '<https://app.example.com/u/abc>, <mailto:u@example.com>',
         'List-Unsubscribe-Post': LIST_UNSUBSCRIBE_ONE_CLICK,
-        'X-Outreach-Enrollment': 'enr-1',
+        'X-Sequence-Enrollment': 'enr-1',
       },
     })
     const { headers } = parse(raw)
@@ -244,7 +244,7 @@ describe('buildRfc5322Message — reply and unsubscribe headers (AGL-2978)', () 
     expect(headers.get('references')).toBe('<first@rep.example.com> <second@rep.example.com>')
     expect(headers.get('list-unsubscribe')).toBe('<https://app.example.com/u/abc>, <mailto:u@example.com>')
     expect(headers.get('list-unsubscribe-post')).toBe('List-Unsubscribe=One-Click')
-    expect(headers.get('x-outreach-enrollment')).toBe('enr-1')
+    expect(headers.get('x-sequence-enrollment')).toBe('enr-1')
     // Structural headers stay in their place, after the caller's.
     expect(raw.indexOf('In-Reply-To:')).toBeLessThan(raw.indexOf('MIME-Version:'))
   })
@@ -300,7 +300,7 @@ describe('buildRfc5322Message — refusals (AGL-2978)', () => {
     }
   })
 
-  it('refuses a header Outreach does not send, a malformed name, a duplicate and a non-ASCII value', () => {
+  it('refuses a header a sequence does not send, a malformed name, a duplicate and a non-ASCII value', () => {
     expect(codeOf(() => build({ headers: { Precedence: 'bulk' } }))).toBe('unsupported-header')
     expect(codeOf(() => build({ headers: { 'Bad Name': 'x' } }))).toBe('invalid-header')
     expect(codeOf(() => build({ headers: { 'X-Tag': 'a', 'x-tag': 'b' } }))).toBe('invalid-header')

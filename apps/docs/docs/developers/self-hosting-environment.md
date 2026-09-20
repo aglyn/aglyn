@@ -611,11 +611,11 @@ forced-failure lever for proving the alert path works.
 | `VERIFICATION_DELIVERY_MIN_ACCOUNTS` | `3` | Accounts created in the trailing day — password signups only, ignoring the last 15 minutes so the delivery feed has time — below which a missing verification delivery event is treated as too little data rather than an outage. Its forced-failure lever is `0`, like the drought check's: at zero any window is graded, so a quiet one reports red. The arm is skipped entirely when `RESEND_WEBHOOK_SECRET` is unset, because nothing records deliveries then. |
 | `USAGE_ALERT_APPROACH_PCT` | `80` | How close to a plan quota a workspace gets before it is warned. Strictly between 0 and 100; you cannot disable the warning with it. The at-cap alert is fixed at 100. |
 
-### Outreach: a rep's own Google mailbox {#outreach}
+### Sequences: a rep's own Google mailbox {#sequences}
 
-Outreach sends one-to-one sequences from each rep's **own** Google mailbox
+Sequences sends one-to-one email from each rep's **own** Google mailbox
 through the Gmail API — never through `RESEND_API_KEY` — so a rep connects
-their Google account in **Outreach → Mailboxes**. That needs an OAuth client
+their Google account in **Sequences → Mailboxes**. That needs an OAuth client
 of your own in Google Cloud:
 
 1. Enable the **Gmail API** in the project.
@@ -633,12 +633,12 @@ The grant asks for `openid`, `email`, `https://www.googleapis.com/auth/gmail.sen
 and `https://www.googleapis.com/auth/gmail.readonly`. The OAuth `state` is
 signed with `TOKEN_SIGNING_SECRET` (see [Secrets](#secrets)), which must be set
 too. Set all three variables below on the **console** only: the tenant runtime
-never loads Outreach, and together the client secret and the token key are the
+never loads Sequences, and together the client secret and the token key are the
 power to send mail as every rep who connected a mailbox.
 
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
-| `GOOGLE_OUTREACH_CLIENT_ID` | Feature | Runtime, **console only** | The OAuth client id, `…apps.googleusercontent.com`. Unset — or with either variable below unset — **Outreach → Mailboxes** says connecting a Google mailbox is not configured on this deployment, and every mailbox route answers `503` with reason `not-configured`. Mailboxes already connected stop being able to send, because no token can be refreshed. |
+| `GOOGLE_OUTREACH_CLIENT_ID` | Feature | Runtime, **console only** | The OAuth client id, `…apps.googleusercontent.com`. Unset — or with either variable below unset — **Sequences → Mailboxes** says connecting a Google mailbox is not configured on this deployment, and every mailbox route answers `503` with reason `not-configured`. Mailboxes already connected stop being able to send, because no token can be refreshed. |
 | `GOOGLE_OUTREACH_CLIENT_SECRET` | Feature | Runtime, **console only** | That client's secret. Used to redeem the authorization code at connect, to refresh each mailbox's access token before a Gmail call, and to revoke a grant when a mailbox is disconnected or its organization is erased. A secret Google refuses surfaces as `client_misconfigured` on every send rather than as a disconnected mailbox. |
 | `OUTREACH_TOKEN_KEY` | Feature | Runtime, **console only** | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored refresh token with AES-256-GCM; nothing else is encrypted with it. A value that is not exactly 32 bytes counts as unset. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a token opened under an old key is sealed again under the new one the next time its mailbox is used. Each credential records the id of the key that sealed it in `tokenKeyId`, so drop the old key once no credential names its id. **Losing the key loses every connected mailbox**: a token that no listed key opens cannot be recovered, and its mailbox moves to *Reconnect required* until the rep connects it again. |
 

@@ -313,8 +313,8 @@
       ],
       "catalog": {
         "order": 8,
-        "$comment": "Works the CRM's records but is released and entitled on its own (AGL-2974).",
-        "label": "Outreach",
+        "$comment": "Works the CRM's records but is released and entitled on its own (AGL-2974). Reads Sequences since AGL-3199; the id is stored on every org, so it stays.",
+        "label": "Sequences",
         "description": "One-to-one email sequences sent from connected mailboxes.",
         "releaseFlag": "release_outreach",
         "publishedSiteImpact": "console-only"

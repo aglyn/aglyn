@@ -212,7 +212,7 @@ export function validateOutreachComplianceSettings(
     .map((entry) => text(entry).trim().toUpperCase())
     .filter((code) => !isOutreachCountryCode(code))
   if (!Array.isArray(rawCountries) || !allowedCountries.length) {
-    issue('allowedCountries', 'Choose at least one country Outreach may send to.')
+    issue('allowedCountries', 'Choose at least one country a sequence may send to.')
   } else if (unknown.length) {
     issue(
       'allowedCountries',

@@ -790,12 +790,12 @@ describe('organization-level surfaces (AGL-2974)', () => {
   function registerOrgSurface() {
     registerConsoleExtension({
       pluginId: 'outreach',
-      displayName: 'Outreach',
+      displayName: 'Sequences',
       featureFlag: 'outreach',
       permission: 'outreach.use',
       orgNavItems: [
         {
-          label: 'Outreach',
+          label: 'Sequences',
           href: '/outreach',
           Component: Outreach,
           sections: [
@@ -860,8 +860,8 @@ describe('organization-level surfaces (AGL-2974)', () => {
     registerOrgSurface()
     registerConsoleExtension({
       pluginId: 'outreach-plus',
-      displayName: 'Outreach Plus',
-      orgNavItems: [{ label: 'Outreach', href: '/outreach', Component: Events }],
+      displayName: 'Sequences Plus',
+      orgNavItems: [{ label: 'Sequences', href: '/outreach', Component: Events }],
     })
     expect(resolveConsoleOrgPluginPage('/outreach')).toBeUndefined()
     expect(error).toHaveBeenCalled()

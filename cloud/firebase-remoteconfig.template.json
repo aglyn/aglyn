@@ -11,7 +11,7 @@
       "defaultValue": {
         "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
       },
-      "description": "Outreach (AGL-2974): one-to-one email sequences from a rep's own connected mailbox, logged in the CRM. OFF by default, staff preview only. It also needs the outreach entitlement, which no plan carries, so a customer gets it only by a per-org override.",
+      "description": "Sequences (AGL-2974): one-to-one email sequences from a rep's own connected mailbox, logged in the CRM. OFF by default, staff preview only. It also needs the outreach entitlement, which no plan carries, so a customer gets it only by a per-org override.",
       "valueType": "JSON"
     },
     "release_bookings": {

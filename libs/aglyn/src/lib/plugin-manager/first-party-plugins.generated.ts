@@ -77,7 +77,7 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   },
   {
     "id": "outreach",
-    "label": "Outreach",
+    "label": "Sequences",
     "description": "One-to-one email sequences sent from connected mailboxes.",
     "releaseFlag": "release_outreach"
   },

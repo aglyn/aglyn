@@ -91,7 +91,7 @@ export function useOutreachMailboxApi(orgId: string | null): OutreachMailboxApi 
       if (!response.ok || !payload) {
         const refusal = (payload ?? {}) as { error?: string; reason?: OutreachApiRefusalReason }
         throw new OutreachApiError(
-          refusal.error || 'Outreach could not be reached. Try again.',
+          refusal.error || 'Sequences could not be reached. Try again.',
           refusal.reason ?? 'unreachable',
           response.status,
         )

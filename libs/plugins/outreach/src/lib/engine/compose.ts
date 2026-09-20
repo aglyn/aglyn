@@ -169,7 +169,7 @@ export function composeOutreachFooter(
       error: {
         code: 'missing_postal_address',
         message:
-          "This email can't be sent without your organization's postal address. Add it in Outreach settings.",
+          "This email can't be sent without your organization's postal address. Add it in Sequences settings.",
       },
     }
   }
@@ -180,7 +180,7 @@ export function composeOutreachFooter(
       error: {
         code: 'missing_legal_name',
         message:
-          "This email can't be sent without your organization's legal name. Add it in Outreach settings.",
+          "This email can't be sent without your organization's legal name. Add it in Sequences settings.",
       },
     }
   }

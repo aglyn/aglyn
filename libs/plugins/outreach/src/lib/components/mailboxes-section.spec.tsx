@@ -120,9 +120,9 @@ describe('OutreachMailboxesSection — what it shows (AGL-2978)', () => {
   })
 
   it('prints the route’s refusal when availability is refused', async () => {
-    mockApi.availability.mockRejectedValue(new Error('Your role does not include Use Outreach.'))
+    mockApi.availability.mockRejectedValue(new Error('Your role does not include Use Sequences.'))
     render(<OutreachMailboxesSection orgId="org-1" />)
-    expect(await screen.findByText('Your role does not include Use Outreach.')).toBeTruthy()
+    expect(await screen.findByText('Your role does not include Use Sequences.')).toBeTruthy()
   })
 
   it('says so when the mailboxes cannot be read', async () => {

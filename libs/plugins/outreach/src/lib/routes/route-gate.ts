@@ -118,7 +118,7 @@ export async function outreachRouteGate(
   extra: readonly OutreachRouteExtraPermission[] = [],
 ): Promise<Response | OutreachRouteCaller> {
   const token = bearer(request)
-  if (!token) return outreachRefusal(401, 'unauthenticated', 'Sign in to use Outreach.')
+  if (!token) return outreachRefusal(401, 'unauthenticated', 'Sign in to use Sequences.')
   let decoded: DecodedIdToken
   try {
     decoded = await deps.verifyIdToken(token)
@@ -131,11 +131,11 @@ export async function outreachRouteGate(
     throw error
   }
   if (!isEmailVerified(decoded) && !isImpersonationSession(decoded)) {
-    return outreachRefusal(403, 'email-unverified', 'Verify your email address before using Outreach.')
+    return outreachRefusal(403, 'email-unverified', 'Verify your email address before using Sequences.')
   }
 
   const orgId = readOutreachDocumentId(rawOrgId)
-  if (!orgId) return outreachRefusal(400, 'org-required', 'Open an organization before using Outreach.')
+  if (!orgId) return outreachRefusal(400, 'org-required', 'Open an organization before using Sequences.')
 
   const membership = await deps.resolveOrgPermissions(decoded.uid, { orgId })
   // A targeted org the account is not on answers with that org's id and no
@@ -147,11 +147,11 @@ export async function outreachRouteGate(
     return outreachRefusal(
       403,
       'not-org-wide',
-      'Outreach covers the whole organization, and your access is to particular sites.',
+      'Sequences covers the whole organization, and your access is to particular sites.',
     )
   }
   if (membership.permissions[OUTREACH_USE_PERMISSION] !== true) {
-    return outreachRefusal(403, 'permission', 'Your role does not include Use Outreach.')
+    return outreachRefusal(403, 'permission', 'Your role does not include Use Sequences.')
   }
   for (const permission of extra) {
     if (!(await deps.holdsOrgCatalogPermission(decoded.uid, orgId, permission.key))) {
@@ -161,7 +161,7 @@ export async function outreachRouteGate(
 
   const org = (await deps.readOrg(orgId)) ?? {}
   if (!checkEntitlement(org, 'outreach')) {
-    return outreachRefusal(403, 'entitlement', "Outreach isn't available to this workspace yet.")
+    return outreachRefusal(403, 'entitlement', "Sequences isn't available to this workspace yet.")
   }
   const staff = decoded['staff'] === true
   const locked = await deps.lockdownRefusal({ request, staff, uid: decoded.uid, org })

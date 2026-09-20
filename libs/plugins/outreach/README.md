@@ -1,12 +1,17 @@
 # @aglyn/plugins-outreach
 
-Outreach (AGL-2974): one-to-one, multi-step email sequences a rep sends from
+Sequences (AGL-2974): one-to-one, multi-step email sequences a rep sends from
 their own connected mailbox, logged on the CRM's records.
+
+The name people read is **Sequences** (AGL-3199). The lib, the package, the
+release flag, the entitlement, the permission key, the collections and the API
+prefix stay `outreach`: they are stored vocabulary and live URLs, and no
+reader sees them.
 
 Two halves, like the CRM plugin:
 
 - **Console** (`registerOutreachConsole`, client barrel): the organization-level
-  Outreach hub at `/[orgSlug]/outreach/<section>`, declared through
+  Sequences hub at `/[orgSlug]/outreach/<section>`, declared through
   `ConsoleExtension.orgNavItems`, behind `release_outreach`, the
   `features.outreach` entitlement and the `outreach.use` permission.
 - **Console API** (`registerOutreachConsoleApi`, `@aglyn/plugins-outreach/server`):

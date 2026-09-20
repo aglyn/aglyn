@@ -275,7 +275,7 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
           ) : null}
           <CardDisplay
             header="Sequence"
-            help={pluginDocsHelp('outreach', { anchor: '#build-a-sequence' })}
+            help={pluginDocsHelp('sequences', { anchor: '#build-a-sequence' })}
             contentGutterX
             contentGutterY
           >
@@ -412,7 +412,7 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
 
           <CardDisplay
             header="Who it sends to, and when"
-            help={pluginDocsHelp('outreach', {
+            help={pluginDocsHelp('sequences', {
               anchor: '#build-a-sequence',
               excerpt:
                 'A sequence sends only to the countries both it and your organization allow, and in its mailbox’s sending hours unless it has its own.',

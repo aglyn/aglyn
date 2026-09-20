@@ -166,13 +166,13 @@ const PLUGIN_TOPICS = {
   inviteTeammates: '/workspace-and-billing/teams-and-roles/invite-teammates',
   marketingOverlays: '/marketing-and-automation/marketing-overlays/overview',
   membersOnly: '/workspace-and-billing/teams-and-roles/members-only',
-  // Outreach: mailboxes, compliance settings, sequences and enrollments
+  // Sequences: mailboxes, compliance settings, sequences and enrollments
   // (AGL-2978, AGL-2980).
-  outreach: '/content-and-data/crm/outreach',
   plugins: '/developers/plugins/overview',
   pos: '/commerce-and-bookings/commerce/pos-and-reservations',
   publisherHandbook: '/developers/plugins/publishing/publisher-handbook',
   redirects: '/building-sites/redirects/overview',
+  sequences: '/content-and-data/crm/sequences',
   webhooks: '/marketing-and-automation/workflows-and-actions/webhooks',
 }
 

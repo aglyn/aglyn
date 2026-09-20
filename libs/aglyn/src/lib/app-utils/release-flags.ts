@@ -82,14 +82,15 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     defaultEnabled: true,
     navTabId: 'nav-tab-contacts',
   },
-  // Outreach (AGL-2974): the plugin's kill switch as well as its launch
+  // Sequences (AGL-2974): the plugin's kill switch as well as its launch
   // gate, like every first-party plugin's flag since AGL-422 — off, it is
   // subtracted from the console loader and the API dispatcher for everyone
   // but staff. OFF by default, because nothing behind it sends mail yet and
-  // no plan carries the `outreach` entitlement it also needs.
+  // no plan carries the `outreach` entitlement it also needs. The KEY stays
+  // `release_outreach`: it is persisted in Remote Config (AGL-3199).
   {
     key: 'release_outreach',
-    label: 'Outreach',
+    label: 'Sequences',
     description:
       'One-to-one, multi-step email sequences sent from a rep’s own ' +
       'connected mailbox and logged in the CRM (AGL-2974). OFF by default ' +

@@ -232,6 +232,10 @@ price and no add-on line for it. When packaging is decided, the plan rows, the
 Firestore rules' entitlement helper (which then needs a plan list) and the
 drift spec move together, under a new entry here.
 
+The feature was renamed **Sequences** on 2026-09-19 (AGL-3199), before any
+customer saw it. The entitlement key, the release flag and the plan rows
+above are unchanged; only what a reader sees moved.
+
 ---
 
 ## 2026-09-14 — The Free AI taste: 300 credits a month behind a hard wall, per account, shipped with its abuse precautions
