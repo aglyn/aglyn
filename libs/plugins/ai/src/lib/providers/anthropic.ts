@@ -65,11 +65,30 @@ export const ANTHROPIC_MAX_CACHE_BREAKPOINTS = 4
  * optional parameters and 16 parameters with union types, each a total over
  * every strict schema the request carries. Past any of them the request is
  * refused with a 400 before the model runs.
+ *
+ * `compiledSchemaBytes` is not one of those. The API also refuses a request
+ * whose schemas compile to too large a grammar — "Simplify your tool schemas
+ * or reduce the number of strict tools" — and states no size for it, so this
+ * bound is measured rather than read (AGL-3096). Its evidence is two live
+ * requests for the automation draft, the largest strict schema anything here
+ * sends:
+ *
+ *  - 8,757 bytes, refused for grammar size (`req_011CfC6Fif9iJvmKPTRgtLdp`,
+ *    2026-09-19), with 1 strict tool, 0 optional parameters and 2 unions:
+ *    every published count was green;
+ *  - 3,807 bytes, served (`req_011CfELn62WVLeaNzwK4TWgb`, 2026-09-20), the
+ *    same tool with the guard lifted out of the steps' union and one variant
+ *    per set of fields.
+ *
+ * Everything else the plugin sends is smaller still, the next largest being
+ * the theme tool at 2,410 bytes. The bound sits at what has been served, so a
+ * schema that grows past it has to be proved live before the bound moves.
  */
 export const ANTHROPIC_TOOL_SCHEMA_LIMITS: AiToolSchemaLimits = {
   strictTools: 20,
   optionalParameters: 24,
   unionParameters: 16,
+  compiledSchemaBytes: 3_807,
 }
 
 /**

@@ -66,6 +66,7 @@ import type { AiAutomationRecords } from '../model/ai-automation-draft'
 import type { AiJob } from '../model/ai-jobs.types'
 import {
   AI_AUTOMATION_RESOURCE,
+  AI_AUTOMATION_STEP_TYPES,
   AI_AUTOMATION_UNSUPPORTED_COPY,
   AI_WORKFLOW_GONE_COPY,
   AI_WORKFLOW_NO_SITE_COPY,
@@ -171,7 +172,10 @@ beforeAll(() => {
 // ── Fixtures ─────────────────────────────────────────────────────────────
 
 /** A step as `submit_automation` carries one: its type, its `when` list and its own fields. */
-const step = (type: string, fields: Record<string, unknown> = {}) => ({ type, when: [], ...fields })
+const step = (type: string, fields: Record<string, unknown> = {}) => {
+  const { when = [], ...rest } = fields
+  return { when, action: { type, ...rest } }
+}
 
 /** The issue's own description, answered the way a good answer is. */
 const EXAMPLE = {
@@ -353,16 +357,26 @@ describe('drafting an automation', () => {
 
   it('lists each step with the fields its variant of the tool carries, in order, and no other', () => {
     const lines = AI_JOB_WORKFLOW_DRAFT_INSTRUCTIONS[0].text.split('\n')
-    const properties = aiAutomationTool().inputSchema['properties'] as Record<string, { items?: { anyOf?: unknown[] } }>
-    const variants = (properties['steps'].items?.anyOf ?? []) as Array<{ properties: Record<string, { enum?: string[] }> }>
+    const properties = aiAutomationTool().inputSchema['properties'] as Record<
+      string,
+      { items: { properties: { action: { anyOf?: unknown[] } } } }
+    >
+    const variants = (properties['steps'].items.properties.action.anyOf ?? []) as Array<{
+      properties: Record<string, { enum?: string[] }>
+    }>
     expect(variants.length).toBeGreaterThan(0)
+    let listedTypes = 0
     for (const variant of variants) {
-      const type = variant.properties['type'].enum?.[0]
-      const line = lines.find((row) => row.startsWith(`- ${type} (`)) ?? ''
-      const listed = (line.split('Fields: ')[1] ?? '').split('.')[0].replace(/\s*\([^)]*\)/g, '')
-      const carried = Object.keys(variant.properties).filter((key) => key !== 'type' && key !== 'when')
-      expect([type, listed === 'none' ? [] : listed.split(', ')]).toEqual([type, carried])
+      const carried = Object.keys(variant.properties).filter((key) => key !== 'type')
+      for (const type of variant.properties['type'].enum ?? []) {
+        const line = lines.find((row) => row.startsWith(`- ${type} (`)) ?? ''
+        const listed = (line.split('Fields: ')[1] ?? '').split('.')[0].replace(/\s*\([^)]*\)/g, '')
+        expect([type, listed === 'none' ? [] : listed.split(', ')]).toEqual([type, carried])
+        listedTypes += 1
+      }
     }
+    // Every step type the tool offers has a line of its own.
+    expect(listedTypes).toBe(AI_AUTOMATION_STEP_TYPES.length)
   })
 
   it('never shows the model the site’s lists, campaigns, workflows, webhooks or pipeline stages', async () => {
@@ -716,8 +730,10 @@ describe('a measured budget', () => {
       notes: ['Pick the teammate who calls new leads.'],
     }
     expect(paragraphs.length).toBeGreaterThan(700)
-    // Each step carries only its own fields, so the whole comes to about 2,400.
-    expect(JSON.stringify(ten).length).toBeLessThan(2_500)
+    // Each step carries when it runs and an action of only its own fields, so
+    // the whole comes to about 2,500 — well inside the 6,000 an answer may be.
+    expect(JSON.stringify(ten).length).toBeLessThan(2_600)
+    expect(JSON.stringify(ten).length).toBeLessThan(AI_AUTOMATION_ANSWER_MAX_CHARS)
     const read = readAiAutomationAnswer(ten, { crm: true, webhooks: false, bookings: false })
     expect(read.violations).toEqual([])
     expect(read.value?.steps).toHaveLength(10)

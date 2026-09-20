@@ -1,0 +1,613 @@
+{
+  "name": "submit_automation",
+  "description": "Submit one automation: its trigger, the conditions on it, and its steps in order. Written out, the whole automation is at most 6000 characters, so keep its emails short.",
+  "strict": true,
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "name",
+      "trigger",
+      "steps",
+      "notes",
+      "unsupported"
+    ],
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "A short name for the automation, at most 60 characters."
+      },
+      "trigger": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event",
+          "conditions",
+          "combinator"
+        ],
+        "properties": {
+          "event": {
+            "type": "string",
+            "enum": [
+              "formSubmission",
+              "pageView",
+              "memberSignUp",
+              "memberSignIn",
+              "memberSignOut",
+              "lead",
+              "booking",
+              "taskCompleted",
+              "contactCreated",
+              "contactStageChanged",
+              "dealStageChanged",
+              "dealWon",
+              "dealLost"
+            ]
+          },
+          "conditions": {
+            "type": "array",
+            "description": "What the event must meet: at most 5 conditions, empty when it runs every time.",
+            "items": {
+              "$ref": "#/$defs/condition"
+            }
+          },
+          "combinator": {
+            "type": "string",
+            "enum": [
+              "and",
+              "or"
+            ]
+          }
+        }
+      },
+      "steps": {
+        "type": "array",
+        "description": "The steps in order, at most 10, each carrying only its own fields. Empty only with unsupported.",
+        "items": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "subject",
+                "body",
+                "toField"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "sendEmail"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "subject": {
+                  "type": "string",
+                  "description": "The subject line."
+                },
+                "body": {
+                  "type": "string",
+                  "description": "The email, as plain text."
+                },
+                "toField": {
+                  "type": "string",
+                  "description": "The event field holding the address: \"email\" unless the description names another."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "title"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "notifyAdmins"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "title": {
+                  "type": "string",
+                  "description": "The notification."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "list"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "enrollList"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "list": {
+                  "type": "string",
+                  "description": "The email list, in the words of the description, such as \"newsletter\". Never an id."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "campaign"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "assignCampaign"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "campaign": {
+                  "type": "string",
+                  "description": "The campaign, in the words of the description, such as \"newsletter\". Never an id."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "workflow"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "runWorkflow"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "workflow": {
+                  "type": "string",
+                  "description": "The workflow, in the words of the description, such as \"newsletter\". Never an id."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "dataset"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "datasetAppend"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "dataset": {
+                  "type": "string",
+                  "description": "The dataset, in the words of the description, such as \"newsletter\". Never an id."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "dataset"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "updateDataset"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "dataset": {
+                  "type": "string",
+                  "description": "The dataset, in the words of the description, such as \"newsletter\". Never an id."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "webhook"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "webhookPost"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "webhook": {
+                  "type": "string",
+                  "description": "The outbound webhook, in the words of the description, such as \"newsletter\". Never an id."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "message",
+                "severity"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "siteAlert"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "What the visitor reads."
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "info",
+                    "success",
+                    "warning",
+                    "error"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "minutes"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "wait"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "minutes": {
+                  "type": "integer",
+                  "description": "How long to wait, in whole minutes from 1 to 129600; an hour is 60 and a day 1440."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "event",
+                "minutes"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "waitForEvent"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "event": {
+                  "type": "string",
+                  "enum": [
+                    "formSubmission",
+                    "pageView",
+                    "memberSignUp",
+                    "memberSignIn",
+                    "memberSignOut",
+                    "lead",
+                    "booking",
+                    "taskCompleted",
+                    "contactCreated",
+                    "contactStageChanged",
+                    "dealStageChanged",
+                    "dealWon",
+                    "dealLost"
+                  ],
+                  "description": "What the automation waits for."
+                },
+                "minutes": {
+                  "type": "integer",
+                  "description": "When to give up, in whole minutes from 1 to 129600; an hour is 60 and a day 1440."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "exitFlow"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "stage"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "setContactStage"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "stage": {
+                  "type": "string",
+                  "enum": [
+                    "subscriber",
+                    "lead",
+                    "marketing-qualified",
+                    "sales-qualified",
+                    "opportunity",
+                    "customer",
+                    "evangelist",
+                    "other"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "tag"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "addContactTag"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "tag": {
+                  "type": "string",
+                  "description": "At most 60 characters."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "owner"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "assignContactOwner"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "owner": {
+                  "type": "string",
+                  "description": "\"round robin\", or the teammate’s email address the description gives."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "title",
+                "taskKind",
+                "dueInDays"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "createCrmTask"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "title": {
+                  "type": "string",
+                  "description": "The task."
+                },
+                "taskKind": {
+                  "type": "string",
+                  "enum": [
+                    "call",
+                    "email",
+                    "meeting",
+                    "todo"
+                  ]
+                },
+                "dueInDays": {
+                  "type": "integer",
+                  "description": "Days from the run, 0 for today, at most 365."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "when",
+                "activityKind",
+                "body"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "logCrmActivity"
+                  ]
+                },
+                "when": {
+                  "$ref": "#/$defs/when"
+                },
+                "activityKind": {
+                  "type": "string",
+                  "enum": [
+                    "call",
+                    "email",
+                    "meeting",
+                    "note",
+                    "other"
+                  ]
+                },
+                "body": {
+                  "type": "string",
+                  "description": "What happened."
+                }
+              }
+            }
+          ]
+        }
+      },
+      "notes": {
+        "type": "array",
+        "description": "What the person must decide that the automation cannot hold; at most 3 short sentences.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "unsupported": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": [
+              "not-an-automation",
+              "no-trigger",
+              "no-step",
+              "needs-crm",
+              "needs-webhooks",
+              "needs-bookings"
+            ],
+            "description": "Why no automation can be built from this description; null when one is built."
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "$defs": {
+      "condition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "field",
+          "op",
+          "value"
+        ],
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "The field of the event the condition reads, as the trigger lists its fields."
+          },
+          "op": {
+            "type": "string",
+            "enum": [
+              "equals",
+              "contains",
+              "notEmpty"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "description": "What equals or contains compares against; empty for notEmpty."
+          }
+        }
+      },
+      "when": {
+        "type": "array",
+        "description": "At most one condition: the step runs only when it holds. Empty when the step always runs.",
+        "items": {
+          "$ref": "#/$defs/condition"
+        }
+      }
+    }
+  }
+}
