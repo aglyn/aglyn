@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 3 edges the allowlist carries, and what removes each. An edge leaves the
+The 2 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -358,12 +358,13 @@ needs it starts.
     zone the Automation page hosts; with nothing registered the page gives the
     answer in words. The number stays.
 
-**Plugin → designer UI** (1). `plugins-mui` renders nested children through
-the designer's node leaf and contexts. A plugin that needs the designer UI
-cannot be used without it, which is exactly
-what the map forbids. Fix: the element-control seam moves into `@aglyn/besigner`
-(the logic package) and the designer UI supplies its implementation at
-registration time.
+**Plugin → designer UI.** Gone (AGL-3080). No shipped file in `plugins-mui`
+imported the designer any more; two specs did, to draw the mui image and video
+elements inside the designer's own `NodeLeaf` and prove the canvas reserves a
+replaced asset's box. A suite about a plugin's element AND the designer's leaf
+lives where both are reached: `apps/console/specs/mui-image-canvas-facts` and
+`mui-video-canvas-facts`, which take the element from the generated manifest.
+A plugin can be used without the designer UI, which is what the map asks.
 
 **A plugin domain on the generic floor: `@aglyn/shared-ui-email-campaigns`** (a
 finding, not an allowlist row). `libs/shared/ui/email-campaigns` holds the

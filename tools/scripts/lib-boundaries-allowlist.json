@@ -2,7 +2,6 @@
   "note": "Static project edges that break the package map in docs/PACKAGES.md, carried until each is worked off. Read by check-lib-boundaries.mjs (which is red for an edge missing here AND for a row the graph no longer has) and by eslint.config.mjs (which turns each row into an `allow` override scoped to the source project). This list may shrink and must never grow: a new cross-package edge is refused, not recorded. The fix for each edge is in docs/PACKAGES.md under 'Violations', where every plugin-to-plugin row has its own numbered remedy naming the core seam that retires it; a `why` here says what the edge was for, and the doc's row says what crosses today, which for four rows is no longer the same thing.",
   "edges": [
     { "from": "plugins-inbox", "to": "plugins-marketing", "why": "One spec only: the end-to-end proof that an enrollment is not a license to send drives the real campaign sender. No shipped file crosses." },
-    { "from": "plugins-marketing", "to": "plugins-email", "why": "Campaign composition reuses the email plugin's send and topic hooks." },
-    { "from": "plugins-mui", "to": "besigner-feature-designer", "why": "MUI elements render nested children through the designer's node leaf and contexts." }
+    { "from": "plugins-marketing", "to": "plugins-email", "why": "Campaign composition reuses the email plugin's send and topic hooks." }
   ]
 }

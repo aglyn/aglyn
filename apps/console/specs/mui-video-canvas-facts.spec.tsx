@@ -37,7 +37,7 @@ import {
 } from '@aglyn/besigner-ui/contexts/media-asset-facts-context'
 import { act, render } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import Video, { schema } from './video'
+import { CONSOLE_PLUGIN_MANIFEST } from '../constants/plugins.client.generated'
 
 const KEY = 'org:acme/film'
 
@@ -100,8 +100,21 @@ const onCanvas = (store: MediaAssetFactsStore | undefined, child: ReactNode) =>
     </MediaAssetFactsContext.Provider>,
   )
 
-beforeAll(() => {
-  Aglyn.components.registerComponent(Video as never, schema as never)
+/**
+ * The real element, reached the way an app reaches a plugin: through the
+ * generated manifest. This suite draws the mui plugin's element inside the
+ * designer's own leaf, so it lives where both can be reached and neither
+ * imports the other.
+ */
+beforeAll(async () => {
+  const mui = CONSOLE_PLUGIN_MANIFEST.find((entry) => entry.id === 'mui')
+  if (!mui) throw new Error('no manifest entry for "mui"')
+  const loadMuiBundle = ((await mui.load()) as Record<string, unknown>)['loadMuiBundle'] as (
+    ids: readonly string[],
+  ) => Promise<Array<{ component: unknown; schema: unknown }>>
+  const [entry] = await loadMuiBundle(['video'])
+  if (!entry) throw new Error('the mui bundle registers no "video"')
+  Aglyn.components.registerComponent(entry.component as never, entry.schema as never)
 })
 
 afterAll(() => {
