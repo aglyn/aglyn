@@ -686,6 +686,101 @@ describe('a form', () => {
     })
     expect(hostRows()[0]).toMatchObject({ action: 'form.duplicated', target: { type: 'content' } })
   })
+
+  /**
+   * THE BINDING INSIDE THE DESIGN (AGL-3024).
+   *
+   * A form's design names its own form in a prop, and `/api/forms/submit`
+   * files a submission under whatever it finds there. Copied verbatim the
+   * copy names the SOURCE, so it renders, collects, and files everything it
+   * collects under the form it was copied from while its own list stays
+   * empty — the console's form page banners it and nothing else does.
+   *
+   * Asserted of BOTH trees a copy writes, because a form is opened by its
+   * version and served from its document: rebinding one and not the other
+   * gives a form that collects correctly until it is next published, or the
+   * reverse.
+   */
+  it('rebinds the copied design to the copy, in the document and in the version', async () => {
+    const design = (formId: string) => ({
+      canvas: { $id: 'canvas', componentId: 'div', nodes: ['formNode'] },
+      formNode: {
+        $id: 'formNode',
+        componentId: 'form',
+        parentId: 'canvas',
+        props: { formId, formName: 'Contact', submitLabel: 'Send' },
+      },
+    })
+    store.set(`hosts/${HOST}/forms/src`, {
+      displayName: 'Contact',
+      slug: 'contact',
+      rootId: 'canvas',
+      nodes: design('src'),
+      versionId: 'v1',
+    })
+    store.set(`hosts/${HOST}/forms/src/versions/v1`, {
+      formId: 'src',
+      nodes: design('src'),
+      updatedAt: 1,
+    })
+
+    const result = await run('form', { name: 'New case intake' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const published = decodeStoredNodes<Record<string, any>>(
+      (store.get(`hosts/${HOST}/forms/${result.id}`) as Doc)['nodes'],
+    )
+    expect(published?.['formNode'].props).toEqual({
+      formId: result.id,
+      // The caption the Inbox labels a submission with moves too: a copy that
+      // kept the source's would file its submissions under the source's name.
+      formName: 'New case intake',
+      // Everything else the author drew rides across untouched.
+      submitLabel: 'Send',
+    })
+    const version = decodeStoredNodes<Record<string, any>>(
+      (store.get(`hosts/${HOST}/forms/${result.id}/versions/${result.versionId}`) as Doc)['nodes'],
+    )
+    expect(version?.['formNode'].props['formId']).toBe(result.id)
+    // And the source is left exactly as it was.
+    expect((store.get(`hosts/${HOST}/forms/src`) as Doc)['nodes']).toEqual(design('src'))
+  })
+
+  it('leaves a copied PAGE placing the form it placed, because a placement is not a binding', async () => {
+    // The rewrite is about a form naming ITSELF. A screen's form node names
+    // an entity it places, and a copy of that page places the same entity —
+    // rebinding it would point the copied page at a form that does not exist.
+    seedScreen(
+      'src',
+      { displayName: 'Contact page', slug: 'contact', kind: 'page', versionId: 'v1' },
+      [
+        [
+          'v1',
+          {
+            screenId: 'src',
+            rootId: 'root',
+            nodes: {
+              root: { $id: 'root', componentId: 'div', nodes: ['placed'] },
+              placed: {
+                $id: 'placed',
+                componentId: 'form',
+                parentId: 'root',
+                props: { formId: 'frm-contact' },
+              },
+            },
+            updatedAt: 1,
+          },
+        ],
+      ],
+    )
+    const result = await run('screen')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const version = decodeStoredNodes<Record<string, any>>(
+      (store.get(`hosts/${HOST}/screens/${result.id}/versions/${result.versionId}`) as Doc)['nodes'],
+    )
+    expect(version?.['placed'].props['formId']).toBe('frm-contact')
+  })
 })
 
 describe('a workflow', () => {

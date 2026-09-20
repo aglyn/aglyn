@@ -25,11 +25,14 @@ import {
   FORM_FIELD_COMPONENT_ID,
   FORM_ID_PROP,
   formFieldDeclsFromNodes,
+  formNodeIdIn,
   isMarketingConsentFieldName,
   MARKETING_CONSENT_FORM_FIELD,
+  type FormDocument,
   type FormFieldDecl,
   type FormRouting,
 } from '@aglyn/aglyn/app-utils/forms'
+import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { NodeType, type NodesMap } from '@aglyn/aglyn/types/nodes'
@@ -106,7 +109,11 @@ import { registerAiJobStep } from './ai-jobs'
  *
  * The form lands as a new draft (`ai-job-drafts.ts`) that no page places and
  * nothing promotes. A plan that starts from a copy of a form the site has gets
- * that copy, through the platform's duplicate module, and nothing generated.
+ * that copy, through the platform's duplicate module, and nothing generated —
+ * and because that path reaches no model, `extend` never runs on it, so the
+ * step asks `checkFormContract` of the stored copy itself before it reports
+ * one (AGL-3024). A copy still bound to the form it was copied from is a
+ * failure, never an output.
  *
  * Like the other generation steps, it runs on the job beat, never at an inline
  * door: it registers the least time its lookup rounds, its answer and its
@@ -425,6 +432,62 @@ export function aiFormDraftCheck(identity: {
   }
 }
 
+/**
+ * What a job says when the copy it asked for came back naming the form it
+ * was copied FROM (AGL-3024). The contract's own sentence follows it and
+ * names the consequence; this one names what to do about it.
+ */
+export const AI_FORM_COPY_UNBOUND_FAILURE =
+  'The copy of that form did not take on an identity of its own, so it is on ' +
+  'the site and not safe to collect with — delete it in Forms and try again.'
+
+/**
+ * Whether the copy the platform just wrote is bound to ITSELF, asked of the
+ * document rather than of the answer — `null` when it is, and the sentence a
+ * person reads when it is not.
+ *
+ * ## Why a step that generated nothing still has something to check
+ *
+ * A "creates X from a copy of Y" plan reaches no model: the copy IS the
+ * output, so there is no answer for the doctrine to refuse and `extend`
+ * never runs. That left the one thing a copy can get wrong unasked. A form's
+ * design names its own form inside itself, and a copy that kept the source's
+ * name files every submission under the source — the console's form page
+ * banners exactly this, and the job reported Done beside it.
+ *
+ * So the check is `checkFormContract`, the SAME function the console's
+ * banner and the promotion route ask, run here on the stored copy. Not a
+ * second predicate shaped like it: a copy this one passed and that one
+ * refused would be a form the job called finished and the console called
+ * broken, which is the state this exists to make impossible.
+ *
+ * Narrowed to `form-id-unbound`, and only that, because it is the one
+ * violation duplication CAUSES. Every other code the contract can report —
+ * an unnamed field, a consent field the design lost — the copy inherited
+ * from a form the site already has and the member chose to copy; refusing
+ * those would be refusing to copy a form they can already see.
+ */
+export async function aiFormCopyUnboundFailure(
+  firestore: FirebaseFirestore.Firestore,
+  copy: { hostId: string; formId: string },
+): Promise<string | null> {
+  const snapshot = await firestore
+    .collection('hosts')
+    .doc(copy.hostId)
+    .collection('forms')
+    .doc(copy.formId)
+    .get()
+  const form = (snapshot.data() ?? null) as Partial<FormDocument> | null
+  const nodes = decodeStoredNodes(form?.nodes)
+  const unbound = checkFormContract({
+    form,
+    formId: copy.formId,
+    nodes: nodes as never,
+    formNodeId: formNodeIdIn(nodes as never),
+  }).find((violation) => violation.code === 'form-id-unbound')
+  return unbound ? `${AI_FORM_COPY_UNBOUND_FAILURE} ${unbound.message}` : null
+}
+
 function listOf(items: readonly string[]): string {
   return items.length < 2
     ? items.join('')
@@ -564,6 +627,11 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
         org: org as Record<string, unknown> | null,
       })
       if (copy.ok) {
+        // The copy is the whole output, so the contract is asked of it here
+        // or nowhere: a copy still bound to its source is not a form this
+        // job may report as built (AGL-3024).
+        const unbound = await aiFormCopyUnboundFailure(firestore, { hostId, formId: copy.id })
+        if (unbound) return { ...aiUnspentOutcome(model), failure: unbound }
         const hostSubdomain = await aiSiteSubdomain(firestore, hostId)
         return aiUnspentOutcome(model, {
           outputs: [output({ id: copy.id, versionId: copy.versionId, name: copy.name, hostSubdomain })],
