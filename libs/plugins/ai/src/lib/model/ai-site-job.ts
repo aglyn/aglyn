@@ -145,6 +145,31 @@ export const AI_SITE_SUBMISSIONS = ['inbox', 'lead'] as const
 export type AiSiteSubmissions = (typeof AI_SITE_SUBMISSIONS)[number]
 
 /**
+ * What each answer to "where do submissions go" is called, and what it means.
+ *
+ * Here rather than beside the guided start's own questions, because it is not
+ * only the guided start that asks: the agency batch asks the same thing of a
+ * whole run (AGL-2918), and two surfaces wording one decision two ways is two
+ * decisions. `ai-site-job.spec.ts` holds the list to {@link AI_SITE_SUBMISSIONS}.
+ */
+export const AI_SITE_SUBMISSION_CHOICES: ReadonlyArray<{
+  id: AiSiteSubmissions
+  label: string
+  blurb: string
+}> = [
+  {
+    id: 'inbox',
+    label: 'The Inbox',
+    blurb: 'Every message is one to read and reply to.',
+  },
+  {
+    id: 'lead',
+    label: 'The Inbox, and CRM as a lead',
+    blurb: 'Every message with an email address is also somebody to follow up.',
+  },
+]
+
+/**
  * Which kind of email a scaffold's email unit is (AGL-2918), carried on the
  * derived job as `inputs.emailType`. The email step names the kind on the one
  * line it puts above the brief, and a scaffold was naming none.

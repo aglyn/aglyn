@@ -140,24 +140,6 @@ export interface AiSiteStartAnswers {
   welcomeEmail: boolean
 }
 
-/** What each answer to "where do submissions go" is called, and what it means. */
-export const AI_SITE_START_SUBMISSIONS: ReadonlyArray<{
-  id: AiSiteSubmissions
-  label: string
-  blurb: string
-}> = [
-  {
-    id: 'inbox',
-    label: 'The Inbox',
-    blurb: 'Every message is one to read and reply to.',
-  },
-  {
-    id: 'lead',
-    label: 'The Inbox, and CRM as a lead',
-    blurb: 'Every message with an email address is also somebody to follow up.',
-  },
-]
-
 /**
  * What the questions start on. Five pages because it is the middle of the
  * band the scaffold builds, a welcome email because the scaffold drafts one

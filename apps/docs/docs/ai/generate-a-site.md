@@ -95,5 +95,9 @@ cost and what the whole run is. Each site then becomes its own job: each propose
 plan, each waits for you to confirm it, and each builds only drafts. The card's table shows
 where every site in the run has got to, with a link into each.
 
+**Where do form submissions go?** is asked once for the whole run, in the same two answers
+the guided start offers, and it routes the contact form on every site the run builds. You can
+change it on any one of those forms afterwards.
+
 You only see the sites you may build on, and a site you cannot is named rather than skipped
 quietly.

@@ -56,7 +56,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 import { AI_PLUGIN_ID } from '../constants'
 import { registerAiConsole } from '../plugin'
-import { AI_SITE_START_EXAMPLES, AI_SITE_START_SUBMISSIONS } from '../model/ai-site-start'
+import { AI_SITE_SUBMISSION_CHOICES } from '../model/ai-site-job'
+import { AI_SITE_START_EXAMPLES } from '../model/ai-site-start'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -390,7 +391,7 @@ describe('the questions become a site scaffold', () => {
     fireEvent.mouseDown(field)
     expect(
       screen.getAllByRole('option').map((option) => option.getAttribute('data-value')),
-    ).toEqual(AI_SITE_START_SUBMISSIONS.map((option) => option.id))
+    ).toEqual(AI_SITE_SUBMISSION_CHOICES.map((option) => option.id))
   })
 
   it('carries the answer about submissions on the job', async () => {

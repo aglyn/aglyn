@@ -1191,7 +1191,11 @@ nothing itself.
   many of the org's sites with the business name, city and brand varied per
   site, one `site` job each under one batch id, and a progress table that links
   into each site. Every job is an ordinary scaffold — it plans, it waits for its
-  own confirmation, it writes only drafts.
+  own confirmation, it writes only drafts. Where a contact form's submissions go
+  is asked once for the run and carried onto every job (AGL-2918), because the
+  forms a batch makes are the same form: the body admits only the two the form
+  step can bind and reads anything else as nobody having said, which leaves each
+  form step's own proposal standing.
 
 ## The doors
 
