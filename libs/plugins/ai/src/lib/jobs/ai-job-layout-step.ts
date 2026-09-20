@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
-import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
+import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
@@ -42,6 +43,7 @@ import {
   aiDraftAllowanceRefusal,
   aiSiteSubdomain,
   readAiDraft,
+  readAiDraftNodes,
   writeAiDraft,
   type AiDraftRecord,
 } from './ai-job-drafts'
@@ -59,6 +61,7 @@ import {
   aiPlanReuseViolations,
   aiUnspentOutcome,
 } from './ai-job-generation'
+import { aiPlanRegionViolations, aiPlannedLayoutRegions } from './ai-job-plan-conformance'
 import type { AiJobStepRunner } from './ai-job-text-step'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
@@ -70,15 +73,18 @@ import { registerAiJobStep } from './ai-jobs'
  * It builds ONE shared layout — a header with the site's navigation, the
  * Layout Slot each page renders in, a footer — through
  * `runValidatedGeneration('layout', …)`, so every building rule holds on the
- * tree before it is kept, and adds two checks of its own through `extend`: a
- * component the confirmed plan reuses is placed (rule 7), and a navigation or
- * menu component the site already has is placed rather than drawn again
- * (rule 1).
+ * tree before it is kept, and adds three checks of its own through `extend`: a
+ * component the confirmed plan reuses is placed (rule 7), every region the
+ * plan gives the layout is built (AGL-3024), and a navigation or menu
+ * component the site already has is placed rather than drawn again (rule 1).
  *
  * The layout lands as a new draft (`ai-job-drafts.ts`): no screen uses it and
  * no layout nests it, so nothing on the live site changes until a member
  * assigns it. A plan that starts from a copy of a layout the site has gets
- * that copy, through the platform's duplicate module, and nothing generated.
+ * that copy, through the platform's duplicate module, and nothing generated —
+ * so the copy is read back and held to the plan's regions the same way
+ * (`aiCopiedLayoutReview`), because a branch that generates nothing is the one
+ * branch where a promise can go unmet with no model to answer for it.
  *
  * A generation step runs on the job beat, never at an inline door: it
  * registers the least time its lookup rounds, its answer and its re-ask need
@@ -143,8 +149,9 @@ function isLink(node: AiDoctrineNode): boolean {
 
 /**
  * The layout door's checks on a tree the doctrine admitted: every component
- * the confirmed plan reuses is placed, and navigation the site already keeps
- * as a component is placed rather than drawn again in the header.
+ * the confirmed plan reuses is placed, every region the confirmed plan gives
+ * the layout is built (AGL-3024), and navigation the site already keeps as a
+ * component is placed rather than drawn again in the header.
  */
 export function aiLayoutReuseCheck(
   inventory: AiSiteInventory | null,
@@ -156,7 +163,13 @@ export function aiLayoutReuseCheck(
   )
   return (tree) => {
     const placed = aiPlacedComponentIds(tree)
-    const violations: AiDoctrineViolation[] = aiPlanReuseViolations(inventory, plan, placed, 'layout')
+    const violations: AiDoctrineViolation[] = [
+      ...aiPlanReuseViolations(inventory, plan, placed, 'layout'),
+      ...aiPlanRegionViolations(plan, {
+        rootId: tree.rootId,
+        nodes: tree.nodes as unknown as Record<string, AiDoctrineNode>,
+      }),
+    ]
     if (navigation.length && !navigation.some((component) => placed.has(component.id))) {
       const visits = walkTree({
         rootId: tree.rootId,
@@ -176,6 +189,44 @@ export function aiLayoutReuseCheck(
     }
     return violations
   }
+}
+
+/**
+ * The regions the confirmed plan gives the layout, against the layout a COPY
+ * actually produced (AGL-3024); `null` when the copy keeps the plan, or when
+ * the plan promised no region to keep.
+ *
+ * The duplicate branch generates nothing, so it is the one place a plan's
+ * promise can go unmet without a model ever answering for it. A copy that
+ * cannot be read — deleted between the write and this read, or stored under a
+ * root this check does not know — settles nothing, and a promise this step
+ * cannot settle is reviewed by a person rather than reported as kept.
+ */
+export async function aiCopiedLayoutReview(
+  firestore: FirebaseFirestore.Firestore,
+  input: { hostId: string; id: string; name: string; plan: AiJobPlan | null },
+): Promise<AiJobReview | null> {
+  const planned = aiPlannedLayoutRegions(input.plan)
+  if (!planned.regions.length && !planned.unreadable.length) return null
+  const stored = await readAiDraftNodes(firestore, {
+    kind: 'layout',
+    hostId: input.hostId,
+    id: input.id,
+  })
+  const nodes = (stored?.nodes ?? {}) as unknown as Record<string, AiDoctrineNode>
+  if (!nodes[CANVAS_ROOT_ELEMENT_ID]) {
+    return {
+      reason: 'doctrine',
+      message: `"${input.name}" was copied from the layout the plan names, and this job could not read the copy back to check it has the regions the plan gives it. Open the layout and check it before you put a page in it.`,
+      findings: [],
+    }
+  }
+  const violations = aiPlanRegionViolations(input.plan, { rootId: CANVAS_ROOT_ELEMENT_ID, nodes })
+  if (!violations.length) return null
+  return aiDoctrineReview({
+    message: `"${input.name}" is a copy of the layout the plan names, and a copy is all it is: ${violations[0].message}`,
+    violations,
+  })
 }
 
 /** A layout job is admitted for a site of the job's own org with a shared layout to spare. */
@@ -240,6 +291,15 @@ export function createAiJobLayoutStep(deps: AiJobLayoutStepDeps = {}): AiJobStep
         org: org as Record<string, unknown> | null,
       })
       if (copy.ok) {
+        // A copy is not a build (AGL-3024). This branch generates nothing, so
+        // whatever the plan promised BEYOND the source is not in the draft
+        // unless the source already had it: a plan reading "from a copy of the
+        // base layout, adding a sidebar" gets the base layout, the sidebar
+        // nowhere in it, and until now reported Done. The copy's own regions
+        // answer the plan's, and a copy that cannot be read answers nothing —
+        // which is a stop for a person, never a Done.
+        const review = await aiCopiedLayoutReview(firestore, { hostId, id: copy.id, plan, name })
+        if (review) return aiUnspentOutcome(model, { review })
         const hostSubdomain = await aiSiteSubdomain(firestore, hostId)
         return aiUnspentOutcome(model, {
           outputs: [output({ id: copy.id, versionId: copy.versionId, name: copy.name, hostSubdomain })],

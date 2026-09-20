@@ -81,7 +81,7 @@ function replay(fixture: AiPageBriefFixture, jobId = 'job-golden') {
       sectionIds,
       index,
       context,
-      uses: screen.sections[index].uses,
+      section: screen.sections[index],
       inventory: fixture.inventory,
     })({ tree: JSON.stringify(answer) })
     expect([fixture.id, index, result.violations]).toEqual([fixture.id, index, []])
@@ -145,14 +145,14 @@ describe('a section that breaks the page’s rules', () => {
   const sectionIds = screen.sections.map((_, index) => aiPageSectionNodeId('job-negative', index))
   const context = aiPageCheckContext(fixture.inventory)
   const firstPage = () => {
-    const first = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, uses: screen.sections[0].uses, inventory: fixture.inventory })({
+    const first = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, section: screen.sections[0], inventory: fixture.inventory })({
       tree: JSON.stringify(fixture.answers[0]),
     })
     return aiPageWithSection(aiEmptyPage(), first.value as AiPageSection, sectionIds)
   }
 
   it('is refused for a second h1, naming and quoting only its own node by the model’s id', () => {
-    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, uses: [], inventory: fixture.inventory })({
+    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
       tree: JSON.stringify(fixture.answers[0]),
     })
     expect(result.violations.map(({ code, nodeIds }) => ({ code, nodeIds }))).toEqual([
@@ -196,7 +196,7 @@ describe('a section that breaks the page’s rules', () => {
     // Read as an empty grid, the answer was "an element meant to hold content
     // is empty — remove it, or fill it", of a container whose content was
     // already written one line away.
-    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, uses: [], inventory: fixture.inventory })({
+    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
       tree: JSON.stringify(practiceAreas(null)),
     })
     expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
@@ -212,7 +212,7 @@ describe('a section that breaks the page’s rules', () => {
     // sanitizer under the palette validator refuses this as `Missing node
     // "card2"`, which reached the model as "the answer could not be used as a
     // section" — no rule, no node, and nothing to change.
-    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, uses: [], inventory: fixture.inventory })({
+    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
       tree: JSON.stringify(practiceAreas(['practice_item', 'card2', 'card3'])),
     })
     expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
@@ -230,7 +230,7 @@ describe('a section that breaks the page’s rules', () => {
     const answer = practiceAreas(['practice_item'])
     delete (answer.nodes.practice_item as { repeat?: unknown }).repeat
     answer.nodes.practice_card_text.props.children = 'Estate Planning — wills and trusts, drafted plainly.'
-    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, uses: [], inventory: fixture.inventory })({
+    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
       tree: JSON.stringify(answer),
     })
     expect(result.violations).toEqual([])
@@ -243,7 +243,7 @@ describe('a section that breaks the page’s rules', () => {
       sectionIds,
       index: 1,
       context,
-      uses: ['cmp-service-card', 'frm-quote', 'scr-contact'],
+      section: { name: 'x', uses: ['cmp-service-card', 'frm-quote', 'scr-contact'], items: 0 },
       inventory: fixture.inventory,
     })({ tree: JSON.stringify(fixture.answers[2]) })
     expect(result.violations).toEqual([
@@ -262,7 +262,7 @@ describe('a section that breaks the page’s rules', () => {
     const row = answer.nodes[rowId as string]
     row.props = { ariaLabel: 'What the inspection covers' }
     for (const cell of row.nodes ?? []) answer.nodes[cell].props = { size: '4' }
-    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, uses: screen.sections[1].uses, inventory: fixture.inventory })({
+    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: screen.sections[1], inventory: fixture.inventory })({
       tree: JSON.stringify(answer),
     })
     expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
@@ -273,12 +273,36 @@ describe('a section that breaks the page’s rules', () => {
     )
   })
 
+  it('is refused for building fewer items than its plan line promised, naming both numbers (AGL-3024)', () => {
+    // The measured shape on beta.139: a plan line of four practice areas built
+    // as three cards, every building rule kept, and the job reporting Done.
+    // This brief's line promises three; the answer is cut to two.
+    const answer = structuredClone(fixture.answers[1])
+    const [rowId] = Object.entries(answer.nodes).find(([, node]) => node.props?.['container'] === true) ?? []
+    const row = answer.nodes[rowId as string]
+    const dropped = (row.nodes as string[])[2]
+    row.nodes = (row.nodes as string[]).slice(0, 2)
+    for (const id of [dropped, ...(answer.nodes[dropped].nodes ?? [])]) delete answer.nodes[id]
+    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: screen.sections[1], inventory: fixture.inventory })({
+      tree: JSON.stringify(answer),
+    })
+    expect(screen.sections[1].items).toBe(3)
+    expect(result.violations.map(({ rule, code, message }) => ({ rule, code, message }))).toEqual([
+      {
+        rule: null,
+        code: 'plan-items-short',
+        message:
+          'The confirmed plan says the "what the inspection covers" section shows 3 items, and this section shows 2. Build all 3.',
+      },
+    ])
+  })
+
   it('is refused for each Grid shape by what the model wrote of the section, which the page it is checked in no longer holds (AGL-3078)', () => {
     // This brief's row of cards: b8 is the container of items b2, b4 and b6, in the column Stack b9 under its h2 b7.
     const check = (edit: (nodes: Record<string, { componentId: string; props?: Record<string, unknown>; sx?: Record<string, unknown>; nodes?: string[] }>) => void) => {
       const answer = structuredClone(fixture.answers[1])
       edit(answer.nodes as never)
-      const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, uses: screen.sections[1].uses, inventory: fixture.inventory })({
+      const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, section: screen.sections[1], inventory: fixture.inventory })({
         tree: JSON.stringify(answer),
       })
       return result.violations.map(({ rule, code, message, nodeIds }) => ({ rule, code, message, nodeIds }))
@@ -328,7 +352,7 @@ describe('a section that breaks the page’s rules', () => {
     answer.nodes['a10'] = { componentId: 'muiListItem', nodes: ['a11'] }
     answer.nodes['a11'] = { componentId: 'muiListItemText', props: {} }
     answer.nodes['a5'].nodes = [...(answer.nodes['a5'].nodes ?? []), 'a7']
-    const result = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, uses: [], inventory: fixture.inventory })({
+    const result = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
       tree: JSON.stringify(answer),
     })
     expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
@@ -352,7 +376,7 @@ describe('a section that breaks the page’s rules', () => {
     const hero = (props: Record<string, unknown>) => {
       const answer = structuredClone(fixture.answers[0])
       answer.nodes['a3'].props = { children: 'Request a quote', variant: 'contained', ...props }
-      return aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context: planned, uses: [], inventory: fixture.inventory })({
+      return aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context: planned, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
         tree: JSON.stringify(answer),
       })
     }
@@ -385,7 +409,7 @@ describe('a section that breaks the page’s rules', () => {
     expect(buttonOf(unknown.value)?.interactions).toBeUndefined()
     // A later pass reads the hero's stored interaction as where its button goes.
     const page = aiPageWithSection(aiEmptyPage(), hero({ scrollTo: 'quote request form' }).value as AiPageSection, sectionIds)
-    const next = aiPageSectionCheck({ page, sectionIds, index: 1, context: planned, uses: screen.sections[1].uses, inventory: fixture.inventory })({
+    const next = aiPageSectionCheck({ page, sectionIds, index: 1, context: planned, section: screen.sections[1], inventory: fixture.inventory })({
       tree: JSON.stringify(fixture.answers[1]),
     })
     expect(next.violations).toEqual([])
@@ -400,7 +424,7 @@ describe('a section that breaks the page’s rules', () => {
       children:
         'We are a client-focused law firm guiding individuals, families and businesses through the moments that matter most, with clear advice and steady support.',
     }
-    const result = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, uses: fixture.plan.screens[0].sections[0].uses, inventory: fixture.inventory })({
+    const result = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, section: fixture.plan.screens[0].sections[0], inventory: fixture.inventory })({
       tree: JSON.stringify(answer),
     })
     expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
@@ -425,7 +449,7 @@ describe('a section that breaks the page’s rules', () => {
         yt: { componentId: 'muiTypography', props: { variant: 'h2', component: 'h2', children: 'Two' } },
       },
     }
-    const result = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, uses: [], inventory: fixture.inventory })({
+    const result = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
       tree: JSON.stringify(two),
     })
     expect(result.value).toBeNull()
@@ -544,7 +568,7 @@ describe('a section cut off at its ceiling (AGL-3042)', () => {
         sectionIds,
         index: 0,
         context: aiPageCheckContext(fixture.inventory),
-        uses: screen.sections[0].uses,
+        section: screen.sections[0],
         inventory: fixture.inventory,
       }),
     })
@@ -560,7 +584,7 @@ describe('a section cut off at its ceiling (AGL-3042)', () => {
       sectionIds,
       index: 0,
       context: aiPageCheckContext(fixture.inventory),
-      uses: screen.sections[0].uses,
+      section: screen.sections[0],
       inventory: fixture.inventory,
     })
     expect(check(CUT_TREE).violations.map((violation) => violation.code)).toEqual(['tree-invalid-input'])
@@ -626,13 +650,13 @@ describe('a repeated item written once (AGL-3053)', () => {
   const heroPage = () =>
     aiPageWithSection(
       aiEmptyPage(),
-      aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context: FREE, uses: [], inventory: fixture.inventory })({
+      aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context: FREE, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
         tree: JSON.stringify(fixture.answers[0]),
       }).value as AiPageSection,
       sectionIds,
     )
   const checkCards = (tree: unknown, context = FREE) =>
-    aiPageSectionCheck({ page: heroPage(), sectionIds, index: 1, context, uses: [], inventory: fixture.inventory })({
+    aiPageSectionCheck({ page: heroPage(), sectionIds, index: 1, context, section: { name: 'x', uses: [], items: 0 }, inventory: fixture.inventory })({
       tree: JSON.stringify(tree),
     })
   /** The practice areas as the golden writes them once, with one node changed. */

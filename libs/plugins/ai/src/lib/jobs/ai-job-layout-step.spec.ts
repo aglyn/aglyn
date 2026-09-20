@@ -73,6 +73,7 @@ jest.mock('./ai-jobs', () => ({
   registerAiJobStep: jest.fn(),
 }))
 
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
@@ -576,6 +577,73 @@ describe('the layout step', () => {
         estCostUsd: 0,
         model: 'routed-model',
         stopReason: null,
+      })
+    })
+
+    // The measured shape on beta.139: a plan reading "from a copy of the base
+    // layout, adding a sidebar region" got the base layout, "sidebar" nowhere
+    // in it, and the job reported Done. This branch generates nothing, so the
+    // copy itself is what answers for the plan (AGL-3024).
+    describe('a copy against the regions the plan gives the layout (AGL-3024)', () => {
+      const withSidebar: AiJobPlan = {
+        ...plan,
+        create: [{ ...plan.create[0], fields: ['header', 'sidebar', 'main', 'footer'] }],
+      }
+      const duplicateInto = (nodes: Record<string, unknown>) => {
+        mockDocs.set('hosts/host-1/layouts/lay-copy', { displayName: 'Main layout', versionId: 'v-copy' })
+        mockDocs.set('hosts/host-1/layouts/lay-copy/versions/v-copy', { nodes })
+        return jest
+          .fn()
+          .mockResolvedValue({ ok: true, id: 'lay-copy', versionId: 'v-copy', name: 'Main layout' })
+      }
+      /** The base layout's shape: an App Bar, the slot, a footer — and no aside. */
+      const BASE = {
+        [CANVAS_ROOT_ELEMENT_ID]: { componentId: 'div', nodes: ['bar', 'slot', 'foot'] },
+        bar: { componentId: 'muiAppBar', nodes: [] },
+        slot: { componentId: 'layoutSlot' },
+        foot: { componentId: 'section', props: { element: 'footer' }, nodes: [] },
+      }
+
+      it('stops for a person rather than reporting a copy that lacks a region the plan named', async () => {
+        mockReadInventory.mockResolvedValue(inventory)
+        const outcome = await createAiJobLayoutStep({
+          duplicate: duplicateInto(BASE) as unknown as typeof duplicateResource,
+        })(context({ plan: withSidebar }))
+        expect(mockRunAiRequest).not.toHaveBeenCalled()
+        expect(outcome.outputs).toEqual([])
+        expect(outcome.review?.reason).toBe('doctrine')
+        expect(outcome.review?.findings.map((finding) => finding.code)).toEqual(['plan-region-missing'])
+        expect(outcome.review?.message).toContain('"sidebar"')
+      })
+
+      it('reports the copy once it carries every region the plan named', async () => {
+        mockReadInventory.mockResolvedValue(inventory)
+        const outcome = await createAiJobLayoutStep({
+          duplicate: duplicateInto({
+            ...BASE,
+            [CANVAS_ROOT_ELEMENT_ID]: { componentId: 'div', nodes: ['bar', 'rail', 'slot', 'foot'] },
+            rail: { componentId: 'section', props: { element: 'aside' }, nodes: [] },
+          }) as unknown as typeof duplicateResource,
+        })(context({ plan: withSidebar }))
+        expect(outcome.review).toBeUndefined()
+        expect(outcome.outputs).toEqual([expect.objectContaining({ resource: 'layout', id: 'lay-copy' })])
+      })
+
+      it('stops for a person when the copy cannot be read back at all', async () => {
+        mockReadInventory.mockResolvedValue(inventory)
+        const duplicate = jest
+          .fn()
+          .mockResolvedValue({ ok: true, id: 'lay-vanished', versionId: 'v-copy', name: 'Main layout' })
+        const outcome = await createAiJobLayoutStep({
+          duplicate: duplicate as unknown as typeof duplicateResource,
+        })(context({ plan: withSidebar }))
+        expect(outcome.outputs).toEqual([])
+        expect(outcome.review).toEqual({
+          reason: 'doctrine',
+          message:
+            '"Main layout" was copied from the layout the plan names, and this job could not read the copy back to check it has the regions the plan gives it. Open the layout and check it before you put a page in it.',
+          findings: [],
+        })
       })
     })
 

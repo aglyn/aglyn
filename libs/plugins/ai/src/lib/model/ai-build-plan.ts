@@ -118,9 +118,12 @@ export interface AiBuildPlanCreate {
   /** The inventory id this starts from as a duplicate, or null. */
   duplicateOf: string | null
   /**
-   * A component or layout: its props as `name:type`, an icon as `name:icon`
-   * (AGL-3054). A form or a dataset: its field names. A theme change: the
-   * palette paths it adds or changes.
+   * A component: its props as `name:type`, an icon as `name:icon`
+   * (AGL-3054). A layout: the regions it has, from the closed vocabulary
+   * `AI_LAYOUT_REGIONS` holds (AGL-3024) — a layout has no props, and a
+   * region named here is what the built layout is held to. A form or a
+   * dataset: its field names. A theme change: the palette paths it adds or
+   * changes.
    */
   fields: string[]
   /**
@@ -258,7 +261,7 @@ export const AI_BUILD_PLAN_TOOL: AiTool = {
               'The inventory id this starts from as a duplicate, or null.',
             ),
             fields: strings(
-              `A component or layout: its props as name:type, an icon as name:icon. A form or dataset: its field names. A theme change: the palette paths it adds or changes. Each ${atMost()}.`,
+              `A component: its props as name:type, an icon as name:icon. A layout: the regions it has, each one of header, nav, sidebar, main, footer — list every region the finished layout has, not only the ones it gains. A form or dataset: its field names. A theme change: the palette paths it adds or changes. Each ${atMost()}.`,
             ),
           },
         },

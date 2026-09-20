@@ -605,6 +605,31 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   and a plan the rules kept is never refused at its page for a list it never
   planned. One section's list split across columns is still one list, a tree with no
   Section is one group, and rule 1's repeat check still reads the whole page.
+- **The build is held to the plan it was confirmed from (AGL-3024).** Five kinds were
+  run against a live site on beta.139 and three under-delivered against their own
+  confirmed plan while reporting `Done` — a plan promising four practice areas built
+  three cards, a plan promising a layout "adding a sidebar region" built a verbatim copy
+  of the base layout. The doctrine validators ask whether an artifact was built the way
+  a careful author builds one; nothing asked whether it was the artifact the plan
+  promised, and `Done` is the dangerous part, because it tells the customer they have no
+  reason to re-read it. `jobs/ai-job-plan-conformance.ts` reads the plan's STRUCTURE,
+  never its prose: a section's `items`, which the section prompt already states as "It
+  shows N items" and nothing read back, and a layout creation's `fields`, which are that
+  kind's regions (`AI_LAYOUT_REGIONS`: header, nav, sidebar, main, footer) because a
+  layout has no properties to list. Matching a plan's English `why` against a node tree
+  would be a second guess dressed as a check, so the planner is asked for a checkable
+  assertion instead. Findings name no rule (`plan-items-short`, `plan-region-missing`,
+  `plan-region-unreadable`) and ride the mechanism every rule rides: one re-ask, then a
+  stop for a person. The count is read as generously as the tree allows — the widest
+  fan-out, or the largest group of one shape — and speaks only when the section is
+  SHORT, so every reading that finds more items makes it quieter; a section whose items
+  a collection fills at render is not counted at all, which is what rule 8 asked for.
+  A region word the vocabulary cannot read is refused on the PLAN
+  (`detectPlanUnreadableRegions`, rule 2), where a re-ask costs a sentence rather than a
+  build. The duplicate branch is where this matters most: it generates nothing, so the
+  copy itself answers for the plan (`aiCopiedLayoutReview` reads the copy back), and a
+  copy that cannot be read settles nothing and stops for a person rather than reporting
+  `Done`.
 - **Refused before a Confirm.** A plan that passes is asked the kind's admission with
   the plan, as the resume door asks it. A refusal fails the job with the door's
   sentence before any member is shown a Confirm: its plan is not kept, and it holds
@@ -913,7 +938,10 @@ confirmed `job.plan` and builds exactly one draft.
   Nothing else is written: no screen, collection, store setting, layout or
   host document names the draft until a member assigns it. A plan that starts
   from a copy (`duplicateOf`) gets that copy through the platform's
-  `duplicateResource` and generates nothing.
+  `duplicateResource` and generates nothing — so a layout's copy is read back
+  and held to the regions its plan names before it is reported (AGL-3024),
+  because a branch that generates nothing has no model to answer for what the
+  plan promised beyond the source.
 - **Admission.** A kind registers one check with `registerAiJobAdmission`
   (`src/lib/jobs/ai-job-admission.ts`). The create door asks it after the gate
   ladder and before the job exists, and the resume door asks it again before

@@ -574,7 +574,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         sectionIds,
         index,
         context,
-        uses: screen.sections[index].uses,
+        section: screen.sections[index],
         inventory,
       }),
       ...(signal ? { signal } : {}),

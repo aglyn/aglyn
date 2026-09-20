@@ -1708,7 +1708,7 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
           sectionIds: [aiPageSectionNodeId(job.$id, 0)],
           index: 0,
           context: aiPageCheckContext(null, { reusableComponents: false }),
-          uses: [],
+          section: { name: 'practice areas', uses: [], items: 0 },
           inventory: null,
         }),
       })

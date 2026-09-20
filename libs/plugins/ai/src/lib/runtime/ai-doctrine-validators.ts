@@ -455,11 +455,132 @@ export function detectRepeatedSubtrees(
   return violations
 }
 
+/**
+ * How many copies of one repeated thing a document shows, read as
+ * generously as the tree allows (AGL-3024): the largest group of nodes the
+ * shape index calls the same shape — the index rule 1 counts repeats with —
+ * or, where a node's children outnumber that, its fan-out.
+ *
+ * GENEROUS ON PURPOSE. The one caller compares this against a count a plan
+ * promised and speaks only when the count is SHORT, so every reading that
+ * finds more items makes the check quieter, never louder: three cards whose
+ * headings a hero's subtitle happens to match read as four and are let
+ * through, and four cards laid out as two rows of two read as four either by
+ * their shared shape or by the rows' fan-out. What it cannot do is find four
+ * items in a document that holds three of everything.
+ */
+export function aiRepeatedItemCount(tree: AiDoctrineTree): number {
+  const index = indexShapes(tree)
+  const byShape = new Map<string, number>()
+  let most = 0
+  for (const visit of index.visits) {
+    if (visit.id !== tree.rootId) {
+      const shape = index.shapeOf.get(visit.id)
+      if (shape) {
+        const count = (byShape.get(shape) ?? 0) + 1
+        byShape.set(shape, count)
+        if (count > most) most = count
+      }
+    }
+    const children = (visit.node.nodes ?? []).filter((id) => tree.nodes[id]).length
+    if (children > most) most = children
+  }
+  return most
+}
+
+/** Whether a document draws its repeated items from a collection, which fills them at render. */
+export function aiBindsRepeatedItems(tree: AiDoctrineTree): boolean {
+  return walkTree(tree).some(({ node }) => node.componentId === 'collectionEntries')
+}
+
 const REGION_ELEMENTS = new Set(['header', 'footer', 'nav'])
 const REGION_WORDS: Record<string, string> = {
   header: 'header',
   footer: 'footer',
   nav: 'navigation',
+}
+
+/**
+ * The regions a layout is built out of, and how each one is found in a tree
+ * (AGL-3024): the landmark elements it may be written as, and the palette
+ * elements that ARE one wherever they appear.
+ *
+ * A CLOSED vocabulary, because it is what a plan's promise of a region is
+ * checked against: a planner naming a region outside it has promised
+ * something no check can find, which the plan rules refuse rather than let
+ * pass as built.
+ */
+export const AI_LAYOUT_REGIONS = {
+  header: { elements: ['header'], componentIds: ['muiAppBar'] },
+  nav: { elements: ['nav'], componentIds: [] },
+  sidebar: { elements: ['aside'], componentIds: [] },
+  main: { elements: ['main'], componentIds: ['layoutSlot'] },
+  footer: { elements: ['footer'], componentIds: [] },
+} as const satisfies Record<string, { elements: readonly string[]; componentIds: readonly string[] }>
+
+export type AiLayoutRegion = keyof typeof AI_LAYOUT_REGIONS
+
+export const AI_LAYOUT_REGION_NAMES = Object.keys(AI_LAYOUT_REGIONS) as AiLayoutRegion[]
+
+/** The words a plan may name each region by, beyond the region's own name. */
+const LAYOUT_REGION_ALIASES: Readonly<Record<string, AiLayoutRegion>> = {
+  'app bar': 'header',
+  masthead: 'header',
+  'top bar': 'header',
+  navigation: 'nav',
+  'nav bar': 'nav',
+  menu: 'nav',
+  aside: 'sidebar',
+  'side bar': 'sidebar',
+  'side nav': 'sidebar',
+  drawer: 'sidebar',
+  rail: 'sidebar',
+  slot: 'main',
+  'layout slot': 'main',
+  content: 'main',
+}
+
+/**
+ * The region a plan's word names, or `null` for a word the vocabulary does
+ * not hold.
+ *
+ * Read the way a recorded plan writes one. A planner names a region as
+ * `header`, as `layoutSlot:slot` or as `footer:region (firm name, address)`,
+ * so the name is what stands before the first colon, capitals are word
+ * breaks, and a trailing "region" or "area" is filler once the whole name has
+ * been tried: "Sidebar region", "side-bar" and `sidebar:links` are one thing.
+ */
+export function aiLayoutRegionOf(word: string): AiLayoutRegion | null {
+  const cleaned = word
+    .split(':')[0]
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+  const read = (value: string): AiLayoutRegion | null =>
+    (AI_LAYOUT_REGION_NAMES as string[]).includes(value)
+      ? (value as AiLayoutRegion)
+      : (LAYOUT_REGION_ALIASES[value] ?? null)
+  if (!cleaned) return null
+  return read(cleaned) ?? read(cleaned.replace(/\s+(?:region|area)$/, ''))
+}
+
+/** Every region a built tree carries, by the elements and palette elements it holds. */
+export function aiTreeLayoutRegions(tree: AiDoctrineTree): Set<AiLayoutRegion> {
+  const found = new Set<AiLayoutRegion>()
+  for (const { node } of walkTree(tree)) {
+    const element = elementOf(node)
+    for (const region of AI_LAYOUT_REGION_NAMES) {
+      const where = AI_LAYOUT_REGIONS[region]
+      if (
+        (element && (where.elements as readonly string[]).includes(element)) ||
+        (where.componentIds as readonly string[]).includes(node.componentId)
+      ) {
+        found.add(region)
+      }
+    }
+  }
+  return found
 }
 
 /**
@@ -3321,6 +3442,43 @@ export function detectPlanOverFreeWall(
 }
 
 /**
+ * Rule 2 (plan): a layout the plan creates lists the regions it has, and
+ * every one is a region this platform builds (AGL-3024).
+ *
+ * A layout has no properties, so its `fields` are its REGIONS — the promise
+ * the build is later held to. A word the vocabulary does not hold is refused
+ * HERE, on the plan, where the re-ask costs a sentence: a promise nothing can
+ * look for would otherwise reach the build as a commitment no check can
+ * settle, and a build that cannot settle its own plan stops for a person
+ * instead of reporting itself done.
+ */
+export function detectPlanUnreadableRegions(plan: AiBuildPlan): AiDoctrineViolation[] {
+  const unreadable: Array<{ word: string; path: string }> = []
+  plan.create.forEach((entry, index) => {
+    if (entry.kind !== 'layout') return
+    entry.fields.forEach((field, fieldIndex) => {
+      if (!aiLayoutRegionOf(field)) {
+        unreadable.push({ word: field, path: `create[${index}].fields[${fieldIndex}]` })
+      }
+    })
+  })
+  if (!unreadable.length) return []
+  const one = unreadable.length === 1
+  return [
+    {
+      rule: 2,
+      code: 'plan-layout-region-unknown',
+      message: `A layout lists ${unreadable
+        .map((entry) => `"${entry.word}"`)
+        .join(', ')} among its regions, and a layout is built out of ${AI_LAYOUT_REGION_NAMES.join(
+        ', ',
+      )}. Name ${one ? 'it' : 'them'} with one of those, or leave ${one ? 'it' : 'them'} off the layout.`,
+      paths: unreadable.map((entry) => entry.path),
+    },
+  ]
+}
+
+/**
  * Every plan rule, against the site inventory the plan was made from and,
  * where the job read them, what it may create there (AGL-3030). `null`
  * capabilities restrict nothing: the doctrine applies whole.
@@ -3336,6 +3494,7 @@ export function validateAiBuildPlan(
     ...detectPlanSplitLists(plan, inventory, capabilities),
     ...detectPlanOverFreeWall(plan, inventory, capabilities),
     ...detectPlanLayoutRegions(plan, inventory, capabilities),
+    ...detectPlanUnreadableRegions(plan),
     ...detectPlanInlineForms(plan, inventory, capabilities),
     ...detectUntemplatedSimilarPages(plan, inventory),
     ...detectPlanLiteralColors(plan),
