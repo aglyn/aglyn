@@ -57,7 +57,6 @@ import { useDebounce } from '@aglyn/shared-util-vendor/use-debounce'
 import AddIcon from '@mui/icons-material/Add'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
-import { alpha } from '@mui/material/styles'
 import {
   DndContext,
   type DragEndEvent,
@@ -5182,8 +5181,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             borderRadius: 1,
             border: '2px dashed',
             borderColor: 'primary.main',
+            // Through `theme.vars` where the theme has them: on the console's
+            // CSS-variables theme `theme.palette` is bound to the default
+            // (light) color scheme, so a palette read sheets the library in
+            // near-white whichever scheme is showing. `theme.alpha` spells
+            // the channel form for a variable and a literal `rgba()` for a
+            // plain theme.
             bgcolor: (theme) =>
-              alpha(theme.palette.background.paper, 0.9),
+              theme.alpha(
+                (theme.vars ?? theme).palette.background.paper,
+                0.9,
+              ),
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
