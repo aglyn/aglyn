@@ -1,0 +1,208 @@
+{
+  "post": "AI email campaigns without the spam",
+  "slug": "ai-email-campaigns-without-the-spam",
+  "route": "/blog/ai-email-campaigns-without-the-spam",
+  "collection": "blog",
+  "category": "Guides",
+  "brief": "Platform Docs/Pricing & Packaging/07-GTM-and-Marketing/AI-Keyword-Plan.md §4, brief 2",
+  "notes": "AUTHORED from the docs tree, not extracted from a frame (AGL-2922). The brief's docs paths are stale: `ai/generate-an-email-campaign` is `marketing-and-automation/email-campaigns/generate-with-ai.md`, and `marketing-and-automation/email-campaigns` is a directory whose `overview.md` is the page meant. Both corrected in `internalLinks`. ⛔ The post reads results PER SITE and never rolls them up — an aggregated cross-site data view is a banned claim (tools/marketing/README.md), and the nine rollup constructions in the product copy were already rewritten per-site once.",
+  "seo": {
+    "title": "AI Email Campaigns Without the Spam",
+    "description": "An AI email campaign generator that drafts and never sends: consent first, one sentence in, a draft design with three subject lines out, and three checks before you press send yourself.",
+    "primaryQuery": "AI email campaign generator",
+    "secondaryQueries": [
+      "AI email marketing for agencies",
+      "AI email copy generator"
+    ],
+    "notes": "Title 35 characters, description 178 — over the 155 a screen's SEO card enforces. Trim to 155 in the pass that sets the entry's own description field."
+  },
+  "excerpt": "A generator that can send is a generator that can send the wrong thing. Aglyn AI writes the email and the campaign as drafts, aimed at nobody, and leaves the audience, the consent check and the send to you.",
+  "cover": {
+    "status": "not generated",
+    "how": "tools/scripts/generate-blog-covers.mjs — add a POSTS entry with this slug and run it; the PNG is uploaded to the media library separately.",
+    "eyebrow": "Marketing + Aglyn AI",
+    "pill": "Guides"
+  },
+  "disclosure": {
+    "id": "ai-rolling-out-blog-2",
+    "placement": "Its own callout block directly below the intro and above the first `##` heading — one block in the entry body, not a sentence inside a paragraph.",
+    "label": "Rolling out",
+    "body": "Aglyn AI is a release-flagged feature, currently being rolled out — generative building does not appear in every workspace yet. Aglyn Assist, the assistant that answers questions about the product, is available today.",
+    "removeAtFlip": true,
+    "notes": "Identical wording to the other two posts, to `apps/docs/docs/ai/overview.md` and to the `/product/ai` notice band, so the flip removes one block from each surface rather than editing prose. Email campaigns themselves are released and are not behind this flag: the flag gates generating the email and the campaign, not sending them. The block says 'generative building' for exactly that reason."
+  },
+  "bodyContract": {
+    "blocks": 36,
+    "notes": "Markdown blocks in document order, joined with a blank line. `disclosure` is NOT one of them; it is placed as its own block after block 2 and deleted at the flip. ⛔ The site-relative links (`/product/…`, `/solutions/…`, `/alternatives/…`, `/pricing`) must be PICKED with the editor's Link dialog, not typed: a picked link stores the target and survives a rename, and renders as plain words if the target goes away, where a typed path silently keeps pointing at the old address (AGL-3117/3118/3119, apps/docs/docs/building-sites/besigner/long-form-markdown.md#links-that-survive-a-rename). The docs.aglyn.com links are another origin, so they are typed as External URL. Task lists are not in the dialect this element parses — headings, bold, italic, links, bullets, numbered lists, quotes, images, fenced code and pipe tables are — so the checklist is written as bullets."
+  },
+  "body": [
+    "Every complaint about AI email is really a complaint about one thing: a machine that can press send. Write the copy badly and you have a bad draft. Write it badly and mail it to four thousand people who never asked, and you have a deliverability problem that outlives the campaign.",
+
+    "So the generator in Aglyn does not send. Describe the email and it writes a **draft design**; ask for a campaign and it writes that design plus the **draft campaign** that would send it. Nothing is sent, scheduled or queued, and the campaign is aimed at nobody until you pick an audience yourself. Choosing who receives it is not a step the product automates — it is the step it refuses to.",
+
+    "## What a generator can and cannot do here",
+
+    "**It writes.** One email built from the email blocks — sections, text, buttons, images, dividers, spacers and product cards — so it renders the same way in every mail client. It appears under **Marketing → Email** beside the templates you made by hand and opens in the Besigner exactly as those do. It comes with **three subject lines and three preheaders**: the strongest lead, the rest are stored as alternatives, and you can change which one leads at any time or write your own.",
+
+    "**It binds rather than types.** An email can carry product cards that fill in each product's current name, price and picture at the moment the email is sent, bound by id — so a rename or a price change never leaves a stale email behind. No product's details are sent for the email to be written; only how many cards to place.",
+
+    "**It leaves gaps rather than inventing.** A fact the brief does not give — a date, a price, a place — arrives in square brackets for you to fill.",
+
+    "**It will not send, schedule or queue anything.** It will not publish a design or mark a template live. It will not pick who receives a campaign. It will not write raw HTML into an email; add the **Email custom HTML** block yourself if you need it.",
+
+    "**It does not write the unsubscribe link,** because it does not have to. Every campaign email gets one when it is sent.",
+
+    "## Consent first, and the denominator that proves it",
+
+    "This is the part to do before you write anything, and it is the part that makes the difference between marketing and spam.",
+
+    "A marketing campaign goes only to people whose consent you have a record of, or who were already in your audience before consent was required. That is enforced at send, not trusted to the person composing. People with no marketing consent on record are removed before anything else happens, along with anyone who has unsubscribed or is suppressed.",
+
+    "The composer shows you the arithmetic rather than a single confident number:",
+
+    "```\nRecipients 1,240 · 12 unsubscribed or suppressed\n1,240 with a recorded consent basis · 310 grandfathered (captured before consent was\nrequired) · 44 withheld — no consent on record\n```",
+
+    "Read the second line before the first. A **recorded consent basis** means this person ticked an opt-in box on a form, a sign-up or an import that carried one. **Grandfathered** means they were in your audience before consent was required and no opt-in was recorded since. **Withheld** means no consent on record, so they are not mailed.",
+
+    "Two things follow, and both catch people out:",
+
+    "- **Buying something or creating an account is not an opt-in.** A person counts as consenting when they ticked a box that says so. To grow the consented number, add a marketing opt-in field to your forms.\n- **Matching a rule is not consent.** A dynamic list decides who is in the audience; the consent rules still decide who is mailed. A list of 4,000 that mails 900 is not broken — it is the check working.",
+
+    "A smaller-than-expected recipient count is therefore information, not a bug. [Who a campaign is allowed to reach](https://docs.aglyn.com/marketing-and-automation/email-campaigns/overview#who-a-campaign-is-allowed-to-reach) is the full rule.",
+
+    "## Describe the campaign in one sentence",
+
+    "Say what the email is for, who it speaks to, and what you want the reader to do. The more the brief gives, the less the email guesses.",
+
+    "> Announce the autumn menu to the regulars. Mention that the Tuesday bread class is running again, and point people at the class page to book.",
+
+    "Two things are worth adding. **Name the kind of email** — a welcome, a newsletter, a launch, a cart reminder, an event reminder — and it is written in that shape. **Name a page of your site** and the button is written as that page's address, completed with your domain when the email is sent.",
+
+    "If your brief names one of your lists, the draft campaign's note says which one, and — where that list has enough history on this site — the day and hour its past campaigns were opened most, with how many sends that reading is taken from. Your lists, contacts and past send figures are read on the server to work that out; none of them is sent for the email to be written.",
+
+    "## Edit the subject, the body and the send plan",
+
+    "The draft opens in the Besigner. Change the copy, swap which subject line leads, reorder the blocks, drop a product card in.",
+
+    "Generated copy greets the reader with the merge tokens every campaign fills — `{{contact.firstName}}`, `{{contact.name}}` and `{{contact.email}}` — and only in text. Never in a link, a subject line or a preheader, where they are not filled. That restriction is the reason you have never had one of our emails open with *Hi {{contact.firstName}}*.",
+
+    "The send plan is yours from an empty start: pick the list on the campaign, check the send time against the reading the note gave you, and schedule it when you are ready. Send a test to yourself first — the composer has one.",
+
+    "## Three checks before you send",
+
+    "**1. Where did this list come from?** Not \"the CRM\" — the actual origin. An import you did yourself, a form with an opt-in field, a conference badge scan. If you cannot name it, do not mail it, whatever the consent column says.",
+
+    "**2. Is there one clear ask?** A generated email will happily carry three buttons if the brief asked for three things. One reader, one decision.",
+
+    "**3. Is anything in square brackets still in there?** The gaps are deliberate and they are visible. Publishing one is the single most common way a generated email goes out wrong.",
+
+    "The unsubscribe link is not on this list because it is not yours to forget: every marketing send carries one, the mail client's own one-click header unsubscribe stops everything, and the suppression list is checked before anything leaves. Transactional mail — order confirmations, booking reminders, password resets — is separate and does not carry one.",
+
+    "## Read the results, per site",
+
+    "Opens and clicks are reported for the campaign, on the site that sent it. Read them there. Aglyn does not offer one number spanning every site you run, deliberately: a blended open rate across a restaurant, a law firm and a SaaS product is a number with no decision attached to it. If you run sites for several clients, the comparison that matters is this client's campaign against this client's last one.",
+
+    "Where you do want a like-for-like comparison, use an experiment instead of an impression. An email A/B test overrides the campaign's subject or body per variant, each recipient deterministically receives one, and sends count as exposures. Aglyn AI can [write two to four variants](https://docs.aglyn.com/ai/ab-tests-with-ai) for a test you set up and put a finished one into plain language — and it will not name a winner your counts do not support. That one needs A/B testing on your plan, which is its own entitlement from Business up, as well as the AI add-on.",
+
+    "## Where this lives",
+
+    "Email, campaigns, lists and overlays are [Marketing](/product/marketing); contacts, consent records and the audiences you build from them are [the CRM](/product/crm). Generating any of it is the Aglyn AI add-on, on any paid plan, metered in credits — see [pricing](/pricing). Drafting a campaign also needs the Marketing plugin on and a plan that sends campaign email; without that you can still generate email designs. The reference pages are [Generate an email campaign with AI](https://docs.aglyn.com/marketing-and-automation/email-campaigns/generate-with-ai) and [Email campaigns](https://docs.aglyn.com/marketing-and-automation/email-campaigns/overview)."
+  ],
+  "internalLinks": [
+    {
+      "label": "Marketing",
+      "href": "/product/marketing",
+      "status": "live",
+      "verifiedAgainst": "https://aglyn.com/sitemaps/pages/1.xml on 2026-09-20"
+    },
+    {
+      "label": "The CRM",
+      "href": "/product/crm",
+      "status": "live",
+      "verifiedAgainst": "https://aglyn.com/sitemaps/pages/1.xml on 2026-09-20 — the route exists although no `product-copy/copy-crm.json` deck does"
+    },
+    {
+      "label": "Pricing",
+      "href": "/pricing",
+      "status": "live",
+      "verifiedAgainst": "https://aglyn.com/sitemaps/pages/1.xml on 2026-09-20",
+      "notes": "Linked as the place figures live, with no figure quoted here. docs/PRICING_SURFACES.md owns that surface."
+    },
+    {
+      "label": "Generate an email campaign with AI",
+      "href": "https://docs.aglyn.com/marketing-and-automation/email-campaigns/generate-with-ai",
+      "status": "in the tree",
+      "verifiedAgainst": "apps/docs/docs/marketing-and-automation/email-campaigns/generate-with-ai.md, no `slug` in front matter"
+    },
+    {
+      "label": "Email campaigns",
+      "href": "https://docs.aglyn.com/marketing-and-automation/email-campaigns/overview",
+      "status": "in the tree",
+      "verifiedAgainst": "apps/docs/docs/marketing-and-automation/email-campaigns/overview.md"
+    },
+    {
+      "label": "Who a campaign is allowed to reach",
+      "href": "https://docs.aglyn.com/marketing-and-automation/email-campaigns/overview#who-a-campaign-is-allowed-to-reach",
+      "status": "in the tree",
+      "verifiedAgainst": "`### Who a campaign is allowed to reach` in that file carries no explicit `{#id}`, so Docusaurus derives this slug — and the file links to it by that anchor itself"
+    },
+    {
+      "label": "Write two to four variants",
+      "href": "https://docs.aglyn.com/ai/ab-tests-with-ai",
+      "status": "in the tree",
+      "verifiedAgainst": "apps/docs/docs/ai/ab-tests-with-ai.md, added 2026-09-20 in 2b3bd3957 (AGL-2914)"
+    }
+  ],
+  "linksConsideredAndNotUsed": [
+    {
+      "href": "/product/ai",
+      "why": "Not in https://aglyn.com/sitemaps/pages/1.xml as of 2026-09-20: the copy deck exists at tools/marketing/product-copy/copy-ai.json but the page is not built. ⛔ PUBLISH PRECONDITION if it is added to the closing paragraph."
+    },
+    {
+      "href": "docs marketing-and-automation/analytics/cookie-consent",
+      "why": "The brief says 'link the consent docs'. Cookie consent is a different consent — analytics storage, not marketing permission to email. Linking it here would send a reader looking for the email rule to a page about cookie banners."
+    }
+  ],
+  "claimsToVerify": [
+    {
+      "phrase": "It will not send, schedule or queue anything … the campaign is aimed at nobody until you pick an audience yourself",
+      "source": "apps/docs/docs/marketing-and-automation/email-campaigns/generate-with-ai.md — 'What it will not do' and 'Who receives it'",
+      "concern": "RESOLVED, and it is the post's whole premise, so it is stated in the second paragraph rather than in a footnote."
+    },
+    {
+      "phrase": "the recipient-count and consent-basis captions, quoted as a code block",
+      "source": "apps/docs/docs/marketing-and-automation/email-campaigns/overview.md#recipient-count and #who-a-campaign-is-allowed-to-reach",
+      "concern": "RESOLVED — the figures 1,240 / 12 / 310 / 44 are the DOCS' OWN worked example, reproduced as an illustration of the caption's shape. They are not a customer's numbers and not a claim about anything. ⛔ If the docs example changes, change it here too, or drop the block rather than let two surfaces disagree."
+    },
+    {
+      "phrase": "merge tokens only in text, never in a link, a subject line or a preheader",
+      "source": "apps/docs/docs/marketing-and-automation/email-campaigns/generate-with-ai.md#merge-tokens",
+      "concern": "RESOLVED. The sentence that follows it in the post — 'the reason you have never had one of our emails open with Hi {{contact.firstName}}' — is a claim about our own sends and is written as a general observation about the restriction, not as a support statistic."
+    },
+    {
+      "phrase": "AI A/B variants need A/B testing on the plan as well as the AI add-on",
+      "source": "libs/aglyn/src/lib/app-utils/plan-entitlements.ts — `abTesting` is false on free/starter/pro and true from business up; apps/docs/docs/ai/ab-tests-with-ai.md#who-can-use-it",
+      "concern": "RESOLVED against the entitlement file itself rather than the docs prose. Stated as a condition, not as a tier table, and with no price."
+    },
+    {
+      "phrase": "a plan that sends campaign email",
+      "source": "apps/docs/docs/marketing-and-automation/email-campaigns/generate-with-ai.md#where-it-runs",
+      "concern": "RESOLVED by using the docs' own phrasing rather than naming the plan. The plan that starts campaign email is recorded elsewhere; repeating it here would put a tier claim on a surface that does not own one."
+    },
+    {
+      "phrase": "no rollup — results are read per site",
+      "source": "tools/marketing/README.md — 'Cross-site rollup', the banned aggregated data view",
+      "concern": "RESOLVED, and turned into an argument rather than an omission: the post says why a blended figure across clients is not worth having. ⛔ Do not let a later edit soften this into 'see all your campaigns in one place'."
+    },
+    {
+      "phrase": "no send-volume, deliverability or open-rate figure anywhere in the post",
+      "source": "AGL-3024 for credits; nothing measured exists for the rest",
+      "concern": "OPEN BY OMISSION. No 'x% higher open rate', no credits per email, no time saved. A cost line can come only from AGL-3024's live run, which records credits and tokens per document kind."
+    },
+    {
+      "phrase": "the rolling-out disclosure",
+      "source": "release flags: `release_ai_generative` off in production",
+      "concern": "OPEN UNTIL THE FLIP. Held in `disclosure`, outside `body`. Note the flag gates GENERATING the email; sending campaigns is released, which is why the disclosure names generative building specifically."
+    }
+  ]
+}
