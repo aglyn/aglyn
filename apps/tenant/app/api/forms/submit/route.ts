@@ -30,6 +30,7 @@ import {
   visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
 import { captureHostContact, emitHostEvent, resolveDatasetDoc } from '@aglyn/tenant-runtime'
+import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'
 // The leaf, not the barrel: this route's specs substitute the barrel wholesale,
 // and the verification must be the real one under them.
 import { verifyFormDatasetBinding } from '@aglyn/tenant-data-admin/server/form-dataset-binding-token'
@@ -874,6 +875,27 @@ export async function POST(request: Request): Promise<Response> {
                 },
               },
             })
+            /*
+             * The pages repeating over the dataset are refreshed (AGL-3113).
+             *
+             * This is the path the Datasets page's own claim rests on — bind
+             * an element to a dataset, publish, and a record written later
+             * shows within seconds. Before this the record landed and the page
+             * kept serving the rows it was built from for the rest of the
+             * hour, which made the only visible difference between a working
+             * form and a broken one a wait nobody would sit through.
+             *
+             * Inside the swallow above, deliberately, and best effort inside
+             * that: a refusal from the cache must never turn a stored lead
+             * into a lost one.
+             */
+            if (owningOrg?.orgId) {
+              await announceDatasetRecordChange({
+                firestore,
+                orgId: owningOrg.orgId,
+                datasetId: datasetDoc.id,
+              })
+            }
           }
         }
       } catch (error) {

@@ -761,3 +761,97 @@ describe('the table of contents scrolls rather than clipping (AGL-2486)', () => 
     }
   })
 })
+
+/**
+ * AGL-3149. A body image asked for the ORIGINAL at every viewport: no
+ * `srcSet`, no WebP variant, and no box reserved for it.
+ *
+ * The fix is one set of attributes, not three independent ones, and the spec
+ * is written that way because the halves are dangerous apart. `srcSet` with
+ * `w` descriptors makes the browser derive the image's density-corrected
+ * intrinsic size from `sizes` — measured, a 320px asset in a 712px column
+ * rendered at 668px — so the pair is what keeps a body image its own size, and
+ * `height: auto` is what stops the pair's height hint squashing it once
+ * `max-width` caps the width.
+ *
+ * Hence the shape of these tests: with a pair, everything; without one,
+ * TODAY'S MARKUP EXACTLY. A composition that cannot measure an asset must
+ * leave it alone rather than improve it halfway.
+ */
+describe('Markdown body images are delivered at the size they render (AGL-3149)', () => {
+  const REF = 'media:org:jWmGooWE3L/4GF1hRJBUp'
+  const CDN = '/api/media/cdn/org:jWmGooWE3L/4GF1hRJBUp'
+  const doc = `![A pipeline](${REF})`
+  const img = (container: HTMLElement) =>
+    container.querySelector('img') as HTMLImageElement
+
+  it('carries the WebP candidates, the pair, and a sizes taken from the pair', () => {
+    const { container } = render(
+      <Markdown content={doc} intrinsicSizes={{ [REF]: { width: 1200, height: 630 } }} />,
+    )
+    const el = img(container)
+    expect(el.getAttribute('srcset')).toBe(
+      [320, 640, 1280, 1920].map((w) => `${CDN}?w=${w} ${w}w`).join(', '),
+    )
+    // Derived from the image, not from the column: an asset narrower than the
+    // prose renders at its own width, so describing the column would fetch a
+    // candidate several times the slot.
+    expect(el.getAttribute('sizes')).toBe('(max-width: 1200px) 100vw, 1200px')
+    expect(el.getAttribute('width')).toBe('1200')
+    expect(el.getAttribute('height')).toBe('630')
+  })
+
+  it('releases the height so the width cap cannot squash the picture', () => {
+    const { container } = render(
+      <Markdown content={doc} intrinsicSizes={{ [REF]: { width: 1200, height: 630 } }} />,
+    )
+    const style = window.getComputedStyle(img(container))
+    expect(style.maxWidth).toBe('100%')
+    expect(style.height).toBe('auto')
+  })
+
+  it('renders exactly today’s markup for an image it has no pair for', () => {
+    // The whole safety property: an unmeasured asset — a hotlink, an SVG, one
+    // past the composition's cap — is not improved halfway into an upscale.
+    const { container } = render(<Markdown content={doc} />)
+    const el = img(container)
+    expect(el.getAttribute('src')).toBe(CDN)
+    expect(el.getAttribute('srcset')).toBeNull()
+    expect(el.getAttribute('sizes')).toBeNull()
+    expect(el.getAttribute('width')).toBeNull()
+    expect(el.getAttribute('height')).toBeNull()
+  })
+
+  it('reserves the box for a hotlink it somehow has a pair for, but offers no variants', () => {
+    // Nobody else's server has our `?w=` variants, so a candidate list there
+    // would be a query string on a stranger's origin.
+    const hotlink = 'https://images.example.com/x.png'
+    const { container } = render(
+      <Markdown
+        content={`![a](${hotlink})`}
+        intrinsicSizes={{ [hotlink]: { width: 800, height: 400 } }}
+      />,
+    )
+    const el = img(container)
+    expect(el.getAttribute('srcset')).toBeNull()
+    expect(el.getAttribute('sizes')).toBeNull()
+    expect(el.getAttribute('width')).toBe('800')
+  })
+
+  it('keys the lookup by the target the document wrote, not the resolved url', () => {
+    // A pair filed under the CDN url would never be found: the renderer holds
+    // the parsed block's `src`, which is the reference as authored.
+    const { container } = render(
+      <Markdown content={doc} intrinsicSizes={{ [CDN]: { width: 1200, height: 630 } }} />,
+    )
+    expect(img(container).getAttribute('width')).toBeNull()
+  })
+
+  it('never lets the stamped map reach the DOM as an attribute', () => {
+    const { container } = render(
+      <Markdown content={doc} intrinsicSizes={{ [REF]: { width: 1200, height: 630 } }} />,
+    )
+    expect(container.querySelector('[intrinsicsizes]')).toBeNull()
+    expect(container.firstElementChild?.getAttribute('intrinsicSizes')).toBeNull()
+  })
+})

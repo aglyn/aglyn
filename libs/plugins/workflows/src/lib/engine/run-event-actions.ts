@@ -73,6 +73,7 @@ import {
   orgDataQueryForHost,
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
+import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'
 // The leaf, not the barrel: this library's specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
@@ -296,6 +297,33 @@ export function workflowContextFromDocs(
  * carries an `extraDataGbMonthlyUsd` rate, which every metered plan does. The
  * reads are paid on the shapes that can actually refuse.
  */
+/**
+ * Refresh the live pages showing the dataset this step just wrote to
+ * (AGL-3113).
+ *
+ * An automation that appends a row is the same change to a visitor as a form
+ * submission or a console edit: the pages repeating over the dataset go on
+ * serving the rows they were built from. Announced from the step rather than
+ * from the run, so a workflow whose steps write two different datasets
+ * refreshes both — the announce coalesces repeats of the SAME dataset itself,
+ * which is what a run hitting one dataset several times needs.
+ *
+ * Silent without an org: datasets are org-scoped, so a host with no resolvable
+ * org has no dataset to have written to. Best effort, and never thrown: the
+ * row is already stored.
+ */
+async function announceDatasetStepWrite(
+  env: ActionRunEnv,
+  datasetId: string,
+): Promise<void> {
+  if (!env.orgId) return
+  await announceDatasetRecordChange({
+    firestore: firebaseAdmin.app().firestore(),
+    orgId: env.orgId,
+    datasetId,
+  })
+}
+
 async function datasetAppendRefusal(
   env: ActionRunEnv,
   datasetRef: FirebaseFirestore.DocumentReference,
@@ -664,6 +692,7 @@ async function runServerStep(
         ),
         createdAt: FieldValue.serverTimestamp(),
       })
+      await announceDatasetStepWrite(env, datasetDoc.id)
       // `saved to Leads` beats `saved to dataset` (AGL-2171).
       detail = appendLabel
     } else if (step.type === 'updateDataset') {
@@ -740,6 +769,9 @@ async function runServerStep(
           createdAt: FieldValue.serverTimestamp(),
         })
       }
+      // Both legs changed a row, so both make the same pages stale — an edited
+      // record reads no differently from a new one on a page that lists them.
+      await announceDatasetStepWrite(env, datasetDoc.id)
     } else if (step.type === 'notifyAdmins') {
       await notifyHostManagers(hostId, {
         type: 'system.announcement',

@@ -1068,6 +1068,58 @@ describe('Entry body block (AGL-551)', () => {
     expect(image?.getAttribute('alt')).toBe('Diagram')
   })
 
+  /**
+   * AGL-3149, and the surface that actually matters for it: a blog post's
+   * pictures are in an entry body, not in a Markdown element.
+   *
+   * The attributes only work as a set — `srcSet` with `w` descriptors makes
+   * `sizes` the image's rendered width unless the intrinsic pair pins it, and
+   * the pair's height hint squashes the picture unless `height: auto` releases
+   * it. The Markdown element's copy of this spec carries the measurements; the
+   * point here is that the two bodies agree, through one shared call.
+   */
+  describe('body images are delivered at the size they render (AGL-3149)', () => {
+    const REF = 'media:org:jWmGooWE3L/4GF1hRJBUp'
+    const CDN = '/api/media/cdn/org:jWmGooWE3L/4GF1hRJBUp'
+    const body = `![A pipeline](${REF})`
+
+    it('carries the candidates, the pair, and a sizes taken from the pair', () => {
+      const { container } = render(
+        <CollectionEntryBody
+          markdown={body}
+          intrinsicSizes={{ [REF]: { width: 1200, height: 630 } }}
+        />,
+      )
+      const image = container.querySelector('img') as HTMLImageElement
+      expect(image.getAttribute('srcset')).toBe(
+        [320, 640, 1280, 1920].map((w) => `${CDN}?w=${w} ${w}w`).join(', '),
+      )
+      expect(image.getAttribute('sizes')).toBe('(max-width: 1200px) 100vw, 1200px')
+      expect(image.getAttribute('width')).toBe('1200')
+      expect(image.getAttribute('height')).toBe('630')
+      expect(window.getComputedStyle(image).height).toBe('auto')
+    })
+
+    it('renders exactly today’s markup for an image it has no pair for', () => {
+      const { container } = render(<CollectionEntryBody markdown={body} />)
+      const image = container.querySelector('img') as HTMLImageElement
+      expect(image.getAttribute('src')).toBe(CDN)
+      expect(image.getAttribute('srcset')).toBeNull()
+      expect(image.getAttribute('sizes')).toBeNull()
+      expect(image.getAttribute('width')).toBeNull()
+    })
+
+    it('never lets the stamped map reach the DOM as an attribute', () => {
+      const { container } = render(
+        <CollectionEntryBody
+          markdown={body}
+          intrinsicSizes={{ [REF]: { width: 1200, height: 630 } }}
+        />,
+      )
+      expect(container.querySelector('[intrinsicsizes]')).toBeNull()
+    })
+  })
+
   it('routes internal markdown links through AppLink (AGL-582)', () => {
     const { container } = render(
       <CollectionEntryBody markdown="Go [about](/about) or [out](https://example.com)." />,

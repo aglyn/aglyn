@@ -225,6 +225,174 @@ registerPluginService(AI_PROVIDERS, ollamaProvider, { pluginId: 'acme-llm', prio
 const providers = resolvePluginServices(AI_PROVIDERS) // acme-llm first, then ai
 ```
 
+## Zones a plugin hosts — `plugin-zones`
+
+`CONSOLE_WIDGET_SLOTS` is the catalog of zones the console SHELL draws, and a
+slot id has always been an open string — so a plugin could already host a zone
+of its own on a page it owns. What it could not do is say what that zone HANDS
+a widget. A zone token carries the props type, so the plugin declares both.
+
+```ts
+// the plugin that HOSTS the zone — it draws `useConsoleWidgetSlot()` itself
+interface BottleDetailZoneProps {
+  hostId: string
+  bottle: { id: string; name: string; vintage: number }
+  /** Stages a tasting note as an unsaved edit; the page's Save is the write. */
+  proposeNote: (note: string, key: string) => void
+}
+export const BOTTLE_DETAIL = definePluginZone<BottleDetailZoneProps>('bottleDetail')
+
+// from its register fn, where the loader's owner marker is set
+registerPluginZone({
+  zone: BOTTLE_DETAIL,
+  label: 'Bottle detail',
+  surface: 'console',
+  description: 'A widget here proposes a tasting note; the page saves it.',
+})
+
+// ANOTHER plugin's widget — it imports the token, never the owner's model
+function Suggestion(props: PluginZoneProps<typeof BOTTLE_DETAIL>) { … }
+registerConsoleExtension({ widgets: [{ slot: 'bottleDetail', Component: Suggestion }] })
+```
+
+| API | Semantics |
+| --- | --- |
+| `definePluginZone<Props>(id)` | The token. Pure — it registers nothing and reads nothing — so a plugin may define it at module scope and register it from its register fn. |
+| `registerPluginZone({ zone, label, surface, description? }, { pluginId? })` | Publishes it. Owner = the loader's marker inside a register fn, else `pluginId`; no owner throws, and a zone id another plugin declared throws naming both while the incumbent keeps its zone. The same plugin re-declaring replaces its own. |
+| `listPluginZones()` / `pluginZone(id)` / `pluginIdForZone(id)` | Every declared zone with its owner, one by id, and the owner alone. |
+| `PluginZoneProps<typeof ZONE>` | The props type, off the token. |
+
+**A token ships nothing.** It is `{ id }`, and `__props` never holds a value —
+the props are carried at the type level and erased. That is load-bearing, not
+tidy: the zone catalog is on the published page's static graph, so a
+declaration that put prop SHAPES there would make every published page carry
+the console's vocabulary. Import this module by its own subpath
+(`@aglyn/aglyn/plugin-manager/plugin-zones`); it is not in the barrel.
+
+## Host subcollections — `plugin-host-collections`
+
+A plugin writes ordinary documents under `hosts/{hostId}`, and three core
+surfaces have to know which plugin owns which: the media-usage scan, a
+reference row's deep link, and the site's artifact counters.
+
+```ts
+registerPluginHostCollections([
+  { name: 'bottles', routeSlug: 'cellar', artifact: true },
+  { name: 'tastings', label: 'Tasting note', routeSlug: 'cellar' },
+  {
+    name: 'cellarTemperatures',
+    mediaScan: 'none',
+    mediaScanReason:
+      'One reading per sensor per minute, none of which can hold an asset ' +
+      'reference: scanning it would cost the whole sweep and find nothing.',
+  },
+])
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginHostCollections(collections, { pluginId? })` | One collection has one owner: a name another plugin declared throws naming both, and refuses the WHOLE call — half a plugin's storage map landing is worse than none. Re-registering replaces that plugin's own. |
+| `mediaScan` | `generic` (the default) flattens each document and searches it; `own` means a pass that knows its shape already reads it; `none` needs `mediaScanReason`, and a declaration without one is refused. |
+| `pluginHostCollectionsScannedGenerically()` / `pluginHostCollectionsExcludedFromMediaScan()` | What the scan reads, and what it skips with the reason given. |
+| `pluginHostCollectionRouteSlug(name)` / `pluginHostCollectionLabel(name)` | A reference row's deep link and its wording. The label is derived from the name when the owner declares none (`productCategories` → "Product category"), so a new collection reads correctly with no second list. |
+| `pluginHostArtifactCollections()` | The collections whose documents a site counts beside its screens, layouts and components. |
+| `listPluginHostCollections()` / `pluginHostCollection(name)` / `pluginIdForHostCollection(name)` | Everything declared, one by name, and its owner. |
+
+**The default is to scan**, and a declaration says only why it should not be.
+That is inverted on purpose: "does this carry media?" needs a judgment about a
+schema nobody wrote down, and a collection nobody has thought about is READ, so
+a plugin shipping a media-bearing collection is covered the day it lands. A
+declaration names no FIELDS — the scan flattens generically, and a field list
+would be the same staleness trap one level down.
+
+## Record addresses — `plugin-record-routes`
+
+Where a plugin's records are read, published by the plugin that owns them, so
+no other surface spells its URLs. Keyed by RECORD KIND, like
+`plugin-record-facts` and `plugin-record-timeline`: one word answers what a
+record is, what happened on it, and where a person reads it.
+
+```ts
+// the owner
+registerPluginRecordRoute('bottle', {
+  list: ({ orgSlug, host }) =>
+    host ? `/${orgSlug}/hosts/${host}/cellar/bottles` : `/${orgSlug}/cellar/bottles`,
+  record(context, id) {
+    const list = this.list(context)
+    return list ? `${list}/${encodeURIComponent(id)}` : null
+  },
+  byEmail(context, email) { … },
+})
+
+// any other surface, including the console app, which may not import a plugin
+const href = pluginRecordHref('bottle', { orgSlug, host }, bottleId)
+return href ? <Link href={href}>{name}</Link> : <span>{name}</span>
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginRecordRoute(kind, route, { pluginId? })` | A kind another plugin publishes throws naming both; the incumbent keeps serving, and the owner re-registering replaces its own. |
+| `pluginRecordHref(kind, context, id)` / `pluginRecordListHref(kind, context)` | One record's page, and the list it lives on. |
+| `pluginRecordByEmailHref(kind, context, email)` / `pluginRecordFilteredHref(kind, context, filter, value)` | The optional halves: a list opened on one person's address, and a list narrowed by one of the OWNER's filters. A filter the owner does not know answers `null` rather than a list that ignores the narrowing. |
+| `pluginRecordRoute(kind)` / `listPluginRecordRouteKinds()` | The route with its owner, and every published kind. |
+
+`context` is `{ orgSlug, host }` — the two route params, both already in the URL
+the calling surface renders on, so a link costs no document read. `host: null`
+asks for the organization-level address. **Every answer can be `null`**: no
+plugin publishes the kind, or the owner has no address at that scope. Render
+text, which is what these surfaces already do while their route params settle.
+A link is not access: the page at the far end applies its own gates.
+
+## Contact capture — `plugin-contact-capture` (`/server`)
+
+A silo that meets a person — a form submission, a member sign-up, an order, a
+booking — hands them to whichever plugin keeps people, instead of importing its
+writer.
+
+```ts
+// the plugin that keeps people, from its server surfaces
+registerPluginContactCaptureWriter(rolodexWriter)
+
+// a silo: it declares its door once…
+registerPluginContactSource({
+  source: 'kiosk',
+  label: 'Guest book',
+  openLabel: 'Open visit',
+  recordKind: 'kioskVisit',
+})
+
+// …and reports what it saw
+const captured = await capturePluginContact({
+  orgId, hostId,
+  identity: { email: form.email, name: form.name },
+  interaction: { source: 'kiosk', atMs, refId: `kioskVisits/${visitId}`, summary: 'Signed the guest book' },
+  marketingConsent: form.optIn,
+  lifecycleFloor: 'lead',
+  profile: { phone: form.phone },
+})
+if (captured?.ok === false) log.warn(captured.reason, captured.error)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginContactCaptureWriter(writer, { pluginId? })` | A slot: a workspace keeps one set of people, so a second plugin's writer throws naming both and the incumbent keeps serving. |
+| `capturePluginContact(request)` | `{ ok: true, contactId, created }` — `created: false` is a returning visit — or `{ ok: false, reason, error }`, or **`null` when no plugin keeps people**. `null` and a refusal are different answers: `null` is a workspace with no record system, where nothing has gone wrong. |
+| `registerPluginContactSource({ source, label, openLabel?, recordKind? }, { pluginId? })` | One source word has one owner. `openLabel` is what a link from a timeline entry says, and a door with nothing to open declares none. `recordKind` is the kind `plugin-record-routes` addresses the silo's own document by. |
+| `pluginContactCaptureWriter()` / `listPluginContactSources()` / `pluginContactSource(source)` | The writer with its owner, every declared door, and one by its word. |
+
+**A refusal is returned, never thrown.** Each of these silos has already
+accepted the submission or taken the money, so a throw would cost it the thing
+it was recording. `reason` is `invalid-email`, `band`, `erased` or `error`, and
+`error` is customer-safe.
+
+**`profile` is the owner's own field names with scalar values, not a core
+type.** A person's record shape belongs to the plugin that models it. So does
+everything else the owner decides: normalizing and keying the address, new
+person or returning visit, what a stage, an owner, a company or a tag means,
+and what a new person sets off. The silo reports what it saw. Like
+`plugin-record-timeline`, the registry authenticates nobody: the silo has
+already decided the capture is the workspace's to record.
+
 ## Record timeline — `plugin-record-timeline` (`/server`)
 
 A plugin that sends mail or books meetings files what happened on the
@@ -556,6 +724,68 @@ registerPluginEntitlements({
 Registration order is deterministic: `FIRST_PARTY_PLUGINS` catalog order,
 then any other id alphabetically — plugin modules load in parallel, and a
 staff checklist that followed arrival order would reorder per session.
+
+## Typed entitlement keys — `plugin-entitlement-keys`
+
+The TYPE half of the keys above. `registerPluginEntitlements` lets a plugin
+REGISTER a key; this is what makes the key part of `OrgEntitlements` and
+`OrgFeatureFlags` without the core listing it.
+
+```ts
+// libs/plugins/cellar — the plugin's own module
+declare module '@aglyn/aglyn/plugin-manager/plugin-entitlement-keys' {
+  interface PluginEntitlementQuotas {
+    bottlesPerHost?: number
+  }
+  interface PluginEntitlementFeatures {
+    cellarTastings?: boolean
+  }
+}
+
+registerPluginEntitlementKeys({
+  pluginId: 'cellar',
+  keys: [
+    {
+      key: 'bottlesPerHost',
+      kind: 'quota',
+      label: 'Bottles per site',
+      description:
+        'Counts the CATALOG, never a pour: how many bottles a site may list, ' +
+        'not how many tastings it may pour from them.',
+    },
+    { key: 'cellarTastings', kind: 'feature', label: 'Tasting notes' },
+  ],
+})
+```
+
+From then on `entitlements.bottlesPerHost` type-checks everywhere
+`OrgEntitlements` is read, `keyof OrgFeatureFlags` admits `cellarTastings`, and
+nothing in the core names a bottle.
+
+| API | Semantics |
+| --- | --- |
+| `PluginEntitlementQuotas` / `PluginEntitlementFeatures` | Empty interfaces to augment with `declare module`. Declare each key OPTIONAL — an entitlement is resolved and may be absent, like every key the core declares. |
+| `registerPluginEntitlementKeys({ pluginId, keys })` | The runtime twin: who owns a key, and what it means. Idempotent per plugin; a key another plugin declared refuses the whole registration, naming both. |
+| `listPluginEntitlementKeys()` / `pluginEntitlementKey(key)` / `pluginIdForEntitlementKey(key)` / `listPluginEntitlementKeysOfKind(kind)` | Everything declared, one key, its owner, and the quota or feature half. |
+| `unregisterPluginEntitlementKeys(pluginId)` / `resetPluginEntitlementKeysForTests()` | A bundle unloading, and the spec reset. |
+
+**`Required` is over the CORE halves.** `CoreOrgEntitlements` and
+`CoreOrgFeatureFlags` are what `PLAN_ENTITLEMENTS` declares and what
+`ResolvedOrgEntitlements` keeps exhaustive — a plan that forgets a platform
+quota or gate does not compile. A plugin's band comes from its own seat add-on
+declaration instead, so it joins as declared: present, and optional, because a
+workspace without the plugin has no value for it.
+
+**No prices here.** A seat add-on's price stays a `PLAN_PRICING` row that the
+Stripe wiring reads and `check-pricing-drift` reconciles. Two places holding a
+number are two places that can disagree about what a customer is charged.
+
+**The organization DOCUMENT does not compose this way**, deliberately. Its
+fields are enumerated from `org-billing.types.ts`'s SOURCE and checked against
+the Firestore write-deny rules, so a field declared from a plugin's own file
+would be a hole in a rules-coverage guard. A plugin's settings block goes
+through `registerPluginConfigSchema` into `pluginSettings/{pluginId}`, which is
+its own document under its own rule.
 
 ## Enablement, flags, config, fields, permissions, jobs
 

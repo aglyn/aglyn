@@ -80,6 +80,32 @@ sets none of its own uses it, including collection lists and blog entries with n
 cover image. Set one and no page of your site ever shares as a bare, image-less
 link again.
 
+### What language your site says it is in
+
+Every page your site serves declares a language in its markup, as
+`<html lang="…">`. Browsers offer to translate from it, screen readers pick a
+voice with it, and search engines use it to decide who to show the page to — so
+a site written in Spanish that declares English is mis-served to everybody.
+
+It comes from your **Languages** card in site setup, and nothing else:
+
+1. the site's **default language**, if you set one;
+2. otherwise the **first language** you added;
+3. otherwise **English**, for a site that has not been set up for more than one
+   language.
+
+You do not set this per page. It describes the site, so it is the same on every
+page of it, and it updates everywhere the moment you change the card.
+
+A **locale variant** — the same page written in another language — still
+advertises its own language where it counts for sharing and search: `og:locale`
+and the `inLanguage` in its structured data name the variant's language, and its
+`hreflang` links point search engines at it. The `<html lang>` on the variant
+names the site it belongs to.
+
+See [Multilingual](../multilingual/overview.md) for adding a language and a
+language switcher.
+
 ## Search engine visibility
 
 You decide what search engines are allowed to index, at two levels.

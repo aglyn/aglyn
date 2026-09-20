@@ -21,6 +21,7 @@
  * `npm run check:ai-palette` fails CI when this file is stale.
  */
 import type {
+  AiNodeCapability,
   AiPaletteEntry,
   AiSurface,
   AiSurfaceDefinition,
@@ -3355,6 +3356,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
         tabLink8: {
           type: 'string',
         },
+        opensOn: {
+          type: 'string',
+        },
         orientation: {
           type: 'string',
           enum: ['horizontal', 'vertical'],
@@ -3407,6 +3411,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       tabLink6: 'screen-select',
       tabLink7: 'screen-select',
       tabLink8: 'screen-select',
+      opensOn: 'select',
       orientation: 'select',
       variant: 'select',
       ssrPanels: 'switch',
@@ -4345,6 +4350,70 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     presets: ['Wishlist'],
   },
 }
+
+/** What every node can do, whatever its componentId. */
+export const AI_NODE_CAPABILITIES: Record<string, AiNodeCapability> = {
+  repeat: {
+    id: 'repeat',
+    displayName: 'Repeat',
+    summary: 'Renders an element once per record of the data it repeats over.',
+    propsSchema: {
+      type: 'object',
+      properties: {
+        repeatSelf: {
+          type: 'string',
+          enum: ['false', 'true'],
+        },
+        repeatLimit: {
+          type: 'string',
+          maxLength: 200,
+        },
+        repeatFilter: {
+          type: 'string',
+          maxLength: 200,
+        },
+        repeatSort: {
+          type: 'string',
+          maxLength: 200,
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    propRoles: {
+      repeatLimit: 'text',
+      repeatFilter: 'text',
+      repeatSort: 'text',
+    },
+    propFields: {
+      repeatSelf: 'select',
+      repeatLimit: 'text-field',
+      repeatFilter: 'text-field',
+      repeatSort: 'text-field',
+    },
+    textLimits: {
+      repeatLimit: 200,
+      repeatFilter: 200,
+      repeatSort: 200,
+    },
+    childrenOnlyProps: ['repeatSelf'],
+    omittedProps: [],
+  },
+}
+
+/** Attribute field kinds this palette declares nowhere, and so turned away. */
+export const AI_UNDECLARED_FIELD_KINDS: readonly string[] = [
+  'category-select',
+  'collection-select',
+  'data-table',
+  'dataset-field-select',
+  'dataset-select',
+  'form-select',
+  'node-select',
+  'plugin-select',
+  'plugin-settings',
+  'product-select',
+]
 
 /** The root and the allowed component ids of each surface. */
 export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = {

@@ -861,6 +861,13 @@ export interface CollectionEntryBodyProps {
    * resolves to the rendered entry's body at compose time.
    */
   markdown?: string
+  /**
+   * The pixel pair of each library image this body names, keyed by the target
+   * as the body writes it, stamped by the composition from the assets' DAM
+   * records (AGL-3149) — never set by hand, and never on the template, where
+   * `markdown` is still the `{{entry.body}}` token and names no asset.
+   */
+  intrinsicSizes?: Record<string, { width: number; height: number }>
 }
 
 /** A still-unresolved `{{token}}` (no entry context on this render). */
@@ -910,7 +917,10 @@ const CollectionEntryBody = forwardRef<
   HTMLDivElement,
   CollectionEntryBodyProps
 >((props, ref) => {
-  const { markdown, ...rest } = props
+  // `intrinsicSizes` is destructured out rather than left in `rest`: `rest` is
+  // spread onto a Box, and a composition-stamped object would reach the DOM as
+  // an attribute React has no idea what to do with.
+  const { markdown, intrinsicSizes, ...rest } = props
   // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
   const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   // The routing map travels with the suppression flag: both decide what a
@@ -985,9 +995,21 @@ const CollectionEntryBody = forwardRef<
               // Resolved like the entry's cover image a few hundred lines
               // below (AGL-1686): a body image is the same kind of asset and
               // has no reason to be stored in a more fragile form.
-              src={Aglyn.resolveMediaSrc(block.src, { hostId })}
+              //
+              // And sized like one too, as of AGL-3149: the same call gives
+              // the Markdown element's body images their candidate list and
+              // intrinsic pair, so the two bodies cannot disagree about how a
+              // picture in prose is delivered.
+              {...Aglyn.mediaBodyImageAttributes({
+                src: block.src,
+                hostId,
+                size: intrinsicSizes?.[block.src],
+              })}
               alt={block.alt}
-              sx={{ maxWidth: '100%', borderRadius: 1, my: 1 }}
+              // Paired with the `width`/`height` above — see the Markdown
+              // element's copy of this: without it the height hint outlives
+              // the `maxWidth` cap and squashes the picture.
+              sx={{ maxWidth: '100%', height: 'auto', borderRadius: 1, my: 1 }}
               // An image inside an entry body is below the fold by
               // construction — the title, byline and opening paragraphs are
               // above it. This one carried no loading hint at all, so it was

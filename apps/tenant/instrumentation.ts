@@ -65,6 +65,28 @@ export async function register(): Promise<void> {
     console.error('[instrumentation] plugin declarations failed', error)
   }
 
+  /**
+   * How a record write refreshes the pages that show it, on this side
+   * (AGL-3113).
+   *
+   * A form submission and an automation step both write dataset records from
+   * inside this process, and the caches those rows are held in are this
+   * process's own. The drop itself is generic — core names no runtime — so the
+   * deployment that owns the caches says how, here, once per instance.
+   * Registered by name rather than by importing the module for its side
+   * effect, which a bundler is free to delete (AGL-3025).
+   */
+  try {
+    const { registerLivePageDropping } = await import(
+      './utils/live-page-dropper'
+    )
+    registerLivePageDropping()
+  } catch (error) {
+    // Without this a tenant-side record write falls back to the TTL, which is
+    // what it did before — never a reason to take the instance down.
+    console.error('[instrumentation] live page dropper failed', error)
+  }
+
   try {
     const { warmFirestoreAtBoot } = await import('./utils/boot-warmup')
     warmFirestoreAtBoot()
