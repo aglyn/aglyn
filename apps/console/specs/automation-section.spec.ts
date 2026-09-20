@@ -51,7 +51,17 @@ const PAGE =
   'libs/plugins/workflows/src/lib/components/workflows-console-sections.ts'
 const NEXT_CONFIG = 'apps/console/next.config.js'
 const RELEASE_FLAGS = 'libs/aglyn/src/lib/app-utils/release-flags.ts'
-const ENABLED_PLUGINS = 'libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts'
+/**
+ * The switchboard row, where the plugin declares it: the generator compiles
+ * each `catalog` block into the core's catalog, so this is the one place the
+ * section's switchboard name and its stored id are written.
+ */
+const switchboardRow = (id: string) => {
+  const config = JSON.parse(readRepo('plugins.config.json')) as {
+    plugins: { id: string; catalog?: { label?: string } }[]
+  }
+  return config.plugins.find((plugin) => plugin.id === id)
+}
 
 /** A route-table path as Next writes it in `redirects()`: `[x]` → `:x`. */
 const asNextSource = (route: string) => route.replace(/\[(\w+)]/g, ':$1')
@@ -88,9 +98,7 @@ describe('the automation section', () => {
     // same section, so a rename that stops at the nav leaves two screens
     // calling it something the console no longer does.
     expect(readRepo(RELEASE_FLAGS)).toContain(`label: 'Automation'`)
-    expect(readRepo(ENABLED_PLUGINS)).toContain(
-      `{ id: 'workflows', label: 'Automation'`,
-    )
+    expect(switchboardRow('workflows')?.catalog?.label).toBe('Automation')
   })
 
   it('THE OLD ADDRESS still resolves', () => {
@@ -144,7 +152,7 @@ describe('the automation section', () => {
     expect(plugin).toContain(`navTabId: 'nav-tab-workflows'`)
     expect(readRepo(RELEASE_FLAGS)).toContain(`key: 'release_workflows'`)
     expect(readRepo(RELEASE_FLAGS)).toContain(`navTabId: 'nav-tab-workflows'`)
-    expect(readRepo(ENABLED_PLUGINS)).toContain(`id: 'workflows'`)
+    expect(switchboardRow('workflows')?.catalog).toBeDefined()
     expect(tabIds(readRepo(PAGE))).toEqual(['workflows', 'actions', 'webhooks'])
   })
 })
