@@ -98,6 +98,13 @@ const SITE_ZONES: readonly string[] = [
   CONSOLE_WIDGET_SLOTS.recordInsights,
   CONSOLE_WIDGET_SLOTS.recordEmail,
   CONSOLE_WIDGET_SLOTS.importMapping,
+  // The A/B testing card's two zones (AGL-2914), hosted by the marketing
+  // plugin on a site's Marketing page. Plain ids rather than a core slot:
+  // the plugin that draws that card declares them, so the catalog names
+  // neither. A switched-off site draws neither widget, and the test they are
+  // about is that site's.
+  'experimentVariants',
+  'experimentResult',
 ]
 
 /** Zones drawn on the WORKSPACE's pages, where no site's switch reaches. */

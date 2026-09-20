@@ -73,6 +73,10 @@ import {
   AiDescribeTemplateButton,
 } from './components/ai-describe-button.component'
 import {
+  AiExperimentResultCard,
+  AiExperimentVariantsCard,
+} from './components/ai-experiment-cards.component'
+import {
   AiExplainAutomation,
   AiExplainRunFailure,
 } from './components/ai-explain-automation.component'
@@ -495,6 +499,30 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiProductImportOption,
+      },
+      // A/B tests by AI (AGL-2914): variants written in the experiment
+      // editor, and one test's result read in plain words below its figures.
+      // The A/B testing card hosts both zones, so they are drawn only where
+      // that card is and only on a site with A/B testing; the shell holds the
+      // plan band and `ai.generate`, and each card asks the jobs route about
+      // the release flag before it shows anything. Neither writes: the
+      // experiment editor's Save is the only write, and an explanation has
+      // nothing to apply.
+      {
+        slot: 'experimentVariants',
+        widgetId: 'ai-experiment-variants',
+        title: 'Write variants with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiExperimentVariantsCard,
+      },
+      {
+        slot: 'experimentResult',
+        widgetId: 'ai-experiment-result',
+        title: 'Explain this result with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiExperimentResultCard,
       },
     ],
   })
