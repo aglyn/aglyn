@@ -61,13 +61,13 @@ export const DOCS_HELP_TOPICS = {
     path: '/getting-started/aglyn-assist',
     title: 'Aglyn Assist',
   },
-  aiAllotments: {
-    path: '/marketing-and-automation/ai-assist/ai-allotments',
-    title: 'AI allotments, usage and model choice',
+  ai: {
+    path: '/ai/overview',
+    title: 'Aglyn AI',
   },
-  aiAssist: {
-    path: '/marketing-and-automation/ai-assist/overview',
-    title: 'AI Assist',
+  aiAllotments: {
+    path: '/ai/ai-allotments',
+    title: 'AI allotments, usage and model choice',
   },
   aiMonitoring: {
     path: '/staff-console/ai-monitoring',
@@ -95,7 +95,7 @@ export const DOCS_HELP_TOPICS = {
   },
   automationsWithAi: {
     path: '/ai/automations-with-ai',
-    title: 'Draft and explain automations with AI',
+    title: 'Explain automations with AI',
   },
   bandwidth: {
     path: '/workspace-and-billing/billing-and-plans/bandwidth',
@@ -190,8 +190,8 @@ export const DOCS_HELP_TOPICS = {
     title: 'Cookie consent',
   },
   copyAssist: {
-    path: '/marketing-and-automation/ai-assist/copy-assist',
-    title: 'Copy assist',
+    path: '/ai/copy-assist',
+    title: 'Rewrite and write copy with AI',
   },
   copyPaste: {
     path: '/building-sites/besigner/copy-paste',
@@ -318,8 +318,8 @@ export const DOCS_HELP_TOPICS = {
     title: 'Generate a whole site from a brief',
   },
   generateSection: {
-    path: '/marketing-and-automation/ai-assist/generate-section',
-    title: 'AI Generate Section',
+    path: '/ai/generate-section',
+    title: 'Generate a section on the canvas',
   },
   generateWithAi: {
     path: '/marketing-and-automation/email-campaigns/generate-with-ai',
@@ -638,7 +638,7 @@ export const DOCS_HELP_TOPICS = {
     title: 'Inline & rich text editing',
   },
   themeAssist: {
-    path: '/marketing-and-automation/ai-assist/theme-assist',
+    path: '/ai/theme-assist',
     title: 'Themes with AI',
   },
   themeBuilder: {
@@ -699,16 +699,16 @@ export const DOCS_HELP_ANCHORS = {
   addALocale: ['#steps', '#tips', '#related'],
   addOns: ['#what-you-can-add', '#assigning-register-seats', '#assigning-collaborator-seats', '#aglyn-ai', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
   addSearch: ['#steps', '#tips', '#related'],
-  aglynAssist: ['#what-it-can-do', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#edits-in-the-besigner', '#where-an-answer-came-from', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
+  aglynAssist: ['#what-it-can-do', '#aglyn-ai', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#edits-in-the-besigner', '#where-an-answer-came-from', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
+  ai: ['#drafts-only', '#what-it-can-build', '#not-yet', '#the-add-on', '#credits-and-caps', '#who-can-use-it', '#switch-ai-off-for-one-site', '#what-is-sent', '#related'],
   aiAllotments: ['#allotments', '#hard-or-soft', '#the-pool-comes-first', '#limiting-models', '#who-can-set-them', '#usage-strip', '#choosing-a-model', '#related'],
-  aiAssist: ['#copy-assist', '#ai-generate-section', '#who-can-use-it', '#limits', '#switch-ai-off-for-one-site', '#related'],
   aiMonitoring: ['#the-ai-card', '#where-else', '#one-account', '#the-spend-leaderboard', '#alerts', '#related'],
   analytics: ['#pageview-tracking', '#visitors-approximate', '#traffic-card', '#traffic-delta', '#insights', '#campaign-tracking-utm', '#per-screen-traffic', '#dwell-time', '#google-analytics', '#related'],
   animations: ['#add-an-animation', '#presets', '#plays', '#duration-and-delay', '#easing', '#stagger-children', '#replay-each-time', '#animations-do-not-play-on-the-canvas', '#accessibility', '#speed-and-layout', '#if-a-visitor-has-javascript-turned-off'],
   architectureMultiTenancy: ['#the-model-in-one-sentence', '#data-model', '#authorization-one-read-per-request', '#membership-lifecycle', '#workspace-subdomains', '#which-hostnames-may-serve-the-console', '#attaching-a-workspaces-subdomain', '#billing--cost-attribution', '#related'],
   assistSignals: ['#the-workflow-this-board-exists-for', '#fleet', '#the-cache-read-rate-and-what-a-bad-number-looks-like', '#where-the-money-goes', '#tokens-by-kind', '#docs-gaps', '#questions-the-docs-could-not-answer', '#what-people-actually-asked', '#what-assist-costs-by-workspace', '#reading-the-sample-honestly', '#related'],
   automations: ['#the-events', '#the-steps', '#assigning-an-owner-or-rotating-one', '#an-automated-email-on-the-timeline', '#recipes', '#installing-from-the-organization', '#example-tag-every-new-contact-from-a-form', '#example-spread-qualified-leads-across-the-team', '#example-follow-up-on-a-won-deal', '#related'],
-  automationsWithAi: ['#draft', '#what-a-draft-uses', '#placeholders', '#explain', '#why-a-run-failed', '#what-is-sent', '#who-can-use-it', '#related'],
+  automationsWithAi: ['#draft', '#explain', '#why-a-run-failed', '#what-is-sent', '#who-can-use-it', '#related'],
   bandwidth: ['#what-each-plan-includes', '#where-to-see-it', '#paused', '#timing', '#reducing-bandwidth', '#reference', '#how-usage-is-counted', '#which-views-are-counted', '#the-two-mechanisms', '#what-a-visitors-browser-gets', '#fail-open-on-purpose', '#self-hosting', '#related'],
   besigner: ['#preview-vs-canvas', '#what-you-can-do', '#the-canvas', '#hierarchy-panel', '#the-inspector', '#inline-and-rich-text', '#reusable-components', '#editing-together', '#ai-in-the-canvas', '#related'],
   billing: ['#tiers--entitlements', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#who-is-generating-what', '#ai-allotments', '#storage-overage', '#if-you-would-rather-uploads-stopped', '#assist-overage', '#stop-ai-assist-at-the-included-band', '#ai-overage-ceiling', '#free-ai-credits', '#ai-credit-alerts', '#usage-budget', '#seats', '#crm-records', '#the-crm-suite', '#one-to-one-email', '#organization-data', '#api-access', '#payments', '#outstanding', '#plan-total', '#billing-email', '#payment-methods', '#billing-address', '#tax-ids', '#sales-tax', '#platform-fees', '#related'],
@@ -732,7 +732,7 @@ export const DOCS_HELP_ANCHORS = {
   contactRecord: ['#adding-a-contact-by-hand', '#the-record-page', '#deleting-and-erasing', '#what-each-site-keeps-to-itself', '#merging-two-records', '#likely-duplicates', '#owner', '#last-engaged', '#lifecycle-stages', '#where-the-persons-lead-is', '#finding-a-contact', '#files', '#related'],
   content: ['#site-templates--starter-gallery', '#section--block-library', '#content-collections--blog', '#related'],
   cookieConsent: ['#how-it-works', '#what-needs-consent', '#videos-that-load-with-the-page', '#privacy-choices--the-persistent-control', '#where-the-choice-is-kept', '#global-privacy-control', '#previewing-what-visitors-see', '#turn-the-banner-off'],
-  copyAssist: ['#use-it', '#tips', '#related'],
+  copyAssist: ['#use-it', '#what-you-get-back', '#tips', '#who-can-use-it', '#related'],
   copyPaste: ['#copy', '#paste', '#between-documents', '#copy--paste-vs-duplicate-vs-reusable-components', '#shortcuts', '#related'],
   createARedirect: ['#add-a-rule', '#read-hit-metrics', '#related'],
   crm: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-from-csv', '#segments', '#everywhere-the-crm-shows-up', '#capture-replies', '#at-the-organization-level', '#who-can-open-the-crm', '#related'],
@@ -762,7 +762,7 @@ export const DOCS_HELP_ANCHORS = {
   generateAForm: ['#describe-the-form', '#what-the-form-gets', '#what-a-form-cannot-collect', '#nothing-is-live-until-you-place-it', '#who-can-use-it', '#related'],
   generateAPage: ['#describe-the-page', '#review-the-plan', '#how-the-page-is-built', '#the-draft', '#what-a-page-job-uses', '#who-can-use-it', '#related'],
   generateASite: ['#what-a-scaffold-builds', '#nothing-is-published', '#what-it-costs-before-it-starts', '#watching-it-build', '#generate-for-several-sites-at-once'],
-  generateSection: ['#use-it', '#tips', '#related'],
+  generateSection: ['#use-it', '#what-it-builds', '#tips', '#who-can-use-it', '#related'],
   generateWithAi: ['#what-you-get', '#write-the-brief', '#products', '#who-receives-it', '#merge-tokens', '#what-it-will-not-do', '#where-it-runs', '#related'],
   gettingStarted: ['#create-your-first-site', '#what-a-site-contains', '#switching-between-sites', '#next'],
   glossary: ['#the-hierarchy', '#organization-org', '#workspace', '#tenant', '#tenant-vs-host--not-the-same-thing', '#quick-reference'],
@@ -840,7 +840,7 @@ export const DOCS_HELP_ANCHORS = {
   tasks: ['#the-tasks-page', '#the-calendar-view', '#snoozing-a-task', '#selecting-exporting-and-acting-on-many', '#import-from-csv', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#organization-tasks', '#tasks-on-a-contact-company-or-deal', '#reminders', '#turning-reminders-off', '#next-activity', '#the-daily-digest', '#turning-it-off', '#the-dashboard-card', '#who-can-do-what', '#related'],
   team: ['#team-roles', '#organizations', '#three-kinds-of-user', '#site-roles', '#collaborator-ai-access', '#what-a-site-collaborator-sees', '#site-membership', '#visitor-record-ceiling', '#seats', '#related'],
   templatesLibrary: ['#the-three-kinds', '#installing-from-the-marketplace', '#saving-something-as-a-template', '#using-a-template', '#generate-a-page-template-with-aglyn-ai', '#where-a-template-came-from', '#first-party-starters', '#templates-are-per-site', '#duplicating', '#deleting', '#related'],
-  termReference: ['#platform--accounts', '#aglyn', '#organization-org', '#workspace', '#tenant', '#host', '#site', '#console', '#staff-console', '#member', '#custom-role', '#publisher', '#sites--content', '#screen', '#layout', '#slug', '#version', '#redirect', '#error-screens', '#maintenance-mode', '#locale', '#site-template', '#theme', '#custom-domain', '#subdomain', '#the-node-tree', '#node', '#tree', '#tree-root', '#trunk', '#stem', '#branch', '#leaf', '#component', '#component-bundle', '#preset', '#reusable-component', '#lineal-placement-rules', '#besigner-the-editor', '#besigner', '#canvas', '#hierarchy-panel', '#drawer', '#binding', '#plugins--marketplace', '#plugin', '#add-on', '#surface', '#console-extension', '#widget', '#injection-zone', '#plugin-manifest', '#enabled-plugins', '#feature-flag', '#release-flag', '#plugin-config', '#plugin-permission', '#plugin-job', '#listing', '#install', '#realm-bundle', '#sandbox', '#host-abi', '#review-queue', '#data--logic', '#dataset', '#record', '#field', '#relation', '#contact', '#segment', '#media-library', '#variable', '#function-fx', '#form', '#automation--marketing', '#event', '#workflow', '#action', '#automation', '#overlay', '#experiment', '#email-campaign', '#designed-email', '#merge-tag', '#commerce', '#product', '#order', '#pos', '#booking', '#billing--plans', '#plan', '#entitlement', '#quota', '#seat', '#metered-usage'],
+  termReference: ['#platform--accounts', '#aglyn', '#aglyn-ai', '#aglyn-assist', '#organization-org', '#workspace', '#tenant', '#host', '#site', '#console', '#staff-console', '#member', '#custom-role', '#publisher', '#sites--content', '#screen', '#layout', '#slug', '#version', '#redirect', '#error-screens', '#maintenance-mode', '#locale', '#site-template', '#theme', '#custom-domain', '#subdomain', '#the-node-tree', '#node', '#tree', '#tree-root', '#trunk', '#stem', '#branch', '#leaf', '#component', '#component-bundle', '#preset', '#reusable-component', '#lineal-placement-rules', '#besigner-the-editor', '#besigner', '#canvas', '#hierarchy-panel', '#drawer', '#binding', '#plugins--marketplace', '#plugin', '#add-on', '#surface', '#console-extension', '#widget', '#injection-zone', '#plugin-manifest', '#enabled-plugins', '#feature-flag', '#release-flag', '#plugin-config', '#plugin-permission', '#plugin-job', '#listing', '#install', '#realm-bundle', '#sandbox', '#host-abi', '#review-queue', '#data--logic', '#dataset', '#record', '#field', '#relation', '#contact', '#segment', '#media-library', '#variable', '#function-fx', '#form', '#automation--marketing', '#event', '#workflow', '#action', '#automation', '#overlay', '#experiment', '#email-campaign', '#designed-email', '#merge-tag', '#commerce', '#product', '#order', '#pos', '#booking', '#billing--plans', '#plan', '#entitlement', '#quota', '#seat', '#metered-usage', '#credit-ai-credit', '#allotment'],
   textEditing: ['#edit-inline', '#committing', '#inline-toolbar', '#rich-text', '#the-text-attribute', '#text-field-read-only', '#remove-formatting', '#line-breaks', '#bindings-in-text', '#limits', '#wrapped-outlines', '#related'],
   themeAssist: ['#change-what-you-describe-or-design-a-new-theme', '#match-your-brand', '#review-the-proposal', '#save-it-or-dont', '#who-can-use-it', '#related'],
   themeBuilder: ['#edit-your-theme', '#related'],

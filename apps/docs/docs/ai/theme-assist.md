@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 7
 title: Themes with AI
 description: Describe a change to your site's theme and get a proposal for the theme editor's own controls, previewed before and after, that you save in the editor. Rolling out.
 ---
@@ -13,7 +13,7 @@ feature.
 :::
 
 The **Theme assistant** sits on your site's **Setup → Theme** section, above the
-[theme editor](../../building-sites/theme-builder/edit-your-theme.md). Describe what you
+[theme editor](../building-sites/theme-builder/edit-your-theme.md). Describe what you
 want and it proposes values for the editor's own controls — the same colors, font,
 corner radius, spacing, navigation heights, dark scheme and component overrides you can
 set by hand. Nothing changes on your site until you save.
@@ -67,10 +67,10 @@ elsewhere is still there to preview.
 ## Who can use it
 
 The assistant needs AI generation on your plan and the **Generate with AI** permission —
-see [Custom roles & permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#ai-permissions).
+see [Custom roles & permissions](../workspace-and-billing/teams-and-roles/custom-roles.md#ai-permissions).
 Each proposal draws on your workspace's AI credits like any other AI request.
 
 ## Related
 
-- [Edit your theme](../../building-sites/theme-builder/edit-your-theme.md)
+- [Edit your theme](../building-sites/theme-builder/edit-your-theme.md)
 - [AI Assist](overview.md)

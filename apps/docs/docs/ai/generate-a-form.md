@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2
+sidebar_position: 4
 title: Generate a form from a brief
 description: Describe the form you need and an Aglyn AI build job makes it as a draft on the Forms page, with its fields, required answers, marketing consent and routing agreeing with each other.
 ---
@@ -19,9 +19,10 @@ form's page. No screen places it, so nothing on the live site changes. It counts
 forms allowance like a form you create yourself, and when your plan has no room for another
 form the job says so before it starts, not after it has spent anything.
 
-:::info Availability
-Aglyn AI build jobs are released gradually. This page applies to form jobs as they reach your
-workspace.
+:::caution Rolling out
+Aglyn AI is a **release-flagged feature, currently being rolled out** — it is not
+available in every workspace yet. This page says what a form job does, and grows with
+the feature.
 :::
 
 ## Describe the form
@@ -69,7 +70,7 @@ screen starts collecting straight away, so check its fields and its consent box 
 ## Who can use it
 
 Build jobs need the **Generate with AI** permission, and your plan must include forms. See
-[who can use AI assist](../marketing-and-automation/ai-assist/overview.md#who-can-use-it).
+[who can use AI assist](overview.md#who-can-use-it).
 
 ## Related
 

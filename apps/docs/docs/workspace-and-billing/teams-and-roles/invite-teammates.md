@@ -183,7 +183,7 @@ billing** set it there or on
 [Billing → Usage](../billing-and-plans/overview.md#ai-allotments); a site's admin can set
 a collaborator's on that site. The member sees their own allotment, and the assistant
 shows it beside their usage as they work — see
-[AI allotments, usage and model choice](../../marketing-and-automation/ai-assist/ai-allotments.md).
+[AI allotments, usage and model choice](../../ai/ai-allotments.md).
 
 ## Tips
 

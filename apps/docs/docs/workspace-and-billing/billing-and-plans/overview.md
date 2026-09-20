@@ -144,7 +144,7 @@ Enterprise the organization can restrict models for everyone.
 An allotment is a share of the pool, never extra credits: the workspace's included credits
 and its own stops are checked first. Seeing allotments requires **View billing**; changing
 them requires **Manage billing**. See
-[AI allotments, usage and model choice](../../marketing-and-automation/ai-assist/ai-allotments.md).
+[AI allotments, usage and model choice](../../ai/ai-allotments.md).
 
 ## Storage overage
 
@@ -189,8 +189,10 @@ of your allowance mean nobody first learns about overage from an invoice. The op
 Paid plans include a monthly band of **AI assist credits** — the **Aglyn Assist credits**
 meter on the billing page shows how much of it this month's assistant use has drawn. The
 [Aglyn AI add-on](add-ons.md#aglyn-ai) widens that band and opens generative building;
-it is one pool, so everything below applies to the widened band as a whole. On a plan
-that sells credits past the band, reaching it is not a wall:
+it is one pool, so everything below applies to the widened band as a whole. What the
+credits are spent on, and what each kind of request costs relative to the others, is
+under [Aglyn AI](../../ai/overview.md#credits-and-caps). On a plan that sells credits
+past the band, reaching it is not a wall:
 
 - **The assistant keeps answering.** Nothing stops because you reached your included
   credits.

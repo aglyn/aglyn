@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 11
 title: AI allotments, usage and model choice
 description: Give a member, a site collaborator or a whole site a monthly share of the workspace's AI credits, see your own usage while you work, and choose which model answers.
 ---
@@ -93,5 +93,5 @@ Free workspaces always run on Auto.
 ## Related
 
 - [AI Assist](overview.md)
-- [Billing & Plans: AI allotments](../../workspace-and-billing/billing-and-plans/overview.md#ai-allotments)
-- [Invite teammates: AI usage per member](../../workspace-and-billing/teams-and-roles/invite-teammates.md#ai-usage)
+- [Billing & Plans: AI allotments](../workspace-and-billing/billing-and-plans/overview.md#ai-allotments)
+- [Invite teammates: AI usage per member](../workspace-and-billing/teams-and-roles/invite-teammates.md#ai-usage)

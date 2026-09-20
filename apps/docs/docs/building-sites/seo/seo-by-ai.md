@@ -110,4 +110,4 @@ your site serves changes only after you press **Update** in the form.
 ## Related
 
 - [SEO Toolkit](./overview.md)
-- [AI assist](../../marketing-and-automation/ai-assist/overview.md)
+- [AI assist](../../ai/overview.md)

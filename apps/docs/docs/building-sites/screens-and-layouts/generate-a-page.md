@@ -96,7 +96,7 @@ builds your site's layout.
 ## Who can use it
 
 Page jobs need the **Generate with AI** permission. See
-[who can use AI assist](../../marketing-and-automation/ai-assist/overview.md#who-can-use-it).
+[who can use AI assist](../../ai/overview.md#who-can-use-it).
 
 ## Related
 

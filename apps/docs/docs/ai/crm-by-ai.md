@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 9
 title: CRM by AI
 description: A short summary and a suggested next step on a contact, company, deal or lead, a one-to-one email drafted into the composer, and an import's columns matched to fields. Aglyn AI suggests; you save, send and import.
 ---
@@ -15,8 +15,10 @@ what happens next: nothing is saved, sent or imported until you do it yourself.
 - **In an import**, a suggested match between the columns of your file and the fields they
   fill.
 
-:::info Availability
-CRM by AI is released gradually. This page applies to it as it reaches your workspace.
+:::caution Rolling out
+Aglyn AI is a **release-flagged feature, currently being rolled out** — it is not
+available in every workspace yet. This page says what it does in the CRM, and grows
+with the feature.
 :::
 
 ## Summarize a record {#summarize-a-record}

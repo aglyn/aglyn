@@ -10,6 +10,64 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
+<!-- Aglyn AI (AGL-2923). Written ahead of the release so the entry is not what holds
+     it up. It stays under "Not released yet" until release_ai_generative is published
+     ON: whoever flips it replaces this heading with the release month, moves "(newest)"
+     onto it from the CRM heading below, and takes the rolling-out admonitions off the
+     pages FLAG_DOC_PAGES lists for that flag. -->
+
+## Not released yet — Aglyn AI
+
+:::caution Rolling out
+Aglyn AI is a **release-flagged feature, currently being rolled out**. The entry below
+describes what it does; it is not open in every workspace yet.
+:::
+
+- **[Aglyn AI](ai/overview.md)** — the assistant builds as well as answers. Describe what
+  you want and it plans the work, builds it from what your site already has, and hands
+  you a draft: a [page](building-sites/screens-and-layouts/generate-a-page.md), a
+  [whole small site](ai/generate-a-site.md), a
+  [layout](building-sites/screens-and-layouts/layouts.md#generate-a-layout-with-aglyn-ai),
+  a [page template](building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai),
+  a [reusable component](building-sites/components/generate-a-component-with-aglyn-ai.md),
+  a [form](ai/generate-a-form.md), a
+  [section on the canvas](ai/generate-section.md),
+  [rewritten copy](ai/copy-assist.md), a [theme change](ai/theme-assist.md),
+  [search titles and descriptions](building-sites/seo/seo-by-ai.md),
+  [product copy and catalog ideas](ai/products-with-ai.md),
+  [help working the CRM](ai/crm-by-ai.md), a
+  [designed email or campaign](marketing-and-automation/email-campaigns/generate-with-ai.md),
+  and [what your analytics mean](marketing-and-automation/analytics/insights.md).
+- **[Nothing is published](ai/overview.md#drafts-only)** — every generation writes a
+  draft or an unpublished version. It never flips a live page, never registers an
+  address, never touches your navigation and never sends anything. You publish what you
+  want, through the buttons you already use.
+- **[The building rules](ai/how-aglyn-ai-builds.md)** — reuse before creating, site-wide
+  regions in the layout, forms built on the Forms page and placed by reference, your
+  theme's colors and spacing rather than fixed values, images from your media library
+  with alt text, one main landmark and headings in order, responsive at your theme's
+  breakpoints, and a measured size for every output. Every plan and every generated
+  document is checked against them before you see it, and an answer that breaks one is
+  re-asked rather than handed over.
+- **[The plan comes first](ai/how-aglyn-ai-builds.md#the-plan-comes-first)** — a build job
+  proposes what it will reuse, what it will create and why, and the screens it will
+  build, with an estimate in credits. Nothing is generated until you confirm it.
+- **[The Aglyn AI add-on](workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai)** —
+  bought once for the workspace on any paid plan, it widens your monthly band of
+  [AI credits](ai/overview.md#credits-and-caps) rather than adding a second meter.
+  Starter gains a band it did not have; Free workspaces generate against their monthly
+  allowance and are never billed; Enterprise carries it by agreement.
+- **[Allotments, usage and model choice](ai/ai-allotments.md)** — give one member, one
+  site collaborator or one whole site its own monthly share of the pool, hard or soft,
+  so one client site cannot spend what everyone else was counting on. Everyone sees their
+  own usage while they work and can pick which model answers, or leave it on **Auto**.
+- **[AI off for one site](ai/overview.md#switch-ai-off-for-one-site)** — a site admin can
+  switch AI off for one site without touching the workspace's add-on, credits or other
+  sites.
+
+Drafting an automation from a description is **not** part of this release — see
+[Explain automations with AI](ai/automations-with-ai.md#draft).
+
 ## September 2026 — the CRM (newest)
 
 - **[The CRM is included from Starter](content-and-data/crm/overview.md#what-each-plan-includes)** —
@@ -441,7 +499,7 @@ The newest round tightened every marketing, billing, and operations loop:
   a sandboxed runtime, per-plugin config, a network bridge, and marketplace monetization.
 - **[Workflows, actions & webhooks](marketing-and-automation/workflows-and-actions/overview.md)** — event-to-action
   automation, workflows on site events, and outbound/inbound webhooks.
-- **[AI assist](marketing-and-automation/ai-assist/overview.md)** — copy assist for any text prop and AI Generate
+- **[AI assist](ai/overview.md)** — copy assist for any text prop and AI Generate
   Section.
 
 ## Operate

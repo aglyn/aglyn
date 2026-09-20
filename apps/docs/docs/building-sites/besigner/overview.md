@@ -136,7 +136,7 @@ survives a crash as a local draft. See
 - **AI copy assist** rewrites or generates text for any canvas text prop.
 - **AI Generate Section** produces a constrained subtree straight onto the canvas.
 
-See [AI Assist](../../marketing-and-automation/ai-assist/overview.md).
+See [AI Assist](../../ai/overview.md).
 
 ## Related
 

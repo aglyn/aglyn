@@ -1,5 +1,5 @@
 ---
-sidebar_position: 1
+sidebar_position: 2
 title: How Aglyn AI builds
 description: The building rules every AI build follows (reuse, components, layouts, forms, theme tokens, drafts only and a measured size) and what happens when an answer breaks one.
 ---
@@ -12,9 +12,10 @@ site already has, with your theme and brand, as a draft you review. The rules
 below are not a suggestion in a prompt. Every plan and every generated document
 is checked against them before you see it.
 
-:::info Availability
-Aglyn AI build jobs are released gradually. The rules on this page apply to every
-build as it reaches your workspace.
+:::caution Rolling out
+Aglyn AI is a **release-flagged feature, currently being rolled out** — it is not
+available in every workspace yet. The rules on this page apply to every build as it
+reaches you.
 :::
 
 ## Where to describe a build
@@ -141,12 +142,12 @@ used.
 ## Who can use it
 
 Build jobs need the **Generate with AI** permission. See
-[who can use AI assist](../marketing-and-automation/ai-assist/overview.md#who-can-use-it).
+[who can use AI assist](overview.md#who-can-use-it).
 
 ## Related
 
-- [AI Assist](../marketing-and-automation/ai-assist/overview.md)
-- [AI Generate Section](../marketing-and-automation/ai-assist/generate-section.md)
+- [AI Assist](overview.md)
+- [AI Generate Section](generate-section.md)
 - [Generate a layout](../building-sites/screens-and-layouts/layouts.md#generate-a-layout-with-aglyn-ai)
 - [Generate a page template](../building-sites/site-templates/templates-library.md#generate-a-page-template-with-aglyn-ai)
 - [Generate a reusable component](../building-sites/components/generate-a-component-with-aglyn-ai.md)
