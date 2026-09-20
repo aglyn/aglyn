@@ -450,7 +450,19 @@ describe('workflows console read cost (AGL-2501)', () => {
     ).toHaveLength(1)
   })
 
-  it('opening the workflow editor is what buys its functions and variables', async () => {
+  /*
+   * The workflow editor buys the step pickers too, since AGL-3105: a workflow
+   * step may be any server-side Actions step, so the editor that offers them
+   * has to offer what they can be pointed at. It is the same hook, the same
+   * ceiling and the same latch as the Actions editor above — the reads MOVED
+   * into one place rather than being added in a second one — and it is still
+   * paid only by an author who opens the dialog.
+   *
+   * The workflows collection is absent here and present in the Actions list
+   * because this section already listens to it for the table behind the
+   * dialog; the hook's listener is the same query and is served by it.
+   */
+  it('opening the workflow editor is what buys its working set and pickers', async () => {
     await renderConsole('workflows')
     const before = mockListens.map((listen) => `${listen.path}#${listen.limit}`)
 
@@ -464,8 +476,11 @@ describe('workflows console read cost (AGL-2501)', () => {
       .filter((listen) => !before.includes(listen))
       .sort()
     expect(opened).toEqual([
+      'hosts/site1/emailCampaigns#101',
       'hosts/site1/functions#101',
+      'hosts/site1/overlays#101',
       'hosts/site1/variables#101',
+      'hosts/site1/webhooks#101',
     ])
   })
 })

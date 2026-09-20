@@ -79,6 +79,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   DUPLICATE_MENU_LABEL: 'Duplicate…',
   useDuplicateResource: () => ({ request: jest.fn(), dialog: null }),
   useFirestore: () => FIRESTORE,
+  // The step pickers ask for the org's data scope (AGL-3105): a workflow
+  // step may be an Actions step, and those are pointed at org records.
+  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'] }),
   useFirestoreCollection: (build: () => unknown) => ({
     data: collections[build() as string] ?? [],
     status: 'success',

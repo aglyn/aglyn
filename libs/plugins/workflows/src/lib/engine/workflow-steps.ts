@@ -139,9 +139,14 @@ export function workflowActionStepRefusal(step: WorkflowActionStep): string | nu
  *
  * An Actions step is held to the Actions editor's own validator,
  * `validateHostAction`, one step at a time — the rules are that validator's,
- * never a second copy of them. A function call has to name its function, and
- * the list is capped at `WORKFLOW_MAX_STEPS`, the workflow's own ceiling
- * rather than the ten an action is capped at.
+ * never a second copy of them. The list is capped at `WORKFLOW_MAX_STEPS`,
+ * the workflow's own ceiling rather than the ten an action is capped at.
+ *
+ * A FUNCTION CALL is not checked, deliberately. A workflow has always been
+ * savable with a blank step — it is how the builder opens, and how an author
+ * leaves a pipeline half-built and comes back to it — and a call naming no
+ * function fails at run time with the evaluator's own words. Checking it here
+ * would refuse a save that has been allowed since the builder shipped.
  */
 export function validateWorkflowSteps(
   steps: readonly unknown[] | null | undefined,
@@ -152,16 +157,7 @@ export function validateWorkflowSteps(
   }
   for (const [index, step] of list.entries()) {
     const label = `Step ${index + 1}`
-    if (!isWorkflowActionStep(step)) {
-      const call = (step ?? {}) as Partial<HostWorkflowStep>
-      if (
-        !String(call.functionId ?? '').trim() &&
-        !String(call.functionName ?? '').trim()
-      ) {
-        return `${label}: pick a function`
-      }
-      continue
-    }
+    if (!isWorkflowActionStep(step)) continue
     const refusal = workflowActionStepRefusal(step)
     if (refusal) return `${label}: ${refusal}`
     const problem = validateHostAction({
