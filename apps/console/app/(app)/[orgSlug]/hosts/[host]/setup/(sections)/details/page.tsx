@@ -18,14 +18,13 @@
 
 import BusinessDetailsCard from '../../../../../../../../components/business-details-card.component'
 import BuiltInPageLayoutCard from '../../../../../../../../components/built-in-page-layout-card.component'
-import ErrorScreensCard from '../../../../../../../../components/error-screens-card.component'
 import LanguagesCard from '../../../../../../../../components/languages-card.component'
 import LogoCard from '../../../../../../../../components/logo-card.component'
 import { useHostSettingsScope } from '../../../host-settings-scope'
 
 /**
  * What the site presents to a visitor: its mark, the details its tokens read
- * from, its error screens and its languages.
+ * from, the layout behind its built-in pages, and its languages.
  *
  * The site's own NAME and ADDRESS are not here. Those describe the site as an
  * object rather than as an experience, so the Basic details form lives in the
@@ -40,6 +39,12 @@ import { useHostSettingsScope } from '../../../host-settings-scope'
  * to the User Accounts plugin's per-site page (AGL-428/1014) — they designate
  * screens that exist only while that plugin is on, so they are settings OF the
  * plugin.
+ *
+ * ERROR PAGES are the newest absence (AGL-3178). The card that assigns a
+ * screen per status code also carries maintenance mode, which replaces every
+ * page for every visitor — site-wide in the way Delete site is final, and
+ * squarely in the tier this page is not. It lives in the Admin hub's Error
+ * pages section, beside Security.
  */
 export default function HostSetupDetailsSection() {
   const { hostId } = useHostSettingsScope()
@@ -55,11 +60,12 @@ export default function HostSetupDetailsSection() {
       <div style={{ marginTop: 24 }}>
         <BusinessDetailsCard hostId={hostId} />
       </div>
-      <div style={{ marginTop: 24 }}>
-        <ErrorScreensCard hostId={hostId} />
-      </div>
-      {/* Next to the error pages on purpose (AGL-2513): both answer "what do
-          visitors see on a page I did not design?" */}
+      {/* The chrome around the pages the platform composes — search results,
+          and a collection entry with no template of its own (AGL-2513). It
+          answers "what do visitors see on a page I did not design?", which is
+          the question Error pages answers for the status codes; it stays on
+          Setup because a layout pick changes no address and takes nothing
+          down. */}
       <div style={{ marginTop: 24 }}>
         <BuiltInPageLayoutCard hostId={hostId} />
       </div>

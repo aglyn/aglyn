@@ -21,8 +21,13 @@ list:
 | What you want | Where it is |
 | --- | --- |
 | A screen's **visibility** (public, unlisted, password, members-only) and its **page password** | The **Page Access** card on that screen's own page |
-| **Error screens** for 404 / 401 / 403 / 503 | The **Error pages** card in **Setup** |
-| **Maintenance mode** | The same **Error pages** card in **Setup** |
+| **Error screens** for 404 / 401 / 403 / 503 | The **Error pages** section of the site's **Admin** area |
+| **Maintenance mode** | The same **Error pages** section, in **Admin** |
+
+A screen's own visibility is set by anyone who can edit that screen. The **Error pages**
+section is different: both settings there are site-wide — maintenance mode replaces every
+page for every visitor — so, like deleting the site, they live in **Admin** and are
+limited to **site admins**.
 
 ![The Page Access card on a screen's own page, with the Visibility menu open on Public, Unlisted, Password protected and Members only](/img/seo/page-access-visibility.png)
 

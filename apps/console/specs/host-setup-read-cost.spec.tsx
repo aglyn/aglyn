@@ -231,10 +231,15 @@ const SECTION_PAGES: Record<string, () => JSX.Element> = {
   emails: require(`${SETUP}/emails/page`).default,
 }
 /**
- * The two Admin sections the settings scope reaches — the hub it was lifted
- * into. `danger` rides along as the section that renders no form at all: the
- * scope is mounted by the LAYOUT, so what it costs has to be the same whether
- * the open section uses it or not.
+ * The Admin sections the settings scope reaches — the hub it was lifted into.
+ * `danger` rides along as the section that renders no form at all: the scope is
+ * mounted by the LAYOUT, so what it costs has to be the same whether the open
+ * section uses it or not.
+ *
+ * `error-pages` is the one that carries a COLLECTION (AGL-3178). It is metered
+ * here for the reason the Setup sections are: the `limit(200)` over `screens`
+ * did not disappear when the card moved, it moved with it, and a cost that is
+ * only ever measured where it used to be is a cost nobody is watching.
  */
 const ADMIN = '../app/(app)/[orgSlug]/hosts/[host]/admin/(sections)'
 const HostAdminLayout = require(`${ADMIN}/layout`).default
@@ -242,6 +247,7 @@ const ADMIN_SECTION_PAGES: Record<string, () => JSX.Element> = {
   general: require(`${ADMIN}/general/page`).default,
   backup: require(`${ADMIN}/backup/page`).default,
   danger: require(`${ADMIN}/danger/page`).default,
+  'error-pages': require(`${ADMIN}/error-pages/page`).default,
 }
 /* eslint-enable @typescript-eslint/no-var-requires */
 
@@ -292,9 +298,18 @@ function renderAdmin(section: string) {
 
 /** Collections only ONE section's cards read, keyed by that section. */
 const SECTION_ONLY = {
-  details: 'hosts/host-1/screens',
+  details: 'hosts/host-1/layouts',
   emails: 'hosts/host-1/emailTemplates',
 } as const
+
+/**
+ * The `screens` list, which Setup no longer reads anywhere (AGL-3178).
+ *
+ * It was Details' collection and the reason that section was the most
+ * expensive one in the hub. The card that opened it is a site-admin control
+ * now, so the read belongs to a page an author never loads.
+ */
+const MOVED_TO_ADMIN = 'hosts/host-1/screens'
 
 describe('host Setup read cost, per section (AGL-2501)', () => {
   afterEach(() => {
@@ -320,7 +335,7 @@ describe('host Setup read cost, per section (AGL-2501)', () => {
 
   /*
    * The two collection reads on this page, each confined to the one section
-   * that shows it. `screens` is a `limit(200)`; `emailTemplates` is unbounded.
+   * that shows it. `layouts` is a `limit(50)`; `emailTemplates` is unbounded.
    * Everything else here is a single-document read.
    */
   it('a section does not pay for another section collection', () => {
@@ -336,6 +351,23 @@ describe('host Setup read cost, per section (AGL-2501)', () => {
     }
   })
 
+  /**
+   * No Setup section reads the screen list any more (AGL-3178).
+   *
+   * Stated over every section rather than over Details alone: the card could
+   * be re-mounted on any of them, and the reason it is not on this hub at all
+   * is a permission one, not a placement preference.
+   */
+  it('no section pays for the screen list the error pages card opened', () => {
+    for (const tab of ['details', 'seo', 'tracking', 'theme', 'emails'] as const) {
+      renderSetup(tab)
+      expect([tab, listenedPaths()]).toEqual([
+        tab,
+        expect.not.arrayContaining([MOVED_TO_ADMIN]),
+      ])
+    }
+  })
+
   it('the emails section is the only reader of the template list', () => {
     renderSetup('emails')
     summarize('emails', mockListens)
@@ -347,7 +379,11 @@ describe('host Setup read cost, per section (AGL-2501)', () => {
    *
    * A budget, not a snapshot: a card added to a section nobody opened shows up
    * as a failure rather than as a slightly larger Firestore bill. Details is
-   * the worst section because of its `limit(200)` over `screens`.
+   * the worst section that is not Emails, and it is a quarter of what it was:
+   * the `limit(200)` over `screens` left with the error pages card (AGL-3178),
+   * leaving the `limit(50)` over `layouts` as its largest read. The budget is
+   * re-cut to the new number rather than left at the old one, because a
+   * ceiling nothing can reach measures nothing.
    *
    * The `emailTemplates` listen is unbounded and so is counted at the estimate
    * — worth knowing, but measured separately it is a pointer document per
@@ -356,7 +392,7 @@ describe('host Setup read cost, per section (AGL-2501)', () => {
    */
   it('holds each section under its document budget', () => {
     renderSetup('details')
-    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(260)
+    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(60)
     renderSetup('theme')
     expect(documentCeiling(mockListens)).toBeLessThanOrEqual(20)
   })
@@ -399,13 +435,26 @@ describe('host Admin read cost, per section', () => {
    */
   it('subscribes the host document once from the layout', () => {
     const counted: Record<string, number> = {}
-    for (const section of ['general', 'backup', 'danger'] as const) {
+    for (const section of [
+      'general',
+      'backup',
+      'danger',
+      'error-pages',
+    ] as const) {
       renderAdmin(section)
       counted[section] = mockListens.filter(
         (listen) => listen.path === 'hosts/host-1',
       ).length
     }
-    expect(counted).toEqual({ general: 1, backup: 1, danger: 2 })
+    // `error-pages` reads 2 for the same reason `danger` does: the card holds
+    // its own listen, because what it renders is that document's current
+    // assignments and its maintenance flag.
+    expect(counted).toEqual({
+      general: 1,
+      backup: 1,
+      danger: 2,
+      'error-pages': 2,
+    })
   })
 
   /**
@@ -431,5 +480,23 @@ describe('host Admin read cost, per section', () => {
         mockListens.filter((listen) => listen.path.split('/').length > 2),
       ).toEqual([])
     }
+  })
+
+  /**
+   * Error pages is the one Admin section that opens a collection (AGL-3178).
+   *
+   * Its pickers list the site's screens, so the `limit(200)` that used to make
+   * Setup → Details the most expensive section in that hub is now charged
+   * here. The limit is the point: it is the billable ceiling, and an unbounded
+   * version of this read would be the same card at a different price.
+   */
+  it('charges the screen list to Error pages, still bounded', () => {
+    renderAdmin('error-pages')
+    summarize('admin/error-pages', mockListens)
+    const screens = mockListens.filter(
+      (listen) => listen.path === 'hosts/host-1/screens',
+    )
+    expect(screens).toEqual([{ path: 'hosts/host-1/screens', limit: 200 }])
+    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(210)
   })
 })
