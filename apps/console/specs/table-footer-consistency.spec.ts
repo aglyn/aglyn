@@ -922,6 +922,17 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'libs/plugins/ai/src/lib/components/ai-experiment-cards.component.tsx',
+    'The arms of ONE A/B test, in the card that explains its result (AGL-2914) — '
+      'the figures the explanation was written from, shown so a reader can check '
+      'the words against them. It is bounded by the experiment itself: an arm per '
+      'variant, and `AI_EXPERIMENT_MAX_VARIANTS` is 4. The rows are not a '
+      'collection anybody adds to; they are the test, and a reader compares them '
+      'against each other at a glance, which is the one thing a footer would take '
+      'away. Nothing here pages, filters or sorts, and the table cannot outgrow '
+      'the test it belongs to.',
+  ],
+  [
     'libs/plugins/crm/src/lib/components/email-templates-card.tsx',
     'The workspace’s email TEMPLATES (AGL-2658) — a settings table, one row ' +
       'per letter somebody saved, read whole under `CRM_EMAIL_TEMPLATES_LIMIT` ' +
