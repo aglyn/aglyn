@@ -156,7 +156,17 @@ export interface HostFunction {
   returnValue?: string
 }
 
-export const FUNCTION_MAX_OPERATIONS = 100
+/**
+ * How many SETs one run may apply. A BOUND, not a budget anyone is meant to
+ * approach: there are no loops, so a run applies at most one SET per SET
+ * written, and this is what stops a definition pasted in by the thousand.
+ *
+ * It was 100, sized for "if P1 <= P2 then P3 = P1 + P2". The first pricing
+ * calculator built on site functions — six plans, a line per meter, a row per
+ * competitor — applies about 150 (AGL-3202). Each SET is one short expression
+ * over a flat scope, so a thousand of them is still well under a millisecond.
+ */
+export const FUNCTION_MAX_OPERATIONS = 1000
 
 type Scope = Record<string, number | string | boolean>
 
@@ -204,7 +214,12 @@ function tokenize(text: string): Token[] {
       tokens.push({ kind: 'number', value: Number(match[0]) })
       index += match[0].length
     } else if (/[a-zA-Z_]/.test(char)) {
-      const match = /^[a-zA-Z_][a-zA-Z0-9_]*/.exec(text.slice(index))!
+      // A dotted path is ONE name: `plan_pro.annual` reads a member of a
+      // dictionary (AGL-3202). A number never starts here, so `1.5` is not
+      // at risk, and a trailing dot is left for the parser to refuse.
+      const match = /^[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*/.exec(
+        text.slice(index),
+      )!
       const word = match[0]
       if (word === 'true' || word === 'false') {
         tokens.push({ kind: 'boolean', value: word === 'true' })
@@ -300,6 +315,77 @@ const BUILTINS: Record<string, (args: Value[]) => Value> = {
   },
 }
 
+// ── Dictionary members (AGL-3202) ──────────────────────────────────────────
+
+/**
+ * Parsed dictionaries, by their JSON text. A pricing function reads thirty
+ * members of the same six dictionaries on every keystroke, and the text is
+ * the only identity a scope value has. Small and bounded: a page holds a
+ * handful of dictionaries, and a miss only costs a parse.
+ */
+const DICTIONARY_CACHE = new Map<string, Record<string, unknown> | null>()
+const DICTIONARY_CACHE_MAX = 64
+
+function parseDictionary(text: string): Record<string, unknown> | null {
+  if (DICTIONARY_CACHE.has(text)) return DICTIONARY_CACHE.get(text) ?? null
+  let parsed: Record<string, unknown> | null = null
+  try {
+    const value: unknown = JSON.parse(text)
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      parsed = value as Record<string, unknown>
+    }
+  } catch {
+    parsed = null
+  }
+  if (DICTIONARY_CACHE.size >= DICTIONARY_CACHE_MAX) {
+    const oldest = DICTIONARY_CACHE.keys().next().value
+    if (oldest !== undefined) DICTIONARY_CACHE.delete(oldest)
+  }
+  DICTIONARY_CACHE.set(text, parsed)
+  return parsed
+}
+
+/**
+ * `plan.annual`: a member of a DICTIONARY — a site variable of that type, or
+ * a text local holding one, which is how a function picks one of several
+ * ("the plan that won") and then reads its members.
+ *
+ * A site that prices six plans on twenty-five meters would otherwise need a
+ * hundred and fifty number variables, and the published page reads a
+ * hundred. One dictionary per plan is what an author would reach for anyway.
+ *
+ * OWN members only, and only a number, a text or a true/false comes out: a
+ * nested dictionary is walked by a longer path, never returned.
+ */
+function readMember(path: string, scope: Scope): Value {
+  const [base, ...members] = path.split('.')
+  if (!Object.prototype.hasOwnProperty.call(scope, base)) {
+    throw new Error(`Unknown name "${base}"`)
+  }
+  let current: unknown =
+    typeof scope[base] === 'string' ? parseDictionary(scope[base] as string) : null
+  if (!current) throw new Error(`"${base}" is not a dictionary`)
+  for (const member of members) {
+    if (
+      !current ||
+      typeof current !== 'object' ||
+      Array.isArray(current) ||
+      !Object.prototype.hasOwnProperty.call(current, member)
+    ) {
+      throw new Error(`Unknown name "${path}"`)
+    }
+    current = (current as Record<string, unknown>)[member]
+  }
+  if (
+    typeof current === 'number' ||
+    typeof current === 'string' ||
+    typeof current === 'boolean'
+  ) {
+    return current
+  }
+  throw new Error(`"${path}" is not a number, a text or a true/false`)
+}
+
 /** The built-in names, for an editor's help text and for tests. */
 export const FUNCTION_BUILTIN_NAMES: readonly string[] = Object.keys(BUILTINS)
 
@@ -323,7 +409,8 @@ export function expressionIdentifiers(text: string): string[] {
   tokens.forEach((token, index) => {
     if (token.kind !== 'ident') return
     if (tokens[index + 1]?.kind === 'lparen' && isBuiltin(token.value)) return
-    names.push(token.value)
+    // `plan_pro.annual` reads the variable `plan_pro`: the base is the name.
+    names.push(token.value.split('.')[0])
   })
   return names
 }
@@ -368,6 +455,7 @@ export function evaluateExpression(
         }
         return BUILTINS[token.value](args)
       }
+      if (token.value.includes('.')) return readMember(token.value, scope)
       // OWN properties only: `in` walks the prototype chain, so `toString`
       // and `constructor` used to read as names every scope declared.
       if (!Object.prototype.hasOwnProperty.call(scope, token.value)) {

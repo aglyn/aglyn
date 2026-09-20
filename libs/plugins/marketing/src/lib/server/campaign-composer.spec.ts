@@ -622,7 +622,7 @@ describe('what a campaign is written from', () => {
    * THE DEFECT: a merchant who picked a design AND wrote a message lost the
    * message.
    *
-   * `renderCampaignEmail` read the typed body only when no template was given,
+   * `renderRecipientEmail` read the typed body only when no template was given,
    * and both gates in front of it accepted EITHER input — so the request went
    * through carrying two sources and one was silently discarded.
    *

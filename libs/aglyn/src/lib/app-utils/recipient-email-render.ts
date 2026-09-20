@@ -16,8 +16,17 @@
  */
 
 /**
- * ONE CAMPAIGN MESSAGE, RENDERED — the step between a composed campaign and
- * the two parts that reach an inbox.
+ * ONE MESSAGE FOR ONE RECIPIENT, RENDERED — the step between a composed email
+ * and the two parts that reach an inbox.
+ *
+ * It sits on the platform's mail rail, in the core, because more than one
+ * plugin needs the SAME rendering: the plugin that sends a campaign renders
+ * each recipient's copy through it, and the plugin that designs an email
+ * checks a design through it before anything is sent. Neither may import the
+ * other, and a second renderer in either would be a preview of something else.
+ * It composes `@aglyn/shared-util-email`'s primitives with the core's HTML
+ * sanitizer, which is why it cannot live in `shared`. Imported by its own
+ * subpath; it is not in the barrel.
  *
  * It exists as a shared function because a preview that renders the message a
  * second way is a preview of something else. The class of defect it is meant
@@ -34,16 +43,22 @@
  * the loading stays with the caller that has the credentials for it.
  */
 
+// By leaf, never the library's index: the index reaches the sender and the
+// health check, which this module has no use for.
 import {
-  appendUnsubscribeHtml,
   EMAIL_NODE_ROOT_ID,
   renderEmailHtml,
-  renderTextEmailHtml,
-  resolveMergeTags,
-  UNSUBSCRIBE_FOOTER_LABEL,
   type EmailRenderProduct,
+} from '@aglyn/shared-util-email/email-render'
+import {
+  resolveMergeTags,
   type MergeTagRecipient,
-} from '@aglyn/shared-util-email'
+} from '@aglyn/shared-util-email/email-merge'
+import {
+  appendUnsubscribeHtml,
+  UNSUBSCRIBE_FOOTER_LABEL,
+} from '@aglyn/shared-util-email/marketing-send'
+import { renderTextEmailHtml } from '@aglyn/shared-util-email/text-email-html'
 /*
  * The LEAF app-util, not `@aglyn/aglyn/server`: this module is pure and is
  * imported by client components, so a server entry point here would pull the
@@ -52,14 +67,14 @@ import {
  * previewed copy are one policy over one string rather than two kept in step
  * by hand.
  */
-import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
+import { sanitizeAuthorHtml } from './author-html';
 
 /**
  * A designed email, loaded. `nodes` is the DECODED besigner map: the stored
  * form is compressed msgpack from the first designer save onward, and a
  * caller that passes the raw value renders an empty shell.
  */
-export interface CampaignEmailTemplate {
+export interface DesignedEmailTemplate {
   nodes: Record<string, unknown>
   products?: Record<string, EmailRenderProduct | undefined>
   /** The template's own preview line, used when the campaign names none. */
@@ -92,7 +107,7 @@ export interface CampaignEmailTemplate {
  * unsayable: the designed branch has no `body` in scope to drop, and a caller
  * holding both has to decide which it means before it can call at all.
  */
-export type CampaignEmailContent =
+export type RecipientEmailContent =
   | {
       /** Written in the composer; the HTML part is synthesized from it. */
       mode: 'text'
@@ -102,7 +117,7 @@ export type CampaignEmailContent =
   | {
       /** Built in the besigner; the HTML part comes from the nodes. */
       mode: 'design'
-      template: CampaignEmailTemplate
+      template: DesignedEmailTemplate
       /**
        * The author's OWN plain-text part, replacing the one the design
        * generates. Absent — not empty — means generated.
@@ -121,7 +136,7 @@ export type CampaignEmailContent =
     }
 
 /** Which of the two ways one email is written. */
-export type CampaignMessageMode = CampaignEmailContent['mode']
+export type EmailMessageMode = RecipientEmailContent['mode']
 
 /**
  * Which mode a stored email is in, from the one field that decides it.
@@ -131,17 +146,17 @@ export type CampaignMessageMode = CampaignEmailContent['mode']
  * by the surfaces that describe a message and by the send path, so a record
  * cannot be shown as one thing and mailed as another.
  */
-export function campaignMessageMode(record: {
+export function emailMessageMode(record: {
   templateScreenId?: string | null
-}): CampaignMessageMode {
+}): EmailMessageMode {
   return record.templateScreenId ? 'design' : 'text'
 }
 
-export interface CampaignEmailRenderInput {
+export interface RecipientEmailRenderInput {
   /** The campaign's subject, after any A/B variant override. */
   subject: string
   /** The one source this message is written from. */
-  content: CampaignEmailContent
+  content: RecipientEmailContent
   /** The composer's preview line; overrides the template's own. */
   preheader?: string
   /** Who this copy is being personalized for. */
@@ -154,7 +169,7 @@ export interface CampaignEmailRenderInput {
   unsubscribeUrl?: string
 }
 
-export interface RenderedCampaignEmail {
+export interface RenderedRecipientEmail {
   /** The subject with this recipient's merge values resolved. */
   subject: string
   /** The HTML part, which every campaign message carries. */
@@ -189,7 +204,7 @@ export interface RenderedCampaignEmail {
  * compared here. Pure, and read by the composer, so the notice a merchant sees
  * and the state the record is in cannot disagree.
  */
-export interface CampaignPlainTextState {
+export interface EmailPlainTextState {
   /** `authored` when somebody wrote it; `generated` from the design. */
   source: 'generated' | 'authored'
   /**
@@ -202,7 +217,7 @@ export interface CampaignPlainTextState {
   stale: boolean
 }
 
-export function campaignPlainTextState(
+export function emailPlainTextState(
   record: {
     plainText?: string | null
     /** The design version the override was written against. */
@@ -210,7 +225,7 @@ export function campaignPlainTextState(
   },
   /** The design's version as it stands now. */
   currentVersionId?: string | null,
-): CampaignPlainTextState {
+): EmailPlainTextState {
   if (!record.plainText?.trim()) return { source: 'generated', stale: false }
   const written = record.plainTextVersionId ?? ''
   return {
@@ -229,9 +244,9 @@ export function campaignPlainTextState(
  * and this calls the same `renderTextEmailHtml` with the same text and
  * subject, so a plain-text campaign is byte-identical either way.
  */
-export function renderCampaignEmail(
-  input: CampaignEmailRenderInput,
-): RenderedCampaignEmail {
+export function renderRecipientEmail(
+  input: RecipientEmailRenderInput,
+): RenderedRecipientEmail {
   const { content, recipient, siteBase = '', hostId, unsubscribeUrl } = input
   const template = content.mode === 'design' ? content.template : null
   const subject = resolveMergeTags(
@@ -370,7 +385,7 @@ export function renderCampaignEmail(
  * that lists them is the difference between a documented feature and a
  * guess.
  */
-export const CAMPAIGN_MERGE_TAGS: ReadonlyArray<{
+export const EMAIL_MERGE_TAGS: ReadonlyArray<{
   /** The full token, fallback included, as it should be typed. */
   token: string
   /** What it resolves to, per recipient. */

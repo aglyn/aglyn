@@ -26,6 +26,7 @@ import PluginWidgetSlot from '../../../../../../../../components/plugin-widget-s
 import useCurrentOrg from '../../../../../../../../hooks/use-current-org'
 import { useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
 import {
+  hostIsBlankSite,
   hostStartedBlank,
   rememberHostStartedBlank,
 } from '../../../../../../../../utils/host-first-run'
@@ -60,9 +61,20 @@ import { useHostSettingsScope } from '../../../host-settings-scope'
  * offers to start the site from a few questions; taking `startBlank` leaves
  * this page exactly as it is below, which is the blank site the person
  * already has.
+ *
+ * ⚠️ LANDING HERE IS NOT THE SAME AS BELONGING HERE. A new site lands on this
+ * page, but this page is the setup page of EVERY site, and for a while the
+ * zone read the first fact as if it were the second: its only condition was
+ * whether this browser had dismissed the offer, so opening Basic details on a
+ * long-established site drew the guided start over the top of it. The zone
+ * therefore asks two things now, and needs both — `hostIsBlankSite`, which is
+ * about the SITE and is true for as long as it publishes nothing, and
+ * `hostStartedBlank`, which is about this BROWSER and is true once somebody
+ * here has said no. Neither one implies the other, and a condition on the
+ * reader is never a condition on the site.
  */
 export default function HostSetupDetailsSection() {
-  const { hostId } = useHostSettingsScope()
+  const { hostId, data, hostHasEmitted } = useHostSettingsScope()
   const { orgId } = useCurrentOrg()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
@@ -71,14 +83,23 @@ export default function HostSetupDetailsSection() {
    * skipped never sees the offer flash back on a reload. `localStorage` is not
    * readable while the page renders on the server.
    */
-  const [offerStart, setOfferStart] = useState(false)
+  const [unasked, setUnasked] = useState(false)
   useEffect(() => {
-    setOfferStart(Boolean(hostId) && !hostStartedBlank(hostId))
+    setUnasked(Boolean(hostId) && !hostStartedBlank(hostId))
   }, [hostId])
   const startBlank = useCallback(() => {
     rememberHostStartedBlank(hostId)
-    setOfferStart(false)
+    setUnasked(false)
   }, [hostId])
+  /*
+   * `hostHasEmitted` before `hostIsBlankSite`, because an unread document has
+   * no `screens` either and would read as blank. Waiting for the snapshot the
+   * layout is already subscribed to is what keeps an established site from
+   * mounting the zone for the moment before its document lands — which on a
+   * widget that takes the whole screen is the difference between not offering
+   * and offering-then-snatching-away.
+   */
+  const offerStart = unasked && hostHasEmitted && hostIsBlankSite(data)
   return (
     <>
       {offerStart && (

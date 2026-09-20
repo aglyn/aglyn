@@ -41,6 +41,7 @@
  * typed the address deliberately.
  */
 
+import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
@@ -68,8 +69,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'scale' }, ready: true }),
   useHostOrgId: () => 'org-1',
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
-  useHostResourceApi: () => jest.fn().mockResolvedValue({ id: 'new' }),
-  useHostVersionApi: () => jest.fn().mockResolvedValue({ id: 'v1' }),
   useFirestoreDoc: () => ({ data: undefined, status: 'success' }),
   useFirestoreCollection: () => ({
     data: [],
@@ -145,12 +144,6 @@ jest.mock('@aglyn/shared-ui-jsx/components/navigation-drawer.component', () => (
         {children}
       </div>
     ) : null,
-}))
-
-jest.mock('./use-org-email-topics', () => ({
-  useOrgEmailTopics: () => ({
-    topics: [{ id: 'marketing', name: 'Promotions and offers' }],
-  }),
 }))
 
 import CampaignComposer from './campaign-composer'
@@ -240,8 +233,27 @@ const settle = async (ms: number) => {
   })
 }
 
+/**
+ * The shell's zone renderer, standing in for the plugin that keeps a site's
+ * sending identities. The sender editor is its drawer, drawn in a zone the
+ * composer mounts once its author asks to add a sender; the stand-in records
+ * what the zone was handed and leaves a marker. The drawer itself — the
+ * mailbox field, its validation, the write — is held by that plugin's specs.
+ */
+let senderEditor: Record<string, any> | null = null
+function ZoneRenderer(props: { slot: string } & Record<string, any>) {
+  if (props.slot !== 'campaignSenderEditor') return null
+  senderEditor = props
+  return <div>{'the sender editor'}</div>
+}
+
 const mount = async (props: Record<string, any> = {}) => {
-  render(<CampaignComposer hostId="host-1" {...props} />)
+  senderEditor = null
+  render(
+    <ConsoleWidgetSlotContext.Provider value={ZoneRenderer}>
+      <CampaignComposer hostId="host-1" {...props} />
+    </ConsoleWidgetSlotContext.Provider>,
+  )
   await settle(500)
 }
 
@@ -475,11 +487,17 @@ describe('a one-off sender', () => {
     await openSelect('From')
     await choose('Add a sender…')
 
-    // The drawer, not a free-text field. An address that exists in one
+    // The editor, not a free-text field. An address that exists in one
     // campaign's headers and nowhere else is a mailbox nobody serves; one
-    // added here is validated, served and reusable.
-    await waitFor(() => expect(screen.getByText('Add a sender')).toBeTruthy())
-    expect(screen.getByLabelText('Mailbox', { exact: false })).toBeTruthy()
+    // added there is validated, served and reusable.
+    await waitFor(() =>
+      expect(screen.getByText('the sender editor')).toBeTruthy(),
+    )
+    // Handed the identity it already read, so the editor opens on what this
+    // site may send as without a second fetch.
+    expect(senderEditor?.hostId).toBe('host-1')
+    expect(senderEditor?.view).toBeTruthy()
+    expect(typeof senderEditor?.onSaved).toBe('function')
   })
 
   it('never sends the menu entry as a sender id', async () => {

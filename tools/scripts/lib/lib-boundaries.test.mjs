@@ -38,6 +38,7 @@ import {
   missingMapRows,
   overrideWiring,
   packageFindings,
+  sideEffectsFindings,
   packageOfSpecifier,
   packagesImported,
   peerFamiliesImported,
@@ -196,6 +197,9 @@ describe('packageFindings', () => {
     exports: { '.': {}, './*': {} },
     peerDependencies: { react: '^19', '@mui/material': '^9' },
     sideEffects: false,
+    license: 'Apache-2.0',
+    publishConfig: { access: 'public', provenance: true },
+    repository: { type: 'git', url: 'https://github.com/aglyn/aglyn.git', directory: 'libs/plugins/crm' },
   }
 
   it('is clean for a package in the shape the map asks for', () => {
@@ -304,6 +308,9 @@ describe('what a lib must declare (AGL-3201)', () => {
       version: '2.0.0',
       exports: { '.': {}, './*': {} },
       sideEffects: false,
+      license: 'Apache-2.0',
+      publishConfig: { access: 'public', provenance: true },
+      repository: { type: 'git', url: 'https://github.com/aglyn/aglyn.git', directory: 'libs/besigner/core' },
       peerDependencies: { react: '^19' },
       dependencies: { '@aglyn/aglyn': '1.9.0', '@types/unist': '^3', rxjs: '^7' },
     }
@@ -329,6 +336,9 @@ describe('what a lib must declare (AGL-3201)', () => {
       version: '2.0.0',
       exports: { '.': {}, './*': {} },
       sideEffects: false,
+      license: 'Apache-2.0',
+      publishConfig: { access: 'public', provenance: true },
+      repository: { type: 'git', url: 'https://github.com/aglyn/aglyn.git', directory: 'libs/besigner/core' },
       dependencies: { '@swc/helpers': '~0.3.3', mobx: '^6' },
     }
     const findings = packageFindings({
@@ -352,6 +362,9 @@ describe('what a lib must declare (AGL-3201)', () => {
       version: '2.0.0',
       exports: { '.': {}, './*': {} },
       sideEffects: false,
+      license: 'Apache-2.0',
+      publishConfig: { access: 'public', provenance: true },
+      repository: { type: 'git', url: 'https://github.com/aglyn/aglyn.git', directory: 'libs/besigner/core' },
       peerDependencies: { react: '^19' },
       dependencies: { '@aglyn/aglyn': '2.0.0', mobx: '^6' },
     }
@@ -394,5 +407,52 @@ describe('the real workspace', () => {
     for (const scope of ['scope:shared', 'scope:core', 'scope:renderer', 'scope:besigner', 'scope:besigner-ui', 'scope:tenant', 'scope:console', 'scope:plugin']) {
       assert.ok(sources.has(scope), scope)
     }
+  })
+})
+
+describe('a sideEffects list is read by two bundlers', () => {
+  it('accepts false, and a module named with its extension left open', () => {
+    assert.deepEqual(sideEffectsFindings(false), [])
+    assert.deepEqual(sideEffectsFindings(['./src/lib/server.*'], (stem) => stem === './src/lib/server'), [])
+  })
+
+  it('refuses the source extension, which a consumer of the built package never matches', () => {
+    const findings = sideEffectsFindings(['./src/lib/server.ts'])
+    assert.equal(findings.length, 1)
+    assert.match(findings[0], /extension left open/)
+  })
+
+  it('refuses the emitted extension too, which this repo never matches', () => {
+    assert.equal(sideEffectsFindings(['./src/lib/server.js']).length, 1)
+  })
+
+  it('refuses an entry that outlived its module', () => {
+    const findings = sideEffectsFindings(['./src/lib/gone.*'], () => false)
+    assert.match(findings[0], /matches no module/)
+  })
+})
+
+describe('a package says how it publishes', () => {
+  const project = { name: 'plugins-crm', root: 'libs/plugins/crm', alias: '@aglyn/plugins-crm', deepAlias: true }
+  const base = {
+    name: '@aglyn/plugins-crm',
+    version: '1.0.0',
+    exports: { '.': {}, './*': {} },
+    sideEffects: false,
+  }
+  const findingsFor = (extra) => packageFindings({ project, pkg: { ...base, ...extra }, rootVersion: '1.0.0', peers: [], hasServerEntry: false })
+
+  it('refuses a missing license, restricted access and a directory that is not the package', () => {
+    const findings = findingsFor({ repository: { directory: 'libs/plugins/forms' } })
+    assert.ok(findings.some((finding) => /Apache-2\.0/.test(finding)))
+    assert.ok(findings.some((finding) => /publish restricted/.test(finding)))
+    assert.ok(findings.some((finding) => /repository\.directory/.test(finding)))
+  })
+
+  it('accepts a package that states all three', () => {
+    assert.deepEqual(
+      findingsFor({ license: 'Apache-2.0', publishConfig: { access: 'public' }, repository: { type: 'git', url: 'x', directory: 'libs/plugins/crm' } }),
+      [],
+    )
   })
 })

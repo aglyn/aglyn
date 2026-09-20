@@ -17,6 +17,7 @@
 
 import {
   FUNCTION_BUILTIN_NAMES,
+  FUNCTION_MAX_OPERATIONS,
   evaluateExpression,
   evaluateHostFunction,
   expressionIdentifiers,
@@ -311,6 +312,105 @@ describe('a choice list as one line of text (AGL-3202)', () => {
     ])
     expect(formatFunctionParameterOptions(parseFunctionParameterOptions('a: One, b'))).toBe('a: One, b')
     expect(parseFunctionParameterOptions(undefined)).toEqual([])
+  })
+})
+
+describe('dictionary members (AGL-3202)', () => {
+  const pro = JSON.stringify({ name: 'Pro', annual: 39, sites: 3, api: false, limits: { pages: 100 } })
+  const scope = { plan_pro: pro, sites: 5, extra_site: 20, label: 'not json', count: 3 }
+
+  it('reads a member of a dictionary variable, of any of the three kinds', () => {
+    expect(evaluateExpression('plan_pro.annual + max(0, sites - plan_pro.sites) * extra_site', scope)).toBe(79)
+    expect(evaluateExpression("plan_pro.name + ' plan'", scope)).toBe('Pro plan')
+    expect(evaluateExpression('plan_pro.api', scope)).toBe(false)
+    expect(evaluateExpression('plan_pro.limits.pages', scope)).toBe(100)
+  })
+
+  it('says which name it could not read, and never returns a dictionary', () => {
+    expect(() => evaluateExpression('plan_pro.monthly', scope)).toThrow('Unknown name "plan_pro.monthly"')
+    expect(() => evaluateExpression('plan_free.annual', scope)).toThrow('Unknown name "plan_free"')
+    expect(() => evaluateExpression('label.annual', scope)).toThrow('is not a dictionary')
+    expect(() => evaluateExpression('count.annual', scope)).toThrow('is not a dictionary')
+    expect(() => evaluateExpression('plan_pro.limits', scope)).toThrow('is not a number')
+    expect(() => evaluateExpression('plan_pro.constructor', scope)).toThrow('Unknown name')
+    expect(() => evaluateExpression('plan_pro.', scope)).toThrow()
+  })
+
+  it('leaves a decimal number alone', () => {
+    expect(evaluateExpression('1.5 + 0.25 * 2', {})).toBe(2)
+  })
+
+  it('names the VARIABLE a path reads, which is what compose ships to a page', () => {
+    expect(expressionIdentifiers('plan_pro.annual + chosen.seat_rate * seats')).toEqual([
+      'plan_pro',
+      'chosen',
+      'seats',
+    ])
+  })
+
+  it('lets a function pick one dictionary and then read it', () => {
+    const definition: HostFunction = {
+      name: 'cheapest',
+      parameters: [{ name: 'sites', type: 'number', required: true }],
+      variables: [
+        { name: 'a', type: 'number' },
+        { name: 'b', type: 'number' },
+        { name: 'chosen', type: 'text' },
+        { name: 'out', type: 'text' },
+      ],
+      operations: [
+        {
+          if: { left: '1', comparator: '==', right: '1' },
+          then: [
+            { set: 'a', expression: 'plan_a.price + max(0, sites - plan_a.sites) * 20' },
+            { set: 'b', expression: 'plan_b.price + max(0, sites - plan_b.sites) * 20' },
+            { set: 'chosen', expression: 'plan_b' },
+          ],
+          otherwise: [],
+        },
+        { if: { left: 'a', comparator: '<=', right: 'b' }, then: [{ set: 'chosen', expression: 'plan_a' }], otherwise: [] },
+        {
+          if: { left: '1', comparator: '==', right: '1' },
+          then: [{ set: 'out', expression: "chosen.name + ' at $' + format(min(a, b))" }],
+          otherwise: [],
+        },
+      ],
+      returnValue: 'out',
+    }
+    const globals = {
+      plan_a: JSON.stringify({ name: 'Business', price: 99, sites: 10 }),
+      plan_b: JSON.stringify({ name: 'Scale', price: 179, sites: 15 }),
+    }
+    expect(evaluateHostFunction(definition, { sites: 12 }, { globals })).toMatchObject({ ok: true, value: 'Business at $139' })
+    expect(evaluateHostFunction(definition, { sites: 15 }, { globals })).toMatchObject({ ok: true, value: 'Scale at $179' })
+    expect(functionReferencedNames(definition).sort()).toEqual(['plan_a', 'plan_b'])
+  })
+})
+
+describe('the operation bound (AGL-3202)', () => {
+  const chain = (count: number): HostFunction => ({
+    name: 'chain',
+    parameters: [],
+    variables: [{ name: 'n', type: 'number' }],
+    operations: [
+      {
+        if: { left: '1', comparator: '==', right: '1' },
+        then: Array.from({ length: count }, () => ({ set: 'n', expression: 'n + 1' })),
+        otherwise: [],
+      },
+    ],
+    returnValue: 'n',
+  })
+
+  it('runs a pricing-calculator-sized function', () => {
+    expect(evaluateHostFunction(chain(150), {})).toMatchObject({ ok: true, value: 150 })
+  })
+
+  it('is still a bound', () => {
+    expect(evaluateHostFunction(chain(FUNCTION_MAX_OPERATIONS), {})).toMatchObject({ ok: true })
+    const over = evaluateHostFunction(chain(FUNCTION_MAX_OPERATIONS + 1), {})
+    expect(over).toMatchObject({ ok: false })
+    expect((over as any).error).toContain('Operation limit')
   })
 })
 

@@ -147,6 +147,10 @@ Inside a step, an expression can use:
   `extra_site_price` directly, so changing the variable changes every page and every
   calculator that uses it. A function can read a variable and never set one, and a
   parameter or local variable with the same name wins.
+- **A dictionary variable's members, as `name.member`.** Keep one dictionary per plan —
+  `{"name": "Pro", "annual": 39, "sites": 3}` — and read `plan_pro.annual`. A text variable
+  inside the function can hold a copy of one (`chosen = plan_pro`), so the function can pick
+  a plan and then read `chosen.sites`.
 - These built-ins: `min(a, b, …)`, `max(a, b, …)`, `round(value, places)`,
   `floor(value)`, `ceil(value)`, `abs(value)`, and `format(value, places)`, which writes a
   number with thousands separators — `'$' + format(1396)` is `$1,396`.

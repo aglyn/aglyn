@@ -16,13 +16,38 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { mdiEmailOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
+import {
+  EMAIL_MESSAGES_ZONE,
+  EMAIL_TEMPLATE_RECIPIENTS_ZONE,
+} from './components/email-zones'
 import { EMAILS_CONSOLE_SECTIONS } from './components/emails-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /** Code-split: the Emails console page only loads when opened. */
 const EmailsConsolePage = lazy(() => import('./components/emails-console-page'))
+
+/*
+ * What this plugin draws inside a campaign's own pages, each loaded only where
+ * the campaign owner's zone is on screen.
+ */
+const CampaignTopicSelect = lazy(
+  () => import('./components/campaign-topic-select'),
+)
+const CampaignTopicOptionsWidget = lazy(
+  () => import('./components/campaign-topic-options-widget'),
+)
+const CampaignSenderEditorWidget = lazy(
+  () => import('./components/campaign-sender-editor-widget'),
+)
+const CampaignDesignCreateWidget = lazy(
+  () => import('./components/campaign-design-create-widget'),
+)
+const EmailDesignPreview = lazy(
+  () => import('./components/email-design-preview'),
+)
 
 /**
  * Console half (AGL-395): registers the Emails nav item + page in the
@@ -34,6 +59,35 @@ const EmailsConsolePage = lazy(() => import('./components/emails-console-page'))
  * nav or page files.
  */
 export function registerEmailConsole(): void {
+  /*
+   * The two places this plugin's pages hand over to whichever plugin owns
+   * campaigns. A message is one send of a campaign and every action on it is
+   * that plugin's route, so the Messages section is a zone this page hosts
+   * rather than pages this plugin imports; the same holds for the recipients
+   * table under a template's report. Named, because a spec calls this
+   * registrar without the loader.
+   */
+  registerPluginZone(
+    {
+      zone: EMAIL_MESSAGES_ZONE,
+      label: 'The Emails page’s Messages section',
+      surface: 'console',
+      layout: 'bare',
+      description:
+        'The whole body of `/emails/messages` and the routes under it. A widget here is handed the site, the Emails page’s base path and the segments under `messages`, and draws the list, one message’s report or its composer.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: EMAIL_TEMPLATE_RECIPIENTS_ZONE,
+      label: 'Who received a template’s emails',
+      surface: 'console',
+      description:
+        'On one template’s page, under its report. A widget here lists the recipients of every send built from that template; it is handed the site and the template’s screen id.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Email',
@@ -71,6 +125,44 @@ export function registerEmailConsole(): void {
      * Refusing the surface outright would take that away to close nothing.
      */
     permission: 'data.manage',
+    /*
+     * The mail a campaign rides on is this plugin's — the topic catalog, the
+     * sending identities, the design document and its renderer — so each is
+     * drawn here, in a zone the campaign owner's composer and message page
+     * host. Every one reports through a callback; none writes a campaign.
+     */
+    widgets: [
+      {
+        slot: 'campaignTopicSelect',
+        widgetId: 'email-campaign-topic-select',
+        title: 'Topic',
+        Component: CampaignTopicSelect,
+      },
+      {
+        slot: 'campaignTopicOptions',
+        widgetId: 'email-campaign-topic-options',
+        title: 'Topics',
+        Component: CampaignTopicOptionsWidget,
+      },
+      {
+        slot: 'campaignSenderEditor',
+        widgetId: 'email-campaign-sender-editor',
+        title: 'Add a sender',
+        Component: CampaignSenderEditorWidget,
+      },
+      {
+        slot: 'campaignDesignCreate',
+        widgetId: 'email-campaign-design-create',
+        title: 'Design this email',
+        Component: CampaignDesignCreateWidget,
+      },
+      {
+        slot: 'campaignDesignPreview',
+        widgetId: 'email-campaign-design-preview',
+        title: 'Preview',
+        Component: EmailDesignPreview,
+      },
+    ],
     navItems: [
       {
         label: 'Emails',

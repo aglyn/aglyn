@@ -68,7 +68,6 @@ import {
 import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { activeEmailTopics } from '@aglyn/aglyn'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -84,7 +83,7 @@ import {
   type CampaignSend,
   type EmailCampaign,
 } from '@aglyn/shared-ui-email-campaigns/model'
-import CampaignComposer from '@aglyn/plugins-email/components/campaign-composer'
+import CampaignComposer from './campaign-composer'
 import CampaignEditDrawer, {
   type CampaignEditValues,
 } from './campaign-edit-drawer'
@@ -95,9 +94,9 @@ import {
 } from './campaign-reach-sections'
 import CampaignMembersSection from './campaign-members-section'
 import CampaignReportCard from './campaign-report-card'
-import { useCampaignManageApi } from '@aglyn/plugins-email/components/use-campaign-send-api'
+import { useCampaignManageApi } from './use-campaign-send-api'
 import { useEmailsHubPath } from './use-emails-hub-path'
-import { useOrgEmailTopics } from '@aglyn/plugins-email/components/use-org-email-topics'
+import { useCampaignTopicOptions } from './use-campaign-topic-options'
 
 /** How many of a campaign's emails the detail page enumerates. */
 const CAMPAIGN_EMAIL_CEILING = 50
@@ -257,10 +256,12 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    * carries its own read of the same catalog, behind its own button, for the
    * same reason.
    */
-  const { topics } = useOrgEmailTopics(hostId, { enabled: editing })
+  const { topics, source: topicSource } = useCampaignTopicOptions(hostId, {
+    enabled: editing,
+  })
   const topicOptions = useMemo(
     () =>
-      activeEmailTopics(topics).map((topic) => ({
+      topics.map((topic) => ({
         value: topic.id,
         label: topic.name,
       })),
@@ -908,6 +909,8 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         cost, so opening it adds one read — the topic catalog — and only
         while it is open.
        */}
+      {/* Draws nothing: the zone the topic catalog's owner answers through. */}
+      {topicSource}
       <CampaignEditDrawer
         open={editing}
         onClose={() => setEditing(false)}

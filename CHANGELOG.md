@@ -9,6 +9,42 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.143 — 2026-09-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.142...v1.0.0-beta.143)
+
+### Added
+
+- **logic:** the function editor says a dictionary reads as name.member ([AGL-3202](https://linear.app/aglyn/issue/AGL-3202))
+- **aglyn:** a function reads a dictionary's members as name.member ([AGL-3202](https://linear.app/aglyn/issue/AGL-3202))
+- **tools:** the plugin-domain guard reads the declarations inside a file ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **tools:** the plugin-domain guard judges what a file does, not only what it is called ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+### Fixed
+
+- **libs:** the Besigner UI installs from its packages and runs ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **libs:** a sideEffects entry matches the source and the built package ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201), [AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
+- **plugins:** a campaign zone suspends under its own boundary ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **console:** the guided start is offered only to a site that publishes nothing ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918), [AGL-687](https://linear.app/aglyn/issue/AGL-687), [AGL-1066](https://linear.app/aglyn/issue/AGL-1066))
+- **mui:** the four calculator elements are declared where a plugin says what it registers ([AGL-3202](https://linear.app/aglyn/issue/AGL-3202), [AGL-3116](https://linear.app/aglyn/issue/AGL-3116))
+
+### Changed
+
+- **plugins:** marketing owns campaign email end to end ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **email:** rendering one message for one recipient sits on the core's mail rail ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+### Documentation
+
+- **bindings:** a function reads a dictionary's members ([AGL-3202](https://linear.app/aglyn/issue/AGL-3202))
+- **ai:** the page an agency searching for an AI website builder lands on ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **libs:** every package states its license and how it publishes ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+
+</details>
+
 ## v1.0.0-beta.142 — 2026-09-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.141...v1.0.0-beta.142)

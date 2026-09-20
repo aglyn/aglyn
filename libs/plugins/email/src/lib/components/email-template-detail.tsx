@@ -59,7 +59,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   CAMPAIGN_SEND_CONTAINER_FIELD,
@@ -76,13 +76,14 @@ import {
   type TemplateCampaign,
 } from '../model/template-report'
 import EmailDesignPreview from './email-design-preview'
-import EmailRecipientsCard from './email-recipients-card'
+import { EMAIL_TEMPLATE_RECIPIENTS_ZONE } from './email-zones'
 import {
   Figure,
   RateRow,
   Section,
 } from '@aglyn/shared-ui-email-campaigns/components/report-figures'
-import { useMarketingHubPath } from './use-marketing-hub-path'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 
 /**
  * How many of a template's messages one read covers.
@@ -162,8 +163,16 @@ type TemplateMessage = TemplateCampaign & {
 export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
   const { hostId, screenId, basePath } = props
   const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
-  // The sibling hub: a campaign's page belongs to the Marketing console.
-  const marketingHub = useMarketingHubPath()
+  /*
+   * A campaign's page is another plugin's, so its address is asked for: the
+   * owner publishes where a `campaign` is read and this page links there.
+   * Null where nobody does, or before the console's URL has resolved.
+   */
+  const campaignHref = (campaignId: string): string | null =>
+    orgSlug && subdomain
+      ? pluginRecordHref('campaign', { orgSlug, host: subdomain }, campaignId)
+      : null
+  const RecipientsZone = useConsoleWidgetSlot()
   const firestore = useFirestore()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
@@ -330,13 +339,12 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
       key: 'campaign',
       label: 'Open its campaign',
       icon: <MdiIcon path={mdiBullhornOutline.path} size={0.8} />,
-      // The campaign's page belongs to the Marketing console, so this one
-      // href is built from the sibling hub rather than this surface's own.
+      // The one href here that is not under this surface's own base path.
       href:
-        message.emailCampaignId && marketingHub
-          ? `${marketingHub}/campaigns/${message.emailCampaignId}`
-          : undefined,
-      disabled: !message.emailCampaignId || !marketingHub,
+        (message.emailCampaignId && campaignHref(message.emailCampaignId)) ||
+        undefined,
+      disabled:
+        !message.emailCampaignId || !campaignHref(message.emailCampaignId),
       disabledReason: message.emailCampaignId
         ? 'This site’s console URL has not resolved yet'
         : 'Sent before campaigns grouped their emails, so it belongs to none',
@@ -714,7 +722,19 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
         </Stack>
       </CardDisplay>
 
-      <EmailRecipientsCard hostId={hostId} screenId={screenId} />
+      {/*
+        Its own boundary: the table's code arrives after the report above it
+        has drawn, and must not send that report back to a loading state.
+       */}
+      {RecipientsZone ? (
+        <Suspense fallback={null}>
+          <RecipientsZone
+            slot={EMAIL_TEMPLATE_RECIPIENTS_ZONE.id}
+            hostId={hostId}
+            screenId={screenId}
+          />
+        </Suspense>
+      ) : null}
 
       {/*
        * Last, and its own card — the same order the email's own page uses.

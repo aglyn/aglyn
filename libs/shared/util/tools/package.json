@@ -1,6 +1,17 @@
 {
   "name": "@aglyn/shared-util-tools",
-  "version": "1.0.0-beta.142",
+  "version": "1.0.0-beta.143",
+  "license": "Apache-2.0",
+  "homepage": "https://aglyn.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aglyn/aglyn.git",
+    "directory": "libs/shared/util/tools"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -14,12 +25,12 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-data-types": "1.0.0-beta.142",
+    "@aglyn/shared-data-types": "1.0.0-beta.143",
     "@swc/helpers": "0.5.23",
     "lodash-es": "^4.18.1",
     "php-serialize": "^5.1.3"
   },
   "sideEffects": [
-    "./src/lib/array/array-overrides.ts"
+    "./src/lib/array/array-overrides.*"
   ]
 }

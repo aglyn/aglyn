@@ -401,6 +401,13 @@
           "shell": true,
           "routes": [
             "/emails"
+          ],
+          "slots": [
+            "campaignDesignCreate",
+            "campaignDesignPreview",
+            "campaignSenderEditor",
+            "campaignTopicOptions",
+            "campaignTopicSelect"
           ]
         }
       }
@@ -532,6 +539,8 @@
           ],
           "slots": [
             "crmRecordAttribution",
+            "emailMessages",
+            "emailTemplateRecipients",
             "hostDashboard",
             "inboxCampaigns",
             "inboxRecordAttribution"

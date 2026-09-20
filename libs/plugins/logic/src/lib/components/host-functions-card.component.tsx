@@ -982,7 +982,8 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
           <SectionLabel>{'Operations'}</SectionLabel>
           <Typography variant="caption" color="text.secondary">
             {'An expression can use + − × ÷ and parentheses, any site ' +
-              'variable by its name, and ' +
+              'variable by its name (a dictionary’s members as ' +
+              'name.member), and ' +
               `${FUNCTION_BUILTIN_NAMES.map((name) => `${name}()`).join(', ')}.`}
           </Typography>
           {(draft?.operations ?? []).map((operation, index) => (

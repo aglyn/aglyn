@@ -3,6 +3,9 @@
   "version": "0.1.2",
   "description": "Read and script any site built on Aglyn — pages as Markdown, llms.txt, OpenAPI, and the REST API.",
   "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "bin": {
     "aglyn": "./src/bin.js"

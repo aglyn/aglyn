@@ -1,6 +1,17 @@
 {
   "name": "@aglyn/plugins-crm",
-  "version": "1.0.0-beta.142",
+  "version": "1.0.0-beta.143",
+  "license": "Apache-2.0",
+  "homepage": "https://aglyn.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aglyn/aglyn.git",
+    "directory": "libs/plugins/crm"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -14,18 +25,18 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.142",
-    "@aglyn/shared-data-enums": "1.0.0-beta.142",
-    "@aglyn/shared-data-mdi": "1.0.0-beta.142",
-    "@aglyn/shared-ui-email-campaigns": "1.0.0-beta.142",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.142",
-    "@aglyn/shared-ui-next": "1.0.0-beta.142",
-    "@aglyn/shared-ui-snackstack": "1.0.0-beta.142",
-    "@aglyn/shared-util-email": "1.0.0-beta.142",
-    "@aglyn/shared-util-http": "1.0.0-beta.142",
-    "@aglyn/tenant-data-admin": "1.0.0-beta.142",
-    "@aglyn/tenant-feature-instance": "1.0.0-beta.142",
-    "@aglyn/tenant-runtime": "1.0.0-beta.142",
+    "@aglyn/aglyn": "1.0.0-beta.143",
+    "@aglyn/shared-data-enums": "1.0.0-beta.143",
+    "@aglyn/shared-data-mdi": "1.0.0-beta.143",
+    "@aglyn/shared-ui-email-campaigns": "1.0.0-beta.143",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.143",
+    "@aglyn/shared-ui-next": "1.0.0-beta.143",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.143",
+    "@aglyn/shared-util-email": "1.0.0-beta.143",
+    "@aglyn/shared-util-http": "1.0.0-beta.143",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.143",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.143",
+    "@aglyn/tenant-runtime": "1.0.0-beta.143",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/utilities": "^3.2.2",
     "@swc/helpers": "0.5.23",

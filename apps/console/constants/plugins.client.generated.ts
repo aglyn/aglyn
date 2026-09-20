@@ -78,7 +78,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'email',
     apiPrefixes: ["email"],
     register: {"site":"registerEmailPlugin","console":"registerEmailConsole"},
-    contributes: {"console":{"shell":true,"routes":["/emails"]}},
+    contributes: {"console":{"shell":true,"routes":["/emails"],"slots":["campaignDesignCreate","campaignDesignPreview","campaignSenderEditor","campaignTopicOptions","campaignTopicSelect"]}},
     load: () => import('@aglyn/plugins-email'),
     loads: {
       site: () => import('@aglyn/plugins-email/site'),
@@ -111,7 +111,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'marketing',
     apiPrefixes: ["campaigns","experiments"],
     register: {"console":"registerMarketingConsole","site":"registerMarketingPlugin"},
-    contributes: {"console":{"shell":true,"routes":["/marketing"],"slots":["crmRecordAttribution","hostDashboard","inboxCampaigns","inboxRecordAttribution"]}},
+    contributes: {"console":{"shell":true,"routes":["/marketing"],"slots":["crmRecordAttribution","emailMessages","emailTemplateRecipients","hostDashboard","inboxCampaigns","inboxRecordAttribution"]}},
     load: () => import('@aglyn/plugins-marketing'),
     loads: {
       site: () => import('@aglyn/plugins-marketing/site'),

@@ -624,7 +624,7 @@ What matters more than a ramp, and is tracked separately:
 
   The visible footer is on **both parts**. `sendEmail` appends it to the text
   and the HTML of any gated message that does not already carry the link, and
-  `renderCampaignEmail` does the same for a campaign, which mints its own
+  `renderRecipientEmail` does the same for a campaign, which mints its own
   pair and passes no marketing context. A designed template carries an
   opt-out only where its author placed a `{{unsubscribeUrl}}`, so before that
   a design whose footer block said only the copyright line mailed an HTML

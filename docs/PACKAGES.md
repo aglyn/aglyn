@@ -16,7 +16,7 @@ The map is held in these places, and they agree by construction:
 | `eslint.config.mjs` | `@nx/enforce-module-boundaries` takes those constraints, so every file is judged at lint; a project on the allowlist spreads `boundaryOverridesFor(import.meta.url)` from its own `eslint.config.mjs`, which allows exactly its listed targets and nothing more |
 | `tools/scripts/check-lib-boundaries.mjs` | `check:lib-boundaries` judges the same constraints over `nx graph`, checks this document has a row for every project, and checks every lib `package.json` |
 | `tools/scripts/lib-boundaries-allowlist.json` | the edges that break the map today, one row each; the guard is red for a row that is missing **and** for a row the graph no longer has |
-| `tools/scripts/check-plugin-domain-in-core.mjs` | `check:plugin-domain-in-core` holds Rule 3, which the import graph cannot see: a domain-named file or route directory, a vendor literal, a first-party plugin id or a static plugin import in any tree that is not a plugin |
+| `tools/scripts/check-plugin-domain-in-core.mjs` | `check:plugin-domain-in-core` holds Rule 3, which the import graph cannot see, in any tree that is not a plugin: a domain-named file or route directory, a vendor literal, a first-party plugin id, a static plugin import, **a Firestore collection one plugin owns addressed from outside it**, **exports that are mostly one plugin's vocabulary**, and **any declaration in a plugin's vocabulary mixed into a platform file**. The last three read the CODE rather than the name; two content sweeps added them after names alone had missed 111 files, the largest group being platform files with a plugin's rows, keys and types written into them (`plan-entitlements.ts`, `org-billing.types.ts`, `usage-budget.ts`) |
 | `tools/scripts/plugin-domain-in-core-allowlist.json` | the files that carry a plugin's domain outside its plugin today, each with the AGL-3080 lane that moves it, or `stays` and the argument; red for a finding with no row **and** for a row nothing trips (`--prune`) |
 
 ```sh
@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 2 edges the allowlist carries, and what removes each. An edge leaves the
+The 1 edge the allowlist carries, and what removes it. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -331,18 +331,37 @@ needs it starts.
     member for the facts reader to answer — and the sender asks
     `readPluginRecordCard`. The "from" price is worked out in one place. The
     number stays.
-15. **`plugins-marketing` → `plugins-email`.** The widest row. Crosses:
-    `CampaignComposer`, `useCampaignManageApi` and `useOrgEmailTopics`
-    (`campaign-detail-card.tsx`, `campaigns-card.tsx`), and
-    `@aglyn/plugins-email/model` (`src/lib/server/campaign-send.ts`). Fix, in
-    three parts: the composer is a widget email registers into a
-    marketing-hosted zone (**present**); the send and manage calls go through
-    email's own `registerPluginApiRoute` doors rather than a borrowed client
-    hook (**present**); and the model import becomes a plugin-declared campaign
-    resource kind whose numbers resolve through `registerPluginFigureReader` —
-    the reader is **present**, while the resource kind and the
-    subscription-topic contract `useOrgEmailTopics` needs are **owed**
-    (AGL-3124). That resource kind is the one the finding below turns on.
+15. **`plugins-marketing` → `plugins-email`.** Gone (AGL-3080). The widest
+    row, and the two plugins were coupled in BOTH directions: marketing served
+    `/api/campaigns/send`, `/manage` and `/recipients` while their client hook,
+    the composer that drives them and the message pages that call them lived
+    in the email plugin. The owner decided (2026-09-20) that **marketing owns
+    campaigns end to end**, so the move was made with a seam on each side
+    rather than by swapping this edge for its reverse.
+    *The mail rail.* Rendering one message for one recipient was never a
+    campaign's or an email design's alone — email checks a design through the
+    same call — so it sits in core as
+    `@aglyn/aglyn/app-utils/recipient-email-render`.
+    *What moved to marketing.* The composer, the test-send drawer, the
+    campaign API hooks, and the three message pages (list, report, compose)
+    with the recipients table: a message is one send of a campaign, and every
+    action on those pages is a marketing route.
+    *Zones email hosts, marketing fills.* `emailMessages` is the whole body of
+    `/emails/messages/**` — email owns the URL, marketing draws it — and
+    `emailTemplateRecipients` is the recipients table under a template's
+    report. A template links its campaigns through
+    `pluginRecordHref('campaign', …)`, which marketing publishes.
+    *Zones marketing hosts, email fills.* What a campaign email needs of the
+    mail itself: `campaignTopicSelect` (the stream picker),
+    `campaignTopicOptions` (a widget that draws nothing and REPORTS the active
+    topics to the two drawers whose select takes a list, read only while the
+    drawer is open), `campaignSenderEditor`, `campaignDesignCreate` and
+    `campaignDesignPreview`. Every one reports through a callback; none writes
+    a campaign. The tokens are in
+    `libs/plugins/marketing/src/lib/components/campaign-email-zones.tsx` and
+    `libs/plugins/email/src/lib/components/email-zones.ts`.
+    `plugin-email-boundary.spec.ts` now holds the whole line — marketing
+    imports nothing from the email plugin. The number stays.
 16. **`plugins-marketplace` → `plugins-mui`.** Gone (AGL-3080). The only
     crossing was the spec proving each block preset composes publishable
     components. It is about the palette's owner and the allowlist's owner at
@@ -458,7 +477,19 @@ Every lib carries, today:
 - `peerDependencies`: `react`, `react-dom`, `next`, `firebase`,
   `firebase-admin` and each `@mui/*` package the lib's shipped source imports,
   at the root's range. A consumer has one of each; a lib never carries its own.
-- `sideEffects`: `false`, or the list of modules that register on import.
+- `license`: `Apache-2.0`, for every package (the owner's call, 2026-09-20);
+  the root `LICENSE` is copied into each built package when it is packed.
+- `publishConfig.access`: `public` — a scoped package publishes restricted
+  unless it says so — and `provenance: true`.
+- `repository.directory`: the package's own directory, which is what links a
+  registry page to its source in a monorepo.
+- `sideEffects`: `false`, or the list of modules that register on import, each
+  named with its extension left open (`./src/lib/server.*`). A lib is read as
+  `.ts` source by this repo's apps and as emitted `.js` by a consumer; an entry
+  naming either extension matches nothing for the other reader, whose bundler
+  then takes the module for side-effect free and drops a bare import of it —
+  measured in webpack and in vite. `check:lib-boundaries` refuses a closed
+  extension and an entry that matches no module.
 - `dependencies`: every package the lib's shipped source imports that is not
   a peer (AGL-3201). Inside this repo an import resolves through a tsconfig
   alias or the root `node_modules`, so a lib that declares nothing builds and
@@ -494,8 +525,8 @@ entry that imports them, and runs it.
 
 | story | asks for | brings | must not need | holds |
 | -- | -- | -- | -- | -- |
-| `logic-only` | `@aglyn/aglyn`, `@aglyn/besigner` | `react` | `next`, `firebase`, `firebase-admin`, `@mui/material`, `@aglyn/besigner-ui` | yes — ten packages in the closure, none of them a UI library |
-| `besigner-ui` | `@aglyn/besigner-ui`, `@aglyn/aglyn-node-renderer` | `react`, `react-dom`, `next`, `firebase`, `@mui/*`, `@emotion/*` | `firebase-admin`, any `@aglyn/tenant-*`, any `@aglyn/plugins-*` | **not yet.** All 21 packages build, pack and install, and no console, tenant runtime or plugin is in the closure — the separation holds. The bundle fails on `@aglyn/shared-data-mdi`, whose entry imports `../../generated/6.5.95/mdi-icons`, 29 MB of generated source outside `src/` that the build never emits. |
+| `logic-only` | `@aglyn/aglyn`, `@aglyn/besigner` | `react` | `next`, `firebase`, `firebase-admin`, `@mui/material`, `@aglyn/besigner-ui` | yes — eleven packages in the closure, none of them a UI library |
+| `besigner-ui` | `@aglyn/besigner-ui`, `@aglyn/aglyn-node-renderer` | `react`, `react-dom`, `next`, `firebase`, `@mui/*`, `@emotion/*` | `firebase-admin`, any `@aglyn/tenant-*`, any `@aglyn/plugins-*` | yes — 22 packages in the closure, and no console, tenant runtime or plugin among them. It holds WITH two peers an embeddable editor should not need, `next` and `firebase`; see below. |
 
 What a build must do for this to hold, all of it invisible from inside: the
 swc output is ESM with `"type": "module"`, so `.swcrc` sets `resolveFully` and
@@ -506,17 +537,26 @@ load `mobx-utils/lib/*`, whose own files import each other without extensions
 — that is `mobx-utils`' packaging, a bundler resolves it, and every consumer of
 a React library has one.
 
-What stands between `besigner-ui` and holding, in the order a consumer meets
-them:
+Two more the proof found, both invisible from inside. The build compiles a
+lib's `sourceRoot`, so `@aglyn/shared-data-mdi`'s generated icon set — which
+sits beside `src/`, not in it — was typed and never emitted; its `sourceRoot`
+is the project root, with the generator scripts and the retired 5.9.55 set
+excluded, and the catalog JSON ships as an asset. And `.swcrc` said nothing
+about JSX, so every component compiled to `React.createElement` in a file that
+imports no `React` — this repo's apps and jest compile lib source with the
+automatic runtime and never met it. Every `.swcrc` sets
+`jsc.transform.react.runtime: "automatic"`.
 
-1. **`@aglyn/shared-data-mdi` does not ship its icons.** Decide whether the
-   package carries the generated set (and at what size) or depends on the
-   upstream icon package; either way the entry must not reach outside `src/`.
-2. **`next` is a peer for two `next/dynamic` calls** in the designer
+The owner's call (2026-09-20) is that the icon package ships its generated set
+for now; depending on the upstream icon package is a later option.
+
+What still stands between `besigner-ui` and an editor that embeds anywhere:
+
+1. **`next` is a peer for two `next/dynamic` calls** in the designer
    (`viewport-canvas`, `workspace-editor`). They carry SSR semantics the
    console's editor route relies on, so replacing them wants a signed-in editor
    to verify against.
-3. **`firebase` is a peer because the working-draft store writes Firestore
+2. **`firebase` is a peer because the working-draft store writes Firestore
    itself** (`drafts/besigner-server-draft.ts`). An embeddable editor takes a
    draft store from whoever embeds it; the contract belongs in
    `@aglyn/besigner` and the Firestore implementation beside the console.
@@ -525,11 +565,6 @@ them:
 
 A follow-up project, not this document's commit:
 
-- **`sideEffects` names `.ts` files and the package ships `.js`** (AGL-3201).
-  The swc build copies the array as written, so a consumer's bundler would
-  read every listed module as side-effect free and drop its registration —
-  the AGL-3025 failure, in somebody else's build. It has to be rewritten to
-  the emitted extension at build or pack time before anything is published.
 - `nx release` with independent versioning and `publishConfig` per package.
 - A `publish-packages.yml` workflow on the `production` promotion tag that
   publishes every changed package with provenance, and a `CHANGELOG` per

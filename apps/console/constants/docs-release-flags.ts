@@ -239,6 +239,11 @@ export const FLAG_DOC_PAGES: Partial<
       checkNoPriceClaim: true,
     },
     {
+      path: 'docs/ai/agency-sites.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
       path: 'docs/ai/generate-a-form.md',
       disclosure: 'admonition',
       checkNoPriceClaim: true,

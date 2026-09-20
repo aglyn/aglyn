@@ -46,13 +46,13 @@
  * reason an override exists at all.
  */
 
-import { UNSUBSCRIBE_FOOTER_LABEL } from '@aglyn/shared-util-email'
+import { UNSUBSCRIBE_FOOTER_LABEL } from '@aglyn/shared-util-email/marketing-send'
 import {
-  campaignMessageMode,
-  campaignPlainTextState,
-  renderCampaignEmail,
-  type CampaignEmailContent,
-} from './campaign-email-render'
+  emailMessageMode,
+  emailPlainTextState,
+  renderRecipientEmail,
+  type RecipientEmailContent,
+} from './recipient-email-render'
 
 /** Rooted at `_@_`, the id the besigner really writes. */
 const NODES = {
@@ -80,9 +80,9 @@ const TYPED = 'Typed copy here'
 
 describe('which of the two ways an email is written', () => {
   it('reads the mode off the one field that decides it', () => {
-    expect(campaignMessageMode({ templateScreenId: 'scr_1' })).toBe('design')
-    expect(campaignMessageMode({ templateScreenId: '' })).toBe('text')
-    expect(campaignMessageMode({})).toBe('text')
+    expect(emailMessageMode({ templateScreenId: 'scr_1' })).toBe('design')
+    expect(emailMessageMode({ templateScreenId: '' })).toBe('text')
+    expect(emailMessageMode({})).toBe('text')
   })
 
   it('has exactly TWO answers, because the data model has two things', () => {
@@ -94,7 +94,7 @@ describe('which of the two ways an email is written', () => {
      */
     const modes = new Set(
       [{ templateScreenId: 'scr_1' }, { templateScreenId: '' }, {}].map(
-        campaignMessageMode,
+        emailMessageMode,
       ),
     )
     expect([...modes].sort()).toEqual(['design', 'text'])
@@ -103,7 +103,7 @@ describe('which of the two ways an email is written', () => {
 
 describe('a plain-text message', () => {
   const rendered = () =>
-    renderCampaignEmail({
+    renderRecipientEmail({
       subject: 'Spring sale',
       content: { mode: 'text', body: TYPED },
       recipient: RECIPIENT,
@@ -127,7 +127,7 @@ describe('a plain-text message', () => {
   })
 
   it('resolves merge tags in the body, per recipient', () => {
-    const { text } = renderCampaignEmail({
+    const { text } = renderRecipientEmail({
       subject: 'Hi {{firstName|there}}',
       content: { mode: 'text', body: 'Hello {{firstName|there}}' },
       recipient: RECIPIENT,
@@ -159,7 +159,7 @@ describe('a plain-text message', () => {
   it('still linkifies the links the AUTHOR typed', () => {
     // Only the generated footer gets a written label. A URL somebody typed
     // into their own copy is theirs, and showing it is what they meant.
-    const { html } = renderCampaignEmail({
+    const { html } = renderRecipientEmail({
       subject: 'Spring sale',
       content: { mode: 'text', body: 'Read more at https://acme.example/sale' },
       recipient: RECIPIENT,
@@ -177,7 +177,7 @@ describe('a plain-text message', () => {
 
 describe('a designed message', () => {
   const rendered = () =>
-    renderCampaignEmail({
+    renderRecipientEmail({
       subject: 'Spring sale',
       content: { mode: 'design', template: { nodes: NODES } },
       recipient: RECIPIENT,
@@ -191,7 +191,7 @@ describe('a designed message', () => {
   })
 
   it('takes the template’s own subject when the campaign names none', () => {
-    const { subject } = renderCampaignEmail({
+    const { subject } = renderRecipientEmail({
       subject: '',
       content: {
         mode: 'design',
@@ -219,7 +219,7 @@ describe('the plain-text half of a designed message', () => {
      * default. A button keeps its destination in the text part — the one half
      * a text-only reader can act on.
      */
-    const { text } = renderCampaignEmail({
+    const { text } = renderRecipientEmail({
       subject: 'Spring sale',
       content: { mode: 'design', template: { nodes: NODES_WITH_A_LINK } },
       recipient: RECIPIENT,
@@ -229,7 +229,7 @@ describe('the plain-text half of a designed message', () => {
   })
 
   it('is replaced, whole, by one the author wrote', () => {
-    const { html, text } = renderCampaignEmail({
+    const { html, text } = renderRecipientEmail({
       subject: 'Spring sale',
       content: {
         mode: 'design',
@@ -247,7 +247,7 @@ describe('the plain-text half of a designed message', () => {
   it('resolves merge tags in an authored part', () => {
     // A text part shipping `{{firstName|there}}` literally is worse than the
     // generated one it replaced.
-    const { text } = renderCampaignEmail({
+    const { text } = renderRecipientEmail({
       subject: 'Spring sale',
       content: {
         mode: 'design',
@@ -266,7 +266,7 @@ describe('the plain-text half of a designed message', () => {
      * so the only form a text-only reader can use is the address itself — and
      * it is appended after the author's copy rather than being part of it.
      */
-    const { text } = renderCampaignEmail({
+    const { text } = renderRecipientEmail({
       subject: 'Spring sale',
       content: {
         mode: 'design',
@@ -290,7 +290,7 @@ describe('the plain-text half of a designed message', () => {
      * of the list at all, while the text part had one — so the defect was
      * invisible to anyone reading their own test send.
      */
-    const { html } = renderCampaignEmail({
+    const { html } = renderRecipientEmail({
       subject: 'Spring sale',
       content: { mode: 'design', template: { nodes: NODES } },
       recipient: RECIPIENT,
@@ -304,7 +304,7 @@ describe('the plain-text half of a designed message', () => {
     // `{{unsubscribeUrl}}` in a link lands in an `href`, where the renderer
     // escapes it — so the check that spots it has to look for the escaped
     // form too, or the templates that did the right thing get two footers.
-    const { html } = renderCampaignEmail({
+    const { html } = renderRecipientEmail({
       subject: 'Spring sale',
       content: {
         mode: 'design',
@@ -323,7 +323,7 @@ describe('the plain-text half of a designed message', () => {
      * render's footer into the stored value, and the next send would append a
      * second one.
      */
-    const { text, messageText } = renderCampaignEmail({
+    const { text, messageText } = renderRecipientEmail({
       subject: 'Spring sale',
       content: { mode: 'design', template: { nodes: NODES } },
       recipient: RECIPIENT,
@@ -336,7 +336,7 @@ describe('the plain-text half of a designed message', () => {
 
   it('treats an empty authored part as no override at all', () => {
     // Presence is the signal, and whitespace is not presence.
-    const { text } = renderCampaignEmail({
+    const { text } = renderRecipientEmail({
       subject: 'Spring sale',
       content: { mode: 'design', template: { nodes: NODES }, plainText: '  ' },
       recipient: RECIPIENT,
@@ -353,11 +353,11 @@ describe('whether the text part still describes the design', () => {
    * can see scores the same as one that is not there.
    */
   it('calls an absent part generated, and never stale', () => {
-    expect(campaignPlainTextState({}, 'ver_2')).toEqual({
+    expect(emailPlainTextState({}, 'ver_2')).toEqual({
       source: 'generated',
       stale: false,
     })
-    expect(campaignPlainTextState({ plainText: '   ' }, 'ver_2')).toEqual({
+    expect(emailPlainTextState({ plainText: '   ' }, 'ver_2')).toEqual({
       source: 'generated',
       stale: false,
     })
@@ -365,7 +365,7 @@ describe('whether the text part still describes the design', () => {
 
   it('calls a part written against THIS design current', () => {
     expect(
-      campaignPlainTextState(
+      emailPlainTextState(
         { plainText: 'Mine', plainTextVersionId: 'ver_2' },
         'ver_2',
       ),
@@ -374,7 +374,7 @@ describe('whether the text part still describes the design', () => {
 
   it('calls a part written against an older design stale', () => {
     expect(
-      campaignPlainTextState(
+      emailPlainTextState(
         { plainText: 'Mine', plainTextVersionId: 'ver_1' },
         'ver_2',
       ),
@@ -384,11 +384,11 @@ describe('whether the text part still describes the design', () => {
   it('does not cry stale over a question it cannot answer', () => {
     // An unanswerable question must not render as a warning — a part written
     // before the version was recorded, or a design whose version is unknown.
-    expect(campaignPlainTextState({ plainText: 'Mine' }, 'ver_2').stale).toBe(
+    expect(emailPlainTextState({ plainText: 'Mine' }, 'ver_2').stale).toBe(
       false,
     )
     expect(
-      campaignPlainTextState(
+      emailPlainTextState(
         { plainText: 'Mine', plainTextVersionId: 'ver_1' },
         undefined,
       ).stale,
@@ -416,11 +416,11 @@ describe('the mode is READ, not assumed', () => {
   }
 
   it('produces a different message for each mode', () => {
-    const asText = renderCampaignEmail({
+    const asText = renderRecipientEmail({
       ...same,
       content: { mode: 'text', body: TYPED },
     })
-    const asDesign = renderCampaignEmail({
+    const asDesign = renderRecipientEmail({
       ...same,
       content: { mode: 'design', template: { nodes: NODES } },
     })
@@ -446,7 +446,7 @@ describe('the mode is READ, not assumed', () => {
      * A runtime assertion could only observe the drop; this makes the drop
      * unsayable.
      *=========================================*/
-    const message = renderCampaignEmail({
+    const message = renderRecipientEmail({
       subject: 'Spring sale',
       content: { mode: 'design', template: { nodes: NODES } },
       // @ts-expect-error a designed message has no typed body to carry
@@ -460,7 +460,7 @@ describe('the mode is READ, not assumed', () => {
   it('names the design branch without a body field of its own', () => {
     // The same guard one level down, on the union member rather than on the
     // render input — so widening either shape is caught.
-    const designed: Extract<CampaignEmailContent, { mode: 'design' }> = {
+    const designed: Extract<RecipientEmailContent, { mode: 'design' }> = {
       mode: 'design',
       template: { nodes: NODES },
       // @ts-expect-error the designed member carries a template and nothing else

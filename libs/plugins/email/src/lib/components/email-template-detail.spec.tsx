@@ -34,6 +34,8 @@
  * the sandbox entirely. So the assertion reads the attribute's VALUE.
  */
 
+import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type {
@@ -180,14 +182,43 @@ async function renderDetail(options?: {
   const { EmailTemplateDetail } = await import('./email-template-detail')
   render(
     (
-      <EmailTemplateDetail
-        hostId="site1"
-        screenId="scr_1"
-        basePath="/acme/hosts/site/emails"
-      />
+      <ConsoleWidgetSlotContext.Provider value={ZoneRenderer}>
+        <EmailTemplateDetail
+          hostId="site1"
+          screenId="scr_1"
+          basePath="/acme/hosts/site/emails"
+        />
+      </ConsoleWidgetSlotContext.Provider>
     ) as ReactNode as never,
   )
 }
+
+/**
+ * The plugin that owns campaigns, reduced to the two things this page asks of
+ * it. It publishes where a `campaign` is read, which is how the row menu's
+ * link is built without this plugin spelling another's nav slug; and it draws
+ * the recipients table in the zone this page hosts, which the stand-in marks
+ * so the page's ORDER can be measured.
+ */
+let recipientsZone: Record<string, unknown> | null = null
+function ZoneRenderer(props: { slot: string } & Record<string, unknown>) {
+  if (props.slot !== 'emailTemplateRecipients') return null
+  recipientsZone = props
+  return <div>{'Recipients'}</div>
+}
+beforeAll(() => {
+  registerPluginRecordRoute(
+    'campaign',
+    {
+      list: () => null,
+      record: (context, id) =>
+        context.host
+          ? `/${context.orgSlug}/hosts/${context.host}/marketing/campaigns/${id}`
+          : null,
+    },
+    { pluginId: 'campaign-owner-stand-in' },
+  )
+})
 
 describe('the template preview cannot reach the console it is drawn in', () => {
   it('renders the email into an iframe sandboxed with no permissions', async () => {
@@ -332,8 +363,8 @@ describe('the template report names its denominators on screen', () => {
       name: 'Open its campaign',
     })
     expect(campaign.tagName).toBe('A')
-    // The MARKETING hub, not this surface's own: a campaign's page is a
-    // section of the Marketing console.
+    // Not under this surface's own base path: a campaign's page is another
+    // plugin's, and the address is the one its owner publishes.
     expect(campaign.getAttribute('href')).toBe(
       '/acme/hosts/site/marketing/campaigns/camp_7',
     )
@@ -450,6 +481,8 @@ describe('the template preview sits at the bottom of the page', () => {
     await renderDetail()
     const preview = document.querySelector('iframe[title="Email preview"]')
     const recipients = screen.getByText('Recipients')
+    // Handed the template, and nothing of a single message.
+    expect(recipientsZone).toMatchObject({ hostId: 'site1', screenId: 'scr_1' })
     expect(
       recipients.compareDocumentPosition(preview as Node) &
         Node.DOCUMENT_POSITION_FOLLOWING,

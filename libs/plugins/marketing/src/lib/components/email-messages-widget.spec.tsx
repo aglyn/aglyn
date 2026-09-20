@@ -25,6 +25,9 @@
  * a page of figures a reader scrolls, and a composer is a form with one
  * irreversible button.
  *
+ * The Emails page hosts the section as a zone and hands over the segments
+ * under `messages`; choosing between the three pages is this widget's.
+ *
  * Both bodies are stubbed. What belongs here is which one the segments select
  * and what it is handed, not what either does once it is mounted: the real
  * ones open Firestore listens against hooks no tree here provides, and their
@@ -32,7 +35,6 @@
  */
 
 import { render, screen } from '@testing-library/react'
-import type { ReactNode } from 'react'
 
 /** The props each stub was mounted with, or null while it is not. */
 let detailProps: Record<string, unknown> | null = null
@@ -61,16 +63,7 @@ jest.mock('./emails-list-card', () => ({
   },
 }))
 
-/*
- * The rail, which this file is not about. It renders its children and nothing
- * else, so what is asserted below is the section body the page chose.
- */
-jest.mock('@aglyn/shared-ui-next', () => ({
-  __esModule: true,
-  HubSections: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}))
-
-import EmailsConsolePage from './emails-console-page'
+import EmailMessagesWidget from './email-messages-widget'
 
 const BASE_PATH = '/acme/hosts/site/emails'
 
@@ -79,18 +72,7 @@ function renderMessages(detail: string[] = []) {
   composeProps = null
   listMounted = false
   return render(
-    (
-      <EmailsConsolePage
-        hostId="site1"
-        entitled
-        org={{ plan: 'business' } as never}
-        permissions={{} as never}
-        basePath={BASE_PATH}
-        sections={[{ id: 'messages', label: 'Messages' }] as never}
-        section="messages"
-        segments={['messages', ...detail]}
-      />
-    ) as ReactNode as never,
+    <EmailMessagesWidget hostId="site1" basePath={BASE_PATH} detail={detail} />,
   )
 }
 

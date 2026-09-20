@@ -65,8 +65,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'scale' }, ready: true }),
   useHostOrgId: () => 'org-1',
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
-  useHostResourceApi: () => jest.fn().mockResolvedValue({ id: 'new' }),
-  useHostVersionApi: () => jest.fn().mockResolvedValue({ id: 'v1' }),
   useFirestoreDoc: () => ({ data: undefined, status: 'success' }),
   useFirestoreCollection: () => ({
     data: [],
@@ -106,10 +104,6 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({ confirm: () => Promise.resolve(undefined) }),
 }))
-jest.mock('./use-org-email-topics', () => ({
-  useOrgEmailTopics: () => ({ topics: [{ id: 'marketing', name: 'Promotions' }] }),
-}))
-
 import CampaignComposer from './campaign-composer'
 
 const HEALTHY_PREVIEW = {

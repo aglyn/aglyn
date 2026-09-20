@@ -101,8 +101,8 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
  * The topic catalog ANSWERS NOTHING UNLESS IT IS ASKED, so the gate itself is
  * assertable rather than only the picker's contents.
  */
-jest.mock('@aglyn/plugins-email/components/use-org-email-topics', () => ({
-  useOrgEmailTopics: (_hostId: string, options?: { enabled?: boolean }) => {
+jest.mock('./use-campaign-topic-options', () => ({
+  useCampaignTopicOptions: (_hostId: string, options?: { enabled?: boolean }) => {
     const enabled = options?.enabled ?? true
     topicsEnabled.push(enabled)
     return {
@@ -112,6 +112,7 @@ jest.mock('@aglyn/plugins-email/components/use-org-email-topics', () => ({
             { id: 'sales', name: 'Sales outreach' },
           ]
         : [],
+      source: null,
     }
   },
 }))
@@ -206,7 +207,7 @@ jest.mock('./campaign-report-card', () => ({
   __esModule: true,
   default: (props: any) => <div>{`send report for ${props.campaignId}`}</div>,
 }))
-jest.mock('@aglyn/plugins-email/components/campaign-composer', () => ({
+jest.mock('./campaign-composer', () => ({
   __esModule: true,
   default: (props: any) => (
     <div>{`composer for ${props.emailCampaignId}`}</div>

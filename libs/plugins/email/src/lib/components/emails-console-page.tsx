@@ -21,15 +21,13 @@ import {
   type ConsentGroup,
   type ConsolePluginPageProps,
 } from '@aglyn/aglyn'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { HubSections } from '@aglyn/shared-ui-next'
 import { useMemo, type ReactNode } from 'react'
-import EmailComposeCard from './email-compose-card'
-import EmailDetail from './email-detail'
 import EmailScreensCard from './email-screens-card'
 import EmailTemplateDetail from './email-template-detail'
 import EmailTopicDetail from './email-topic-detail'
 import EmailTopicsCard from './email-topics-card'
-import EmailsListCard from './emails-list-card'
 import ListDetailCard from './list-detail-card'
 import ListEditCard from './list-edit-card'
 import ListsCard from './lists-card'
@@ -37,6 +35,19 @@ import SendingDomainDetail from './sending-domain-detail'
 import SendingDomainsCard from './sending-domains-card'
 import SuppressionsCard from './suppressions-card'
 import type { EmailsConsoleSectionId } from './emails-console-sections'
+import { EMAIL_MESSAGES_ZONE, type EmailMessagesZoneProps } from './email-zones'
+
+/**
+ * The Messages section: a zone, drawn by whichever plugin owns campaigns.
+ *
+ * Its own component because a zone's renderer comes from a hook and
+ * `sectionBody` is a plain function — and so that, like every other branch
+ * there, it is constructed only while Messages is the section being read.
+ */
+function EmailMessagesSection(props: EmailMessagesZoneProps) {
+  const Zone = useConsoleWidgetSlot()
+  return Zone ? <Zone slot={EMAIL_MESSAGES_ZONE.id} {...props} /> : null
+}
 
 /**
  * The body of one emails section, built only when that section is the one
@@ -79,35 +90,19 @@ function sectionBody(
        * The page links OUT to the campaign this message belongs to, which is
        * a section of the Marketing console.
        */
-      return detail[0] ? (
-        /*
-         * `…/{emailId}/edit` WRITES the email; `…/{emailId}` reports on it.
-         *
-         * Two jobs with two shapes: a form with one irreversible button, and
-         * a page of figures each over its own denominator. Carrying both on
-         * one route made the reader of a report scroll past a composer. It is
-         * also the grammar the audiences section already reads by — a record,
-         * and `…/edit` beside it — and creating stays a drawer on the list.
-         *
-         * Ternaries rather than a lookup for the reason this whole function
-         * is shaped that way: only the branch taken is constructed, so the
-         * composer's listens are not paid for by somebody reading a report.
-         */
-        detail[1] === 'edit' ? (
-          <EmailComposeCard
-            hostId={hostId}
-            emailId={detail[0]}
-            basePath={basePath}
-          />
-        ) : (
-          <EmailDetail
-            hostId={hostId}
-            emailId={detail[0]}
-            basePath={basePath}
-          />
-        )
-      ) : (
-        <EmailsListCard hostId={hostId} basePath={basePath} />
+      /*
+       * `…/{emailId}/edit` WRITES the email and `…/{emailId}` reports on
+       * it — two jobs with two shapes, and creating stays a drawer on the
+       * list. Which of the three is drawn is decided from `detail` by the
+       * widget, which builds only the one it is asked for: the composer's
+       * listens are not paid for by somebody reading a report.
+       */
+      return (
+        <EmailMessagesSection
+          hostId={hostId}
+          basePath={basePath}
+          detail={detail}
+        />
       )
     case 'templates':
       /*

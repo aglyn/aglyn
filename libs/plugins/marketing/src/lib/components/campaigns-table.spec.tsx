@@ -151,8 +151,8 @@ jest.mock('@aglyn/shared-ui-jsx-forms', () => ({
  * make it while the drawer is shut. `topicsEnabled` records what was asked
  * for, so the gate itself is assertable and not merely the picker's contents.
  */
-jest.mock('@aglyn/plugins-email/components/use-org-email-topics', () => ({
-  useOrgEmailTopics: (_hostId: string, options?: { enabled?: boolean }) => {
+jest.mock('./use-campaign-topic-options', () => ({
+  useCampaignTopicOptions: (_hostId: string, options?: { enabled?: boolean }) => {
     const enabled = options?.enabled ?? true
     topicsEnabled.push(enabled)
     return {
@@ -160,9 +160,9 @@ jest.mock('@aglyn/plugins-email/components/use-org-email-topics', () => ({
         ? [
             { id: 'marketing', name: 'Promotions and offers' },
             { id: 'sales', name: 'Sales outreach' },
-            { id: 'retired', name: 'Old stream', archived: true },
           ]
         : [],
+      source: null,
     }
   },
 }))
@@ -677,9 +677,10 @@ describe('creating a campaign', () => {
     ])
   })
 
-  it('offers only the topics a recipient can still leave', async () => {
-    // A campaign may not be composed under a stream nobody can unsubscribe
-    // from; one already SENT under a retired topic keeps resolving.
+  it('offers the topics the catalog’s owner reports', async () => {
+    // Which streams a campaign may open on — a retired one is not among them
+    // — is decided by the plugin that keeps the catalog, and held there. What
+    // is this card's is that the drawer offers exactly what was reported.
     await openDrawer()
 
     const topicField = drawerFields.find(

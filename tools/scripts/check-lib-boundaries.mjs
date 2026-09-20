@@ -159,6 +159,7 @@ for (const project of packageMap) {
     dependencies: declarationsOwed(packagesImported(root, project.alias)).dependencies,
     workspacePackages,
     rootRanges,
+    moduleExists: (stem) => ['.ts', '.tsx'].some((extension) => existsSync(join(root, stem + extension))),
   })
   for (const finding of findings) problems.push(`${project.root}/package.json: ${finding}`)
 }

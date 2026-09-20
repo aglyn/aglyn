@@ -1,6 +1,17 @@
 {
   "name": "@aglyn/aglyn-node-renderer",
-  "version": "1.0.0-beta.142",
+  "version": "1.0.0-beta.143",
+  "license": "Apache-2.0",
+  "homepage": "https://aglyn.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aglyn/aglyn.git",
+    "directory": "libs/aglyn-node-renderer"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "exports": {
     ".": {
       "types": "./src/index.d.ts",
@@ -13,12 +24,12 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.142",
-    "@aglyn/shared-data-types": "1.0.0-beta.142",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.142",
-    "@aglyn/shared-ui-theme": "1.0.0-beta.142",
-    "@aglyn/shared-util-tools": "1.0.0-beta.142",
-    "@aglyn/shared-util-vendor": "1.0.0-beta.142",
+    "@aglyn/aglyn": "1.0.0-beta.143",
+    "@aglyn/shared-data-types": "1.0.0-beta.143",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.143",
+    "@aglyn/shared-ui-theme": "1.0.0-beta.143",
+    "@aglyn/shared-util-tools": "1.0.0-beta.143",
+    "@aglyn/shared-util-vendor": "1.0.0-beta.143",
     "mobx-react-lite": "^4.1.1",
     "react-is": "^19.2.8"
   },
