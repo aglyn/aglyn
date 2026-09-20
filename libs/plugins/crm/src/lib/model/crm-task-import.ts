@@ -47,7 +47,7 @@
  * the same way; a status other than open or done reads as open.
  */
 
-import { normalizeContactEmail } from './contacts'
+import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import { parseImportDate } from './crm-deal-import'
 import {
   CRM_TASK_KIND_LABELS,
@@ -55,7 +55,7 @@ import {
   type CrmTaskPriority,
   type CrmTaskStatus,
   isCrmTaskKind,
-} from './crm'
+} from '@aglyn/aglyn/app-utils/crm'
 import {
   CSV_IMPORT_CHUNK_SIZE,
   CSV_IMPORT_MAX_BODY_BYTES,
@@ -70,7 +70,7 @@ import {
   importTextValue,
   mapImportRow,
   mergeImportResults,
-} from './csv-import'
+} from '@aglyn/aglyn/app-utils/csv-import'
 
 /** The shared ceilings, under this collection's names. */
 export const TASK_IMPORT_MAX_ROWS = CSV_IMPORT_MAX_ROWS

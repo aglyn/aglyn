@@ -25,7 +25,7 @@
  * with the capture door's columns left alone.
  */
 
-import { leadCsvHeader } from './crm-csv'
+import { leadCsvHeader } from '@aglyn/aglyn/app-utils/crm-csv'
 import {
   LEAD_IMPORT_FIELD_LABELS,
   LEAD_IMPORT_FIELDS,

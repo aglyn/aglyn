@@ -67,9 +67,9 @@
  * refusal per row rather than pre-empting it with a count of its own.
  */
 
-import type { AglynPostalAddress } from '../foundation'
-import { normalizeAddress, normalizePhone } from '../foundation'
-import { normalizeContactEmail } from './contacts'
+import type { AglynPostalAddress } from '@aglyn/aglyn/foundation/definitions/contact.types'
+import { normalizeAddress, normalizePhone } from '@aglyn/aglyn/foundation/definitions/contact.types'
+import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import {
   CSV_IMPORT_CHUNK_SIZE,
   CSV_IMPORT_MAX_BODY_BYTES,
@@ -88,7 +88,7 @@ import {
   mergeImportResults,
   parseImportFlag,
   parseImportTags,
-} from './csv-import'
+} from '@aglyn/aglyn/app-utils/csv-import'
 import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
@@ -96,14 +96,14 @@ import {
   type ContactFieldDefinition,
   type ContactLifecycleStage,
   isContactLifecycleStage,
-} from './crm'
+} from '@aglyn/aglyn/app-utils/crm'
 
 /*
  * The custom-target grammar is the shared module's; it is re-exported here
  * because every reader of a contact mapping has always taken it from this
  * file, and the companies import reads the same two functions from theirs.
  */
-export { customImportTarget, customImportTargetKey } from './csv-import'
+export { customImportTarget, customImportTargetKey } from '@aglyn/aglyn/app-utils/csv-import'
 
 /**
  * The ceilings are the shared ones (`csv-import.ts`), under the names this

@@ -27,6 +27,7 @@
  * task has no key, so every row is a new task.
  */
 
+import { pluginDocsHelp } from '@aglyn/aglyn'
 import {
   TASK_IMPORT_CHUNK_SIZE,
   TASK_IMPORT_FIELD_LABELS,
@@ -41,9 +42,8 @@ import {
   guessTaskImportMapping,
   mapTaskImportRow,
   mergeTaskImportResults,
-  pluginDocsHelp,
   taskImportSkippedCsv,
-} from '@aglyn/aglyn'
+} from '../model/crm-task-import'
 import { tasksCsv } from '../model/tasks-csv'
 import {
   CsvImportButton,

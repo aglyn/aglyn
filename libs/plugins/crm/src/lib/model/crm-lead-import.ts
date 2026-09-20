@@ -67,13 +67,13 @@
  * nowhere rather than discovering it weeks later.
  */
 
-import { normalizeContactEmail } from './contacts'
+import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import {
   CRM_LEAD_STATUS_LABELS,
   CRM_LEAD_STATUSES,
   type CrmLeadStatus,
   isCrmLeadStatus,
-} from './crm'
+} from '@aglyn/aglyn/app-utils/crm'
 import {
   CSV_IMPORT_CHUNK_SIZE,
   CSV_IMPORT_MAX_BODY_BYTES,
@@ -88,7 +88,7 @@ import {
   importTextValue,
   mapImportRow,
   mergeImportResults,
-} from './csv-import'
+} from '@aglyn/aglyn/app-utils/csv-import'
 
 /** The shared ceilings, under this collection's names. */
 export const LEAD_IMPORT_MAX_ROWS = CSV_IMPORT_MAX_ROWS

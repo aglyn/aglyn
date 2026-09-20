@@ -53,6 +53,12 @@ import {
   CRM_COLLECTIONS,
   type CrmDealStage,
   type CrmPipeline,
+  isPipelineArchived,
+  nameSearchKey,
+  type PluginApiHandler,
+  visibleToTokens,
+} from '@aglyn/aglyn/server'
+import {
   DEAL_IMPORT_CHUNK_SIZE,
   DEAL_IMPORT_MAX_BODY_BYTES,
   type DealImportChunkResult,
@@ -60,12 +66,8 @@ import {
   type DealImportRow,
   type DealImportSkippedRow,
   dealImportNameKey,
-  isPipelineArchived,
-  nameSearchKey,
   normalizeDealImportRow,
-  type PluginApiHandler,
-  visibleToTokens,
-} from '@aglyn/aglyn/server'
+} from '../model/crm-deal-import'
 import { crmRecordsQuotaForOrg, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {

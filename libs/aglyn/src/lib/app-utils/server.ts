@@ -115,32 +115,20 @@ export * from './crm-inbound'
 // confirmed count as theirs wherever the roster is asked who wrote a
 // message. Pure; the store and the confirmation link are server-side.
 export * from './member-email-aliases'
-// Reading a spreadsheet of people INTO the CRM (AGL-2602): the column
-// mapping, the per-row normalizer and the chunk-result arithmetic the
-// console drawer and the `crm/contacts-import` route both read. Pure, and
-// beside `crm` because it composes its stage list and field definitions.
-export * from './crm-import'
-// Reading a spreadsheet of COMPANIES into the CRM (AGL-2621): the same three
-// stages over the company vocabulary, on the generic helpers `crm-import`
-// also stands on. Pure, and beside it for the same reason.
-export * from './crm-company-import'
 // The next activity a record carries (AGL-2661): what `nextTaskAtMs` IS given
 // a record's open tasks, the view clause a list filters on, the report figure.
 // Pure like `crm`; the admin library's `recomputeCrmNextTaskAt` is the writer.
 export * from './crm-next-activity'
-// Reading a spreadsheet of DEALS or TASKS into the CRM (AGL-2662): the same
-// three stages over each vocabulary; the server resolves a pipeline, a
-// stage and an assignee by name and refuses the row it cannot.
-export * from './crm-deal-import'
-export * from './crm-task-import'
-// Reading a spreadsheet of LEADS into the CRM (AGL-2701): the same three
-// stages over the lead vocabulary. Half a lead — the person and the team's
-// working state — because the capture half is the capture door's to write.
-export * from './crm-lead-import'
-// The CSV cell grammar the exports write with (AGL-2621) — named rather than
-// starred, because the two import modules above re-export the custom-target
-// helpers from the same file under their own names.
-export { csvCell, csvDocument } from './csv-import'
+// The CSV cell grammar the exports write with (AGL-2621), and the target a
+// mapped column names for a custom field — named rather than starred, because
+// an importer built on this file exports the shared ceilings under its own
+// names.
+export {
+  csvCell,
+  csvDocument,
+  customImportTarget,
+  customImportTargetKey,
+} from './csv-import'
 export type {
   ImportChunkResult,
   ImportDroppedValue,

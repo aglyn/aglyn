@@ -693,21 +693,7 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/crm-company-import.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/crm-csv.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm-deal-import.ts",
       "rules": [
         "domain-name"
       ],
@@ -729,13 +715,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/crm-import.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/crm-inbound.ts",
       "rules": [
         "domain-name",
@@ -751,13 +730,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/crm-lead-import.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/crm-next-activity.ts",
       "rules": [
         "domain-name"
@@ -766,13 +738,6 @@
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/crm-reports.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm-task-import.ts",
       "rules": [
         "domain-name"
       ],

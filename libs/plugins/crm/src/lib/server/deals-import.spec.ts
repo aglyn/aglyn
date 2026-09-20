@@ -52,7 +52,7 @@ jest.mock('firebase-admin/firestore', () => ({
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   registerPluginApiRoute: jest.fn(),
-  ...jest.requireActual('@aglyn/aglyn/app-utils/crm-deal-import'),
+  ...jest.requireActual('../model/crm-deal-import'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/name-search'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/scope-tokens'),
