@@ -25,7 +25,7 @@
  * verbatim strings, and the server judges each row and tallies what it did.
  * A companies file goes through the same three stages with a different
  * field list, so the stages live here, parametric over the field union, and
- * `crm-import.ts` and `crm-company-import.ts` each supply their vocabulary
+ * the CRM plugin's contact and company importers each supply their vocabulary
  * — the fields, their aliases, their labels — and nothing else.
  *
  * ## A custom target is `custom:<key>`

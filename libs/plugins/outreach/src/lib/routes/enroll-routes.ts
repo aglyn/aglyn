@@ -105,8 +105,8 @@ export interface OutreachEnrollRoutes {
 /** The activity line an enroll writes. */
 export function outreachEnrolledActivity(count: number): string {
   return count === 1
-    ? 'Enrolled 1 person in an Outreach sequence'
-    : `Enrolled ${count} people in an Outreach sequence`
+    ? 'Enrolled 1 person in a sequence'
+    : `Enrolled ${count} people in a sequence`
 }
 
 /** Lookups for a person the gates will never be asked about: every one unchecked. */

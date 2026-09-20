@@ -191,7 +191,7 @@ person you wrote to gets nothing on their timeline.
 - An address that is not verified changes nothing. A link opened while
   signed in as anyone else confirms nothing, and a link stops working after
   24 hours or once its address is removed.
-- Connecting a Google mailbox in [Outreach](./outreach.md#connect-a-mailbox)
+- Connecting a Google mailbox in [Sequences](./sequences.md#connect-a-mailbox)
   verifies any address on your list that Gmail already lists as one the
   account can send as — Gmail has confirmed it, so no email is needed. An
   address you have not added is never added for you.

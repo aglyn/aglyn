@@ -59,7 +59,7 @@ const page = (section: string, segments: string[]): ConsolePluginPageProps => ({
   sections: [
     {
       id: 'sequences',
-      label: 'Sequences',
+      label: 'All sequences',
       href: '/acme/outreach/sequences',
       visible: true,
     },
@@ -84,7 +84,7 @@ const page = (section: string, segments: string[]): ConsolePluginPageProps => ({
   },
 })
 
-describe('the Outreach hub (AGL-2980)', () => {
+describe('the Sequences hub (AGL-2980)', () => {
   it('mounts Compliance with the organization', () => {
     render(<OutreachConsolePage {...page('compliance', ['compliance'])} />)
     expect(screen.getByText('compliance org-1')).toBeTruthy()

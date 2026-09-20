@@ -80,6 +80,7 @@ import { renderEmailHtml } from '@aglyn/shared-util-email/email-render'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import type { AiJob } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
+import { AI_SITE_EMAIL_TYPE } from '../model/ai-site-job'
 import { AI_GENERATION_MAX_TOKENS } from '../runtime/ai-doctrine'
 import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import { AI_JOB_LAYOUT_MAX_TOKENS } from './ai-job-layout-step'
@@ -89,7 +90,9 @@ import {
   AI_EMAIL_DESIGN_RESOURCE,
   AI_EMAIL_PREHEADER_MAX_CHARS,
   AI_EMAIL_SITE_URL_TOKEN,
+  AI_EMAIL_TYPES,
   AI_EMAIL_VARIANTS,
+  type AiEmailType,
   AI_JOB_EMAIL_MAX_TOKENS,
   aiJobEmailPrompt,
   createAiJobEmailStep,
@@ -532,6 +535,38 @@ describe('what an email job sends the model', () => {
       0,
     )
     expect(prompt).not.toMatch(/list|contact|recipient|subscriber/i)
+    // A kind's label is the step's own words too, on the line above the
+    // brief, so the rule holds over the whole catalog and not only over the
+    // prompt of a job that named no kind.
+    for (const kind of Object.keys(AI_EMAIL_TYPES)) {
+      const named = aiJobEmailPrompt(
+        { brief: 'Anything at all.', inputs: { emailType: kind } },
+        null,
+        'Email name: Test',
+        0,
+      )
+      expect(named).toContain(`Kind of email: ${AI_EMAIL_TYPES[kind as AiEmailType]}`)
+      expect(named).not.toMatch(/list|contact|recipient|subscriber/i)
+    }
+  })
+})
+
+/*
+ * Which kind a scaffold's own email is (AGL-2918). The scaffold composes an
+ * email job rather than a member picking one, and it was naming no kind at
+ * all — because the catalog had no label for what that email is, and the
+ * nearest one describes a signup that never happened.
+ */
+describe('the kind a composed email carries', () => {
+  it('has a label in the catalog for the email a scaffold composes', () => {
+    expect(Object.keys(AI_EMAIL_TYPES)).toContain(AI_SITE_EMAIL_TYPE)
+  })
+
+  it('says what that email is, without calling it a signup', () => {
+    const label = AI_EMAIL_TYPES[AI_SITE_EMAIL_TYPE as AiEmailType]
+    expect(label).toBe('a reply to somebody who got in touch through the site')
+    expect(label).not.toMatch(/signed up|sign-?up/i)
+    expect(AI_SITE_EMAIL_TYPE).not.toBe('welcome')
   })
 })
 

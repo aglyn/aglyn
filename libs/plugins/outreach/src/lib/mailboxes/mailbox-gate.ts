@@ -106,7 +106,7 @@ export async function outreachMemberGate(
   deps: OutreachGateDeps,
 ): Promise<Response | OutreachGateContext> {
   const token = bearer(request)
-  if (!token) return refusal(401, 'unauthenticated', 'Sign in to manage Outreach mailboxes.')
+  if (!token) return refusal(401, 'unauthenticated', 'Sign in to manage your connected mailboxes.')
   let decoded: DecodedIdToken
   try {
     decoded = await deps.verifyIdToken(token)
@@ -132,15 +132,15 @@ export async function outreachMemberGate(
     return refusal(403, 'not-a-member', 'You are not a member of that organization.')
   }
   if (!membership.orgWide) {
-    return refusal(403, 'not-org-wide', 'Outreach covers the whole organization, and your access is to particular sites.')
+    return refusal(403, 'not-org-wide', 'Sequences covers the whole organization, and your access is to particular sites.')
   }
   if (membership.permissions[OUTREACH_USE_PERMISSION] !== true) {
-    return refusal(403, 'permission', 'Your role does not include Use Outreach.')
+    return refusal(403, 'permission', 'Your role does not include Use Sequences.')
   }
 
   const org = (await deps.readOrg(orgId)) ?? {}
   if (!checkEntitlement(org, 'outreach')) {
-    return refusal(403, 'entitlement', "Outreach isn't available to this workspace yet.")
+    return refusal(403, 'entitlement', "Sequences isn't available to this workspace yet.")
   }
   const staff = decoded['staff'] === true
   const locked = await deps.lockdownRefusal({ request, staff, uid: decoded.uid, org })

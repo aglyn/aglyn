@@ -20,7 +20,7 @@ import type { ConsoleNavSection } from '@aglyn/aglyn'
 export type OutreachConsoleSectionId = 'sequences' | 'mailboxes' | 'compliance'
 
 /**
- * The Outreach hub's sections, in rail order (AGL-2974).
+ * The Sequences hub's sections, in rail order (AGL-2974).
  *
  * Read twice and never copied, the CRM's rule: `plugin.ts` registers the list
  * on the org nav item so the shell routes and gates each section, and the hub
@@ -28,8 +28,15 @@ export type OutreachConsoleSectionId = 'sequences' | 'mailboxes' | 'compliance'
  * `PLUGIN_SECTIONS` title table keeps a checked copy for its server layout.
  *
  * Ids are persisted vocabulary — `/[orgSlug]/outreach/sequences` is a link
- * people keep. Sequences is first because it is where the work is, and so it
- * is where a bare `/outreach` lands.
+ * people keep, and the surface slug stays `outreach` for the same reason the
+ * plugin id does (AGL-3199). The sequence list is first because it is where
+ * the work is, and so it is where a bare `/outreach` lands.
+ *
+ * Its LABEL is "All sequences" rather than "Sequences", because the hub is
+ * called Sequences and the shell prints the two together — in the tab title,
+ * the page header and the breadcrumb. A section named after its surface says
+ * one word twice and tells the reader nothing;
+ * `plugin-section-tab-titles.spec.ts` refuses it.
  *
  * Every section inherits the nav item's `release_outreach` gate and the
  * extension's `features.outreach` entitlement and `outreach.use` permission;
@@ -37,7 +44,7 @@ export type OutreachConsoleSectionId = 'sequences' | 'mailboxes' | 'compliance'
  * narrow.
  */
 export const OUTREACH_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
-  { id: 'sequences', label: 'Sequences' },
+  { id: 'sequences', label: 'All sequences' },
   { id: 'mailboxes', label: 'Mailboxes' },
   // The footer's sender identity and the allowed countries (AGL-2980).
   { id: 'compliance', label: 'Compliance' },

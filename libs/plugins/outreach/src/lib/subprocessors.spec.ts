@@ -56,7 +56,7 @@ describe('outreachSubprocessors (AGL-2978)', () => {
   it('adds its use to Google’s token endpoint, carrying the flag for legal', () => {
     expect(OUTREACH_GOOGLE_TOKEN_USE.host).toBe('oauth2.googleapis.com')
     expect(OUTREACH_GOOGLE_TOKEN_USE.dataReceived).toContain(
-      '⚑ Legal to confirm the Annex III cell needs no change for the Outreach use.',
+      '⚑ Legal to confirm the Annex III cell needs no change for the Sequences use.',
     )
   })
 

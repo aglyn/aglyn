@@ -40,6 +40,10 @@ export const PLUGIN_TITLES: Readonly<Record<string, string>> = {
   pos: 'POS',
   // The same reason: three letters nobody reads as a word.
   crm: 'CRM',
+  // A surface whose name is not its slug (AGL-3199): the plugin id, and so
+  // the URL, stays `outreach` because it is stored vocabulary and a live API
+  // prefix; the name every reader sees is Sequences.
+  outreach: 'Sequences',
 }
 
 /** `email-campaigns` -> `Email Campaigns`. Wrong for acronyms, by design. */
@@ -100,8 +104,8 @@ export const PLUGIN_SECTIONS: Readonly<Record<string, readonly string[]>> = {
   automation: ['workflows', 'actions', 'webhooks'],
   inbox: ['submissions', 'contacts', 'campaigns'],
   crm: ['contacts', 'leads', 'companies', 'deals', 'tasks', 'reports', 'fields', 'settings'],
-  // An ORGANIZATION-level surface (AGL-2974), titled by the org plugin
-  // route's layout from this same table.
+  // Sequences, an ORGANIZATION-level surface (AGL-2974), titled by the org
+  // plugin route's layout from this same table.
   outreach: ['sequences', 'mailboxes', 'compliance'],
 }
 
@@ -119,6 +123,10 @@ export const PLUGIN_SECTION_TITLES: Readonly<Record<string, string>> = {
   // id the section was deep-linked by and does not move; the rail names both
   // collections the one table holds.
   'inbox/contacts': 'Members & leads',
+  // The hub is called Sequences (AGL-3199), so its sequence list cannot be
+  // too: the shell prints section and surface together. The id stays
+  // `sequences`, which is the URL segment.
+  'outreach/sequences': 'All sequences',
 }
 
 /**

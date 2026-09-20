@@ -639,7 +639,7 @@ describeEmulated('the sync job (AGL-2981)', () => {
     expect(box.health.recentSends?.filter((send) => send.bounced)).toHaveLength(2)
     expect(filed.feed).toEqual([
       expect.objectContaining({
-        action: expect.stringMatching(/^Paused an Outreach mailbox automatically/),
+        action: expect.stringMatching(/^Paused a mailbox in Sequences automatically/),
         target: expect.objectContaining({ type: 'outreach:mailbox', id: 'gm_rep' }),
       }),
     ])

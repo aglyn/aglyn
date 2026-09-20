@@ -85,9 +85,9 @@ export function registerOutreachConsoleServerDeclarations(): void {
   registerPluginConsoleCron(
     {
       id: OUTREACH_SEND_JOB_ID,
-      label: 'Outreach sends',
+      label: 'Sequence sends',
       drives:
-        'Sends every Outreach sequence step that has come due, from the rep’s own connected mailbox, and files each on the contact’s timeline. If it stops, no sequence sends anything and every task step waits.',
+        'Sends every sequence step that has come due, from the rep’s own connected mailbox, and files each on the contact’s timeline. If it stops, no sequence sends anything and every task step waits.',
       run: async (context) => {
         const [{ runOutreachSendJob }, platform] = await Promise.all([import('./runtime/send-job'), runtime()])
         return runOutreachSendJob(platform.platformOutreachRuntimeDeps(), context)
@@ -98,7 +98,7 @@ export function registerOutreachConsoleServerDeclarations(): void {
   registerPluginConsoleCron(
     {
       id: OUTREACH_SYNC_JOB_ID,
-      label: 'Outreach replies and bounces',
+      label: 'Sequence replies and bounces',
       drives:
         'Reads each connected mailbox for replies, out-of-office answers, opt-outs and bounces, and stops or postpones the sequence each one is about. If it stops, a person who replied or asked to be left alone keeps getting follow-ups, and a mailbox that bounces never pauses itself.',
       run: async (context) => {

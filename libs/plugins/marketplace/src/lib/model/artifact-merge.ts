@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { stableStringify } from './marketplace-provenance'
+import { stableStringify } from '@aglyn/aglyn/app-utils/marketplace-provenance'
 
 /**
  * Three-way diff for COPIED marketplace artifacts (AGL-1018).

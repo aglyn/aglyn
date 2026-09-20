@@ -43,7 +43,7 @@ import {
   datasetRecordFields,
   describeDatasetValue,
 } from './dataset-record-view'
-import type { DatasetModel } from './dataset-models'
+import type { DatasetModel } from '@aglyn/aglyn/app-utils/dataset-models'
 
 const model: DatasetModel = {
   order: ['title', 'note', 'count', 'inStock', 'tags', 'meta', 'owner', 'blob'],

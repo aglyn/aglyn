@@ -1,0 +1,194 @@
+{
+  "post": "How to generate a page with AI and keep your brand",
+  "slug": "how-to-generate-a-page-with-ai-and-keep-your-brand",
+  "route": "/blog/how-to-generate-a-page-with-ai-and-keep-your-brand",
+  "collection": "blog",
+  "category": "Guides",
+  "brief": "Platform Docs/Pricing & Packaging/07-GTM-and-Marketing/AI-Keyword-Plan.md §4, brief 1",
+  "notes": "AUTHORED from the docs tree, not extracted from a frame (AGL-2922). The brief is dated 2026-09-13 and two of the five internal links it names do not exist: `/alternatives/framer` is not a page this site has (the six live `/alternatives/*` are duda, shopify, squarespace, webflow, wix, wordpress) and the docs path it calls `ai/generate-a-page` is `building-sites/screens-and-layouts/generate-a-page.md`. Both are corrected in `internalLinks`, each with what it was checked against. Every capability sentence in `body` is sourced in `claimsToVerify`; nothing here describes a door `apps/docs/docs/ai/` does not.",
+  "seo": {
+    "title": "Generate a Landing Page With AI and Keep Your Brand",
+    "description": "An AI landing page generator that drafts rather than publishes: write the brief, generate the draft, edit it on the canvas in your own theme, then write the search listing and publish it yourself.",
+    "primaryQuery": "AI landing page generator",
+    "secondaryQueries": [
+      "AI SEO for websites",
+      "generate a website from a prompt"
+    ],
+    "notes": "Title 51 characters (limit 60), description 192 — over the 155 the SEO card enforces for a screen. A collection entry's search description is its own field on the entry, set by hand; trim to 155 in the same pass if the entry's field carries the screen limit. The primary is the brief's; the secondary is the brief's secondary, and it is the one the post's last third actually earns."
+  },
+  "excerpt": "Prompt-built pages drift off-brand because the generator has nothing of yours to build from. Aglyn AI has your theme, your layout and your components — and it hands the result back as a draft you edit and publish yourself.",
+  "cover": {
+    "status": "rendered, not uploaded",
+    "out": "blogCoverAiBrand.png",
+    "how": "POSTS entry added to tools/scripts/generate-blog-covers.mjs; `node tools/scripts/generate-blog-covers.mjs --out=<dir>` renders it. Still to do: upload the PNG to the media library and set it as the post's cover. Agents CAN upload a DAM asset under 10 MB — only films are blocked — so the earlier note here saying otherwise was wrong; what actually blocks it today is that app.aglyn.com is signed out.",
+    "eyebrow": "Aglyn AI",
+    "pill": "Guides"
+  },
+  "disclosure": {
+    "id": "ai-rolling-out-blog-1",
+    "placement": "Its own callout block directly below the intro and above the first `##` heading — one block in the entry body, not a sentence inside a paragraph.",
+    "label": "Rolling out",
+    "body": "Aglyn AI is a release-flagged feature, currently being rolled out — generative building does not appear in every workspace yet. Aglyn Assist, the assistant that answers questions about the product, is available today.",
+    "removeAtFlip": true,
+    "notes": "`release_ai_generative` is OFF in production and every generative route answers 404, so a how-to written in the present tense needs this said once, plainly, where a reader meets it before the instructions. Same wording as `apps/docs/docs/ai/overview.md` and as the `/product/ai` notice band, so all three come off together — see `project_release_ai_generative_flip_sequence`. Kept OUT of `body` deliberately: at the flip this is one block deleted, not a post reread sentence by sentence. The second sentence is the honest split — the assistant that answers questions is released; the build jobs are what the flag gates."
+  },
+  "bodyContract": {
+    "blocks": 36,
+    "notes": "Markdown blocks in document order, joined with a blank line to form the entry body. The `disclosure` is NOT one of them; it is placed as its own block after block 2 and deleted at the flip. Links are site-relative for aglyn.com and absolute for docs.aglyn.com, which is a different origin. ⛔ The site-relative links (`/product/…`, `/solutions/…`, `/alternatives/…`, `/pricing`) must be PICKED with the editor's Link dialog, not typed: a picked link stores the target and survives a rename, and renders as plain words if the target goes away, where a typed path silently keeps pointing at the old address (AGL-3117/3118/3119, apps/docs/docs/building-sites/besigner/long-form-markdown.md#links-that-survive-a-rename). The docs.aglyn.com links are another origin, so they are typed as External URL. Task lists are not in the dialect this element parses — headings, bold, italic, links, bullets, numbered lists, quotes, images, fenced code and pipe tables are — so the checklist is written as bullets."
+  },
+  "body": [
+    "Ask most AI builders for a landing page and you get a finished website: someone else's sections, someone else's spacing, a palette that is nearly your blue. Changing it means fighting it, so the page either ships slightly wrong or gets rebuilt by hand — which is the work you were trying to skip.",
+
+    "Aglyn AI starts from the other end. It builds **a draft**, from your own theme, your own layout and the components your site already has, and it hands that draft to you. It never publishes, never changes a live page in place, never registers an address on your live site, never touches your navigation and never sends anything. You publish, with the same button you always use.",
+
+    "## Why prompt-built pages drift off-brand",
+
+    "A generator drifts when it has nothing of yours to build from. Given only a sentence, it invents: a color close to your primary, a card it wrote itself rather than the card you already use, a heading that reads like every other page it has produced. None of that is a model failing to try — it is a model with no material.",
+
+    "So the material is the whole design. Before it generates anything, an Aglyn AI build job proposes a **plan**: what it will reuse from your site — components, layouts, templates, forms, datasets and collections — what it will create and why nothing you already have will do, and the sections of the page in order. You read the plan and confirm it, or cancel. Nothing is generated until you do.",
+
+    "Seventeen [building rules](https://docs.aglyn.com/ai/how-aglyn-ai-builds) hold the draft to your site rather than to a house style, and they are checked rather than suggested: every plan and every generated document is held to them before you see it. The ones that keep a page on-brand are worth knowing by name.",
+
+    "- **Colors, spacing and type come from your theme** — never a fixed color value. A color your theme lacks comes back as a proposed theme change for you to review, not as a hex code baked into a section.\n- **Repeats become one reusable component.** A block that appears three or more times is built once and placed as instances, and the job looks for a component you already have before it makes one.\n- **Site-wide regions live in the layout.** A generated page sits in your header, navigation and footer. It never carries its own copy of them.\n- **Start from a duplicate of the nearest thing.** Where your site has a similar screen, the job starts from a copy of it, which keeps its bindings and its SEO.",
+
+    "An answer that breaks a rule is not used. The job asks once more, naming the rules that were broken; if the second answer still breaks one it stops and shows you which.",
+
+    "## The brief that works",
+
+    "A good brief is four things, and it is shorter than you think.",
+
+    "**Who it is for.** Not \"customers\" — \"facilities managers at mid-size warehouses who have just had a compliance failure.\"",
+
+    "**The offer, and the one thing to do next.** One call to action beats three. A page that asks a reader to book, subscribe and download is a page that gets none of them.",
+
+    "**Tone, in a comparison.** \"Plain and unhurried, like a good instruction manual\" gives more than \"professional.\" The copy follows the tone of what is already on your site and the brief you gave, and it never ships lorem ipsum or a sentence cut off partway.",
+
+    "**Three facts you actually have.** A price, a turnaround time, a place, a guarantee. This is the part people skip, and it is the part that decides how much of the page you rewrite afterward: where the brief leaves a fact out, the draft marks the gap in square brackets rather than inventing one. That is the correct behavior, and it is also a list of holes. **AI jobs** lists those gaps beside the draft so you can fill them before you publish.",
+
+    "> Book demos from facilities managers who have just failed an inspection. Plain and unhurried. We audit in 48 hours, we have done 400 warehouses in Texas, and the first audit is free. One action: book a walkthrough.",
+
+    "You can also pick a page type — Landing, About, Pricing, Contact, Blog index, Product, Service or Event — so the job knows what shape of page it is writing.",
+
+    "## Generate the draft",
+
+    "Open **Screens** for the site and choose **Describe it**, beside **Templates** and **Create New Screen**; you can also start one from **Describe a page** in **AI jobs** in the Assist panel. Write the brief in the one box and choose **Plan the page**.",
+
+    "Read the plan. It names the layout the page will render in, the components and forms it places, anything it needs to create first, the page's address and search title, and its sections top to bottom — with what the whole job is estimated to use beside the button that confirms it. If the plan is wrong, this is the cheap moment: cancel and rewrite the brief rather than editing a finished page into shape.",
+
+    "Confirm, and the job builds anything the plan creates first — a layout, a form, a reusable component, each as its own draft — then builds the page one section at a time in the background. You can leave the Screens page while it works.",
+
+    "What comes back is a new screen with **no address on your site**. It is not in your navigation, your sitemap or your site search, and visitors cannot reach it. It does have a layout, an address ready to take, a search title and a search description written from the page's own text. Pictures arrive as image slots with a description of what belongs there, for you to fill from your media library — generated pages never link an image from another website, and every image it does place has alt text or is marked decorative.",
+
+    "## Edit it on the canvas",
+
+    "The draft opens in the [Besigner](/product/besigner) like any other screen, because it is one. There is no separate AI editor to learn and nothing about the page is locked.",
+
+    "- **Text.** Select any text element and use **Rewrite with AI** under the field in the Attributes panel — a headline, body copy, a button label, a caption. What you apply is an unsaved change on the version you have open, exactly like typing it yourself, and one undo takes it back.\n- **Components.** A section the job built inline that you would rather reuse can be promoted to a reusable component and placed as instances.\n- **Theme.** If the draft made you notice the palette, the [theme assistant](https://docs.aglyn.com/ai/theme-assist) on **Setup → Theme** proposes values for the theme editor's own controls — colors, font, corner radius, spacing, navigation heights, dark scheme. A hex color you name is used exactly as written, and it reads the colors of your site logo when the logo comes from your media library. Nothing changes until you save.",
+
+    "On the version your live site is already showing, the Besigner asks you to make a new version before it lets you edit. Take it — that is the habit that makes all of this safe.",
+
+    "## Write the search listing",
+
+    "A page nobody finds is a page that did not ship. The screen's detail page has an **SEO** card with a **Write with AI** section: add target keywords if you have them, press **Write SEO**, and read the proposal.",
+
+    "| Field | Limit | Written from |\n| --- | --- | --- |\n| Title | 60 characters | What the page is about, specifically |\n| Description | 155 characters | A one- or two-sentence summary |\n| Breadcrumb label | 40 characters | The page's short name in a trail |\n| Image description | 300 characters | Only when the page has a social image |",
+
+    "Each value shows its length against the field's limit. The listing is written from the version you are looking at, in the language of its text; it does not invent a fact, a price or a claim the page does not make, and it does not reuse a title another page of your site already uses. Press **Put in the fields**, check them, press **Save SEO**.",
+
+    "Alt text is a separate thing and it is already handled: every image the job places carries alt text or is marked decorative, by rule. The image slots you fill yourself are the ones to check.",
+
+    "When the page is live, **Setup → SEO** has an **SEO audit** that runs over the published pages your sitemap lists and returns a finding with a proposed fix for each — missing or duplicate titles, a description over the limit, a thin or repeated `h1`. See [AI SEO for your website](https://docs.aglyn.com/building-sites/seo/seo-by-ai) for what it checks.",
+
+    "## Publish, then measure",
+
+    "Publish the draft from the Besigner, the same way you publish anything. Add the navigation entry the job suggested, once you want the page found. Then give it a couple of weeks and read it: the audit for what is structurally wrong, your analytics for whether the one action you asked for is the one people take.",
+
+    "## The checklist",
+
+    "- **The brief** names an audience, one offer, a tone and three facts you have.\n- **The plan** reuses your layout and your existing components — read it before confirming.\n- **Every square-bracket gap** in **AI jobs** is filled.\n- **Every image slot** is filled from the media library, with alt text.\n- **No fixed color values.** The page uses theme tokens, and any new color went through the theme editor.\n- **The search listing** is under 60 and 155 characters, and neither value duplicates another page.\n- **One `h1`**, with headings stepping down in order.\n- **Checked** at phone and tablet width.\n- **The navigation entry** added, once you want the page found.",
+
+    "Aglyn AI is an add-on on any paid plan, metered in credits — see [Aglyn AI](https://docs.aglyn.com/ai/overview) for how credits, caps and allotments work, and [how we compare to Webflow](/alternatives/webflow) if you are deciding between builders."
+  ],
+  "internalLinks": [
+    {
+      "label": "The Besigner",
+      "href": "/product/besigner",
+      "status": "live",
+      "verifiedAgainst": "https://aglyn.com/sitemaps/pages/1.xml on 2026-09-20"
+    },
+    {
+      "label": "How we compare to Webflow",
+      "href": "/alternatives/webflow",
+      "status": "live",
+      "verifiedAgainst": "https://aglyn.com/sitemaps/pages/1.xml on 2026-09-20",
+      "notes": "SUBSTITUTED. The brief names `/alternatives/framer`, which this site does not have — the live set is duda, shopify, squarespace, webflow, wix and wordpress, plus the `/alternatives` index. Webflow is the nearest live comparison for a reader choosing a visual builder. ⛔ A comparison page concedes only code-verified gaps, so this post links the page and makes no comparative claim of its own."
+    },
+    {
+      "label": "How Aglyn AI builds",
+      "href": "https://docs.aglyn.com/ai/how-aglyn-ai-builds",
+      "status": "in the tree",
+      "verifiedAgainst": "apps/docs/docs/ai/how-aglyn-ai-builds.md, no `slug` in its front matter, docs `routeBasePath` is '/'"
+    },
+    {
+      "label": "Aglyn AI",
+      "href": "https://docs.aglyn.com/ai/overview",
+      "status": "in the tree",
+      "verifiedAgainst": "apps/docs/docs/ai/overview.md"
+    },
+    {
+      "label": "Themes with AI",
+      "href": "https://docs.aglyn.com/ai/theme-assist",
+      "status": "in the tree",
+      "verifiedAgainst": "apps/docs/docs/ai/theme-assist.md"
+    },
+    {
+      "label": "AI SEO for your website",
+      "href": "https://docs.aglyn.com/building-sites/seo/seo-by-ai",
+      "status": "in the tree",
+      "verifiedAgainst": "apps/docs/docs/building-sites/seo/seo-by-ai.md",
+      "notes": "The brief calls this docs page `building-sites/seo`; that path is a directory whose `overview.md` is the non-AI SEO page. `seo-by-ai.md` is the one this post means."
+    }
+  ],
+  "linksConsideredAndNotUsed": [
+    {
+      "href": "/product/ai",
+      "why": "The brief names it and `tools/marketing/product-copy/copy-ai.json` holds its copy deck, but the route is NOT in https://aglyn.com/sitemaps/pages/1.xml as of 2026-09-20 — the page has not been built on the canvas yet. Linking it from a published post is a 404. ⛔ PUBLISH PRECONDITION: add this link to the closing paragraph once /product/ai is live, in place of or beside the docs hub link."
+    },
+    {
+      "href": "https://docs.aglyn.com/building-sites/screens-and-layouts/generate-a-page",
+      "why": "Named inline as **Describe it** rather than linked, to keep the how-to's link count down; it is the page a reader who wants the full reference should reach. Add it if the post is later split from the docs."
+    }
+  ],
+  "claimsToVerify": [
+    {
+      "phrase": "It never publishes, never changes a live page in place, never registers an address on your live site, never touches your navigation and never sends anything",
+      "source": "apps/docs/docs/ai/overview.md#drafts-only; how-aglyn-ai-builds.md rule 13",
+      "concern": "RESOLVED. All four nevers are the hub page's own sentence, kept whole here because a how-to written in the imperative needs the boundary stated before the instructions rather than after them."
+    },
+    {
+      "phrase": "Seventeen building rules",
+      "source": "apps/docs/docs/ai/how-aglyn-ai-builds.md — the numbered list runs 1 to 17",
+      "concern": "RESOLVED by counting the list on 2026-09-20. ⛔ A count is the kind of fact that rots: if a rule is added or merged, this word is wrong and nothing will catch it. Re-count before the besigner pass, or replace the numeral with 'the building rules'."
+    },
+    {
+      "phrase": "the four brief elements, the page types, the SEO field table and its limits",
+      "source": "apps/docs/docs/building-sites/screens-and-layouts/generate-a-page.md; building-sites/seo/seo-by-ai.md",
+      "concern": "RESOLVED. Page types, the 60/155/40/300 limits and the 'Put in the fields' → 'Save SEO' sequence are quoted from those pages. The four-part brief is this post's framing of advice those pages give, not a product feature — no UI asks for four fields."
+    },
+    {
+      "phrase": "Aglyn AI is an add-on on any paid plan, metered in credits",
+      "source": "apps/docs/docs/ai/overview.md#the-add-on; tools/marketing/product-copy/copy-ai.json early-access section",
+      "concern": "RESOLVED, and deliberately the only commercial sentence in the post. ⛔ No figure: what the add-on costs and the size of the band it adds live on /pricing and in Billing, and docs/PRICING_SURFACES.md owns those surfaces."
+    },
+    {
+      "phrase": "no credit figure and no time saved",
+      "source": "AGL-3024",
+      "concern": "OPEN BY OMISSION — the post states no cost in credits and no hours saved, because nothing measured supports either. AGL-3024's live run records credits and tokens per document kind; a 'what a page costs' line can be added from that run and from nothing else."
+    },
+    {
+      "phrase": "the rolling-out disclosure",
+      "source": "release flags: `release_ai_generative` off in production",
+      "concern": "OPEN UNTIL THE FLIP. Held in `disclosure`, outside `body`, so the flip deletes one block."
+    }
+  ]
+}

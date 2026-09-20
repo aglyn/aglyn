@@ -174,7 +174,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   // The REAL resolver and signing (AGL-2847): only Firestore and the bucket
   // are faked, so "the link expires" is checked with the verifier the CDN runs.
   const delivery = jest.requireActual(
-    '@aglyn/tenant-data-admin/server/paid-media-delivery',
+    './paid-media-delivery',
   )
   const signing = jest.requireActual(
     '@aglyn/tenant-data-admin/server/media-signing',

@@ -156,13 +156,29 @@ export const AI_EMAIL_UNAVAILABLE_COPY = 'Email is not available on this site.'
 export const AI_EMAIL_SAVE_FAILURE_COPY =
   'The email was written but could not be saved. Try the job again.'
 
-/** The kinds of email a member may pick for a job, as `inputs.emailType`, and how the prompt says each. */
+/**
+ * The kinds of email a job may carry, as `inputs.emailType`, and how the
+ * prompt says each.
+ *
+ * A member picks one for an email of their own; a job the platform composes
+ * sets one for itself, which is what `reply` is for (AGL-2918, named by the
+ * site model's `AI_SITE_EMAIL_TYPE`). A scaffold's email answers one person
+ * who wrote in, and none of the five campaign kinds says that: the nearest,
+ * `welcome`, names a signup the site has not had, and a kind that
+ * misdescribes the email is worse than no kind at all, because this line is
+ * what the model reads first.
+ *
+ * Every label is the step's own words, so none of them may name a list, a
+ * recipient or the people an email is sent to — the same rule the step's
+ * instructions keep, held over the whole catalog by `ai-job-email-step.spec`.
+ */
 export const AI_EMAIL_TYPES = {
   welcome: 'a welcome email for someone who just signed up',
   newsletter: 'a newsletter',
   launch: 'a launch announcement',
   abandonedCart: 'a reminder about items left in a cart',
   eventReminder: 'a reminder about an upcoming event',
+  reply: 'a reply to somebody who got in touch through the site',
 } as const
 
 export type AiEmailType = keyof typeof AI_EMAIL_TYPES

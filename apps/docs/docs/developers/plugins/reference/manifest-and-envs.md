@@ -238,6 +238,8 @@ page renders: the [staff zones](./injection-zones.md#staff-zones) read their
 widgets, and the staff strip and the generic staff route read their
 `staffPages`.
  The scaffolder (`tools/scripts/create-plugin.mjs`)
-maintains it for you; the manual follow-ups are the
-`FIRST_PARTY_PLUGINS` catalog entry and the release flag
-(registry + Remote Config template).
+maintains it for you, the plugin's `catalog` row included: its label,
+description, release flag and what a published site loses when it is switched
+off. The generator compiles every row into the core's switchboard catalog, so
+a new plugin edits no core file. The manual follow-ups are that row's
+description and the release flag (registry + Remote Config template).

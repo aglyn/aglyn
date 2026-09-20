@@ -1,0 +1,220 @@
+{
+  "post": "Agencies: 20 client sites from one brief",
+  "slug": "agencies-20-client-sites-from-one-brief",
+  "route": "/blog/agencies-20-client-sites-from-one-brief",
+  "collection": "blog",
+  "category": "Guides",
+  "brief": "Platform Docs/Pricing & Packaging/07-GTM-and-Marketing/AI-Keyword-Plan.md §4, brief 3",
+  "notes": "AUTHORED from the docs tree, not extracted from a frame (AGL-2922). Title kept as the brief wrote it; the body immediately makes clear that twenty is the agency's roster, not a product limit or a throughput claim — the run is bounded by the sites your plan holds, and every site is its own job you confirm. `/product/ai`, which the brief names, is not a live route (see `linksConsideredAndNotUsed`); the docs hub carries the link instead. ⛔ Comparison links go to the pages that concede only code-verified gaps; this post makes no comparative claim of its own.",
+  "seo": {
+    "title": "Agencies: Client Sites From One Brief, With AI",
+    "description": "An AI website builder for agencies: run one brief across many client sites, each as its own job with its own plan, each building drafts an account manager reviews before anything is published.",
+    "primaryQuery": "AI website builder for agencies",
+    "secondaryQueries": [
+      "white label AI website builder",
+      "generate a website from a prompt"
+    ],
+    "notes": "Title 46 characters, description 186 — over the 155 a screen's SEO card enforces; trim in the pass that sets the entry's description field. ⛔ The secondary is 'white label AI website builder' and the post earns it in one section only: white-labeling is a plan entitlement of its own, not part of the AI add-on, and the post says so rather than implying the AI is what is white-labeled."
+  },
+  "excerpt": "One brief, many client sites, each one its own job with its own plan and its own drafts. Nothing reaches a client's live site until somebody on your team publishes it.",
+  "cover": {
+    "status": "rendered, not uploaded",
+    "out": "blogCoverAiAgencies.png",
+    "how": "POSTS entry added to tools/scripts/generate-blog-covers.mjs; `node tools/scripts/generate-blog-covers.mjs --out=<dir>` renders it. Still to do: upload the PNG to the media library and set it as the post's cover. Agents CAN upload a DAM asset under 10 MB — only films are blocked — so the earlier note here saying otherwise was wrong; what actually blocks it today is that app.aglyn.com is signed out.",
+    "eyebrow": "Agencies + Aglyn AI",
+    "pill": "Guides"
+  },
+  "disclosure": {
+    "id": "ai-rolling-out-blog-3",
+    "placement": "Its own callout block directly below the intro and above the first `##` heading — one block in the entry body, not a sentence inside a paragraph.",
+    "label": "Rolling out",
+    "body": "Aglyn AI is a release-flagged feature, currently being rolled out — generative building does not appear in every workspace yet. Aglyn Assist, the assistant that answers questions about the product, is available today.",
+    "removeAtFlip": true,
+    "notes": "Identical wording to the other two posts, to `apps/docs/docs/ai/overview.md` and to the `/product/ai` notice band. An agency post is the one most likely to be read as a buying decision, so the qualifier sits above the instructions rather than at the end. Deleted as one block at the flip — see `project_release_ai_generative_flip_sequence`."
+  },
+  "bodyContract": {
+    "blocks": 36,
+    "notes": "Markdown blocks in document order, joined with a blank line. `disclosure` is NOT one of them; it is placed as its own block after block 2 and deleted at the flip. ⛔ The site-relative links (`/product/…`, `/solutions/…`, `/alternatives/…`, `/pricing`) must be PICKED with the editor's Link dialog, not typed: a picked link stores the target and survives a rename, and renders as plain words if the target goes away, where a typed path silently keeps pointing at the old address (AGL-3117/3118/3119, apps/docs/docs/building-sites/besigner/long-form-markdown.md#links-that-survive-a-rename). The docs.aglyn.com links are another origin, so they are typed as External URL. Task lists are not in the dialect this element parses — headings, bold, italic, links, bullets, numbered lists, quotes, images, fenced code and pipe tables are — so the checklist is written as bullets."
+  },
+  "body": [
+    "Twenty client sites is not a throughput claim. It is what a small agency's roster looks like, and it is the number at which the usual approach stops working: twenty logins, twenty billing relationships, twenty slightly different stacks, and a first draft that costs the same on the twentieth site as it did on the first.",
+
+    "What changes that is not a faster designer. It is that the first draft of a site stops being bespoke work — while the review, the judgment and the publish stay exactly where they were, with your team. Aglyn AI builds drafts. It never publishes, never changes a live page in place, never registers an address on a client's live site, never touches navigation and never sends anything. A client's site changes when somebody on your team decides it does.",
+
+    "## One console, one site per client",
+
+    "Every client is a site in your organization, and your organization is one [console](/product/console): one login, one place the work lives, one set of people with roles that decide what each can touch. A client's own contact can be a collaborator on their site alone, with no access to the other nineteen.",
+
+    "That is the precondition for everything below. A batch that builds across client sites only makes sense when the client sites are already in one place.",
+
+    "## The intake brief",
+
+    "A generated site is only as good as its brief, and the brief is the thing an agency can standardize. Ask every client the same short set of questions once, at intake, and the answers become the input to every draft you generate for them.",
+
+    "- **What the business is, in one sentence.** The kind of business, and what makes this one different from the others in its category.\n- **Who it is for.** The actual customer, not a demographic.\n- **Where.** The city or service area, if it is a business where that matters.\n- **The one action.** Book, call, buy, subscribe, visit. One per site, and if the client names three, make them rank them.\n- **Tone, by comparison.** \"Like a good instruction manual.\" \"Like the neighbor who does this for a living.\"\n- **Three facts you have.** A turnaround, a guarantee, a founding year, a price. Where the brief leaves a fact out, the draft marks the gap in square brackets rather than inventing one — so a thin intake form does not produce a wrong website, it produces a visible list of holes.\n- **Brand, if there is one.** A hex color is used exactly as written, and the theme assistant reads the colors of a site logo that comes from the media library.",
+
+    "Keep the answers with the client. They are the reusable asset here, more than any template.",
+
+    "## Generate each client's draft",
+
+    "A single site starts from its own **Setup** page: **Start this site with AI** asks what kind of site it is, who it is for and which starter example the client likes, then writes the brief from those answers and plans the site. **Skip and start blank** sits beside the questions the whole time and creates nothing at all.",
+
+    "A scaffold proposes a plan first, and builds nothing until you confirm it. What it then builds is four to eight pages, each with its sections, address, search title and description; a shared layout for the header, navigation and footer; a contact form created on the Forms page and placed where it is needed; a palette suggestion made from the site's own theme; a welcome email draft if you ask for one; and a proposed navigation entry per page. **The live navigation is not touched.**",
+
+    "For the roster, the batch is on the **Sites** page of your organization: **Generate for several sites** runs one brief across many of your sites, changing the business name, the city and the brand for each. It is available on the plans that hold enough sites for it to be useful.",
+
+    "The shape of the run matters more than its size:",
+
+    "- Pick the sites and fill in each one's details. The card shows what one site is estimated to cost in credits and what the whole run is, before it starts.\n- **Each site becomes its own job.** Each proposes its own plan. Each waits for you to confirm it. Each builds only drafts.\n- The card's table shows where every site in the run has reached, with a link into each.\n- You only see the sites you may build on, and a site you cannot is named rather than skipped quietly.",
+
+    "There is no step at which twenty sites go live at once, because there is no step at which anything goes live. Twenty sites means twenty plans to read and twenty drafts to review — which is the work, and it is an order of magnitude less of it than twenty first drafts.",
+
+    "If a run exhausts the workspace's credits partway through, the job stops and waits rather than failing. What it had already built stays, and it carries on when there are credits again. You can cancel at any point and keep what it made.",
+
+    "## The review pass",
+
+    "This is the part to write down once and hand to whoever does it. An account manager can run it without a designer, and it is the same pass on every site.",
+
+    "1. **Read the plan, not the page.** The plan names what will be reused and what will be created. A plan proposing to create something the client already has is the signal to stop and fix the brief.\n2. **Work the square brackets.** **AI jobs** lists every gap beside the draft, including the ones a component shows until the site sets its own. Nothing publishes with a bracket in it.\n3. **Fill the image slots.** Pictures arrive as empty slots with a description of what belongs there. Generated pages never link an image from another website, and every image carries alt text or is marked decorative — the slots you fill are the ones to check.\n4. **Check the one action.** Every button and link goes somewhere real; a link with nowhere to go is left out rather than pointed at the home page. Confirm the ones that remain are the action the client asked for.\n5. **Read it at phone width.** Generated layouts follow the theme's breakpoints, and this is still worth thirty seconds per page.\n6. **Save the palette, or do not.** The palette suggestion waits in the Theme section until somebody saves it.\n7. **Publish, then add navigation.** Publishing is per screen, by hand, by a person with the role to do it.",
+
+    "## Keeping clients from spending each other's credits",
+
+    "One workspace means one pool of AI credits, which is a problem until you divide it. **Allotments** are the division: a monthly share of the pool set on a team member, on a site collaborator, or on a whole site. An agency can give each client site its own share, so one site running out never touches another.",
+
+    "- **Hard** stops requests for the month once the share is used, and the message names who can raise it.\n- **Soft** keeps working and notifies the person and the workspace's owners and admins, in the console and by email, at 80% and again at 100%.\n- An allotment is a share of the pool, never an addition to it — the workspace's own limits are checked first.\n- **Nobody can raise their own allotment.**\n- An allotment can also limit which models it runs on, and on the top plans the organization can restrict models for everyone the same way.",
+
+    "A client who does not want AI on their site at all is one switch: a site admin turns it off on that site's **Admin → Plugins → AI** page, and the page says what switching it off stops and what it leaves running. The other sites are unaffected, and a batch still builds the ones that have it on.",
+
+    "See [AI allotments, usage and model choice](https://docs.aglyn.com/ai/ai-allotments) for the whole of it.",
+
+    "## White label and billing",
+
+    "White-labeling is worth separating from AI, because they are two different things that get sold as one.",
+
+    "**White-labeling** replaces the Aglyn brand across the console your team signs in to, the sites you publish and the transactional email your members and customers receive — product name, logo, colors, support URL, email from-name. It is its own plan entitlement; no add-on buys it, and [the docs page](https://docs.aglyn.com/workspace-and-billing/white-label) names the plans that carry it. An organization that white-labels and later downgrades reverts cleanly: the stored brand is ignored rather than deleted, and comes back on upgrade.",
+
+    "**Aglyn AI** is an add-on, bought once for the workspace on any paid plan, metered in credits — not per seat and not per site. With it on, every member with the permission can generate on every site in the workspace.",
+
+    "Billing is the workspace's, not the client's. Whether you rebill it, bundle it into a retainer or absorb it is your commercial decision; what the platform gives you is a per-site allotment so you can see and cap what each client's site draws.",
+
+    "## What you still design by hand",
+
+    "Be honest with clients about this, because it is the difference between a tool that helps and a promise that fails on contact.",
+
+    "- **Anything that is the brand.** A generated draft is built from a theme somebody decided on. Deciding on it is design work.\n- **The photography.** Image slots are slots. Nothing generates or licenses a picture of the client's actual premises.\n- **The facts.** Prices, hours, credentials, service areas, legal copy. The bracket convention makes them visible; it does not supply them.\n- **The hard pages.** A pricing table that has to be exactly right, a booking flow with real constraints, anything with money in it.\n- **The judgment.** What to cut. Which of the client's three priorities is actually the one. Whether this reads like them.",
+
+    "What you get back is the first eighty percent of twenty first drafts, in your own components, with the review loop intact. That is a real change to how an agency's month looks, and it is a smaller claim than the one usually made for this.",
+
+    "## Where to start",
+
+    "Read [Agencies](/solutions/agencies) for how the console handles many client sites, and [Aglyn AI](https://docs.aglyn.com/ai/overview) for the add-on, the credits and the permissions. [Generate a whole site from a brief](https://docs.aglyn.com/ai/generate-a-site) has the scaffold and the multi-site run in detail. If you are comparing platforms, we keep pages on [Duda](/alternatives/duda) and [Webflow](/alternatives/webflow)."
+  ],
+  "internalLinks": [
+    {
+      "label": "Console",
+      "href": "/product/console",
+      "status": "live",
+      "verifiedAgainst": "https://aglyn.com/sitemaps/pages/1.xml on 2026-09-20"
+    },
+    {
+      "label": "Agencies",
+      "href": "/solutions/agencies",
+      "status": "live",
+      "verifiedAgainst": "https://aglyn.com/sitemaps/pages/1.xml on 2026-09-20"
+    },
+    {
+      "label": "Duda",
+      "href": "/alternatives/duda",
+      "status": "live",
+      "verifiedAgainst": "https://aglyn.com/sitemaps/pages/1.xml on 2026-09-20"
+    },
+    {
+      "label": "Webflow",
+      "href": "/alternatives/webflow",
+      "status": "live",
+      "verifiedAgainst": "https://aglyn.com/sitemaps/pages/1.xml on 2026-09-20"
+    },
+    {
+      "label": "Aglyn AI",
+      "href": "https://docs.aglyn.com/ai/overview",
+      "status": "in the tree",
+      "verifiedAgainst": "apps/docs/docs/ai/overview.md"
+    },
+    {
+      "label": "Generate a whole site from a brief",
+      "href": "https://docs.aglyn.com/ai/generate-a-site",
+      "status": "in the tree",
+      "verifiedAgainst": "apps/docs/docs/ai/generate-a-site.md — its 'Generate for several sites at once' section is the batch this post describes"
+    },
+    {
+      "label": "AI allotments, usage and model choice",
+      "href": "https://docs.aglyn.com/ai/ai-allotments",
+      "status": "in the tree",
+      "verifiedAgainst": "apps/docs/docs/ai/ai-allotments.md"
+    },
+    {
+      "label": "White-label (the docs page)",
+      "href": "https://docs.aglyn.com/workspace-and-billing/white-label",
+      "status": "in the tree",
+      "verifiedAgainst": "apps/docs/docs/workspace-and-billing/white-label.md"
+    }
+  ],
+  "linksConsideredAndNotUsed": [
+    {
+      "href": "/product/ai",
+      "why": "The brief names it twice for this post. The copy deck is committed at tools/marketing/product-copy/copy-ai.json, but the route is NOT in https://aglyn.com/sitemaps/pages/1.xml as of 2026-09-20 — the page has not been built on the canvas, so a link is a 404. `https://docs.aglyn.com/ai/overview` carries the closing link instead. ⛔ PUBLISH PRECONDITION: swap in /product/ai once it is live."
+    }
+  ],
+  "claimsToVerify": [
+    {
+      "phrase": "Twenty client sites is not a throughput claim",
+      "source": "The brief's own title, AI-Keyword-Plan.md §4",
+      "concern": "RESOLVED by disarming it in the first sentence. Twenty is the roster; the run is bounded by the sites the plan holds, and the post says explicitly that twenty sites means twenty plans to read and twenty drafts to review. ⛔ No time saved, no sites-per-hour, no multiplier anywhere in the post — nothing measured supports one."
+    },
+    {
+      "phrase": "Generate for several sites runs one brief across many of your sites … each site becomes its own job",
+      "source": "apps/docs/docs/ai/generate-a-site.md — 'Generate for several sites at once'",
+      "concern": "RESOLVED. Every property in the bullet list is that section's: the per-site and whole-run credit estimate, per-site plans, per-site confirmation, drafts only, the progress table, and sites you cannot build on being named rather than skipped."
+    },
+    {
+      "phrase": "four to eight pages, a shared layout, a contact form, a palette suggestion, a welcome email draft, a proposed navigation entry",
+      "source": "apps/docs/docs/ai/generate-a-site.md — 'What a scaffold builds' and 'Nothing is published'",
+      "concern": "RESOLVED, with 'the live navigation is not touched' kept in bold because it is the property an agency reader will not believe without being told."
+    },
+    {
+      "phrase": "allotments: hard and soft, 80% and 100%, a share not an addition, nobody raises their own",
+      "source": "apps/docs/docs/ai/ai-allotments.md#allotments, #hard-or-soft, #the-pool-comes-first, #limiting-models",
+      "concern": "RESOLVED. 'On the top plans the organization can restrict models for everyone' is the docs' 'On Agency and Enterprise' rewritten to avoid a tier claim on a marketing surface; the docs page linked beside it names them."
+    },
+    {
+      "phrase": "white-labeling is its own plan entitlement; no add-on buys it",
+      "source": "apps/docs/docs/workspace-and-billing/white-label.md — the `whiteLabel` entitlement, 'no add-on buys it', and the clean revert on downgrade",
+      "concern": "RESOLVED. The plans that carry it are deliberately not named here: the post's job is to stop a reader believing the AI add-on white-labels anything, and the docs page it links says which plans do. ⛔ No price, no tier table."
+    },
+    {
+      "phrase": "AI is an add-on on any paid plan, metered in credits, not per seat and not per site",
+      "source": "apps/docs/docs/ai/overview.md#the-add-on",
+      "concern": "RESOLVED. No figure for the add-on or the credit band; /pricing and Billing own those, per docs/PRICING_SURFACES.md."
+    },
+    {
+      "phrase": "switch AI off for one site on Admin → Plugins → AI, and a batch still builds the sites that have it on",
+      "source": "apps/docs/docs/ai/overview.md#switch-ai-off-for-one-site",
+      "concern": "RESOLVED, including the batch clause, which that section states in those words."
+    },
+    {
+      "phrase": "what you still design by hand",
+      "source": "how-aglyn-ai-builds.md rules 9 and 14; generate-a-page.md 'The draft'",
+      "concern": "RESOLVED as the honest reading of the rules: image slots are slots, bracketed facts are not supplied, and the theme is a decision somebody makes. The last two bullets — the hard pages and the judgment — are editorial position, not product claims, and are written as advice rather than as limits the product enforces."
+    },
+    {
+      "phrase": "the first eighty percent of twenty first drafts",
+      "source": "none",
+      "concern": "OPEN — AND DELIBERATELY IMPRECISE. It is a figure of speech in a sentence whose point is that the claim is smaller than the usual one, not a measurement. ⛔ If a reviewer reads it as a metric, cut the words 'eighty percent of' rather than trying to source them; nothing measures draft completeness."
+    },
+    {
+      "phrase": "the rolling-out disclosure",
+      "source": "release flags: `release_ai_generative` off in production",
+      "concern": "OPEN UNTIL THE FLIP. Held in `disclosure`, outside `body`."
+    }
+  ]
+}

@@ -44,15 +44,15 @@
  * {@link CompanyImportRow.dropped}, never silently discarded.
  */
 
-import type { AglynPostalAddress } from '../foundation'
-import { normalizeAddress, normalizePhone } from '../foundation'
-import { normalizeContactEmail } from './contacts'
+import type { AglynPostalAddress } from '@aglyn/aglyn/foundation/definitions/contact.types'
+import { normalizeAddress, normalizePhone } from '@aglyn/aglyn/foundation/definitions/contact.types'
+import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import {
   type ContactFieldDefinition,
   type CrmCustomValue,
   normalizeCompanyDomain,
   normalizeCompanyWebsite,
-} from './crm'
+} from '@aglyn/aglyn/app-utils/crm'
 import { parseContactImportCustomValue } from './crm-import'
 import {
   customImportTarget,
@@ -70,8 +70,8 @@ import {
   mapImportRow,
   mergeImportResults,
   parseImportTags,
-} from './csv-import'
-import { nameSearchKey } from './name-search'
+} from '@aglyn/aglyn/app-utils/csv-import'
+import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
 
 /** The shared ceilings, under this collection's names. */
 export const COMPANY_IMPORT_MAX_ROWS = CSV_IMPORT_MAX_ROWS

@@ -37,7 +37,7 @@ import {
  * * "what did I change" IS the patch, with no diffing at read time;
  * * "reset to the publisher's version" is deleting the patch;
  * * a conflict is narrow: only where the patch touches a path the update also
- *   changed, which {@link marketplace-merge}'s three-way plan already names.
+ *   changed, which the marketplace plugin's three-way update plan already names.
  *
  * Pure and content-shaped, exactly like the merge module it sits next to: it
  * knows nothing about Firestore or artifact types, so one resolver serves a

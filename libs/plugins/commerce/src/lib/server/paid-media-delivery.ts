@@ -28,18 +28,18 @@ import {
   type MediaDeliveryProvider,
   mediaDeliveryProvider,
 } from '@aglyn/aglyn/plugin-manager/media-delivery-provider'
-import { mediaDeliveryRedirect } from './media-delivery'
+import { mediaDeliveryRedirect } from '@aglyn/tenant-data-admin/server/media-delivery'
 import {
   assertMediaSignatureTtl,
   mediaSignatureQuery,
   mintMediaSignature,
-} from './media-signing'
-import { isMediaStoragePathInScope } from './media-storage-path'
+} from '@aglyn/tenant-data-admin/server/media-signing'
+import { isMediaStoragePathInScope } from '@aglyn/tenant-data-admin/server/media-storage-path'
 import {
   mediaCdnScopeRefusal,
   parseMediaCdnScope,
   selectAutoRendition,
-} from './serve-media-cdn'
+} from '@aglyn/tenant-data-admin/server/serve-media-cdn'
 
 /**
  * Turning a URL stored on a product into a link a buyer may follow (AGL-2814).

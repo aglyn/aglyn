@@ -52,7 +52,9 @@ import {
 import {
   AI_SITE_BATCH_MAX,
   AI_SITE_PAGES,
+  AI_SITE_SUBMISSION_CHOICES,
   aiSiteCreditEstimate,
+  type AiSiteSubmissions,
 } from '../model/ai-site-job'
 
 /**
@@ -68,6 +70,10 @@ import {
  * The estimate beside the button is the guard rail the issue asks for: what
  * one site is estimated to cost, and what the whole run is, before a credit
  * is spent on any of it.
+ *
+ * Where a contact form's submissions go is asked once for the run and binds
+ * every site's form step (AGL-2918), in the words the guided start asks it
+ * in: one decision, worded once, whether it is asked of one site or twenty.
  */
 
 /** Jobs the card reads to find the batches this workspace has run. */
@@ -148,6 +154,12 @@ export function AiSiteBatchCard(
   const [businessType, setBusinessType] = useState('')
   const [pages, setPages] = useState<number>(AI_SITE_PAGES.min + 1)
   const [welcomeEmail, setWelcomeEmail] = useState(true)
+  /*
+   * One routing answer for the whole run. It starts on the Inbox — what every
+   * submission does anyway — because filing a lead as well is the addition,
+   * and an addition is the thing somebody should have to choose.
+   */
+  const [submissions, setSubmissions] = useState<AiSiteSubmissions>('inbox')
   const [rows, setRows] = useState<AiSiteBatchRow[]>([])
   const [batchId, setBatchId] = useState<string | null>(null)
   const [jobs, setJobs] = useState<AiJobSummary[]>([])
@@ -301,6 +313,7 @@ export function AiSiteBatchCard(
             businessType,
             pages,
             welcomeEmail,
+            submissions,
             sites: picked.map((row) => ({
               hostId: row.hostId,
               businessName: row.businessName,
@@ -339,7 +352,16 @@ export function AiSiteBatchCard(
     } finally {
       setBusy(false)
     }
-  }, [orgId, picked, brief, businessType, pages, welcomeEmail, siteName])
+  }, [
+    orgId,
+    picked,
+    brief,
+    businessType,
+    pages,
+    welcomeEmail,
+    submissions,
+    siteName,
+  ])
 
   if (verdict !== 'ready' || !hostsReady || hosts.length < MIN_SITES)
     return null
@@ -426,6 +448,28 @@ export function AiSiteBatchCard(
                 <MenuItem value="no">{'No'}</MenuItem>
               </TextField>
             </Stack>
+            {/*
+              Asked of the run, not of each site (AGL-2918): the forms a batch
+              makes are the same form, and where a submission goes is the one
+              thing about a contact form a model cannot know. Left unasked,
+              twenty sites each kept a proposal nobody made.
+            */}
+            <TextField
+              select
+              fullWidth
+              label="Where do form submissions go?"
+              value={submissions}
+              onChange={(event) =>
+                setSubmissions(event.target.value as AiSiteSubmissions)
+              }
+              helperText="The same for every site in this run. You can change it on any form afterwards."
+            >
+              {AI_SITE_SUBMISSION_CHOICES.map((option) => (
+                <MenuItem key={option.id} value={option.id}>
+                  {`${option.label} — ${option.blurb}`}
+                </MenuItem>
+              ))}
+            </TextField>
             <ScrollTable size="small" aria-label="Sites to generate for">
               <TableHead>
                 <TableRow>

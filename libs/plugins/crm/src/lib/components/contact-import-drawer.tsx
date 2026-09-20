@@ -29,27 +29,29 @@
  */
 
 import {
+  type ConsolePluginPageProps,
+  type ContactFieldDefinition,
+  CRM_COLLECTIONS,
+  normalizeContactEmail,
+  pluginDocsHelp,
+} from '@aglyn/aglyn'
+import {
   CONTACT_IMPORT_CHUNK_SIZE,
   CONTACT_IMPORT_FIELD_LABELS,
   CONTACT_IMPORT_FIELDS,
   CONTACT_IMPORT_MAX_ROWS,
   CONTACT_IMPORT_PREVIEW_ROWS,
   CONTACT_IMPORT_SKIP_LABELS,
-  type ConsolePluginPageProps,
-  type ContactFieldDefinition,
   type ContactImportChunkResult,
   type ContactImportField,
   type ContactImportRawRow,
   type ContactImportSkippedRow,
   contactImportSkippedCsv,
-  CRM_COLLECTIONS,
   emptyContactImportResult,
   guessContactImportMapping,
   mapContactImportRow,
   mergeContactImportResults,
-  normalizeContactEmail,
-  pluginDocsHelp,
-} from '@aglyn/aglyn'
+} from '../model/crm-import'
 import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'

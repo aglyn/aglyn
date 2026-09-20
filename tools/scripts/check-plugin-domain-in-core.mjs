@@ -107,9 +107,9 @@ const PLUGIN_IMPORT =
   /from\s+['"](@aglyn\/plugins-[a-z-]+)(?:\/[^'"]*)?['"]|import\(\s*['"](@aglyn\/plugins-[a-z-]+)|(?:\.\.\/)+(libs\/plugins\/[a-z-]+)\//
 const COMMENT_LINE = /^\s*(?:\/\/|\*|\/\*)/
 
-/** A comment that spells a package name is prose, not an import. */
-function importsPlugin(text) {
-  return text.split('\n').some((line) => !COMMENT_LINE.test(line) && PLUGIN_IMPORT.test(line))
+/** Prose is not code: a comment that spells a package or an id is judged by neither rule. */
+function codeLineMatches(text, pattern) {
+  return text.split('\n').some((line) => !COMMENT_LINE.test(line) && pattern.test(line))
 }
 
 export function pluginIdPattern(ids) {
@@ -135,8 +135,8 @@ export function findFindings(files, pluginIds) {
       if (pattern.test(text)) add(path, `vendor:${vendor}`)
     }
     if (!guarded || tools) continue
-    if (idPattern?.test(text)) add(path, 'plugin-id')
-    if (!MANIFEST.test(path) && importsPlugin(text)) add(path, 'plugin-import')
+    if (idPattern && codeLineMatches(text, idPattern)) add(path, 'plugin-id')
+    if (!MANIFEST.test(path) && codeLineMatches(text, PLUGIN_IMPORT)) add(path, 'plugin-import')
   }
   return findings
 }
@@ -195,6 +195,7 @@ function selfTest() {
     { path: 'libs/plugins/mui/src/lib/video.ts', text: "const host = 'fast.wistia.net'\n" },
     { path: 'libs/aglyn/src/lib/plugin-manager/catalog.ts', text: "const requires = ['commerce']\n" },
     { path: 'libs/aglyn/src/lib/plugin-manager/words.ts', text: "const kind = 'data'\n" },
+    { path: 'libs/aglyn/src/lib/plugin-manager/prose.ts', text: " * `contacts` read as `crm` until its backfill\n// the 'commerce' bundle\nexport const x = 1\n" },
     { path: 'apps/console/app/(app)/page.tsx', text: "import { x } from '@aglyn/plugins-ai'\n" },
     { path: 'apps/console/constants/plugins.client.generated.ts', text: "import('@aglyn/plugins-ai')\n" },
     { path: 'libs/aglyn/src/lib/app-utils/crm.spec.ts', text: "'claude-haiku-4-5' 'commerce'\n" },
@@ -219,6 +220,7 @@ function selfTest() {
   ok('a video vendor inside a plugin is not', !findings.has('libs/plugins/mui/src/lib/video.ts'))
   ok('a plugin id in core is reported', has('libs/aglyn/src/lib/plugin-manager/catalog.ts', 'plugin-id'))
   ok('an id that is a plain word is not', !findings.has('libs/aglyn/src/lib/plugin-manager/words.ts'))
+  ok('an id named in a comment is not', !findings.has('libs/aglyn/src/lib/plugin-manager/prose.ts'))
   ok('a page importing a plugin is reported', has('apps/console/app/(app)/page.tsx', 'plugin-import'))
   ok('the generated manifest is not reported', !findings.has('apps/console/constants/plugins.client.generated.ts'))
   ok('a spec is not reported', !findings.has('libs/aglyn/src/lib/app-utils/crm.spec.ts'))

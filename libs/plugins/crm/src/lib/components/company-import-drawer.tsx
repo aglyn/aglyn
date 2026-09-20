@@ -28,6 +28,11 @@
  */
 
 import {
+  type ConsolePluginPageProps,
+  type ContactFieldDefinition,
+  pluginDocsHelp,
+} from '@aglyn/aglyn'
+import {
   COMPANY_IMPORT_CHUNK_SIZE,
   COMPANY_IMPORT_FIELD_LABELS,
   COMPANY_IMPORT_FIELDS,
@@ -38,14 +43,11 @@ import {
   type CompanyImportRawRow,
   type CompanyImportSkippedRow,
   companyImportSkippedCsv,
-  type ConsolePluginPageProps,
-  type ContactFieldDefinition,
   emptyCompanyImportResult,
   guessCompanyImportMapping,
   mapCompanyImportRow,
   mergeCompanyImportResults,
-  pluginDocsHelp,
-} from '@aglyn/aglyn'
+} from '../model/crm-company-import'
 import { useMemo } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmScope } from '../hooks/use-crm-scope'

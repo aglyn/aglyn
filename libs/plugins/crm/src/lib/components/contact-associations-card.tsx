@@ -22,9 +22,9 @@ import {
   type ConsentGroup,
   type ContactSource,
   MARKETING_BASIS_LABELS,
-  personKeyInBrowser,
   readMarketingBasis,
 } from '@aglyn/aglyn'
+import { personKeyInBrowser } from '../model/person-key-web'
 /*
  * The component path and NOT the marketing barrel: that barrel is the entry
  * point the tenant's loader imports to activate the plugin's SITE half, so a

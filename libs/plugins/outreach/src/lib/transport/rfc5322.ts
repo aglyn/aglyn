@@ -342,7 +342,7 @@ function extraHeaders(headers: OutreachComposedMessage['headers']): Array<[strin
     }
     const canonical = EXTRA_HEADERS[lower] ?? (lower.startsWith('x-') ? name : null)
     if (!canonical) {
-      throw new Rfc5322MessageError('unsupported-header', `The ${name} header is not one Outreach sends.`)
+      throw new Rfc5322MessageError('unsupported-header', `The ${name} header is not one a sequence sends.`)
     }
     if (seen.has(lower)) {
       throw new Rfc5322MessageError('invalid-header', `The ${name} header is given twice.`)

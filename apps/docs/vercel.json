@@ -105,6 +105,11 @@
       "permanent": true
     },
     {
+      "source": "/content-and-data/crm/outreach",
+      "destination": "/content-and-data/crm/sequences",
+      "permanent": true
+    },
+    {
       "source": "/marketing-and-automation/ai-assist",
       "destination": "/ai/overview",
       "permanent": true

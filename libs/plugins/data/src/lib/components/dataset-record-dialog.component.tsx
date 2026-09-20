@@ -16,13 +16,12 @@
  */
 'use client'
 
+import { type DatasetModel, validateDocument } from '@aglyn/aglyn'
 import {
-  type DatasetModel,
   type DatasetRecordField,
   type DatasetReferenceResolver,
   datasetRecordFields,
-  validateDocument,
-} from '@aglyn/aglyn'
+} from '../model/dataset-record-view'
 import {
   Alert,
   Box,
