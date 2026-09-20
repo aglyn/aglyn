@@ -44,6 +44,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { ensureCustomFieldTypes } from '../../../../utils/ensure-custom-field-types'
+import { announceDatasetChange } from '../../../../utils/server/announce-dataset-change'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
@@ -329,7 +330,11 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ ok: true, id }, { status: 200 })
     }
 
-    if (action === 'create-record' || action === 'import-records') {
+    if (
+      action === 'create-record' ||
+      action === 'import-records' ||
+      action === 'announce-records'
+    ) {
       const datasetId = String(body?.datasetId ?? '')
       if (!datasetId) {
         return Response.json({ error: 'Missing datasetId' }, { status: 400 })
@@ -364,6 +369,28 @@ async function handler(request: Request): Promise<Response> {
         )
       ) {
         return Response.json({ error: 'Unknown dataset' }, { status: 404 })
+      }
+      /**
+       * A record the BROWSER wrote, announcing itself (AGL-3113).
+       *
+       * Record edits and deletes stay client-direct on purpose — they consume
+       * no quota, so AGL-473 left them out of the server leg — which also left
+       * them with nothing to announce from. They are the same staleness as a
+       * create: a page listing the rows goes on showing the old one.
+       *
+       * A drop, and only a drop. It moves no pointer, writes nothing and
+       * registers no route, so it grants nothing the rules withhold — and it
+       * is gated by the same org membership and the same `memberCanSee` the
+       * create is, which is what stops a collaborator on one site from
+       * learning that another site's dataset exists.
+       */
+      if (action === 'announce-records') {
+        const announced = await announceDatasetChange({
+          firestore,
+          orgId,
+          datasetId,
+        })
+        return Response.json({ ok: true, announced }, { status: 200 })
       }
       const model = effectiveDatasetModel(datasetSnapshot.data() as any)
       // Before either validation below: a plugin's field validator only runs
@@ -437,7 +464,16 @@ async function handler(request: Request): Promise<Response> {
           },
         )
         if (refusal) return Response.json({ error: refusal }, { status: 403 })
-        return Response.json({ ok: true, id }, { status: 200 })
+        // The record is stored; now the pages that repeat over it are told
+        // (AGL-3113). Awaited so the site is already serving the new row by the
+        // time the editor's save returns, and reported so a refused drop can
+        // say the live pages are behind rather than leaving it to be noticed.
+        const announced = await announceDatasetChange({
+          firestore,
+          orgId,
+          datasetId,
+        })
+        return Response.json({ ok: true, id, announced }, { status: 200 })
       }
 
       // import-records: the console sends only the NEW rows (updates to
@@ -541,6 +577,18 @@ async function handler(request: Request): Promise<Response> {
           return null
         })
         if (refusedAt === null) ids.push(...chunkIds)
+      }
+      /**
+       * ONE announce for the whole import, after the loop (AGL-3113).
+       *
+       * Not per chunk and certainly not per row: a thousand rows arrive as one
+       * import and make the same pages stale once, so the pages are worked out
+       * once and dropped once. The refusal path announces too — rows that
+       * landed before the quota bit are live records, and leaving them out of
+       * the refresh would make a partial import look like no import at all.
+       */
+      if (ids.length) {
+        await announceDatasetChange({ firestore, orgId, datasetId })
       }
       if (refusedAt !== null) {
         // What landed is reported alongside the refusal. Rows are independent,

@@ -229,6 +229,31 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     [user, orgId],
   )
 
+  /**
+   * Refresh the live pages showing a dataset after a write the BROWSER made
+   * (AGL-3113).
+   *
+   * Record edits and deletes are client-direct — they consume no quota, so
+   * AGL-473 left them out of the server leg — which also left them with
+   * nothing to announce from. They make a page listing the rows exactly as
+   * stale as a create does, so they take the same trip the create already
+   * takes, through the route that already holds the org membership check.
+   *
+   * BEST EFFORT. The record is stored by the time this runs, and the pages
+   * catch up on their own window regardless; a refused cache must never be
+   * shown to somebody as a refused save.
+   */
+  const announceRecords = useCallback(
+    async (datasetId: string) => {
+      try {
+        await callDatasetApi({ action: 'announce-records', datasetId })
+      } catch (error) {
+        console.error(error)
+      }
+    },
+    [callDatasetApi],
+  )
+
   const {
     data: datasetDocs,
     status: datasetsStatus,
@@ -851,6 +876,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           },
           { mergeFields: ['values', 'referencedIds', 'updatedAt'] },
         )
+        await announceRecords(selected.$id)
       } else {
         // Creates go through the quota-enforcing API (AGL-473). The legacy
         // host-scope client write that used to follow this branch is gone
@@ -888,11 +914,16 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     dataScope,
     model,
     callDatasetApi,
+    announceRecords,
     enqueueSnackbar,
     logActivity,
   ])
   const handleDeleteRecord = useCallback(
     (record: any) => async () => {
+      // Datasets whose records this delete rewrites through a reference
+      // fixup, beside the one the record belongs to. Each has pages of its
+      // own to refresh (AGL-3113).
+      const alsoChanged = new Set<string>()
       if (!selected || !dataScope) return
       /**
        * Delete integrity (AGL-180): every collection whose model references
@@ -999,6 +1030,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           }
           await batch.commit()
         }
+        // The fixups rewrote rows in ANOTHER dataset, whose own pages are now
+        // showing a reference that no longer resolves.
+        alsoChanged.add(other.$id)
       }
       await deleteDoc(
         doc(
@@ -1012,9 +1046,12 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         ),
       )
       setRecordCountEpoch((epoch) => epoch + 1)
+      for (const datasetId of [selected.$id, ...alsoChanged]) {
+        await announceRecords(datasetId)
+      }
       enqueueSnackbar('Record deleted', { variant: 'success', persist: false })
     },
-    [selected, datasets, firestore, dataScope, enqueueSnackbar],
+    [selected, datasets, firestore, dataScope, announceRecords, enqueueSnackbar],
   )
 
   // CSV/JSON round-tripping (AGL-182).
@@ -1262,6 +1299,12 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           datasetId: selected.$id,
           records: toWrite.map((row) => ({ values: row.values })),
         })
+      } else if (updates.length) {
+        // An import that only UPDATED existing rows never reaches the server
+        // leg, so it has to announce for itself — otherwise the one import
+        // shape that changes every row of a dataset is the one that refreshes
+        // nothing (AGL-3113).
+        await announceRecords(selected.$id)
       }
     } catch (error: any) {
       return void enqueueSnackbar(error?.message ?? 'Import failed', {
@@ -1298,6 +1341,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     firestore,
     dataScope,
     callDatasetApi,
+    announceRecords,
     enqueueSnackbar,
     logActivity,
   ])
