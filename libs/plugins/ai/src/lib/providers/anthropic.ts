@@ -300,6 +300,13 @@ async function* streamEvents(
   let stopReason: string | null = null
   /** Tool-use blocks in flight, by content index; input arrives in pieces. */
   const tools = new Map<number, { name: string; json: string }>()
+  /**
+   * What each tool call was actually written in, in the order its block
+   * opened (AGL-3143). The `tool` events below carry only as much of these
+   * as `aiToolInputOf` could still parse, so for a call the ceiling cut off
+   * this is the one place the emitted bytes survive.
+   */
+  const written: string[] = []
   let buffer = ''
   let drained = false
   try {
@@ -356,6 +363,7 @@ async function* streamEvents(
             const tool = tools.get(index)
             if (tool) {
               tools.delete(index)
+              written.push(tool.json)
               yield { type: 'tool', name: tool.name, input: aiToolInputOf(tool.json) }
             }
             break
@@ -397,11 +405,17 @@ async function* streamEvents(
     if (!drained) await reader.cancel().catch(() => undefined)
     reader.releaseLock()
   }
+  // A message the ceiling ends mid-block never reaches that block's stop
+  // event, so what it had written is still held in flight.
+  for (const tool of tools.values()) written.push(tool.json)
   yield {
     type: 'done',
     usage,
     estCostUsd: estimateAiBilledUsd(usage, model),
     stopReason,
+    // What the model emitted into its tool calls, for a stream its ceiling
+    // cut off (AGL-3143): the `tool` events carry only what parsed out.
+    ...(aiStoppedAtCeiling(stopReason) ? { rawOutput: aiRawOutputOf(written.join('')) } : {}),
   }
 }
 

@@ -110,10 +110,19 @@ interface Subject {
   pictureTurn: unknown
   /** That same answer with the vendor's own "stopped at the ceiling" word on it. */
   atCeiling: (body: unknown) => unknown
+  /**
+   * That vendor's SSE for a message the ceiling cut off while it was writing
+   * a second tool call: the first call is delivered whole, and `json` is as
+   * much of the second as the model got out before the ceiling.
+   */
+  cutOffStream: (json: string) => unknown[]
 }
 
 /** Four bytes of a JPEG's start, base64: a picture's shape, not a picture. */
 const PICTURE = '/9j/4AAQ'
+
+/** The call that finished, ahead of the one the ceiling cut off. */
+const FIRST_CALL = '{"rootId":"n1","nodes":{}}'
 
 const SUBJECTS: Subject[] = [
   {
@@ -144,6 +153,38 @@ const SUBJECTS: Subject[] = [
       else expect(body).not.toHaveProperty('stream')
     },
     atCeiling: (body) => ({ ...(body as Record<string, unknown>), stop_reason: 'max_tokens' }),
+    // The second block never reaches its stop event: the message ends at the
+    // ceiling with that call still open.
+    cutOffStream: (json) => [
+      { type: 'message_start', message: { usage: { input_tokens: 900 } } },
+      {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id: 'toolu_c1', name: 'emit_section', input: {} },
+      },
+      {
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'input_json_delta', partial_json: FIRST_CALL },
+      },
+      { type: 'content_block_stop', index: 0 },
+      {
+        type: 'content_block_start',
+        index: 1,
+        content_block: { type: 'tool_use', id: 'toolu_c2', name: 'emit_section', input: {} },
+      },
+      {
+        type: 'content_block_delta',
+        index: 1,
+        delta: { type: 'input_json_delta', partial_json: json },
+      },
+      {
+        type: 'message_delta',
+        delta: { stop_reason: 'max_tokens' },
+        usage: { output_tokens: 4000 },
+      },
+      { type: 'message_stop' },
+    ],
   },
   {
     provider: openAiCompatibleProvider,
@@ -187,6 +228,40 @@ const SUBJECTS: Subject[] = [
       const payload = body as { choices: Array<Record<string, unknown>> }
       return { ...payload, choices: [{ ...payload.choices[0], finish_reason: 'length' }] }
     },
+    cutOffStream: (json) => [
+      {
+        id: 'chatcmpl-c',
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_c1',
+                  type: 'function',
+                  function: { name: 'emit_section', arguments: FIRST_CALL },
+                },
+                {
+                  index: 1,
+                  id: 'call_c2',
+                  type: 'function',
+                  function: { name: 'emit_section', arguments: json },
+                },
+              ],
+            },
+            finish_reason: null,
+          },
+        ],
+      },
+      { id: 'chatcmpl-c', choices: [{ index: 0, delta: {}, finish_reason: 'length' }] },
+      {
+        id: 'chatcmpl-c',
+        choices: [],
+        usage: { prompt_tokens: 900, completion_tokens: 4000 },
+      },
+      '[DONE]',
+    ],
   },
 ]
 
@@ -348,6 +423,39 @@ describe.each(SUBJECTS)('$prefix adapter conforms to the provider contract', (su
       },
     ])
     subject.assertShape(JSON.parse(String(mock.mock.calls[0][1].body)), true)
+  })
+
+  it('streams: keeps the bytes a cut-off tool call was written in, and none when the stop was clean (AGL-3143)', async () => {
+    // A stream that ended on its own: the parsed input says everything its
+    // fragments did, so there is nothing the trace does not already have.
+    armFetch(fixture(`${subject.prefix}-stream`))
+    const whole = await collect(await subject.provider.stream(request(subject)))
+    expect(whole[whole.length - 1]).not.toHaveProperty('rawOutput')
+
+    // Cut mid-string, where nothing of the second call parses: it reaches a
+    // reader with an empty input or not at all, so without these fragments a
+    // runaway string and a decoding stall both read as 4,000 output tokens
+    // against an answer that holds one small section.
+    const partial = '{"rootId":"n2","nodes":{"n2":{"props":{"title":"A headline that ran'
+    armFetch({ status: 200, headers: {}, events: subject.cutOffStream(partial) })
+    const cut = await collect(await subject.provider.stream(request(subject)))
+    const done = cut[cut.length - 1]
+    if (done.type !== 'done') throw new Error('unreachable')
+    expect(done.stopReason).toBe('max_tokens')
+    // Both calls: the one that closed, and the one the ceiling left open.
+    expect(done.rawOutput).toBe(`${FIRST_CALL}${partial}`)
+  })
+
+  it('streams: cuts a runaway tool call at the bound and marks it (AGL-3143)', async () => {
+    const runaway = `{"rootId":"${'n'.repeat(AI_RAW_OUTPUT_MAX_CHARS)}`
+    armFetch({ status: 200, headers: {}, events: subject.cutOffStream(runaway) })
+    const events = await collect(await subject.provider.stream(request(subject)))
+    const done = events[events.length - 1]
+    if (done.type !== 'done') throw new Error('unreachable')
+    // A trace of a runaway string would otherwise be as long as the string
+    // that ran away; the ellipsis says a reader is seeing part of it.
+    expect(done.rawOutput).toHaveLength(AI_RAW_OUTPUT_MAX_CHARS + 1)
+    expect(done.rawOutput?.endsWith('…')).toBe(true)
   })
 
   it('relays an in-stream fault as a typed, retryable event and still closes with done', async () => {
