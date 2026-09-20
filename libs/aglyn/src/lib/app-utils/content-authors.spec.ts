@@ -38,6 +38,9 @@ import {
   contentAuthorPaginationLinks,
   contentAuthorSlug,
   parseContentAuthorRoute,
+  siteEntityJsonLd,
+  siteProfileUrls,
+  xHandleFromProfiles,
 } from './content-authors'
 
 const ORIGIN = 'https://example.com'
@@ -818,5 +821,143 @@ describe('the author page (AGL-2518)', () => {
       slug: '  Chris Taylor  ',
     })
     expect(author?.slug).toBe('chris-taylor')
+  })
+})
+
+describe('the site’s own profiles reach `sameAs` (AGL-3148)', () => {
+  const ENTITY_PROFILE = 'https://www.crunchbase.com/organization/aglyn'
+  const RENDERED = [
+    { label: 'X', url: 'https://twitter.com/AglynSoftware' },
+    { label: 'LinkedIn', url: 'https://www.linkedin.com/company/aglyn' },
+  ]
+
+  it('publishes the social links the site already renders', () => {
+    /*
+      The defect this fixes: `seo.entity.sameAs` was the only field read, and
+      a production sweep found it unset on EVERY host on the platform — while
+      `business.socialLinks` was populated and being drawn into site footers.
+      So the structured data claimed no profiles for any site, with the
+      profiles sitting one field over.
+    */
+    expect(
+      siteProfileUrls({ business: { socialLinks: RENDERED } }),
+    ).toEqual([
+      'https://twitter.com/AglynSoftware',
+      'https://www.linkedin.com/company/aglyn',
+    ])
+  })
+
+  it('puts the deliberate SEO field first and de-duplicates across the two', () => {
+    expect(
+      siteProfileUrls({
+        seo: {
+          entity: {
+            sameAs: [ENTITY_PROFILE, 'https://www.linkedin.com/company/aglyn'],
+          },
+        },
+        business: { socialLinks: RENDERED },
+      }),
+    ).toEqual([
+      ENTITY_PROFILE,
+      'https://www.linkedin.com/company/aglyn',
+      'https://twitter.com/AglynSoftware',
+    ])
+  })
+
+  it('keeps only fetchable https profiles, and caps the list', () => {
+    // A profile URL that is not fetchable teaches a consumer nothing, and the
+    // cap is the one the author serializer applies to the same property.
+    expect(
+      siteProfileUrls({
+        business: {
+          socialLinks: [
+            { url: 'http://insecure.example/aglyn' },
+            { url: 'mailto:hi@aglyn.com' },
+            { url: '' },
+            null,
+            { label: 'No url' },
+          ],
+        },
+      }),
+    ).toEqual([])
+    expect(
+      siteProfileUrls({
+        business: {
+          socialLinks: Array.from({ length: AUTHOR_SAME_AS_MAX + 5 }, (_, i) => ({
+            url: `https://example.com/profile-${i}`,
+          })),
+        },
+      }),
+    ).toHaveLength(AUTHOR_SAME_AS_MAX)
+  })
+
+  it('reaches the published `Organization` node', () => {
+    const entity = siteEntityJsonLd(
+      {
+        displayName: 'Aglyn',
+        business: { socialLinks: RENDERED },
+      },
+      { origin: 'https://aglyn.com' },
+    )
+    expect(entity?.['sameAs']).toEqual([
+      'https://twitter.com/AglynSoftware',
+      'https://www.linkedin.com/company/aglyn',
+    ])
+  })
+
+  it('omits `sameAs` entirely for a site that claims no profiles', () => {
+    // Absent, never `"sameAs": []` — an empty list is a claim that the
+    // business has no presence anywhere, which is not what "unset" means.
+    const entity = siteEntityJsonLd({ displayName: 'Aglyn' }, {})
+    expect(entity && 'sameAs' in entity).toBe(false)
+  })
+})
+
+describe('xHandleFromProfiles (AGL-3148)', () => {
+  it('reads the handle back out of a profile URL, on either hostname', () => {
+    // Nothing on the platform stores a handle; what publishers and authors
+    // store is the profile link, and a link saved before the rename names the
+    // same account.
+    expect(xHandleFromProfiles(['https://twitter.com/AglynSoftware'])).toBe(
+      '@AglynSoftware',
+    )
+    expect(xHandleFromProfiles(['https://x.com/AglynSoftware'])).toBe(
+      '@AglynSoftware',
+    )
+    expect(xHandleFromProfiles(['https://www.x.com/AglynSoftware/'])).toBe(
+      '@AglynSoftware',
+    )
+  })
+
+  it('takes the first X profile and ignores every other platform', () => {
+    expect(
+      xHandleFromProfiles([
+        'https://www.linkedin.com/company/aglyn',
+        'https://github.com/aglyn/aglyn',
+        'https://x.com/AglynSoftware',
+      ]),
+    ).toBe('@AglynSoftware')
+  })
+
+  it('refuses anything that is not a bare account path', () => {
+    /*
+      A post is not its author and a list is not an account; attributing a
+      card to either names something that wrote nothing.
+    */
+    expect(
+      xHandleFromProfiles(['https://x.com/AglynSoftware/status/1789']),
+    ).toBeUndefined()
+    expect(xHandleFromProfiles(['https://x.com/i/lists/9'])).toBeUndefined()
+    expect(xHandleFromProfiles(['https://x.com/home'])).toBeUndefined()
+    expect(xHandleFromProfiles(['https://x.com/'])).toBeUndefined()
+    expect(
+      xHandleFromProfiles(['https://x.com/way-too-long-for-a-handle']),
+    ).toBeUndefined()
+  })
+
+  it('survives a stored value that is not a URL at all', () => {
+    expect(xHandleFromProfiles(['@AglynSoftware', '', 'not a url'])).toBeUndefined()
+    expect(xHandleFromProfiles(null)).toBeUndefined()
+    expect(xHandleFromProfiles([])).toBeUndefined()
   })
 })

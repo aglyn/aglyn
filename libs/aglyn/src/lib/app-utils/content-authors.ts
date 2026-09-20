@@ -888,10 +888,91 @@ export interface SiteEntityHost {
     description?: string
     entity?: HostSeoEntity | null
   } | null
+  /**
+   * The contact card behind the AGL-1022 host tokens. Its `socialLinks` are
+   * the site's own profiles, which is what {@link siteProfileUrls} reads.
+   */
+  business?: {
+    socialLinks?: Array<{ label?: string; url?: string } | null> | null
+  } | null
 }
 
 /** The fragment identifier the site entity is published under. */
 export const SITE_ENTITY_FRAGMENT = '#organization'
+
+/**
+ * EVERY PROFILE THE SITE CLAIMS AS ITSELF — `schema.org` `sameAs` (AGL-3148).
+ *
+ * Two fields hold these and only one was ever published. `seo.entity.sameAs`
+ * is the SEO form, and a production read found it unset on every host on the
+ * platform; `business.socialLinks` is the contact card the site's own footer
+ * renders from, and it is the one publishers actually fill in. So the
+ * structured data named no profiles at all on any site, while the profiles sat
+ * one field over being drawn into the page.
+ *
+ * Folding the second into `sameAs` is the AGL-2516 move one level up: a link
+ * the SITE prints is a profile the site claims, and asking a publisher to
+ * retype it into an SEO field to be believed is asking them to maintain the
+ * same list twice. The entity field stays FIRST, because it is the one written
+ * deliberately for this purpose.
+ *
+ * https-only and de-duplicated, matching both serializers beside it: a profile
+ * URL that is not fetchable teaches a consumer nothing, and one identity listed
+ * twice reads as two.
+ */
+export function siteProfileUrls(
+  host: SiteEntityHost | null | undefined,
+): string[] {
+  const rendered = (host?.business?.socialLinks ?? []).map(
+    (link) => link?.url ?? '',
+  )
+  return Array.from(
+    new Set(
+      [...(host?.seo?.entity?.sameAs ?? []), ...rendered]
+        .map((value) => text(value, 800))
+        .filter((value) => /^https:\/\//i.test(value)),
+    ),
+  ).slice(0, AUTHOR_SAME_AS_MAX)
+}
+
+/**
+ * The X (Twitter) handle among a set of profile URLs, as `@name` (AGL-3148).
+ *
+ * `twitter:site` and `twitter:creator` take a handle, and nothing on the
+ * platform stores one — what publishers and authors store is the profile URL,
+ * in the same list that feeds `sameAs`. Reading the handle back out of the URL
+ * is what lets both cards be attributed without a second field to fill in and
+ * keep in step.
+ *
+ * Both hostnames, because a link saved before the rename is still the same
+ * profile. Only a bare profile path qualifies: `x.com/AglynSoftware` is an
+ * account, while `x.com/AglynSoftware/status/123` is one post by it and
+ * `x.com/i/lists/9` is not an account at all — attributing a card to either
+ * would name something that is not the author of anything.
+ */
+export function xHandleFromProfiles(
+  urls: readonly string[] | null | undefined,
+): string | undefined {
+  for (const value of urls ?? []) {
+    let url: URL
+    try {
+      url = new URL(value)
+    } catch {
+      continue
+    }
+    if (!/^(www\.)?(x|twitter)\.com$/i.test(url.hostname)) continue
+    const segments = url.pathname.split('/').filter(Boolean)
+    if (segments.length !== 1) continue
+    const handle = segments[0]
+    // X handles are 1–15 of `[A-Za-z0-9_]`. Anything else is one of the
+    // reserved paths (`i`, `home`, `search`) rather than somebody's account.
+    if (!/^[A-Za-z0-9_]{1,15}$/.test(handle)) continue
+    if (/^(i|home|search|explore|notifications|messages|settings)$/i.test(handle))
+      continue
+    return `@${handle}`
+  }
+  return undefined
+}
 
 /**
  * The site's publisher as a STANDALONE, fully populated `schema.org` node
@@ -958,14 +1039,12 @@ export function siteEntityJsonLd(
     `sameAs` is de-duplicated and https-only, matching the author serializer:
     a profile URL that is not fetchable teaches a consumer nothing, and the
     same profile listed twice reads as two identities.
+
+    Through `siteProfileUrls` (AGL-3148) so the site's rendered social links
+    count as profiles it claims, rather than only the SEO field that no host
+    on the platform had filled in.
   */
-  const sameAs = Array.from(
-    new Set(
-      (entity?.sameAs ?? [])
-        .map((value) => text(value, 800))
-        .filter((value) => /^https:\/\//i.test(value)),
-    ),
-  ).slice(0, AUTHOR_SAME_AS_MAX)
+  const sameAs = siteProfileUrls(host)
 
   /*
     A contactPoint needs something to contact. `contactType` alone is a label
