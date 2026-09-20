@@ -902,13 +902,6 @@
       "lane": "marketplace"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/marketplace-merge.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/marketplace-overrides.ts",
       "rules": [
         "domain-name"

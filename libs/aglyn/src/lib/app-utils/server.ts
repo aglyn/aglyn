@@ -311,7 +311,6 @@ export * from './dataset-models'
 // The record-view descriptors, after the model and formatter they build on.
 export * from './dataset-record-view'
 export * from './dataset-csv'
-export * from './marketplace-merge'
 export * from './marketplace-provenance'
 export * from './marketplace-update-state'
 export * from './dataset-query'
