@@ -161,6 +161,12 @@ const COMPONENT_EXTRA_IDS = ['icon']
 const NEVER_IDS = new Set([
   'custom-html',
   'functionWidget',
+  // The calculator elements (AGL-3202) mean nothing without a site function
+  // to bind, and a model cannot create one.
+  'functionScope',
+  'functionInput',
+  'functionOutput',
+  'functionShow',
   'div',
   'reusableInstance',
   'marketplacePlugin',

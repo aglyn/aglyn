@@ -1319,6 +1319,168 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     presets: ['Form Field', 'Marketing consent'],
   },
+  functionInput: {
+    pluginId: 'mui',
+    kind: 'element',
+    category: 'Input',
+    displayName: 'Calculator Input',
+    summary:
+      'Asks one parameter of the Calculator it sits in: a number box, a list, a switch, or quick-pick chips.',
+    acceptsChildren: false,
+    propsSchema: {
+      type: 'object',
+      properties: {
+        parameter: {
+          type: 'string',
+          maxLength: 200,
+        },
+        control: {
+          type: 'string',
+          enum: ['auto', 'number', 'text', 'select', 'chips', 'switch'],
+        },
+        choices: {
+          type: 'string',
+          maxLength: 200,
+        },
+        label: {
+          type: 'string',
+          maxLength: 200,
+        },
+        hideLabel: {
+          type: 'boolean',
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    propRoles: {
+      parameter: 'text',
+      choices: 'text',
+      label: 'text',
+    },
+    propFields: {
+      parameter: 'text-field',
+      control: 'select',
+      choices: 'text-field',
+      label: 'text-field',
+      hideLabel: 'switch',
+    },
+    textLimits: {
+      parameter: 200,
+      choices: 200,
+      label: 200,
+    },
+    presets: ['Calculator Input'],
+  },
+  functionOutput: {
+    pluginId: 'mui',
+    kind: 'element',
+    category: 'Input',
+    displayName: 'Calculator Result',
+    summary:
+      'Shows one value from the Calculator it sits in, updated as the visitor answers.',
+    acceptsChildren: false,
+    propsSchema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          maxLength: 200,
+        },
+        placeholder: {
+          type: 'string',
+          maxLength: 200,
+        },
+        element: {
+          type: 'string',
+          enum: ['div', 'p', 'span'],
+        },
+        announce: {
+          type: 'boolean',
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    propRoles: {
+      name: 'text',
+      placeholder: 'text',
+    },
+    propFields: {
+      name: 'text-field',
+      placeholder: 'text-field',
+      element: 'select',
+      announce: 'switch',
+    },
+    textLimits: {
+      name: 200,
+      placeholder: 200,
+    },
+    presets: ['Calculator Result'],
+  },
+  functionScope: {
+    pluginId: 'mui',
+    kind: 'element',
+    category: 'Input',
+    displayName: 'Calculator',
+    summary: 'A container bound to one of your functions.',
+    acceptsChildren: true,
+    propsSchema: {
+      type: 'object',
+      properties: {
+        functionName: {
+          type: 'string',
+          maxLength: 200,
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    propRoles: {
+      functionName: 'text',
+    },
+    propFields: {
+      functionName: 'text-field',
+    },
+    textLimits: {
+      functionName: 200,
+    },
+    presets: ['Calculator'],
+  },
+  functionShow: {
+    pluginId: 'mui',
+    kind: 'element',
+    category: 'Input',
+    displayName: 'Show When',
+    summary:
+      'A container inside a Calculator that appears only while one of the function’s values is true, non-zero or non…',
+    acceptsChildren: true,
+    propsSchema: {
+      type: 'object',
+      properties: {
+        when: {
+          type: 'string',
+          maxLength: 200,
+        },
+        invert: {
+          type: 'boolean',
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    propRoles: {
+      when: 'text',
+    },
+    propFields: {
+      when: 'text-field',
+      invert: 'switch',
+    },
+    textLimits: {
+      when: 200,
+    },
+    presets: ['Show When'],
+  },
   functionWidget: {
     pluginId: 'mui',
     kind: 'element',
