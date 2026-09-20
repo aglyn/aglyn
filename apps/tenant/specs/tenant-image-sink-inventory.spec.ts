@@ -477,6 +477,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'projection',
     why: 'The dialog `<video poster>` (AGL-2744). This module resolves nothing itself: `video.tsx` calls `Aglyn.mediaVariantSrc` and passes the finished url in as a prop, which is why the marker here is a projection of the entry above rather than a second sink with its own reach.',
   },
+  'libs/plugins/outreach/src/lib/runtime/unsubscribe-route.ts': {
+    markers: 1,
+    guard: 'platform',
+    why: "The one-click unsubscribe confirmation page (AGL-2981), answered by the plugin API dispatchers for a link mailed in a List-Unsubscribe header. The marker is the `<style>` built in `outreachUnsubscribePage` in this file: six declarations of type and margin, every one a literal in the template string beside it, and no `url()` anywhere in it. Nothing a member or an author stored reaches the page at all — its title and body are module constants, escaped, and the page carries no logo, no brand image and no script, deliberately, so that it renders for a stranger with nothing of ours fetched. It is also never a tenant render: it is a recipient link, gated by its own signature rather than by the site pipeline.",
+  },
   'libs/tenant/runtime/src/lib/collection-fallback-nodes.ts': {
     markers: 1,
     guard: 'scheme-guard',
