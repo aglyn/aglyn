@@ -44,6 +44,7 @@ import {
   hasBindings,
   inheritedMediaAlt,
   intrinsicMediaSize,
+  linkTargetKind,
   VIDEO_COMPONENT_ID,
   videoMediaProps,
   MISSING_BINDING_LABEL,
@@ -136,7 +137,9 @@ import {
 } from './markdown-attribute-field.component'
 import {
   ScreenLinkField,
+  ScreenTargetField,
   SCREEN_LINK_FIELD_COMPONENT,
+  SCREEN_TARGET_FIELD_COMPONENT,
 } from './screen-link-field.component'
 import {
   PropertyBindingField,
@@ -348,6 +351,9 @@ export const elementPropsComponentMapper = {
   // Screen picker + external-URL escape hatch for `Link`-typed component
   // props (AGL-1335), which were plain text boxes storing a raw path.
   [SCREEN_LINK_FIELD_COMPONENT]: ScreenLinkField,
+  // The attributes' own Screen pickers (`SCREEN_SELECT`), searchable and
+  // offering entries (AGL-3119); `resolveAttributeField` rewrites to it.
+  [SCREEN_TARGET_FIELD_COMPONENT]: ScreenTargetField,
   // The markdown-lite WYSIWYG for document-valued attributes (AGL-1616),
   // registered under BOTH the schema-declared type and the internal key so a
   // schema can ask for it directly and the memo below can rewrite to it.
@@ -981,8 +987,8 @@ export function resolveAttributeField<T extends Record<string, any>>(
   const stored = readAttributeFieldValue(values, field.name)
   if (field.component === FieldComponentType.SCREEN_SELECT) {
     // The host's screens by path, then its collection listings
-    // (AGL-2799) — built by the function the `Link`-typed prop picker
-    // uses too, so neither can offer a target the other does not.
+    // (AGL-2799) and feeds — built by the function the `Link`-typed prop
+    // picker uses too, so neither can offer a target the other does not.
     const options = [
       { value: '', label: 'None (use external URL)' },
       ...screenLinkTargetOptions(screens, labels, 'path').map(
@@ -992,14 +998,22 @@ export function resolveAttributeField<T extends Record<string, any>>(
     // A stored target the host no longer has renders as a BLANK
     // picker, which reads as "no link set" while the element still
     // behaves as linked (AGL-1893). Naming it is the only way the
-    // author finds out before publishing rather than after.
+    // author finds out before publishing rather than after. An entry is
+    // not stranded for being absent here — the map holds no entries, and
+    // the lookup names one by reading it (AGL-3119).
     const stranded = unresolvedScreenOption(stored, screens)
-    if (stranded && !options.some((o) => o.value === stranded.value)) {
+    if (
+      stranded &&
+      linkTargetKind(stranded.value) !== 'entry' &&
+      !options.some((o) => o.value === stranded.value)
+    ) {
       options.push(stranded)
     }
+    // Drawn by the searchable lookup (AGL-3119), which offers these and
+    // finds entries as the author types.
     return {
       ...field,
-      component: FieldComponentType.SELECT,
+      component: SCREEN_TARGET_FIELD_COMPONENT,
       options,
     }
   }
@@ -2020,7 +2034,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         .map((field, index) =>
           // One field in, one out, so `index` still names the attribute as
           // the schema DECLARED it. The rewrites above change `component` —
-          // a Screen picker is a plain select by now — and what a field can
+          // a Screen picker is the link lookup by now — and what a field can
           // be bound to follows what it holds, not how it is drawn.
           withPropertyBinding(field, {
             declaredComponent: rawAttributes?.[index]?.component,

@@ -29,6 +29,7 @@ import {
   composeCollectionTemplatePage,
 } from '@aglyn/tenant-runtime/compose-collection-page'
 import getCollectionContent from '@aglyn/tenant-runtime/get-collection-content'
+import { resolveEntryLinkRoutes } from '@aglyn/tenant-runtime/entry-link-routes'
 import getAuthorContent from '@aglyn/tenant-runtime/get-author-content'
 import {
   composeAuthorFallbackPage,
@@ -1505,8 +1506,19 @@ export async function loadNotFoundScreen(
     // The designed 404 carries the site's own header and footer, so its links
     // resolve through the same corrected map every other page uses (AGL-1998)
     // — a nav pointing at the blog must not send a visitor who already hit one
-    // 404 to a second one. Paid for only on a 404, like the rest of this.
+    // 404 to a second one. Paid for only on a 404, like the rest of this, and
+    // so are the entries its links name (AGL-3118) — none, on almost every
+    // site, and read beside the enrichers below rather than ahead of them.
     const routing = await getTemplateScreenRouting({ hostId })
+    const entryRefs = Aglyn.collectEntryLinkRefs({ nodes: [nodes] })
+    // Never rejects, so nothing below can leave it unhandled.
+    const entryRoutesPromise = entryRefs.length
+      ? resolveEntryLinkRoutes({
+          hostId,
+          refs: entryRefs,
+          collectionSlugs: routing.collectionListings,
+        })
+      : undefined
 
     /**
      * The designed 404 behaves like the page it stands in for (AGL-2511).
@@ -1554,6 +1566,7 @@ export async function loadNotFoundScreen(
         { orgId: (orgRes.org as { $id?: string })?.$id ?? null },
       ),
     ])
+    const entryRoutes = await entryRoutesPromise
 
     return JSON.parse(
       JSON.stringify({
@@ -1573,6 +1586,7 @@ export async function loadNotFoundScreen(
             routedElsewhere: routing.listRoutes,
             unrouted: routing.templateScreenIds,
             collectionListings: routing.collectionListings,
+            entryRoutes,
           },
         ),
       }),

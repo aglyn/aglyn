@@ -80,11 +80,14 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import {
   applyCommandToSource,
+  applyLinkToSource,
   MARKDOWN_SOURCE_HINT,
   MarkdownEditorToolbar,
+  MarkdownLinkDialog,
   MarkdownVisualEditor,
   type MarkdownEditorCommand,
   type MarkdownEditorContext,
+  type MarkdownLink,
   type MarkdownVisualEditorHandle,
 } from '@aglyn/aglyn-markdown-editor'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -792,8 +795,23 @@ export function EntryDetailPage() {
   const [bodyContext, setBodyContext] = useState<MarkdownEditorContext | null>(
     null,
   )
+  /** The markdown-source selection a link is being written over (AGL-3119). */
+  const [sourceLink, setSourceLink] = useState<{
+    start: number
+    end: number
+    text: string
+  } | null>(null)
   const applyMarkdown = useCallback((command: MarkdownEditorCommand) => {
     const input = bodyInputRef.current
+    // A link is picked, not typed: the dialog offers this site's pages and
+    // entries, and inserts the reference that survives a rename (AGL-3119).
+    if (command === 'link') {
+      const body = input?.value ?? ''
+      const start = input?.selectionStart ?? body.length
+      const end = input?.selectionEnd ?? body.length
+      setSourceLink({ start, end, text: body.slice(start, end) })
+      return
+    }
     setEditor((prev) => {
       if (!prev) return prev
       const edit = applyCommandToSource(
@@ -809,6 +827,24 @@ export function EntryDetailPage() {
       return { ...prev, body: edit.body }
     })
   }, [])
+  const insertSourceLink = useCallback(
+    (link: MarkdownLink) => {
+      const target = sourceLink
+      const input = bodyInputRef.current
+      setSourceLink(null)
+      if (!target) return
+      setEditor((prev) => {
+        if (!prev) return prev
+        const edit = applyLinkToSource(prev.body, target.start, target.end, link)
+        requestAnimationFrame(() => {
+          input?.focus()
+          input?.setSelectionRange(edit.start, edit.end)
+        })
+        return { ...prev, body: edit.body }
+      })
+    },
+    [sourceLink],
+  )
   // One toolbar, two surfaces (AGL-582): in the Visual tab commands mutate the
   // editor's block model; in the Markdown tab they wrap the textarea selection.
   const handleToolbar = useCallback(
@@ -1757,6 +1793,18 @@ export function EntryDetailPage() {
                           helperText={MARKDOWN_SOURCE_HINT}
                         />
                       )}
+                      {/* Rendered only while it is open: the visual surface
+                          carries its own copy, and the two must not both
+                          answer the toolbar's Link. */}
+                      {sourceLink ? (
+                        <MarkdownLinkDialog
+                          open
+                          withText
+                          text={sourceLink.text}
+                          onClose={() => setSourceLink(null)}
+                          onConfirm={insertSourceLink}
+                        />
+                      ) : null}
                     </Stack>
                   </CardDisplay>
                 ),

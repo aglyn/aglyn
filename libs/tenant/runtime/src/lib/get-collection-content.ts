@@ -355,12 +355,28 @@ function scheduleAlreadyRefused(
 }
 
 /** A scheduled entry whose time has come — before any plan question. */
-function isDueScheduled(value: FirebaseFirestore.DocumentData): boolean {
+export function isDueScheduled(value: FirebaseFirestore.DocumentData): boolean {
   return (
     value['status'] === 'scheduled' &&
     !scheduleAlreadyRefused(value) &&
     (value['publishAt']?.seconds ?? Number.POSITIVE_INFINITY) * 1000 <=
       Date.now()
+  )
+}
+
+/**
+ * A scheduled entry still waiting on its time: not due yet, and not refused.
+ * Nothing but a render publishes a content entry, so a cache that stored a
+ * read holding one would withhold the render that notices it come due — see
+ * {@link LiveEntriesRead.pendingSchedule}.
+ */
+export function isPendingScheduled(
+  value: FirebaseFirestore.DocumentData,
+): boolean {
+  return (
+    value['status'] === 'scheduled' &&
+    !scheduleAlreadyRefused(value) &&
+    !isDueScheduled(value)
   )
 }
 
@@ -392,9 +408,9 @@ function isDueScheduled(value: FirebaseFirestore.DocumentData): boolean {
  * read hides only the due-scheduled entry, never the published ones, and the
  * next render retries.
  */
-type SchedulePermission = 'allowed' | 'refused' | 'unresolved'
+export type SchedulePermission = 'allowed' | 'refused' | 'unresolved'
 
-async function scheduledPublishingPermission(
+export async function scheduledPublishingPermission(
   hostId: string,
 ): Promise<SchedulePermission> {
   try {
@@ -425,8 +441,12 @@ async function scheduledPublishingPermission(
  *
  * The permission is threaded in rather than resolved here so the org read
  * happens once per call site instead of once per entry.
+ *
+ * Exported for the one other reader that decides whether an entry is on the
+ * site — whether a LINK to it resolves (AGL-3118) — so a link and the page it
+ * points at can never disagree about which entries exist.
  */
-function isLive(
+export function isLive(
   value: FirebaseFirestore.DocumentData,
   permission: SchedulePermission,
 ): boolean {
@@ -626,14 +646,9 @@ async function listLiveEntries(
   // Also measured on the RAW docs, and for the same reason: a not-yet-due
   // entry is filtered out one line down, so this is the last place that can
   // see one at all.
-  const pendingSchedule = entriesQuery.docs.some((entryDoc) => {
-    const value = entryDoc.data()
-    return (
-      value['status'] === 'scheduled' &&
-      !scheduleAlreadyRefused(value) &&
-      !isDueScheduled(value)
-    )
-  })
+  const pendingSchedule = entriesQuery.docs.some((entryDoc) =>
+    isPendingScheduled(entryDoc.data()),
+  )
 
   const entries = entriesQuery.docs
     .filter((entryDoc) => isLive(entryDoc.data(), permission))

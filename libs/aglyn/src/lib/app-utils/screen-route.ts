@@ -18,7 +18,12 @@
 import { HOST_ERROR_SCREEN_SLOTS, type ScreenUid } from '../foundation'
 import { collectionListUrl } from './collection-entries'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
-import { formatCollectionLinkValue } from './screen-link-value'
+import {
+  formatCollectionLinkValue,
+  formatEntryLinkValue,
+  formatFeedLinkValue,
+  parseEntryLinkValue,
+} from './screen-link-value'
 
 /**
  * Route path of a host's root screen. The tenant matcher joins the catch-all
@@ -401,6 +406,38 @@ export interface LinkableScreenRouteSources {
    * renders it.
    */
   collectionListings?: Record<string, string> | null | undefined
+  /**
+   * entry key (`entry:<collectionId>/<entryId>`) → the entry's path, for the
+   * entries a page references (AGL-3118). Unlike every other source, this one
+   * is not the whole site: a renderer reads only the entries its own links
+   * name, so an entry key missing here means "not asked for", and
+   * `screenRoutesAnswerFor` judges entry links only against a map that has
+   * some.
+   */
+  entryRoutes?: Record<string, string> | null | undefined
+}
+
+/**
+ * Where a collection's RSS feed is served, in the routing map's own format
+ * (no leading slash): `blog/rss.xml` for the collection at `/blog`.
+ */
+export function collectionFeedRoutePath(collectionSlug: string): string {
+  const listing = collectionListUrl({ collectionSlug }).replace(/^\/+|\/+$/g, '')
+  return `${listing}/rss.xml`
+}
+
+/**
+ * Where a collection ENTRY is served, in the routing map's own format (no
+ * leading slash): `blog/hello` for the entry slugged `hello` in the
+ * collection at `/blog` — the `/{collection}/{entry}` shape
+ * `parseCollectionRoute` reads back.
+ */
+export function collectionEntryRoutePath(
+  collectionSlug: string,
+  entrySlug: string,
+): string {
+  const listing = collectionListUrl({ collectionSlug }).replace(/^\/+|\/+$/g, '')
+  return `${listing}/${entrySlug.trim().replace(/^\/+|\/+$/g, '')}`
 }
 
 /**
@@ -443,10 +480,13 @@ export function linkableScreenRoutes(
   screens: Record<ScreenUid, string> | null | undefined,
   sources: LinkableScreenRouteSources = {},
 ): Record<ScreenUid, string> | undefined {
-  const { routedElsewhere, unrouted, collectionListings } = sources
+  const { routedElsewhere, unrouted, collectionListings, entryRoutes } = sources
   const overrides = Object.entries(routedElsewhere ?? {})
   const listings = Object.entries(collectionListings ?? {})
-  if (!screens && !overrides.length && !listings.length) return undefined
+  const entries = Object.entries(entryRoutes ?? {})
+  if (!screens && !overrides.length && !listings.length && !entries.length) {
+    return undefined
+  }
   const next: Record<ScreenUid, string> = { ...(screens ?? {}) }
   for (const id of unrouted ?? []) delete next[id]
   for (const [collectionId, collectionSlug] of listings) {
@@ -460,6 +500,20 @@ export function linkableScreenRoutes(
     next[formatCollectionLinkValue(collectionId)] = collectionListUrl({
       collectionSlug: slug,
     }).replace(/^\/+/, '')
+    // The feed hangs off the same listing (AGL-3118), so it follows the same
+    // rename and disappears with the same collection.
+    next[formatFeedLinkValue(collectionId)] = collectionFeedRoutePath(slug)
+  }
+  for (const [key, path] of entries) {
+    // Only well-formed entry keys, stored under their canonical spelling: this
+    // source must not be able to plant a screen id or a listing key the other
+    // sources own.
+    const entry = parseEntryLinkValue(key)
+    if (!entry) continue
+    const normalized =
+      typeof path === 'string' ? path.trim().replace(/^\/+|\/+$/g, '') : ''
+    if (!normalized) continue
+    next[formatEntryLinkValue(entry.collectionId, entry.entryId)] = normalized
   }
   for (const [id, path] of overrides) {
     // A collection slug (`blog`) arrives in the map's own format already, but

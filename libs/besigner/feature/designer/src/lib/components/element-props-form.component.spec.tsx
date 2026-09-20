@@ -18,7 +18,10 @@
 import { PLUGIN_SETTINGS_FIELD_COMPONENT } from './plugin-settings-field.component'
 import { MARKDOWN_ATTRIBUTE_FIELD_COMPONENT } from './markdown-attribute-field.component'
 import { TOKEN_TEXT_FIELD_COMPONENT } from './token-text-field.component'
-import { SCREEN_LINK_FIELD_COMPONENT } from './screen-link-field.component'
+import {
+  SCREEN_LINK_FIELD_COMPONENT,
+  SCREEN_TARGET_FIELD_COMPONENT,
+} from './screen-link-field.component'
 import { PROPERTY_BINDING_FIELD_COMPONENT } from './property-binding-field.component'
 import { act, renderHook } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
@@ -549,7 +552,9 @@ describe('the Screen picker names a lost target and offers listings (AGL-1893, A
 
   it('builds its options with the shared target builder, listings included', () => {
     const field = resolve({})
-    expect(field['component']).toBe(Aglyn.FieldComponentType.SELECT)
+    // Drawn by the searchable lookup since AGL-3119 — the options are still
+    // the shared builder's, and entries come from the search seam.
+    expect(field['component']).toBe(SCREEN_TARGET_FIELD_COMPONENT)
     expect(field['options']).toEqual([
       { value: '', label: 'None (use external URL)' },
       ...Aglyn.screenLinkTargetOptions(screens, labels, 'path').map(

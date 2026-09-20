@@ -47,6 +47,7 @@ import {
   offeredPluginVersion,
   PLUGIN_HOST_ABI_VERSION,
   pluginDocsHelp,
+  resolveMarkdownLink,
   resolveMediaSrc,
   resolveUpdateState,
   Route,
@@ -204,11 +205,21 @@ const renderInlines = (inlines: MarkdownInline[]) =>
         return <strong key={index}>{inline.text}</strong>
       case 'italic':
         return <em key={index}>{inline.text}</em>
-      case 'link':
+      case 'link': {
+        /*
+          No routing map is passed, and that is the answer rather than an
+          omission (AGL-3118). A link REFERENCE names a screen, listing, entry
+          or feed of the SITE a document was written for; a listing README is
+          read in the console, which serves none of them, so a reference here
+          resolves to nothing and renders as its words — never as an anchor
+          holding `entry:…`.
+        */
+        const link = resolveMarkdownLink(inline.href)
+        if (!('href' in link)) return <span key={index}>{inline.text}</span>
         return (
           <MuiLink
             key={index}
-            href={inline.href}
+            href={link.href}
             target="_blank"
             rel="noopener noreferrer"
             color="primary"
@@ -217,6 +228,7 @@ const renderInlines = (inlines: MarkdownInline[]) =>
             {inline.text}
           </MuiLink>
         )
+      }
       default:
         return <span key={index}>{inline.text}</span>
     }

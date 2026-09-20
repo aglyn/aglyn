@@ -298,9 +298,15 @@ The shared **toolbar** works in both tabs:
 
 - **B / I** — bold or italicize the selection (`Cmd/Ctrl+B`, `Cmd/Ctrl+I` in Visual).
 - **H2** — toggle the current line between paragraph and heading.
-- **Link** — wrap the selection as a link; you're prompted for an `https://` URL or a
-  site path like `/pricing`. In Visual mode, clicking an existing link opens a small
-  popover to **edit or remove** it (it never navigates).
+- **Link** — wrap the selection as a link. A **Link to** box searches this site — its
+  pages, its collection listings, their RSS feeds, and the entries themselves — so one
+  post can link another by picking it. What is stored is the target, not its address, so
+  the link follows a renamed post or a renamed collection; a typed `/blog/my-post` does
+  not. Choose **External URL or path…** in the same box for an outside address. When you
+  link with nothing selected, a **Text** box appears; leave it empty and the target's own
+  name becomes the link text — the post's title, never its internal id. In Visual mode,
+  clicking an existing link opens a small popover to **edit or remove** it (it never
+  navigates), and a picked link shows what it points at by name.
 - **Image** — insert an image by URL, or hit **Choose from media** in the same dialog
   to pick one from your media library; the standalone **Insert image** button opens the
   media picker directly.
@@ -317,6 +323,12 @@ Markdown supports `**bold**`, `*italic*`,
 `## headings`, `- lists`, `1. numbered lists`, `[links](https://…)` — including
 **site-relative links** (`[pricing](/pricing)`) that get client-side navigation — and
 `![images](https://…)`.
+
+Prefer a **picked** link over a typed one for anywhere on this site. A typed
+`/blog/my-post` is a string: it keeps pointing at the old address the day that post's slug
+changes, and nothing warns you. A picked link stores the post itself, so it follows the
+rename — and if the post is later unpublished or deleted, the sentence renders as plain
+words instead of offering a reader a link to nowhere.
 
 There are **two heading sizes**. Any `#` run is read as a heading and clamped onto
 them: `#` becomes the larger one and `####` or deeper become the smaller one, so a
