@@ -59,6 +59,7 @@ import {
 import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.component'
 import AiSeoAuditCard from './components/ai-seo-audit-card.component'
 import AiSiteBatchCard from './components/ai-site-batch-card.component'
+import AiSiteStartCard from './components/ai-site-start-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
 import AiDescribeAutomationButton from './components/ai-describe-automation.component'
 import AiCrmEmailDraft from './components/ai-crm-email-draft.component'
@@ -438,6 +439,20 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiCrmImportMapping,
+      },
+      // The guided start (AGL-2918), on the page a newly created site lands
+      // on: a few questions that become a site scaffold. Gated as the other
+      // generative widgets are, and it asks the jobs route about the release
+      // flag before it shows anything — so a workspace the feature is not
+      // released to gets the blank page and nothing else. Skipping is the
+      // zone's own `startBlank`, which creates nothing.
+      {
+        slot: 'hostFirstRun',
+        widgetId: 'ai-site-start',
+        title: 'Start this site with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiSiteStartCard,
       },
       // The agency batch (AGL-2911): one brief across many of the org's
       // sites, from the page that lists them. The card asks the jobs route

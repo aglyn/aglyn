@@ -90,6 +90,24 @@ export const AI_SITE_BATCH_MIN_HOST_LIMIT = 25
 export interface AiSiteJobInputs {
   /** What the business is, in a few words: the brief's subject. */
   businessType: string
+  /**
+   * Who the site is for, in a few words (AGL-2918); empty when nobody said.
+   * The plan step puts it in front of the model on a line of its own, as it
+   * does every other scalar here, so it narrows the pages a plan proposes
+   * without a prompt of its own.
+   */
+  audience: string
+  /**
+   * The starter site whose shape the person liked (AGL-2918), by its
+   * `STARTER_TEMPLATES` id; empty when they picked none.
+   *
+   * A hint carried as the id rather than the starter, because an id is what
+   * the guided start's list, this door and the plan's line all agree on
+   * without any of them loading a catalog of node maps. Unrecognized ids are
+   * admitted for the same reason an unrecognized business type is: it is a
+   * few words in a brief, not a lookup.
+   */
+  starter: string
   /** How many pages the member asked for. */
   pages: number
   /** The per-site variables an agency batch varies; empty when none was given. */
@@ -123,10 +141,14 @@ export function parseAiSiteJobInputs(
   const businessName = text('businessName')
   const city = text('city')
   const brand = text('brand')
+  const audience = text('audience')
+  const starter = text('starter')
   for (const [key, value] of [
     ['businessName', businessName],
     ['city', city],
     ['brand', brand],
+    ['audience', audience],
+    ['starter', starter],
   ] as const) {
     if (value === null)
       return `${key} must be text under ${AI_SITE_INPUT_MAX_CHARS} characters`
@@ -151,6 +173,8 @@ export function parseAiSiteJobInputs(
   if (batchId === undefined) return 'batchId is not a batch id'
   return {
     businessType,
+    audience: audience as string,
+    starter: starter as string,
     pages,
     businessName: businessName as string,
     city: city as string,
