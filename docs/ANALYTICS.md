@@ -1364,16 +1364,32 @@ have sent events to the property — among them `aglyn-org`, `demo`,
 `34kwy7hnbr`. Nobody can visit `?aglyn_internal=1` on a hostname that does not
 exist yet, so the rows above are the fixed surfaces only.
 
-What holds the rest is `rememberInternalActor` (§8d-pre): it writes
+`rememberInternalActor` (§8d-pre) covers part of it: it writes
 `aglyn_internal_actor` on every staff or impersonation token read, per origin,
-so each console origin self-heals after ONE signed-in load. The residual leak
-is therefore narrow but real — the FIRST pre-sign-in pageview on each origin,
-per browser, which is exactly the `/signin` view that fires before any token
-exists. AGL-3175 carries whether the opt-in should move to a
-`Domain=.aglyn.com` cookie, which is the only mechanism that can cover an
-origin nobody has visited yet. ⚑ That would reverse the reasoning recorded
-above — a cookie rides to the server on every request and lands in logs — so
-it is a decision, not a cleanup.
+so each console origin self-heals after ONE signed-in load. What it cannot
+reach is the FIRST pre-sign-in pageview on each origin — exactly the `/signin`
+view, which fires before any token exists.
+
+✅ **Closed by the domain-wide cookie (AGL-3175).** The console now pins the
+opt-in as a cookie scoped to `WORKSPACE_DOMAIN` as well as in `localStorage`,
+so **one visit to `?aglyn_internal=1` on any console origin covers every
+`*.aglyn.com` origin, including workspaces that do not exist yet.** Either
+source turning it on is enough.
+
+⚑ This reverses the reasoning above deliberately: the cookie does ride to the
+server and land in logs. It carries the constant `internal` and nothing about
+who is using the browser, and it rides beside `__session`, which this domain
+already carries. The trade was worth making because the origin set is
+open-ended and the storage half alone could never cover it.
+
+⛔ **The cookie is written only where a caller passes `cookieDomain`, and the
+console's helper passes it only while the current hostname is under that
+domain.** `readInternalTrafficOverride` is also called from `analytics-beacon`
+and `advertising-tags`, which run on customers' own domains; nothing there
+writes a cookie, and a test asserts that negative directly.
+`INTERNAL_TRAFFIC_GTAG_SNIPPET` is deliberately left on storage alone — it is
+a constant string inlined into ISR-cached customer HTML, it cannot be made
+hostname-aware, and every surface using it is a fixed origin listed above.
 
 Being per-origin is a feature as much as a cost: it is what makes it
 impossible for an opt-in on our console to leak a stamp into a CUSTOMER's

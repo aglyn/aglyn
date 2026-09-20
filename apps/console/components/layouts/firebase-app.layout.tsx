@@ -70,10 +70,11 @@ import {
   INTERNAL_TRAFFIC_PARAM,
   INTERNAL_TRAFFIC_VALUE,
   isInternalTrafficSession,
-  readInternalTrafficOverride,
+  readInternalTrafficOverrideForDomain,
   readRememberedInternalActor,
   rememberInternalActor,
 } from '../../utils/internal-traffic'
+import { WORKSPACE_DOMAIN } from '../../constants/workspace-domain'
 
 /**
  * Let listeners feed the stale-session verdict (AGL-1066).
@@ -369,8 +370,15 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
     // build is ours by definition — so it stamps unconditionally rather than
     // waiting to be opted in, and the hatch cannot become the leak it stands
     // beside.
+    // Domain-wide rather than per origin (AGL-3175). The console is served on
+    // every `*.aglyn.com` hostname, including a generated slug per workspace,
+    // and nobody can visit `?aglyn_internal=1` on a host that does not exist
+    // yet — so a per-origin opt-in could never cover this surface. The helper
+    // writes the cookie only while the current hostname is under
+    // `WORKSPACE_DOMAIN`, which is what keeps it off customer domains.
     const override =
-      readInternalTrafficOverride() || analyticsEnvironmentForcesInternal()
+      readInternalTrafficOverrideForDomain(WORKSPACE_DOMAIN) ||
+      analyticsEnvironmentForcesInternal()
     // Whether the last account whose token this browser read was ours — the
     // only claims-derived answer available before this session's own token
     // resolves. See `readRememberedInternalActor` for why it is a separate
