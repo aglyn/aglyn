@@ -144,3 +144,6 @@ export * from './lib/server/crm-inbound-email'
 export * from './lib/server/member-email-aliases'
 export * from './lib/server/user-profiles'
 export * from './lib/server/legal-acceptance'
+// The person's decision about the platform's own product email, on their
+// document and on the operator's marketing contact (AGL-3185).
+export * from './lib/server/platform-marketing-consent'
