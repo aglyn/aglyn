@@ -62,11 +62,22 @@
  *
  * ## Residual, and deliberately stated rather than fixed here
  *
- * The takeover bumps `validSince`, which stops the attacker REFRESHING — but
- * an ID token they already hold stays cryptographically valid for the rest of
- * its hour, and case 4 measures exactly that. It does not buy them a console:
- * `/api/auth/session` verifies with `checkRevoked` (AGL-1959) and refuses a
- * token minted before the revocation, so no session cookie can be had with it.
+ * The takeover bumps `validSince`, which stops the attacker REFRESHING. An ID
+ * token they already hold stays cryptographically valid for the rest of its
+ * hour, and a verifier that checks only the signature accepts it for that
+ * long: that is the residual. It buys no console, because `/api/auth/session`
+ * verifies with `checkRevoked` (AGL-1959) and refuses a token minted before
+ * the revocation, and the backend itself answers `TOKEN_EXPIRED` to it once
+ * `validSince` passes its `iat`. Case 4 measures both of those closures.
+ *
+ * The residual itself cannot be measured here. The Admin SDK's emulator mode
+ * runs the revocation check whether or not `checkRevoked` is asked for
+ * (`verifyIdToken` in firebase-admin's base-auth: `if (checkRevoked ||
+ * isEmulator)`), and the emulator's own endpoints refuse the token as the
+ * backend does. Until 2026-09-20 this case asserted that `lookup` still
+ * answered the stale token, which it does only when the sign-up and the
+ * takeover share a wall-clock second; that was the emulator's granularity,
+ * not the residual, and it failed whenever the two straddled a tick.
  *
  * Skipped unless FIREBASE_AUTH_EMULATOR_HOST is set — the same convention as
  * the other `*.emulator.spec.ts` files. Start the emulators, then:
@@ -77,8 +88,16 @@
  *       apps/console/specs/oauth-over-unverified-password.emulator.spec.ts
  */
 
+import { getApps, initializeApp } from 'firebase-admin/app'
+import { getAuth } from 'firebase-admin/auth'
+
 const EMULATED = Boolean(process.env.FIREBASE_AUTH_EMULATOR_HOST)
 const describeEmulated = EMULATED ? describe : describe.skip
+
+// Initialized WITHOUT a credential: with FIREBASE_AUTH_EMULATOR_HOST set the
+// Admin SDK talks to the emulator and accepts its unsigned tokens. Case 4 is
+// the only caller; every other case speaks Identity Toolkit directly.
+if (EMULATED && !getApps().length) initializeApp({ projectId: 'aglyn-main' })
 
 const HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST ?? '127.0.0.1:9099'
 const ACCOUNTS = `http://${HOST}/identitytoolkit.googleapis.com/v1/accounts`
@@ -243,26 +262,50 @@ describeEmulated('AGL-2590 · OAuth over an unverified password account', () => 
     expect(stillTheirs.body.localId).toBe(signUp.body.localId)
   })
 
-  it('RESIDUAL: an ID token the attacker already holds outlives the takeover', async () => {
-    // Stated, not fixed. `validSince` moves, so nothing can be REFRESHED — but
-    // a token already minted stays valid for the rest of its hour. It buys no
-    // console: `/api/auth/session` verifies with `checkRevoked` (AGL-1959) and
-    // refuses to mint a cookie from a token older than the revocation. This
-    // case exists so the residual is measured rather than assumed away.
+  it('RESIDUAL: a token the attacker already holds is refused by the backend and by checkRevoked', async () => {
+    // Stated, not fixed. The takeover moves `validSince`, and both verifiers
+    // the console relies on compare the token against it in whole seconds:
+    //
+    //   assert(!user.validSince || decoded.payload.iat >= Number(user.validSince), "TOKEN_EXPIRED")
+    //   — firebase-tools 15.24.0, src/emulator/auth/operations.ts, parseIdToken
+    //   if (authTimeUtc < validSinceUtc) throw ID_TOKEN_REVOKED
+    //   — firebase-admin, base-auth, verifyDecodedJWTNotRevokedOrDisabled
+    //
+    // A token minted in the takeover's own second passes both, so this case
+    // waits that second out: its verdict must not depend on which side of a
+    // clock tick two fast calls land. What remains open, a verifier that
+    // checks the signature alone, is stated in the file comment; the emulator
+    // cannot show it, because the Admin SDK checks revocation there regardless.
     const { email, sub } = identity('residual')
     const signUp = await identityToolkit('signUp', {
       email,
       password: 'AttackerKnows123!',
       returnSecureToken: true,
     })
-    await signInWithGoogle(email, true, sub)
+    expect(signUp.status).toBe(200)
+    await new Promise((resolve) => setTimeout(resolve, 1_100))
+    const google = await signInWithGoogle(email, true, sub)
+    expect(google.status).toBe(200)
+
+    // The backend's answer to the token the attacker kept.
     const stale = await identityToolkit('lookup', {
       idToken: signUp.body.idToken,
     })
-    expect(stale.status).toBe(200)
-    // And it now describes the account the VICTIM owns, which is the shape of
-    // the risk: the uid did not change, only who can obtain new tokens for it.
-    expect(stale.body.users[0].localId).toBe(signUp.body.localId)
-    expect(stale.body.users[0].emailVerified).toBe(true)
+    expect(stale.status).toBe(400)
+    expect(stale.body.error.message).toBe('TOKEN_EXPIRED')
+
+    // The console's answer: `/api/auth/session` verifies exactly this way.
+    await expect(getAuth().verifyIdToken(signUp.body.idToken, true)).rejects.toMatchObject({
+      code: 'auth/id-token-revoked',
+    })
+
+    // The account is the VICTIM's now, and the uid did not change: only who
+    // can obtain tokens for it did.
+    const fresh = await identityToolkit('lookup', {
+      idToken: google.body.idToken,
+    })
+    expect(fresh.status).toBe(200)
+    expect(fresh.body.users[0].localId).toBe(signUp.body.localId)
+    expect(fresh.body.users[0].emailVerified).toBe(true)
   })
 })

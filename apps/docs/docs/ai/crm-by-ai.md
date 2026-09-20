@@ -1,10 +1,10 @@
 ---
 sidebar_position: 9
-title: CRM by AI
-description: A short summary and a suggested next step on a contact, company, deal or lead, a one-to-one email drafted into the composer, and an import's columns matched to fields. Aglyn AI suggests; you save, send and import.
+title: The AI CRM built into Aglyn
+description: An AI CRM for small business: a short summary and a suggested next step on a contact, company, deal or lead, a one-to-one email drafted into the composer, and an import's columns matched to fields.
 ---
 
-# CRM by AI
+# The AI CRM built into Aglyn
 
 Aglyn AI works in three places in the CRM. In each one it makes a suggestion and you decide
 what happens next: nothing is saved, sent or imported until you do it yourself.
