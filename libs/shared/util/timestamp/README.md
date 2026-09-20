@@ -47,7 +47,7 @@ zonedDateTime(Date.now(), 'America/Chicago').weekday
 The wall clock an IANA zone shows for an instant, the instant a wall time
 happens at (the spring gap moves forward, the autumn overlap takes the earlier
 pass), day boundaries, business days, and weekly schedules of open stretches.
-It is the one copy the booking slots, the CRM digest and Outreach's send
+It is the one copy the booking slots, the CRM digest and the Sequences send
 windows read. Imports nothing, like `timestamp-json`, and
 `zoned-time.isolation.spec.ts` holds it to that.
 
