@@ -82,16 +82,27 @@ item matched exactly as before — a path beneath it does not resolve. See
 
 | API | Semantics |
 | --- | --- |
-| `createPluginLoader(manifest)` | One loader per generated manifest; loads are cached per plugin, registrations once per plugin+surface. |
-| `loader.ensure(ids, surfaces)` | Loads + registers the given plugins' surfaces. Returns a **stable promise per (ids, surfaces)** so React `use()` can suspend on it during SSR — the canvas never renders against an empty registry. Unknown ids are ignored (marketplace realm plugins load separately); `alwaysOn` entries activate regardless. |
+| `createPluginLoader(manifest)` | One loader per generated manifest; loads are cached per plugin, registrations per plugin+surface+use. |
+| `loader.ensure(ids, surfaces, use?)` | Loads + registers the given plugins' surfaces. Returns a **stable promise per (ids, surfaces, use)** so React `use()` can suspend on it during SSR — the canvas never renders against an empty registry. Unknown ids are ignored (marketplace realm plugins load separately); `alwaysOn` entries activate regardless. |
 | `loader.ensureAll(surfaces)` | Every manifest plugin — the API dispatchers' lazy-load-all. |
 | `loader.pluginIdForApiPath(path)` | Prefix-map fallback for the per-request org gate. |
 
-**Lifecycle**: all `register` fns in an ensure batch run first, then each
-module's optional **`bootstrap<Surface>()`** export runs (manifest order,
-once per plugin+surface, failures logged not fatal) — the sanctioned place
-for cross-plugin wiring. Plugins loaded by a later ensure bootstrap in that
-batch, so read registries lazily rather than snapshotting.
+**Lifecycle**: every module in an ensure batch is fetched at once, then the
+`register` fns run one at a time in manifest order and each is **awaited**,
+then each module's optional **`bootstrap<Surface>()`** export runs (manifest
+order, once per plugin+surface, failures logged not fatal) — the sanctioned
+place for cross-plugin wiring. Plugins loaded by a later ensure bootstrap in
+that batch, so read registries lazily rather than snapshotting.
+
+**`use` — what the surface actually uses** (AGL-3141). `{ componentIds }` as
+the page computed it, handed to every register fn unchanged. A plugin that
+can register a part of itself reads it and imports only those modules; one
+that cannot ignores it. Omit it and every plugin registers all of itself,
+which is what the console and the besigner want — their palette shows every
+element — and what any surface that cannot say what it places MUST do: an
+element whose component never registered renders nothing, silently.
+Registration is bookkept per plugin+surface+use, so a second page that places
+a component the first did not still reaches the plugin.
 
 ## Server APIs — `api-plugins` (`/server` only)
 

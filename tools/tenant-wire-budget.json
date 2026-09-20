@@ -4,7 +4,7 @@
   "groups": [
     {
       "name": "every published page",
-      "why": "The document's own chunks, plus the three imports every published page makes before it settles.",
+      "why": "The document's own chunks, plus the three imports every published page makes before it settles. The mui import stopped carrying the element library in AGL-3141: its sixty components load on demand, so this group holds the floor every page pays and no longer holds elements the page does not place. What a page then adds for its own elements is NOT in this measurement — an `import()` is a chunk a branch asks for, and `check:plugins-load-where-used` holds a deferred plugin module to staying deferred. Measured on beta.134's build: 14.7 KB for a six-element page, 127.9 KB for a nineteen-element one, 177.2 KB for a blog entry, 416.7 KB for all sixty, against the 191.0 KB this group shed.",
       "loads": [
         {
           "from": "apps/tenant/utils/plugins.client.generated.ts",
@@ -22,12 +22,12 @@
           "why": "Real-user vitals, measured on every page."
         }
       ],
-      "baselineBytes": 506481,
-      "budgetBytes": 532480
+      "baselineBytes": 312320,
+      "budgetBytes": 328704
     },
     {
       "name": "a site with the marketing plugin",
-      "why": "What the marketing plugin's site runtime adds on a site that enables it, as aglyn.com does.",
+      "why": "What the marketing plugin's site runtime adds on a site that enables it, as aglyn.com does. Its baseline rose in AGL-3141 without a marketing site loading anything new: the shared MUI runtime it reaches used to be counted in the group above, which held every element statically, and is counted here now that the elements load on demand.",
       "loads": [
         {
           "from": "apps/tenant/utils/plugins.client.generated.ts",
@@ -35,12 +35,12 @@
           "why": "Its site runtime (overlays, experiments, client automations) mounts on every page of the site."
         }
       ],
-      "baselineBytes": 7483,
-      "budgetBytes": 8192
+      "baselineBytes": 30484,
+      "budgetBytes": 32768
     },
     {
       "name": "a page that uses a realm plugin",
-      "why": "What a page adds when it uses a trusted realm install (AGL-3116): the host ABI hands a remote bundle the whole core namespace, so this group grows with every export added to @aglyn/aglyn. A page whose realm installs it does not use loads none of it.",
+      "why": "What a page adds when it uses a trusted realm install (AGL-3116): the host ABI hands a remote bundle the whole core namespace, so this group grows with every export added to @aglyn/aglyn. A page whose realm installs it does not use loads none of it. Its baseline rose in AGL-3141 for the reason the marketing group above gives: shared chunks it did not use to pay for are no longer counted by the group above it.",
       "loads": [
         {
           "from": "apps/tenant/utils/realm-plugins.client.ts",
@@ -48,8 +48,8 @@
           "why": "Composes __AGLYN_PLUGIN_HOST__ before any realm bundle the page uses runs."
         }
       ],
-      "baselineBytes": 216816,
-      "budgetBytes": 228352
+      "baselineBytes": 248158,
+      "budgetBytes": 261120
     }
   ]
 }

@@ -110,7 +110,9 @@ describe('first-party plugins declare what they register (AGL-3116)', () => {
     const mod = await entry.load()
     for (const surface of ['console', 'staff']) {
       const name = entry.register[surface]
-      if (name) (mod[name] as () => void)()
+      // Awaited, because a registrar that loads what the surface uses
+      // returns a promise (AGL-3141).
+      if (name) await (mod[name] as () => void | Promise<void>)()
     }
     // A registrar may register more than one extension — commerce registers
     // the User Accounts card under the `accounts` switch — and every one of
@@ -136,7 +138,9 @@ describe('first-party plugins declare what they register (AGL-3116)', () => {
       if (!name) continue
       const before = new Set(Object.keys(components.schemas))
       const load = entry.loads?.['site'] ?? entry.load
-      ;((await load())[name] as () => void)()
+      // Awaited, and called with no use context, so a registrar that can
+      // narrow itself registers ALL of what it declares (AGL-3141).
+      await ((await load())[name] as () => void | Promise<void>)()
       for (const componentId of Object.keys(components.schemas)) {
         if (!before.has(componentId)) owner.set(componentId, entry.id)
       }

@@ -1420,11 +1420,12 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
   // The card's facts (AGL-2850) are read by `generateMetadata` and by nothing
   // the client renders, so they stop here rather than cross into its payload.
   const shippedProps = withoutHeadOnlyProps(result.props)
-  // `blockingPlugins` is already on `result.props` — the loader computes it
-  // from the FULL document, before this prune. That ordering matters: a
-  // component sitting inside a withheld panel still belongs to this page, and
-  // narrowing on the pruned map would drop its plugin and leave that panel
-  // unrenderable the moment someone opened it.
+  // `blockingPlugins` and `placedComponents` are already on `result.props` —
+  // the loader computes both from the FULL document, before this prune. That
+  // ordering matters: a component sitting inside a withheld panel still
+  // belongs to this page, and narrowing on the pruned map would drop its
+  // plugin, or its element from the bundle that registers it, and leave that
+  // panel unrenderable the moment someone opened it.
   const prunedProps: Props = deferred?.deferredPanelIds.length
     ? {
         ...shippedProps,

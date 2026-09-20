@@ -45,6 +45,7 @@ import getTemplateScreenIds, {
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import getVariables from '@aglyn/tenant-runtime/get-variables'
 import {
+  placedComponentIds,
   realmPluginsInUse,
   requiredSitePlugins,
 } from '@aglyn/tenant-runtime/required-site-plugins'
@@ -89,19 +90,29 @@ import type { LoadResult, Props } from './types'
  * absent from `contributors` mounts late, after paint. Auth-screen pages pass
  * no enrichment because they return before `runSitePageEnrichers` and so have
  * none; only their nodes can require a plugin.
+ *
+ * It also answers the second, narrower question (AGL-3141): WHICH of a
+ * plugin's components this page places. Both are read from the same document,
+ * which is the whole reason they share a helper — a page that narrowed one
+ * from the full tree and the other from a pruned one would load the right
+ * plugins and register the wrong elements.
  */
 const blockingPluginsFor = (
   nodes: Record<string, any> | null | undefined,
   enabledPlugins: string[] | undefined,
   enrichment?: { contributors: string[]; unattributed: boolean },
-): { blockingPlugins?: string[] } => {
+): { blockingPlugins?: string[]; placedComponents?: string[] } => {
   const blockingPlugins = requiredSitePlugins({
     nodes,
     contributors: enrichment?.contributors,
     unattributed: enrichment?.unattributed,
     enabledPlugins,
   })
-  return blockingPlugins ? { blockingPlugins } : {}
+  const placedComponents = placedComponentIds(nodes)
+  return {
+    ...(blockingPlugins ? { blockingPlugins } : {}),
+    ...(placedComponents ? { placedComponents } : {}),
+  }
 }
 
 /**

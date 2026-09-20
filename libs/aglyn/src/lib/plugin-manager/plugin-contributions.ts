@@ -227,6 +227,31 @@ export function readPluginContributions(
   return verdict.ok ? verdict.contributions : undefined
 }
 
+/**
+ * What the surface a plugin is being registered into actually uses
+ * (AGL-3141).
+ *
+ * The loaders carry this from the surface that computed it to each plugin's
+ * register function, unchanged. A plugin that can register a part of itself
+ * reads it; one that cannot ignores it, and the platform's behavior is the
+ * same either way.
+ *
+ * An absent field means "everything of that kind". A surface that cannot say
+ * what it uses must be handed all of it, because an element the surface
+ * places and the set omits has no registered component and renders NOTHING,
+ * silently (the blank-canvas invariant, AGL-52). Narrowing is an optimization
+ * and must fail toward the whole.
+ */
+export interface PluginUse {
+  /**
+   * Canvas component ids the surface places, read from the FULL composed
+   * document the way `pagePresence` reads it — withheld lazy-panel subtrees
+   * included, because an element inside a panel the visitor opens later is
+   * still this page's element.
+   */
+  componentIds?: readonly string[]
+}
+
 /** A node as presence reads it: the two ids a placed element carries. */
 export interface PresenceNode {
   componentId?: string

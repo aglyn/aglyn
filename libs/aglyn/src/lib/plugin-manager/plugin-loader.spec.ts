@@ -144,6 +144,77 @@ describe('plugin loader lifecycle (AGL-417/429)', () => {
   })
 })
 
+/**
+ * What the surface uses reaches the plugin, and a second surface that uses
+ * more still reaches it (AGL-3141).
+ *
+ * The failure this guards is silent: a page places an element, the plugin was
+ * never told about it, and the element renders nothing at all (AGL-52). It is
+ * the second page that breaks, because the first one's registration is what
+ * the bookkeeping would otherwise call done.
+ */
+describe('the use context a surface registers with (AGL-3141)', () => {
+  const useManifest = (seen: Array<readonly string[] | undefined>) => [
+    {
+      id: 'library',
+      register: { site: 'registerLibrary' },
+      load: async () => ({
+        registerLibrary: async (use?: { componentIds?: readonly string[] }) => {
+          seen.push(use?.componentIds)
+        },
+      }),
+    },
+  ] satisfies PluginLoadManifest
+
+  it('hands the register fn what the surface uses, and awaits it', async () => {
+    const seen: Array<readonly string[] | undefined> = []
+    const loader = createPluginLoader(useManifest(seen))
+    await loader.ensure(['library'], ['site'], { componentIds: ['a', 'b'] })
+    expect(seen).toEqual([['a', 'b']])
+  })
+
+  it('registers again for a page that places something new', async () => {
+    const seen: Array<readonly string[] | undefined> = []
+    const loader = createPluginLoader(useManifest(seen))
+    await loader.ensure(['library'], ['site'], { componentIds: ['a'] })
+    await loader.ensure(['library'], ['site'], { componentIds: ['a', 'c'] })
+    expect(seen).toEqual([['a'], ['a', 'c']])
+  })
+
+  it('does not register again for a page whose use is already covered', async () => {
+    const seen: Array<readonly string[] | undefined> = []
+    const loader = createPluginLoader(useManifest(seen))
+    await loader.ensure(['library'], ['site'], { componentIds: ['a', 'b'] })
+    await loader.ensure(['library'], ['site'], { componentIds: ['b'] })
+    expect(seen).toEqual([['a', 'b']])
+  })
+
+  it('an unbounded ask is not covered by a narrow one, and covers it after', async () => {
+    const seen: Array<readonly string[] | undefined> = []
+    const loader = createPluginLoader(useManifest(seen))
+    await loader.ensure(['library'], ['site'], { componentIds: ['a'] })
+    // The console asks for everything; a list it already registered does not
+    // answer that.
+    await loader.ensure(['library'], ['site'])
+    await loader.ensure(['library'], ['site'], { componentIds: ['z'] })
+    expect(seen).toEqual([['a'], undefined])
+  })
+
+  it('caches the ensure promise per use, not per (ids, surfaces)', async () => {
+    const seen: Array<readonly string[] | undefined> = []
+    const loader = createPluginLoader(useManifest(seen))
+    const first = loader.ensure(['library'], ['site'], { componentIds: ['a'] })
+    // Same contents, a different array: the key is what is in it.
+    expect(loader.ensure(['library'], ['site'], { componentIds: ['a'] })).toBe(
+      first,
+    )
+    expect(
+      loader.ensure(['library'], ['site'], { componentIds: ['b'] }),
+    ).not.toBe(first)
+    await first
+  })
+})
+
 describe('a surface with a module of its own (AGL-3116)', () => {
   it('loads each surface from its own module, once', async () => {
     const loaded: string[] = []

@@ -17,7 +17,14 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { render } from '@testing-library/react'
-import { MUI_BUNDLE } from './plugin'
+import { loadMuiBundle, type MuiBundleEntry } from './plugin'
+
+/** The whole library, resolved once — the bundle loads on demand (AGL-3141). */
+let MUI_BUNDLE: MuiBundleEntry[] = []
+
+beforeAll(async () => {
+  MUI_BUNDLE = await loadMuiBundle()
+})
 
 /**
  * An empty element's authoring hint is for the person editing the page

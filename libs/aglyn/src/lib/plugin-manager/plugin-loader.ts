@@ -19,11 +19,11 @@
  * Dynamic plugin activation (AGL-417). Apps never import @aglyn/plugins-*;
  * they hand this loader a GENERATED manifest of `() => import(...)` thunks
  * (see tools/scripts/generate-plugin-manifests.mjs) and activate plugins at
- * runtime from `org.enabledPlugins` (AGL-416). Loading and registration are
- * cached per entry+surface, and `ensure` returns a stable promise per
- * (ids, surfaces) so React `use()` can suspend on it during SSR — the canvas
- * never renders before its components are registered (the blank-canvas
- * invariant, AGL-52).
+ * runtime from `org.enabledPlugins` (AGL-416). Loading is cached per
+ * entry+surface and registration per entry+surface+use, and `ensure` returns
+ * a stable promise per (ids, surfaces, use) so React `use()` can suspend on
+ * it during SSR — the canvas never renders before its components are
+ * registered (the blank-canvas invariant, AGL-52).
  */
 
 export interface PluginLoadEntry {
@@ -52,25 +52,76 @@ export type PluginLoadManifest = readonly PluginLoadEntry[]
 
 export interface PluginLoader {
   /**
-   * Loads + registers the given plugins' surfaces (once each). `ids` may
-   * include unknown ids (marketplace realm plugins — ignored here); manifest
-   * entries marked alwaysOn activate regardless of `ids`.
+   * Loads + registers the given plugins' surfaces. `ids` may include unknown
+   * ids (marketplace realm plugins — ignored here); manifest entries marked
+   * alwaysOn activate regardless of `ids`.
+   *
+   * `use` is what the surface actually uses (AGL-3141), carried unchanged to
+   * every register function: the page computes it, the loader carries it, a
+   * plugin reads it or ignores it. Omitting it asks for everything, which is
+   * what a surface that cannot narrow must do.
+   *
+   * A surface registers once per plugin per use context. A second page that
+   * places a component the first did not still reaches the plugin, so the
+   * element it added has a component to render (AGL-52); one whose use is
+   * already covered costs nothing.
    */
-  ensure(ids: readonly string[], surfaces: readonly string[]): Promise<void>
+  ensure(
+    ids: readonly string[],
+    surfaces: readonly string[],
+    use?: PluginUse,
+  ): Promise<void>
   /** Every manifest plugin, for `ensureAll` semantics (server dispatchers). */
   ensureAll(surfaces: readonly string[]): Promise<void>
   /** The plugin owning an api path ('bookings/slots' → 'bookings'). */
   pluginIdForApiPath(path: string): string | undefined
 }
 
+/**
+ * A register function as the loader calls it: handed the surface's use
+ * context, and awaited, because a plugin that imports what the surface uses
+ * returns a promise.
+ */
+type PluginRegisterFn = (use?: PluginUse) => void | Promise<void>
+
+/** What one plugin+surface has already registered for. */
+interface RegisteredFor {
+  /** It registered with no use context, so it registered all of itself. */
+  all: boolean
+  /** The component ids it has been handed so far. */
+  componentIds: Set<string>
+}
+
 // From the leaf module, not the API route registry that re-exports it: this
 // loader is on every published page, and the registry is server-only.
 import { setRegisteringPluginId } from '../app-utils/registering-plugin'
+import type { PluginUse } from './plugin-contributions'
 import { plugins } from '../aglyn'
+
+/** Whether an earlier registration already covers this use context. */
+function covers(done: RegisteredFor | undefined, use?: PluginUse): boolean {
+  if (!done) return false
+  if (done.all) return true
+  // An unbounded ask is never covered by a narrow one: the plugin was handed
+  // a list, so it registered a list.
+  if (!use?.componentIds) return false
+  return use.componentIds.every((id) => done.componentIds.has(id))
+}
+
+/**
+ * A use context as a cache key.
+ *
+ * Absent is its own key, and a different one from an empty list: a surface
+ * that cannot say what it uses asks for everything, where one that places no
+ * component asks for nothing.
+ */
+function keyForUse(use?: PluginUse): string {
+  return use?.componentIds ? `c:${[...use.componentIds].sort().join(',')}` : '*'
+}
 
 export function createPluginLoader(manifest: PluginLoadManifest): PluginLoader {
   const loads = new Map<string, Promise<Record<string, unknown>>>()
-  const registered = new Set<string>()
+  const registered = new Map<string, RegisteredFor>()
   const bootstrapped = new Set<string>()
   const ensures = new Map<string, Promise<void>>()
   const prefixToId = new Map<string, string>()
@@ -90,12 +141,23 @@ export function createPluginLoader(manifest: PluginLoadManifest): PluginLoader {
     return promise
   }
 
-  const activate = async (
+  /**
+   * Fetches what `surfaces` register from, and hands back the registration
+   * itself as a step to run later.
+   *
+   * The two are separated because registration is now AWAITED (AGL-3141): a
+   * plugin that imports the components the surface uses returns a promise,
+   * and a register fn that yields would otherwise overlap another plugin's —
+   * leaving `setRegisteringPluginId` naming the wrong owner for whatever the
+   * first one registers after it resumes. Loading still runs for every plugin
+   * at once, which is where the time is; only the registrations are ordered.
+   */
+  const prepare = async (
     entry: PluginLoadEntry,
     surfaces: readonly string[],
-  ) => {
+  ): Promise<(use?: PluginUse) => Promise<void>> => {
     const wanted = surfaces.filter((surface) => entry.register[surface])
-    if (!wanted.length) return
+    if (!wanted.length) return async () => undefined
     // Dev-mode load metrics (AGL-436): slow plugins show up in the
     // console instead of hiding inside the gate's total.
     const startedAt = Date.now()
@@ -103,32 +165,41 @@ export function createPluginLoader(manifest: PluginLoadManifest): PluginLoader {
       wanted.map((surface) => loadOnce(entry, surface)),
     )
     const loadMs = Date.now() - startedAt
-    for (const [index, surface] of wanted.entries()) {
-      const mod = modules[index]
-      const key = `${entry.id}:${surface}`
-      if (registered.has(key)) continue
-      registered.add(key)
-      const fnName = entry.register[surface] as string
-      const fn = mod[fnName]
-      if (typeof fn !== 'function') {
-        // A manifest/plugin drift bug — surface loudly, don't crash the app.
-        console.error(`plugin ${entry.id}: missing register fn ${fnName}`)
-        continue
+    return async (use?: PluginUse) => {
+      for (const [index, surface] of wanted.entries()) {
+        const mod = modules[index]
+        const key = `${entry.id}:${surface}`
+        const done = registered.get(key)
+        if (covers(done, use)) continue
+        registered.set(key, {
+          all: done?.all || !use?.componentIds,
+          componentIds: new Set([
+            ...(done?.componentIds ?? []),
+            ...(use?.componentIds ?? []),
+          ]),
+        })
+        const fnName = entry.register[surface] as string
+        const fn = mod[fnName]
+        if (typeof fn !== 'function') {
+          // A manifest/plugin drift bug — surface loudly, don't crash the app.
+          console.error(`plugin ${entry.id}: missing register fn ${fnName}`)
+          continue
+        }
+        // Mark ownership while the register fn runs so registerPluginApiRoute
+        // records exact path→plugin attribution for the per-org gate.
+        setRegisteringPluginId(entry.id)
+        try {
+          await (fn as PluginRegisterFn)(use)
+        } finally {
+          setRegisteringPluginId(undefined)
+        }
       }
-      // Mark ownership while the register fn runs so registerPluginApiRoute
-      // records exact path→plugin attribution for the per-org gate.
-      setRegisteringPluginId(entry.id)
-      try {
-        ;(fn as () => void)()
-      } finally {
-        setRegisteringPluginId(undefined)
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug(
+          `[plugin-loader] ${entry.id} [${wanted.join(',')}] ` +
+            `load ${loadMs}ms, total ${Date.now() - startedAt}ms`,
+        )
       }
-    }
-    if (process.env.NODE_ENV !== 'production') {
-      console.debug(
-        `[plugin-loader] ${entry.id} [${wanted.join(',')}] ` +
-          `load ${loadMs}ms, total ${Date.now() - startedAt}ms`,
-      )
     }
   }
 
@@ -194,15 +265,25 @@ export function createPluginLoader(manifest: PluginLoadManifest): PluginLoader {
   const ensure = (
     ids: readonly string[],
     surfaces: readonly string[],
+    use?: PluginUse,
   ): Promise<void> => {
-    const key = `${[...ids].sort().join(',')}|${[...surfaces].sort().join(',')}`
+    // The use context is part of the key, not just of the bookkeeping: a
+    // second page that places components the first did not must get its own
+    // run, or it would be handed the first page's settled promise and render
+    // its extra elements against nothing (AGL-52).
+    const key =
+      `${[...ids].sort().join(',')}|${[...surfaces].sort().join(',')}` +
+      `|${keyForUse(use)}`
     let promise = ensures.get(key)
     if (!promise) {
       const targets = manifest.filter(
         (entry) => entry.alwaysOn || ids.includes(entry.id),
       )
       const run = async (): Promise<void> => {
-        await Promise.all(targets.map((entry) => activate(entry, surfaces)))
+        const steps = await Promise.all(
+          targets.map((entry) => prepare(entry, surfaces)),
+        )
+        for (const step of steps) await step(use)
         await bootstrap(targets, surfaces)
         warnStuck(targets)
       }

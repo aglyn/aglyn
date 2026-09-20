@@ -28,7 +28,19 @@ import { schema as stack } from './components/stack'
 import { schema as toolbar } from './components/toolbar'
 import { schema as typography } from './components/typography'
 import { BUNDLE_ID } from './constants/bundle-common'
-import { MUI_BUNDLE, registerMuiPlugin } from './plugin'
+import {
+  loadMuiBundle,
+  registerMuiPlugin,
+  type MuiBundleEntry,
+} from './plugin'
+
+/**
+ * The whole library, resolved once (AGL-3141). The bundle is no longer a
+ * static array: the components load on demand so a published page fetches
+ * only what it places, and `loadMuiBundle()` with nothing named is the "all"
+ * path the console and the besigner take.
+ */
+let MUI_BUNDLE: MuiBundleEntry[] = []
 
 // These ids are persisted in screen documents and must never change
 // without a document migration.
@@ -114,14 +126,18 @@ const MUI_DECLARED_CONTAINERS: readonly string[] = [
 ]
 
 describe('plugins-mui', () => {
-  it('registers the mui plugin dependency with the legacy runtime', () => {
-    registerMuiPlugin()
+  beforeAll(async () => {
+    MUI_BUNDLE = await loadMuiBundle()
+  })
+
+  it('registers the mui plugin dependency with the legacy runtime', async () => {
+    await registerMuiPlugin()
     expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBeTruthy()
   })
 
-  it('is idempotent', () => {
-    registerMuiPlugin()
-    expect(() => registerMuiPlugin()).not.toThrow()
+  it('is idempotent', async () => {
+    await registerMuiPlugin()
+    await expect(registerMuiPlugin()).resolves.toBeUndefined()
   })
 
   it('registers every component under a distinct id (AGL-1201)', () => {

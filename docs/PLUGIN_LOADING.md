@@ -145,6 +145,17 @@ Every link must hold before a byte executes:
   with the staff-only trust grants — clients can't read version docs) and
   `loadRealmPlugins` executes each verified bundle via a blob-URL import,
   calling its exported `register(host)`. Loaded before the shell renders.
+- **Within a plugin** (AGL-3141): `loader.ensure(ids, surfaces, use)` carries
+  what the surface uses — `{ componentIds }` — to every register fn, and a
+  plugin that can register a part of itself reads it. The tenant computes it
+  in `placedComponentIds` from the FULL composed document, withheld lazy-panel
+  subtrees included, and ships it as `props.placedComponents`; `mui` then
+  imports the modules for those elements and leaves the rest of its sixty
+  behind. A caller that names nothing gets all of the plugin, which is what
+  the console and the besigner ask for and what a page with no document to
+  read must ask for — an element whose component never registered renders
+  nothing at all (AGL-52). Registration is bookkept per plugin+surface+use, so
+  a second page that places a component the first did not still gets it.
 - **Sites**: `load-page-data` ships `props.realmPlugins` (same join,
   admin SDK), narrowed to the installs THIS page uses (AGL-3116,
   `realmPluginsInUse`): a pinned version is used where the page places a
