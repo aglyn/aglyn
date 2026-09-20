@@ -74,6 +74,31 @@ export function applyCommandToSource(
   }
 }
 
+/**
+ * Writes one link over [start, end) — what the link dialog's answer becomes
+ * on the raw-source surface (AGL-3119).
+ *
+ * Separate from the command above because a link is the one command that
+ * cannot be a template: `[link text](https://)` is a placeholder the author
+ * has to finish by hand, and the whole point of the dialog is that an
+ * internal target is PICKED, so what lands here is already a reference or a
+ * checked address.
+ */
+export function applyLinkToSource(
+  body: string,
+  start: number,
+  end: number,
+  link: { href: string; text?: string },
+): SourceEdit {
+  const text = link.text?.trim() || body.slice(start, end).trim() || link.href
+  const insert = `[${text}](${link.href})`
+  return {
+    body: body.slice(0, start) + insert + body.slice(end),
+    start,
+    end: start + insert.length,
+  }
+}
+
 /** Markdown-lite's syntax, as one line of helper text under a source box. */
 export const MARKDOWN_SOURCE_HINT =
   'Markdown-lite: **bold**, *italic*, # or ## headings, - lists, ' +

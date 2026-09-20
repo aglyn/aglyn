@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/plugins-outreach",
-  "version": "1.0.0-beta.131",
+  "version": "1.0.0-beta.132",
   "type": "module",
   "exports": {
     ".": {
@@ -20,6 +20,7 @@
     "@mui/material": "^9.3.1",
     "firebase": "^12.18.0",
     "firebase-admin": "^14.3.0",
+    "next": "16.3.3",
     "react": "^19.2.8"
   },
   "sideEffects": false

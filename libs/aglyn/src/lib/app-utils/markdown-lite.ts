@@ -24,6 +24,15 @@
  */
 
 import { isMediaRef, parseMediaRef } from './media-ref'
+import {
+  parseCollectionLinkValue,
+  parseEntryLinkValue,
+  parseFeedLinkValue,
+  parseScreenLinkValue,
+  resolveScreenHref,
+  SCREEN_LINK_VALUE_PREFIX,
+  screenRoutesAnswerFor,
+} from './screen-link-value'
 
 export type MarkdownInline =
   | { type: 'text'; text: string }
@@ -107,13 +116,36 @@ export function isSupportedImageSrc(url: string): boolean {
 }
 
 /**
+ * Whether a link target is a stored REFERENCE rather than an address
+ * (AGL-3118): a screen, a collection listing, an entry or a feed, named by id
+ * so a rename cannot break it. Only the marked, well-formed forms count — a
+ * bare id is indistinguishable from a relative path with no slash, so it
+ * stays what the dialect has always made of it.
+ *
+ * Kept verbatim in the parsed link: a renderer resolves it against the same
+ * routing map element links use, and the serializer writes it back as typed.
+ */
+export function isMarkdownLinkReference(url: string): boolean {
+  if (url.startsWith(SCREEN_LINK_VALUE_PREFIX)) {
+    return parseScreenLinkValue(url) !== undefined
+  }
+  return (
+    parseCollectionLinkValue(url) !== undefined ||
+    parseEntryLinkValue(url) !== undefined ||
+    parseFeedLinkValue(url) !== undefined
+  )
+}
+
+/**
  * Link targets additionally allow SITE-RELATIVE paths (AGL-582) so entry
  * markdown can link to other pages of the same site — renderers give those
- * client-side navigation. Protocol-relative `//host` is rejected: it would
- * silently leave the site.
+ * client-side navigation — and link REFERENCES (AGL-3118), which renderers
+ * resolve to wherever the target lives now. Protocol-relative `//host` is
+ * rejected: it would silently leave the site.
  */
 function safeLinkUrl(url: string): string | null {
   if (/^\/(?!\/)/.test(url)) return url
+  if (isMarkdownLinkReference(url)) return url
   return safeUrl(url)
 }
 
@@ -142,8 +174,12 @@ function safeLinkUrl(url: string): string | null {
  *
  * Protocol-relative stays refused here exactly as it is for links.
  *
- * It takes one thing LESS than a link, though: `http:` (AGL-1713). An image is
- * fetched the moment the page renders; a link is followed by the reader's
+ * It takes two things LESS than a link. A link REFERENCE (AGL-3118) names a
+ * page, not a file, so no renderer has a picture to fetch for one; kept, it
+ * would reach an `<img src="entry:…">`.
+ *
+ * And `http:` (AGL-1713). An image is fetched the moment the page renders; a
+ * link is followed by the reader's
  * choice, past an interstitial the browser puts up. So an `http:` image on our
  * TLS pages is mixed content that every current browser blocks outright — the
  * permissive form never rendered a picture, it only moved the failure from
@@ -157,6 +193,7 @@ function safeLinkUrl(url: string): string | null {
 function safeImageUrl(url: string): string | null {
   if (isMediaRef(url)) return parseMediaRef(url) ? url : null
   if (/^http:\/\//i.test(url)) return null
+  if (isMarkdownLinkReference(url)) return null
   return safeLinkUrl(url)
 }
 
@@ -182,6 +219,57 @@ function safeImageUrl(url: string): string | null {
  */
 export function isInternalMarkdownHref(href: string): boolean {
   return /^\/(?!\/)/.test(href) && !/^\/api\//.test(href)
+}
+
+/** How a renderer draws one parsed link — see {@link resolveMarkdownLink}. */
+export type MarkdownLinkResolution =
+  /** The link's text alone, with no anchor: a reference to a missing target. */
+  | { kind: 'text' }
+  /** Drawn as a link with nothing to follow, on an editing surface. */
+  | { kind: 'inert' }
+  /** A page of this site, for client-side navigation. */
+  | { kind: 'internal'; href: string }
+  /** Anything else the parser kept, as a plain anchor. */
+  | { kind: 'external'; href: string }
+
+/**
+ * What one parsed link renders as (AGL-3118), for every markdown-lite
+ * renderer on a site: the Markdown element, the entry body and the legacy
+ * article surface.
+ *
+ * A link REFERENCE resolves against the routing map element links use, so a
+ * link in a post follows its target through a rename exactly as a button
+ * does, and a target the map does not have (unpublished, deleted, or never
+ * asked for) renders as the link's text — never as an anchor whose href is
+ * the stored reference. Every other href is the one the parser kept.
+ *
+ * An editing surface withholds every href, so there the only question is
+ * whether a link is drawn at all: a reference the map KNOWS is gone reads as
+ * the text the published page will show, and one the map cannot judge yet —
+ * nothing of its kind has loaded — keeps the link look, for the reason
+ * `isScreenLinkBroken` gives.
+ */
+export function resolveMarkdownLink(
+  href: string,
+  context: {
+    screens?: Record<string, string> | null
+    suppressNavigation?: boolean
+  } = {},
+): MarkdownLinkResolution {
+  const screens = context.screens ?? undefined
+  const reference = isMarkdownLinkReference(href)
+  const resolved = reference ? resolveScreenHref(screens, href) : href
+  if (context.suppressNavigation) {
+    const gone =
+      reference &&
+      resolved === undefined &&
+      screenRoutesAnswerFor(screens, href)
+    return gone ? { kind: 'text' } : { kind: 'inert' }
+  }
+  if (resolved === undefined) return { kind: 'text' }
+  return isInternalMarkdownHref(resolved)
+    ? { kind: 'internal', href: resolved }
+    : { kind: 'external', href: resolved }
 }
 
 /**
@@ -455,6 +543,52 @@ export function parseMarkdownLite(body: string): MarkdownBlock[] {
   }
   flush()
   return blocks
+}
+
+/** A link or an image in markdown-lite source: bang, text, target. */
+const SOURCE_LINK_PATTERN = /(!?)\[([^\]]*)\]\(([^)\s]+)\)/g
+
+/**
+ * Markdown-lite SOURCE with its link references resolved (AGL-3118), for a
+ * reader that hands the source on instead of rendering it — the Markdown twin
+ * of a page, which an agent follows links out of.
+ *
+ * `resolve` answers a reference with the URL to write in its place, or with
+ * `undefined` for a target that is gone, and that link becomes its text
+ * alone: a reference no reader can follow is worse than no link at all. An
+ * image whose source is a reference becomes its alt text, because the parser
+ * draws no image for one.
+ *
+ * Everything else stays exactly as written, and fenced code is not touched —
+ * a reference quoted in a snippet is the snippet's text, as the parser has it.
+ */
+export function resolveMarkdownSourceLinks(
+  source: string,
+  resolve: (reference: string) => string | undefined,
+): string {
+  if (!source.includes('](')) return source
+  let fenced = false
+  return source
+    .split('\n')
+    .map((line) => {
+      if (FENCE_PATTERN.test(line.trim())) {
+        fenced = !fenced
+        return line
+      }
+      if (fenced || !line.includes('](')) return line
+      return line.replace(
+        SOURCE_LINK_PATTERN,
+        (match: string, bang: string, text: string, href: string) => {
+          if (!isMarkdownLinkReference(href)) return match
+          const target = bang ? undefined : resolve(href)
+          // A URL cannot close the parentheses it sits in or break at a space.
+          return target
+            ? `[${text}](${target.replace(/\)/g, '%29').replace(/\s/g, '%20')})`
+            : text
+        },
+      )
+    })
+    .join('\n')
 }
 
 /**

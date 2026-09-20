@@ -70,6 +70,10 @@ import {
   useState,
 } from 'react'
 import { htmlToRows } from './markdown-html-paste'
+import MarkdownLinkDialog, {
+  MarkdownLinkTargetName,
+  type MarkdownLink,
+} from './markdown-link-dialog.component'
 
 export type MarkdownEditorCommand =
   | 'bold'
@@ -979,15 +983,27 @@ const HISTORY_LIMIT = 100
 const isValidLinkUrl = (url: string): boolean => isSupportedLinkHref(url)
 const isValidImageUrl = (url: string): boolean => isSupportedImageSrc(url)
 
+/** The Insert image dialog. */
 interface UrlDialogState {
-  kind: 'link' | 'image'
+  kind: 'image'
   url: string
   text: string
-  /** Set when editing an existing link's URL from the popover. */
+}
+
+/**
+ * The link dialog (AGL-3119): inserting over the selection, or editing an
+ * existing link's target from the popover.
+ */
+interface LinkDialogState {
+  /** The selection's text, offered as the link text when inserting. */
+  text: string
+  /** Set when editing: the link's current target. */
+  href?: string
   editRowKey?: string
   editLinkIndex?: number
 }
 
+/** The clicked link, and what the popover over it acts on. */
 interface LinkPopoverState {
   anchor: HTMLElement
   rowKey: string
@@ -1028,6 +1044,7 @@ const MarkdownVisualEditor = forwardRef<
     end: number
   } | null>(null)
   const [urlDialog, setUrlDialog] = useState<UrlDialogState | null>(null)
+  const [linkDialog, setLinkDialog] = useState<LinkDialogState | null>(null)
   const [linkPopover, setLinkPopover] = useState<LinkPopoverState | null>(null)
   const [placeholderVisible, setPlaceholderVisible] = useState(
     () => rowsToMarkdown(rowsRef.current ?? []).length === 0,
@@ -1333,9 +1350,7 @@ const MarkdownVisualEditor = forwardRef<
       if (command === 'quote') return toggleKind('quote')
       if (command === 'link') {
         dialogTargetRef.current = target
-        setUrlDialog({
-          kind: 'link',
-          url: '',
+        setLinkDialog({
           text: rowPlainText(
             sliceInlines(row.inlines, target.start, target.end),
           ),
@@ -1726,9 +1741,8 @@ const MarkdownVisualEditor = forwardRef<
 
   const handleLinkEdit = useCallback(() => {
     if (!linkPopover) return
-    setUrlDialog({
-      kind: 'link',
-      url: linkPopover.href,
+    setLinkDialog({
+      href: linkPopover.href,
       text: '',
       editRowKey: linkPopover.rowKey,
       editLinkIndex: linkPopover.linkIndex,
@@ -1739,49 +1753,62 @@ const MarkdownVisualEditor = forwardRef<
   const handleUrlDialogConfirm = useCallback(() => {
     if (!urlDialog) return
     const url = urlDialog.url.trim()
-    const current = rowsRef.current ?? []
-    if (urlDialog.kind === 'image') {
-      if (!isValidImageUrl(url)) return
-      const target = dialogTargetRef.current
-      setUrlDialog(null)
-      insertImageRow(urlDialog.text.trim(), url, target ? target.index : null)
-      return
-    }
-    if (!isValidLinkUrl(url)) return
-    if (urlDialog.editRowKey != null && urlDialog.editLinkIndex != null) {
-      const found = findLinkInline(urlDialog.editRowKey, urlDialog.editLinkIndex)
-      setUrlDialog(null)
-      if (!found) return
-      pushHistory()
-      const inlines = [...found.row.inlines]
-      inlines[found.inlineIndex] = {
-        type: 'link',
-        text: found.inline.text,
-        href: url,
-      }
-      current[found.rowIndex] = { ...found.row, inlines } as EditorRow
-      commit(null)
-      return
-    }
+    if (!isValidImageUrl(url)) return
     const target = dialogTargetRef.current
     setUrlDialog(null)
-    if (!target) return
-    const row = current[target.index]
-    if (!row || !isTextRow(row)) return
-    pushHistory()
-    const text = urlDialog.text.trim() || url
-    current[target.index] = {
-      ...row,
-      inlines: replaceInlineRange(row.inlines, target.start, target.end, [
-        { type: 'link', text, href: url },
-      ]),
-    } as EditorRow
-    commit({
-      key: row.key,
-      start: target.start,
-      end: target.start + text.length,
-    })
-  }, [commit, findLinkInline, insertImageRow, pushHistory, urlDialog])
+    insertImageRow(urlDialog.text.trim(), url, target ? target.index : null)
+  }, [insertImageRow, urlDialog])
+
+  /**
+   * The link dialog's answer: a URL as typed, or a reference the dialog's
+   * lookup produced (AGL-3119). Both are `href` on the same inline — the
+   * dialect keeps either, and the renderer resolves the reference.
+   */
+  const handleLinkConfirm = useCallback(
+    (link: MarkdownLink) => {
+      if (!linkDialog) return
+      const href = link.href.trim()
+      if (!isValidLinkUrl(href)) return
+      const current = rowsRef.current ?? []
+      if (linkDialog.editRowKey != null && linkDialog.editLinkIndex != null) {
+        const found = findLinkInline(
+          linkDialog.editRowKey,
+          linkDialog.editLinkIndex,
+        )
+        setLinkDialog(null)
+        if (!found) return
+        pushHistory()
+        const inlines = [...found.row.inlines]
+        inlines[found.inlineIndex] = {
+          type: 'link',
+          text: found.inline.text,
+          href,
+        }
+        current[found.rowIndex] = { ...found.row, inlines } as EditorRow
+        commit(null)
+        return
+      }
+      const target = dialogTargetRef.current
+      setLinkDialog(null)
+      if (!target) return
+      const row = current[target.index]
+      if (!row || !isTextRow(row)) return
+      pushHistory()
+      const text = link.text.trim() || href
+      current[target.index] = {
+        ...row,
+        inlines: replaceInlineRange(row.inlines, target.start, target.end, [
+          { type: 'link', text, href },
+        ]),
+      } as EditorRow
+      commit({
+        key: row.key,
+        start: target.start,
+        end: target.start + text.length,
+      })
+    },
+    [commit, findLinkInline, linkDialog, pushHistory],
+  )
 
   const handleBlockRemove = useCallback(
     (key: string) => () => {
@@ -1853,11 +1880,7 @@ const MarkdownVisualEditor = forwardRef<
   )
 
   const urlDialogValid =
-    urlDialog == null
-      ? false
-      : urlDialog.kind === 'image'
-        ? isValidImageUrl(urlDialog.url.trim())
-        : isValidLinkUrl(urlDialog.url.trim())
+    urlDialog != null && isValidImageUrl(urlDialog.url.trim())
 
   return (
     <>
@@ -2012,7 +2035,9 @@ const MarkdownVisualEditor = forwardRef<
             noWrap
             sx={{ maxWidth: 240 }}
           >
-            {linkPopover?.href}
+            {linkPopover ? (
+              <MarkdownLinkTargetName href={linkPopover.href} />
+            ) : null}
           </Typography>
           <Button size="small" onClick={handleLinkEdit}>
             {'Edit'}
@@ -2029,13 +2054,7 @@ const MarkdownVisualEditor = forwardRef<
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>
-          {urlDialog?.kind === 'image'
-            ? 'Insert image'
-            : urlDialog?.editRowKey != null
-              ? 'Edit link'
-              : 'Insert link'}
-        </DialogTitle>
+        <DialogTitle>{'Insert image'}</DialogTitle>
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
         >
@@ -2056,13 +2075,9 @@ const MarkdownVisualEditor = forwardRef<
             size="small"
             autoFocus
             sx={{ mt: 1 }}
-            helperText={
-              urlDialog?.kind === 'image'
-                ? 'https:// or a site path like /images/hero.png'
-                : 'https:// or a site path like /pricing'
-            }
+            helperText="https:// or a site path like /images/hero.png"
           />
-          {urlDialog?.kind === 'image' ? (
+          {urlDialog ? (
             <TextField
               label="Alt text"
               value={urlDialog.text}
@@ -2073,22 +2088,10 @@ const MarkdownVisualEditor = forwardRef<
               }
               size="small"
             />
-          ) : urlDialog?.editRowKey == null ? (
-            <TextField
-              label="Text"
-              value={urlDialog?.text ?? ''}
-              onChange={(event) =>
-                setUrlDialog((prev) =>
-                  prev ? { ...prev, text: event.target.value } : prev,
-                )
-              }
-              size="small"
-              helperText="Falls back to the URL when blank"
-            />
           ) : null}
         </DialogContent>
         <DialogActions>
-          {urlDialog?.kind === 'image' && onPickImageFromMedia ? (
+          {urlDialog && onPickImageFromMedia ? (
             <Button
               color="primary"
               sx={{ mr: 'auto' }}
@@ -2111,14 +2114,21 @@ const MarkdownVisualEditor = forwardRef<
             disabled={!urlDialogValid}
             onClick={handleUrlDialogConfirm}
           >
-            {urlDialog?.kind === 'image'
-              ? 'Insert'
-              : urlDialog?.editRowKey != null
-                ? 'Save'
-                : 'Insert'}
+            {'Insert'}
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Where a link goes (AGL-3119): a page, a listing, a feed or an entry
+          picked by name, or an address typed as before. */}
+      <MarkdownLinkDialog
+        open={Boolean(linkDialog)}
+        href={linkDialog?.href}
+        text={linkDialog?.text}
+        withText={linkDialog?.editRowKey == null}
+        onClose={() => setLinkDialog(null)}
+        onConfirm={handleLinkConfirm}
+      />
     </>
   )
 })

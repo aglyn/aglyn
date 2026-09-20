@@ -45,6 +45,22 @@ describe('ListingReadme (markdown-lite parity)', () => {
     // The markers belong to the <ol>, not to the README's prose.
     expect(container.textContent).toBe('Install:Run npm iRegister it')
   })
+
+  it('renders a link REFERENCE as text — a listing has no site (AGL-3118)', () => {
+    // `entry:`/`screen:` name a page of the SITE a document was written for,
+    // and this README is read in the console, which serves none of them. An
+    // anchor holding the stored value would be a link to nowhere.
+    const { container } = render(
+      <ListingReadme
+        readme={'See [the post](entry:blog/e1) and [docs](https://x.example).'}
+      />,
+    )
+    expect(
+      [...container.querySelectorAll('a')].map((a) => a.getAttribute('href')),
+    ).toEqual(['https://x.example'])
+    expect(container.innerHTML).not.toContain('entry:')
+    expect(container.textContent).toBe('See the post and docs.')
+  })
 })
 
 /**

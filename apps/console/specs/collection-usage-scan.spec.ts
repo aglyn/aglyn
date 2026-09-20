@@ -206,19 +206,44 @@ describe('scanCollectionUsage (AGL-2806)', () => {
     ).toEqual([])
   })
 
-  it('does not count a listing target typed into a Markdown body, which renders as text', () => {
-    // markdown-lite keeps only site-relative and http(s) link targets, so the
-    // page shows the words and no link — there is nothing for a delete to
-    // break. If the parser ever starts keeping such a link, this reds first.
+  it('counts a listing linked from a Markdown body (AGL-3118)', () => {
+    // This case used to assert the opposite, and the assertion below is why:
+    // markdown-lite refused a reference, so the page showed the words and no
+    // link, and a delete could break nothing. Since AGL-3118 the parser keeps
+    // it and the page renders a real link, so the delete dialog has to name
+    // the document holding it.
     const content = 'Read [the blog](collection:blog) for more.'
     const inlines = parseMarkdownLite(content).flatMap((block) =>
       block.type === 'paragraph' ? block.inlines : [],
     )
-    expect(inlines.some((inline) => inline.type === 'link')).toBe(false)
+    expect(inlines.some((inline) => inline.type === 'link')).toBe(true)
     expect(
       scanCollectionUsage('blog', {
         ...empty,
         screens: [candidate('home', { nodes: tree('markdown', { content }) })],
+      }),
+    ).toEqual([
+      {
+        type: 'screen',
+        id: 'home',
+        name: 'home',
+        via: ['id'],
+        relation: 'link',
+      },
+    ])
+  })
+
+  it('leaves a Markdown body naming another collection out of it', () => {
+    expect(
+      scanCollectionUsage('blog', {
+        ...empty,
+        screens: [
+          candidate('home', {
+            nodes: tree('markdown', {
+              content: 'Read [the news](collection:news) for more.',
+            }),
+          }),
+        ],
       }),
     ).toEqual([])
   })

@@ -89,9 +89,11 @@ it could not match to your canvas is listed under **Left out**.
   the same **New version** you would use yourself. Once the new version opens,
   the card offers **Apply as draft** there.
 - **Select the element you mean.** The assistant sees the element you have
-  selected, what surrounds it and the page's sections — not your whole site —
-  and it can only change elements it was shown. If the canvas changes before
-  you apply, the card says so and applies nothing.
+  selected, everything inside it, what surrounds it and the page's sections —
+  not your whole site — and it can only change elements it was shown. With
+  nothing selected it sees only the top of the page and asks you to select
+  one. If the canvas changes before you apply, the card says so and applies
+  nothing.
 - **Who can use it.** Your role needs the **Generate with AI** permission (a
   site collaborator needs it on that site). Asking uses AI credits like any
   other assistant message; applying uses none. Each applied change is recorded

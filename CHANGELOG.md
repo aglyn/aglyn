@@ -9,6 +9,69 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.132 — 2026-09-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.131...v1.0.0-beta.132)
+
+### Added
+
+- **console:** the link pickers find this host's entries, for five reads ([AGL-3119](https://linear.app/aglyn/issue/AGL-3119))
+- **besigner:** every link picker is a search, and an entry is one of its targets ([AGL-3119](https://linear.app/aglyn/issue/AGL-3119))
+- **markdown:** the link lookup, and a body link that names its target ([AGL-3119](https://linear.app/aglyn/issue/AGL-3119))
+- **links:** a link target is looked up, and an entry is named by what reads it ([AGL-3119](https://linear.app/aglyn/issue/AGL-3119))
+- **tenant:** every page's link map carries the entries that page links to ([AGL-3118](https://linear.app/aglyn/issue/AGL-3118))
+- **tenant:** the entries a page links to, read once and only while live ([AGL-3118](https://linear.app/aglyn/issue/AGL-3118))
+- **markdown:** one function decides what a link reference renders as ([AGL-3118](https://linear.app/aglyn/issue/AGL-3118))
+- **links:** a page can say which entries its links name ([AGL-3118](https://linear.app/aglyn/issue/AGL-3118))
+- **markdown:** a link in an entry body may name its target by reference ([AGL-3118](https://linear.app/aglyn/issue/AGL-3118))
+- **links:** an entry and a collection feed are link targets, addressed by id ([AGL-3118](https://linear.app/aglyn/issue/AGL-3118))
+- **outreach:** the sequence mailbox picker, and a page that says why it can't activate ([AGL-2980](https://linear.app/aglyn/issue/AGL-2980), [AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+- **outreach:** a sequence activates only onto a mailbox that is sending ([AGL-2980](https://linear.app/aglyn/issue/AGL-2980))
+- **outreach:** the sequence and enrollment routes name their org to the release gate ([AGL-2980](https://linear.app/aglyn/issue/AGL-2980), [AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+- **outreach:** the console surface — compliance, sequences, enroll and enrollments ([AGL-2980](https://linear.app/aglyn/issue/AGL-2980))
+- **outreach:** sequence, enroll, enrollment and preview routes ([AGL-2980](https://linear.app/aglyn/issue/AGL-2980))
+- **outreach:** store the org's compliance settings and do-not-contact list ([AGL-2980](https://linear.app/aglyn/issue/AGL-2980))
+
+### Fixed
+
+- **links:** a link written in a markdown body counts as a reference ([AGL-3118](https://linear.app/aglyn/issue/AGL-3118))
+- **markdown:** the link lookup's source is text, not a binary blob ([AGL-3119](https://linear.app/aglyn/issue/AGL-3119))
+- **markdown:** the visual editor keeps the type its link popover state has ([AGL-3119](https://linear.app/aglyn/issue/AGL-3119))
+- **markdown:** a rendered link never carries the stored reference ([AGL-3118](https://linear.app/aglyn/issue/AGL-3118))
+- **ai:** the panel sends the canvas only while the editor is on the route's version ([AGL-3114](https://linear.app/aglyn/issue/AGL-3114))
+- **ai:** the canvas outline covers the selection's surroundings and says what it omits ([AGL-3114](https://linear.app/aglyn/issue/AGL-3114))
+- **outreach:** a new sequence is named by createResourceUid, not a Firestore auto-id ([AGL-2980](https://linear.app/aglyn/issue/AGL-2980), [AGL-3079](https://linear.app/aglyn/issue/AGL-3079))
+- **screens:** a duplicated screen keeps its shared layout ([AGL-3120](https://linear.app/aglyn/issue/AGL-3120))
+- **tools:** outreach's sequence and enroll routes live in its manifest ([AGL-2980](https://linear.app/aglyn/issue/AGL-2980))
+- **aglyn:** the self-host ratchet drops the Stripe drill, which holds no Aglyn host ([AGL-3112](https://linear.app/aglyn/issue/AGL-3112), [AGL-3108](https://linear.app/aglyn/issue/AGL-3108))
+- **outreach:** the sequence list keeps the newest and counts only the page on screen ([AGL-2980](https://linear.app/aglyn/issue/AGL-2980))
+- **outreach:** the routes reach the platform's modules through one lazily loaded module ([AGL-2980](https://linear.app/aglyn/issue/AGL-2980))
+
+### Performance
+
+- **ai:** the canvas outline lists what surrounds the selection by place alone ([AGL-3114](https://linear.app/aglyn/issue/AGL-3114))
+
+### Changed
+
+- **outreach:** sequence activity rows use Outreach's own target, outreach:sequence ([AGL-2980](https://linear.app/aglyn/issue/AGL-2980), [AGL-2978](https://linear.app/aglyn/issue/AGL-2978))
+
+### Documentation
+
+- **links:** a link to a page, a post or a feed is picked, not typed ([AGL-3117](https://linear.app/aglyn/issue/AGL-3117))
+- **ai:** what Assist sees around a selection, and that it asks for one ([AGL-3114](https://linear.app/aglyn/issue/AGL-3114))
+- **outreach:** a new sequence starts on your one active mailbox ([AGL-2980](https://linear.app/aglyn/issue/AGL-2980))
+- **outreach:** the compliance settings, sequences, enroll and enrollments sections ([AGL-2980](https://linear.app/aglyn/issue/AGL-2980))
+
+<details>
+<summary>Also in this release: 1 test, 3 chore</summary>
+
+- **tools:** the Linear ceiling is 3140, read from the workspace ([AGL-3140](https://linear.app/aglyn/issue/AGL-3140))
+- **tenant:** the loader's three suites double its new runtime import ([AGL-3118](https://linear.app/aglyn/issue/AGL-3118))
+- **tools:** the Linear ceiling is 3120, read from the workspace ([AGL-3120](https://linear.app/aglyn/issue/AGL-3120))
+- **tools:** the Linear ceiling is 3112, read from the workspace ([AGL-3112](https://linear.app/aglyn/issue/AGL-3112))
+
+</details>
+
 ## v1.0.0-beta.131 — 2026-09-19
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.130...v1.0.0-beta.131)

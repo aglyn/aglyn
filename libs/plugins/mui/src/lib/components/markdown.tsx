@@ -101,28 +101,35 @@ const ANCHOR_SCROLL_MARGIN = Aglyn.HEADING_ANCHOR_SCROLL_MARGIN
  * internal links route through AppLink for client-side navigation, external
  * ones stay plain anchors, and editing surfaces render the link look without
  * an href so clicking never leaves the canvas.
+ *
+ * Which of those a link is — and whether it is a link at all — is
+ * `resolveMarkdownLink`'s to say (AGL-3118), so a target named by reference
+ * resolves through the same routing map an element link does, and one whose
+ * target is gone renders as its words rather than as `href="entry:…"`.
  */
 const renderInlines = (
   inlines: Aglyn.MarkdownInline[],
-  suppressNavigation?: boolean,
+  links: { suppressNavigation?: boolean; screens?: Aglyn.ScreenRouteMap },
 ): ReactNode[] =>
   inlines.map((inline, index) => {
     if (inline.type === 'bold') return <strong key={index}>{inline.text}</strong>
     if (inline.type === 'italic') return <em key={index}>{inline.text}</em>
     if (inline.type === 'link') {
-      if (suppressNavigation) {
+      const link = Aglyn.resolveMarkdownLink(inline.href, links)
+      if (link.kind === 'text') return <span key={index}>{inline.text}</span>
+      if (link.kind === 'inert') {
         return (
           <MuiLink key={index} component="span" sx={{ cursor: 'default' }}>
             {inline.text}
           </MuiLink>
         )
       }
-      return Aglyn.isInternalMarkdownHref(inline.href) ? (
-        <AppLink key={index} href={inline.href}>
+      return link.kind === 'internal' ? (
+        <AppLink key={index} href={link.href}>
           {inline.text}
         </AppLink>
       ) : (
-        <MuiLink key={index} href={inline.href}>
+        <MuiLink key={index} href={link.href}>
           {inline.text}
         </MuiLink>
       )
@@ -160,7 +167,13 @@ export interface MarkdownProps extends BoxProps {
  */
 const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
   const { content, sx, children: _children, ...rest } = props
-  const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+  // The routing map travels with the suppression flag: both decide what a
+  // link in this document renders as (AGL-3118).
+  const { suppressNavigation, screens } = useContext(Aglyn.ScreenLinkContext)
+  const links = useMemo(
+    () => ({ suppressNavigation, screens }),
+    [suppressNavigation, screens],
+  )
   /**
    * The site being rendered, for image blocks (AGL-1686). Read once here
    * rather than per block: hooks cannot run inside the `blocks.map` below,
@@ -225,7 +238,7 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
                 '&:first-of-type': { mt: 0 },
               }}
             >
-              {renderInlines(block.inlines, suppressNavigation)}
+              {renderInlines(block.inlines, links)}
             </Typography>
           )
         }
@@ -260,7 +273,7 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
             >
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex}>
-                  {renderInlines(item, suppressNavigation)}
+                  {renderInlines(item, links)}
                 </li>
               ))}
             </Box>
@@ -279,7 +292,7 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
             >
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex}>
-                  {renderInlines(item, suppressNavigation)}
+                  {renderInlines(item, links)}
                 </li>
               ))}
             </Box>
@@ -338,7 +351,7 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
                         key={cellIndex}
                         style={{ textAlign: block.align[cellIndex] ?? 'left' }}
                       >
-                        {renderInlines(cell, suppressNavigation)}
+                        {renderInlines(cell, links)}
                       </th>
                     ))}
                   </tr>
@@ -353,7 +366,7 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
                             textAlign: block.align[cellIndex] ?? 'left',
                           }}
                         >
-                          {renderInlines(cell, suppressNavigation)}
+                          {renderInlines(cell, links)}
                         </td>
                       ))}
                     </tr>
@@ -383,13 +396,13 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
                 lineHeight: 1.6,
               }}
             >
-              {renderInlines(block.inlines, suppressNavigation)}
+              {renderInlines(block.inlines, links)}
             </Typography>
           )
         }
         return (
           <Typography key={index} component="p" sx={{ ...BODY_SX, my: 2 }}>
-            {renderInlines(block.inlines, suppressNavigation)}
+            {renderInlines(block.inlines, links)}
           </Typography>
         )
       })}

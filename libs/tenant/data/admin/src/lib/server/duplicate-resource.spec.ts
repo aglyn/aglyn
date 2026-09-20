@@ -217,6 +217,7 @@ describe('a screen', () => {
         description: 'The front door',
         seo: { title: 'Home' },
         kind: 'page',
+        layoutId: 'marketingBase',
         versionId: 'v1',
         publishedAt: '__then__',
       },
@@ -240,6 +241,9 @@ describe('a screen', () => {
       description: 'The front door',
       seo: { title: 'Home' },
       kind: 'page',
+      // The shared layout rides along (AGL-3120), so the copy renders inside
+      // the same header and footer as the page it was made from.
+      layoutId: 'marketingBase',
       versionId: result.versionId,
       createdBy: PERSON.uid,
     })
@@ -259,6 +263,20 @@ describe('a screen', () => {
     // The NEWEST version, packed at rest.
     expect(decodeStoredNodes(version['nodes'])).toEqual({ ...TREE, extra: {} })
     expect(result.name).toBe('Copy of Home')
+  })
+
+  it('invents no layout for a source that binds none (AGL-3120)', async () => {
+    seedScreen(
+      'bare',
+      { displayName: 'Bare', slug: 'bare', kind: 'page', versionId: 'b1' },
+      [['b1', { screenId: 'bare', nodes: TREE, rootId: 'root', updatedAt: 1 }]],
+    )
+    const result = await run('screen', { sourceId: 'bare' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(store.get(`hosts/${HOST}/screens/${result.id}`)).not.toHaveProperty(
+      'layoutId',
+    )
   })
 
   it('numbers a name a live sibling holds and steps the slug', async () => {
@@ -389,6 +407,7 @@ describe('a collection entry template', () => {
         description: 'One post',
         seo: { title: '{{entry.title}}' },
         kind: 'template',
+        layoutId: 'marketingBase',
         versionId: 'v1',
         publishedAt: '__then__',
       },
@@ -419,6 +438,7 @@ describe('a collection entry template', () => {
       description: 'One post',
       seo: { title: '{{entry.title}}' },
       kind: 'template',
+      layoutId: 'marketingBase',
       versionId: result.versionId,
       createdBy: PERSON.uid,
     })

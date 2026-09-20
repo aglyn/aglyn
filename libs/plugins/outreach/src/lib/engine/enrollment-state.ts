@@ -243,6 +243,8 @@ export interface OutreachEnrollmentDraft {
   sequence: Pick<OutreachSequence, 'id' | 'hostId' | 'mailboxId' | 'steps' | 'settings'>
   mailbox: ScheduleMailbox
   contactId: string
+  /** The contact's name as the sending site knows it; `''` for none. */
+  contactName?: string | null
   /** The address, as the gates normalized it. */
   email: string
   /** The gates' `cold`. */
@@ -264,6 +266,7 @@ export function buildOutreachEnrollment(draft: OutreachEnrollmentDraft): Outreac
     id: draft.id,
     sequenceId: draft.sequence.id,
     contactId: draft.contactId,
+    contactName: String(draft.contactName ?? '').replace(/\s+/g, ' ').trim().slice(0, 200),
     email: String(draft.email ?? '').trim().toLowerCase(),
     hostId: draft.sequence.hostId,
     mailboxId: draft.sequence.mailboxId,

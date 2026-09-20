@@ -19,12 +19,21 @@ import type * as Aglyn from '@aglyn/aglyn'
 import {
   bareFragmentLinkWarning,
   formatScreenLinkValue,
+  linkTargetKind,
   parseScreenLinkValue,
+  resolveScreenHref,
   ScreenLinkContext,
   screenLinkTargetOptions,
   screenRoutesAnswerFor,
   unavailableScreenLabel,
+  useLinkTargetLabel,
 } from '@aglyn/aglyn'
+import {
+  EXTERNAL_URL_OPTION,
+  LinkTargetAutocomplete,
+  type LinkTargetChangeDetail,
+  type LinkTargetChoice,
+} from '@aglyn/aglyn-markdown-editor'
 import {
   FormFieldGrid,
   type FormFieldGridProps,
@@ -32,25 +41,24 @@ import {
   validationError,
   type ExtendedFieldMeta,
 } from '@aglyn/shared-ui-jsx-forms'
-import { MenuItem, Stack, TextField } from '@mui/material'
+import { Stack, TextField } from '@mui/material'
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 
 /**
- * Select value standing for "type a URL instead" (AGL-1335).
- *
- * UI-only: it is never stored. The persisted value in that mode is the URL
- * the author types, so the AGL-1191 rule about `''`-valued options does not
- * bite here — the one `''` option means genuinely unset, which is exactly
- * what the graft reads as "fall back to the component's default".
- *
- * Spelled with a character no Firestore id contains so it can never collide
- * with a real screen id in the same list.
+ * The picker's "type a URL instead" choice (AGL-1335) — UI-only and never
+ * stored. Defined beside the shared lookup, which offers the same choice in
+ * the markdown link dialog, and re-exported here where it was first needed.
  */
-export const EXTERNAL_URL_OPTION = 'external-url:'
+export { EXTERNAL_URL_OPTION }
 
 /** Mapper key for {@link ScreenLinkField} in the attributes form. */
 export const SCREEN_LINK_FIELD_COMPONENT = 'aglyn-screen-link-field'
+
+/** The escape hatch the `Link` picker ends its list with. */
+const EXTERNAL_CHOICE: readonly LinkTargetChoice[] = [
+  { value: EXTERNAL_URL_OPTION, label: 'External URL or path…' },
+]
 
 export interface ScreenLinkValuePickerProps {
   /** Stored value: `screen:<id>`, a literal href, or empty. */
@@ -95,6 +103,11 @@ export interface ScreenLinkValuePickerProps {
  * the renderer would not resolve. A value the map does not know (a screen
  * deleted since, or a component opened before the map loads) is kept and
  * shown rather than silently reset to "not set".
+ *
+ * A search, not a list (AGL-3119): screens, listings and feeds narrow as the
+ * author types, and a collection ENTRY is looked up through
+ * `LinkTargetSearchContext` and stored as `entry:<collectionId>/<entryId>`,
+ * so a renamed post keeps every link to it.
  */
 export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
   const {
@@ -126,8 +139,9 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
     else if (literal) setExternal(true)
   }, [screenId, literal])
 
-  // Screens by name, then the site's collection listings (AGL-2799) — built by
-  // the same function as the attributes panel's Screen picker.
+  // Screens by name, then the site's collection listings (AGL-2799) and their
+  // feeds — built by the same function as the attributes panel's Screen
+  // picker.
   const options = useMemo(
     () => screenLinkTargetOptions(screens, labels, 'label'),
     [screens, labels],
@@ -135,12 +149,27 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
 
   // A stored id the routing map doesn't know still has to be selectable, or
   // opening the dialog would silently rewrite the author's link to "unset".
-  const unknownScreen = screenId && !screens?.[screenId] ? screenId : undefined
+  // Not an entry: the map holds none, and the lookup names one by reading it.
+  const unknownScreen =
+    screenId &&
+    linkTargetKind(screenId) !== 'entry' &&
+    resolveScreenHref(screens, screenId) === undefined
+      ? screenId
+      : undefined
 
+  const defaultScreen = defaultValue
+    ? parseScreenLinkValue(defaultValue)
+    : undefined
+  // An entry default is named by the same lookup a picked entry is.
+  const defaultEntry = useLinkTargetLabel(
+    defaultScreen && linkTargetKind(defaultScreen) === 'entry'
+      ? defaultScreen
+      : undefined,
+  )
   const describeDefault = () => {
     if (!defaultValue) return undefined
-    const defaultScreen = parseScreenLinkValue(defaultValue)
     if (!defaultScreen) return defaultValue
+    if (defaultEntry) return defaultEntry.label
     return labels?.[defaultScreen] ?? screens?.[defaultScreen] ?? undefined
   }
   const described = describeDefault()
@@ -164,14 +193,37 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
       ? screenId
       : ''
 
+  const leading = useMemo<LinkTargetChoice[]>(
+    () => [
+      { value: '', label: resolvedEmptyLabel },
+      ...(unknownScreen
+        ? [
+            {
+              value: unknownScreen,
+              // Wording shared with the plain Screen picker (AGL-1893): the
+              // same condition told two different stories in two panels, and
+              // "Unknown screen" reads as "we cannot look it up" rather than
+              // "this link is dead". The value stays the bare id — the
+              // handler re-wraps it through `formatScreenLinkValue`.
+              label: unavailableScreenLabel(
+                unknownScreen,
+                screenRoutesAnswerFor(screens, unknownScreen),
+              ),
+            },
+          ]
+        : []),
+    ],
+    [resolvedEmptyLabel, unknownScreen, screens],
+  )
+
   const handleSelect = useCallback(
-    (event: { target: { value: unknown } }) => {
-      const next = String(event.target.value ?? '')
+    (next: string, detail: LinkTargetChangeDetail) => {
       if (next === EXTERNAL_URL_OPTION) {
         setExternal(true)
-        // Keep whatever literal was already there — switching modes back
-        // and forth must not eat a URL that was typed a moment ago.
-        onChange(literal)
+        // An address typed straight into the lookup is used as typed.
+        // Otherwise keep whatever literal was already there — switching
+        // modes back and forth must not eat a URL typed a moment ago.
+        onChange(detail.address ?? literal)
         return
       }
       setExternal(false)
@@ -182,8 +234,7 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
 
   return (
     <Stack spacing={1} sx={{ width: '100%' }}>
-      <TextField
-        select
+      <LinkTargetAutocomplete
         name={name}
         label={label}
         size={size}
@@ -192,40 +243,11 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
         error={error}
         onChange={handleSelect}
         helperText={external ? undefined : helperText}
-        fullWidth
-        // Without displayEmpty a MUI Select renders NOTHING for `''`, which
-        // reads as a broken control rather than "no screen chosen" — and
-        // `displayEmpty` alone then prints the label ON TOP of the option
-        // it just drew, because an empty Select reports itself unfilled no
-        // matter what it is rendering (AGL-2486).
-        slotProps={{
-          select: { displayEmpty: true },
-          inputLabel: { shrink: true },
-        }}
-      >
-        <MenuItem value="">{resolvedEmptyLabel}</MenuItem>
-        {unknownScreen ? (
-          <MenuItem value={unknownScreen}>
-            {/* Wording shared with the plain Screen picker (AGL-1893): the
-                same condition told two different stories in two panels, and
-                "Unknown screen" reads as "we cannot look it up" rather than
-                "this link is dead". The value stays the bare id — this
-                select re-wraps it through `formatScreenLinkValue`. */}
-            {unavailableScreenLabel(
-              unknownScreen,
-              screenRoutesAnswerFor(screens, unknownScreen),
-            )}
-          </MenuItem>
-        ) : null}
-        {options.map((option) => (
-          <MenuItem key={option.value} value={option.value}>
-            {option.label}
-          </MenuItem>
-        ))}
-        <MenuItem value={EXTERNAL_URL_OPTION}>
-          {'External URL or path…'}
-        </MenuItem>
-      </TextField>
+        targets={options}
+        leading={leading}
+        trailing={EXTERNAL_CHOICE}
+        addressOption={EXTERNAL_URL_OPTION}
+      />
       {external ? (
         <TextField
           size={size}
@@ -308,5 +330,86 @@ export function ScreenLinkField(props: ScreenLinkFieldProps) {
   )
 }
 ScreenLinkField.displayName = 'ScreenLinkField'
+
+/** Mapper key for {@link ScreenTargetField}, the attributes panel's Screen picker. */
+export const SCREEN_TARGET_FIELD_COMPONENT = 'aglyn-screen-target-field'
+
+/**
+ * The options `resolveAttributeField` built, sorted into the targets the
+ * routing map holds — offered in groups, narrowed as the author types — and
+ * the choices pinned above them: the empty one, and a stored target the host
+ * no longer has. An entry is neither: the lookup names it by reading it.
+ */
+function splitScreenTargetOptions(
+  options: unknown,
+  screens: Aglyn.ScreenRouteMap | undefined,
+): { leading: LinkTargetChoice[]; targets: LinkTargetChoice[] } {
+  const leading: LinkTargetChoice[] = []
+  const targets: LinkTargetChoice[] = []
+  for (const option of Array.isArray(options) ? options : []) {
+    const value = typeof option?.value === 'string' ? option.value : ''
+    const choice = { value, label: String(option?.label ?? value) }
+    if (value && linkTargetKind(value) === 'entry') continue
+    if (value && resolveScreenHref(screens, value) !== undefined) {
+      targets.push(choice)
+    } else {
+      leading.push(choice)
+    }
+  }
+  return { leading, targets }
+}
+
+/**
+ * The attributes panel's Screen picker (`SCREEN_SELECT`) as the lookup
+ * (AGL-3119): the Screen Link's "Screen", the "Link to screen" of a Button and
+ * an Image, the Link Container's target, an Accordion header's, a Form's
+ * redirect, and each tab of a Tabs strip.
+ *
+ * It was a plain select over the routing map, which had no room for entries.
+ * Its options are still the ones `resolveAttributeField` builds, so both
+ * pickers offer one list; the value is stored exactly as the select stored it
+ * — a bare screen id, or a listing's, feed's or entry's own key — and there is
+ * no typed-address choice, because each of these elements carries its own
+ * External URL field for that.
+ */
+export function ScreenTargetField(props: ScreenLinkFieldProps) {
+  const {
+    input,
+    isDisabled,
+    isReadOnly,
+    label,
+    helperText,
+    description,
+    validateOnMount,
+    meta,
+    help,
+    options,
+    FormFieldGridProps = {},
+  } = useFieldApi(props as never) as Record<string, any>
+  const { screens } = useContext(ScreenLinkContext)
+  const invalid = validationError(meta as ExtendedFieldMeta, validateOnMount)
+  const { leading, targets } = useMemo(
+    () => splitScreenTargetOptions(options, screens),
+    [options, screens],
+  )
+  const stored = typeof input.value === 'string' ? input.value.trim() : ''
+
+  return (
+    <FormFieldGrid help={help} {...FormFieldGridProps}>
+      <LinkTargetAutocomplete
+        name={input.name}
+        value={stored}
+        onChange={(next) => input.onChange(next)}
+        targets={targets}
+        leading={leading}
+        label={label}
+        disabled={isDisabled || isReadOnly}
+        error={Boolean(invalid)}
+        helperText={invalid || helperText || description}
+      />
+    </FormFieldGrid>
+  )
+}
+ScreenTargetField.displayName = 'ScreenTargetField'
 
 export default ScreenLinkField

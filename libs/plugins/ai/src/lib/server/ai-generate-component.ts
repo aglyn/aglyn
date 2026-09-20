@@ -529,7 +529,8 @@ export function aiComponentSelectionPrompt(
   name: string,
 ): string {
   const inside = aiComponentSelectionIds(context, selectedId)
-  const lines = context.nodes.map((node) => {
+  // The brief tier lies outside the selection, which is all this door binds.
+  const lines = context.nodes.filter((node) => !node.brief).map((node) => {
     const parts = [
       `${inside.has(node.id) ? '*' : ' '} ${node.id}: ${node.componentId}`,
       node.name ? `name=${JSON.stringify(node.name)}` : '',

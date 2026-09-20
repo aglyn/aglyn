@@ -55,9 +55,30 @@ export {
 
 export {
   applyCommandToSource,
+  applyLinkToSource,
   MARKDOWN_SOURCE_HINT,
   type SourceEdit,
 } from './lib/markdown-source-command'
+
+/**
+ * The link-target lookup and the dialog around it (AGL-3119). Published from
+ * here because this is the one core UI package both the designer's link
+ * pickers and the console's content editor already reach.
+ */
+export {
+  default as LinkTargetAutocomplete,
+  EXTERNAL_URL_OPTION,
+  type LinkTargetAutocompleteProps,
+  type LinkTargetChangeDetail,
+  type LinkTargetChoice,
+} from './lib/link-target-autocomplete.component'
+
+export {
+  default as MarkdownLinkDialog,
+  MarkdownLinkTargetName,
+  type MarkdownLink,
+  type MarkdownLinkDialogProps,
+} from './lib/markdown-link-dialog.component'
 
 export { htmlToInlines, htmlToRows } from './lib/markdown-html-paste'
 
