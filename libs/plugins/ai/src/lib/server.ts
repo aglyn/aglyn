@@ -24,6 +24,7 @@ import { registerAiComponentJob } from './jobs/ai-job-component-step'
 import { registerAiCrmJob } from './jobs/ai-job-crm-step'
 import { registerAiLayoutJob } from './jobs/ai-job-layout-step'
 import { registerAiTemplateJob } from './jobs/ai-job-template-step'
+import { registerAiExperimentJob } from './jobs/ai-job-experiment-step'
 import { registerAiFormJob } from './jobs/ai-job-form-step'
 import { registerAiPageJob } from './jobs/ai-job-page-step'
 import { registerAiProductsJob } from './jobs/ai-job-products-step'
@@ -100,6 +101,7 @@ function registerAiJobKinds(): void {
   registerAiLayoutJob()
   registerAiTemplateJob()
   // Forms (AGL-2913).
+  registerAiExperimentJob()
   registerAiFormJob()
   // Pages, with the least time one pass needs (AGL-2907).
   registerAiPageJob()

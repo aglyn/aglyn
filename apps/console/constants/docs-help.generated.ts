@@ -63,7 +63,7 @@ export const DOCS_HELP_TOPICS = {
   },
   ai: {
     path: '/ai/overview',
-    title: 'Aglyn AI',
+    title: 'Aglyn AI: the AI website builder',
   },
   aiAllotments: {
     path: '/ai/ai-allotments',
@@ -207,7 +207,7 @@ export const DOCS_HELP_TOPICS = {
   },
   crmByAi: {
     path: '/ai/crm-by-ai',
-    title: 'CRM by AI',
+    title: 'The AI CRM built into Aglyn',
   },
   customDomains: {
     path: '/building-sites/custom-domains/overview',
@@ -307,11 +307,11 @@ export const DOCS_HELP_TOPICS = {
   },
   generateAForm: {
     path: '/ai/generate-a-form',
-    title: 'Generate a form from a brief',
+    title: 'Generate a form from a description',
   },
   generateAPage: {
     path: '/building-sites/screens-and-layouts/generate-a-page',
-    title: 'Generate a page with Aglyn AI',
+    title: 'Generate a page from a prompt',
   },
   generateASite: {
     path: '/ai/generate-a-site',
@@ -323,7 +323,7 @@ export const DOCS_HELP_TOPICS = {
   },
   generateWithAi: {
     path: '/marketing-and-automation/email-campaigns/generate-with-ai',
-    title: 'Generate an email with AI',
+    title: 'Generate an email campaign with AI',
   },
   gettingStarted: {
     path: '/getting-started/create-a-site',
@@ -483,7 +483,7 @@ export const DOCS_HELP_TOPICS = {
   },
   productsWithAi: {
     path: '/ai/products-with-ai',
-    title: 'Products with AI',
+    title: 'Product copy and catalogs with AI',
   },
   publishAPlugin: {
     path: '/developers/plugins/publish-a-plugin',
@@ -575,7 +575,7 @@ export const DOCS_HELP_TOPICS = {
   },
   seoByAi: {
     path: '/building-sites/seo/seo-by-ai',
-    title: 'SEO by AI',
+    title: 'AI SEO for your website',
   },
   serverApis: {
     path: '/developers/plugins/guides/server-apis',
@@ -761,7 +761,7 @@ export const DOCS_HELP_ANCHORS = {
   generateAComponentWithAglynAi: ['#from-a-brief', '#what-the-job-builds', '#optional-parts', '#defaults', '#where-it-lands', '#from-a-section-on-your-page', '#related'],
   generateAForm: ['#describe-the-form', '#what-the-form-gets', '#what-a-form-cannot-collect', '#nothing-is-live-until-you-place-it', '#who-can-use-it', '#related'],
   generateAPage: ['#describe-the-page', '#review-the-plan', '#how-the-page-is-built', '#the-draft', '#what-a-page-job-uses', '#who-can-use-it', '#related'],
-  generateASite: ['#what-a-scaffold-builds', '#nothing-is-published', '#what-it-costs-before-it-starts', '#watching-it-build', '#generate-for-several-sites-at-once'],
+  generateASite: ['#starting-a-new-site-from-a-few-questions', '#what-a-scaffold-builds', '#nothing-is-published', '#what-it-costs-before-it-starts', '#watching-it-build', '#generate-for-several-sites-at-once'],
   generateSection: ['#use-it', '#what-it-builds', '#tips', '#who-can-use-it', '#related'],
   generateWithAi: ['#what-you-get', '#write-the-brief', '#products', '#who-receives-it', '#merge-tokens', '#what-it-will-not-do', '#where-it-runs', '#related'],
   gettingStarted: ['#create-your-first-site', '#what-a-site-contains', '#switching-between-sites', '#next'],

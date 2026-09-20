@@ -1,0 +1,118 @@
+{
+  "id": "experiment-hero-headline-variants",
+  "kind": "experiment",
+  "brief": "Write variants of the hero headline on the home page so we can test which one gets more trial signups.",
+  "framing": null,
+  "inventory": null,
+  "experiment": {
+    "task": "variants",
+    "target": "screen",
+    "subject": "Build a website for your business\nEverything you need to get online, in one place. Start free."
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand: the copy as it stands first, then three variants that each change one idea — the speed, the objection, the audience — with no markup and nothing invented.",
+      "plan": null,
+      "answer": {
+        "goal": "More trial signups from the home page",
+        "variants": [
+          {
+            "name": "As it stands",
+            "headline": "Build a website for your business",
+            "body": "Everything you need to get online, in one place. Start free.",
+            "rationale": "The copy already on the page, so the test has something to measure against."
+          },
+          {
+            "name": "Time to live",
+            "headline": "Your business website, live by this afternoon",
+            "body": "Everything you need to get online, in one place. Start free.",
+            "rationale": "Changes the promise from what you build to how soon it is up."
+          },
+          {
+            "name": "No card",
+            "headline": "Build a website for your business",
+            "body": "Everything you need to get online, in one place. Start free, no card needed.",
+            "rationale": "Changes the supporting line to answer the objection before the signup."
+          },
+          {
+            "name": "Said plainly",
+            "headline": "Get your business online",
+            "body": "One place for your pages, your store and your email. Start free.",
+            "rationale": "Changes the headline to the shortest plain statement of the same offer."
+          }
+        ]
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 5, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "One variant only, which is not a test: there is nothing to measure it against.",
+      "answer": {
+        "goal": "More trial signups",
+        "variants": [
+          {
+            "name": "Shorter",
+            "headline": "Get your business online",
+            "body": "Start free.",
+            "rationale": "Shorter."
+          }
+        ]
+      },
+      "fails": ["readable"]
+    },
+    {
+      "why": "Markup in the copy, which the A/B testing card's plain-text fields cannot store.",
+      "answer": {
+        "goal": "More trial signups",
+        "variants": [
+          {
+            "name": "As it stands",
+            "headline": "Build a website for your business",
+            "body": "Everything you need to get online, in one place. Start free.",
+            "rationale": "The copy already on the page."
+          },
+          {
+            "name": "Bolder",
+            "headline": "<h1>Your site, live by lunch</h1>",
+            "body": "<p>Start free.</p>",
+            "rationale": "Bolder."
+          },
+          {
+            "name": "Plainer",
+            "headline": "Get your business online",
+            "body": "One place for everything. Start free.",
+            "rationale": "Plainer."
+          }
+        ]
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A headline far past the length the card's field stores.",
+      "answer": {
+        "goal": "More trial signups",
+        "variants": [
+          {
+            "name": "As it stands",
+            "headline": "Build a website for your business",
+            "body": "Everything you need to get online, in one place. Start free.",
+            "rationale": "The copy already on the page."
+          },
+          {
+            "name": "Everything at once",
+            "headline": "Build a website for your business today with pages, a store, a booking calendar, an email list, a customer record, a blog, a search listing and a domain, all in one place, with nothing to install, nothing to host and nobody to hire, starting free and staying free until you are ready to take money.",
+            "body": "Start free.",
+            "rationale": "Says everything."
+          }
+        ]
+      },
+      "fails": ["budget"]
+    }
+  ]
+}

@@ -92,6 +92,9 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   dashboardFooter: 'stack',
   orgSettings: 'stack',
   hostSettings: 'stack',
+  // A card above the first page a new site lands on, spaced from that page's
+  // own cards as any other card on it would be.
+  hostFirstRun: 'stack',
   hostTheme: 'stack',
   adminOrgDetail: 'stack',
   orgBillingUsage: 'stack',

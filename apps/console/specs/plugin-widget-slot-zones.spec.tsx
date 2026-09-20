@@ -50,6 +50,8 @@ const mockProposeValues = jest.fn()
 const mockProposeDraft = jest.fn()
 /** The Actions editor's door (AGL-2919), passed through by identity. */
 const mockOpenAction = jest.fn()
+/** The first-run zone's way back to the blank path (AGL-2918), by identity. */
+const mockStartBlank = jest.fn()
 /** The commerce zones' doors (AGL-2916), passed through by identity. */
 const mockProductWrite = jest.fn()
 /** The CRM record zones' proposal doors (AGL-2917), passed through by identity. */
@@ -222,6 +224,20 @@ const MOUNTS: Record<
     file: 'apps/console/app/(app)/admin/orgs/[orgId]/page.tsx',
     how: 'both',
     props: { orgId: 'org-1', org: {} },
+  },
+  // AGL-2918: the top of the page a newly created site lands on, where a
+  // widget offers to start the site — and hands back the blank path.
+  hostFirstRun: {
+    file:
+      'apps/console/app/(app)/[orgSlug]/hosts/[host]/setup/(sections)/details/page.tsx',
+    how: 'slot',
+    props: {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      orgSlug: 'acme',
+      host: 'shop',
+      startBlank: mockStartBlank,
+    },
   },
   // AGL-2907: beside Templates and Create New Screen on a site's Screens page.
   hostScreens: {

@@ -16,10 +16,19 @@
  */
 'use client'
 
+import { useCallback, useEffect, useState } from 'react'
 import BusinessDetailsCard from '../../../../../../../../components/business-details-card.component'
 import BuiltInPageLayoutCard from '../../../../../../../../components/built-in-page-layout-card.component'
+import { useHostSubdomain } from '../../../../../../../../components/host-id-provider'
 import LanguagesCard from '../../../../../../../../components/languages-card.component'
 import LogoCard from '../../../../../../../../components/logo-card.component'
+import PluginWidgetSlot from '../../../../../../../../components/plugin-widget-slot.component'
+import useCurrentOrg from '../../../../../../../../hooks/use-current-org'
+import { useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
+import {
+  hostStartedBlank,
+  rememberHostStartedBlank,
+} from '../../../../../../../../utils/host-first-run'
 import { useHostSettingsScope } from '../../../host-settings-scope'
 
 /**
@@ -45,11 +54,45 @@ import { useHostSettingsScope } from '../../../host-settings-scope'
  * page for every visitor — site-wide in the way Delete site is final, and
  * squarely in the tier this page is not. It lives in the Admin hub's Error
  * pages section, beside Security.
+ *
+ * It is also where a site created a minute ago LANDS, which is why the
+ * `hostFirstRun` zone is drawn at the top of it (AGL-2918). A widget there
+ * offers to start the site from a few questions; taking `startBlank` leaves
+ * this page exactly as it is below, which is the blank site the person
+ * already has.
  */
 export default function HostSetupDetailsSection() {
   const { hostId } = useHostSettingsScope()
+  const { orgId } = useCurrentOrg()
+  const orgSlug = useOrgSlug()
+  const host = useHostSubdomain()
+  /*
+   * Starts closed and opens once the browser has been asked, so a reader who
+   * skipped never sees the card flash back on a reload. `localStorage` is not
+   * readable while the page renders on the server.
+   */
+  const [offerStart, setOfferStart] = useState(false)
+  useEffect(() => {
+    setOfferStart(Boolean(hostId) && !hostStartedBlank(hostId))
+  }, [hostId])
+  const startBlank = useCallback(() => {
+    rememberHostStartedBlank(hostId)
+    setOfferStart(false)
+  }, [hostId])
   return (
     <>
+      {offerStart && (
+        <div style={{ marginBottom: 24 }}>
+          <PluginWidgetSlot
+            slot="hostFirstRun"
+            hostId={hostId}
+            orgId={orgId}
+            orgSlug={orgSlug}
+            host={host ?? null}
+            startBlank={startBlank}
+          />
+        </div>
+      )}
       {/* Site brand mark (AGL-594): shown by the tenant's navigation loader. */}
       <div>
         <LogoCard hostId={hostId} />

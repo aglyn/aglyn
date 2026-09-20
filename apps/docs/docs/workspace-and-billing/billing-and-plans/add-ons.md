@@ -31,7 +31,7 @@ just be a second copy to keep in step.
 | Extra sites | Publish more sites than your plan includes | Per site, per month — cheaper on higher plans |
 | POS registers | One extra point-of-sale register, assigned to one site | Flat per register, per month — the same on every plan |
 | Event Calendar | The event manager + calendar elements, workspace-wide | Flat per month — the same on every plan |
-| Aglyn AI | Generative building — pages, emails, campaigns, products and more — plus a monthly band of AI credits added to your plan's, workspace-wide | Flat per month, priced by plan — higher on higher plans, and so is the band it adds |
+| Aglyn AI | Generative building (**rolling out**) — pages, emails, campaigns, products and more — plus a monthly band of AI credits added to your plan's, workspace-wide | Flat per month, priced by plan — higher on higher plans, and so is the band it adds |
 
 - **Prices are per unit per month.** On annual billing, add-ons bill yearly alongside
   your plan (12× the monthly price) — a subscription has one billing interval.
@@ -107,6 +107,10 @@ either move a seat off a site that isn't using it, or buy another seat under Pla
 add-ons.
 
 ## Aglyn AI {#aglyn-ai}
+
+**Generative building is rolling out.** The add-on is described here in full, but the
+doors that build are not open in every workspace yet. Aglyn Assist — the assistant that
+answers questions — is available today.
 
 **Aglyn AI** is the generative add-on: with it on, the assistant builds for you —
 pages, components, emails, campaigns, products and more — rather than only answering

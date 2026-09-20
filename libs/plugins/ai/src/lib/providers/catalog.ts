@@ -392,6 +392,7 @@ export type AiStepKind =
   | 'generate.section'
   | 'job.component'
   | 'job.crm'
+  | 'job.experiment'
   | 'job.form'
   | 'job.insight'
   | 'job.layout'
@@ -421,6 +422,11 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   // Short answers through a strict tool, held to the facts the CRM reports
   // about the record the member opened.
   'job.crm': 'fast',
+  // A/B tests by AI (AGL-2914): variants of one piece of copy, and a
+  // result put into words for a verdict code already reached. Short answers
+  // through a strict tool, but the judgment a variant sells — which ONE idea
+  // to vary so the result says something — is the balanced tier's.
+  'job.experiment': 'balanced',
   // A form is one small tree held to the building rules and to the contract
   // its submissions are read by; a re-ask costs more than the tier saves.
   'job.form': 'balanced',
