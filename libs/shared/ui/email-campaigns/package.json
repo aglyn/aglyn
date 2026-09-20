@@ -14,8 +14,8 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.140",
-    "@aglyn/shared-util-email": "1.0.0-beta.140",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.141",
+    "@aglyn/shared-util-email": "1.0.0-beta.141",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {

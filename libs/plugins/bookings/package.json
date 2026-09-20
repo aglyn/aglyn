@@ -14,16 +14,16 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.140",
-    "@aglyn/shared-data-mdi": "1.0.0-beta.140",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.140",
-    "@aglyn/shared-ui-snackstack": "1.0.0-beta.140",
-    "@aglyn/shared-util-email": "1.0.0-beta.140",
-    "@aglyn/shared-util-http": "1.0.0-beta.140",
-    "@aglyn/shared-util-timestamp": "1.0.0-beta.140",
-    "@aglyn/tenant-data-admin": "1.0.0-beta.140",
-    "@aglyn/tenant-feature-instance": "1.0.0-beta.140",
-    "@aglyn/tenant-runtime": "1.0.0-beta.140",
+    "@aglyn/aglyn": "1.0.0-beta.141",
+    "@aglyn/shared-data-mdi": "1.0.0-beta.141",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.141",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.141",
+    "@aglyn/shared-util-email": "1.0.0-beta.141",
+    "@aglyn/shared-util-http": "1.0.0-beta.141",
+    "@aglyn/shared-util-timestamp": "1.0.0-beta.141",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.141",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.141",
+    "@aglyn/tenant-runtime": "1.0.0-beta.141",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
