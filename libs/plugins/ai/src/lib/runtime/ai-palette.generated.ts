@@ -3240,18 +3240,6 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           enum: ['line', 'dashed'],
         },
-        repeatLimit: {
-          type: 'string',
-          maxLength: 200,
-        },
-        repeatFilter: {
-          type: 'string',
-          maxLength: 200,
-        },
-        repeatSort: {
-          type: 'string',
-          maxLength: 200,
-        },
       },
       required: [],
       additionalProperties: false,
@@ -3259,9 +3247,6 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propRoles: {
       ariaLabel: 'text',
       spacing: 'text',
-      repeatLimit: 'text',
-      repeatFilter: 'text',
-      repeatSort: 'text',
     },
     propFields: {
       component: 'select',
@@ -3273,16 +3258,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       useFlexGap: 'switch',
       flexWrap: 'select',
       divider: 'select',
-      repeatLimit: 'text-field',
-      repeatFilter: 'text-field',
-      repeatSort: 'text-field',
     },
     textLimits: {
       ariaLabel: 200,
       spacing: 200,
-      repeatLimit: 200,
-      repeatFilter: 200,
-      repeatSort: 200,
     },
     presets: [
       'Image Gallery',

@@ -394,7 +394,7 @@ describe('the block the model reads for the reported document', () => {
     // before AGL-3114 was 2,412 characters with the link selected and 796
     // with nothing selected; describing the whole cap in full was 9,768.
     expect({ selected: measure(LINK), nothingSelected: measure(null) }).toEqual({
-      selected: { chars: 3_945, tokens: 986 },
+      selected: { chars: 3_870, tokens: 968 },
       nothingSelected: { chars: 1_533, tokens: 383 },
     })
   })
