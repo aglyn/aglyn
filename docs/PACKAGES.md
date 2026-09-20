@@ -8,7 +8,7 @@ runtime and every plugin are each one package. Publishing is a later project
 (see [Later](#later)); what this document does now is state the map, so that
 every change made from here on keeps to it, and describe how the map is held.
 
-The map is held in three places, and they agree by construction:
+The map is held in these places, and they agree by construction:
 
 | where | what |
 | -- | -- |
@@ -16,10 +16,14 @@ The map is held in three places, and they agree by construction:
 | `eslint.config.mjs` | `@nx/enforce-module-boundaries` takes those constraints, so every file is judged at lint; a project on the allowlist spreads `boundaryOverridesFor(import.meta.url)` from its own `eslint.config.mjs`, which allows exactly its listed targets and nothing more |
 | `tools/scripts/check-lib-boundaries.mjs` | `check:lib-boundaries` judges the same constraints over `nx graph`, checks this document has a row for every project, and checks every lib `package.json` |
 | `tools/scripts/lib-boundaries-allowlist.json` | the edges that break the map today, one row each; the guard is red for a row that is missing **and** for a row the graph no longer has |
+| `tools/scripts/check-plugin-domain-in-core.mjs` | `check:plugin-domain-in-core` holds Rule 3, which the import graph cannot see: a domain-named file or route directory, a vendor literal, a first-party plugin id or a static plugin import in any tree that is not a plugin |
+| `tools/scripts/plugin-domain-in-core-allowlist.json` | the files that carry a plugin's domain outside its plugin today, each with the AGL-3080 lane that moves it, or `stays` and the argument; red for a finding with no row **and** for a row nothing trips (`--prune`) |
 
 ```sh
 npm run check:lib-boundaries                        # the guard (a few seconds; runs `nx graph`)
 npm run test:lib-boundaries                         # its forced reds
+npm run check:plugin-domain-in-core                 # Rule 3 (a second; reads tracked source)
+npm run test:plugin-domain-in-core                  # its forced reds
 npx nx graph --file=/tmp/graph.json                 # the baseline this document summarizes
 node tools/scripts/run-guards.mjs --only check:lib-boundaries
 ```
@@ -212,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 19 edges the allowlist carries, and what removes each. An edge leaves the
+The 18 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -224,7 +228,7 @@ import and no production file may repeat it; the fix is a fixture that reads
 the table from the core's server entry, or the spec moving to a project that
 may import the core.
 
-**Plugin → plugin** (17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (16, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -245,14 +249,10 @@ needs it starts.
    it, neither imports the other. The machinery is **present**; the named
    contract is **owed** (AGL-3124), beside the payment-provider contract the
    same money path needs.
-2. **`plugins-commerce` → `plugins-data`.** Crosses: `parseCsv`
-   (`src/lib/model/commerce-io.ts`), imported from
-   `@aglyn/plugins-data/model/dataset-io` — which re-exports it from
-   `@aglyn/aglyn/app-utils/dataset-csv`. No plugin domain crosses at all:
-   commerce is reaching a core function through a plugin's barrel. Fix:
-   commerce imports `parseCsv` where it lives — core's `dataset-csv` today, and
-   the generic CSV half's `libs/shared/util/*` home once that file's split
-   lands. No seam needed; this row can be worked off first and on its own.
+2. **`plugins-commerce` → `plugins-data`.** Gone (AGL-3080). Commerce was
+   reaching `parseCsv` through the data plugin's barrel, which only re-exports
+   it; it now imports the function from the core's `dataset-csv`, where it
+   lives. The number stays so the rows below keep theirs.
 3. **`plugins-crm` → `plugins-bookings`.** Crosses: `BOOKING_PATH_DEFAULT` and
    `bookingLinkFor` (`src/lib/components/book-meeting-action.tsx`) — CRM
    spelling a bookings address. Fix: the plugin-declared record route contract,
@@ -415,7 +415,9 @@ until that child lands.
    over plugin ids sits behind a contract any implementer can satisfy. A
    binding that is genuinely the platform's own infrastructure is argued case
    by case and written down where it is argued, never assumed from the fact
-   that it is already there.
+   that it is already there. `check:plugin-domain-in-core` refuses a new one, and
+   its allowlist is where an argued binding is written: a `stays` row with its
+   `why`.
 4. **`libs/shared` stays generic.** Widen a narrow shared utility rather than
    fork it — but never at a bundle cost. A shared lib that would need the
    core to do its job belongs one layer up, not in `shared` with a copy. And

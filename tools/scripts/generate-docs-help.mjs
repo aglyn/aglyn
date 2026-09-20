@@ -131,6 +131,7 @@ const PLUGIN_TOPICS = {
   aglynAssist: '/getting-started/aglyn-assist',
   aiAutomations: '/ai/automations-with-ai',
   aiCrm: '/ai/crm-by-ai',
+  aiExperiments: '/ai/ab-tests-with-ai',
   aiProducts: '/ai/products-with-ai',
   aiSeo: '/building-sites/seo/seo-by-ai',
   aiMonitoring: '/staff-console/ai-monitoring',

@@ -94,6 +94,7 @@ describe('a scaffold’s inputs', () => {
       businessName: 'Wag & Co',
       city: 'Austin',
       brand: 'teal',
+      submissions: null,
       welcomeEmail: true,
       batchId: 'b-1',
     })
@@ -108,6 +109,7 @@ describe('a scaffold’s inputs', () => {
       businessName: '',
       city: '',
       brand: '',
+      submissions: null,
       welcomeEmail: true,
       batchId: null,
     })

@@ -116,8 +116,42 @@ export interface AiSiteJobInputs {
   brand: string
   /** Whether the scaffold also drafts a welcome email. */
   welcomeEmail: boolean
+  /**
+   * Where the contact form's submissions go (AGL-2918); `null` where nobody
+   * said, which is every job created before the question existed and every
+   * door that does not ask it.
+   *
+   * The one setting a new site owner actually needs made, and the one thing
+   * about a contact form a model cannot know: whether a submission is a note
+   * to read or a lead to chase is a decision about how the business runs. So
+   * an answer BINDS the form step rather than hinting to it, and `null`
+   * leaves the model's own proposal standing, exactly as it stood before.
+   */
+  submissions: AiSiteSubmissions | null
   /** The batch this job was created under (AGL-2911); `null` for a single site. */
   batchId: string | null
+}
+
+/**
+ * Where a site's contact form sends what a visitor writes.
+ *
+ * Two, not three. The form step's own vocabulary has a third — a mailing
+ * list — which it can only answer with a note, because the stored routing has
+ * no place for a list; offering it as a question would be asking somebody to
+ * pick an outcome the platform then explains it cannot store.
+ */
+export const AI_SITE_SUBMISSIONS = ['inbox', 'lead'] as const
+
+export type AiSiteSubmissions = (typeof AI_SITE_SUBMISSIONS)[number]
+
+/** Where a job's inputs say submissions go, or `null` where they do not say. */
+export function aiSiteSubmissions(
+  inputs: Readonly<Record<string, unknown>> | null | undefined,
+): AiSiteSubmissions | null {
+  const value = inputs?.['submissions']
+  return (AI_SITE_SUBMISSIONS as readonly unknown[]).includes(value)
+    ? (value as AiSiteSubmissions)
+    : null
 }
 
 const ID_CHARS = /^[A-Za-z0-9_-]{1,64}$/
@@ -163,6 +197,10 @@ export function parseAiSiteJobInputs(
   ) {
     return `pages must be a whole number from ${AI_SITE_PAGES.min} to ${AI_SITE_PAGES.max}`
   }
+  // Where submissions go is admitted only as one of the two the form step
+  // can actually bind; anything else is nobody having said, and the model
+  // proposes as it always did rather than the door refusing the whole job.
+  const submissions = aiSiteSubmissions(inputs)
   const rawBatch = inputs?.['batchId']
   const batchId =
     rawBatch === undefined || rawBatch === null || rawBatch === ''
@@ -180,8 +218,48 @@ export function parseAiSiteJobInputs(
     city: city as string,
     brand: brand as string,
     welcomeEmail: inputs?.['welcomeEmail'] !== false,
+    submissions,
     batchId,
   }
+}
+
+/**
+ * What the site itself is, as a step that is NOT the scaffold reads it off a
+ * job's inputs (AGL-2918).
+ *
+ * A scaffold delegates unit by unit under a job derived from its own — a page
+ * job, a form job — and the derived job carries the scaffold's inputs. So the
+ * two answers that describe the site rather than one record of it are
+ * readable by every delegated step, and a step that wants them does not have
+ * to know it was delegated to.
+ *
+ * Lenient where {@link parseAiSiteJobInputs} is strict, because it reads the
+ * inputs of jobs that are not scaffolds: a page job started from the Screens
+ * page has no `businessType` and no `pages`, and that is not an error here —
+ * it is a site nobody described, and the answer is two empty strings.
+ */
+export interface AiSiteWords {
+  /** What kind of site it is; empty when the job's inputs do not say. */
+  about: string
+  /** Who it is for; empty when the job's inputs do not say. */
+  audience: string
+}
+
+/** Whether either half of {@link AiSiteWords} says anything. */
+export function aiSiteWordsSaidAnything(words: AiSiteWords): boolean {
+  return Boolean(words.about || words.audience)
+}
+
+/** What a job's inputs say the site is, read defensively and trimmed to the input ceiling. */
+export function aiSiteWords(
+  inputs: Readonly<Record<string, unknown>> | null | undefined,
+): AiSiteWords {
+  const read = (key: string): string => {
+    const value = inputs?.[key]
+    if (typeof value !== 'string') return ''
+    return value.replace(/\s+/g, ' ').trim().slice(0, AI_SITE_INPUT_MAX_CHARS).trim()
+  }
+  return { about: read('businessType'), audience: read('audience') }
 }
 
 /**

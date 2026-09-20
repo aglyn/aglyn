@@ -4,7 +4,7 @@
   "figmaNodeId": null,
   "frameName": null,
   "frameSize": null,
-  "notes": "The Aglyn AI hub page (AGL-2920). AUTHORED, not extracted: there is no Figma frame for it, so `figmaNodeId`, `frameName` and `frameSize` are null and every `notes` field describes the section of the /product/besigner skeleton the copy pours into rather than a frame that already draws it. Same 8-section skeleton as the other detail pages, so `apply-page-copy.js` pours it unchanged; `explore` carries TEN cards (the roster, which Aglyn AI is not a member of — it is the eleventh card on /product, AGL-2920 decision of 2026-09-15), so the Explore grid must be grown to ten before pouring, exactly as `copy-datasets.json` requires. Every capability claim on this page is sourced from `apps/docs/docs/ai/` and the AI plugin's own code; the provenance for each is in `claimsToVerify` under the `source` key. Three things about this page are unlike the others and are deliberate. (1) `disclosure` is a top-level key, not a section: generative building is behind `release_ai_generative`, which is OFF in production, so the page carries a rolling-out notice as its own removable band — see that key. (2) `placements` records the nav entry, the footer entry and the /product grid card that AGL-2920 also covers; they belong to the layout and to another page, so they are not sections here and the applier never sees them. (3) `seo` carries the title and description the keyword plan recommends, because neither is a text node on the page — /pricing's SEO description is the surface `docs/PRICING_SURFACES.md` records as missed twice, and this page has the same shape of field.",
+  "notes": "The Aglyn AI hub page (AGL-2920). AUTHORED, not extracted: there is no Figma frame for it, so `figmaNodeId`, `frameName` and `frameSize` are null and every `notes` field describes the section of the /product/besigner skeleton the copy pours into rather than a frame that already draws it. Same 8-section skeleton as the other detail pages, so `apply-page-copy.js` pours it unchanged; `explore` carries TEN cards (the roster, which Aglyn AI is not a member of — it is the eleventh card on /product, AGL-2920 decision of 2026-09-15), so the Explore grid must be grown to ten before pouring, exactly as `copy-datasets.json` requires. Every capability claim on this page is sourced from `apps/docs/docs/ai/` and the AI plugin's own code; the provenance for each is in `claimsToVerify` under the `source` key. Three things about this page are unlike the others and are deliberate. (1) `disclosure` is a top-level key, not a section: generative building is behind `release_ai_generative`, which is OFF in production, so the page carries a rolling-out notice as its own removable band — see that key. (2) `placements` records the nav entry, the footer entry and the /product grid card that AGL-2920 also covers; they belong to the layout and to another page, so they are not sections here and the applier never sees them. (3) `seo` carries the title and description the keyword plan recommends, because neither is a text node on the page — /pricing's SEO description is the surface `docs/PRICING_SURFACES.md` records as missed twice, and this page has the same shape of field. ⛔ Two things in here are NOT ready to apply as written and both are flagged in `claimsToVerify`: the hero mockup's credits figure is a placeholder awaiting AGL-3024's live measurement, and the A/B claim in card 6 needs a plan feature the rest of the page does not.",
   "seo": {
     "title": "Aglyn AI: Describe It, Draft It, Edit Anything",
     "description": "For agencies and multi-brand teams: describe a page, form, email, campaign or product listing, get a draft, edit anything, and publish it yourself.",
@@ -81,23 +81,23 @@
           "meta": null
         },
         {
-          "title": "Emails and campaigns, unsent",
-          "body": "A draft email built from the email blocks, with three subject lines and three preheaders to choose between — or that design plus the draft campaign that would send it.",
+          "title": "Emails, campaigns and follow-ups",
+          "body": "A draft email built from the email blocks, with three subject lines to choose between — or that design plus the draft campaign that would send it. In the CRM, a summary of where a record stands and a one-to-one email drafted into the composer.",
           "meta": null
         },
         {
-          "title": "Copy, themes and search listings",
-          "body": "Rewrite any text on the canvas, or write it from nothing. Describe a theme change and get a proposal in the theme editor's own controls. Have a page or product's search title and description written for you.",
+          "title": "Copy, themes, listings and products",
+          "body": "Rewrite any text on the canvas, or write it from nothing. Describe a theme change and get a proposal in the theme editor's own controls. Have a page or product's search listing written, and a product's copy and catalog ideas proposed.",
           "meta": null
         },
         {
-          "title": "Products, records and your figures",
-          "body": "Product copy and catalog ideas as proposals. A summary and a suggested next step on a CRM record. Plain-words answers about your own numbers, with every figure traced to the row it came from.",
+          "title": "Your figures, and what to try next",
+          "body": "Plain-words answers about your own numbers, with every figure traced to the row it came from. Where your plan includes A/B testing, two to four variants of the copy under test — and a result read back in words that names a winner only when the numbers support one.",
           "meta": null
         }
       ],
       "image": null,
-      "notes": "Centered eyebrow and heading, 3-column card grid, 2 rows, 410px cards with the 44px icon tile top-left. ⛔ These six are the released doors and no more. Drafting an automation from a description is NOT among them — `apps/docs/docs/ai/automations-with-ai.md#draft` says the door is shut on every plan because a multi-step description can come back as a one-step draft. Explaining an automation you already have, and answering why a run failed, ARE released, and they sit in the deep-dive rather than here so that no card reads as 'AI builds your automations'. The heading deliberately says 'most of what you make' rather than a count: `project_product_roster_is_ten_no_counters` bans a counter in copy, and a list of doors goes stale on every release."
+      "notes": "Centered eyebrow and heading, 3-column card grid, 2 rows, 410px cards with the 44px icon tile top-left. The grid is SIX cards and cannot grow — `apply-page-copy.js` pins this section at 14 slots for every product page — so a new door is folded into an existing card rather than given its own, which is why cards 4, 5 and 6 each carry more than one. ⛔ Card 6 is the only claim on this page that needs more than the AI add-on: A/B testing is an entitlement of its own, so the clause 'Where your plan includes A/B testing' is load-bearing and must not be trimmed for rhythm. ⛔ These six are the released doors and no more. Drafting an automation from a description is NOT among them — `apps/docs/docs/ai/automations-with-ai.md#draft` says the door is shut on every plan because a multi-step description can come back as a one-step draft. Explaining an automation you already have, and answering why a run failed, ARE released, and they sit in the deep-dive rather than here so that no card reads as 'AI builds your automations'. The heading deliberately says 'most of what you make' rather than a count: `project_product_roster_is_ten_no_counters` bans a counter in copy, and a list of doors goes stale on every release."
     },
     {
       "kind": "deep-dive",
@@ -121,8 +121,8 @@
           "meta": null
         },
         {
-          "title": "Safe to run, safe to abandon",
-          "body": "A job you don't like costs the credits it spent and a draft you delete. It can also read what you already have: what a saved automation does, or why one of its runs failed.",
+          "title": "It proposes; you decide",
+          "body": "A job you don't like costs the credits it spent and a draft you delete. A proposal fills in the fields you would have typed — it never starts a test or moves a visitor. It can also simply read what you have: what a saved automation does, or why a run failed.",
           "meta": null
         }
       ],
@@ -130,7 +130,7 @@
         "describe": "Besigner canvas mockup, 768×580, showing a generated page open as a draft. Top bar carries the screen name 'Services', a grey status pill reading 'Draft · never published', and a primary 'Publish' button that is the only way it goes live. Left rail shows the layer tree with a highlighted 'Service card' component instance repeated three times — one component, three instances, not three copies. Right rail shows the Attributes panel with theme tokens selected rather than hex values ('Primary', 'Spacing 4'). Across the canvas, a services section with three cards and a quote form block labeled 'Quote request · placed by reference'. Bottom-left, a small toast: 'Draft created. Nothing on your live site has changed.'",
         "figmaNodeId": null
       },
-      "notes": "Combined deep-dive + canvas/visual section — the page's one big visual moment. Two columns: 440px text column left, 768px mockup right, on the tinted band. The three items are checkmark-bulleted rows, not cards. This section carries the single most load-bearing true claim on the page, so its body is close to verbatim from `apps/docs/docs/ai/overview.md#drafts-only` and building rule 13 — the four nevers are the ones the product actually enforces, and no one of them may be softened or dropped for rhythm. Item three carries the automation doors deliberately: 'read what you already have' is exactly what Explain it and Why did this fail? do, and neither drafts nor runs anything."
+      "notes": "Combined deep-dive + canvas/visual section — the page's one big visual moment. Two columns: 440px text column left, 768px mockup right, on the tinted band. The three items are checkmark-bulleted rows, not cards. This section carries the single most load-bearing true claim on the page, so its body is close to verbatim from `apps/docs/docs/ai/overview.md#drafts-only` and building rule 13 — the four nevers are the ones the product actually enforces, and no one of them may be softened or dropped for rhythm. Item three does three jobs. 'Costs the credits it spent and a draft you delete' is the abandon case. 'A proposal fills in the fields you would have typed — it never starts a test or moves a visitor' is the A/B door stated as its code states it: the variants widget writes into the experiment editor's own fields, unsaved, and the dialog's Save is the only write (`libs/plugins/marketing/src/lib/components/experiment-zones.tsx`). And 'simply read what you have' is exactly what Explain it and Why did this fail? do, neither of which drafts nor runs anything."
     },
     {
       "kind": "how-it-works",
@@ -230,7 +230,7 @@
       "heading": "Aglyn AI is an add-on on every paid plan.",
       "subheading": null,
       "body": [
-        "Bought once for the workspace — not per seat and not per site — it adds a band of AI credits to the band your plan already includes, and every member with the permission can use every door on every site. Free workspaces get a small monthly allowance instead, and stop there rather than billing you."
+        "Bought once for the workspace — not per seat and not per site — it adds a band of AI credits to the band your plan already includes, and every member with the permission can use it on every site. A door built on a plan feature needs that feature too: AI A/B variants need A/B testing on your plan as well as the add-on. Free workspaces get a small monthly allowance instead, and stop there rather than billing you."
       ],
       "actions": [
         { "label": "Start free", "variant": "contained" },
@@ -243,7 +243,7 @@
         { "title": "180", "body": "days a brief is kept, then deleted", "meta": "stat" }
       ],
       "image": null,
-      "notes": "⛔ NO PRICES ON THIS PAGE. `docs/PRICING_SURFACES.md` counts nine surfaces a charged price has to reach and two of them are edited by hand here; a figure on this page would be a tenth that no guard can see. The band says what the add-on IS and sends the reader to /pricing for what it costs. Unlike the other detail pages the chip is POURED rather than kept: `eyebrow` is set, so the applier writes 'An add-on, not a plan' over the skeleton's 'Now in early access' — the datasets page changed the same chip to 'Included from Starter' by hand, and pouring it is the mechanical version of that. The four stats are figures that do not go stale with the roster: one workspace credit pool with no second meter per feature, the draft-first rule as a number, the two attempts a generation gets before a job stops (`AI_GENERATION_MAX_ATTEMPTS`), and the 180 days a brief is kept. Section background is bg/default (#F8F9FA); the stat figures take the primary.dark token and never the retired brand-blue literal (AGL-1293)."
+      "notes": "⛔ NO PRICES ON THIS PAGE. `docs/PRICING_SURFACES.md` counts nine surfaces a charged price has to reach and two of them are edited by hand here; a figure on this page would be a tenth that no guard can see. The band says what the add-on IS and sends the reader to /pricing for what it costs. The middle sentence is the SECOND statement of the A/B gate — card 6 carries the first — and it is worded as the general rule with A/B as its instance, because the add-on is what opens the doors and a door standing on a plan feature still needs that feature. It names no tier, deliberately: `abTesting` is false on free, starter and pro and true from business up in `plan-entitlements.ts`, and a tier name in this band would be a plan table growing on a page that must not carry one. The plan names belong to /pricing, which is generated and reconciled. Unlike the other detail pages the chip is POURED rather than kept: `eyebrow` is set, so the applier writes 'An add-on, not a plan' over the skeleton's 'Now in early access' — the datasets page changed the same chip to 'Included from Starter' by hand, and pouring it is the mechanical version of that. The four stats are figures that do not go stale with the roster: one workspace credit pool with no second meter per feature, the draft-first rule as a number, the two attempts a generation gets before a job stops (`AI_GENERATION_MAX_ATTEMPTS`), and the 180 days a brief is kept. Section background is bg/default (#F8F9FA); the stat figures take the primary.dark token and never the retired brand-blue literal (AGL-1293)."
     },
     {
       "kind": "cta",
@@ -310,16 +310,22 @@
       "concern": "RESOLVED. Stated as tracing rather than as analysis, because the guarantee the product actually makes is provenance, not interpretation."
     },
     {
-      "section": "not on the page — A/B variants",
-      "phrase": "describe an A/B variant, generate a draft",
+      "section": "capabilities (card 6) and deep-dive (item 3) — A/B variants",
+      "phrase": "two to four variants of the copy under test … names a winner only when the numbers support one",
       "source": "libs/plugins/ai/src/lib/model/ai-experiment.ts and jobs/ai-job-experiment-step.ts (AGL-2914); registered in server.ts",
-      "concern": "OPEN — deliberately left off this page. The runner exists and its contract is exact: variants are PROPOSED, never written ('Nothing here writes an experiment, starts one, or moves traffic'), and an explanation may name a winner only where `readAiExperimentResult` found one in the counts. But no console surface starts an `experiment` job — nothing outside `libs/plugins/ai` references the module — and there is no docs page for it, so it is a runner without a door. The keyword plan assigns /product/analytics the 'AI A/B testing' primary; that row needs the console surface and a docs page before any marketing page claims it. If it ships first, the accurate wording is proposed variants you paste into the A/B testing card, and a result explained only when the numbers support a winner — never 'AI runs your tests'."
+      "concern": "OPEN WHEN FIRST WRITTEN — deliberately left off this page, because the runner existed and no console surface started an `experiment` job: nothing outside `libs/plugins/ai` referenced the module and there was no docs page, so it was a runner without a door. ✅ RESOLVED by `03ada7539`, which landed the door while this deck was being written: `libs/plugins/marketing/src/lib/components/experiment-zones.tsx` declares two zones on the A/B testing card and the AI plugin registers widgets into them by id, neither plugin importing the other. The wording here is held to what the code guarantees and must stay held to it: variants are PROPOSED, never written ('Nothing here writes an experiment, starts one, or moves traffic'); two to four of them (`AI_EXPERIMENT_MIN_VARIANTS` 2, `AI_EXPERIMENT_MAX_VARIANTS` 4); and an explanation may name a winner only where `readAiExperimentResult` found one BEFORE a model was asked anything — a challenger that could not be compared never wins, because not knowing is not evidence. ⛔ Never 'AI runs your tests'. Still owed: a docs page, so /product/ai and the docs agree the way they do on every other door; and only then the keyword plan's 'AI A/B testing' primary on /product/analytics."
+    },
+    {
+      "section": "capabilities (card 6) and early-access",
+      "phrase": "Where your plan includes A/B testing … AI A/B variants need A/B testing on your plan as well as the add-on",
+      "source": "libs/aglyn/src/lib/app-utils/plan-entitlements.ts → `abTesting`: false on free, starter and pro; true on business, scale, advanced, agency and enterprise. The job's own gate is `aiExperimentAdmissionRefusal` in ai-job-experiment-step.ts, which asks the owning plugin whether the results reader is one this workspace may read rather than restating the entitlement.",
+      "concern": "RESOLVED, and it is the one exception on the page to 'an add-on on any paid plan'. Everything else Aglyn AI does needs the add-on and nothing more; this needs the add-on AND an entitlement two tiers above the cheapest paid plan, so a card that read like the others would be the overclaim this file is otherwise careful to avoid. Verified in `plan-entitlements.ts` rather than off a rendered billing page. ⛔ Stated as 'where your plan includes A/B testing', never as a tier name and never as a price: naming the plan would put a plan-tier fact on a page with no guard over it, which is how `docs/PRICING_SURFACES.md`'s hand-edited surfaces go stale. The refusal is also invisible rather than disabled — `experiment-zones.tsx` says a 403 behind the plan is the card not being there at all — so the page must not imply a greyed-out control a reader could go looking for."
     },
     {
       "section": "hero (mockup content, not prose)",
       "phrase": "Estimated · 1,850 credits",
       "source": "apps/docs/docs/ai/generate-a-site.md — 'the plan shows an estimated cost in credits beside the button that confirms it'",
-      "concern": "OPEN. The behavior is real and the unit is right, but the figure is invented for the shot. Replace it with a measured estimate from a real page job before the mockup is built, or drop the numeral and keep the chip's label. It carries no dollar amount and must not acquire one — a price in a mockup is a pricing surface no guard in `docs/PRICING_SURFACES.md` can see."
+      "concern": "OPEN — AND THE FIGURE IS A PLACEHOLDER, NOT A MEASUREMENT. The behavior is real and the unit is right, but 1,850 is invented for the shot, so whoever applies this page must not quietly keep it. ⛔ The measurement that fills it is AGL-3024's live run, which records credits and tokens per document kind against the real product and goes as soon as beta.138 serves; take the page-job figure from that run. Until it exists, drop the numeral and keep the chip's label rather than shipping a number nobody measured. It carries no dollar amount and must not acquire one — a price in a mockup is a pricing surface no guard in `docs/PRICING_SURFACES.md` can see."
     },
     {
       "section": "early-access",

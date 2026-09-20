@@ -34,6 +34,7 @@ import type { DocsHelpTopicKey } from './docs-help.generated'
  * A missing key is a compile error, so no topic can lose its excerpt quietly.
  */
 export const DOCS_HELP_EXCERPTS = {
+  abTestsWithAi: 'Have Aglyn AI write two to four variants for a screen, section or email experiment, and put a finished test into plain language — with the verdict decided from the counts before the model is asked anything.',
   abuseReports: 'The public abuse-report queue — where outside reports land, how to triage by severity, which lever answers which report, and the CSAM and DMCA paths that are not takedown buttons.',
   account: 'How console sign-in works — Google sign-in on desktop and mobile, one session across all your workspaces, and automatic sign-out after inactivity.',
   actionsBuilder: 'Map a single event to a single action without building a full workflow.',
@@ -146,7 +147,7 @@ export const DOCS_HELP_EXCERPTS = {
   pluginManagerApi: 'Every public registration and loading API a plugin can use, from `@aglyn/aglyn` and `@aglyn/aglyn/server`.',
   plugins: 'Extend Aglyn with sandboxed plugins — install from the marketplace, configure them, and publish your own.',
   pos: 'Sell in person from the console register and take date-range reservations with deposits.',
-  productsWithAi: 'An AI product description generator for your catalog: have Aglyn AI write copy for one product or a whole import, propose a first catalog, and propose categories and discounts — as proposals you review before anything changes.',
+  productsWithAi: 'An AI product description generator for your catalog: write copy for one product or a whole import, propose a first catalog, and propose categories and discounts — all as proposals you review.',
   publishAPlugin: 'Ship your own plugin to the marketplace with version pinning.',
   publisherHandbook: 'Publishing to the Aglyn marketplace — from profile setup through listing authoring, review, updates, and getting paid.',
   publishYourFirstScreen: 'Create a screen, design it in the Besigner, and publish it live.',

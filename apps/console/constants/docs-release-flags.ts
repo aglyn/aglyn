@@ -273,6 +273,17 @@ export const FLAG_DOC_PAGES: Partial<
       disclosure: 'admonition',
       checkNoPriceClaim: true,
     },
+    // AGL-2914. Both doors — variants written in the experiment editor, and a
+    // finished test read back in words — are widgets this flag closes, so the
+    // page is ABOUT the feature and takes the admonition whole-file. A/B
+    // testing itself is a Business-and-up entitlement that ships today, and
+    // the page states that as a condition; the price assertions are what keep
+    // it a condition rather than a plan table.
+    {
+      path: 'docs/ai/ab-tests-with-ai.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
     // AGL-2923 put a full description of the generative add-on on the BILLING
     // page, where a buyer decides. It carried no disclosure and was declared
     // for no flag, so nothing here looked at it while every door it named

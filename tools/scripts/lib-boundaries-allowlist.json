@@ -8,7 +8,6 @@
       "enforcedInline": true
     },
     { "from": "plugins-bookings", "to": "plugins-commerce", "why": "The booking model reuses the commerce model types." },
-    { "from": "plugins-commerce", "to": "plugins-data", "why": "Storefront import/export reuses the dataset io helpers." },
     { "from": "plugins-crm", "to": "plugins-bookings", "why": "A contact record shows its bookings through the bookings model." },
     { "from": "plugins-crm", "to": "plugins-email", "why": "The contact record composes email through the email plugin's hooks." },
     { "from": "plugins-crm", "to": "plugins-marketing", "why": "Conversion attribution and the campaign-send server path are imported from marketing." },
