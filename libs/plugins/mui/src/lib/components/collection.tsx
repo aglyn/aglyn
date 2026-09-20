@@ -1229,18 +1229,27 @@ export interface CollectionRelatedProps extends StackProps {
 const RELATED_DEFAULT_COLUMNS = 3
 
 /**
- * The cover's PROPORTION in the card grid, from the frame's 445 x 180 card
- * (Figma 170:243).
+ * The cover's PROPORTION in the card grid.
  *
- * It was a fixed 180px height, which is the frame's number without the
- * frame's shape. A card is 445 wide there; the grid's columns grow with the
- * viewport and 180 does not, so every extra pixel of width flattened the box
- * and `objectFit: cover` cropped further into the art to fill it. At a 2000px
- * viewport the cover had reached 3.57:1 against the design's 2.47:1 — about a
- * third of the image gone, and the cover art is a composed lockup, so what it
- * loses is the title text on it. A ratio holds the shape at every width.
+ * ONE ratio for every card, rather than each record's own shape: the titles
+ * under the covers only line up when the covers are the same height, and a
+ * grid of honest shapes is a ragged grid.
+ *
+ * The ratio is the shape the console asks authors for — 1200 x 630, the same
+ * image that heads the entry and doubles as its share card — so a cover
+ * authored as instructed loses nothing to the crop. The frame's own card is
+ * 445 x 180 (Figma 170:243), which is 2.47 against that art's 1.90: held
+ * there, `objectFit: cover` discarded 23% of every card's picture at every
+ * width. Cover art is usually a composed lockup, so what it discards is the
+ * title set on it.
+ *
+ * Before the ratio it was a fixed 180px height, which was the frame's number
+ * without the frame's shape: a card is 445 wide there, the grid's columns
+ * grow with the viewport and 180 does not, so every extra pixel of width
+ * flattened the box further — 3.57:1 by a 2000px viewport. A ratio holds the
+ * shape at every width; this ratio holds the picture as well.
  */
-const RELATED_COVER_ASPECT = '445 / 180'
+const RELATED_COVER_ASPECT = '1200 / 630'
 
 /**
  * The card's category chip (AGL-1457). ONE fixed token pair for every
