@@ -163,4 +163,76 @@ export function rememberInternalActor(
   }
 }
 
+/**
+ * The claims verdict for THIS pageview, while it is still being read
+ * (AGL-3194).
+ *
+ * ## Why the remembered actor is not enough on its own
+ *
+ * {@link readRememberedInternalActor} — the `localStorage` memory — can
+ * only answer for a browser that has already completed one signed-in load on
+ * this origin. On the FIRST staff load of a new origin it is empty, the
+ * override may be empty too, and the advertising gate therefore mounts the
+ * tags before the token that would have stopped them has resolved. The hit is
+ * already out by the time the memory is written; sweeping the tag afterwards
+ * does not un-send it.
+ *
+ * So the read announces itself. A gate that cares can hold off while a verdict
+ * is in flight, instead of guessing from a memory that is not written yet.
+ *
+ * ## Why this is not simply "wait for auth"
+ *
+ * `providers.tsx` puts the advertising tags deliberately OUTSIDE the auth
+ * gate: the advertising grant belongs to a visitor who may never sign in, and
+ * `/signin` is this surface's most-collected page. So `pending` is only ever
+ * true when there is an actual token read in flight — a signed-out visitor
+ * never sets it, and their tags mount exactly as before.
+ *
+ * Module state rather than context, for the same reason
+ * `analytics-default-params.ts` owns its set: the layout that reads the token
+ * and the component that mounts the tags are siblings, and threading a
+ * provider between them would put a second copy of this verdict in the tree.
+ */
+export const INTERNAL_ACTOR_VERDICT_EVENT = 'aglyn:internal-actor-verdict'
+
+let actorReadPending = false
+let actorVerdict = false
+
+/** A token read has started, so no verdict is known yet. */
+export function beginInternalActorRead(): void {
+  actorReadPending = true
+  announceInternalActorVerdict()
+}
+
+/** The token resolved, one way or the other. */
+export function settleInternalActorVerdict(internal: boolean): void {
+  actorReadPending = false
+  actorVerdict = internal
+  announceInternalActorVerdict()
+}
+
+/** Whether a verdict is still in flight, and the last one that landed. */
+export function readInternalActorVerdict(): {
+  pending: boolean
+  internal: boolean
+} {
+  return { pending: actorReadPending, internal: actorVerdict }
+}
+
+/** Test seam: no page outlives its own module, but a spec file does. */
+export function resetInternalActorVerdict(): void {
+  actorReadPending = false
+  actorVerdict = false
+}
+
+function announceInternalActorVerdict(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.dispatchEvent(new Event(INTERNAL_ACTOR_VERDICT_EVENT))
+  } catch {
+    // A browser that refuses to construct an Event leaves the gate on the
+    // answer it already had, which is the pre-AGL-3193 behaviour.
+  }
+}
+
 export default isInternalTrafficSession

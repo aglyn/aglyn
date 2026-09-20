@@ -30,6 +30,8 @@ import {
 } from '@aglyn/aglyn/app-utils/platform-advertising-tags'
 import { VISITOR_CONSENT_CHANGED_EVENT } from '@aglyn/aglyn/app-utils/visitor-consent'
 import {
+  INTERNAL_ACTOR_VERDICT_EVENT,
+  readInternalActorVerdict,
   readInternalTrafficOverride,
   readRememberedInternalActor,
 } from '../utils/internal-traffic'
@@ -110,7 +112,14 @@ export default function PlatformAdvertisingTags({
     setReady(true)
     const sync = () => setRevision((previous) => previous + 1)
     window.addEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
-    return () => window.removeEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
+    // The claims verdict arrives after this has already rendered once
+    // (AGL-3194), and it is the answer that decides whether these tags may
+    // exist at all — so it gets a re-resolve exactly like a consent change.
+    window.addEventListener(INTERNAL_ACTOR_VERDICT_EVENT, sync)
+    return () => {
+      window.removeEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
+      window.removeEventListener(INTERNAL_ACTOR_VERDICT_EVENT, sync)
+    }
   }, [])
 
   // Read FRESH, for the teardown listener inside the shared mount: it fires in
@@ -137,7 +146,10 @@ export default function PlatformAdvertisingTags({
   // new origin the memory is not written yet, so that one pageview still
   // mounts. Every load after it does not.
   const internalBrowser = useCallback(
-    () => readInternalTrafficOverride() || readRememberedInternalActor(),
+    () =>
+      readInternalTrafficOverride() ||
+      readRememberedInternalActor() ||
+      readInternalActorVerdict().internal,
     [],
   )
 
@@ -152,8 +164,20 @@ export default function PlatformAdvertisingTags({
     [internalBrowser],
   )
 
-  const tags = ready ? resolve() : []
-  const containerId = ready
+  // Held while a token read is in flight (AGL-3194). The memory and the
+  // override can both be empty on the first staff load of an origin, and a
+  // tag mounted before the verdict lands has already sent its hit — sweeping
+  // it afterwards does not un-send it. `pending` is true ONLY when there is a
+  // real read to wait for, so a signed-out visitor is never held and the
+  // `/signin` mount this component is deliberately placed outside the auth
+  // gate for is unchanged.
+  //
+  // Expressed as an empty tag list rather than a suppressed mount, which is
+  // the same structural state an ungranted visitor is in: no `<Script>`, so
+  // no request reaches a vendor.
+  const settled = ready && !readInternalActorVerdict().pending
+  const tags = settled ? resolve() : []
+  const containerId = settled
     ? resolvePlatformGtmContainerId(
         platformAnalyticsAllowed(),
         undefined,
