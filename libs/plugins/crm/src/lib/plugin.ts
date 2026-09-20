@@ -32,6 +32,11 @@ const CrmConsolePage = lazy(
   () => import('./components/crm-console-page'),
 )
 /** The dashboard glance, split the same way: it loads where the slot mounts it. */
+/** Where a form's fields save on a contact, drawn on the form's own page. */
+const FormContactFieldsCard = lazy(
+  () => import('./components/form-contact-fields-card'),
+)
+
 const CrmTasksDueCard = lazy(
   () => import('./components/crm-tasks-due-card'),
 )
@@ -148,6 +153,19 @@ export function registerCrmConsole(): void {
      * provider around each card, since the sites page cannot import one.
      */
     widgets: [
+      // Which contact field each of a form's fields saves to, on the form's
+      // own page. The forms plugin hosts the zone and writes the form
+      // document; what a contact's fields ARE is this plugin's, so the card
+      // is too.
+      {
+        slot: 'formContactFields',
+        widgetId: 'crm-form-contact-fields',
+        title: 'Saves to contact fields',
+        // A contact's custom fields are part of the suite, so a workspace
+        // without it has none to map a form's field onto.
+        featureFlag: 'crm',
+        Component: FormContactFieldsCard,
+      },
       {
         slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
         widgetId: 'crm-tasks-due',

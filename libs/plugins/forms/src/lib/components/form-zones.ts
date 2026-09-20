@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { FormFieldDecl } from '@aglyn/aglyn'
 import { definePluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 
 /**
@@ -33,3 +34,27 @@ export interface FormSubmissionsZoneProps {
 
 export const FORM_SUBMISSIONS_ZONE =
   definePluginZone<FormSubmissionsZoneProps>('formSubmissions')
+
+/**
+ * Where each of a form's fields saves on the person, decided by whichever
+ * plugin keeps people.
+ *
+ * A form declares its fields; what a contact's fields are is another plugin's
+ * to know. This zone sits on the form's page beside routing and the consent
+ * field and hands that plugin the published declaration. A widget here decides
+ * what the declaration should become and calls `saveFields`; the page does the
+ * write, because the form document is this plugin's.
+ */
+export interface FormContactFieldsZoneProps {
+  hostId: string
+  formId: string
+  /** The PUBLISHED declaration, as stored on the form document. */
+  fields: readonly FormFieldDecl[]
+  /** True while the form document is still being read. */
+  loading?: boolean
+  /** Writes the declaration back onto the form document. */
+  saveFields: (fields: FormFieldDecl[]) => Promise<void>
+}
+
+export const FORM_CONTACT_FIELDS_ZONE =
+  definePluginZone<FormContactFieldsZoneProps>('formContactFields')

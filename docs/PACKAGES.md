@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 6 edges the allowlist carries, and what removes each. An edge leaves the
+The 5 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -230,7 +230,7 @@ legal, so it lives beside the table as
 imports the model from the email library. `shared` imports only `shared`
 again, with no inline disable anywhere.
 
-**Plugin → plugin** (5, numbered to 17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (4, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -284,13 +284,15 @@ needs it starts.
    script against four plugins' bundles and so was never the forms plugin's
    spec. It lives in `apps/console/specs` and reaches each plugin through the
    generated manifest, the one door an app has. The number stays.
-8. **`plugins-forms` → `plugins-crm`.** Crosses two different things:
-   `useContactFieldDefinitions` (`form-contact-fields-card.tsx`) and `crmRoutes`
-   (`form-detail-card.tsx`). Fix, in two halves: contact field definitions come
-   through `registerCustomFieldType`, **present**; the route table comes through
-   the record route contract, and that half has landed: `form-detail-card.tsx`
-   asks `pluginRecordFilteredHref('contact', …, 'form', formId)`. The edge
-   leaves the allowlist when the field-definitions half lands too.
+8. **`plugins-forms` → `plugins-crm`.** Gone (AGL-3080), in two halves. The
+   link to a form's people asks `pluginRecordFilteredHref('contact', …,
+   'form', formId)`. The "Saves to contact fields" card moved to the CRM: what
+   a contact's fields are is the CRM's to know, so the card is its widget, in a
+   `formContactFields` zone the form's page hosts. The widget decides what the
+   declaration becomes and calls `saveFields`; the page writes the form
+   document, which is the forms plugin's. It is gated on the `crm` entitlement
+   like every CRM card, since a workspace without the suite has no fields to
+   map onto. The number stays.
 9. **`plugins-forms` → `plugins-events-calendar`.** Gone (AGL-3080), with
    row 7: the same spec, the same move. The number stays.
 10. **`plugins-forms` → `plugins-inbox`.** Gone (AGL-3080). The forms plugin

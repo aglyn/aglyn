@@ -19,7 +19,10 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiEmailFastOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
-import { FORM_SUBMISSIONS_ZONE } from './components/form-zones'
+import {
+  FORM_CONTACT_FIELDS_ZONE,
+  FORM_SUBMISSIONS_ZONE,
+} from './components/form-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /** Code-split: the Forms console surface only loads when opened. */
@@ -42,6 +45,16 @@ export function registerFormsConsole(): void {
         'On one form’s page, behind the reader’s ask. A widget here reads the submissions to that form alone; it is handed the site and the form and nothing else.',
     },
     // Named, because a spec calls this registrar without the loader.
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: FORM_CONTACT_FIELDS_ZONE,
+      label: 'Where a form’s fields save on the person',
+      surface: 'console',
+      description:
+        'On one form’s page, beside routing and consent. A widget here decides which of the person’s fields each form field saves to and hands the new declaration to `saveFields`; the page writes the form document, and the widget writes nothing itself.',
+    },
     { pluginId: BUNDLE_ID },
   )
   Aglyn.registerConsoleExtension({

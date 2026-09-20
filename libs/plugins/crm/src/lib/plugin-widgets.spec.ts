@@ -73,10 +73,11 @@ describe('crm dashboard widgets', () => {
     }
   })
 
-  it('gates every dashboard card on the CRM, as the extension is gated (AGL-2611, AGL-2851)', () => {
+  it('gates every card on the CRM, as the extension is gated (AGL-2611, AGL-2851)', () => {
     registerCrmConsole()
     const widgets = registered()?.widgets ?? []
-    expect(widgets).toHaveLength(4)
+    // Four dashboard cards, and the form page's contact-fields card.
+    expect(widgets).toHaveLength(5)
     for (const widget of widgets) {
       expect(`${widget.slot}/${widget.widgetId}: ${widget.featureFlag}`).toBe(
         `${widget.slot}/${widget.widgetId}: crm`,

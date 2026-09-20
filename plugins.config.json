@@ -290,6 +290,7 @@
             "/crm"
           ],
           "slots": [
+            "formContactFields",
             "hostDashboard",
             "orgDashboard"
           ]

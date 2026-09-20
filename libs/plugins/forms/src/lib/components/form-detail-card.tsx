@@ -19,13 +19,16 @@
 import * as Aglyn from '@aglyn/aglyn'
 import {
   buildRoute,
+  type FormFieldDecl,
   formFieldsCanYieldAnEmail,
   formFieldsCaptureConsent,
   PageHeaderActions,
   PageHeaderRecord,
+  listConsoleWidgets,
   pluginDocsHelp,
   Route,
 } from '@aglyn/aglyn'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 // The CRM's route builder by its leaf path, not the plugin barrel: the barrel
 // is the entry point the tenant's loader imports to activate the plugin's
 // site half, and a console page named there would ship to every published
@@ -64,7 +67,7 @@ import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
-import FormContactFieldsCard from './form-contact-fields-card'
+import { FORM_CONTACT_FIELDS_ZONE } from './form-zones'
 import FormDesignPreview from './form-design-preview.component'
 import FormMetricsCard from './form-metrics-card.component'
 import FormSubmissionsCard from './form-submissions-card.component'
@@ -122,6 +125,24 @@ export interface FormDetailCardProps {
 export function FormDetailCard(props: FormDetailCardProps) {
   const { hostId, formId, basePath, canPublish, hostRoleLoaded } = props
   const firestore = useFirestore()
+  const ContactFieldsZone = useConsoleWidgetSlot()
+  // Read at render, after the shell has loaded its plugins.
+  const hasContactFieldsWidget =
+    listConsoleWidgets(FORM_CONTACT_FIELDS_ZONE.id).length > 0
+  /**
+   * The write a widget in the contact-fields zone asks for. The declaration
+   * is one array on the form document, and the document is this plugin's, so
+   * the page writes what the widget decided.
+   */
+  const saveFields = useCallback(
+    async (fields: FormFieldDecl[]) => {
+      await updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId), {
+        fields,
+        updatedAt: Timestamp.now(),
+      })
+    },
+    [firestore, hostId, formId],
+  )
   const { orgSlug, subdomain: host } = useConsoleHostRoute(hostId)
   const createHostVersion = useHostVersionApi()
   const promoteForm = useFormPromoteApi()
@@ -654,17 +675,26 @@ export function FormDetailCard(props: FormDetailCardProps) {
             </CardDisplay>
           ),
         },
-        {
-          size: { xs: 12 },
-          children: (
-            <FormContactFieldsCard
-              hostId={hostId}
-              formId={formId}
-              fields={declaredFields}
-              loading={status === 'loading'}
-            />
-          ),
-        },
+        // Where each field saves on the person: another plugin's card, in a
+        // zone this page hosts. No item at all where nothing fills it, so the
+        // grid keeps no empty cell.
+        ...(ContactFieldsZone && hasContactFieldsWidget
+          ? [
+              {
+                size: { xs: 12 },
+                children: (
+                  <ContactFieldsZone
+                    slot={FORM_CONTACT_FIELDS_ZONE.id}
+                    hostId={hostId}
+                    formId={formId}
+                    fields={declaredFields}
+                    loading={status === 'loading'}
+                    saveFields={saveFields}
+                  />
+                ),
+              },
+            ]
+          : []),
         {
           size: { xs: 12, lg: 5 },
           children: (
