@@ -533,6 +533,100 @@ export function mediaVariantSrc(
 }
 
 /**
+ * The whole candidate list for an `<img>`: every width in
+ * {@link MEDIA_CDN_VARIANT_WIDTHS} as a `?w=` url, or `undefined` for a url
+ * that is not ours and therefore has no variants to offer.
+ *
+ * Takes the RESOLVED url, like {@link isMediaCdnUrl} and for the same reason:
+ * a `media:` reference and a legacy stored path both keep their WebP variants,
+ * while a hotlinked image gets nothing rather than a `?w=` on somebody else's
+ * server. Each candidate goes through {@link mediaVariantSrc} so the width
+ * MERGES into a query the url already carries (AGL-2958) instead of being
+ * appended after one.
+ *
+ * Shared rather than restated because three surfaces render a library image —
+ * the Image element, a Markdown body and a collection entry's body — and the
+ * two body renderers shipped with no `srcSet` at all for exactly as long as
+ * this list lived inside `image.tsx` (AGL-3149). A fourth copy is how the
+ * next one drifts.
+ *
+ * ⚠️ `srcSet` alone is not a delivery-only change. With `w` descriptors the
+ * browser derives the image's density-corrected intrinsic size from `sizes`,
+ * so an `<img>` carrying this list and no intrinsic `width`/`height` pair
+ * renders at `sizes` rather than at its own size — measured, a 320px asset in
+ * a 712px column jumped to 668px. Hand it the pair, or hand it an explicit CSS
+ * width, but do not hand it this list alone.
+ */
+export function mediaCdnSrcSet(
+  src: string | undefined | null,
+): string | undefined {
+  if (!isMediaCdnUrl(src)) return undefined
+  return MEDIA_CDN_VARIANT_WIDTHS.map(
+    (width) => `${mediaVariantSrc(src, { width })} ${width}w`,
+  ).join(', ')
+}
+
+/**
+ * Every sizing attribute an image inside authored PROSE should carry, given
+ * what the composition could learn about the asset (AGL-3149).
+ *
+ * A body image differs from an Image element in the one way that matters here:
+ * nobody sets its CSS width. It is laid out by `max-width: 100%` and its own
+ * intrinsic size, so the attributes below are what decide both its box and its
+ * bytes, and they only work as a set:
+ *
+ * - `width`/`height` map to presentational-hint CSS `width`, which
+ *   `max-width: 100%` then caps — so the rendered width is
+ *   `min(natural, column)`. That is the growth the issue asked for, and it is
+ *   also what stops `sizes` deciding the size (see {@link mediaCdnSrcSet}).
+ *   The renderer MUST pair them with `height: auto`, or the height hint
+ *   survives the width cap and the picture is squashed.
+ * - `sizes` is then only a delivery hint, and it is derived from the pair
+ *   rather than from the column: an image narrower than the column renders at
+ *   its own width, so describing the column would fetch a candidate several
+ *   times larger than the slot. Measured, a 320px asset under a fixed
+ *   `sizes="712px"` fetched `?w=1280`; under its own width it fetches `?w=320`.
+ *
+ * WITHOUT a pair this returns the resolved `src` and NOTHING else — today's
+ * markup exactly. That is deliberate: `srcSet` without the pair would upscale
+ * every image narrower than the column, so an asset the facts read cannot
+ * answer for (a hotlink, an SVG the upload could not measure, one past the
+ * composition's cap) must come out unchanged rather than half-improved.
+ */
+export function mediaBodyImageAttributes(options: {
+  /** The target as the body wrote it: a `media:` reference or a plain url. */
+  src: unknown
+  hostId?: string
+  /** The asset's pixel pair, when the composition could read one. */
+  size?: { width: number; height: number } | undefined
+}): {
+  src: string | undefined
+  srcSet?: string
+  sizes?: string
+  width?: number
+  height?: number
+} {
+  const src = resolveMediaSrc(
+    typeof options.src === 'string' ? options.src : undefined,
+    { hostId: options.hostId },
+  )
+  const { size } = options
+  if (!size) return { src }
+  const srcSet = mediaCdnSrcSet(src)
+  return {
+    src,
+    width: size.width,
+    height: size.height,
+    ...(srcSet
+      ? {
+          srcSet,
+          sizes: `(max-width: ${size.width}px) 100vw, ${size.width}px`,
+        }
+      : {}),
+  }
+}
+
+/**
  * Hosts that serve OUR OWN media, for {@link isFirstPartyMediaSrc}.
  *
  * `firebasestorage.googleapis.com` is here because it is where the DAM

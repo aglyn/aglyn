@@ -329,39 +329,16 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       component="img"
       src={src}
       // EVERY CANDIDATE IS A `?w=` URL, and the bare one is gone (2026-08-26).
+      // Why that is worth 335 KB against 4 KB, and why each candidate merges
+      // its width into the url's existing query, are documented where the list
+      // and the builder live — `MEDIA_CDN_VARIANT_WIDTHS` and `mediaCdnSrcSet`
+      // in `media-ref.ts`.
       //
-      // The list used to be a literal `[320, 640, 1280]` with the BARE url
-      // appended as `1920w` — the only candidate that is never WebP. With
-      // `sizes="100vw"` below, any retina desktop needs more effective pixels
-      // than 1280w offers, so that bare candidate is precisely the one most
-      // desktop visitors download: measured on aglyn.com, 335 KB / 305 KB /
-      // 164 KB PNG originals where the WebP variants are 4 KB / 4 KB / 5 KB.
-      // Since ~94% of a media serve is bandwidth (AGL-1442), this was the
-      // largest remaining media cost AND the page weight a visitor feels.
-      //
-      // `?w=1920` is byte-identical to the bare url until a 1920 variant
-      // exists — `serveMediaCdn` serves the original for a width an asset does
-      // not have — so this ships zero regression and picks up the saving the
-      // moment the backfill runs, with no document or component change.
-      //
-      // Reading `MEDIA_CDN_VARIANT_WIDTHS` rather than restating it is the
-      // other half: the literal here is why adding a width to the generator
-      // never used to reach the markup.
-      //
-      // Each candidate comes from `mediaVariantSrc`, which merges the width
-      // into a query the url already carries (AGL-2958). A film's captured
-      // frame is `?poster=1` on the film's url, and a cover image filled from
-      // a film holds exactly that; `?poster=1?w=320` is a request the CDN
-      // answers with the master film. A url with no query gets the same
-      // `?w=` it always has.
-      srcSet={
-        isCdnUrl
-          ? Aglyn.MEDIA_CDN_VARIANT_WIDTHS.map(
-              (variant) =>
-                `${Aglyn.mediaVariantSrc(src, { width: variant })} ${variant}w`,
-            ).join(', ')
-          : undefined
-      }
+      // Called rather than restated so the Markdown and entry-body renderers
+      // can ask for the same list (AGL-3149). Building it here is the reason
+      // they had none: a candidate list inside a component is a candidate list
+      // no other component can have.
+      srcSet={Aglyn.mediaCdnSrcSet(src)}
       // `sizes` is NOT only a delivery hint, and treating it as one broke every
       // fluid image (AGL-2486). With `w` descriptors the browser derives the
       // image's density-corrected INTRINSIC size from `sizes`, so `sizes` is

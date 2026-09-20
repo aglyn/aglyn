@@ -93,6 +93,28 @@ import { VIDEO_COMPONENT_ID } from './video-object'
 /** The Image element's persisted component id (`image.tsx`), never renamed. */
 export const IMAGE_COMPONENT_ID = 'image'
 
+/**
+ * The prop each element that holds a markdown-lite DOCUMENT keeps it in, and
+ * therefore every element whose body can name a library image (AGL-3149).
+ *
+ * The same two elements and the same two prop names `resolveMarkdownSource`
+ * walks for a table of contents (AGL-1162), which is the other reader of a
+ * body's contents. They differ: the Markdown element calls it `content` and a
+ * collection entry's body calls it `markdown`.
+ *
+ * Both ids are spelled out rather than imported. `markdown` belongs to a
+ * plugin, which core may never import; `collectionEntryBody` is exported by
+ * `collection-entries.ts`, but that module is 1,860 lines and drags
+ * `content-authors.ts` behind it, and this one is deliberately outside the
+ * barrel that ships to published pages. A persisted component id is a string
+ * that cannot change — renaming one orphans every document that stores it —
+ * so the copy cannot drift in the way an imported value would protect against.
+ */
+const MARKDOWN_BODY_PROPS: Readonly<Record<string, string>> = {
+  markdown: 'content',
+  collectionEntryBody: 'markdown',
+}
+
 /** The root of a composed map, where a walk in document order starts. */
 const ROOT_NODE_ID: string = CANVAS_ROOT_ELEMENT_ID
 
@@ -234,6 +256,75 @@ function placedAsset(
   return parseMediaRef(props?.['src'])
 }
 
+/** A compose-time token the tenant has not substituted — never a document. */
+const UNRESOLVED_TOKEN = /^\{\{[^}]+\}\}$/
+
+/**
+ * The markdown-lite document a node holds, or `''` for a node holding none.
+ *
+ * `resolvedProps` first, for the reason {@link placedAsset} gives: an entry
+ * body is the literal `{{entry.body}}` in `props` and the entry's real text in
+ * the resolved copy. An unsubstituted token is not a document — it can name no
+ * asset — so it is dropped here rather than walked for images that a canvas
+ * surface would never find.
+ */
+function markdownBodyOf(
+  props: Record<string, unknown> | undefined,
+  componentId: string | undefined,
+): string {
+  const prop =
+    componentId && owns(MARKDOWN_BODY_PROPS, componentId)
+      ? MARKDOWN_BODY_PROPS[componentId]
+      : undefined
+  const text = prop ? props?.[prop] : undefined
+  if (typeof text !== 'string' || UNRESOLVED_TOKEN.test(text.trim())) return ''
+  return text
+}
+
+/** See {@link markdownBodyOf} — the body the page will actually render. */
+function markdownBody(node: ComposedMediaNode | null | undefined): string {
+  return markdownBodyOf(
+    node?.resolvedProps ?? node?.props,
+    node?.componentId,
+  )
+}
+
+/**
+ * A markdown-lite image: `![alt](target)`, capturing only the target, and only
+ * up to the first whitespace or `)`.
+ *
+ * That is the whole of the syntax `markdown-lite.ts` accepts — no title string
+ * after the target, no angle-bracket form — so there is nowhere else in a body
+ * for a reference to hide, and matching more than the parser does would name
+ * assets the renderer never asks for.
+ */
+const MARKDOWN_IMAGE_TARGET = /!\[[^\]]*\]\(\s*([^)\s]+)/g
+
+/**
+ * Every library asset a markdown body's images name, in the order the body
+ * names them, each beside the target EXACTLY as the body wrote it.
+ *
+ * The raw target is carried because that is the key the renderer has: it holds
+ * the parsed block's `src`, the same string, and looking a pair up by it costs
+ * no second parse per image on every render.
+ *
+ * A target that is not a `media:` reference yields nothing — a hotlinked URL
+ * and a legacy stored path have no DAM document to read, and the renderer
+ * gives those today's markup unchanged.
+ */
+function markdownImageRefs(
+  text: string,
+): Array<{ target: string; ref: MediaRef }> {
+  if (!text.includes('![')) return []
+  const found: Array<{ target: string; ref: MediaRef }> = []
+  for (const match of text.matchAll(MARKDOWN_IMAGE_TARGET)) {
+    const target = match[1]
+    const ref = parseMediaRef(target)
+    if (ref) found.push({ target, ref })
+  }
+  return found
+}
+
 /**
  * The map's node ids in document order: depth first from the root through
  * each node's child ids, then every id the walk never reached (a map with no
@@ -289,6 +380,24 @@ export function mediaAssetRefs(
       if (node?.componentId !== element) continue
       const ref = placedAsset(node)
       if (!ref) continue
+      const key = mediaAssetFactsKey(ref)
+      if (seen.has(key)) continue
+      seen.add(key)
+      refs.push(ref)
+    }
+  }
+  // A markdown body's images come LAST, and only when the caller wants every
+  // element (AGL-3149). Last because of what a capped read costs each kind: a
+  // placement that misses out renders at its pick-time pair, a body image that
+  // misses out renders exactly as it does today, and a film that misses out
+  // gets a player of the wrong shape. Only-when-unfiltered because `only` asks
+  // for one ELEMENT's placements, and a body image is not a placement of the
+  // Image element — the video-asset reader would otherwise read image
+  // documents it has no use for.
+  if (options.only) return refs
+  for (const id of order) {
+    const body = markdownBody(nodes[id] as ComposedMediaNode | null)
+    for (const { ref } of markdownImageRefs(body)) {
       const key = mediaAssetFactsKey(ref)
       if (seen.has(key)) continue
       seen.add(key)
@@ -369,7 +478,71 @@ function withImageFacts(
 }
 
 /**
- * The composed map with each placed asset's facts laid over its node.
+ * The prop a markdown body carries its images' pixel pairs in, keyed by the
+ * target the body wrote (AGL-3149).
+ *
+ * A body image is not a node, so it cannot take `intrinsicWidth` and
+ * `intrinsicHeight` the way a placement does; the pairs travel together on the
+ * element that holds the document, and the renderer looks each one up by the
+ * parsed block's `src`.
+ */
+export const BODY_IMAGE_SIZES_PROP = 'intrinsicSizes'
+
+/** One body image's pair, as {@link BODY_IMAGE_SIZES_PROP} carries it. */
+export interface BodyImageSize {
+  width: number
+  height: number
+}
+
+/**
+ * A markdown body's props with a pair for each library image it names, or the
+ * SAME object when no image in it can be answered for.
+ *
+ * Only images whose document records a usable pair get an entry, through the
+ * same {@link intrinsicMediaSize} gate a placement goes through. An image left
+ * out is one the renderer must give today's markup: `srcSet` without the pair
+ * makes `sizes` the image's rendered width, which upscales anything narrower
+ * than the column, so a partial answer is worse here than no answer.
+ */
+function withBodyImageFacts(
+  props: Record<string, unknown>,
+  componentId: string | undefined,
+  facts: ReadonlyMap<string, MediaAssetFacts>,
+): Record<string, unknown> {
+  // THIS object's own body, never the node's resolved one: `props` on a bound
+  // entry body still holds the `{{entry.body}}` token, and pairs for images it
+  // does not name are bytes in the tree that nothing can ever look up.
+  let sizes: Record<string, BodyImageSize> | undefined
+  for (const { target, ref } of markdownImageRefs(
+    markdownBodyOf(props, componentId),
+  )) {
+    const found = facts.get(mediaAssetFactsKey(ref))
+    if (!found) continue
+    const live = intrinsicMediaSize({
+      componentId: IMAGE_COMPONENT_ID,
+      propName: 'src',
+      assetWidth: found.width,
+      assetHeight: found.height,
+    })
+    if (
+      live.intrinsicWidth === undefined ||
+      live.intrinsicHeight === undefined
+    ) {
+      continue
+    }
+    if (!sizes) sizes = {}
+    sizes[target] = {
+      width: live.intrinsicWidth,
+      height: live.intrinsicHeight,
+    }
+  }
+  if (!sizes) return props
+  return { ...props, [BODY_IMAGE_SIZES_PROP]: sizes }
+}
+
+/**
+ * The composed map with each placed asset's facts laid over its node, and each
+ * markdown body's images' pairs laid over the element holding the body.
  *
  * `facts` is keyed by {@link mediaAssetFactsKey}. A placement with no entry,
  * because the reader could not answer for its asset, keeps its stored props.
@@ -384,22 +557,44 @@ export function applyMediaAssetFacts<T extends Record<string, unknown>>(
 ): T {
   if (!facts.size) return nodes
   let applied: Record<string, unknown> | undefined
+  const write = (id: string, node: ComposedMediaNode, next: {
+    props?: Record<string, unknown>
+    resolvedProps?: Record<string, unknown>
+  }): void => {
+    if (!applied) applied = { ...nodes }
+    applied[id] = {
+      ...node,
+      ...(next.props ? { props: next.props } : {}),
+      ...(next.resolvedProps ? { resolvedProps: next.resolvedProps } : {}),
+    }
+  }
   for (const id in nodes) {
     const node = nodes[id] as ComposedMediaNode
     const ref = placedAsset(node, options.only)
     const found = ref ? facts.get(mediaAssetFactsKey(ref)) : undefined
-    if (!found) continue
-    const overlay =
-      node.componentId === VIDEO_COMPONENT_ID ? withFilmFacts : withImageFacts
-    const props = node.props && overlay(node.props, found)
-    const resolvedProps = node.resolvedProps && overlay(node.resolvedProps, found)
-    if (props === node.props && resolvedProps === node.resolvedProps) continue
-    if (!applied) applied = { ...nodes }
-    applied[id] = {
-      ...node,
-      ...(props ? { props } : {}),
-      ...(resolvedProps ? { resolvedProps } : {}),
+    if (found) {
+      const overlay =
+        node.componentId === VIDEO_COMPONENT_ID ? withFilmFacts : withImageFacts
+      const props = node.props && overlay(node.props, found)
+      const resolvedProps =
+        node.resolvedProps && overlay(node.resolvedProps, found)
+      if (props === node.props && resolvedProps === node.resolvedProps) continue
+      write(id, node, { props, resolvedProps })
+      continue
     }
+    // A markdown body, under the same `only` rule `mediaAssetRefs` collects
+    // under: a body image is not a placement of the Image element, so a reader
+    // asking for one element's placements is not asking about bodies.
+    if (options.only) continue
+    const { componentId } = node
+    if (!componentId || !owns(MARKDOWN_BODY_PROPS, componentId)) continue
+    const props =
+      node.props && withBodyImageFacts(node.props, componentId, facts)
+    const resolvedProps =
+      node.resolvedProps &&
+      withBodyImageFacts(node.resolvedProps, componentId, facts)
+    if (props === node.props && resolvedProps === node.resolvedProps) continue
+    write(id, node, { props, resolvedProps })
   }
   return applied ? (applied as T) : nodes
 }

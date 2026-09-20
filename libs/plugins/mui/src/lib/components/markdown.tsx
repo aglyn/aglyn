@@ -140,6 +140,16 @@ const renderInlines = (
 export interface MarkdownProps extends BoxProps {
   /** The document, as markdown-lite source. */
   content?: string
+  /**
+   * The pixel pair of each library image this document names, keyed by the
+   * target as the document writes it, stamped by the composition from the
+   * assets' DAM records (AGL-3149) — never set by hand.
+   *
+   * An image with no entry here renders exactly as it did before this prop
+   * existed: see `mediaBodyImageAttributes` for why a partial answer is worse
+   * than none.
+   */
+  intrinsicSizes?: Record<string, { width: number; height: number }>
 }
 
 /**
@@ -166,7 +176,7 @@ export interface MarkdownProps extends BoxProps {
  * moment earlier as soon as its content was cleared.
  */
 const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
-  const { content, sx, children: _children, ...rest } = props
+  const { content, intrinsicSizes, sx, children: _children, ...rest } = props
   // The routing map travels with the suppression flag: both decide what a
   // link in this document renders as (AGL-3118).
   const { suppressNavigation, screens } = useContext(Aglyn.ScreenLinkContext)
@@ -253,9 +263,25 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
               // route shape never has to be baked into a published document.
               // Every other value — a legacy storage URL, a legacy CDN path,
               // an author-typed hotlink — passes through untouched.
-              src={Aglyn.resolveMediaSrc(block.src, { hostId })}
+              //
+              // The resolve now comes back with the WebP candidate list and
+              // the intrinsic pair beside it, when the composition could read
+              // the asset's record (AGL-3149). Shared with the entry body and
+              // with `image.tsx`'s own srcSet so a body image cannot drift
+              // away from the element again.
+              {...Aglyn.mediaBodyImageAttributes({
+                src: block.src,
+                hostId,
+                size: intrinsicSizes?.[block.src],
+              })}
               alt={block.alt}
-              sx={{ maxWidth: '100%', borderRadius: 1, my: 2 }}
+              // `height: 'auto'` is load-bearing beside the pair above, not
+              // tidiness: the pair's `height` arrives as a presentational hint
+              // too, and a hint that survives the `maxWidth` cap squashes the
+              // picture instead of scaling it. It is what `auto` already
+              // resolved to before the pair existed, so this changes nothing
+              // for an image the composition could not measure.
+              sx={{ maxWidth: '100%', height: 'auto', borderRadius: 1, my: 2 }}
               // `lazy` alone until AGL-2486. A markdown image is by
               // definition inside prose the reader scrolls through, so it
               // belongs in the same deferred rank as everything else that is
