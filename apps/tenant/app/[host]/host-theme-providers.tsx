@@ -21,17 +21,12 @@ import type { HostTheme } from '@aglyn/shared-data-types'
 // the shared-ui-jsx barrel.
 import LoadingLayoutAppComponent from '@aglyn/shared-ui-jsx/components/loading-layout-app.component'
 import {
-  consoleOptions,
-  consoleOptionsDark,
-  consoleThemeDark,
-  consoleThemeLight,
   HostThemeProvider,
-  tenantOptions,
-  tenantOptionsDark,
-  tenantThemeDark,
-  tenantThemeLight,
+  siteBaseOptions,
+  siteFallbackTheme,
+  type Theme,
   type ThemeMode,
-  wearsPlatformBrand,
+  type ThemeOptions,
 } from '@aglyn/shared-ui-theme'
 import type { ReactNode } from 'react'
 // Type-only — see the note on the same import in `host-brand.context.tsx`.
@@ -105,30 +100,23 @@ export function HostThemeProviders({
   // A site that authored no palette of its own resolves the tenant default —
   // MUI's stock accents plus this platform's extra slots, accessible in both
   // schemes. The platform's own marketing hosts keep the Aglyn brand, which
-  // is why the choice is made here rather than by writing a palette into
-  // every host document: the marketing site tracks `console.theme.ts` the
-  // same way the console does.
-  const platformBrand = wearsPlatformBrand(hostKey)
-  const fallback = platformBrand
-    ? ([consoleThemeLight, consoleThemeDark] as [
-        typeof consoleThemeLight,
-        typeof consoleThemeDark,
-      ])
-    : ([tenantThemeLight, tenantThemeDark] as [
-        typeof tenantThemeLight,
-        typeof tenantThemeDark,
-      ])
-  // The same theme as `fallback`, in options form, so a host that customizes
+  // is why the choice is made from the site key rather than by writing a
+  // palette into every host document: the marketing site tracks
+  // `console.theme.ts` the same way the console does.
+  //
+  // Asked of the shared resolvers rather than spelled here, because the
+  // besigner canvas and the theme editor ask the same question about the same
+  // site and have to get the same answer (AGL-3068).
+  const fallback: [Theme, Theme] = [
+    siteFallbackTheme(hostKey, 'light'),
+    siteFallbackTheme(hostKey, 'dark'),
+  ]
+  // The same themes as `fallback`, in options form, so a host that customizes
   // one value keeps the rest of the base rather than MUI's stock (AGL-1180).
-  const baseOptions = platformBrand
-    ? ([consoleOptions, consoleOptionsDark] as [
-        typeof consoleOptions,
-        typeof consoleOptionsDark,
-      ])
-    : ([tenantOptions, tenantOptionsDark] as [
-        typeof tenantOptions,
-        typeof tenantOptionsDark,
-      ])
+  const baseOptions: [ThemeOptions, ThemeOptions] = [
+    siteBaseOptions(hostKey, 'light'),
+    siteBaseOptions(hostKey, 'dark'),
+  ]
 
   return (
     <HostThemeProvider

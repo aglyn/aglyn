@@ -171,6 +171,77 @@ export function sanitizeHostTheme(theme: HostTheme | undefined): HostTheme {
   return sanitized
 }
 
+/** An `@media` key that names a `min-width`, and the width it names. */
+const MIN_WIDTH_AT_RULE = /^@media\b[^{]*\bmin-width\s*:\s*(\d+(?:\.\d+)?)\s*px/
+
+/**
+ * Re-orders breakpoint at-rules ascending, so STORED key order cannot decide
+ * which rule wins (AGL-3146).
+ *
+ * Two `min-width` rules of equal specificity both match a wide window, so the
+ * later one wins — which makes key order a rendering decision. Firestore does
+ * not preserve it: one stored toolbar mixin came back sm, landscape, base to
+ * the server reader and landscape, base, sm to the browser, so aglyn.com's
+ * nav drew 48px live and 72px on the besigner canvas from a single saved
+ * document. The editor and the page disagreed about a value neither of them
+ * had changed.
+ *
+ * Ascending is the order MUI writes its own breakpoint styles in and the
+ * order the theme editor writes a toolbar mixin in: the wider query is the
+ * more specific answer, so it belongs last.
+ *
+ * Only two things move. Plain declarations are hoisted ahead of the blocks,
+ * keeping their order among themselves — which is where the style engine
+ * emits them anyway, since a nested block becomes a rule of its own after the
+ * base one, and where the shorthand/longhand hazard lives. Breakpoint rules
+ * are sorted into the slots the blocks already occupy, so a nested selector
+ * or a condition naming no width never changes position against one another.
+ *
+ * Returns its input by identity when no order changes, which is every theme
+ * with at most one breakpoint rule per object.
+ */
+export function orderMediaWidths<T>(value: T): T {
+  if (Array.isArray(value)) {
+    let moved = false
+    const next = value.map((entry) => {
+      const ordered = orderMediaWidths(entry)
+      if (ordered !== entry) moved = true
+      return ordered
+    })
+    return (moved ? next : value) as T
+  }
+  if (!isPlainObject(value)) return value
+
+  const source = value as Record<string, unknown>
+  const keys = Object.keys(source)
+  const declarations = keys.filter((key) => !isPlainObject(source[key]))
+  const blocks = keys.filter((key) => isPlainObject(source[key]))
+  const widthSlots: number[] = []
+  const widths: Array<{ key: string; width: number }> = []
+  blocks.forEach((key, index) => {
+    const match = MIN_WIDTH_AT_RULE.exec(key)
+    if (!match) return
+    widthSlots.push(index)
+    widths.push({ key, width: Number.parseFloat(match[1]) })
+  })
+  // A stable sort, so two rules at the same width keep the order they were
+  // stored in — there is nothing to prefer between them.
+  const sorted = [...widths].sort((a, b) => a.width - b.width)
+  widthSlots.forEach((slot, position) => {
+    blocks[slot] = sorted[position].key
+  })
+
+  const order = [...declarations, ...blocks]
+  let moved = order.some((key, index) => key !== keys[index])
+  const next: Record<string, unknown> = {}
+  for (const key of order) {
+    const child = orderMediaWidths(source[key])
+    if (child !== source[key]) moved = true
+    next[key] = child
+  }
+  return (moved ? next : value) as T
+}
+
 /**
  * Converts a persisted {@link HostTheme} document into MUI `ThemeOptions`
  * for one color scheme. The result is meant to be passed through
@@ -217,7 +288,11 @@ export function hostThemeToThemeOptions(
     options.mixins = { toolbar: sanitized.mixins.toolbar }
   }
 
-  return options
+  // Every surface that renders a site's theme arrives here — the tenant's
+  // provider, the besigner canvas, Preview, the theme editor — so this is
+  // where a stored document stops being able to resolve differently for
+  // different readers (AGL-3146).
+  return orderMediaWidths(options)
 }
 
 /**

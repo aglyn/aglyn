@@ -220,7 +220,14 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     return null
   }, [missingBillingPieces])
   // Annual billing (AGL-269): checkout maps to the *_YEARLY price ids.
-  const [interval, setInterval] = useState<'month' | 'year'>('month')
+  //
+  // Annual is the offer, so the toggle opens on it. This is the floor and not
+  // the answer: the effect below hands the toggle to a deep link's stated
+  // interval first and to the live subscription's interval next, so the only
+  // org this decides for is one with no subscription of its own — someone
+  // choosing a plan for the first time, who is exactly who the default is for.
+  // A monthly org still opens monthly and an annual org still opens annual.
+  const [interval, setInterval] = useState<'month' | 'year'>('year')
   // Non-null while an in-page checkout is open (AGL-1132). Null is both the
   // closed state and the state on every deploy where the route chose the
   // redirect instead, so nothing here has to know which mode is live.
@@ -1717,7 +1724,11 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             {
               size: { xs: 12 },
               children: (
-                // Annual billing toggle (AGL-269): two months free.
+                // Annual billing toggle (AGL-269). The saving is stated the
+                // way /pricing states it, because a customer reads both: the
+                // annual price is 19.2% (Agency) to 36.0% (Starter) below
+                // twelve months at the monthly price, so "two months free"
+                // — 16.7% — understated every plan on the grid (AGL-3155).
                 <FormControlLabel
                   control={
                     <Switch
@@ -1729,8 +1740,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   }
                   label={
                     interval === 'year'
-                      ? 'Annual billing — 2 months free'
-                      : 'Monthly billing (switch for 2 months free)'
+                      ? 'Annual billing — save up to 35%'
+                      : 'Monthly billing (switch and save up to 35%)'
                   }
                 />
               ),

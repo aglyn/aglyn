@@ -203,7 +203,11 @@ const specs = [
         timeout: TIMEOUT_MS,
         state: 'attached',
       })
-      await page.click('text=Monthly billing (switch for 2 months free)')
+      // The seeded org is billed monthly, so its own interval puts the
+      // toggle on Monthly whatever the page's default is (AGL-3155 made
+      // that default annual for an org with no subscription). The $139
+      // wait above is what proves it started there.
+      await page.click('text=Monthly billing (switch and save up to 35%)')
       await page.waitForSelector('text=/month, billed yearly', {
         timeout: TIMEOUT_MS,
         state: 'attached',

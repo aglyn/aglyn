@@ -27,6 +27,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useFirestore, useHost, useUser } from '@aglyn/tenant-feature-instance'
+import { hostBrandKey, HostSiteKeyContext } from '@aglyn/shared-ui-theme'
 import { useAuthRecovery } from '../hooks/use-auth-recovery'
 import { useHostResolution } from '../hooks/use-host-resolution'
 import { useOrgScope } from '../hooks/use-org-scope'
@@ -128,10 +129,12 @@ export const useHostAuthError = () => useContext(HostAuthErrorContext)
 function HostPluginPolicyBridge({
   hostId,
   uid,
+  subdomain,
   children,
 }: {
   hostId: string
   uid?: string
+  subdomain: string | null
   children: ReactNode
 }) {
   const {
@@ -150,11 +153,24 @@ function HostPluginPolicyBridge({
     [host?.enabledPlugins],
   )
   const isAdmin = Boolean(uid && host?.memberRoles?.[uid] === 'admin')
+  /**
+   * Which site every themed surface below is showing (AGL-3068).
+   *
+   * The site's own address, because that is what the published page is
+   * served under and what decides the theme base it builds on. Read off the
+   * document already open here rather than fetched again, and falling back
+   * to the URL's subdomain while it loads — a site with no attached domain
+   * is reachable by that subdomain, and the fallback is what keeps the
+   * canvas from resolving a base for a nameless site in the meantime.
+   */
+  const siteKey = hostBrandKey(host) ?? subdomain ?? undefined
   return (
     <HostDisabledPluginsContext.Provider value={disabledPlugins}>
       <HostEnabledPluginsContext.Provider value={optedInPlugins}>
         <HostAdminContext.Provider value={isAdmin}>
-          {children}
+          <HostSiteKeyContext.Provider value={siteKey}>
+            {children}
+          </HostSiteKeyContext.Provider>
         </HostAdminContext.Provider>
       </HostEnabledPluginsContext.Provider>
     </HostDisabledPluginsContext.Provider>
@@ -271,7 +287,11 @@ export function HostIdProvider({ children }) {
               <HostSubdomainContext.Provider value={hostSubdomain}>
                 <HostIdContext.Provider value={hostId ?? null}>
                   {hostId ? (
-                    <HostPluginPolicyBridge hostId={hostId} uid={user?.uid}>
+                    <HostPluginPolicyBridge
+                      hostId={hostId}
+                      uid={user?.uid}
+                      subdomain={hostSubdomain}
+                    >
                       {children}
                     </HostPluginPolicyBridge>
                   ) : (

@@ -17,11 +17,10 @@
 
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import {
-  consoleOptions,
-  consoleOptionsDark,
   createResponsiveTheme,
   hostThemeToThemeOptions,
   mergeThemeOptions,
+  siteBaseOptions,
   ThemeProvider,
 } from '@aglyn/shared-ui-theme'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
@@ -68,6 +67,12 @@ import { useMemo } from 'react'
 export interface ThemePreviewProps {
   theme: HostTheme
   scheme: HostThemeScheme
+  /**
+   * Which site this is — its attached domain, or its subdomain (AGL-3068).
+   * It decides the base the draft is previewed over, which is the same
+   * choice the published page makes from its own address.
+   */
+  host?: string
 }
 
 /**
@@ -154,20 +159,21 @@ function TypeRamp() {
 }
 
 export function ThemePreview(props: ThemePreviewProps) {
-  const { theme, scheme } = props
+  const { theme, scheme, host } = props
 
   const previewTheme = useMemo(() => {
     // Preview what the SITE will render, which layers the host's overrides
-    // onto the brand theme (AGL-1180). Building from the host document alone
-    // showed MUI's stock blue/purple for every slot left on "Default", so an
-    // untouched host previewed in colours it would never actually serve.
+    // onto the base that site publishes on (AGL-1180, AGL-3068). Building
+    // from the host document alone showed MUI's stock blue/purple for every
+    // slot left on "Default", and building on the brand unconditionally
+    // showed a customer site colors only the operator's own hosts serve.
     return createResponsiveTheme({
       themeOptions: mergeThemeOptions(
-        scheme === 'dark' ? consoleOptionsDark : consoleOptions,
+        siteBaseOptions(host, scheme),
         hostThemeToThemeOptions(theme, scheme),
       ),
     })
-  }, [theme, scheme])
+  }, [theme, scheme, host])
 
   return (
     <ThemeProvider theme={previewTheme}>

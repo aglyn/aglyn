@@ -31,7 +31,9 @@ import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 // Subpath, not the barrel: `empty-state.component` is deliberately kept out
 // of `@aglyn/shared-ui-jsx`'s index (nothing in the tenant page graph shows an
 // empty state, and the barrel rule is enforced in CI).
-import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
+import EmptyStateComponent, {
+  emptyStateBackdropSx,
+} from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   DndContext,
@@ -61,7 +63,6 @@ import {
   TableRow,
   Tooltip,
   Typography,
-  alpha,
   useMediaQuery,
   useTheme,
 } from '@mui/material'
@@ -828,18 +829,15 @@ export function ScreensHierarchyTableComponent(
                 colSpan={COLUMN_COUNT}
                 align="center"
                 sx={(theme) => ({
-                  // MUI's OWN `GridOverlay` FORMULA, not an approximation of
-                  // it. The three grid lists render their empty state inside
-                  // that overlay, which fills with `background.default` at
-                  // `action.disabledOpacity` — a very faint wash over the
-                  // white card. Setting `background.default` SOLID here (the
-                  // first attempt) produced a visibly darker grey than the
-                  // lists it was supposed to match. Written as the same
-                  // expression so a theme change moves both together.
-                  backgroundColor: alpha(
-                    theme.palette.background.default,
-                    theme.palette.action.disabledOpacity,
-                  ),
+                  // MUI's OWN `GridOverlay` FILL, from the module that owns
+                  // the empty state. The three grid lists render theirs
+                  // inside that overlay, which washes `background.default` at
+                  // `action.disabledOpacity` over the card; this cell has no
+                  // overlay, so it takes the same wash by name. Spelled here,
+                  // the formula read `theme.palette` — bound to the light
+                  // scheme on the console's CSS-variables theme, so the cell
+                  // painted a near-white block inside the dark console.
+                  ...emptyStateBackdropSx(theme),
                   // No bottom rule: the pagination below draws the only line
                   // this region needs, and the two together read as a stray
                   // border with a gap in it.
