@@ -456,6 +456,7 @@
             "/inbox"
           ],
           "slots": [
+            "formSubmissions",
             "hostDashboard"
           ]
         }

@@ -18,6 +18,8 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiEmailFastOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
+import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
+import { FORM_SUBMISSIONS_ZONE } from './components/form-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /** Code-split: the Forms console surface only loads when opened. */
@@ -31,6 +33,17 @@ const FormsConsolePage = lazy(() => import('./components/forms-console-page'))
  * declared section. Safe to call at console app load — the page is lazy.
  */
 export function registerFormsConsole(): void {
+  registerPluginZone(
+    {
+      zone: FORM_SUBMISSIONS_ZONE,
+      label: 'One form’s submissions',
+      surface: 'console',
+      description:
+        'On one form’s page, behind the reader’s ask. A widget here reads the submissions to that form alone; it is handed the site and the form and nothing else.',
+    },
+    // Named, because a spec calls this registrar without the loader.
+    { pluginId: BUNDLE_ID },
+  )
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Forms',

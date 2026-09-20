@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 13 edges the allowlist carries, and what removes each. An edge leaves the
+The 12 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -228,7 +228,7 @@ import and no production file may repeat it; the fix is a fixture that reads
 the table from the core's server entry, or the spec moving to a project that
 may import the core.
 
-**Plugin → plugin** (11, numbered to 17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (10, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -290,11 +290,12 @@ needs it starts.
    leaves the allowlist when the field-definitions half lands too.
 9. **`plugins-forms` → `plugins-events-calendar`.** Gone (AGL-3080), with
    row 7: the same spec, the same move. The number stays.
-10. **`plugins-forms` → `plugins-inbox`.** Crosses: inbox's `SubmissionsCard`
-    (`src/lib/components/form-submissions-card.component.tsx`). Fix: inbox
-    registers the card as a widget into the `hostForms` zone the forms plugin
-    already hosts and draws with `useConsoleWidgetSlot()`. **Present**, and this
-    is the shape a plugin's own hub is meant to take.
+10. **`plugins-forms` → `plugins-inbox`.** Gone (AGL-3080). The forms plugin
+    declares a `formSubmissions` zone (`definePluginZone`, `registerPluginZone`)
+    and draws it on a form's page behind the reader's ask; the Inbox registers
+    its submissions table there as a widget, narrowed to that form. The page
+    says where submissions are read when no plugin registered a reader. The
+    number stays.
 11. **`plugins-forms` → `plugins-mui`.** Crosses: `BUNDLE_ID as MUI_BUNDLE_ID`
     (`src/lib/components/form.tsx`), plus MUI's `Product` component and its
     bundle id in two specs. Fix: a form never needs another plugin's bundle id

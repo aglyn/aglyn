@@ -17,6 +17,8 @@
  * that listens with `limit(100)` to draw ten rows is buying a hundred.
  */
 
+import { registerConsoleExtension, unregisterConsoleExtension } from '@aglyn/aglyn'
+import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
@@ -225,10 +227,29 @@ const CATALOG_DOCUMENT_CEILING = 13
  */
 const ONE_FORM_DOCUMENT_CEILING = 101
 
+/** What the shell's slot renderer was asked to draw. */
+const mockZonesDrawn: Array<Record<string, unknown>> = []
+const Slot = (props: { slot: string } & Record<string, unknown>) => {
+  mockZonesDrawn.push(props)
+  return null
+}
+
 async function renderConsole(segments: string[]) {
   mockListens.length = 0
+  mockZonesDrawn.length = 0
+  // A plugin that reads submissions, standing in for the Inbox: the form page
+  // offers the ask only where something registered a reader for its zone.
+  unregisterConsoleExtension('reader')
+  registerConsoleExtension({
+    pluginId: 'reader',
+    displayName: 'Reader',
+    widgets: [
+      { slot: 'formSubmissions', widgetId: 'reader-form', title: 'Submissions', Component: () => null },
+    ],
+  })
   const { FormsConsolePage } = await import('./forms-console-page')
   return render(
+    <ConsoleWidgetSlotContext.Provider value={Slot}>
     <FormsConsolePage
       hostId="site1"
       entitled
@@ -237,7 +258,8 @@ async function renderConsole(segments: string[]) {
       basePath={BASE_PATH}
       segments={segments}
       hostRole={{ canPublish: true, loaded: true }}
-    /> as ReactNode as never,
+    />
+    </ConsoleWidgetSlotContext.Provider> as ReactNode as never,
   )
 }
 
@@ -325,26 +347,17 @@ describe('forms console read cost', () => {
     expect(documentCeiling()).toBeLessThanOrEqual(ONE_FORM_DOCUMENT_CEILING)
   })
 
-  it('THE CONTROL: pressing the ask DOES open the submissions listen', async () => {
-    // Otherwise the assertion above is satisfied by a page with no
-    // submissions table at all, which is the state this work started from.
+  it('THE CONTROL: pressing the ask DOES draw the submissions zone', async () => {
+    // Otherwise the assertion above is satisfied by a page with no way to
+    // read submissions at all, which is the state this work started from.
+    // What the reader then costs is the reading plugin's to bound, and the
+    // Inbox's `submissions-card-scoped.spec.tsx` holds it: paged, ordered,
+    // and no read of the site's form catalog.
     await renderConsole(['form-abc'])
+    expect(mockZonesDrawn).toEqual([])
     fireEvent.click(screen.getByRole('button', { name: 'Show submissions' }))
-    expect(paths()).toContain('hosts/site1/formSubmissions')
-    // And BOUNDED when it does open: the reader is paged, not a walk of the
-    // collection sliced small.
-    const listen = mockListens.find(
-      (entry) => entry.path === 'hosts/site1/formSubmissions',
-    )
-    expect(listen && listen.limit > 0).toBe(true)
-  })
-
-  it('the scoped table does NOT read the site’s form catalog', async () => {
-    // The picker is the catalog read's only consumer, and a card narrowed to
-    // one form renders no picker. Reading fifty form documents to draw a
-    // control that is not on screen is the read this scope removes.
-    await renderConsole(['form-abc'])
-    fireEvent.click(screen.getByRole('button', { name: 'Show submissions' }))
-    expect(paths()).not.toContain('hosts/site1/forms')
+    expect(mockZonesDrawn).toEqual([
+      { slot: 'formSubmissions', hostId: 'site1', formId: 'form-abc' },
+    ])
   })
 })
