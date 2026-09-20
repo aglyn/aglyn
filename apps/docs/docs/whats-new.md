@@ -127,6 +127,14 @@ Drafting an automation from a description is **not** part of this release — se
   for a sync that walks only what changed. A [contact](/api/resources/contacts#crm-profile)
   gains its CRM profile — phone, job title, company, owner, lifecycle stage — written per
   site and readable as one, and `/v1/usage` reports the size of each collection.
+- **[Functions that can carry a calculator](building-sites/bindings/overview.md#no-code-functions)** —
+  an expression can call `min`, `max`, `round`, `floor`, `ceil`, `abs` and `format`, and
+  can read any site variable by its name, so a price lives in one variable and every
+  page and calculator follows it. A parameter takes a **label**, a starting value and a
+  list of **choices**, and the
+  [Function Widget](building-sites/besigner/element-catalog.md) asks each one as what it
+  is — a number box, a switch, a list — shows several named results instead of one, and
+  can update as the visitor types.
 
 ## August 2026 — the canvas, up close
 

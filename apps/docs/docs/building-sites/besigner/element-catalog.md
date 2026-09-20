@@ -393,7 +393,7 @@ One element in this group belongs to neither:
 
 | Element | What it's for |
 | --- | --- |
-| **Function Widget** | Runs one of your no-code [functions](../../marketing-and-automation/workflows-and-actions/overview.md) on the live site and shows what it returns — a quote calculator, a shipping estimate, a score. **Function name** is the function from the site's Functions card; the widget draws an input per parameter, a run button you can relabel, and the result under a **Result label** prefix. The function runs server-side, so its logic is never in the page source. |
+| **Function Widget** | Runs one of your no-code [functions](../../marketing-and-automation/workflows-and-actions/overview.md) on the live site and shows what it returns — a quote calculator, a shipping estimate, a score. **Function name** is the function from the site's Functions card; the widget draws an input per parameter — a number box, a switch or a list, under the label and starting value the [function sets](../bindings/overview.md#parameters-a-visitor-can-answer) — a run button you can relabel, and the result under a **Result label** prefix. **Results to show** lists several named results instead of one, one per line as `name | Label`, and **Update as the visitor types** recomputes without the button. The function runs in the visitor's browser: its definition, and the site variables it names, are part of the page, so keep anything private out of both. |
 
 ## Related
 
