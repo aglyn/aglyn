@@ -22,7 +22,11 @@ sharing the same structure.
 ## hreflang & discovery
 
 Aglyn emits **hreflang** tags so search engines serve the right language to the right
-visitor.
+visitor, and the same set reaches social networks as `og:locale` — the language this
+page is in — plus one `og:locale:alternate` for each language it is translated into.
+
+A language reaches both only once its variant is a published page: a locale you have
+added but not yet translated is never advertised as a translation that exists.
 
 ## Language switcher
 

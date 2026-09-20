@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 import type { PaletteOptions, Theme, ThemeOptions } from '../vendor/mui'
-import { consoleOptions, consoleOptionsDark } from './console.theme'
+import {
+  consoleOptions,
+  consoleOptionsDark,
+  consoleThemeDark,
+  consoleThemeLight,
+} from './console.theme'
 import createResponsiveTheme from './util/create-responsive-theme'
 
 /**
@@ -261,4 +266,57 @@ export function wearsPlatformBrand(host: string | undefined): boolean {
       ? normalized.slice(CNAME_PREFIX.length)
       : normalized,
   )
+}
+
+/**
+ * The site key {@link wearsPlatformBrand} is asked about, read off a host
+ * document (AGL-3068).
+ *
+ * The tenant is handed its `[host]` route param, which is the attached domain
+ * under the middleware's `cname--` sentinel or a bare subdomain label. A
+ * console surface has the document instead, where those are two fields: the
+ * attached domain is what a platform-brand host is listed under, and the
+ * subdomain is what every other site is reachable by. Reading them in that
+ * order is what makes the editor ask the same question the published page
+ * answers.
+ */
+export function hostBrandKey(
+  host: { cname?: string; subdomain?: string } | null | undefined,
+): string | undefined {
+  return host?.cname || host?.subdomain || undefined
+}
+
+/**
+ * The options a site's own theme is layered onto: the platform's brand for
+ * the operator's own hosts, the neutral tenant default for everyone else
+ * (AGL-3068).
+ *
+ * One decision, because it used to be four. The tenant made it per host,
+ * while the besigner canvas, the theme editor's preview and the "Default ·
+ * #…" the editor prints beside every unset slot all built on the brand base
+ * unconditionally — so a customer site was authored in Aglyn's cyan and
+ * published in MUI's blue, and an author correcting contrast was correcting a
+ * page that does not exist.
+ *
+ * An unknown host is NOT a platform host, exactly as `wearsPlatformBrand`
+ * already reads it: the operator's hosts are the named exception, so a
+ * surface that cannot name the site resolves what a customer site resolves.
+ */
+export function siteBaseOptions(
+  host: string | undefined,
+  scheme: 'light' | 'dark',
+): ThemeOptions {
+  const brand = wearsPlatformBrand(host)
+  if (scheme === 'dark') return brand ? consoleOptionsDark : tenantOptionsDark
+  return brand ? consoleOptions : tenantOptions
+}
+
+/** The built theme a site with no customization of its own renders under. */
+export function siteFallbackTheme(
+  host: string | undefined,
+  scheme: 'light' | 'dark',
+): Theme {
+  const brand = wearsPlatformBrand(host)
+  if (scheme === 'dark') return brand ? consoleThemeDark : tenantThemeDark
+  return brand ? consoleThemeLight : tenantThemeLight
 }

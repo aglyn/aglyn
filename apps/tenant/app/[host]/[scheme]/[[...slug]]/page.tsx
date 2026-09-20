@@ -17,6 +17,13 @@
 
 import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
+// Deep import, not the barrel (AGL-3148): four call sites in this file need
+// three small functions, and `import * as` pins whatever the barrel reaches.
+import {
+  openGraphAlternateLocales,
+  resolvePageLocale,
+  toOpenGraphLocale,
+} from '@aglyn/aglyn/app-utils/seo-locale'
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
 import {
   ELEMENT_ANIMATION_STYLE_ID,
@@ -122,6 +129,25 @@ type CatchAllPageProps = {
 }
 
 /**
+ * The X handle of whoever a card should CREDIT (AGL-3148).
+ *
+ * An author record stores its profiles in two fields — `sameAs`, declared for
+ * crawlers, and `links`, the rows the profile page prints — and AGL-2516
+ * established that the second is folded into the first for structured data.
+ * `twitter:creator` reads the same union, so an author who filled in either
+ * one is credited on the card without a third field to keep in step.
+ */
+function authorXHandle(record: any): string | undefined {
+  if (!record) return undefined
+  return Aglyn.xHandleFromProfiles([
+    ...(Array.isArray(record.sameAs) ? record.sameAs : []),
+    ...(Array.isArray(record.links)
+      ? record.links.map((link: any) => link?.url).filter(Boolean)
+      : []),
+  ])
+}
+
+/**
  * Metadata replaces the Pages Router `<Head>` blocks (no-ops in the App
  * Router). Derived server-side from the same composed props — screen SEO
  * with host-level defaults, noindex for the gated/soft-404 surfaces.
@@ -134,6 +160,42 @@ function buildMetadata(props: Props): Metadata {
   const assetFacts = props.socialImageFacts
   const siteTitle: string | undefined = host?.seo?.title ?? host?.displayName
   const separator: string | undefined = host?.seo?.separator
+  /**
+   * `og:site_name`, on EVERY page (AGL-3148).
+   *
+   * This was `siteTitle`, so a site that had set neither an SEO title nor a
+   * display name shared as a card naming no site at all — and the docs have
+   * promised the property "on every page" since AGL-1341. The business name
+   * sits between the two because a site with no SEO title still usually knows
+   * what the business is called; it is the same name the structured data
+   * publishes as the entity, so the card and the `Organization` node cannot
+   * disagree about who this is.
+   *
+   * Still not a placeholder when all three are empty: a host with no name of
+   * any kind emits no `og:site_name`, rather than the platform's own.
+   */
+  const siteName: string | undefined =
+    host?.seo?.title || host?.seo?.entity?.name || host?.displayName
+  /**
+   * The language of this page, and the card attribution, once for all four
+   * branches below (AGL-3148).
+   *
+   * Every one of these was absent from every page type on the platform.
+   * They are computed above the early returns for the reason the JSON-LD
+   * builder computes its site entity there: a property added to only the last
+   * branch is missing from exactly the pages people link to.
+   *
+   * `twitter:site` is the SITE's account and so belongs on every card; the
+   * `creator` is per-page and is set by the branches that know an author.
+   */
+  const pageLocale = resolvePageLocale({ screen, host })
+  const ogLocale = toOpenGraphLocale(pageLocale)
+  const siteOpenGraph = {
+    ...(siteName ? { siteName } : {}),
+    ...(ogLocale ? { locale: ogLocale } : {}),
+  }
+  const siteXHandle = Aglyn.xHandleFromProfiles(Aglyn.siteProfileUrls(host))
+  const siteTwitter = siteXHandle ? { site: siteXHandle } : {}
   // White-label (White-Label Phase 2): the generic title fallback reads the
   // org's resolved brand name rather than a hard-coded "Aglyn", so a
   // white-label site with no SEO/display title never leaks the Aglyn brand
@@ -259,6 +321,7 @@ function buildMetadata(props: Props): Metadata {
         host,
         assetFacts,
       })
+    const authorHandle = authorXHandle(record)
     return {
       title: authorTitle,
       ...(authorDescription ? { description: authorDescription } : {}),
@@ -269,20 +332,29 @@ function buildMetadata(props: Props): Metadata {
         ? { alternates: { canonical: authorCanonical } }
         : {}),
       openGraph: {
+        ...siteOpenGraph,
         title: authorTitle,
         ...(authorDescription ? { description: authorDescription } : {}),
         // `profile`, not `website`: the subject of the page is a person.
         type: 'profile',
+        // `profile:username` is the one profile sub-property this platform can
+        // answer without guessing (AGL-3148). A display name is not reliably
+        // "first" then "last" — many names are neither, and splitting one on
+        // a space to fill `profile:first_name` publishes a claim nobody made.
+        ...(authorHandle ? { username: authorHandle.replace(/^@/, '') } : {}),
         ...(authorCanonical ? { url: authorCanonical } : {}),
         ...(authorImage ? { images: [authorImage] } : {}),
-        ...(siteTitle ? { siteName: siteTitle } : {}),
       },
       twitter: {
+        ...siteTwitter,
         // The wide card only for a picture shaped like one. Falling back to
         // the portrait means falling back to `summary`: a square face in a
         // `summary_large_image` slot is cropped to a letterbox, which is a
         // worse card than the small one that fits.
         card: authorCard ? 'summary_large_image' : 'summary',
+        // The card credits the PERSON the page is about, beside the site that
+        // publishes them — which is what the two fields mean.
+        ...(authorHandle ? { creator: authorHandle } : {}),
         title: authorTitle,
         ...(authorDescription ? { description: authorDescription } : {}),
         ...(authorImage ? { images: [authorImage] } : {}),
@@ -443,6 +515,58 @@ function buildMetadata(props: Props): Metadata {
       collectionBase && collectionSlug && !unknownCategory
         ? `${collectionBase}/${collectionSlug}/rss.xml`
         : undefined
+    /**
+     * WHAT `og:type: article` IS SUPPOSED TO COME WITH (AGL-3148).
+     *
+     * The type was declared and none of its properties were, while the same
+     * five values were being resolved a few lines over for the `BlogPosting`
+     * node — so a crawler reading the structured data learned when a post was
+     * written and who wrote it, and a card reading the meta tags learned
+     * neither. One entry, two readers, two answers.
+     *
+     * The byline is the author's PAGE on this site rather than their name:
+     * `article:author` is defined as a profile, and this platform publishes a
+     * real one for every author (AGL-2518). The name is the fallback for a
+     * legacy free-typed byline, which has no page to point at.
+     */
+    const entryAuthor = entry
+      ? (entry.author ?? Aglyn.resolveEntryAuthor(entry))
+      : undefined
+    const entryAuthorUrl =
+      collectionBase && entry?.author
+        ? collectionBase +
+          Aglyn.contentAuthorPageAtUrl({ author: entry.author })
+        : undefined
+    const entryTags = Array.isArray(entry?.tags)
+      ? entry.tags.filter((tag: unknown) => typeof tag === 'string' && tag)
+      : []
+    const entrySection = entry
+      ? Aglyn.resolveEntryCategoryName(entry, content.collection?.categories)
+      : undefined
+    const entryArticleOpenGraph = {
+      ...(entry?.publishedAt?.seconds
+        ? {
+            publishedTime: new Date(
+              entry.publishedAt.seconds * 1000,
+            ).toISOString(),
+          }
+        : {}),
+      ...(entry?.updatedAt?.seconds
+        ? {
+            modifiedTime: new Date(
+              entry.updatedAt.seconds * 1000,
+            ).toISOString(),
+          }
+        : {}),
+      ...(entryAuthorUrl
+        ? { authors: [entryAuthorUrl] }
+        : entryAuthor?.name
+          ? { authors: [entryAuthor.name] }
+          : {}),
+      ...(entrySection ? { section: entrySection } : {}),
+      ...(entryTags.length ? { tags: entryTags } : {}),
+    }
+    const entryHandle = authorXHandle(entry?.author)
     return {
       title: fullTitle,
       ...(description ? { description } : {}),
@@ -460,15 +584,18 @@ function buildMetadata(props: Props): Metadata {
           }
         : {}),
       openGraph: {
+        ...siteOpenGraph,
         title: fullTitle,
         ...(description ? { description } : {}),
         type: entry ? 'article' : 'website',
+        ...(entry ? entryArticleOpenGraph : {}),
         ...(contentCanonical ? { url: contentCanonical } : {}),
         ...(socialImage ? { images: [socialImage] } : {}),
-        ...(siteTitle ? { siteName: siteTitle } : {}),
       },
       twitter: {
+        ...siteTwitter,
         card: socialImage ? 'summary_large_image' : 'summary',
+        ...(entryHandle ? { creator: entryHandle } : {}),
         ...(socialImage ? { images: [socialImage] } : {}),
       },
     }
@@ -529,6 +656,10 @@ function buildMetadata(props: Props): Metadata {
     if (canonical) languages[screen?.locale || 'x-default'] = canonical
   }
   const hasLanguages = Object.keys(languages).length > 0
+  const alternateLocales = openGraphAlternateLocales(
+    Object.keys(languages),
+    pageLocale,
+  )
   /*
     The Markdown representation, advertised in the head (AGL-2716).
 
@@ -566,17 +697,23 @@ function buildMetadata(props: Props): Metadata {
     ...(noindex ? { robots: { index: false, follow: true } } : {}),
     ...(canonical || hasLanguages || markdownAlternate ? { alternates } : {}),
     openGraph: {
+      ...siteOpenGraph,
       title: fullTitle,
       ...(description ? { description } : {}),
       type: 'website',
+      // The translations this page HAS (AGL-3148), read off the very map that
+      // drives `alternates.languages` above — so a locale is advertised to a
+      // card only once its variant resolves to a real routed path, exactly as
+      // it is advertised to a crawler.
+      ...(alternateLocales.length ? { alternateLocale: alternateLocales } : {}),
       ...(canonical ? { url: canonical } : {}),
       // A DESCRIPTOR, not a bare string: Next emits `og:image:width` and
       // `og:image:height` only for the object form, and the bare string is
       // what left every card without them (AGL-1337).
       ...(socialImage ? { images: [socialImage] } : {}),
-      ...(siteTitle ? { siteName: siteTitle } : {}),
     },
     twitter: {
+      ...siteTwitter,
       // The upgrade the whole issue is about: a page with an image shares as
       // the large card, and a page without one keeps the small `summary`
       // rather than promising an image it has not got.
@@ -606,6 +743,11 @@ function buildJsonLd(props: Props): string[] {
   // site the operator owns. The `<link rel="canonical">` above already asks the
   // shared helper; there is no reason for the same question to have two answers.
   const canonicalBase = Aglyn.hostPublicOrigin(host)
+  // Read up here because `inLanguage` reaches every node below, including the
+  // ones this function returns early with (AGL-3148). The same resolver the
+  // head's `og:locale` uses, so the two cannot name different languages.
+  const screen = props.data?.screen?.data as any
+  const pageLocale = resolvePageLocale({ screen, host })
   // Through the shared serializer (AGL-2486) rather than an inline ternary, so
   // the site entity and a post author answer `Person` or `Organization` the
   // same way — see `content-authors.ts`. It also FIXES that answer: the Setup
@@ -670,7 +812,52 @@ function buildJsonLd(props: Props): string[] {
     origin: canonicalBase,
     hostId: host?.$id,
   }).map((video) => Aglyn.safeJsonLd(video))
-  const leadingLd = [...siteEntityLd, ...videoLd]
+
+  /*
+    THE SITE ITSELF, on every page (AGL-3148).
+
+    `WebSite` was pushed in the general case only, and this function returns
+    before it four times — so the author pages, the collection listings, the
+    category listings and every content entry, which between them are most of
+    a content site's indexed URLs, carried no `WebSite` node at all. Measured
+    on aglyn.com: `/`, `/product` and `/alternatives/webflow` had one; `/blog`,
+    `/blog/category/product`, `/blog/one-platform-not-a-stack` and
+    `/author/zach-gover` had none.
+
+    So it joins the site entity and the videos in the leading set, for exactly
+    the reason the comment above gives for those: a node pushed in only the
+    last branch is missing from the pages an agent is most likely to land on.
+
+    `name` is the same chain `og:site_name` uses and is OMITTED when the site
+    has no name anywhere — this read `?? 'Site'`, which named every unnamed
+    site "Site" in the structured data search engines read.
+
+    `inLanguage` is the language the page declares, through the one resolver
+    the meta tags and the hreflang map also read.
+  */
+  const siteJsonLdName =
+    host?.seo?.title || host?.seo?.entity?.name || host?.displayName
+  const websiteLd = canonicalBase
+    ? [
+        Aglyn.safeJsonLd({
+          '@context': 'https://schema.org',
+          '@type': 'WebSite',
+          ...(siteJsonLdName ? { name: siteJsonLdName } : {}),
+          url: canonicalBase,
+          inLanguage: pageLocale,
+          ...(host?.seo?.entity?.name && {
+            publisher: {
+              ...publisher,
+              ...Aglyn.hostSeoEntityImageJsonLd(host.seo.entity, {
+                origin: canonicalBase,
+                hostId: host?.$id,
+              }),
+            },
+          }),
+        }),
+      ]
+    : []
+  const leadingLd = [...siteEntityLd, ...videoLd, ...websiteLd]
 
   /**
    * The author page → `ProfilePage` wrapping the `Person` (AGL-2518).
@@ -702,13 +889,53 @@ function buildJsonLd(props: Props): string[] {
         ...(record ? { author: record } : { authorName: author.slug }),
         page: author.page,
       })
+    /*
+      The author page's trail (AGL-3148): the site, then this person.
+
+      `/author/{slug}` is two segments deep and published no breadcrumb, while
+      the entry and category branches beside it both do — the one page type
+      whose whole job is to be the hub for a byline was the one without.
+
+      Rooted at the HOME page rather than at an author index, deliberately:
+      nothing on this platform serves a bare `/author` (it 404s on a live
+      site), and a crumb pointing at a URL the site does not answer is a
+      fabricated step in the trail. Home is the nearest parent that exists.
+      An unnamed site drops that crumb and the helper then declines the
+      one-item list, which is the correct trail for a site with no name.
+    */
+    const authorCrumbs = Aglyn.breadcrumbListJsonLd(
+      [
+        {
+          name:
+            host?.seo?.title || host?.seo?.entity?.name || host?.displayName,
+          path: '/',
+        },
+        {
+          name: author.name,
+          path: Aglyn.contentAuthorPageAtUrl({
+            ...(record ? { author: record } : { authorName: author.slug }),
+            page: author.page,
+          }),
+        },
+      ],
+      canonicalBase,
+    )
     return [
       ...leadingLd,
+      ...(authorCrumbs
+        ? [
+            Aglyn.safeJsonLd({
+              '@context': 'https://schema.org',
+              ...authorCrumbs,
+            }),
+          ]
+        : []),
       Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
         '@type': 'ProfilePage',
         url: authorUrl,
         name: author.name,
+        inLanguage: pageLocale,
         mainEntity: person,
         // The site entity WITH its mark, the same shape the Article branch
         // publishes (AGL-2534). This spread was the bare `publisher` — so an
@@ -920,6 +1147,9 @@ function buildJsonLd(props: Props): string[] {
         ),
         headline: entry.title,
         ...(entry.excerpt && { description: entry.excerpt }),
+        // The language the piece is written in (AGL-3148) — the same answer
+        // `og:locale` and the hreflang map give, from the one resolver.
+        inLanguage: pageLocale,
         // Absent, never `"image": [null]` — the resolver returns undefined for
         // an empty cover, an unresolvable reference, and a host that names no
         // origin alike, and `strictNullChecks` is off repo-wide so this guard
@@ -1085,27 +1315,6 @@ function buildJsonLd(props: Props): string[] {
     )
   }
 
-  const screen = props.data?.screen?.data as any
-  const siteTitle: string | undefined = host?.seo?.title ?? host?.displayName
-  if (canonicalBase) {
-    ld.push(
-      Aglyn.safeJsonLd({
-        '@context': 'https://schema.org',
-        '@type': 'WebSite',
-        name: siteTitle ?? host?.displayName ?? 'Site',
-        url: canonicalBase,
-        ...(host?.seo?.entity?.name && {
-          publisher: {
-            ...publisher,
-            ...Aglyn.hostSeoEntityImageJsonLd(host.seo.entity, {
-              origin: canonicalBase,
-              hostId: host?.$id,
-            }),
-          },
-        }),
-      }),
-    )
-  }
   const screenPath = screen?.$id ? host?.screens?.[screen.$id] : undefined
   const segments =
     typeof screenPath === 'string' ? screenPath.split('/').filter(Boolean) : []

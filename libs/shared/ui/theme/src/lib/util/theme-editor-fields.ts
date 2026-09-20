@@ -114,8 +114,14 @@ export function buildToolbarMixin(xs: number | undefined, sm: number | undefined
  * Deliberately narrow: only `mixins`. `components.*.styleOverrides` are CSS
  * objects too, but widening this would re-expose the AGL-56 failure for every
  * host with component overrides, and order-sensitivity has only actually been
- * demonstrated here. (Verified that Firestore returns `mixins` in the written
- * order, so this does not mark a freshly-loaded document dirty.)
+ * demonstrated here.
+ *
+ * Firestore does NOT hand a map back in the order it was written, and it
+ * hands different readers different orders (AGL-3146) — which is why what
+ * renders is canonicalized in `hostThemeToThemeOptions` rather than trusted
+ * from storage. A freshly-loaded document is still not dirty here, because
+ * the draft is seeded from the loaded document itself: both sides of this
+ * comparison carry whatever order THIS reader was given.
  */
 export function orderSensitiveKey(theme: HostTheme): string {
   return JSON.stringify(theme.mixins ?? {})

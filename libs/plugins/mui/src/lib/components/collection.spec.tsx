@@ -1282,7 +1282,7 @@ describe('Related posts sample cards on the canvas (AGL-2486)', () => {
     const style = window.getComputedStyle(
       container.querySelector('[aria-hidden="true"]') as HTMLElement,
     )
-    expect(style.aspectRatio.replace(/\s+/g, '')).toBe('445/180')
+    expect(style.aspectRatio.replace(/\s+/g, '')).toBe('1200/630')
     expect(style.height).toBe('')
   })
 
@@ -1744,13 +1744,17 @@ describe('Related posts covers and card grid (AGL-1457)', () => {
     })
 
     /**
-     * The frame's card is 445 x 180, and the cover has to keep that SHAPE at
-     * every width, not that height. A fixed height is the regression this
-     * guards: the grid's columns widen with the viewport while the number
-     * does not, so the box flattens and `objectFit: cover` eats further into
-     * art whose whole content is a composed title lockup.
+     * The cover keeps a SHAPE at every width rather than a height, and the
+     * shape is the one the console asks authors to upload — 1200 x 630 — so
+     * a cover authored as instructed is not cropped to fit the card.
+     *
+     * Two regressions live here. A fixed height flattens the box as the
+     * grid's columns widen with the viewport, and any ratio other than the
+     * art's makes `objectFit: cover` eat into art whose whole content is a
+     * composed title lockup: the frame's own 445 x 180 card is 2.47 against
+     * 1.90, which discarded 23% of every picture at every width.
      */
-    it('holds the frame’s cover proportion instead of a fixed height', () => {
+    it('holds the recommended cover proportion, not a height and not the frame’s card', () => {
       const { container } = render(
         <CollectionRelated entries={entries} showCover />,
       )
@@ -1759,7 +1763,7 @@ describe('Related posts covers and card grid (AGL-1457)', () => {
       )
       // jsdom re-serialises the ratio without spaces, so compare the value
       // rather than its formatting.
-      expect(style.aspectRatio.replace(/\s+/g, '')).toBe('445/180')
+      expect(style.aspectRatio.replace(/\s+/g, '')).toBe('1200/630')
       expect(style.height).toBe('')
       expect(style.objectFit).toBe('cover')
     })

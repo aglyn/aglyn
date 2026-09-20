@@ -563,7 +563,7 @@ describe('a plan change from the grid is reported to GA4 (AGL-2235)', () => {
     expect(eventNamed('plan_downgrade_scheduled')).toEqual({
       from_plan: 'pro',
       to_plan: 'starter',
-      interval: 'month',
+      interval: 'year',
       // The SERVER's date, which is the difference between a decision and an
       // effect — and the window in which "keep my plan" can still save them.
       effective_at: PERIOD_END_ISO,
@@ -580,7 +580,7 @@ describe('a plan change from the grid is reported to GA4 (AGL-2235)', () => {
     await waitFor(() => expect(mockTrackEvent).toHaveBeenCalled())
 
     const params = eventNamed('plan_upgraded')
-    expect(params).toMatchObject({ from_plan: 'pro', interval: 'month' })
+    expect(params).toMatchObject({ from_plan: 'pro', interval: 'year' })
     expect(String(params?.to_plan)).not.toBe('pro')
     // An upgrade lands now, so it carries no effective date to explain away.
     expect(params).not.toHaveProperty('effective_at')
