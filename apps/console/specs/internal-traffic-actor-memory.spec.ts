@@ -131,7 +131,9 @@ const source = stripComments(readFileSync(LAYOUT, 'utf8'))
 
 /** The body of the effect that owns `traffic_type`, comments removed. */
 function trafficEffect(): string {
-  const start = source.indexOf('readInternalTrafficOverride()')
+  // Domain-wide since AGL-3175; this file cares where the read is, not how
+  // it is spelled.
+  const start = source.indexOf('readInternalTrafficOverrideForDomain(')
   expect(start).toBeGreaterThan(-1)
   const end = source.indexOf('}, [user])', start)
   expect(end).toBeGreaterThan(start)

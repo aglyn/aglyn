@@ -338,6 +338,25 @@ To take everything the workspace holds rather than only its people, use
 **Settings → Delete → Download workspace data**, described
 [above](#downloading-a-whole-workspace).
 
+## Product updates
+
+Aglyn emails you about product updates only if you said so. There are three
+places to say it, and one record behind all of them:
+
+- an optional checkbox on the sign-up form — unticked until you tick it, and
+  never required;
+- the **Product updates** switch under **Manage Account → Email addresses**,
+  which turns the emails on or off at any time;
+- a one-time card on your workspace list, for accounts that were never asked.
+  *Yes* and *No thanks* are both remembered and never asked again; closing the
+  card without answering asks once more in ninety days.
+
+Each answer is stored with the exact time and the version of the sentence you
+agreed to. Leaving the sign-up box unticked records nothing — it is not a
+refusal, so the card may still ask later. Turning the switch off records a
+refusal, which is honored everywhere Aglyn sends marketing email. Receipts,
+invites, security alerts and other account mail are unaffected by this choice.
+
 ## Closing your account
 
 **Manage Account → Close account** permanently deletes your personal account. It removes

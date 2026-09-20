@@ -76,7 +76,9 @@ export function openAiCompatibleHost(): string {
  * of every object listed in `required`, so no optional parameter at all — an
  * optional field is a union with `null` instead. No other bound is stated:
  * the endpoint is whatever `AI_OPENAI_COMPAT_BASE_URL` names, and no one
- * count of tools or unions holds for every endpoint that speaks the shape.
+ * count of tools or unions — nor any grammar size — holds for every endpoint
+ * that speaks the shape. A bound nothing here has watched an endpoint hold to
+ * would be a guess, and a guess in a guard is worse than a gap in one.
  */
 export const OPENAI_COMPATIBLE_TOOL_SCHEMA_LIMITS: AiToolSchemaLimits = {
   optionalParameters: 0,

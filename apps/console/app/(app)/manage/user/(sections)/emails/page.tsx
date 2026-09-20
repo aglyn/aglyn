@@ -18,10 +18,22 @@
 'use client'
 
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
+import { Stack } from '@mui/material'
 import AccountEmailsCard from '../../../../../../components/account-emails-card.component'
+import ProductUpdatesCard from '../../../../../../components/account/product-updates-card.component'
 
-/** Every address on the account, and which one is primary. */
-const AccountEmails: NextPageWithLayout<Record<string, never>> = () => <AccountEmailsCard />
+/**
+ * Every address on the account, which one is primary — and what the platform
+ * may send to it (AGL-3185). The product-updates switch sits under the
+ * addresses because the two are one question from the reader's side: where
+ * mail goes, and whether it should.
+ */
+const AccountEmails: NextPageWithLayout<Record<string, never>> = () => (
+  <Stack spacing={3}>
+    <AccountEmailsCard />
+    <ProductUpdatesCard />
+  </Stack>
+)
 AccountEmails.displayName = 'Page:AccountEmails'
 
 export default AccountEmails

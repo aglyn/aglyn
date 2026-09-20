@@ -127,10 +127,10 @@ together, before the model runs, and refuses a request past its bounds with a
 400 that no retry clears. Each adapter declares its bounds on the provider
 contract as `toolSchemaLimits`, each a total over one request's tools:
 
-| adapter | strict tools | optional parameters | union-typed parameters |
-| --- | --- | --- | --- |
-| `anthropic` | 20 | 24 | 16 |
-| `openai-compatible` | not stated | 0: its strict function shape requires every property | not stated |
+| adapter | strict tools | optional parameters | union-typed parameters | bytes of compiled schema |
+| --- | --- | --- | --- | --- |
+| `anthropic` | 20 | 24 | 16 | 3,807 |
+| `openai-compatible` | not stated | 0: its strict function shape requires every property | not stated | not stated |
 
 `aiToolSchemaCounts` (`providers/contract.ts`) counts a request's tools the way
 the bounds do: a union is an `anyOf` or a list of types, wherever it is
@@ -139,11 +139,25 @@ local `$ref` counts where it is used. `providers/tool-schema-limits.spec.ts`
 lists every tool set each door sends — a door that reads a site sends the
 lookup tool beside its own, and the two count together — and holds every set
 to every registered provider's bounds, because any provider may serve any
-step. Its control is the automation tool with a `null` union on every field a
-step did not use, the 23 the provider refused. So a field that may be absent
-is left out of a variant, or is an empty list or string, and never a `null`
-union written per field; an optional property is no way around it, since the
-second adapter takes none.
+step. So a field that may be absent is left out of a variant, or is an empty
+list or string, and never a `null` union written per field; an optional
+property is no way around it, since the second adapter takes none.
+
+**The fourth bound is measured, not published.** The first three are counts a
+vendor documents. The fourth is not: a provider also refuses a request whose
+schemas compile to too large a grammar — "Simplify your tool schemas or reduce
+the number of strict tools" — and names no size for it. `submit_automation`
+was refused that way while every published count was green: one strict tool,
+no optional parameter, two unions. So `compiledSchemaBytes` bounds the schema
+a grammar is compiled from, measured by `aiToolSchemaCompiledBytes` with every
+local `$ref` written out where it is used and every description dropped. Its
+number is the largest a live request has been watched to carry, and only
+another live request raises it — an offline measurement is what missed the
+break the first time. The spec's two controls are the two refused shapes of
+the automation tool, kept as fixtures: the one with a `null` union on every
+unused field, which counts the 23 unions reported, and the one with a variant
+per step type, which counts the 8,757 bytes that compiled to too large a
+grammar.
 
 ## Credits, per step
 
@@ -2351,11 +2365,17 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   webhooks or bookings is refused, with a re-ask, on a workspace whose plan
   lacks it — the entitlements the executor reads before it runs one.
 - **What the model is shown to draft.** The doctrine's cached block, the
-  drafting instructions (cached) and `submit_automation`, a strict tool with
-  one variant per step type, each carrying only that step's own fields. A step
-  that always runs has an empty `when` list, and a notEmpty condition compares
-  against an empty string, so the tool holds two union-typed parameters where a
-  `null` on every unused field held 23 and was refused (AGL-3096; see
+  drafting instructions (cached) and `submit_automation`, a strict tool whose
+  steps are a guard beside an action: `when`, written once outside the union,
+  and an `action` from ten variants, each carrying only the fields its step
+  types take. Six steps that name one of the site's records share `reference`,
+  and six that carry one line share `text`, which the reader puts back on the
+  step's own key. Nothing in the tool is a `null`: a step that always runs has
+  an empty `when` list, a notEmpty condition compares against an empty string,
+  and an answer that builds an automation leaves `unsupported` empty. A `null`
+  on every unused field held 23 union-typed parameters and was refused; a
+  variant per step type, repeating the guard seventeen times, compiled to too
+  large a grammar and was refused too (AGL-3096; see
   [Tools a step may call](#tools-a-step-may-call)). The user turn carries
   whether the workspace has the CRM, webhooks and bookings, the site's forms
   with their field names, its datasets by name, and the brief. It carries no
@@ -2423,7 +2443,7 @@ with three modes, named by `inputs.mode`: `draft` (the default), `explain` and
   three characters a token with as much again to think in. A longer answer is
   refused and re-asked shorter. It sends no site inventory block and so makes
   no lookup; its reads are the declared 4 s,
-  `AI_WORKFLOW_RECORDS_READ_MS`. Its cached prefixes are 5,015 tokens drafting
+  `AI_WORKFLOW_RECORDS_READ_MS`. Its cached prefixes are 4,616 tokens drafting
   and 2,212 explaining, as the ledger spec measures them.
 
 | step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |

@@ -36,12 +36,14 @@
  */
 
 import {
+  INTERNAL_TRAFFIC_COOKIE_KEY,
   INTERNAL_TRAFFIC_GTAG_SNIPPET,
   INTERNAL_TRAFFIC_PARAM,
   INTERNAL_TRAFFIC_QUERY_PARAM,
   INTERNAL_TRAFFIC_STORAGE_KEY,
   INTERNAL_TRAFFIC_VALUE,
   readInternalTrafficOverride,
+  readInternalTrafficOverrideForDomain,
 } from './internal-traffic'
 
 /** A `localStorage` that is real enough for both implementations. */
@@ -233,5 +235,147 @@ describe('INTERNAL_TRAFFIC_GTAG_SNIPPET (AGL-2064)', () => {
   it('cannot close the script element it is inlined into', () => {
     // It is concatenated into an inline <script> in ISR-cached HTML.
     expect(INTERNAL_TRAFFIC_GTAG_SNIPPET).not.toContain('<')
+  })
+})
+
+/**
+ * The domain-wide half of the opt-in (AGL-3175).
+ *
+ * The console is served on every `*.aglyn.com` hostname — `WORKSPACE_DOMAIN`
+ * is the workspace apex, so each org workspace is its own origin, generated
+ * slugs included. A per-origin opt-in cannot be performed on a host that does
+ * not exist yet, which is how `auth.aglyn.com` went a month unpinned. The
+ * cookie is what covers an origin before anyone has visited it.
+ *
+ * The assertion that matters most here is the NEGATIVE one: no call site
+ * without an explicit `cookieDomain` may ever write a cookie, because
+ * `readInternalTrafficOverride` is also called from tenant surfaces running on
+ * customers' own domains.
+ *
+ * Planted reds, verified before committing:
+ *   - drop the `!domain` guard in `writeInternalTrafficCookie` → "writes no
+ *     cookie for a caller that did not ask for one" goes red.
+ *   - stop clearing the cookie on `?aglyn_internal=0` → the off-switch case
+ *     goes red while the storage half still passes, which is the exact shape
+ *     of a browser left pinned with nothing local to show for it.
+ */
+describe('the domain-wide cookie (AGL-3175)', () => {
+  const COOKIE = `${INTERNAL_TRAFFIC_COOKIE_KEY}=${INTERNAL_TRAFFIC_VALUE}`
+
+  it('is ON from the cookie alone, on an origin that stored nothing', () => {
+    // The whole point: a workspace subdomain nobody has ever opted in on.
+    expect(
+      readInternalTrafficOverride({
+        search: '',
+        storage: fakeStorage(),
+        cookie: COOKIE,
+      }),
+    ).toBe(true)
+  })
+
+  it('answers from the cookie even when storage is refused outright', () => {
+    // Safari private mode and partitioned frames were unpinnable before this.
+    expect(
+      readInternalTrafficOverride({ storage: null, cookie: COOKIE }),
+    ).toBe(true)
+    expect(readInternalTrafficOverride({ storage: null, cookie: '' })).toBe(
+      false,
+    )
+  })
+
+  it('reads its own cookie and not one that merely ends the same way', () => {
+    expect(
+      readInternalTrafficOverride({
+        search: '',
+        storage: fakeStorage(),
+        cookie: `not_${INTERNAL_TRAFFIC_COOKIE_KEY}=${INTERNAL_TRAFFIC_VALUE}`,
+      }),
+    ).toBe(false)
+    // Real jars arrive "; "-joined, and the value is not ours.
+    expect(
+      readInternalTrafficOverride({
+        search: '',
+        storage: fakeStorage(),
+        cookie: `other=1; ${INTERNAL_TRAFFIC_COOKIE_KEY}=customer; x=2`,
+      }),
+    ).toBe(false)
+  })
+
+  it('writes no cookie for a caller that did not ask for one', () => {
+    // `readInternalTrafficOverride` is called from `analytics-beacon` and
+    // `advertising-tags`, which run on customers' custom domains. A cookie
+    // written there would be us writing to a customer's domain.
+    const written: string[] = []
+    readInternalTrafficOverride({
+      search: `?${INTERNAL_TRAFFIC_QUERY_PARAM}=1`,
+      storage: fakeStorage(),
+      writeCookie: (value) => void written.push(value),
+    })
+    expect(written).toEqual([])
+  })
+
+  it('pins both halves when a domain is supplied', () => {
+    const written: string[] = []
+    const storage = fakeStorage()
+    expect(
+      readInternalTrafficOverride({
+        search: `?${INTERNAL_TRAFFIC_QUERY_PARAM}=1`,
+        storage,
+        cookieDomain: 'aglyn.com',
+        writeCookie: (value) => void written.push(value),
+      }),
+    ).toBe(true)
+    expect(storage.getItem(INTERNAL_TRAFFIC_STORAGE_KEY)).toBe(
+      INTERNAL_TRAFFIC_VALUE,
+    )
+    expect(written).toHaveLength(1)
+    expect(written[0]).toContain(COOKIE)
+    expect(written[0]).toContain('Domain=.aglyn.com')
+    expect(written[0]).toContain('Path=/')
+    expect(written[0]).toContain('SameSite=Lax')
+    expect(written[0]).toContain('Secure')
+  })
+
+  it('clears BOTH halves on the off switch', () => {
+    const written: string[] = []
+    const storage = fakeStorage({
+      [INTERNAL_TRAFFIC_STORAGE_KEY]: INTERNAL_TRAFFIC_VALUE,
+    })
+    expect(
+      readInternalTrafficOverride({
+        search: `?${INTERNAL_TRAFFIC_QUERY_PARAM}=0`,
+        storage,
+        cookie: COOKIE,
+        cookieDomain: 'aglyn.com',
+        writeCookie: (value) => void written.push(value),
+      }),
+    ).toBe(false)
+    expect(storage.getItem(INTERNAL_TRAFFIC_STORAGE_KEY)).toBeNull()
+    // Same Domain and Path, or the browser keeps the original cookie.
+    expect(written[0]).toContain('Max-Age=0')
+    expect(written[0]).toContain('Domain=.aglyn.com')
+    expect(written[0]).toContain('Path=/')
+  })
+
+  it('a cookie jar that throws leaves the storage half intact', () => {
+    const storage = fakeStorage()
+    expect(
+      readInternalTrafficOverride({
+        search: `?${INTERNAL_TRAFFIC_QUERY_PARAM}=1`,
+        storage,
+        cookieDomain: 'aglyn.com',
+        writeCookie: () => {
+          throw new Error('cookies refused')
+        },
+      }),
+    ).toBe(true)
+    expect(storage.getItem(INTERNAL_TRAFFIC_STORAGE_KEY)).toBe(
+      INTERNAL_TRAFFIC_VALUE,
+    )
+  })
+
+  it('is false on the server, where there is no browser to pin', () => {
+    // Node test environment: no `window`. A server render must not decide.
+    expect(readInternalTrafficOverrideForDomain('aglyn.com')).toBe(false)
   })
 })

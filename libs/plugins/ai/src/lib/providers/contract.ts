@@ -48,7 +48,9 @@ import { UpstreamServiceError } from '@aglyn/shared-util-errors'
  * fragments and parses the whole once, at the block's end. Nothing
  * string-matches the serialized form: models differ in how they escape it.
  * A provider bounds how much strict schema one request may carry, and an
- * adapter declares those bounds as `toolSchemaLimits`.
+ * adapter declares those bounds as `toolSchemaLimits`: three bounds a vendor
+ * publishes and counts, and a fourth, the size of the grammar the schemas
+ * compile to, that none publishes and only a live request settles.
  *
  * ── Thinking ──────────────────────────────────────────────────────────────
  *
@@ -98,6 +100,11 @@ export interface AiTool {
  * the same on every retry. Each bound is a TOTAL over every strict tool one
  * request sends, as `aiToolSchemaCounts` counts them. A bound left out is one
  * the provider does not state.
+ *
+ * A provider may also refuse a request whose schemas compile to too large a
+ * grammar, which none of the published counts can see: a request counting 1
+ * strict tool, 0 optional parameters and 1 union was refused for exactly that
+ * (AGL-3096). `compiledSchemaBytes` stands in for it, on live evidence.
  */
 export interface AiToolSchemaLimits {
   /** The most strict tools one request may send. */
@@ -106,10 +113,58 @@ export interface AiToolSchemaLimits {
   optionalParameters?: number
   /** The most schemas, across every strict schema, that are a union: an `anyOf` or `oneOf`, or a list of types. */
   unionParameters?: number
+  /**
+   * The most bytes of schema a request's grammar may be compiled from, as
+   * `aiToolSchemaCompiledBytes` measures them.
+   *
+   * Unlike the bounds above, this one is EMPIRICAL. A provider refuses a
+   * request whose compiled grammar is too large without publishing the size,
+   * so the number here is not read off a vendor's page: it is the largest a
+   * live request has been watched to carry, and every number above it is
+   * unknown rather than safe. Raising it on an offline measurement alone
+   * puts the guard back where it could not see the break.
+   */
+  compiledSchemaBytes?: number
 }
 
 /** A request's strict tools, counted on the measures `AiToolSchemaLimits` bounds. */
 export type AiToolSchemaCounts = Required<AiToolSchemaLimits>
+
+/**
+ * One schema as a grammar compiler reads it: every local `$ref` written out
+ * at each place it is used, and every description, title and `$defs` dropped,
+ * since none of them constrains a single token. A schema that refers to
+ * itself is written out once around and then left as the reference it is.
+ */
+function compiledForm(node: unknown, root: Record<string, unknown>, resolving: ReadonlySet<string>): unknown {
+  if (Array.isArray(node)) return node.map((entry) => compiledForm(entry, root, resolving))
+  if (!isSchemaObject(node)) return node
+  const ref = node['$ref']
+  if (typeof ref === 'string') {
+    if (resolving.has(ref)) return { $ref: ref }
+    return compiledForm(localSchemaAt(root, ref), root, new Set([...resolving, ref]))
+  }
+  const written: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(node)) {
+    if (key === 'description' || key === 'title' || key === '$defs') continue
+    written[key] = compiledForm(value, root, resolving)
+  }
+  return written
+}
+
+/**
+ * The bytes of schema a request's grammar is compiled from, over all its
+ * strict tools. It is a stand-in for the size of the grammar itself, which
+ * nothing outside the provider can measure, and it errs toward more: a `$ref`
+ * counts at each place it is used, because a compiler that writes it out
+ * there pays for it there.
+ */
+export function aiToolSchemaCompiledBytes(tools: readonly AiTool[]): number {
+  return tools.reduce(
+    (bytes, tool) => bytes + JSON.stringify(compiledForm(tool.inputSchema, tool.inputSchema, new Set())).length,
+    0,
+  )
+}
 
 function isSchemaObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -164,15 +219,25 @@ function countSchema(
  * that compiles it; a `$ref` counted where it is used errs toward more.
  */
 export function aiToolSchemaCounts(tools: readonly AiTool[]): AiToolSchemaCounts {
-  const counts: AiToolSchemaCounts = { strictTools: tools.length, optionalParameters: 0, unionParameters: 0 }
+  const counts: AiToolSchemaCounts = {
+    strictTools: tools.length,
+    optionalParameters: 0,
+    unionParameters: 0,
+    compiledSchemaBytes: aiToolSchemaCompiledBytes(tools),
+  }
   for (const tool of tools) countSchema(tool.inputSchema, tool.inputSchema, counts, new Set())
   return counts
 }
 
-const TOOL_SCHEMA_MEASURES: ReadonlyArray<[keyof AiToolSchemaLimits, string, string]> = [
-  ['strictTools', 'strict tool', 'strict tools'],
-  ['optionalParameters', 'optional parameter', 'optional parameters'],
-  ['unionParameters', 'union-typed parameter', 'union-typed parameters'],
+/**
+ * Each bound, as one, as many, and where its number comes from — a published
+ * bound reads as the provider's own, a measured one as what has been proved.
+ */
+const TOOL_SCHEMA_MEASURES: ReadonlyArray<[keyof AiToolSchemaLimits, string, string, string]> = [
+  ['strictTools', 'strict tool', 'strict tools', 'the provider compiles'],
+  ['optionalParameters', 'optional parameter', 'optional parameters', 'the provider compiles'],
+  ['unionParameters', 'union-typed parameter', 'union-typed parameters', 'the provider compiles'],
+  ['compiledSchemaBytes', 'byte of compiled schema', 'bytes of compiled schema', 'a live request has proved'],
 ]
 
 /** Each bound a request's tools are past, as a sentence; empty when every one holds. */
@@ -182,11 +247,11 @@ export function aiToolSchemaBreaches(
 ): string[] {
   if (!limits) return []
   const counts = aiToolSchemaCounts(tools)
-  return TOOL_SCHEMA_MEASURES.flatMap(([measure, one, many]) => {
+  return TOOL_SCHEMA_MEASURES.flatMap(([measure, one, many, source]) => {
     const limit = limits[measure]
     const count = counts[measure]
     return limit !== undefined && count > limit
-      ? [`${count} ${count === 1 ? one : many} in one request, over the ${limit} the provider compiles`]
+      ? [`${count} ${count === 1 ? one : many} in one request, over the ${limit} ${source}`]
       : []
   })
 }
