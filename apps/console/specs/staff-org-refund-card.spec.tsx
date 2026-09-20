@@ -117,14 +117,45 @@ beforeEach(() => {
   mockConfirm.mockResolvedValue(undefined)
 })
 
+/**
+ * Opens a Select, picks an option, and waits for the menu to leave the DOM
+ * (AGL-3145).
+ *
+ * MUI keeps a Select's menu mounted through its close transition, and while
+ * it is mounted the `<ul role="listbox">` carries `aria-labelledby` pointing
+ * at the field's OWN `<label>`. `getByLabelText('Reason')` therefore matches
+ * two elements — the combobox and the listbox — and throws "Found multiple
+ * elements with the text of: Reason" on the next interaction with that field.
+ *
+ * Whether the unmount has happened by the next line was a race the file used
+ * to win by accident: the unmount rides a `setTimeout`, while the `waitFor`
+ * above it can settle on microtasks alone, and a loaded machine reorders the
+ * two. Measured on this file: the listbox answers `getByLabelText` for as
+ * long as it is mounted, so the count is 2 for that whole window.
+ *
+ * This waits for the menu to be GONE rather than lengthening a timeout: a
+ * menu that never closes still fails the test, and the role-scoped queries
+ * name the control rather than a label two nodes share.
+ *
+ * `hidden: true` is load-bearing. MUI drops the closing menu out of the
+ * accessibility tree BEFORE it unmounts it, so the default role query
+ * answers "gone" while the node — and the duplicate label match — is still
+ * in the document.
+ */
+const chooseOption = async (field: string, option: string | RegExp) => {
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: field }))
+  fireEvent.click(await screen.findByRole('option', { name: option }))
+  await waitFor(() =>
+    expect(screen.queryAllByRole('listbox', { hidden: true })).toHaveLength(0),
+  )
+}
+
 /** Selects the charge and a reason — the minimum a refund needs. */
 const arm = async () => {
   render(<StaffOrgRefundCard orgId="org-1" />)
   await screen.findByText('ch_1')
-  fireEvent.mouseDown(screen.getByLabelText('Charge to refund'))
-  fireEvent.click(await screen.findByText(/AGL-0001 —/))
-  fireEvent.mouseDown(screen.getByLabelText('Reason'))
-  fireEvent.click(await screen.findByText('Billing error on our side'))
+  await chooseOption('Charge to refund', /AGL-0001/)
+  await chooseOption('Reason', 'Billing error on our side')
 }
 
 describe('StaffOrgRefundCard (AGL-2486)', () => {
@@ -199,6 +230,12 @@ describe('StaffOrgRefundCard (AGL-2486)', () => {
       expect(options.description).toContain('AGL-0001')
       expect(options.description).toMatch(/1\.75/)
       expect(options.title).toContain('$40.00 USD')
+      // The click above goes on to POST once the confirmation resolves, and
+      // the mocked `fetch` pushes into whatever `postBodies` currently is —
+      // an array `beforeEach` replaces for the NEXT test. Awaited here so the
+      // request this test started cannot be counted against that one
+      // (AGL-3145).
+      await waitFor(() => expect(postBodies).toHaveLength(1))
     })
 
     it('posts NOTHING when the confirmation is declined', async () => {
@@ -235,8 +272,7 @@ describe('StaffOrgRefundCard (AGL-2486)', () => {
       const button = screen.getByRole('button', { name: /Refund/ })
       fireEvent.click(button)
       await waitFor(() => expect(postBodies).toHaveLength(1))
-      fireEvent.mouseDown(screen.getByLabelText('Reason'))
-      fireEvent.click(await screen.findByText('Goodwill or retention'))
+      await chooseOption('Reason', 'Goodwill or retention')
       fireEvent.click(screen.getByRole('button', { name: /Refund/ }))
       await waitFor(() => expect(postBodies).toHaveLength(2))
       expect(postBodies[0].idempotencyKey).not.toBe(postBodies[1].idempotencyKey)
@@ -245,8 +281,7 @@ describe('StaffOrgRefundCard (AGL-2486)', () => {
     it('will not submit without a reason', async () => {
       render(<StaffOrgRefundCard orgId="org-1" />)
       await screen.findByText('ch_1')
-      fireEvent.mouseDown(screen.getByLabelText('Charge to refund'))
-      fireEvent.click(await screen.findByText(/AGL-0001 —/))
+      await chooseOption('Charge to refund', /AGL-0001/)
       expect(
         screen.getByRole('button', { name: /Refund/ }).hasAttribute('disabled'),
       ).toBe(true)
@@ -256,10 +291,8 @@ describe('StaffOrgRefundCard (AGL-2486)', () => {
     it('will not submit "Other" until the note says what', async () => {
       render(<StaffOrgRefundCard orgId="org-1" />)
       await screen.findByText('ch_1')
-      fireEvent.mouseDown(screen.getByLabelText('Charge to refund'))
-      fireEvent.click(await screen.findByText(/AGL-0001 —/))
-      fireEvent.mouseDown(screen.getByLabelText('Reason'))
-      fireEvent.click(await screen.findByText(/^Other/))
+      await chooseOption('Charge to refund', /AGL-0001/)
+      await chooseOption('Reason', /^Other/)
       const button = screen.getByRole('button', { name: /Refund/ })
       expect(button.hasAttribute('disabled')).toBe(true)
       fireEvent.change(screen.getByLabelText(/Note \(required\)/), {
@@ -368,8 +401,7 @@ describe('the card states the operator’s own ceiling first (AGL-2486)', () => 
 
   it('blocks an over-cap amount with the sentence the SERVER would have said', async () => {
     await renderWith('support', capped, BIG)
-    fireEvent.mouseDown(screen.getByLabelText('Charge to refund'))
-    fireEvent.click(screen.getByRole('option', { name: /AGL-0001/ }))
+    await chooseOption('Charge to refund', /AGL-0001/)
     fireEvent.change(screen.getByLabelText('Amount'), {
       target: { value: '400' },
     })
@@ -392,13 +424,11 @@ describe('the card states the operator’s own ceiling first (AGL-2486)', () => 
     // The direction that matters most: the change exists so support can
     // issue the ordinary refund without escalating.
     await renderWith('support', capped, BIG)
-    fireEvent.mouseDown(screen.getByLabelText('Charge to refund'))
-    fireEvent.click(screen.getByRole('option', { name: /AGL-0001/ }))
+    await chooseOption('Charge to refund', /AGL-0001/)
     fireEvent.change(screen.getByLabelText('Amount'), {
       target: { value: '120' },
     })
-    fireEvent.mouseDown(screen.getByLabelText('Reason'))
-    fireEvent.click(screen.getByRole('option', { name: /Billing error/ }))
+    await chooseOption('Reason', /Billing error/)
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: /Refund/ }).hasAttribute('disabled'),
