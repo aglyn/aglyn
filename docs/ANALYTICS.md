@@ -1416,9 +1416,28 @@ So `readInternalTrafficOverride()` is the **sixth condition** on
 `resolveAdvertisingTags` (`libs/aglyn/src/lib/app-utils/advertising-tags.ts`),
 alongside the five in that module's comment. A flagged browser mounts no
 advertising tag at all — structural, like every other clause there, because a
-resident tag fires on its own. One visit to `?aglyn_internal=1` therefore
-covers both products, and the two cannot drift into a browser that is internal
-for GA4 and external for Ads.
+resident tag fires on its own.
+
+⛔⛔ **That covered the MARKETING surface only, and this section claimed
+otherwise for three weeks (AGL-3188).** `resolveAdvertisingTags` returns early
+unless the host is the marketing site, so condition 6 never ran for
+`app.aglyn.com`, `auth.aglyn.com` or any workspace subdomain. Those go through
+`resolvePlatformAdvertisingTags` and `resolvePlatformGtmContainerId` in
+`platform-advertising-tags.ts`, and neither consulted the flag at all — on the
+surface we spend the day on, and the one where consent never intervenes
+because platform analytics load unconditionally (§8c).
+
+Measured on `auth.aglyn.com` 2026-09-20, in a pinned browser: `/g/collect`
+carried `tt=internal` while the **same document** sent an unmarked
+`ccm/collect` to `AW-18401436785` and a `rmkt/collect` `gtag.config`. Both
+platform resolvers now take the same two clauses — the flag and the
+non-production hatch — and the container takes them too, because what a
+container loads is decided in Google's UI and has to be assumed to reach an
+`AW-` destination.
+
+One visit to `?aglyn_internal=1` now genuinely covers both products on every
+surface, and the two cannot drift into a browser that is internal for GA4 and
+external for Ads.
 
 ⚑ **The tell to remember:** GA4 promotes `traffic_type` out of `ep.` into a
 top-level **`tt`** field on `/g/collect`. Grepping a collect URL for

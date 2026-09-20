@@ -60,10 +60,12 @@ import {
   type ResolvedAdvertisingTag,
 } from './advertising-tags'
 import {
+  analyticsEnvironmentForcesInternal,
   analyticsMayEmit,
   type AnalyticsEnvironment,
   readAnalyticsEnvironment,
 } from './analytics-environment'
+import { readInternalTrafficOverride } from './internal-traffic'
 import { GTM_CONTAINER_ID_PATTERN } from './visitor-consent'
 
 /**
@@ -119,9 +121,27 @@ export function resolvePlatformAdvertisingTags(
   advertisingGranted: boolean,
   ids: Record<string, string> = readPlatformAdTagIds(),
   env: AnalyticsEnvironment = readAnalyticsEnvironment(),
+  internal: boolean = readInternalTrafficOverride(),
 ): ResolvedAdvertisingTag[] {
   if (advertisingGranted !== true) return []
   if (analyticsMayEmit(env) === false) return []
+  // The same clause the tenant resolver calls condition 6 (AGL-3188), which
+  // this surface never had. A GA4 data filter is PROPERTY-scoped: it drops
+  // `traffic_type: internal` from the GA4 property and has no reach into an
+  // `AW-` destination, which is a separate product reached by separate
+  // requests. Measured on `auth.aglyn.com`: a pinned browser's pageview sent
+  // `tt=internal` to `g/collect` and, in the same document, an unmarked
+  // `ccm/collect` to `AW-18401436785`. Excluding ourselves from the reports
+  // while still training the bidding on ourselves is the worse half, because
+  // it is the half nobody can see in a report.
+  //
+  // Structural, not suppression: a resident tag fires on its own and the
+  // first automatic event writes a `_gcl_*` cookie, so the tag must not be
+  // MOUNTED rather than mounted and silenced.
+  if (internal === true) return []
+  // A non-production build emitting because someone turned the hatch on is
+  // ours by definition, and must not hand a preview the real `AW-` id.
+  if (analyticsEnvironmentForcesInternal(env) === true) return []
   const tags: ResolvedAdvertisingTag[] = []
   for (const vendor of ADVERTISING_VENDORS) {
     // Sweep-only: nothing to mount, and no `accountIdPattern` to test with.
@@ -170,9 +190,16 @@ export function resolvePlatformGtmContainerId(
   analyticsGranted: boolean,
   containerId: string = readPlatformGtmContainerId(),
   env: AnalyticsEnvironment = readAnalyticsEnvironment(),
+  internal: boolean = readInternalTrafficOverride(),
 ): string | null {
   if (analyticsGranted !== true) return null
   if (analyticsMayEmit(env) === false) return null
+  // The container takes the gate too (AGL-3188). What it loads is decided in
+  // Google's UI and is invisible to every spec here, so it has to be assumed
+  // to carry advertising tags — and a container's tags reach `AW-` and Meta
+  // destinations no GA4 filter can touch.
+  if (internal === true) return null
+  if (analyticsEnvironmentForcesInternal(env) === true) return null
   const candidate = String(containerId ?? '').trim()
   // Strict format check, same reason as the account ids above: the container
   // id lands inside an inline script.
