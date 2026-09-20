@@ -76,6 +76,21 @@ export type TabLinkProps = Partial<
 export interface TabsElementProps extends TabLinkProps {
   /** Tab labels, one per line (commas also accepted). */
   labels?: string
+  /**
+   * The LABEL of the tab the strip opens on (AGL-3164). Unset opens the
+   * first tab, which is what every Tabs already in the wild does.
+   *
+   * A label rather than a position, because a position is a silent lie the
+   * moment the list is edited: it keeps pointing at "the second tab" after
+   * the author reorders or renames, and nothing on screen says the wrong
+   * panel is now the one that opens. A label that no longer exists simply
+   * does not match, and the strip falls back to the first tab.
+   *
+   * See {@link openingTabIndex} for the whole rule, and `deferLazyPanelNodes`
+   * in tenant-runtime for the server side of it — the two must agree or the
+   * page ships the wrong panel's markup.
+   */
+  opensOn?: string
   /** Accessible name of the strip; also names the nav landmark in link mode. */
   ariaLabel?: string
   orientation?: 'horizontal' | 'vertical'
@@ -172,6 +187,39 @@ export function labelsMatch(a: unknown, b: unknown): boolean {
   )
 }
 
+/**
+ * Which tab the strip opens on, by index into the parsed label list.
+ *
+ * Two rules, in order:
+ *
+ * 1. the tab the author NAMED in `opensOn` (AGL-3164), matched by label with
+ *    the same case/whitespace tolerance panels are matched with;
+ * 2. otherwise the landing tab — the first one WITHOUT a screen link, which
+ *    is how a navigation row says "this is the page you are on" (AGL-1312),
+ *    and which is tab 0 on a strip with no links at all, i.e. exactly what
+ *    this element did before the attribute existed.
+ *
+ * The named tab is refused when it carries a screen link: a linked tab
+ * navigates instead of revealing a panel (AGL-1312), so it is not a tab the
+ * strip can rest on, and opening on it would show the indicator over a panel
+ * nobody can see. It falls back rather than rendering nothing.
+ *
+ * Never returns -1. `landing` is -1 when EVERY tab navigates — the strip
+ * shows no indicator there, but callers still read a label with this index.
+ */
+export function openingTabIndex(
+  labels: readonly string[],
+  opensOn?: unknown,
+  linkIds: readonly (string | undefined)[] = [],
+): number {
+  const named = labels.findIndex(
+    (label, index) => !linkIds[index] && labelsMatch(label, opensOn),
+  )
+  if (named >= 0) return named
+  const landing = labels.findIndex((_label, index) => !linkIds[index])
+  return landing < 0 ? 0 : landing
+}
+
 interface TabsContextValue {
   activeLabel: string
   /** True on the besigner canvas, where every panel is shown at once. */
@@ -222,7 +270,18 @@ export const TabsContext = createContext<TabsContextValue | undefined>(
  * are already on must not link to itself. That unlinked tab is also how the
  * author says which page this copy of the row is on: the strip lands on it,
  * so the same three-tab row placed on three screens shows the indicator in
- * the right place on each, with no "selected tab" attribute to keep in sync.
+ * the right place on each, with no "selected tab" attribute to keep in sync
+ * — `opensOn` below is for panel rows and gives way to this one.
+ *
+ * ## Which tab opens (AGL-3164)
+ *
+ * `opensOn` names it, by LABEL. Unset opens the first tab, which is what
+ * every Tabs authored before the attribute existed does; a label that no
+ * longer matches opens the first tab too, rather than nothing. The rule
+ * lives in {@link openingTabIndex} and is mirrored server-side by
+ * `deferLazyPanelNodes` (tenant-runtime), which decides which panel's nodes
+ * reach the page at all — so the tab that opens is the one that was
+ * rendered, and the page does not paint one panel and swap to another.
  *
  * **Accessibility.** The row is a `tablist` only while NOTHING in it
  * navigates. As soon as one tab carries a link the whole strip is marked up
@@ -254,6 +313,7 @@ const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
       indicatorColor,
       ssrPanels,
       lazyPanels,
+      opensOn,
       children,
       ...rest
     } = props
@@ -291,22 +351,32 @@ const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
      * With no links at all this is 0, i.e. exactly today's behavior.
      */
     const landing = parsed.findIndex((_label, index) => !linkIds[index])
-    const [active, setActive] = useState(landing < 0 ? 0 : landing)
+    // Which tab this strip opens on (AGL-3164): the one the author named,
+    // and otherwise `landing` — so an unset attribute, or one naming a label
+    // that has since been renamed away, behaves exactly as it always did.
+    const opening = openingTabIndex(parsed, opensOn, linkIds)
+    const [active, setActive] = useState(opening)
     // Once a lazy panel has been opened it stays mounted: re-tabbing between
     // two plans should not re-render 50 rows each time, and anything the
     // reader typed or scrolled inside a panel survives a round trip.
     //
-    // Seeded with the LANDING label, because that panel is open from the
-    // start without anyone clicking it. Leaving it out unmounted the landing
+    // Seeded with the OPENING label, because that panel is open from the
+    // start without anyone clicking it. Leaving it out unmounted the opening
     // panel the moment the reader moved away — visibly inconsistent with
     // every other panel they had visited, and caught by the round-trip test.
     const [opened, setOpened] = useState<ReadonlySet<string>>(() => {
-      const first = parsed[landing < 0 ? 0 : landing]
+      const first = parsed[opening]
       return new Set<string>(first === undefined ? [] : [first])
     })
     // A label removed from the list must not leave the strip pointing at
     // a tab that no longer exists — MUI warns and drops the indicator.
-    const chosen = active < parsed.length ? active : 0
+    //
+    // On the besigner canvas the authored attribute is read every render
+    // instead of the state seeded at mount: `onChange` is inert there, so
+    // nothing else can have moved the selection, and a canvas that kept
+    // showing the tab that was open when the element mounted would make
+    // "Opens on" look like it had done nothing.
+    const chosen = editorInert ? opening : active < parsed.length ? active : 0
     // A tab that navigates is never the selected one; if the author has just
     // given the open tab a link, fall back to one that still has a panel.
     const activeIndex = linkIds[chosen] && landing >= 0 ? landing : chosen
@@ -421,12 +491,12 @@ const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
                * a panel with this label exists, and on the real `/changelog`
                * shape it does not.
                *
-               * `landing`, `activeIndex`, `aria-controls` and the `onChange`
-               * guard all still read the AUTHORED id, unchanged. They must:
-               * `deferLazyPanelNodes` computes the landing label server-side
-               * from the raw `tabLink{n}` props and has no routing map to
-               * resolve ids with, so a client that resolved differently
-               * would keep a panel the server withheld.
+               * `landing`, `opening`, `activeIndex`, `aria-controls` and the
+               * `onChange` guard all still read the AUTHORED id, unchanged.
+               * They must: `deferLazyPanelNodes` computes the opening label
+               * server-side from the raw `tabLink{n}` props and has no
+               * routing map to resolve ids with, so a client that resolved
+               * differently would keep a panel the server withheld.
                */
               disabled={broken && !editorInert ? true : undefined}
               // On the canvas the tab stays live: the author has to be able
@@ -617,6 +687,60 @@ export function atLeastLabels(count: number): Record<string, unknown> {
   }
 }
 
+/**
+ * The "Opens on" field's `resolveProps`: its answers are the element's OWN
+ * tab labels, read from the sibling `labels` field as they are typed
+ * (AGL-3164).
+ *
+ * A picker rather than a typed index or a typed label. An index goes on
+ * meaning "the second tab" after a reorder, with nothing on screen to say
+ * the wrong panel now opens; a typed label breaks on a rename and on every
+ * typo in between. Choosing from the list the author has just written is the
+ * only form of this control someone who does not write code can get right,
+ * which is the whole reason it exists instead of the tabs being reordered by
+ * hand to obtain a behavior.
+ *
+ * The answers follow the label list as it is edited because the field's
+ * `condition` names `labels`: data-driven-forms subscribes a conditional
+ * field to its condition's trigger fields, and that subscription is what
+ * re-runs this.
+ *
+ * A stored label the list no longer holds is offered back as its own option,
+ * named as gone. The element itself already falls back to the first tab, so
+ * the page is never broken by one; but a picker that rendered BLANK would
+ * read as "not set", and the author would never learn that the choice they
+ * made has stopped being honoured — the same reason a Screen picker names a
+ * target the host no longer has (AGL-1893).
+ */
+export function opensOnFieldProps(
+  _props: unknown,
+  field: { input?: { value?: unknown } },
+  formOptions?: {
+    getFieldState?: (name: string) => { value?: unknown } | undefined
+    getState?: () => { values?: Record<string, unknown> } | undefined
+  },
+): { options: { value: string; label: string }[] } {
+  // The registered field first, the form's values as the fallback: a field
+  // that has not registered yet has no state, and the values are there from
+  // the first render.
+  const authored =
+    formOptions?.getFieldState?.('labels')?.value ??
+    formOptions?.getState?.()?.values?.['labels']
+  const options = parseLabels(authored).map((label) => ({
+    value: label,
+    label,
+  }))
+  const stored = field?.input?.value
+  if (
+    typeof stored === 'string' &&
+    stored.trim() &&
+    !options.some((option) => labelsMatch(option.value, stored))
+  ) {
+    options.push({ value: stored, label: `${stored} (no longer a tab)` })
+  }
+  return { options }
+}
+
 /** "1st", "2nd", "3rd", … for the link fields' own descriptions. */
 function ordinal(position: number): string {
   const suffix =
@@ -682,6 +806,25 @@ export const tabsSchema: Aglyn.ComponentSchema<TabsElementProps> = {
       component: Aglyn.FieldComponentType.TEXTAREA,
     },
     ...TAB_LINK_FIELDS,
+    {
+      name: 'opensOn',
+      label: 'Opens on',
+      description:
+        'The tab a visitor lands on. Leave it unset and the first tab ' +
+        'opens, as it always has. Pick from the tabs above rather than ' +
+        'reordering them — the strip is the design, and which tab opens ' +
+        'is not. If the tab named here is later renamed or removed, the ' +
+        'first tab opens again.',
+      component: Aglyn.FieldComponentType.SELECT,
+      // Nothing to choose on a one-tab strip — and naming `labels` is also
+      // what keeps the answers following the list (see opensOnFieldProps).
+      condition: atLeastLabels(2),
+      resolveProps: opensOnFieldProps,
+      // The corner ✕ is the way back to "the first tab": no option could
+      // carry that meaning, since an `''` value is stripped before save
+      // (AGL-1191) and every other value names a real tab.
+      clearable: true,
+    },
     {
       name: 'orientation',
       label: 'Orientation',

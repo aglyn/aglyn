@@ -253,3 +253,105 @@ describe('deferLazyPanelNodes (AGL-1285)', () => {
     expect(result.removed).toBe(5)
   })
 })
+
+/**
+ * The panel that reaches the page is the one that OPENS (AGL-3164).
+ *
+ * `opensOn` names the tab a Tabs element opens on. This function decides
+ * whose nodes survive into the payload at all, so it has to follow the same
+ * rule the element does: keep the panel of a tab that is not the one opening
+ * and the reader lands on "Loading…" instead of content, with a round trip
+ * to the server before the page they asked for appears.
+ *
+ * The rule itself is pinned beside the element (`openingTabIndex`, in the mui
+ * plugin's tabs.spec.tsx); these pin that this side agrees with it. The two
+ * implementations are deliberately separate — tenant-runtime must not depend
+ * on a plugin bundle — so the agreement is spec'd, not imported.
+ */
+describe('the opening panel is the one kept (AGL-3164)', () => {
+  it('keeps the panel the author said opens, not the first one', () => {
+    const result = deferLazyPanelNodes(doc({ tabProps: { opensOn: 'Two' } }))
+    expect(result.nodes['row-Two']).toBeDefined()
+    expect(result.nodes['text-Two']).toBeDefined()
+    expect(result.nodes['text-One']).toBeUndefined()
+    expect(result.deferredPanelIds.sort()).toEqual(['panel-One', 'panel-Three'])
+  })
+
+  it('marks the panels it withholds, opening one included in neither list', () => {
+    const { nodes } = deferLazyPanelNodes(doc({ tabProps: { opensOn: 'Two' } }))
+    expect(nodes['panel-Two'].props[DEFERRED_PANEL_PROP]).toBeUndefined()
+    expect(nodes['panel-Two'].nodes).toEqual(['row-Two'])
+    expect(nodes['panel-One'].props[DEFERRED_PANEL_PROP]).toBe(true)
+  })
+
+  it('keeps the first panel when nothing is named — today’s behavior', () => {
+    // The attribute must not become a field the Tabs already in the wild are
+    // suddenly missing.
+    const result = deferLazyPanelNodes(doc({ tabProps: {} }))
+    expect(result.nodes['text-One']).toBeDefined()
+    expect(result.deferredPanelIds.sort()).toEqual(['panel-Three', 'panel-Two'])
+  })
+
+  it('keeps the first panel when the named label no longer exists', () => {
+    // A renamed or deleted tab must fall back, never withhold everything.
+    const result = deferLazyPanelNodes(doc({ tabProps: { opensOn: 'Four' } }))
+    expect(result.nodes['text-One']).toBeDefined()
+    expect(result.deferredPanelIds.sort()).toEqual(['panel-Three', 'panel-Two'])
+  })
+
+  it('reads a cleared attribute as unset', () => {
+    // The field's ✕ writes null, and an empty string is what an empty box
+    // hands back; neither may match a label.
+    for (const opensOn of [null, '', '   ', undefined]) {
+      const result = deferLazyPanelNodes(doc({ tabProps: { opensOn } }))
+      expect(result.nodes['text-One']).toBeDefined()
+    }
+  })
+
+  it('matches the label the way every other label here is matched', () => {
+    const result = deferLazyPanelNodes(doc({ tabProps: { opensOn: ' tWo ' } }))
+    expect(result.nodes['text-Two']).toBeDefined()
+    expect(result.nodes['text-One']).toBeUndefined()
+  })
+
+  it('refuses a named tab that navigates, as the client does', () => {
+    // A linked tab reveals no panel (AGL-1312), so naming it cannot open it;
+    // both sides fall back to the first tab without a link.
+    const result = deferLazyPanelNodes(
+      doc({ tabProps: { opensOn: 'Two', tabLink2: 'screen-b' } }),
+    )
+    expect(result.nodes['text-One']).toBeDefined()
+    expect(result.nodes['text-Two']).toBeUndefined()
+  })
+
+  it('follows the label list rather than the child order', () => {
+    const result = deferLazyPanelNodes(
+      doc({
+        panelOrder: ['Three', 'Two', 'One'],
+        tabProps: { opensOn: 'Three' },
+      }),
+    )
+    expect(result.nodes['text-Three']).toBeDefined()
+    expect(result.deferredPanelIds.sort()).toEqual(['panel-One', 'panel-Two'])
+  })
+
+  it('defers nothing when no panel carries the named label', () => {
+    // Same refusal as a mislabelled first tab: guessing is most expensive
+    // exactly where the labels and the panels disagree.
+    const input = doc({
+      labels: 'One\nTwo\nThree',
+      panelLabels: ['One', 'Three'],
+      tabProps: { opensOn: 'Two' },
+    })
+    const result = deferLazyPanelNodes(input)
+    expect(result.removed).toBe(0)
+    expect(result.nodes).toBe(input)
+  })
+
+  it('does nothing at all when the author kept every panel in the source', () => {
+    const input = doc({ ssrPanels: true, tabProps: { opensOn: 'Two' } })
+    const result = deferLazyPanelNodes(input)
+    expect(result.removed).toBe(0)
+    expect(result.nodes).toBe(input)
+  })
+})
