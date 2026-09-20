@@ -54,6 +54,7 @@ import CreateHostDialog from '../../../../components/create-host-dialog.componen
 import EmptyState from '../../../../components/empty-state.component'
 import HostIcon from '../../../../components/host-icon.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import MarketingConsentPrompt from '../../../../components/marketing-consent-prompt.component'
 import OrgDashboardWidgets from '../../../../components/org-dashboard-widgets.component'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
 import OrgInvitesBanner from '../../../../components/org-invites-banner.component'
@@ -229,6 +230,10 @@ function HostsContent() {
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         {/* Pending org invites (AGL-234). */}
         <OrgInvitesBanner />
+        {/* The one-time product-updates ask (AGL-3185): a single-workspace
+            member is sent straight here from the workspace chooser, so this
+            is where most accounts land. Renders nothing once answered. */}
+        <MarketingConsentPrompt />
         {/* The `invites.length === 0` deferral is about which CALL TO ACTION
             leads (AGL-234) and only applies to a genuine zero-state; a read we
             could not finish still has to say so. */}

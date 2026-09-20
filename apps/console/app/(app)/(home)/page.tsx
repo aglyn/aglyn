@@ -49,6 +49,7 @@ import CreateHostDialog from '../../../components/create-host-dialog.component'
 import CreateOrgDialog from '../../../components/create-org-dialog.component'
 import EmptyState from '../../../components/empty-state.component'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
+import MarketingConsentPrompt from '../../../components/marketing-consent-prompt.component'
 import OrgInvitesBanner from '../../../components/org-invites-banner.component'
 import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
@@ -352,6 +353,11 @@ function OrgJump() {
         </Box>
       ) : (
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          {/* The one-time product-updates ask (AGL-3185), for an account
+              with no decision on record. Here and on the sites list — the
+              two places a signed-in person lands — rather than above every
+              route. */}
+          <MarketingConsentPrompt />
           {signupOrgFailure ? (
             <Alert
               severity="warning"
