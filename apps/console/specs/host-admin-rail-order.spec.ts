@@ -22,9 +22,11 @@
  * Admin governs the site as an OBJECT — its address, its permissions, its
  * history, its existence — and the rail is read top to bottom as that story.
  * General is first because a name and an address are what identify the thing
- * every section below governs. Backup & template sits between Activity and
- * Danger zone: moving the whole site somewhere else, or bringing it back, is
- * the last thing short of deleting it.
+ * every section below governs. Error pages sits beside Security, because both
+ * answer what a visitor's browser is handed on a page the site did not design
+ * for them. Backup & template sits between Activity and Danger zone: moving
+ * the whole site somewhere else, or bringing it back, is the last thing short
+ * of deleting it.
  *
  * Read off the SOURCE rather than a rendered rail, because what is being
  * pinned is the list itself. Rendering it would need the whole console
@@ -69,6 +71,7 @@ describe('the site Admin rail', () => {
       'Plugins',
       'Custom Domain',
       'Security',
+      'Error pages',
       'Activity',
       'Backup & template',
       'Danger zone',

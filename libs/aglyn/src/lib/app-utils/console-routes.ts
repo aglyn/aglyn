@@ -388,6 +388,15 @@ export enum Route {
   HOST_ADMIN_PLUGIN = '/[orgSlug]/hosts/[host]/admin/plugins/[pluginRef]',
   HOST_ADMIN_DOMAIN = '/[orgSlug]/hosts/[host]/admin/domain',
   HOST_ADMIN_SECURITY = '/[orgSlug]/hosts/[host]/admin/security',
+  /*
+   * The designed screen behind each status code, and the switch that shows the
+   * 503 one at every address at once (AGL-3178).
+   *
+   * Beside Security because both answer what a visitor's browser is handed on
+   * a page the site did not design for them, and above Activity because it is
+   * a control rather than a record.
+   */
+  HOST_ADMIN_ERROR_PAGES = '/[orgSlug]/hosts/[host]/admin/error-pages',
   HOST_ADMIN_ACTIVITY = '/[orgSlug]/hosts/[host]/admin/activity',
   /*
    * Backup, restore and publishing the site as a template — moving the whole
@@ -629,6 +638,7 @@ export interface RoutePayload {
   [Route.HOST_ADMIN_PLUGIN]: { orgSlug: string; host: string; pluginRef: string }
   [Route.HOST_ADMIN_DOMAIN]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_SECURITY]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_ERROR_PAGES]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_ACTIVITY]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_BACKUP]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_DANGER]: { orgSlug: string; host: string }
