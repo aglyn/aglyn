@@ -43,7 +43,7 @@ page template, reusable component, form, email, campaign, product copy, SEO
 text or theme change from a description. An add-on on any paid plan, carried
 by agreement on Enterprise, and metered in credits. Everything it makes is a
 draft — it never publishes, changes a live page in place or sends anything.
-Currently rolling out. → [Aglyn AI](../ai/overview.md),
+→ [Aglyn AI](../ai/overview.md),
 [Add-ons](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai)
 
 ### Aglyn Assist
