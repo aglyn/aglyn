@@ -385,6 +385,42 @@ export interface AiCompletion {
    */
   estCostUsd: number
   stopReason: string | null
+  /**
+   * WHERE THE OUTPUT WENT (AGL-3143). The provider's own output for this
+   * call, as it answered it, kept ONLY when the call stopped at its ceiling
+   * and cut to `AI_RAW_OUTPUT_MAX_CHARS`.
+   *
+   * A tool call truncated mid-answer reaches `toolUse` as whatever the
+   * provider could still parse, and the parsed input alone cannot say where
+   * the tokens went: a runaway string the partial parse discarded and a
+   * decoding stall that wrote nothing usable both leave a small input
+   * against a spent ceiling. This is what tells them apart. It is for the
+   * trace — a log, a recording — and never travels to a customer.
+   */
+  rawOutput?: string
+}
+
+/**
+ * Whether a model call stopped because it reached the output ceiling it was
+ * asked for (AGL-3042). `max_tokens` is the contract's word, and the
+ * OpenAI-compatible adapter maps its endpoint's `length` onto it; `length` is
+ * read as well, for an adapter that passes its provider's own word through.
+ */
+export function aiStoppedAtCeiling(stopReason: string | null): boolean {
+  return stopReason === 'max_tokens' || stopReason === 'length'
+}
+
+/** The most characters of raw output a call cut off at its ceiling keeps. */
+export const AI_RAW_OUTPUT_MAX_CHARS = 20_000
+
+/**
+ * A cut-off call's output as the trace keeps it: what the provider answered,
+ * serialized where it is not already text, and cut to the bound with an
+ * ellipsis so a reader can tell a cut trace from a short answer.
+ */
+export function aiRawOutputOf(output: unknown): string {
+  const text = typeof output === 'string' ? output : (JSON.stringify(output) ?? '')
+  return text.length > AI_RAW_OUTPUT_MAX_CHARS ? `${text.slice(0, AI_RAW_OUTPUT_MAX_CHARS)}…` : text
 }
 
 /**

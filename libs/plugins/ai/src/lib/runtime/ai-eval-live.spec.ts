@@ -67,6 +67,7 @@ import {
 } from '../model/ai-plan-capabilities'
 import { aiAutomationCapabilities } from '../model/ai-workflow-job'
 import { aiProductsJobInputs } from '../model/ai-products'
+import { AI_UPSTREAM_FAILURE_COPY, AiUpstreamError } from '../providers/contract'
 import {
   AI_CATALOG_TOOL_NAME,
   AI_CATEGORIES_TOOL_NAME,
@@ -86,6 +87,7 @@ import {
 import {
   AI_EVAL_CAPABILITIES_GRADER_NOTE,
   AI_EVAL_INLINE_GRADER_NOTE,
+  AI_EVAL_INLINE_USES_GRADER_NOTE,
   AI_EVAL_LAYOUT_OUTLINE_MAX_LINES,
   AI_EVAL_PAGE_GRADER_NOTE,
   AI_EVAL_PHOTO_GRADER_NOTE,
@@ -98,6 +100,7 @@ import {
   aiEvalGraderOutput,
   aiEvalGraderPrompt,
   aiEvalLayoutOutline,
+  aiEvalPlanOutline,
   aiEvalRecorderFor,
   readAiEvalGrade,
   recordAiEvalLive,
@@ -189,6 +192,12 @@ function armReferenceAnswers(
 
 beforeEach(() => {
   mockRunAiRequest.mockReset()
+  // An answer cut off at its ceiling says so; a suite that arms one on purpose is not a report of it.
+  jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+})
+
+afterEach(() => {
+  jest.restoreAllMocks()
 })
 
 describe('the live run', () => {
@@ -412,6 +421,26 @@ describe('the automation and products recorders (AGL-3074)', () => {
 
   const records = draft.automationRecords as AiAutomationRecords
   const siteDoc = { [`hosts/${AI_EVAL_SITE_ID}`]: { orgId: 'org-runner', subdomain: 'runner' } }
+
+  it('keeps what the provider wrote on a draft its ceiling cut off, so a run can be read after it ends (AGL-3143)', async () => {
+    // The shape the last live run could not diagnose: a whole ceiling spent
+    // and a tool call that parsed to one step. The recording is the only
+    // place those bytes outlive the run that paid for them.
+    const runaway = `{"steps":[{"note":"${'y'.repeat(300)}`
+    armReferenceAnswers()
+    const answers = mockRunAiRequest.getMockImplementation() as (request: {
+      tools?: Array<{ name: string }>
+    }) => Promise<Record<string, unknown>>
+    mockRunAiRequest.mockImplementation(async (request: { tools?: Array<{ name: string }> }) => {
+      const answer = await answers(request)
+      return request.tools?.[0]?.name === AI_AUTOMATION_TOOL_NAME
+        ? { ...answer, toolUse: [{ name: AI_AUTOMATION_TOOL_NAME, input: {} }], stopReason: 'max_tokens', rawOutput: runaway }
+        : answer
+    })
+    const [{ candidate }] = (await recordAiEvalLive([draft], LIVE)).recorded
+    expect(candidate.note).toContain('needs review:')
+    expect(candidate.rawOutput).toBe(runaway)
+  })
 
   it('records an automation draft through the workflow step’s own generation, sending what the step’s runner sends for the same site', async () => {
     // A workspace whose plan runs the CRM and neither webhooks nor bookings,
@@ -664,6 +693,55 @@ describe('the automation and products recorders (AGL-3074)', () => {
     ])
     expect(mockRunAiRequest).not.toHaveBeenCalled()
   })
+
+  it('keeps the briefs a refused one sits between, and names what was thrown (AGL-3143)', async () => {
+    armReferenceAnswers()
+    const answers = mockRunAiRequest.getMockImplementation() as (request: {
+      tools?: Array<{ name: string }>
+    }) => Promise<unknown>
+    // The provider refuses the middle brief's own tool, as it refused an
+    // automation's before the model ran. The first brief is recorded before
+    // the throw and the third is recorded after it.
+    mockRunAiRequest.mockImplementation(async (request: { tools?: Array<{ name: string }> }) => {
+      if (request.tools?.[0]?.name === AI_THEME_TOOL_NAME) {
+        throw new AiUpstreamError(400, false, 'req_refused_theme')
+      }
+      return answers(request)
+    })
+    const report = await recordAiEvalLive([text, theme, categories], LIVE)
+    expect(report.recorded.map((entry) => entry.caseId)).toEqual([text.id, categories.id])
+    expect(report.failed).toEqual([
+      {
+        caseId: theme.id,
+        kind: 'theme',
+        step: 'record',
+        error: `AiUpstreamError: ${AI_UPSTREAM_FAILURE_COPY}`,
+        requestId: 'req_refused_theme',
+      },
+    ])
+  })
+
+  it('records a brief whose grade throws as a failure of its grading, not of its answer (AGL-3143)', async () => {
+    armReferenceAnswers()
+    const answers = mockRunAiRequest.getMockImplementation() as (request: {
+      tools?: Array<{ name: string }>
+    }) => Promise<unknown>
+    mockRunAiRequest.mockImplementation(async (request: { tools?: Array<{ name: string }> }) => {
+      if (request.tools?.[0]?.name === AI_EVAL_RUBRIC_TOOL.name) throw new Error('the grader is out of quota')
+      return answers(request)
+    })
+    const report = await recordAiEvalLive([text], LIVE)
+    expect(report.recorded).toEqual([])
+    expect(report.failed).toEqual([
+      {
+        caseId: text.id,
+        kind: 'text',
+        step: 'grade',
+        error: 'Error: the grader is out of quota',
+        requestId: null,
+      },
+    ])
+  })
 })
 
 describe('aiEvalGraderPrompt', () => {
@@ -697,6 +775,28 @@ describe('aiEvalGraderPrompt', () => {
     }
   })
 
+  it('tells the grader that a section built inline can only leave its `uses` empty (AGL-3143)', () => {
+    // `uses` names an inventory id or a creation, and a workspace that keeps
+    // no reusable components and may create none has neither — so the grader
+    // marked the Free brief's plan down for the only list it could write.
+    const outline = aiEvalPlanOutline({
+      screens: [{ title: 'About', sections: [{ name: 'contact form', uses: [], items: 0 }] }],
+    })
+    expect(outline).toContain('1. contact form')
+    expect(outline).not.toContain('placing')
+    for (const scope of ['plan', 'full'] as const) {
+      const prompt = aiEvalGraderPrompt(freePage, {
+        ...answer,
+        scope,
+        plan: { screens: [{ title: 'About', sections: [{ name: 'contact form', uses: [], items: 0 }] }] },
+        answer: { tree: {} },
+      })
+      expect([scope, prompt.includes(AI_EVAL_INLINE_USES_GRADER_NOTE)]).toEqual([scope, true])
+      // Read before the output it is graded against.
+      expect(prompt.indexOf(AI_EVAL_INLINE_USES_GRADER_NOTE)).toBeLessThan(prompt.indexOf('Output:\n'))
+    }
+  })
+
   it('says nothing of a workspace for a case that describes none, and nothing of building inline where one keeps components', () => {
     const plan = { ...answer, scope: 'plan', plan: { reuse: [] }, answer: null } as const
     const none = aiEvalGraderPrompt(page, plan)
@@ -705,6 +805,9 @@ describe('aiEvalGraderPrompt', () => {
     const paid = aiEvalGraderPrompt({ ...page, capabilities: aiUnrestrictedPlanCapabilities() }, plan)
     expect(paid).toContain(AI_EVAL_CAPABILITIES_GRADER_NOTE)
     expect(paid).not.toContain(AI_EVAL_INLINE_GRADER_NOTE)
+    // A workspace that keeps components can place one, so the empty-`uses`
+    // note would excuse a plan that should have named it.
+    expect(paid).not.toContain(AI_EVAL_INLINE_USES_GRADER_NOTE)
   })
 
   it('excuses an empty screens list for exactly the kinds the plan step tells to plan none (AGL-3022)', () => {

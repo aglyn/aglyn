@@ -127,6 +127,7 @@ import {
   AI_JOB_PAGE_CREATION_UNAVAILABLE_COPY,
   AI_JOB_PAGE_DELETED_COPY,
   AI_JOB_PAGE_MAX_PASSES,
+  AI_JOB_PAGE_REFUSED_DRAFT_COPY,
   AI_JOB_PAGE_SECTION_MAX_TOKENS,
   AI_JOB_PAGE_SECTION_TOKENS,
   AI_JOB_PAGE_STEP_MINIMUM_MS,
@@ -574,7 +575,7 @@ describe('the passes', () => {
 
     const outcome = await step()(context())
     expect(mockRunAiRequest).not.toHaveBeenCalled()
-    expect(outcome.outputs).toEqual([])
+    expect(outcome.outputs).toEqual([expect.objectContaining({ resource: 'screen', id: 'drftScreen' })])
     const cells = nodes[rowId as string].nodes ?? []
     expect(outcome.review).toEqual({
       reason: 'doctrine',
@@ -588,6 +589,45 @@ describe('the passes', () => {
         ]),
       ],
     })
+  })
+
+  it('lets the member mend the reported draft and finish the job, reporting it only once (AGL-3143)', async () => {
+    await buildSections()
+    mockRunAiRequest.mockReset()
+    const versionPath = `${DRAFT}/versions/${mockDocs.get(DRAFT)?.['versionId']}`
+    const nodes = storedPage() as Record<string, { props?: Record<string, unknown> }>
+    const [rowId] = Object.entries(nodes).find(([, node]) => node.props?.['container'] === true) ?? []
+    const mended = nodes[rowId as string].props
+    // The container comes off the row of cards, which rule 12 refuses.
+    nodes[rowId as string].props = { ariaLabel: 'What the inspection covers' }
+    mockDocs.set(versionPath, { ...mockDocs.get(versionPath), nodes: encodeStoredNodes(nodes) })
+
+    // The last pass refuses the stored page — and reports the draft, which is
+    // the only thing that gives the member somewhere to mend it.
+    const refused = await step()(context())
+    expect(refused.review?.reason).toBe('doctrine')
+    const [reported] = refused.outputs
+    expect(reported).toMatchObject({ resource: 'screen', id: SCREEN_ID })
+    expect(refused.review?.message).toContain(AI_JOB_PAGE_REFUSED_DRAFT_COPY)
+
+    // They open it and put the container back, then try again. This pass
+    // reads the mended page, so the job finishes instead of refusing again —
+    // and the draft it already reported is not reported a second time.
+    nodes[rowId as string].props = mended
+    mockDocs.set(versionPath, { ...mockDocs.get(versionPath), nodes: encodeStoredNodes(nodes) })
+    seoFields.mockResolvedValueOnce({
+      status: 'ok',
+      value: { title: 'Spring Roof Inspections in Springfield', description: 'A licensed roofer checks shingles, flashing and gutters.' },
+      attempts: 1,
+      usage: { inputTokens: 700, outputTokens: 80, cacheReadTokens: 900, cacheWriteTokens: 0 },
+      effort: null,
+      estCostUsd: 0.001,
+      model: 'claude-haiku-4-5',
+      stopReason: 'tool_use',
+    })
+    const done = await step()(context({ outputs: refused.outputs }))
+    expect(done.review).toBeUndefined()
+    expect(done.outputs).toEqual([])
   })
 
   it('names a placed component’s bracketed defaults once, where the page sets nothing of its own (AGL-3056)', () => {
@@ -714,7 +754,8 @@ describe('when a pass stops', () => {
     mockRunAiRequest.mockReset()
     const last = await step()(context())
     expect(mockRunAiRequest).not.toHaveBeenCalled()
-    expect(last.outputs).toEqual([])
+    // The draft is reported with the refusal (AGL-3143), so the member has it to mend.
+    expect(last.outputs).toEqual([expect.objectContaining({ resource: 'screen', id: 'drftScreen' })])
     expect(last.review).toEqual({
       reason: 'doctrine',
       message: expect.stringContaining('(1 more rule was also broken.)'),

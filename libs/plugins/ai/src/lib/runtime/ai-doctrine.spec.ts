@@ -398,6 +398,15 @@ function planInput(fake: AiProvider) {
   }
 }
 
+beforeEach(() => {
+  // An answer cut off at its ceiling says so; a suite arming one on purpose is not a report of it.
+  jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+})
+
+afterEach(() => {
+  jest.restoreAllMocks()
+})
+
 describe('runValidatedGeneration — a plan', () => {
   it('keeps a first answer that holds to every rule, in one call, under the doctrine prompt', async () => {
     const { fake, requests } = provider([toolAnswer(AI_BUILD_PLAN_TOOL.name, CLEAN_PLAN)])
@@ -605,6 +614,47 @@ describe('runValidatedGeneration — a plan', () => {
         ].join('\n'),
       )
       expect(requests[1].messages[2].content).not.toContain('could not be read as a plan')
+    })
+
+    it('is refused even where its cut input still passes every check (AGL-3143)', async () => {
+      // The control an automation draft hit live: 4,000 output tokens of a
+      // 4,000 ceiling, and a tool call whose prefix parsed to one legal step
+      // where three were asked for. Nothing in the answer is wrong — it is
+      // just not the whole answer — so a ceiling tested after the check's
+      // verdict never fires, and the half-answer is handed over unre-asked.
+      const { fake, requests } = provider([
+        cutOff(CLEAN_PLAN),
+        toolAnswer(AI_BUILD_PLAN_TOOL.name, CLEAN_PLAN),
+      ])
+      const result = await runValidatedGeneration('plan', planInput(fake))
+      expect(result).toMatchObject({ status: 'ok', value: CLEAN_PLAN, attempts: 2 })
+      expect(requests[1].messages[2].content).toContain('ran past the size one answer may have')
+      expect(requests[1].messages[2].content).not.toContain('breaks these building rules')
+    })
+
+    it('keeps what the provider wrote, which the parsed input is only part of (AGL-3143)', async () => {
+      // The question the last live run could not answer: 4,000 output tokens
+      // against a 255-character tool input. Was a runaway string discarded by
+      // the partial parse, or did the decoding stall? Only the bytes say.
+      const runaway = `{"steps":[{"note":"${'x'.repeat(400)}`
+      const { fake } = provider([
+        { ...cutOff({}), rawOutput: runaway },
+        { ...cutOff({}), rawOutput: runaway },
+      ])
+      const result = await runValidatedGeneration('plan', planInput(fake))
+      expect(result).toMatchObject({ status: 'needs_input', rawOutput: runaway })
+    })
+
+    it('hands a person the cut-off answer when the re-ask is cut off too, and never the prefix (AGL-3143)', async () => {
+      const { fake } = provider([cutOff(CLEAN_PLAN), cutOff(CLEAN_PLAN)])
+      const result = await runValidatedGeneration('plan', planInput(fake))
+      expect(result).toMatchObject({
+        status: 'needs_input',
+        attempts: 2,
+        message: 'This plan was too large to build in one pass. Try again, or describe it smaller.',
+      })
+      if (result.status !== 'needs_input') return
+      expect(result.violations.map((violation) => violation.code)).toEqual(['answer-cut-off'])
     })
 
     it('reads a provider’s own `length` the way it reads the contract’s `max_tokens`', async () => {

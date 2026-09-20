@@ -604,7 +604,16 @@ const recordWorkflow: AiEvalRecorder = async (evalCase, options) => {
     answer: result.status === 'refused' ? null : raw,
     usage: result.usage,
     steps: [recordedStep('job.workflow', result)],
-    ...(result.status === 'needs_input' ? { note: `needs review: ${result.message}` } : {}),
+    ...(result.status === 'needs_input'
+      ? {
+          note: `needs review: ${result.message}`,
+          // An automation draft is the largest thing anything here asks for,
+          // so it is the one that runs out of ceiling (AGL-3143). What the
+          // provider wrote goes on the recording, where the run that paid for
+          // it can still be read after it ends.
+          ...(result.rawOutput ? { rawOutput: result.rawOutput } : {}),
+        }
+      : {}),
   }
 }
 
@@ -866,6 +875,21 @@ export const AI_EVAL_INLINE_GRADER_NOTE =
   "On this workspace, a list's repeated items drawn in one section and a form drawn on the page, as a Form element holding its Form Fields, are the correct build and never a missed reuse."
 
 /**
+ * What a section's `uses` can hold on such a workspace (AGL-3143).
+ *
+ * A section's `uses` names what the section PLACES, and the only things it
+ * can name are an inventory id and a `new:<name>` creation. A workspace that
+ * keeps no reusable components or saved forms has neither to name, and the
+ * capability lines above have already refused the job the creations — so
+ * every inline section leaves `uses` empty because it is the only answer it
+ * can give. A grader that does not know it reads the empty list as a section
+ * that places nothing and marks the plan down for being correct, which drags
+ * the floors down for a reason that has nothing to do with the answer.
+ */
+export const AI_EVAL_INLINE_USES_GRADER_NOTE =
+  "A section's `uses` names what it places, and can name only an inventory id or a creation. This workspace has neither to place and may create neither, so an empty `uses` on a section drawn inline is the only answer there is: never mark a plan or a section down for it."
+
+/**
  * The workspace a case describes, as its grader reads it: the capability
  * lines the plan step was sent, narrowed to what the job builds the way the
  * step narrows them, and the notes on grading against them. `null` for a
@@ -879,7 +903,9 @@ export function aiEvalGraderCapabilities(evalCase: AiEvalCase): string | null {
   return [
     ...aiPlanCapabilityLines(capabilities),
     AI_EVAL_CAPABILITIES_GRADER_NOTE,
-    ...(capabilities.reusableComponents ? [] : [AI_EVAL_INLINE_GRADER_NOTE]),
+    ...(capabilities.reusableComponents
+      ? []
+      : [AI_EVAL_INLINE_GRADER_NOTE, AI_EVAL_INLINE_USES_GRADER_NOTE]),
   ].join('\n')
 }
 
@@ -1220,15 +1246,50 @@ export async function gradeAiEvalCandidate(
   return result.value
 }
 
+/** Which half of a case's run threw: asking for the answer, or grading it. */
+export type AiEvalLiveStep = 'record' | 'grade'
+
+/** A brief whose run threw, as the report keeps it. */
+export interface AiEvalLiveFailure {
+  caseId: string
+  kind: AiEvalKind
+  step: AiEvalLiveStep
+  /** What was thrown, as a sentence. */
+  error: string
+  /** The provider's request id, when the throw carried one — the vendor log's join key. */
+  requestId: string | null
+}
+
 export interface AiEvalLiveReport {
   recorded: Array<{ caseId: string; kind: AiEvalKind; candidate: AiEvalCandidate }>
   skipped: Array<{ caseId: string; kind: AiEvalKind; why: string }>
+  /** The briefs whose run threw; empty when every brief a recorder covers came back. */
+  failed: AiEvalLiveFailure[]
+}
+
+/** The vendor's request id off a thrown `UpstreamServiceError`, when it carried one. */
+function requestIdOfThrown(error: unknown): string | null {
+  const id = (error as { requestId?: unknown } | null)?.requestId
+  return typeof id === 'string' && id ? id : null
+}
+
+function messageOfThrown(error: unknown): string {
+  return error instanceof Error ? `${error.name}: ${error.message}` : String(error)
 }
 
 /**
  * Record and grade an answer for every brief a recorder covers. Refused
  * before anything else unless `AI_EVAL_LIVE=1` names the run, and before any
  * request when a brief it would record names media the run cannot read.
+ *
+ * ONE BRIEF'S FAILURE IS NOT THE RUN'S (AGL-3143). A run is owner-approved
+ * spend, and a provider that refuses one brief — a tool it will not compile,
+ * a rate limit — used to end the whole run with the answers already paid for
+ * still in memory and never written. Each brief is run on its own instead:
+ * one that throws is kept as a failure naming what was thrown, the vendor's
+ * request id and which half of its run threw, and the briefs behind it are
+ * still recorded. The caller writes what came back and decides what a
+ * non-empty `failed` means for its exit status.
  */
 export async function recordAiEvalLive(
   cases: readonly AiEvalCase[],
@@ -1241,16 +1302,28 @@ export async function recordAiEvalLive(
       `${unreadable.map((evalCase) => evalCase.id).join(', ')} name media, and this run was given no readFixture to read them with`,
     )
   }
-  const report: AiEvalLiveReport = { recorded: [], skipped: [] }
+  const report: AiEvalLiveReport = { recorded: [], skipped: [], failed: [] }
   for (const evalCase of cases) {
     const recorder = aiEvalRecorderFor(evalCase.kind)
     if (!recorder) {
       report.skipped.push({ caseId: evalCase.id, kind: evalCase.kind, why: aiEvalSkipReason(evalCase.kind) })
       continue
     }
-    const answer = await recorder(evalCase, options)
-    const rubric = await gradeAiEvalCandidate(evalCase, answer, options)
-    report.recorded.push({ caseId: evalCase.id, kind: evalCase.kind, candidate: { ...answer, rubric } })
+    let step: AiEvalLiveStep = 'record'
+    try {
+      const answer = await recorder(evalCase, options)
+      step = 'grade'
+      const rubric = await gradeAiEvalCandidate(evalCase, answer, options)
+      report.recorded.push({ caseId: evalCase.id, kind: evalCase.kind, candidate: { ...answer, rubric } })
+    } catch (error) {
+      report.failed.push({
+        caseId: evalCase.id,
+        kind: evalCase.kind,
+        step,
+        error: messageOfThrown(error),
+        requestId: requestIdOfThrown(error),
+      })
+    }
   }
   return report
 }

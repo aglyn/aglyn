@@ -271,6 +271,15 @@ export interface AiEvalCandidate {
   screen?: AiEvalRecordedScreen
   rubric: AiEvalRubric
   note?: string
+  /**
+   * What the provider wrote when the answer ran out of ceiling (AGL-3143):
+   * the bytes `answer` is only as much of as still parsed. Absent on every
+   * recording but one whose answer was cut off. It is here because the
+   * recording is the only place a live run's output outlives the run, and
+   * it is what says whether the ceiling went on a runaway string or on a
+   * decoding stall that wrote nothing usable. Never authored by hand.
+   */
+  rawOutput?: string
 }
 
 /** One metered exchange of a recorded job. */

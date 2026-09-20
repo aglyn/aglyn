@@ -19,6 +19,8 @@ import { aiCatalogEntry, aiModelIdsForProvider, estimateAiBilledUsd } from './ca
 import {
   AiUpstreamError,
   aiMessageText,
+  aiRawOutputOf,
+  aiStoppedAtCeiling,
   aiTokenCount,
   aiToolInputOf,
   type AiMessage,
@@ -226,7 +228,18 @@ async function complete(input: AiProviderRequest): Promise<AiResult> {
   if (stopReason === 'refusal') {
     return { kind: 'refusal', text, usage, estCostUsd, stopReason }
   }
-  return { kind: 'completion', text, toolUse, usage, estCostUsd, stopReason }
+  return {
+    kind: 'completion',
+    text,
+    toolUse,
+    usage,
+    estCostUsd,
+    stopReason,
+    // The message as the endpoint answered it, for a call its ceiling cut off
+    // (AGL-3143). A tool call's `arguments` is raw JSON text here, and this
+    // is the only place the bytes it was cut in survive the parse.
+    ...(aiStoppedAtCeiling(stopReason) ? { rawOutput: aiRawOutputOf(choice?.message) } : {}),
+  }
 }
 
 async function stream(input: AiProviderRequest): Promise<AsyncIterable<AiStreamEvent>> {

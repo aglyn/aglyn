@@ -30,7 +30,7 @@ import {
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
 import type { AiStepKind } from '../providers/catalog'
-import type { AiProvider } from '../providers/contract'
+import { aiStoppedAtCeiling, type AiProvider } from '../providers/contract'
 import { AI_ROUTING_TABLE, aiModelForStep, type AiPluginSettings } from '../providers/routing'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
@@ -679,14 +679,12 @@ export function aiDoctrinePlanCheck(
 export const AI_ANSWER_CUT_OFF_CODE = 'answer-cut-off'
 
 /**
- * Whether a model call stopped because it reached the output ceiling it was
- * asked for (AGL-3042). `max_tokens` is the contract's word, and the
- * OpenAI-compatible adapter maps its endpoint's `length` onto it; `length` is
- * read as well, for an adapter that passes its provider's own word through.
+ * Whether a model call stopped at its output ceiling (AGL-3042). The
+ * contract owns the predicate, because an adapter reads it to decide whether
+ * to keep the call's raw output; the doctrine re-exports it, which is where
+ * every door already reads it from.
  */
-export function aiStoppedAtCeiling(stopReason: string | null): boolean {
-  return stopReason === 'max_tokens' || stopReason === 'length'
-}
+export { aiStoppedAtCeiling }
 
 /**
  * How a door names what it generates, and what makes it smaller, for an
@@ -893,6 +891,14 @@ export type AiValidatedGeneration<T> =
        * Held in memory only, and `null` when no answer arrived.
        */
       answer?: Record<string, unknown> | null
+      /**
+       * What the provider wrote for the attempt its ceiling cut off
+       * (AGL-3143), when it sent it: the bytes behind `answer`, which is only
+       * as much of them as still parsed. Held in memory only, like `answer`,
+       * and `null` when nothing was cut off. It is the trace's, never a
+       * customer's — a caller that keeps it keeps it out of what it shows.
+       */
+      rawOutput?: string | null
     })
   /** The model declined; tokens were spent. */
   | (AiGenerationSpend & { status: 'refused' })
@@ -1021,6 +1027,8 @@ export async function runValidatedGeneration(
   let violations: AiDoctrineViolation[] = []
   // The answer `violations` were found in, for the review a person reads.
   let refused: Record<string, unknown> | null = null
+  // What the provider wrote for the attempt its ceiling cut off (AGL-3143).
+  let rawOutput: string | null = null
   // Answer attempts, which the re-ask bounds, are counted apart from model
   // calls, which lookups also spend.
   let answers = 0
@@ -1090,20 +1098,49 @@ export async function runValidatedGeneration(
       continue
     }
     answers += 1
-    const checked = answer ? check(answer) : null
-    if (checked && checked.value !== null && checked.violations.length === 0) {
-      return { ...spend, status: 'ok', value: checked.value }
-    }
-    // CUT OFF WINS (AGL-3042). A call that stopped at its ceiling was cut
-    // off, whatever reached the tool: a tool input cut mid-answer arrives
-    // partial or empty, and a check reads the truncation as a shape error —
-    // "the answer could not be used as a section" — that a re-ask quoting it
+    // CUT OFF WINS (AGL-3042), AND IT IS ASKED BEFORE THE CHECK'S VERDICT IS
+    // BELIEVED (AGL-3143). A call that stopped at its ceiling was cut off,
+    // whatever reached the tool: a tool input cut mid-answer arrives partial
+    // or empty, and a check reads the truncation as a shape error — "the
+    // answer could not be used as a section" — that a re-ask quoting it
     // cannot mend, so the re-ask is cut off the same way. The attempt is
     // refused as too large instead, and only a numbered rule the part that
     // arrived already broke is named beside it.
-    const found = checked?.violations ?? []
+    //
+    // A truncation does not always break a rule, though. A tool call cut at a
+    // point where its valid prefix still parses reads as a smaller but legal
+    // answer — three steps asked for, one step delivered — and passes every
+    // check there is. Tested after the success path, "cut off wins" then
+    // fires only where the check ALREADY failed, and the half-answer is
+    // handed over with no re-ask spent on it. So the ceiling is tested first,
+    // and a cut-off answer is refused whatever its prefix reads as. This is
+    // not particular to one kind: any door that can read a partial answer as
+    // a whole one has the same hole.
     const cutOff = aiStoppedAtCeiling(result.stopReason)
+    const checked = answer ? check(answer) : null
+    if (!cutOff && checked && checked.value !== null && checked.violations.length === 0) {
+      return { ...spend, status: 'ok', value: checked.value }
+    }
+    const found = checked?.violations ?? []
     refused = answer
+    if (cutOff) {
+      rawOutput = result.rawOutput ?? null
+      // WHERE THE OUTPUT WENT (AGL-3143). The two shapes a cut-off answer
+      // comes in are told apart by these figures: output tokens far past what
+      // the tool call parsed to, against raw output that is long (a runaway
+      // string the partial parse discarded) or short (decoding wrote nothing
+      // usable). The bytes themselves are the model's own words, which is the
+      // site's content, so they travel on the result for a trace to keep and
+      // never into the log.
+      console.warn('ai answer cut off at its ceiling', {
+        kind,
+        model,
+        maxTokens,
+        outputTokens: spend.usage.outputTokens,
+        parsedChars: answer ? JSON.stringify(answer).length : 0,
+        rawChars: rawOutput?.length ?? null,
+      })
+    }
     violations = cutOff
       ? [cutOffAnswer(kind, input.cutOff), ...found.filter((violation) => violation.rule !== null)]
       : found.length
@@ -1127,6 +1164,7 @@ export async function runValidatedGeneration(
     violations,
     message: aiDoctrineNeedsInputMessage(violations),
     answer: refused,
+    rawOutput,
   }
 }
 
