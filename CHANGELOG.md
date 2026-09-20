@@ -9,6 +9,49 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.141 — 2026-09-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.140...v1.0.0-beta.141)
+
+### Added
+
+- **logic:** the function builder sets what a visitor sees, and tests with site variables ([AGL-3202](https://linear.app/aglyn/issue/AGL-3202))
+- **mui:** a Function Widget asks in real controls and answers with several results ([AGL-3202](https://linear.app/aglyn/issue/AGL-3202))
+- **aglyn:** a function calls min, round and format, and reads a site variable by name ([AGL-3202](https://linear.app/aglyn/issue/AGL-3202))
+- **plugins:** one tax rule for every plugin that charges, refused when nobody owns it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a plugin publishes what its record looks like; a campaign asks for one ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+### Fixed
+
+- **forms:** a duplicated form is bound to itself, not to the one it was copied from ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+- **console:** the table-footer sweep names the booking dialog where it lives now ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+### Changed
+
+- **forms:** the form block names the mui bundle by the core's constant, not mui's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **crm:** where a form field saves on a contact is the CRM's card, in a forms zone ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2851](https://linear.app/aglyn/issue/AGL-2851))
+- **bookings:** "Book a meeting" is bookings' own, drawn in a zone the CRM hosts ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **crm:** the composer reads the sending identity from the platform, not from email ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **workflows:** where a workflow is used is asked of the platform, not of logic ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **inbox:** the Campaigns section is a zone marketing fills, not an import ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** campaign attribution is a widget in zones the CRM and the Inbox host ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **forms:** a form page hosts a zone for its submissions; the Inbox draws the reader ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **email:** the email blocks sanitize with the core's function, not MUI's alias ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-1901](https://linear.app/aglyn/issue/AGL-1901))
+- **plugins:** the CRM publishes where its records are read; the Inbox and Forms ask ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+### Documentation
+
+- **bindings:** what a function can compute, and that a widget's function is on the page ([AGL-3202](https://linear.app/aglyn/issue/AGL-3202))
+
+<details>
+<summary>Also in this release: 3 test</summary>
+
+- **mui:** the canvas-facts specs live where the designer and the mui plugin both reach ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **billing:** the plans we sell are held to the deliverable ceiling beside the table ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a spec about several plugins lives where an app reaches them all ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+</details>
+
 ## v1.0.0-beta.140 — 2026-09-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.139...v1.0.0-beta.140)
