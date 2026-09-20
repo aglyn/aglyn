@@ -1373,10 +1373,8 @@ export interface PlanPricing {
    * Starter the capacity an extra host grants is what varies and the price
    * cannot chase it downward.
    *
-   * Business sits at $5 and is the exception: it genuinely grants the
-   * smallest bands of the tiers above Pro. It is left where it is rather than
-   * raised to match, because raising a shipped price is a decision with an
-   * invoice behind it and nothing about this line needed one.
+   * Business grants 20 GB and 8,000 submissions per host against Pro's 10 GB
+   * and 1,000, so it sits at Pro's $8 and not below it (2026-09-20).
    */
   extraHostMonthlyUsd: number | null
   /**
@@ -1644,7 +1642,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
   business: {
     basePriceMonthlyUsd: 139,
     basePriceAnnualMonthlyUsd: 99,
-    extraHostMonthlyUsd: 5,
+    extraHostMonthlyUsd: 8,
     extraSeatMonthlyUsd: 3,
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,

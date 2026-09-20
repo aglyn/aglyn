@@ -62,6 +62,16 @@ The parity spec's literals were updated the same day, and the 2026-09-07
 entries in `docs/DECISION_LOG.md` record the was → now of every row that
 moved.
 
+It was republished again on 2026-09-20 to version `pHMLIs5UF5`, "Business
+extra site $8 (AGL-3195)": the Business extra-site cell $5 → $8, on the
+desktop add-on table and in the Business mobile panel, the two stored text
+nodes that carry it. The version was a copy of the live one with only those
+two nodes changed, published the way the console publishes (the screen's
+`versionId` pointer), and the tenant cache dropped through the revalidate
+route. The parity spec's literal and the Figma extraction under
+`tools/marketing/pricing-copy/` moved in the same commit; the Figma frame
+itself still reads $5, which the reconciler cannot close.
+
 **#9 quotes the price in prose and nothing reads it.** `/pricing`'s
 description is a plain-text field on the screen's detail page, separate from
 the body, and it propagates into `<meta name="description">`,
