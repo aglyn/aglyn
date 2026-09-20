@@ -362,6 +362,23 @@ export interface AiUsage {
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
+  /**
+   * How many of `outputTokens` the model spent thinking, where the provider
+   * reports it; absent where it does not (AGL-3143).
+   *
+   * Inside `outputTokens`, never beside it: a rate table prices the four
+   * figures above and would charge these twice if it read this one.
+   *
+   * It is here because it is the figure that says where a generation's
+   * output went. A tool call that comes back far smaller than the tokens it
+   * cost has three shapes, and only this separates the first from the other
+   * two: the model thought and then answered briefly, which is a model
+   * working as asked; a runaway string the partial parse discarded; or
+   * decoding that wrote nothing usable. Kept on every answer, because a
+   * generation burns its budget thinking without ever reaching its ceiling,
+   * and `rawOutput` is only there when it does.
+   */
+  thinkingTokens?: number
 }
 
 export interface AiToolUse {

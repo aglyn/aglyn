@@ -645,6 +645,38 @@ describe('runValidatedGeneration — a plan', () => {
       expect(result).toMatchObject({ status: 'needs_input', rawOutput: runaway })
     })
 
+    it('says how much of the ceiling went on thinking, which the raw output cannot (AGL-3143)', async () => {
+      // The third shape, and the one the live run turned up: a generation
+      // that spends its ceiling THINKING and answers correctly and briefly.
+      // Its tool call is small against its output tokens exactly as a runaway
+      // string's is, and its raw output says nothing, because the thinking
+      // budget is drawn from the same ceiling as the answer.
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      const thinker: AiCompletion = {
+        ...cutOff(CLEAN_PLAN),
+        usage: { inputTokens: 374, outputTokens: 4008, cacheReadTokens: 4293, cacheWriteTokens: 0, thinkingTokens: 3698 },
+      }
+      const { fake } = provider([thinker, toolAnswer(AI_BUILD_PLAN_TOOL.name, CLEAN_PLAN)])
+      await runValidatedGeneration('plan', planInput(fake))
+      expect(warn).toHaveBeenCalledWith(
+        'ai answer cut off at its ceiling',
+        expect.objectContaining({ outputTokens: 4008, thinkingTokens: 3698 }),
+      )
+      warn.mockRestore()
+    })
+
+    it('carries no thinking figure where the provider reported none, rather than a zero (AGL-3143)', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      const { fake } = provider([cutOff(CLEAN_PLAN), toolAnswer(AI_BUILD_PLAN_TOOL.name, CLEAN_PLAN)])
+      const result = await runValidatedGeneration('plan', planInput(fake))
+      expect(result.usage.thinkingTokens).toBeUndefined()
+      expect(warn).toHaveBeenCalledWith(
+        'ai answer cut off at its ceiling',
+        expect.objectContaining({ thinkingTokens: null }),
+      )
+      warn.mockRestore()
+    })
+
     it('hands a person the cut-off answer when the re-ask is cut off too, and never the prefix (AGL-3143)', async () => {
       const { fake } = provider([cutOff(CLEAN_PLAN), cutOff(CLEAN_PLAN)])
       const result = await runValidatedGeneration('plan', planInput(fake))

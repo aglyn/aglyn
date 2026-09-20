@@ -223,11 +223,15 @@ const LAYOUT_TREE = {
   },
 }
 
+/** The layout's nodes without the ones named, for a variant that writes its own. */
+const layoutNodesWithout = (...ids: string[]): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(LAYOUT_TREE.nodes).filter(([id]) => !ids.includes(id)))
+
 /** The same layout with the site's navigation component placed instead of its links. */
 const NAV_TREE = {
   rootId: 'root',
   nodes: {
-    ...LAYOUT_TREE.nodes,
+    ...layoutNodesWithout('home', 'about'),
     bar: { componentId: 'muiToolbar', nodes: ['brand', 'nav'] },
     nav: { componentId: 'reusableInstance', props: { refId: 'cmp-nav' } },
   },
@@ -364,7 +368,7 @@ describe('the layout step', () => {
     const footer = (link: Record<string, unknown> | null) => ({
       rootId: 'root',
       nodes: {
-        ...LAYOUT_TREE.nodes,
+        ...layoutNodesWithout('tagline'),
         footer: {
           componentId: 'section',
           props: { element: 'footer' },

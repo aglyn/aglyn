@@ -35,7 +35,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { setRegisteringPluginId } from '@aglyn/aglyn/app-utils/registering-plugin'
 import { resetPluginServicesForTests } from '@aglyn/aglyn'
-import { anthropicProvider, buildAnthropicRequestBody } from './anthropic'
+import { anthropicProvider, anthropicUsageFrom, buildAnthropicRequestBody } from './anthropic'
 import { estimateAiBilledUsd } from './catalog'
 import {
   AI_RAW_OUTPUT_MAX_CHARS,
@@ -635,5 +635,44 @@ describe('the routing table (AGL-2937)', () => {
     // `platform` defers to the environment; an unregistered choice falls back too.
     expect(aiModelForStep('job.text', { provider: 'platform' })).toBe('claude-opus-5')
     expect(resolveAiRoute('job.text', { provider: 'nope' })?.provider.id).toBe('anthropic')
+  })
+})
+
+describe('where a generation’s output went (AGL-3143)', () => {
+  // The figure that separates the shapes a small answer against a spent
+  // ceiling comes in. Thinking is drawn from the same ceiling as the answer,
+  // so a model that thought its budget away and answered correctly and
+  // briefly reads exactly like one whose runaway string was discarded — and
+  // only this tells them apart, on every answer rather than only on the ones
+  // that reach the ceiling.
+  it('keeps how much of the output the model spent thinking, inside the output tokens and never beside them', () => {
+    const usage = anthropicUsageFrom({
+      input_tokens: 374,
+      output_tokens: 4008,
+      cache_read_input_tokens: 4293,
+      cache_creation_input_tokens: 0,
+      output_tokens_details: { thinking_tokens: 3698 },
+    })
+    expect(usage).toEqual({
+      inputTokens: 374,
+      outputTokens: 4008,
+      cacheReadTokens: 4293,
+      cacheWriteTokens: 0,
+      thinkingTokens: 3698,
+    })
+    // Inside `output_tokens`: pricing the four reported figures must not
+    // charge the thinking twice.
+    expect(estimateAiBilledUsd(usage, 'claude-sonnet-5')).toBe(
+      estimateAiBilledUsd({ ...usage, thinkingTokens: undefined }, 'claude-sonnet-5'),
+    )
+  })
+
+  it('says nothing rather than zero where the answer reported no breakdown', () => {
+    expect(anthropicUsageFrom({ input_tokens: 10, output_tokens: 20 })).toEqual({
+      inputTokens: 10,
+      outputTokens: 20,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    })
   })
 })
