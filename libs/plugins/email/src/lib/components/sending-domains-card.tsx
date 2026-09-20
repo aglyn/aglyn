@@ -63,7 +63,7 @@ import SendingSenderDrawer from './sending-sender-drawer'
 import {
   useSendingApi,
   type SendingIdentityView,
-} from './use-sending-identity-api'
+} from '@aglyn/tenant-feature-instance/hooks/use-sending-identity-api'
 
 export interface SendingDomainsCardProps {
   hostId: string

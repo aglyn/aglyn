@@ -43,7 +43,7 @@ import {
   type SendingDnsRecordView,
   type SendingDomainView,
   type SendingIdentityView,
-} from './use-sending-identity-api'
+} from '@aglyn/tenant-feature-instance/hooks/use-sending-identity-api'
 
 export interface SendingDomainDetailProps {
   hostId: string

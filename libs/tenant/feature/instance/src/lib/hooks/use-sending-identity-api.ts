@@ -16,13 +16,24 @@
  */
 'use client'
 
-import { useUser } from '@aglyn/tenant-feature-instance'
+import { useUser } from './firebase/firebase-services'
 import { useCallback, useRef } from 'react'
 import {
   describeCallFailure,
   resolveIdToken,
   type TokenSource,
 } from '@aglyn/shared-util-http/authorized-token'
+
+/**
+ * The client of the console's sending-identity routes (`/api/email/*`).
+ *
+ * Which address a site's mail leaves from, and the domains and senders behind
+ * it, are the platform's mail rail: the console serves the routes, and every
+ * message goes out under that identity whichever plugin wrote it. So the hook
+ * that calls them is here, beside the other client hooks a plugin may import,
+ * and a one-to-one composer reads the identity without importing the plugin
+ * whose settings page edits it.
+ */
 
 /** What one call answered with. `payload` is `{}` on an unparseable body. */
 export interface SendingApiResult {

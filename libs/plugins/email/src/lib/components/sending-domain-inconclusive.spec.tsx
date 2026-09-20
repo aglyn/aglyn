@@ -45,6 +45,12 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => undefined, replace: () => undefined }),
   usePathname: () => `${BASE_PATH}/${DOMAIN}`,
 }))
+// The sending-identity hook lives inside that package and reads the user from
+// its services leaf, which a mock of the barrel does not reach: hand it the
+// same stub, so this file has one signed-in user.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  useUser: () => jest.requireMock('@aglyn/tenant-feature-instance').useUser(),
+}))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
 }))

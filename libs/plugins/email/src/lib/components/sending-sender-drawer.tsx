@@ -44,7 +44,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useSendingApi,
   type SendingIdentityView,
-} from './use-sending-identity-api'
+} from '@aglyn/tenant-feature-instance/hooks/use-sending-identity-api'
 
 /**
  * How many people each of the roster reads may return.

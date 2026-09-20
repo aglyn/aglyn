@@ -55,6 +55,12 @@ let posted: Array<Record<string, any>> = []
 const mockCreateResource = jest.fn(async (_input?: unknown) => ({ id: 'new' }))
 const mockCreateVersion = jest.fn(async () => ({ id: 'v1' }))
 
+// The sending-identity hook lives inside that package and reads the user from
+// its services leaf, which a mock of the barrel does not reach: hand it the
+// same stub, so this file has one signed-in user.
+jest.mock('@aglyn/tenant-feature-instance/hooks/firebase/firebase-services', () => ({
+  useUser: () => jest.requireMock('@aglyn/tenant-feature-instance').useUser(),
+}))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useUser: () => ({

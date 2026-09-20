@@ -45,7 +45,7 @@ import {
   useSendingApi,
   type HostSenderView,
   type SendingIdentityView,
-} from './use-sending-identity-api'
+} from '@aglyn/tenant-feature-instance/hooks/use-sending-identity-api'
 import SendingSenderDrawer from './sending-sender-drawer'
 import { describeCallFailure } from '@aglyn/shared-util-http/authorized-token'
 import CampaignTestSendDrawer from './campaign-test-send-drawer'

@@ -33,7 +33,7 @@ import {
 } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import type { ConsoleRecordEmailDraft } from '@aglyn/aglyn/plugin-manager/record-zone-props'
-import { useSendingApi } from '@aglyn/plugins-email/components/use-sending-identity-api'
+import { useSendingApi } from '@aglyn/tenant-feature-instance/hooks/use-sending-identity-api'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {

@@ -46,7 +46,7 @@ const firestoreHandle = {}
 /** What the templates listener answers — the rows as stored, with ids (AGL-2658). */
 let templateRows: Array<Record<string, unknown>> = []
 
-jest.mock('@aglyn/plugins-email/components/use-sending-identity-api', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-sending-identity-api', () => ({
   useSendingApi: () => sendingApi,
 }))
 // The hub path and the API door, each recording the site they were asked

@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 9 edges the allowlist carries, and what removes each. An edge leaves the
+The 8 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -228,7 +228,7 @@ import and no production file may repeat it; the fix is a fixture that reads
 the table from the core's server entry, or the spec moving to a project that
 may import the core.
 
-**Plugin → plugin** (7, numbered to 17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (6, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -259,14 +259,13 @@ needs it starts.
    so bookings publishes its own addresses and CRM asks for one. **Owed**
    (AGL-3124). A route table is the plugin's domain, so `libs/shared` is not an
    answer for it.
-4. **`plugins-crm` → `plugins-email`.** Crosses: `useSendingApi`
-   (`src/lib/components/crm-send-email-dialog.tsx`) — CRM's one-to-one composer
-   calling email's send. Fix: the send control is a widget the email plugin
-   registers through `registerConsoleExtension` (`ConsoleExtension.widgets`)
-   into the `recordEmail` zone CRM already hosts and draws with
-   `useConsoleWidgetSlot()`. **Present**, and in use for other zones today.
-   Email's route stays behind its own `registerPluginApiRoute`; CRM never holds
-   the client hook.
+4. **`plugins-crm` → `plugins-email`.** Gone (AGL-3080). What crossed was
+   `useSendingApi`, the client of `/api/email/sending-identity` — a route the
+   console itself serves, because which address a site's mail leaves from is
+   the platform's mail rail and not the email plugin's. The hook lives in
+   `@aglyn/tenant-feature-instance/hooks/use-sending-identity-api`, beside the
+   other client hooks a plugin may import, and the CRM's one-to-one composer
+   reads the identity from the platform. The number stays.
 5. **`plugins-crm` → `plugins-marketing`.** Gone (AGL-3080). The CRM hosts a
    `crmRecordAttribution` zone on a contact's page and in a lead's history and
    hands it `{ hostId, recordKind, recordId }` in its own words; marketing
