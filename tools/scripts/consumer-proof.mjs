@@ -40,7 +40,7 @@
 // Exit codes: 0 the story holds · 1 it does not, with the step that failed.
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -139,6 +139,9 @@ function main() {
     for (const project of projects) {
       const dist = join(ROOT, 'dist', project.root)
       if (!existsSync(join(dist, 'package.json'))) throw new Error(`${project.name} built no package at dist/${project.root}`)
+      // The license text travels with every package. npm packs a LICENSE only
+      // from the package's own directory, and the repo keeps one, at the root.
+      copyFileSync(join(ROOT, 'LICENSE'), join(dist, 'LICENSE'))
       run('npm', ['pack', '--silent', '--pack-destination', join(dir, 'tarballs')], dist)
     }
 

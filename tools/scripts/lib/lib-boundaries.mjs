@@ -575,6 +575,17 @@ export function packageFindings({ project, pkg, rootVersion, peers, hasServerEnt
   }
   if (!('sideEffects' in pkg)) findings.push('sideEffects is not declared')
   findings.push(...sideEffectsFindings(pkg.sideEffects, moduleExists))
+  // WHAT THE REGISTRY PAGE AND THE PUBLISH STEP READ (AGL-3201). Every package
+  // is Apache-2.0; a scoped package publishes restricted unless it says
+  // `public`, and the first anyone learns of that is a 402 from the registry;
+  // and `repository.directory` is what links a package page to its source in a
+  // monorepo, and what provenance is checked against.
+  if (pkg.license !== 'Apache-2.0') findings.push(`license is ${JSON.stringify(pkg.license)}; every package is "Apache-2.0"`)
+  if (pkg.publishConfig?.access !== 'public') findings.push('publishConfig.access is not "public", so a scoped package would publish restricted')
+  const directory = typeof pkg.repository === 'object' ? pkg.repository?.directory : undefined
+  if (project.root && !INDEPENDENTLY_VERSIONED.has(project.name) && directory !== project.root) {
+    findings.push(`repository.directory is ${JSON.stringify(directory)} but the package lives at "${project.root}"`)
+  }
   const declared = pkg.peerDependencies ?? {}
   for (const family of peers) {
     if (!(family in declared)) findings.push(`peerDependencies lacks ${family}, which the shipped source imports`)

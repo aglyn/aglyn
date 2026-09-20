@@ -477,6 +477,12 @@ Every lib carries, today:
 - `peerDependencies`: `react`, `react-dom`, `next`, `firebase`,
   `firebase-admin` and each `@mui/*` package the lib's shipped source imports,
   at the root's range. A consumer has one of each; a lib never carries its own.
+- `license`: `Apache-2.0`, for every package (the owner's call, 2026-09-20);
+  the root `LICENSE` is copied into each built package when it is packed.
+- `publishConfig.access`: `public` — a scoped package publishes restricted
+  unless it says so — and `provenance: true`.
+- `repository.directory`: the package's own directory, which is what links a
+  registry page to its source in a monorepo.
 - `sideEffects`: `false`, or the list of modules that register on import, each
   named with its extension left open (`./src/lib/server.*`). A lib is read as
   `.ts` source by this repo's apps and as emitted `.js` by a consumer; an entry
