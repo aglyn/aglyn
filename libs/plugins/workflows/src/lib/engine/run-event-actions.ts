@@ -35,9 +35,11 @@ import {
   type HostAction,
   type HostActionAlert,
   type HostActionStep,
+  type HostActionStepType,
   type HostFunction,
   type HostVariable,
   type HostWorkflow,
+  type HostWorkflowStep,
   buildDatasetRecordValues,
   datasetDisplayName,
   contactCampaignFieldPath,
@@ -49,6 +51,7 @@ import {
   type PluginJobHostGate,
   resolveOrgEntitlements,
   runWorkflow,
+  WORKFLOW_MAX_STEPS,
 } from '@aglyn/aglyn/server'
 import {
   isDeferrableSendResult,
@@ -96,15 +99,34 @@ import {
 // each leaf, and a mock of the barrel would take the rest of it down too.
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
 import { resolveDatasetDoc } from '@aglyn/tenant-runtime/resolve-dataset'
-import { runEventWorkflows } from './run-event-workflows'
+import {
+  resumeWorkflowEnrollment,
+  runEventWorkflows,
+} from './run-event-workflows'
+import {
+  type AutomationWorkflow,
+  isWorkflowActionStep,
+  type WorkflowStep,
+  workflowActionStepRefusal,
+  workflowHasActionSteps,
+  workflowStepTypeLabel,
+} from './workflow-steps'
 
 /** Bounded fan-out per event, mirroring the workflow runner. */
 const MAX_TRIGGERED_ACTIONS = 10
 
-interface ActionRunEnv {
+export interface ActionRunEnv {
   hostId: string
   hostRef: FirebaseFirestore.DocumentReference
   alerts: HostActionAlert[]
+  /**
+   * Whether the owning org holds the actions builder (`actions`, Pro and up)
+   * — the gate every Actions step takes. An action run is admitted by it
+   * before its first step, so it is always true there; a workflow run is not,
+   * because its function calls need no such plan, so the workflow executor
+   * asks it of each Actions step it reaches.
+   */
+  actionsAllowed: boolean
   webhooksAllowed: boolean
   /**
    * Whether the owning org holds the CRM suite (AGL-2611) — the gate the
@@ -125,46 +147,116 @@ interface ActionRunEnv {
    */
   org: unknown
   orgId: string | null
-  loadWorkflowContext: () => Promise<{
-    functions: Record<string, HostFunction>
-    variables: Record<string, HostVariable>
-    workflows: Record<string, HostWorkflow>
-  }>
+  loadWorkflowContext: () => Promise<WorkflowContext>
 }
 
-function makeWorkflowContextLoader(
+/**
+ * The site's functions, variables and workflows, double-keyed by document id
+ * and by name (AGL-261). A workflow value also carries its document id as
+ * `$id`, so a step that names a workflow by its name can still run it as the
+ * automation it is.
+ */
+export interface WorkflowContext {
+  functions: Record<string, HostFunction>
+  variables: Record<string, HostVariable>
+  workflows: Record<string, HostWorkflow & { $id?: string }>
+}
+
+/**
+ * The automation a run belongs to, as the step executors need it: which kind,
+ * its document id, and its name for the history and the enrollment.
+ */
+export interface AutomationRun {
+  kind: 'action' | 'workflow'
+  id: string
+  name: string
+}
+
+/**
+ * The run environment for one automation run: the org's plan gates resolved
+ * once, from the org document the caller already read.
+ */
+export function automationRunEnv(input: {
+  hostId: string
+  hostRef: FirebaseFirestore.DocumentReference
+  owner: { org?: unknown; orgId?: string | null } | null | undefined
+  depth: number
+  alerts?: HostActionAlert[]
+  loadWorkflowContext?: ActionRunEnv['loadWorkflowContext']
+}): ActionRunEnv {
+  const org = input.owner?.org ?? null
+  return {
+    hostId: input.hostId,
+    hostRef: input.hostRef,
+    alerts: input.alerts ?? [],
+    actionsAllowed: checkEntitlement(org as any, 'actions'),
+    webhooksAllowed: checkEntitlement(org as any, 'webhooks'),
+    crmAllowed: checkEntitlement(org as any, 'crm'),
+    depth: input.depth,
+    org,
+    orgId: input.owner?.orgId ?? null,
+    loadWorkflowContext:
+      input.loadWorkflowContext ?? makeWorkflowContextLoader(input.hostRef),
+  }
+}
+
+export function makeWorkflowContextLoader(
   hostRef: FirebaseFirestore.DocumentReference,
 ) {
-  let workflowContext: Awaited<
-    ReturnType<ActionRunEnv['loadWorkflowContext']>
-  > | null = null
-  return async () => {
+  let workflowContext: WorkflowContext | null = null
+  return async (): Promise<WorkflowContext> => {
     if (workflowContext) return workflowContext
     const [functionDocs, variableDocs, workflowDocs] = await Promise.all([
       hostRef.collection('functions').limit(100).get(),
       hostRef.collection('variables').limit(100).get(),
       hostRef.collection('workflows').limit(100).get(),
     ])
-    // Double-keyed by doc id AND name (AGL-261): id references are
-    // rename-safe; legacy name references keep resolving.
-    const byName = <T extends { name?: string; deletedAt?: unknown }>(
-      docs: FirebaseFirestore.QueryDocumentSnapshot[],
-    ) => {
-      const map: Record<string, T> = {}
-      for (const doc of docs) {
-        const data = doc.data() as T
-        if (data.deletedAt) continue
-        map[doc.id] = data
-        if (data?.name) map[data.name] = data
-      }
-      return map
-    }
-    workflowContext = {
-      functions: byName<HostFunction>(functionDocs.docs),
-      variables: byName<HostVariable>(variableDocs.docs),
-      workflows: byName<HostWorkflow>(workflowDocs.docs),
-    }
+    workflowContext = workflowContextFromDocs(
+      functionDocs.docs,
+      variableDocs.docs,
+      workflowDocs.docs,
+    )
     return workflowContext
+  }
+}
+
+/**
+ * The working set a run reads, from documents already in hand — for a door
+ * that read them itself and must not pay for them twice.
+ */
+export function workflowContextFromDocs(
+  functionDocs: readonly FirebaseFirestore.QueryDocumentSnapshot[],
+  variableDocs: readonly FirebaseFirestore.QueryDocumentSnapshot[],
+  workflowDocs: readonly FirebaseFirestore.QueryDocumentSnapshot[],
+): WorkflowContext {
+  // Double-keyed by doc id AND name (AGL-261): id references are
+  // rename-safe; legacy name references keep resolving.
+  const byName = <T extends { name?: string; deletedAt?: unknown }>(
+    docs: readonly FirebaseFirestore.QueryDocumentSnapshot[],
+  ) => {
+    const map: Record<string, T> = {}
+    for (const doc of docs) {
+      const data = doc.data() as T
+      if (data.deletedAt) continue
+      map[doc.id] = data
+      if (data?.name) map[data.name] = data
+    }
+    return map
+  }
+  // A workflow is carried with its id so a step naming it by its legacy
+  // name still runs it as the automation it is (see `WorkflowContext`).
+  const workflows: WorkflowContext['workflows'] = {}
+  for (const doc of workflowDocs) {
+    const data = doc.data() as HostWorkflow
+    if ((data as { deletedAt?: unknown }).deletedAt) continue
+    const withId = { ...data, $id: doc.id }
+    workflows[doc.id] = withId
+    if (data?.name) workflows[data.name] = withId
+  }
+  return {
+    functions: byName<HostFunction>(functionDocs),
+    variables: byName<HostVariable>(variableDocs),
+    workflows,
   }
 }
 
@@ -250,10 +342,736 @@ interface ExecuteActionOptions {
   enrollmentRef?: FirebaseFirestore.DocumentReference | null
 }
 
+/** What one step is run against: its place, the list it is in, the event. */
+interface ServerStepContext {
+  /** The step's index in {@link steps}. */
+  index: number
+  /** The list being run — the snapshot a wait enrolls with. */
+  steps: readonly WorkflowStep[]
+  event: string
+  /** The payload the step reads its values from. */
+  payload: HostEventPayload
+  /** The scope a step's `when` is evaluated against. */
+  scope: Record<string, unknown>
+  enrollmentRef: FirebaseFirestore.DocumentReference | null
+  /**
+   * Set when this run is itself a step of another automation — a workflow a
+   * `runWorkflow` step started. Such a run finishes inside its caller's run,
+   * so it has no enrollment of its own to wait in.
+   */
+  nested?: boolean
+}
+
+/**
+ * What one Actions step did, for the run that holds it.
+ *
+ * - `skipped` — its `when` was not met, or it is a step the visitor's page
+ *   runs; nothing is recorded.
+ * - `done` — it did its work; `detail` is the fact the history line carries.
+ * - `failed` — it did not; the run records the error and continues.
+ * - `exited` — an `exitFlow`: the run ends here.
+ * - `waiting` — a wait enrolled the person; the rest runs from the beat.
+ * - `halted` — a wait that could not enroll; the run ends with the error.
+ * - `deferred` — a resumed send was refused for now; the enrollment retries.
+ */
+export type ServerStepVerdict =
+  | { kind: 'skipped' }
+  | { kind: 'done'; detail?: string }
+  | { kind: 'failed'; error: string }
+  | { kind: 'exited' }
+  | { kind: 'waiting'; detail?: string }
+  | { kind: 'halted'; error: string }
+  | { kind: 'deferred' }
+
+/** A run's tally so far: how it is ending, its errors, what its steps did. */
+interface RunTally {
+  ending: ActionRunEnding
+  errors: string[]
+  outcomes: string[]
+}
+
+/**
+ * Folds one step's verdict into its run's tally, in the run-history phrasing
+ * every automation shares; true when the run stops at this step.
+ */
+function tallyStep(
+  tally: RunTally,
+  type: HostActionStepType,
+  verdict: ServerStepVerdict,
+): boolean {
+  switch (verdict.kind) {
+    case 'skipped':
+      return false
+    case 'done':
+      tally.outcomes.push(describeStepOutcome(type, verdict.detail))
+      return false
+    case 'failed':
+      tally.errors.push(verdict.error)
+      return false
+    case 'exited':
+      tally.ending = 'exited'
+      tally.outcomes.push(describeStepOutcome(type))
+      return true
+    case 'waiting':
+      tally.ending = 'waiting'
+      tally.outcomes.push(describeStepOutcome(type, verdict.detail))
+      return true
+    case 'halted':
+      tally.errors.push(verdict.error)
+      return true
+    case 'deferred':
+      tally.ending = 'deferred'
+      return true
+  }
+}
+
+/**
+ * Runs ONE Actions step on the server: the executor every automation shares.
+ *
+ * An action's step list runs through it one step at a time, and so does
+ * every Actions step inside a workflow — so the two engines cannot disagree
+ * about what `sendEmail` or `datasetAppend` does, what a step is gated on, or
+ * how its outcome reads in the run history. There is no second copy of any
+ * branch below.
+ *
+ * Client-side steps (AGL-257) are skipped — the tenant page runtime runs
+ * those in the visitor's browser.
+ *
+ * Never throws: a step that throws is a failed step, and the run continues.
+ */
+async function runServerStep(
+  env: ActionRunEnv,
+  run: AutomationRun,
+  step: HostActionStep,
+  context: ServerStepContext,
+): Promise<ServerStepVerdict> {
+  const { hostId, hostRef, alerts, depth } = env
+  const { event, payload, enrollmentRef } = context
+  /**
+   * The one fact worth carrying into the summary — the dataset's name,
+   * the webhook's status. Set by the branch that knows it.
+   */
+  let detail: string | undefined
+  const failed = (error: string): ServerStepVerdict => ({ kind: 'failed', error })
+  try {
+    /*
+     * BRANCHING INSIDE A FLOW: the step's own condition, evaluated against
+     * the same scope the trigger's is. An unmet guard skips this step and
+     * only this step — the run continues, which is what makes "wait three
+     * days, then, only if they have not ordered, send the reminder" a thing
+     * an author can write without a second action.
+     */
+    if (!evaluateStepGuard(step.when, context.scope)) return { kind: 'skipped' }
+    if (isClientActionStep(step) && step.type !== 'siteAlert') {
+      return { kind: 'skipped' } // Runs in the visitor's page (AGL-257).
+    }
+    if (step.type === 'exitFlow') return { kind: 'exited' }
+    if (isFlowSuspendingStep(step)) {
+      // A run inside another automation's run finishes inside it: there is
+      // no enrollment of its own for the person to wait in.
+      if (context.nested) {
+        return {
+          kind: 'halted',
+          error:
+            'a workflow run as a step of another automation cannot wait — ' +
+            'give it its own trigger instead',
+        }
+      }
+      const suspended = await suspendFlow(env, run, {
+        step,
+        steps: context.steps,
+        nextStepIndex: context.index + 1,
+        event,
+        payload,
+        enrollmentRef,
+      })
+      if (suspended.error) return { kind: 'halted', error: suspended.error }
+      return { kind: 'waiting', detail: suspended.detail }
+    }
+    if (step.type === 'siteAlert') {
+      alerts.push({
+        message: String(step.message ?? '').slice(0, 300),
+        severity: step.severity ?? 'info',
+      })
+    } else if (step.type === 'runWorkflow') {
+      const workflowContext = await env.loadWorkflowContext()
+      const workflow =
+        workflowContext.workflows[step.workflowId?.trim() ?? ''] ??
+        workflowContext.workflows[step.workflowName?.trim() ?? '']
+      if (!workflow) {
+        return failed(`unknown workflow "${step.workflowName || step.workflowId}"`)
+      }
+      if (workflowHasActionSteps(workflow)) {
+        /*
+         * A workflow with Actions steps is PERFORMED, not evaluated: its
+         * steps run here, inside this run, one level deeper under the same
+         * guard a custom-event chain runs under. It is part of this run, so
+         * it is not metered or recorded as a run of its own.
+         */
+        if (depth + 1 > ACTION_MAX_EVENT_DEPTH) {
+          return failed(`workflow "${workflow.name}" is nested too deeply`)
+        }
+        const nested = await executeWorkflow(
+          { ...env, depth: depth + 1 },
+          {
+            kind: 'workflow',
+            id: workflow.$id ?? step.workflowId?.trim() ?? '',
+            name: workflow.name ?? '',
+          },
+          workflow as AutomationWorkflow,
+          event,
+          payload,
+          { nested: true },
+        )
+        if (nested.errors.length) {
+          return failed(
+            `workflow "${workflow.name}": ${nested.errors.join('; ')}`.slice(0, 300),
+          )
+        }
+      } else {
+        const evaluated = runWorkflow(
+          workflow,
+          workflowContext.functions,
+          workflowContext.variables,
+          { event, ...payload },
+          { workflows: workflowContext.workflows },
+        )
+        if (evaluated.ok === false) return failed(evaluated.error)
+      }
+    } else if (step.type === 'customEvent') {
+      const nested = await runEventActions(
+        hostId,
+        step.eventName.trim(),
+        payload,
+        depth + 1,
+      )
+      alerts.push(...nested)
+    } else if (step.type === 'webhookPost') {
+      if (!env.webhooksAllowed) return failed('webhooks require a Business plan')
+      // Id-first lookup (AGL-261); the name query is the legacy path.
+      const hookDoc = step.webhookId?.trim()
+        ? await hostRef
+            .collection('webhooks')
+            .doc(step.webhookId.trim())
+            .get()
+        : (
+            await hostRef
+              .collection('webhooks')
+              .where('name', '==', step.webhookName?.trim() ?? '')
+              .limit(1)
+              .get()
+          ).docs[0]
+      const hook = hookDoc?.exists
+        ? (hookDoc.data() as HostWebhook)
+        : undefined
+      if (
+        !hook ||
+        hookDoc.get('deletedAt') ||
+        hook.enabled === false ||
+        hook.direction !== 'outbound' ||
+        !hook.url ||
+        !WEBHOOK_URL_PATTERN.test(hook.url)
+      ) {
+        return failed(`unknown webhook "${step.webhookName || step.webhookId}"`)
+      }
+      const body = JSON.stringify({
+        event,
+        payload,
+        sentAt: new Date().toISOString(),
+      })
+      const signature = hook.secret
+        ? createHmac('sha256', hook.secret).update(body).digest('hex')
+        : ''
+      // Two quick retries — serverless-friendly; longer retry queues
+      // are a follow-up.
+      let delivered = false
+      let lastStatus: number | undefined
+      for (let attempt = 0; attempt < 3 && !delivered; attempt += 1) {
+        try {
+          const response = await fetch(hook.url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(signature && { 'X-Aglyn-Signature': signature }),
+            },
+            body,
+            signal: AbortSignal.timeout(5000),
+          })
+          lastStatus = response.status
+          delivered = response.ok
+        } catch {
+          // Retry below.
+        }
+        if (!delivered && attempt < 2) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, 500 * (attempt + 1)),
+          )
+        }
+      }
+      if (!delivered) {
+        return failed(
+          `webhook "${step.webhookName || step.webhookId}" delivery failed`,
+        )
+      }
+      // The status the mockup prints — discarded on the line it arrived
+      // until AGL-2171. A 200 and a 204 are both `ok`, and knowing which is
+      // the whole reason anyone opens a run history after a webhook.
+      detail = String(lastStatus ?? '')
+    } else if (step.type === 'datasetAppend') {
+      // Id-first lookup (AGL-261/556); the name query is the legacy path.
+      const datasetsRef = await orgDataCollectionForHost(hostId, 'datasets')
+      const datasetDoc = await resolveDatasetDoc(datasetsRef, step, hostId)
+      if (!datasetDoc?.exists || datasetDoc.get('deletedAt')) {
+        return failed(`unknown dataset "${step.datasetName || step.datasetId}"`)
+      }
+      // Restrict to the model's field ids (AGL-556) — covers model-only
+      // datasets whose flat v1 `fields` mirror is absent.
+      const appendDataset = {
+        model: datasetDoc.get('model'),
+        fields: Array.isArray(datasetDoc.get('fields'))
+          ? datasetDoc.get('fields')
+          : [],
+      }
+      const values = buildDatasetRecordValues(appendDataset, payload)
+      // Same name precedence `findDatasetByName` resolves in.
+      const appendLabel = (
+        datasetDisplayName({
+          displayName: datasetDoc.get('displayName'),
+          name: datasetDoc.get('name'),
+        }) ||
+        step.datasetName ||
+        ''
+      ).slice(0, 60)
+      // No event field matched a field of the dataset, so there is nothing
+      // to write. An error rather than a quiet success: a run history that
+      // says `saved to Leads` while nothing saves is how a mismatched field
+      // name goes unnoticed.
+      if (!Object.keys(values).length) {
+        return failed(
+          `no event field matches a field in dataset "${appendLabel || step.datasetId}"`,
+        )
+      }
+      const refusal = await datasetAppendRefusal(env, datasetDoc.ref)
+      if (refusal) return failed(refusal)
+      await datasetDoc.ref.collection('records').add({
+        values,
+        // The integrity index the console's delete check queries —
+        // carried by every write that sets `values`, or the index
+        // describes rows this one never held.
+        ...datasetIntegrityFields(
+          effectiveDatasetModel(appendDataset),
+          values,
+        ),
+        createdAt: FieldValue.serverTimestamp(),
+      })
+      // `saved to Leads` beats `saved to dataset` (AGL-2171).
+      detail = appendLabel
+    } else if (step.type === 'updateDataset') {
+      // Update-or-append (AGL-257): matches the record whose `email`
+      // field equals the payload's email; appends when nothing matches.
+      const datasetsRef = await orgDataCollectionForHost(hostId, 'datasets')
+      const datasetDoc = await resolveDatasetDoc(datasetsRef, step, hostId)
+      if (!datasetDoc?.exists || datasetDoc.get('deletedAt')) {
+        return failed(`unknown dataset "${step.datasetName || step.datasetId}"`)
+      }
+      const updateDataset = {
+        model: datasetDoc.get('model'),
+        fields: Array.isArray(datasetDoc.get('fields'))
+          ? datasetDoc.get('fields')
+          : [],
+      }
+      const updateModel = effectiveDatasetModel(updateDataset)
+      const values = buildDatasetRecordValues(updateDataset, payload)
+      // Nothing to merge or append — an error, for the reason the append
+      // branch above gives.
+      if (!Object.keys(values).length) {
+        const updateLabel =
+          datasetDisplayName({
+            displayName: datasetDoc.get('displayName'),
+            name: datasetDoc.get('name'),
+          }) ||
+          step.datasetName ||
+          step.datasetId
+        return failed(
+          `no event field matches a field in dataset "${String(updateLabel ?? '').slice(0, 60)}"`,
+        )
+      }
+      const email = String((payload as any).email ?? '').trim()
+      // `records.values` is exempt from indexing, so this lookup is served
+      // only by the `values.email` field override in
+      // cloud/firebase-firestore.indexes.json. Without that override
+      // production refuses the query and neither leg below runs.
+      const existing = email
+        ? await datasetDoc.ref
+            .collection('records')
+            .where('values.email', '==', email)
+            .limit(1)
+            .get()
+        : null
+      if (existing && !existing.empty) {
+        const merged = {
+          ...(existing.docs[0].get('values') ?? {}),
+          ...values,
+        }
+        await existing.docs[0].ref.set(
+          {
+            values: merged,
+            // The merging form: an update that clears the last reference
+            // has to REMOVE the index rather than omit it, or a stale
+            // array refuses a delete nothing is holding.
+            ...datasetIntegrityUpdate(
+              updateModel,
+              merged,
+              FieldValue.delete(),
+            ),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+      } else {
+        // The APPEND leg of update-or-append, and the only one of the two
+        // that adds a row — the merge above rewrites a record that already
+        // counts against the band.
+        const refusal = await datasetAppendRefusal(env, datasetDoc.ref)
+        if (refusal) return failed(refusal)
+        await datasetDoc.ref.collection('records').add({
+          values,
+          ...datasetIntegrityFields(updateModel, values),
+          createdAt: FieldValue.serverTimestamp(),
+        })
+      }
+    } else if (step.type === 'notifyAdmins') {
+      await notifyHostManagers(hostId, {
+        type: 'system.announcement',
+        title: String(step.title ?? '').slice(0, 200),
+        ...(step.body ? { body: String(step.body).slice(0, 500) } : {}),
+        link: `/${hostId}`,
+      })
+    } else if (step.type === 'sendEmail') {
+      const to = String(
+        (payload as any)[step.toField?.trim() || 'email'] ?? '',
+      ).trim()
+      if (!isEmailConfigured()) return failed('email is not configured')
+      if (!to || !to.includes('@')) {
+        return failed('no recipient email in the event payload')
+      }
+      // The site's own origin, for the unsubscribe link. Read here rather
+      // than carried on the run env because most action runs send no email
+      // at all, and a document read every workflow pays for is a read on
+      // the hot path for a link nine runs in ten never need.
+      const siteBase =
+        hostPublicOrigin(
+          (await hostRef.get().catch(() => null))?.data() as never,
+        ) ?? ''
+      /*
+       * MARKETING. The subject and body are merchant-authored and the
+       * recipient comes out of the event payload — which, for the collect
+       * route, is a write triggered by an anonymous visitor. So this is a
+       * site mailing an address on the merchant's say-so, and it owes what
+       * every other such message owes: the unsubscribe header pair and a
+       * visible link, both suppression lists, and a share of the ceiling on
+       * how much one person receives from this site.
+       *
+       * Priority stays transactional. An action run is not resumable — the
+       * event has already happened and there is no beat that comes back for
+       * it — and the rule on `'bulk'` is that only a resumable sweep may
+       * refuse in a way the recipient survives.
+       *
+       * A merchant who wants an internal alert that no suppression can stop
+       * uses the `notifyAdmins` step beside this one: it reaches managers
+       * in the console rather than the shared sending domain, which is the
+       * right instrument for a notification nobody consented to receive.
+       */
+      /*
+       * A STEP THAT RUNS AFTER A WAIT IS A CAMPAIGN, not a reply.
+       *
+       * The paragraph above is exactly right about an IMMEDIATE step: the
+       * event has already happened, the recipient just did something, and
+       * the message is the response to it. None of that survives a three-day
+       * delay. Everything after a wait goes out on the merchant's schedule,
+       * to somebody who did one thing once — which is `marketing-send.ts`'s
+       * own definition of marketing mail, and it earns the full consent
+       * split and the default stream, exactly as a campaign does.
+       *
+       * An immediate step is not ungated, which it used to be. `to` is read
+       * out of the event payload — an anonymous visitor's write on the
+       * collect route — so nothing here establishes that whoever typed the
+       * address is whoever receives the mail, and a person with a RECORDED
+       * REFUSAL on this site was mailed merchant-authored content because a
+       * third party entered their address in a form. `'immediate'` asks the
+       * narrower question that catches exactly that and cannot refuse a
+       * new visitor their auto-response: see `FlowEmailScope`.
+       *
+       * Refused BEFORE `sendEmail` rather than inside it, because these two
+       * are the merchant's own policy over their own audience, where the
+       * ones the seam asks are platform controls over the shared sending
+       * domain. Both refusals are permanent for this message, so the
+       * enrollment moves on rather than retrying.
+       */
+      const scope = enrollmentRef ? 'scheduled' : 'immediate'
+      /*
+       * The stream this message belongs to, resolved ONCE and read twice:
+       * the gate below filters on it, and it rides the `marketing` context
+       * so the opt-out link the seam mints names it. Without that the
+       * preference page opens on a list of every stream the site has, and
+       * the recipient has to find the one they were trying to leave.
+       */
+      const topicId = flowEmailTopicId(step.topicId, scope)
+      const gate = await flowEmailRefusal({
+        hostId,
+        email: to,
+        topicId: step.topicId ?? null,
+        org: env.org,
+        scope,
+      })
+      if (gate) {
+        return failed(
+          gate !== 'consent-withheld'
+            ? 'the recipient has left this email topic'
+            : // Named by what was actually asked. An immediate step refuses
+              // only on a stated refusal, so reporting it as a missing
+              // record would send a merchant looking for a consent field to
+              // fill in that would change nothing.
+              enrollmentRef
+              ? 'the recipient has no marketing consent record on this site'
+              : 'the recipient has declined marketing from this site',
+        )
+      }
+      const emailSubject = String(step.subject ?? '').slice(0, 200)
+      const emailText = String(step.body ?? '').slice(0, 5000)
+      /*
+       * THE TIMELINE ENTRY (AGL-2615). A message addressed to the contact
+       * the event is about is logged on that contact's timeline as an
+       * email activity — the same row the console's own send logs — so an
+       * automated welcome shows beside the calls a rep made, with its
+       * delivery state. Prepared first because the row's id has to be on
+       * the message for the webhook to find it; written only after the
+       * provider accepted. Behind the suite gate like every other CRM
+       * write an action makes.
+       */
+      const emailActivity = env.crmAllowed
+        ? await prepareCrmEmailActivity(
+            { hostId, org: env.org, orgId: env.orgId },
+            to,
+            payload,
+          )
+        : null
+      const result = await sendEmail({
+        to,
+        subject: emailSubject,
+        text: emailText,
+        sendingIdentity: await hostSendingIdentity(hostId),
+        ...(emailActivity ? { tags: emailActivity.tags } : {}),
+        audience: 'tenant',
+        context: enrollmentRef ? 'flow step' : 'event action',
+        /*
+         * A resumed step may take `'bulk'` where an immediate one may not,
+         * and the reason is the same one the abandoned-checkout sweep gives:
+         * only a RESUMABLE sender may be refused in a way the recipient
+         * survives. The enrollment is the thing that makes it resumable —
+         * a deferral below leaves the row waiting and the next beat sends
+         * the same step to the same person.
+         */
+        ...(enrollmentRef ? { priority: 'bulk' as const } : {}),
+        // `topicId` is `''` for a step that belongs to no stream, which
+        // every reader of it treats as absent — see `flowEmailTopicId`.
+        marketing: { hostId, siteBase, topicId },
+      })
+      /*
+       * DEFERRED IS NOT FAILED, and it is not SENT either.
+       *
+       * The platform's hourly ceiling and this person's own frequency window
+       * are both refusals a later beat can pass. Advancing past this step
+       * would turn "not this hour" into an email nobody ever receives, which
+       * is the defect the campaign processor and the cart sweep each name.
+       * So the enrollment is put back with the SAME `nextStepIndex` and the
+       * run ends here.
+       */
+      if (enrollmentRef && isDeferrableSendResult(result)) {
+        return { kind: 'deferred' }
+      }
+      // Named rather than lumped into "delivery failed": a suppression and
+      // a frequency ceiling are the controls working, and a merchant
+      // reading the run's alerts has a different thing to do about each.
+      const refusal = sendFailureReason(result)
+      const sendError = refusal
+        ? refusal === 'suppressed'
+          ? 'the recipient is unsubscribed or suppressed'
+          : refusal === 'frequency-capped'
+            ? 'the recipient has already had today’s limit of email ' +
+              'from this site'
+            : 'email delivery failed'
+        : null
+      // Cost meter (AGL-1438). A workflow notification is transactional:
+      // counted, never capped. `sent` is false when Resend refused or the
+      // environment is unconfigured, and an email that never left is not a
+      // cost.
+      if (result.sent) {
+        await meterHostEmail(hostId)
+        if (emailActivity) {
+          await logCrmEmailActivity(
+            { hostId, org: env.org, orgId: env.orgId },
+            emailActivity,
+            { subject: emailSubject, body: emailText, to },
+            run.id,
+          )
+        }
+      }
+      if (sendError) return failed(sendError)
+    } else if (step.type === 'enrollList') {
+      const orgId = await resolveOrgIdForHost(hostId)
+      const email = String((payload as any).email ?? '')
+        .trim()
+        .toLowerCase()
+      if (!orgId || !email || !email.includes('@')) {
+        return failed('no email to enroll')
+      }
+      const listsRef = firebaseAdmin
+        .app()
+        .firestore()
+        .collection('orgs')
+        .doc(orgId)
+        .collection('lists')
+      const listDoc = step.listId?.trim()
+        ? await listsRef.doc(step.listId.trim()).get()
+        : (
+            await listsRef
+              .where('name', '==', step.listName?.trim() ?? '')
+              .limit(1)
+              .get()
+          ).docs[0]
+      if (!listDoc?.exists) {
+        return failed(`unknown list "${step.listName || step.listId}"`)
+      }
+      // `enrollListMember` owns the document id: the commerce newsletter
+      // handler enrolls into the same collection, and an id derived here
+      // would be a second answer to which document describes which person.
+      await enrollListMember({
+        listRef: listDoc.ref,
+        group: await consentGroupForSite(hostId),
+        email,
+        // Which automation enrolled them: `action:<id>` or `workflow:<id>`.
+        source: `${run.kind}:${run.id}`,
+      })
+    } else if (step.type === 'assignCampaign') {
+      const email = String((payload as any).email ?? '')
+        .trim()
+        .toLowerCase()
+      if (!email || !email.includes('@')) {
+        return failed('no contact email to assign')
+      }
+      // Scoped to this host (AGL-1039): a site must not reach a contact
+      // it cannot see, even to tag it onto a campaign. Through the org's
+      // address index (AGL-2633), so an address a merge folded into
+      // another record still names the person who now holds it.
+      const { ref: contactsRef } = await orgDataQueryForHost(hostId, 'contacts')
+      const contact = await findContactByEmail(contactsRef, email, { hostId })
+      if (!contact) return failed(`no contact for ${email}`)
+      /*
+       * THE CAMPAIGN IS RESOLVED TO A DOCUMENT, exactly as `enrollList`
+       * resolves a list one branch above.
+       *
+       * A step may name a campaign by id or by name — the picker writes the
+       * id, an imported automation may carry only the name — and what gets
+       * stored is the id either way. Storing whichever of the two the step
+       * happened to hold would put names and ids in one array, and every
+       * reader of that array resolves ids: a name in it renders as a chip
+       * nobody can click and matches no campaign the console can find.
+       *
+       * An unknown campaign is an ERROR rather than a stored string. The
+       * reference audit already reports a step pointing at a campaign that
+       * does not exist; a run that wrote the dangling name anyway would
+       * make the audit's finding untrue the moment it fired.
+       */
+      const campaignsRef = hostRef.collection('emailCampaigns')
+      const namedId = step.campaignId?.trim() ?? ''
+      const campaignDoc = namedId
+        ? await campaignsRef.doc(namedId).get()
+        : (
+            await campaignsRef
+              .where('name', '==', step.campaignName?.trim() ?? '')
+              .limit(1)
+              .get()
+          ).docs[0]
+      if (!campaignDoc?.exists) {
+        return failed(`unknown campaign "${step.campaignName || step.campaignId}"`)
+      }
+      /*
+       * INSIDE THIS SITE'S FACET, not at the top of the document.
+       *
+       * A contact is one row shared by every site in the org, and which
+       * campaigns a merchant has filed somebody under is that merchant's
+       * business record on the same footing as their notes and their tags.
+       * Written at the top it would be readable by every other site in an
+       * agency's account.
+       *
+       * `update` with a dotted path, never `set({merge:true})`: a `set`
+       * treats the string as a literal field NAME and would mint a
+       * top-level key with dots in it. The document was just read, so the
+       * update cannot fail for absence.
+       */
+      const group = await consentGroupForSite(hostId)
+      await contact.ref.update({
+        [contactCampaignFieldPath(group.groupId)]: FieldValue.arrayUnion(
+          campaignDoc.id,
+        ),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+    } else if (isCrmActionStep(step)) {
+      // The plan gate, the way `webhookPost` takes the `webhooks` one:
+      // refused into the run history with the tier that carries it, so
+      // a Free workspace whose flow names a CRM step reads why the step
+      // did nothing rather than a log that says it ran.
+      if (!env.crmAllowed) {
+        return failed(
+          `CRM steps require the ${planLabelGrantingFeature('crm')} plan`,
+        )
+      }
+      // The five CRM steps (AGL-2605) share a resolver and a scope, so
+      // they share a module; see `crm-action-steps.ts`.
+      const outcome = await runCrmActionStep(
+        { hostId, org: env.org, orgId: env.orgId },
+        run.id,
+        step,
+        payload,
+      )
+      if (outcome.error) return failed(outcome.error)
+      detail = outcome.detail
+      /*
+       * A stage set by an automation IS a stage change, and whatever
+       * listens for one must hear it — fanned out here, under the same
+       * depth guard a `customEvent` chain runs under, rather than through
+       * `emitHostEvent`, which starts every chain at depth zero and would
+       * let an automation that sets the stage it listens for run forever.
+       * Workflows take the guard too, now that a workflow can set a stage.
+       */
+      if (outcome.emit) {
+        const [fromWorkflows, fromActions] = await Promise.all([
+          runEventWorkflows(
+            hostId,
+            outcome.emit.event,
+            outcome.emit.payload,
+            depth + 1,
+          ),
+          runEventActions(
+            hostId,
+            outcome.emit.event,
+            outcome.emit.payload,
+            depth + 1,
+          ),
+        ])
+        alerts.push(...fromActions, ...fromWorkflows)
+      }
+    }
+  } catch (error) {
+    return failed((error as Error).message)
+  }
+  return { kind: 'done', detail }
+}
+
 /**
  * Executes one action's SERVER steps in order, collecting per-step errors
- * into the activity summary. Client-side steps (AGL-257) are skipped —
- * the tenant page runtime runs those in the visitor's browser.
+ * into the activity summary. Each step runs through {@link runServerStep}.
  *
  * A `wait` step ENDS this call and hands the rest of the list to the job
  * beat: everything after the wait belongs to a run that has not happened yet,
@@ -267,12 +1085,15 @@ async function executeAction(
   payload: HostEventPayload,
   options: ExecuteActionOptions = {},
 ): Promise<ActionRunEnding> {
-  const { hostId, hostRef, alerts, depth } = env
+  const { hostRef } = env
+  const run: AutomationRun = {
+    kind: 'action',
+    id: actionId,
+    name: action.name ?? '',
+  }
   const enrollmentRef = options.enrollmentRef ?? null
   const steps = (options.steps ?? action.steps ?? []).slice(0, ACTION_MAX_STEPS)
   const startIndex = Math.max(0, options.startIndex ?? 0)
-  let ending: ActionRunEnding = 'ran'
-  const stepErrors: string[] = []
   /**
    * What each step actually DID (AGL-2171). Only failures were recorded,
    * so a run that sent an email, wrote a row and posted a webhook logged
@@ -280,649 +1101,21 @@ async function executeAction(
    * `/product/workflows` advertises a `What happened` column reading
    * `Sent email · saved to Leads · webhook 200`.
    */
-  const outcomes: string[] = []
+  const tally: RunTally = { ending: 'ran', errors: [], outcomes: [] }
   const scope = { event, ...payload }
   for (let index = startIndex; index < steps.length; index += 1) {
     const step = steps[index] as HostActionStep
-    const errorsBefore = stepErrors.length
-    /** False for a step this run never attempted. */
-    let attempted = false
-    /**
-     * The one fact worth carrying into the summary — the dataset's name,
-     * the webhook's status. Set by the branch that knows it.
-     */
-    let detail: string | undefined
-    try {
-      /*
-       * BRANCHING INSIDE A FLOW: the step's own condition, evaluated against
-       * the same scope the trigger's is. An unmet guard skips this step and
-       * only this step — the run continues, which is what makes "wait three
-       * days, then, only if they have not ordered, send the reminder" a thing
-       * an author can write without a second action.
-       */
-      if (!evaluateStepGuard(step.when, scope)) continue
-      if (isClientActionStep(step) && step.type !== 'siteAlert') {
-        continue // Runs in the visitor's page (AGL-257).
-      }
-      if (step.type === 'exitFlow') {
-        ending = 'exited'
-        outcomes.push(describeStepOutcome(step.type))
-        break
-      }
-      if (isFlowSuspendingStep(step)) {
-        const suspended = await suspendFlow(env, actionId, action, {
-          step,
-          steps,
-          nextStepIndex: index + 1,
-          event,
-          payload,
-          enrollmentRef,
-        })
-        if (suspended.error) {
-          stepErrors.push(suspended.error)
-          break
-        }
-        ending = 'waiting'
-        outcomes.push(describeStepOutcome(step.type, suspended.detail))
-        break
-      }
-      attempted = true
-      if (step.type === 'siteAlert') {
-        alerts.push({
-          message: String(step.message ?? '').slice(0, 300),
-          severity: step.severity ?? 'info',
-        })
-      } else if (step.type === 'runWorkflow') {
-        const context = await env.loadWorkflowContext()
-        const workflow =
-          context.workflows[step.workflowId?.trim() ?? ''] ??
-          context.workflows[step.workflowName?.trim() ?? '']
-        if (!workflow) {
-          stepErrors.push(
-            `unknown workflow "${step.workflowName || step.workflowId}"`,
-          )
-          continue
-        }
-        const run = runWorkflow(
-          workflow,
-          context.functions,
-          context.variables,
-          { event, ...payload },
-          { workflows: context.workflows },
-        )
-        if (run.ok === false) stepErrors.push(run.error)
-      } else if (step.type === 'customEvent') {
-        const nested = await runEventActions(
-          hostId,
-          step.eventName.trim(),
-          payload,
-          depth + 1,
-        )
-        alerts.push(...nested)
-      } else if (step.type === 'webhookPost') {
-        if (!env.webhooksAllowed) {
-          stepErrors.push('webhooks require a Business plan')
-          continue
-        }
-        // Id-first lookup (AGL-261); the name query is the legacy path.
-        const hookDoc = step.webhookId?.trim()
-          ? await hostRef
-              .collection('webhooks')
-              .doc(step.webhookId.trim())
-              .get()
-          : (
-              await hostRef
-                .collection('webhooks')
-                .where('name', '==', step.webhookName?.trim() ?? '')
-                .limit(1)
-                .get()
-            ).docs[0]
-        const hook = hookDoc?.exists
-          ? (hookDoc.data() as HostWebhook)
-          : undefined
-        if (
-          !hook ||
-          hookDoc.get('deletedAt') ||
-          hook.enabled === false ||
-          hook.direction !== 'outbound' ||
-          !hook.url ||
-          !WEBHOOK_URL_PATTERN.test(hook.url)
-        ) {
-          stepErrors.push(
-            `unknown webhook "${step.webhookName || step.webhookId}"`,
-          )
-          continue
-        }
-        const body = JSON.stringify({
-          event,
-          payload,
-          sentAt: new Date().toISOString(),
-        })
-        const signature = hook.secret
-          ? createHmac('sha256', hook.secret).update(body).digest('hex')
-          : ''
-        // Two quick retries — serverless-friendly; longer retry queues
-        // are a follow-up.
-        let delivered = false
-        let lastStatus: number | undefined
-        for (let attempt = 0; attempt < 3 && !delivered; attempt += 1) {
-          try {
-            const response = await fetch(hook.url, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(signature && { 'X-Aglyn-Signature': signature }),
-              },
-              body,
-              signal: AbortSignal.timeout(5000),
-            })
-            lastStatus = response.status
-            delivered = response.ok
-          } catch {
-            // Retry below.
-          }
-          if (!delivered && attempt < 2) {
-            await new Promise((resolve) =>
-              setTimeout(resolve, 500 * (attempt + 1)),
-            )
-          }
-        }
-        if (!delivered) {
-          stepErrors.push(
-            `webhook "${step.webhookName || step.webhookId}" delivery failed`,
-          )
-        } else {
-          // The status the mockup prints — discarded on the line it
-          // arrived until AGL-2171. A 200 and a 204 are both `ok`, and
-          // knowing which is the whole reason anyone opens a run history
-          // after a webhook.
-          detail = String(lastStatus ?? '')
-        }
-      } else if (step.type === 'datasetAppend') {
-        // Id-first lookup (AGL-261/556); the name query is the legacy path.
-        const datasetsRef = await orgDataCollectionForHost(hostId, 'datasets')
-        const datasetDoc = await resolveDatasetDoc(datasetsRef, step, hostId)
-        if (!datasetDoc?.exists || datasetDoc.get('deletedAt')) {
-          stepErrors.push(
-            `unknown dataset "${step.datasetName || step.datasetId}"`,
-          )
-          continue
-        }
-        // Restrict to the model's field ids (AGL-556) — covers model-only
-        // datasets whose flat v1 `fields` mirror is absent.
-        const appendDataset = {
-          model: datasetDoc.get('model'),
-          fields: Array.isArray(datasetDoc.get('fields'))
-            ? datasetDoc.get('fields')
-            : [],
-        }
-        const values = buildDatasetRecordValues(appendDataset, payload)
-        // Same name precedence `findDatasetByName` resolves in.
-        const appendLabel = (
-          datasetDisplayName({
-            displayName: datasetDoc.get('displayName'),
-            name: datasetDoc.get('name'),
-          }) ||
-          step.datasetName ||
-          ''
-        ).slice(0, 60)
-        // No event field matched a field of the dataset, so there is nothing
-        // to write. An error rather than a quiet success: a run history that
-        // says `saved to Leads` while nothing saves is how a mismatched field
-        // name goes unnoticed.
-        if (!Object.keys(values).length) {
-          stepErrors.push(
-            `no event field matches a field in dataset "${appendLabel || step.datasetId}"`,
-          )
-          continue
-        }
-        const refusal = await datasetAppendRefusal(env, datasetDoc.ref)
-        if (refusal) {
-          stepErrors.push(refusal)
-          continue
-        }
-        await datasetDoc.ref.collection('records').add({
-          values,
-          // The integrity index the console's delete check queries —
-          // carried by every write that sets `values`, or the index
-          // describes rows this one never held.
-          ...datasetIntegrityFields(
-            effectiveDatasetModel(appendDataset),
-            values,
-          ),
-          createdAt: FieldValue.serverTimestamp(),
-        })
-        // `saved to Leads` beats `saved to dataset` (AGL-2171).
-        detail = appendLabel
-      } else if (step.type === 'updateDataset') {
-        // Update-or-append (AGL-257): matches the record whose `email`
-        // field equals the payload's email; appends when nothing matches.
-        const datasetsRef = await orgDataCollectionForHost(hostId, 'datasets')
-        const datasetDoc = await resolveDatasetDoc(datasetsRef, step, hostId)
-        if (!datasetDoc?.exists || datasetDoc.get('deletedAt')) {
-          stepErrors.push(
-            `unknown dataset "${step.datasetName || step.datasetId}"`,
-          )
-          continue
-        }
-        const updateDataset = {
-          model: datasetDoc.get('model'),
-          fields: Array.isArray(datasetDoc.get('fields'))
-            ? datasetDoc.get('fields')
-            : [],
-        }
-        const updateModel = effectiveDatasetModel(updateDataset)
-        const values = buildDatasetRecordValues(updateDataset, payload)
-        // Nothing to merge or append — an error, for the reason the append
-        // branch above gives.
-        if (!Object.keys(values).length) {
-          const updateLabel =
-            datasetDisplayName({
-              displayName: datasetDoc.get('displayName'),
-              name: datasetDoc.get('name'),
-            }) ||
-            step.datasetName ||
-            step.datasetId
-          stepErrors.push(
-            `no event field matches a field in dataset "${String(updateLabel ?? '').slice(0, 60)}"`,
-          )
-          continue
-        }
-        const email = String((payload as any).email ?? '').trim()
-        // `records.values` is exempt from indexing, so this lookup is served
-        // only by the `values.email` field override in
-        // cloud/firebase-firestore.indexes.json. Without that override
-        // production refuses the query and neither leg below runs.
-        const existing = email
-          ? await datasetDoc.ref
-              .collection('records')
-              .where('values.email', '==', email)
-              .limit(1)
-              .get()
-          : null
-        if (existing && !existing.empty) {
-          const merged = {
-            ...(existing.docs[0].get('values') ?? {}),
-            ...values,
-          }
-          await existing.docs[0].ref.set(
-            {
-              values: merged,
-              // The merging form: an update that clears the last reference
-              // has to REMOVE the index rather than omit it, or a stale
-              // array refuses a delete nothing is holding.
-              ...datasetIntegrityUpdate(
-                updateModel,
-                merged,
-                FieldValue.delete(),
-              ),
-              updatedAt: FieldValue.serverTimestamp(),
-            },
-            { merge: true },
-          )
-        } else {
-          // The APPEND leg of update-or-append, and the only one of the two
-          // that adds a row — the merge above rewrites a record that already
-          // counts against the band.
-          const refusal = await datasetAppendRefusal(env, datasetDoc.ref)
-          if (refusal) {
-            stepErrors.push(refusal)
-            continue
-          }
-          await datasetDoc.ref.collection('records').add({
-            values,
-            ...datasetIntegrityFields(updateModel, values),
-            createdAt: FieldValue.serverTimestamp(),
-          })
-        }
-      } else if (step.type === 'notifyAdmins') {
-        await notifyHostManagers(hostId, {
-          type: 'system.announcement',
-          title: String(step.title ?? '').slice(0, 200),
-          ...(step.body ? { body: String(step.body).slice(0, 500) } : {}),
-          link: `/${hostId}`,
-        })
-      } else if (step.type === 'sendEmail') {
-        const to = String(
-          (payload as any)[step.toField?.trim() || 'email'] ?? '',
-        ).trim()
-        if (!isEmailConfigured()) {
-          stepErrors.push('email is not configured')
-          continue
-        }
-        if (!to || !to.includes('@')) {
-          stepErrors.push('no recipient email in the event payload')
-          continue
-        }
-        // The site's own origin, for the unsubscribe link. Read here rather
-        // than carried on the run env because most action runs send no email
-        // at all, and a document read every workflow pays for is a read on
-        // the hot path for a link nine runs in ten never need.
-        const siteBase =
-          hostPublicOrigin(
-            (await hostRef.get().catch(() => null))?.data() as never,
-          ) ?? ''
-        /*
-         * MARKETING. The subject and body are merchant-authored and the
-         * recipient comes out of the event payload — which, for the collect
-         * route, is a write triggered by an anonymous visitor. So this is a
-         * site mailing an address on the merchant's say-so, and it owes what
-         * every other such message owes: the unsubscribe header pair and a
-         * visible link, both suppression lists, and a share of the ceiling on
-         * how much one person receives from this site.
-         *
-         * Priority stays transactional. An action run is not resumable — the
-         * event has already happened and there is no beat that comes back for
-         * it — and the rule on `'bulk'` is that only a resumable sweep may
-         * refuse in a way the recipient survives.
-         *
-         * A merchant who wants an internal alert that no suppression can stop
-         * uses the `notifyAdmins` step beside this one: it reaches managers
-         * in the console rather than the shared sending domain, which is the
-         * right instrument for a notification nobody consented to receive.
-         */
-        /*
-         * A STEP THAT RUNS AFTER A WAIT IS A CAMPAIGN, not a reply.
-         *
-         * The paragraph above is exactly right about an IMMEDIATE step: the
-         * event has already happened, the recipient just did something, and
-         * the message is the response to it. None of that survives a three-day
-         * delay. Everything after a wait goes out on the merchant's schedule,
-         * to somebody who did one thing once — which is `marketing-send.ts`'s
-         * own definition of marketing mail, and it earns the full consent
-         * split and the default stream, exactly as a campaign does.
-         *
-         * An immediate step is not ungated, which it used to be. `to` is read
-         * out of the event payload — an anonymous visitor's write on the
-         * collect route — so nothing here establishes that whoever typed the
-         * address is whoever receives the mail, and a person with a RECORDED
-         * REFUSAL on this site was mailed merchant-authored content because a
-         * third party entered their address in a form. `'immediate'` asks the
-         * narrower question that catches exactly that and cannot refuse a
-         * new visitor their auto-response: see `FlowEmailScope`.
-         *
-         * Refused BEFORE `sendEmail` rather than inside it, because these two
-         * are the merchant's own policy over their own audience, where the
-         * ones the seam asks are platform controls over the shared sending
-         * domain. Both refusals are permanent for this message, so the
-         * enrollment moves on rather than retrying.
-         */
-        const scope = enrollmentRef ? 'scheduled' : 'immediate'
-        /*
-         * The stream this message belongs to, resolved ONCE and read twice:
-         * the gate below filters on it, and it rides the `marketing` context
-         * so the opt-out link the seam mints names it. Without that the
-         * preference page opens on a list of every stream the site has, and
-         * the recipient has to find the one they were trying to leave.
-         */
-        const topicId = flowEmailTopicId(step.topicId, scope)
-        const gate = await flowEmailRefusal({
-          hostId,
-          email: to,
-          topicId: step.topicId ?? null,
-          org: env.org,
-          scope,
-        })
-        if (gate) {
-          stepErrors.push(
-            gate !== 'consent-withheld'
-              ? 'the recipient has left this email topic'
-              : // Named by what was actually asked. An immediate step refuses
-                // only on a stated refusal, so reporting it as a missing
-                // record would send a merchant looking for a consent field to
-                // fill in that would change nothing.
-                enrollmentRef
-                ? 'the recipient has no marketing consent record on this site'
-                : 'the recipient has declined marketing from this site',
-          )
-          continue
-        }
-        const emailSubject = String(step.subject ?? '').slice(0, 200)
-        const emailText = String(step.body ?? '').slice(0, 5000)
-        /*
-         * THE TIMELINE ENTRY (AGL-2615). A message addressed to the contact
-         * the event is about is logged on that contact's timeline as an
-         * email activity — the same row the console's own send logs — so an
-         * automated welcome shows beside the calls a rep made, with its
-         * delivery state. Prepared first because the row's id has to be on
-         * the message for the webhook to find it; written only after the
-         * provider accepted. Behind the suite gate like every other CRM
-         * write an action makes.
-         */
-        const emailActivity = env.crmAllowed
-          ? await prepareCrmEmailActivity(
-              { hostId, org: env.org, orgId: env.orgId },
-              to,
-              payload,
-            )
-          : null
-        const result = await sendEmail({
-          to,
-          subject: emailSubject,
-          text: emailText,
-          sendingIdentity: await hostSendingIdentity(hostId),
-          ...(emailActivity ? { tags: emailActivity.tags } : {}),
-          audience: 'tenant',
-          context: enrollmentRef ? 'flow step' : 'event action',
-          /*
-           * A resumed step may take `'bulk'` where an immediate one may not,
-           * and the reason is the same one the abandoned-checkout sweep gives:
-           * only a RESUMABLE sender may be refused in a way the recipient
-           * survives. The enrollment is the thing that makes it resumable —
-           * a deferral below leaves the row waiting and the next beat sends
-           * the same step to the same person.
-           */
-          ...(enrollmentRef ? { priority: 'bulk' as const } : {}),
-          // `topicId` is `''` for a step that belongs to no stream, which
-          // every reader of it treats as absent — see `flowEmailTopicId`.
-          marketing: { hostId, siteBase, topicId },
-        })
-        /*
-         * DEFERRED IS NOT FAILED, and it is not SENT either.
-         *
-         * The platform's hourly ceiling and this person's own frequency window
-         * are both refusals a later beat can pass. Advancing past this step
-         * would turn "not this hour" into an email nobody ever receives, which
-         * is the defect the campaign processor and the cart sweep each name.
-         * So the enrollment is put back with the SAME `nextStepIndex` and the
-         * run ends here.
-         */
-        if (enrollmentRef && isDeferrableSendResult(result)) {
-          ending = 'deferred'
-          break
-        }
-        // Named rather than lumped into "delivery failed": a suppression and
-        // a frequency ceiling are the controls working, and a merchant
-        // reading the run's alerts has a different thing to do about each.
-        const refusal = sendFailureReason(result)
-        if (refusal) {
-          stepErrors.push(
-            refusal === 'suppressed'
-              ? 'the recipient is unsubscribed or suppressed'
-              : refusal === 'frequency-capped'
-                ? 'the recipient has already had today’s limit of email ' +
-                  'from this site'
-                : 'email delivery failed',
-          )
-        }
-        // Cost meter (AGL-1438). A workflow notification is transactional:
-        // counted, never capped. `sent` is false when Resend refused or the
-        // environment is unconfigured, and an email that never left is not a
-        // cost.
-        if (result.sent) {
-          await meterHostEmail(hostId)
-          if (emailActivity) {
-            await logCrmEmailActivity(
-              { hostId, org: env.org, orgId: env.orgId },
-              emailActivity,
-              { subject: emailSubject, body: emailText, to },
-              actionId,
-            )
-          }
-        }
-      } else if (step.type === 'enrollList') {
-        const orgId = await resolveOrgIdForHost(hostId)
-        const email = String((payload as any).email ?? '')
-          .trim()
-          .toLowerCase()
-        if (!orgId || !email || !email.includes('@')) {
-          stepErrors.push('no email to enroll')
-          continue
-        }
-        const listsRef = firebaseAdmin
-          .app()
-          .firestore()
-          .collection('orgs')
-          .doc(orgId)
-          .collection('lists')
-        const listDoc = step.listId?.trim()
-          ? await listsRef.doc(step.listId.trim()).get()
-          : (
-              await listsRef
-                .where('name', '==', step.listName?.trim() ?? '')
-                .limit(1)
-                .get()
-            ).docs[0]
-        if (!listDoc?.exists) {
-          stepErrors.push(`unknown list "${step.listName || step.listId}"`)
-          continue
-        }
-        // `enrollListMember` owns the document id: the commerce newsletter
-        // handler enrolls into the same collection, and an id derived here
-        // would be a second answer to which document describes which person.
-        await enrollListMember({
-          listRef: listDoc.ref,
-          group: await consentGroupForSite(hostId),
-          email,
-          source: `action:${actionId}`,
-        })
-      } else if (step.type === 'assignCampaign') {
-        const email = String((payload as any).email ?? '')
-          .trim()
-          .toLowerCase()
-        if (!email || !email.includes('@')) {
-          stepErrors.push('no contact email to assign')
-          continue
-        }
-        // Scoped to this host (AGL-1039): a site must not reach a contact
-        // it cannot see, even to tag it onto a campaign. Through the org's
-        // address index (AGL-2633), so an address a merge folded into
-        // another record still names the person who now holds it.
-        const { ref: contactsRef } = await orgDataQueryForHost(hostId, 'contacts')
-        const contact = await findContactByEmail(contactsRef, email, { hostId })
-        if (!contact) {
-          stepErrors.push(`no contact for ${email}`)
-          continue
-        }
-        /*
-         * THE CAMPAIGN IS RESOLVED TO A DOCUMENT, exactly as `enrollList`
-         * resolves a list one branch above.
-         *
-         * A step may name a campaign by id or by name — the picker writes the
-         * id, an imported automation may carry only the name — and what gets
-         * stored is the id either way. Storing whichever of the two the step
-         * happened to hold would put names and ids in one array, and every
-         * reader of that array resolves ids: a name in it renders as a chip
-         * nobody can click and matches no campaign the console can find.
-         *
-         * An unknown campaign is an ERROR rather than a stored string. The
-         * reference audit already reports a step pointing at a campaign that
-         * does not exist; a run that wrote the dangling name anyway would
-         * make the audit's finding untrue the moment it fired.
-         */
-        const campaignsRef = hostRef.collection('emailCampaigns')
-        const namedId = step.campaignId?.trim() ?? ''
-        const campaignDoc = namedId
-          ? await campaignsRef.doc(namedId).get()
-          : (
-              await campaignsRef
-                .where('name', '==', step.campaignName?.trim() ?? '')
-                .limit(1)
-                .get()
-            ).docs[0]
-        if (!campaignDoc?.exists) {
-          stepErrors.push(
-            `unknown campaign "${step.campaignName || step.campaignId}"`,
-          )
-          continue
-        }
-        /*
-         * INSIDE THIS SITE'S FACET, not at the top of the document.
-         *
-         * A contact is one row shared by every site in the org, and which
-         * campaigns a merchant has filed somebody under is that merchant's
-         * business record on the same footing as their notes and their tags.
-         * Written at the top it would be readable by every other site in an
-         * agency's account.
-         *
-         * `update` with a dotted path, never `set({merge:true})`: a `set`
-         * treats the string as a literal field NAME and would mint a
-         * top-level key with dots in it. The document was just read, so the
-         * update cannot fail for absence.
-         */
-        const group = await consentGroupForSite(hostId)
-        await contact.ref.update({
-          [contactCampaignFieldPath(group.groupId)]: FieldValue.arrayUnion(
-            campaignDoc.id,
-          ),
-          updatedAt: FieldValue.serverTimestamp(),
-        })
-      } else if (isCrmActionStep(step)) {
-        // The plan gate, the way `webhookPost` takes the `webhooks` one:
-        // refused into the run history with the tier that carries it, so
-        // a Free workspace whose flow names a CRM step reads why the step
-        // did nothing rather than a log that says it ran.
-        if (!env.crmAllowed) {
-          stepErrors.push(
-            `CRM steps require the ${planLabelGrantingFeature('crm')} plan`,
-          )
-          continue
-        }
-        // The five CRM steps (AGL-2605) share a resolver and a scope, so
-        // they share a module; see `crm-action-steps.ts`.
-        const outcome = await runCrmActionStep(
-          { hostId, org: env.org, orgId: env.orgId },
-          actionId,
-          step,
-          payload,
-        )
-        if (outcome.error) {
-          stepErrors.push(outcome.error)
-          continue
-        }
-        detail = outcome.detail
-        /*
-         * A stage set by an automation IS a stage change, and whatever
-         * listens for one must hear it — fanned out here, under the same
-         * depth guard a `customEvent` chain runs under, rather than through
-         * `emitHostEvent`, which starts every chain at depth zero and would
-         * let an action that sets the stage it listens for run forever.
-         */
-        if (outcome.emit) {
-          const [, nested] = await Promise.all([
-            runEventWorkflows(hostId, outcome.emit.event, outcome.emit.payload),
-            runEventActions(
-              hostId,
-              outcome.emit.event,
-              outcome.emit.payload,
-              depth + 1,
-            ),
-          ])
-          alerts.push(...nested)
-        }
-      }
-    } catch (error) {
-      stepErrors.push((error as Error).message)
-    } finally {
-      // A step that added no error of its own did what it said. `finally`
-      // rather than the end of the try block because every failure branch
-      // above reaches its error with `continue`, which would skip a plain
-      // trailing statement while still counting as a success.
-      if (attempted && stepErrors.length === errorsBefore) {
-        outcomes.push(describeStepOutcome(step.type, detail))
-      }
-    }
+    const verdict = await runServerStep(env, run, step, {
+      index,
+      steps,
+      event,
+      payload,
+      scope,
+      enrollmentRef,
+    })
+    if (tallyStep(tally, step.type, verdict)) break
   }
+  const { ending, errors: stepErrors, outcomes } = tally
   /*
    * A DEFERRED run writes no history line and leaves the enrollment where it
    * was. Nothing happened that a merchant should read as a run: the step is
@@ -959,6 +1152,149 @@ async function executeAction(
   return ending
 }
 
+/** How a workflow run went, for whoever records or answers for it. */
+export interface WorkflowExecution {
+  ending: ActionRunEnding
+  /**
+   * Every error, in step order. An Actions step's error is recorded and the
+   * run goes on, as it does in an action; a function call's error ENDS the
+   * run, as it always has, because the steps after it read its result.
+   */
+  errors: string[]
+  /** What each step that ran did, in the Actions run-history phrasing. */
+  outcomes: string[]
+  /** The workflow's return value, as the pure evaluator reports it. */
+  value: number | string | boolean
+  /** Every result the function calls bound, by name. */
+  results: Record<string, number | string | boolean>
+}
+
+interface ExecuteWorkflowOptions {
+  /** The step to start at: a resume's `nextStepIndex`. */
+  startIndex?: number
+  /** The list to run: a resume's snapshot. */
+  steps?: readonly WorkflowStep[]
+  /** The enrollment a resume belongs to. */
+  enrollmentRef?: FirebaseFirestore.DocumentReference | null
+  /** A run started by another automation's `runWorkflow` step. */
+  nested?: boolean
+}
+
+/**
+ * Runs a workflow whose steps include Actions steps: function calls and
+ * Actions steps, in order, in one scope.
+ *
+ * - A FUNCTION CALL is evaluated by the platform's pure evaluator,
+ *   `runWorkflow`, one call at a time, so its expressions see the event, the
+ *   site's variables and every result bound before it — exactly the scope a
+ *   function-only workflow gives it. A call that fails ends the run.
+ * - An ACTIONS STEP runs through {@link runServerStep}, the executor actions
+ *   use, and reads the event payload together with every result bound so
+ *   far: a workflow can compute a score and write it to a dataset. Each one
+ *   takes the Actions tier gate (`actions`, Pro and up) on top of its own —
+ *   `webhookPost` on Business, the CRM steps on the CRM suite — and a step
+ *   only the visitor's browser can run is refused.
+ * - `wait` and `waitForEvent` enroll the person and end this call; the rest
+ *   of the list, results included, continues from the beat. `exitFlow` ends
+ *   the run.
+ *
+ * Records nothing and meters nothing: the caller that admitted the run does
+ * both, once.
+ */
+export async function executeWorkflow(
+  env: ActionRunEnv,
+  run: AutomationRun,
+  workflow: AutomationWorkflow,
+  event: string,
+  payload: HostEventPayload,
+  options: ExecuteWorkflowOptions = {},
+): Promise<WorkflowExecution> {
+  const steps = options.steps ?? workflow.steps ?? []
+  const tally: RunTally = { ending: 'ran', errors: [], outcomes: [] }
+  const results: Record<string, number | string | boolean> = {}
+  if (steps.length > WORKFLOW_MAX_STEPS) {
+    return {
+      ...tally,
+      errors: [`Workflows are capped at ${WORKFLOW_MAX_STEPS} steps`],
+      value: '',
+      results,
+    }
+  }
+  const context = await env.loadWorkflowContext()
+  const enrollmentRef = options.enrollmentRef ?? null
+  const startIndex = Math.max(0, options.startIndex ?? 0)
+  /** The payload an Actions step reads: the event's, then every result. */
+  const stepPayload = (): HostEventPayload => ({ ...payload, ...results })
+  for (let index = startIndex; index < steps.length; index += 1) {
+    const step = steps[index]
+    if (!isWorkflowActionStep(step)) {
+      const call = step as HostWorkflowStep
+      const resultName = call.resultName?.trim() || `step${index + 1}`
+      const evaluated = runWorkflow(
+        { name: workflow.name, steps: [{ ...call, resultName }] },
+        context.functions,
+        context.variables,
+        { event, ...stepPayload() },
+        { workflows: context.workflows },
+      )
+      if (evaluated.ok === false) {
+        // The evaluator numbers the one step it was handed; the author
+        // numbers it by its place in the workflow.
+        tally.errors.push(
+          evaluated.error.replace(/^Step 1\b/, `Step ${index + 1}`),
+        )
+        break
+      }
+      results[resultName] = evaluated.results[resultName]
+      tally.outcomes.push(
+        `ran ${String(call.functionName || call.functionId || 'a function').trim()}`,
+      )
+      continue
+    }
+    const refusal = workflowActionStepRefusal(step)
+    if (refusal) {
+      tally.errors.push(refusal)
+      continue
+    }
+    if (!env.actionsAllowed) {
+      tally.errors.push(
+        `“${workflowStepTypeLabel(step.type)}” needs the ` +
+          `${planLabelGrantingFeature('actions')} plan`,
+      )
+      continue
+    }
+    const verdict = await runServerStep(env, run, step, {
+      index,
+      steps,
+      event,
+      payload: stepPayload(),
+      scope: { event, ...stepPayload() },
+      enrollmentRef,
+      nested: options.nested,
+    })
+    if (tallyStep(tally, step.type, verdict)) break
+  }
+  /*
+   * The return value the pure evaluator would give: the named scope entry —
+   * a result, a payload field or a variable — when the workflow names one,
+   * and the last result otherwise. Asked of the evaluator itself, with no
+   * steps, so a variable resolves by the evaluator's own rules.
+   */
+  const returnName = workflow.returnValue?.trim()
+  const value = returnName
+    ? (() => {
+        const named = runWorkflow(
+          { name: workflow.name, steps: [], returnValue: returnName },
+          context.functions,
+          context.variables,
+          { event, ...stepPayload() },
+        )
+        return named.ok === false ? '' : named.value
+      })()
+    : (Object.values(results).at(-1) ?? '')
+  return { ...tally, value, results }
+}
+
 /**
  * Suspends the run at a `wait` or `waitForEvent` step.
  *
@@ -969,11 +1305,10 @@ async function executeAction(
  */
 async function suspendFlow(
   env: ActionRunEnv,
-  actionId: string,
-  action: HostAction,
+  run: AutomationRun,
   request: {
     step: HostActionStep
-    steps: readonly HostActionStep[]
+    steps: readonly WorkflowStep[]
     nextStepIndex: number
     event: string
     payload: HostEventPayload
@@ -1015,11 +1350,14 @@ async function suspendFlow(
 
   const enrolled = await enrollInFlow({
     hostId: env.hostId,
-    actionId,
+    actionId: run.id,
+    // Absent for an action, which is every enrollment written before a
+    // workflow could wait — the resume reads absent as `action`.
+    ...(run.kind === 'workflow' ? { automation: 'workflow' as const } : {}),
     // The SNAPSHOT is the list this run is executing, which on a first run is
-    // the action's own — so an action edited later cannot move this person's
+    // the automation's own — so one edited later cannot move this person's
     // remaining steps out from under them.
-    action: { name: action.name ?? '', steps: [...request.steps] },
+    action: { name: run.name, steps: [...request.steps] },
     email: String((request.payload as any)?.['email'] ?? ''),
     event: request.event,
     payload: (request.payload ?? {}) as Record<string, unknown>,
@@ -1157,6 +1495,8 @@ export async function runEventActions(
       hostId,
       hostRef,
       alerts,
+      // Admitted by the `actions` gate above.
+      actionsAllowed: true,
       webhooksAllowed,
       crmAllowed,
       depth,
@@ -1257,6 +1597,8 @@ export async function runSingleAction(
       hostId,
       hostRef,
       alerts,
+      // Admitted by the `actions` gate above.
+      actionsAllowed: true,
       webhooksAllowed,
       crmAllowed,
       depth: 0,
@@ -1272,6 +1614,43 @@ export async function runSingleAction(
     console.error('runSingleAction failed', hostId, actionId, error)
   }
   return alerts
+}
+
+/**
+ * Ends an enrollment its automation may no longer run, and says why in the
+ * run history — the automation was deleted or switched off, or the plan that
+ * carried it lapsed. Shared by both kinds of enrollment, so "stopped mid-wait"
+ * reads the same for an action and a workflow.
+ */
+export async function stopFlowEnrollment(
+  enrollment: FlowEnrollment,
+  ref: FirebaseFirestore.DocumentReference,
+  reason: string,
+): Promise<'stopped'> {
+  const hostRef = firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(enrollment.hostId)
+  await endFlowEnrollment(ref)
+  await hostRef
+    .collection('activity')
+    .add({
+      actorId: null,
+      actorEmail: null,
+      action: `Flow stopped mid-wait: ${reason}`.slice(0, 300),
+      result: 'skipped',
+      trigger: enrollment.event,
+      summary: reason.slice(0, 300),
+      target: {
+        type: 'workflow',
+        id: enrollment.actionId,
+        name: enrollment.actionName ?? '',
+      },
+      createdAt: FieldValue.serverTimestamp(),
+    })
+    .catch(() => undefined)
+  return 'stopped'
 }
 
 /**
@@ -1291,31 +1670,20 @@ export async function resumeFlowEnrollment(
   options?: { timedOut?: boolean; nowMs?: number },
 ): Promise<'ran' | 'waiting' | 'exited' | 'deferred' | 'stopped'> {
   const nowMs = options?.nowMs ?? Date.now()
+  // A workflow's enrollment continues the workflow, against the workflow's
+  // own kill switch and meter; every enrollment without the field is an
+  // action's, which is every one written before a workflow could wait.
+  if (enrollment.automation === 'workflow') {
+    return await resumeWorkflowEnrollment(enrollment, ref, {
+      ...options,
+      nowMs,
+    })
+  }
   const hostId = enrollment.hostId
   const firestore = firebaseAdmin.app().firestore()
   const hostRef = firestore.collection('hosts').doc(hostId)
 
-  const stop = async (reason: string) => {
-    await endFlowEnrollment(ref)
-    await hostRef
-      .collection('activity')
-      .add({
-        actorId: null,
-        actorEmail: null,
-        action: `Flow stopped mid-wait: ${reason}`.slice(0, 300),
-        result: 'skipped',
-        trigger: enrollment.event,
-        summary: reason.slice(0, 300),
-        target: {
-          type: 'workflow',
-          id: enrollment.actionId,
-          name: enrollment.actionName ?? '',
-        },
-        createdAt: FieldValue.serverTimestamp(),
-      })
-      .catch(() => undefined)
-    return 'stopped' as const
-  }
+  const stop = (reason: string) => stopFlowEnrollment(enrollment, ref, reason)
 
   const doc = await hostRef
     .collection('actions')
@@ -1344,6 +1712,8 @@ export async function resumeFlowEnrollment(
     hostId,
     hostRef,
     alerts: [],
+    // Admitted by the `actions` gate above.
+    actionsAllowed: true,
     webhooksAllowed: checkEntitlement(owner?.org as any, 'webhooks'),
     crmAllowed: checkEntitlement(owner?.org as any, 'crm'),
     depth: 0,
@@ -1368,7 +1738,9 @@ export async function resumeFlowEnrollment(
     payload,
     {
       startIndex: enrollment.nextStepIndex,
-      steps: enrollment.steps,
+      // An action's enrollment holds only Actions steps: its snapshot is the
+      // action's own list.
+      steps: enrollment.steps as HostActionStep[],
       enrollmentRef: ref,
     },
   )
@@ -1405,7 +1777,7 @@ export async function resumeFlowEnrollment(
 }
 
 /** How long a deferred enrollment waits before the next attempt. */
-const FLOW_CLAIM_RETRY_MS = 15 * 60_000
+export const FLOW_CLAIM_RETRY_MS = 15 * 60_000
 
 /**
  * The job beat's entry point: resume every flow whose wait has ended.

@@ -23,7 +23,8 @@ import { runEventWorkflows } from './run-event-workflows'
 /**
  * Everything the automation engine runs for one host event: the workflows
  * triggered by it and the actions, side by side, with the site alerts they
- * produced for the visitor. What the runtime's host-event listener calls.
+ * produced for the visitor — the actions' first, then those a workflow's
+ * `siteAlert` step raised. What the runtime's host-event listener calls.
  *
  * Never rejects, because neither runner does: each catches and logs its own
  * failure so the event that has already happened is not refused for it.
@@ -33,9 +34,9 @@ export async function runEventAutomations(
   event: string,
   payload: HostEventPayload = {},
 ): Promise<HostActionAlert[]> {
-  const [, alerts] = await Promise.all([
+  const [fromWorkflows, fromActions] = await Promise.all([
     runEventWorkflows(hostId, event as HostEventType, payload),
     runEventActions(hostId, event, payload),
   ])
-  return alerts
+  return [...fromActions, ...fromWorkflows]
 }

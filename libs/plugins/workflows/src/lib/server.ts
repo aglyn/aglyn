@@ -34,7 +34,16 @@ import { timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { BUNDLE_ID as WORKFLOWS_BUNDLE_ID } from './constants/bundle-common'
 import { registerWorkflowsServerDeclarations } from './declarations.server'
-import { runDueFlowEnrollments } from './engine/run-event-actions'
+import {
+  automationRunEnv,
+  executeWorkflow,
+  runDueFlowEnrollments,
+  workflowContextFromDocs,
+} from './engine/run-event-actions'
+import {
+  type AutomationWorkflow,
+  workflowHasActionSteps,
+} from './engine/workflow-steps'
 
 /*==========================================
  * THE BEAT THAT MAKES A WAIT STEP REAL.
@@ -140,7 +149,8 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
     }
 
     // Plan/quota gates ride the owning org's doc (AGL-238).
-    const org = (await getOrgForHost(hostId))?.org
+    const owner = await getOrgForHost(hostId)
+    const org = owner?.org
     if (!checkEntitlement(org as any, 'webhooks')) {
       return res
         .status(403)
@@ -223,29 +233,86 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
       return res.status(422).json({ error: 'No workflow bound to this hook' })
     }
 
-    const run = runWorkflow(
-      workflow,
-      byName<HostFunction>(functionDocs.docs),
-      byName<HostVariable>(variableDocs.docs),
-      { event: `hook:${hook.name ?? hookId}`, ...scope },
-      { workflows },
-    )
-    const failed = run.ok === false
+    const hookEvent = `hook:${hook.name ?? hookId}`
+    /*
+     * A workflow of function calls is evaluated, as it always has been. One
+     * with Actions steps is PERFORMED by the engine's executor — the posted
+     * JSON is its payload — under the Actions tier gates, step by step, and
+     * it is still one run on the meter below. Its working set is built from
+     * the documents read above rather than read again.
+     */
+    const outcome: { error: string | null; value: unknown; summary: string } =
+      workflowHasActionSteps(workflow)
+        ? await (async () => {
+            const workflowDoc = workflowDocs.docs.find(
+              (doc) =>
+                !doc.get('deletedAt') &&
+                doc.get('name') === hook.workflowName?.trim(),
+            )
+            const execution = await executeWorkflow(
+              automationRunEnv({
+                hostId,
+                hostRef,
+                owner,
+                depth: 0,
+                loadWorkflowContext: async () =>
+                  workflowContextFromDocs(
+                    functionDocs.docs,
+                    variableDocs.docs,
+                    workflowDocs.docs,
+                  ),
+              }),
+              {
+                kind: 'workflow',
+                id: workflowDoc?.id ?? '',
+                name: workflow.name ?? '',
+              },
+              workflow as AutomationWorkflow,
+              hookEvent,
+              scope,
+            )
+            return {
+              error: execution.errors.length
+                ? execution.errors.join('; ')
+                : null,
+              value: execution.value,
+              summary: execution.outcomes.length
+                ? execution.outcomes.join(' · ')
+                : `Ran ${hook.workflowName}`,
+            }
+          })()
+        : (() => {
+            const run = runWorkflow(
+              workflow,
+              byName<HostFunction>(functionDocs.docs),
+              byName<HostVariable>(variableDocs.docs),
+              { event: hookEvent, ...scope },
+              { workflows },
+            )
+            return run.ok === false
+              ? { error: run.error, value: undefined, summary: '' }
+              : {
+                  error: null,
+                  value: run.value,
+                  summary: `Ran ${hook.workflowName}`,
+                }
+          })()
+    const failed = outcome.error !== null
     await hostRef
       .collection('activity')
       .add({
         actorId: null,
         actorEmail: null,
         action: failed
-          ? `Inbound webhook run failed: ${run.error}`.slice(0, 300)
+          ? `Inbound webhook run failed: ${outcome.error}`.slice(0, 300)
           : `Inbound webhook ran "${hook.workflowName}"`,
         // The run-history shape (AGL-2222) — without `result` this execution
         // is invisible to the Runs table, which reads a verdict and not prose.
         result: failed ? 'failed' : 'succeeded',
-        trigger: `hook:${hook.name ?? hookId}`,
+        trigger: hookEvent,
         summary: failed
-          ? String(run.error).slice(0, 300)
-          : `Ran ${hook.workflowName}`,
+          ? String(outcome.error).slice(0, 300)
+          : outcome.summary.slice(0, 300),
         target: { type: 'workflow', id: hookId, name: hook.name ?? '' },
         createdAt: FieldValue.serverTimestamp(),
       })
@@ -259,8 +326,8 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
       .set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
       .catch(() => undefined)
 
-    if (failed) return res.status(422).json({ error: run.error })
-    return res.status(200).json({ ok: true, value: run.value })
+    if (failed) return res.status(422).json({ error: outcome.error })
+    return res.status(200).json({ ok: true, value: outcome.value })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Webhook failed' })
