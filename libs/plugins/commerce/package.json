@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/plugins-commerce",
-  "version": "1.0.0-beta.141",
+  "version": "1.0.0-beta.142",
   "type": "module",
   "exports": {
     ".": {
@@ -14,18 +14,18 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.141",
-    "@aglyn/shared-data-mdi": "1.0.0-beta.141",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.141",
-    "@aglyn/shared-ui-next": "1.0.0-beta.141",
-    "@aglyn/shared-ui-snackstack": "1.0.0-beta.141",
-    "@aglyn/shared-util-email": "1.0.0-beta.141",
-    "@aglyn/shared-util-http": "1.0.0-beta.141",
-    "@aglyn/shared-util-timestamp": "1.0.0-beta.141",
-    "@aglyn/shared-util-tools": "1.0.0-beta.141",
-    "@aglyn/tenant-data-admin": "1.0.0-beta.141",
-    "@aglyn/tenant-feature-instance": "1.0.0-beta.141",
-    "@aglyn/tenant-runtime": "1.0.0-beta.141",
+    "@aglyn/aglyn": "1.0.0-beta.142",
+    "@aglyn/shared-data-mdi": "1.0.0-beta.142",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.142",
+    "@aglyn/shared-ui-next": "1.0.0-beta.142",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.142",
+    "@aglyn/shared-util-email": "1.0.0-beta.142",
+    "@aglyn/shared-util-http": "1.0.0-beta.142",
+    "@aglyn/shared-util-timestamp": "1.0.0-beta.142",
+    "@aglyn/shared-util-tools": "1.0.0-beta.142",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.142",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.142",
+    "@aglyn/tenant-runtime": "1.0.0-beta.142",
     "@stripe/react-stripe-js": "^3.10.0",
     "@stripe/stripe-js": "^5.10.0",
     "@swc/helpers": "0.5.23",
