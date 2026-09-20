@@ -9,6 +9,50 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.139 — 2026-09-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/d20eca5ea...v1.0.0-beta.139)
+
+### Added
+
+- **marketing:** the blog post for agencies running one brief across clients ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922))
+- **marketing:** the blog post on AI email campaigns and consent ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922))
+- **marketing:** the blog post that keeps a generated page on brand ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922), [AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+- **ai:** the welcome email is written to somebody, about something ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **ai:** the contact form is built for the people who fill it in ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **ai:** the guided start's answers write the site's search listings ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **tools:** a guard refuses a plugin's domain outside its plugin ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **marketing:** /product/ai claims A/B variants, and says what they need ([AGL-2920](https://linear.app/aglyn/issue/AGL-2920), [AGL-2914](https://linear.app/aglyn/issue/AGL-2914), [AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+- **marketing:** one AI band, worded once, for twenty-five pages ([AGL-2921](https://linear.app/aglyn/issue/AGL-2921))
+- **marketing:** the /product/ai copy deck, drafts first ([AGL-2920](https://linear.app/aglyn/issue/AGL-2920))
+- **ai:** the guided start asks in a full screen dialog ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **pricing:** an extra site is $20 on every tier, Starter included ([AGL-3198](https://linear.app/aglyn/issue/AGL-3198))
+
+### Fixed
+
+- **console:** the client plugin manifest lists the AI plugin's two experiment slots ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914))
+- **console:** the A/B arms table is classified, and the spec parses ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914))
+- **ai:** three guards the day's work walked past ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914), [AGL-2918](https://linear.app/aglyn/issue/AGL-2918), [AGL-2922](https://linear.app/aglyn/issue/AGL-2922), [AGL-3116](https://linear.app/aglyn/issue/AGL-3116), [AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+
+### Changed
+
+- **commerce:** the storefront CSV import reads parseCsv where it lives ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+### Documentation
+
+- **ai:** the guided start says which answer changes what ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **ai:** the guided start is a dialog, and says every way out of it ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **ai:** the page for A/B tests by AI, and the help link both cards lacked ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914))
+- **uptime:** the per-minute beat jobs are counted, not paged per failure ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+
+<details>
+<summary>Also in this release: 2 test</summary>
+
+- **marketing:** every blog link resolves, and the flip note comes off whole ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922))
+- **console:** the A/B door is a declared Anthropic data flow ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914), [AGL-1909](https://linear.app/aglyn/issue/AGL-1909), [AGL-3069](https://linear.app/aglyn/issue/AGL-3069))
+
+</details>
+
 ## v1.0.0-beta.138 — 2026-09-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.137...v1.0.0-beta.138)
