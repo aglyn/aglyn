@@ -53,6 +53,12 @@ import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import { useNodeWithMediaAssetFacts } from '../hooks/use-media-asset-facts-overlay'
 import useNodeWithHostTokens from '../hooks/use-node-with-host-tokens'
 import {
+  useNodeWithRepeatRecord,
+  useRepeatCopies,
+  useRepeatPreview,
+} from '../hooks/use-repeat-preview'
+import { RepeatRecordContext } from '../contexts/repeat-record-context'
+import {
   isNodeHiddenOnSite,
   isNodeRevealedOnCanvas,
 } from '../utils/canvas-reveal'
@@ -74,7 +80,8 @@ import EmptyDocumentSlot from './empty-document-slot'
 export const MediaFactsLeaf = forwardRef<any, LeafProps>((props, ref) => {
   const { node, ...rest } = props
   const withHostTokens = useNodeWithHostTokens(node)
-  const shown = useNodeWithMediaAssetFacts(withHostTokens)
+  const withRecord = useNodeWithRepeatRecord(withHostTokens)
+  const shown = useNodeWithMediaAssetFacts(withRecord)
   return <Leaf ref={ref} node={shown} {...rest} />
 })
 MediaFactsLeaf.displayName = 'MediaFactsLeaf'
@@ -163,6 +170,53 @@ const SlotMarker = ({ caption }: { caption?: string }) => (
       {'◇ layout-slot'}
     </Box>
     <Box component="span">{caption || 'Screen content renders here'}</Box>
+  </Box>
+)
+
+/**
+ * The repeat badge (AGL-3111).
+ *
+ * Editor chrome, so it holds its accent literally for the reason
+ * {@link SLOT_ACCENT} does: the canvas renders under the SITE's palette, and a
+ * theme token here would repaint the editor's own furniture whenever a
+ * subscriber restyled their site.
+ *
+ * It cannot reach a published page: only `NodeLeaf` draws it, and a published
+ * page is composed from stored nodes and rendered through the plain `Leaf`.
+ * The stored node is untouched either way — this is a render copy, like every
+ * other thing the canvas lays over a node.
+ */
+const REPEAT_ACCENT = '#7C4DFF'
+
+const RepeatBadge = ({ label, count }: { label: string; count: number }) => (
+  <Box
+    aria-hidden
+    data-aglyn-repeat-badge=""
+    sx={{
+      // Out of the element's own layout: a badge that took part in a flex row
+      // would move the design it is describing.
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      zIndex: 2,
+      // Never swallows a click — the element under it stays selectable.
+      pointerEvents: 'none',
+      px: 0.75,
+      py: 0.25,
+      maxWidth: '100%',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      borderBottomLeftRadius: 3,
+      backgroundColor: REPEAT_ACCENT,
+      color: '#FFF',
+      fontSize: 11,
+      fontWeight: 700,
+      lineHeight: 1.6,
+      letterSpacing: 0.2,
+    }}
+  >
+    {`⟳ ${label} · ${count} ${count === 1 ? 'record' : 'records'}`}
   </Box>
 )
 
@@ -379,13 +433,47 @@ export const NodeLeaf = observer(
       [hostResolvedNode, node, mutedClasses],
     )
 
+    /**
+     * The record a repeat above this one is drawing (AGL-3111).
+     *
+     * Applied in the same place, and for the same reason, as the host tokens
+     * and the DAM facts above: the published page substitutes `{{item.*}}`
+     * when it composes, so the canvas substitutes it on the render copy while
+     * the node keeps the tokens every save writes.
+     */
+    const withRepeatRecord = useNodeWithRepeatRecord(renderNodeUnclassed)
+
     // A placed asset's shape, and a film's length and poster, as its DAM
     // document records them NOW (AGL-2838, AGL-2856). The published page lays
     // the asset over the node when it is composed, so the canvas lays it over
     // the same render copy: a replace shows here as it shows to a visitor,
     // while selection, the panels and every save keep reading the node's
     // stored props.
-    const shownNode = useNodeWithMediaAssetFacts(renderNodeUnclassed)
+    const shownNode = useNodeWithMediaAssetFacts(withRepeatRecord)
+
+    /**
+     * What this element repeats over, and the copies it draws (AGL-3111).
+     *
+     * The first record's copy is the element's own children — real canvas
+     * nodes an author selects, drags and edits — with that record laid over
+     * their render copies through {@link RepeatRecordContext}. Records 2..n
+     * are inert pictures of the same template, built by the page's own
+     * expansion. Editing the template therefore edits every copy, because
+     * there is only ever one.
+     */
+    const repeatPreview = useRepeatPreview(node)
+    const repeatCopies = useRepeatCopies(node, repeatPreview)
+    const firstRecord = useMemo(
+      () =>
+        repeatPreview
+          ? {
+              record: repeatPreview.records[0],
+              model: repeatPreview.dataset?.model,
+              datasetsByKey: repeatPreview.datasetsByKey,
+            }
+          : undefined,
+      [repeatPreview],
+    )
 
     // A component instance renders its definition (AGL-1251) instead of the
     // named dashed box. Authors placed a hero and saw a grey rectangle, so
@@ -565,7 +653,40 @@ export const NodeLeaf = observer(
         >
           {/* A resolved form entity REPLACES the page's own fields, exactly
               as the published page composes it — see `placedFormTree`. */}
-          {placedFormTree ? null : children}
+          {placedFormTree ? null : firstRecord ? (
+            // The template IS the first copy: the real children, drawing the
+            // first record. Provided around them rather than applied to them,
+            // so every descendant leaf resolves its own tokens the way the
+            // page's substitution walks the whole cloned subtree.
+            <RepeatRecordContext.Provider value={firstRecord}>
+              {children}
+            </RepeatRecordContext.Provider>
+          ) : (
+            children
+          )}
+          {repeatCopies.length ? (
+            // Inert and click-through like the component and form previews
+            // below, and for the same reason: a copy is a picture of the
+            // template, not a document. Selecting one would offer an author
+            // an element no save can reach.
+            <Box
+              sx={{ pointerEvents: 'none' }}
+              data-aglyn-repeat-preview=""
+              aria-hidden
+            >
+              <RendererComponents.Provider value={INERT_RENDERER as any}>
+                {repeatCopies.map((copy) => (
+                  <Stem key={copy.$id} node={copy} />
+                ))}
+              </RendererComponents.Provider>
+            </Box>
+          ) : null}
+          {repeatPreview ? (
+            <RepeatBadge
+              label={repeatPreview.label}
+              count={repeatPreview.records.length}
+            />
+          ) : null}
           {placedFormTree ? (
             // Inert and click-through like the instance preview below: the
             // fields belong to the form, and they are edited in the form's own

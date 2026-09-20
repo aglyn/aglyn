@@ -191,6 +191,30 @@ export function repeatScope(node: unknown): RepeatScope {
   return Array.isArray(nodes) ? 'children' : 'self'
 }
 
+/**
+ * One record's values put into `{{item.field}}` tokens, anywhere in a props
+ * map — the substitution {@link expandRepeatables} makes on every copy it
+ * builds, for a caller that already knows which record it is rendering.
+ *
+ * The besigner's canvas is that caller (AGL-3111): the element an author
+ * edits IS the first copy, so it draws with the first record's values while
+ * the node it saves keeps the tokens. Exported rather than reimplemented
+ * because a canvas that resolved a token differently from the page would be
+ * showing the author a page that does not exist.
+ */
+export function substituteRecordTokens<T>(
+  props: T,
+  context: {
+    record: Record<string, unknown>
+    /** Model of the repeated rows; reference hops need field configs. */
+    model?: import('./dataset-models').DatasetModel
+    /** Rows by key, for a one-hop reference (AGL-180). */
+    datasetsByKey?: Record<string, RepeatableDataset | undefined>
+  },
+): T {
+  return substituteValue(props, context) as T
+}
+
 /** The node minus its repeat directives, or the node itself when it has none. */
 export function withoutRepeatDirective<N>(node: N): N {
   const props = (node as { props?: Record<string, unknown> })?.props
