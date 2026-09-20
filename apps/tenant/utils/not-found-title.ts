@@ -54,6 +54,8 @@ export interface NotFoundTitleOptions {
   siteTitle?: string | null
   /** The host's `seo.separator`; padded and defaulted by the resolver. */
   separator?: string | null
+  /** The host's `seo.titlePattern` — how it composes an untitled page. */
+  pattern?: string | null
 }
 
 export function resolveNotFoundTitle(options: NotFoundTitleOptions): string {
@@ -62,19 +64,33 @@ export function resolveNotFoundTitle(options: NotFoundTitleOptions): string {
     name: NOT_FOUND_PAGE_NAME,
     siteTitle: options.siteTitle,
     separator: options.separator,
+    pattern: options.pattern,
     fallback: NOT_FOUND_PAGE_NAME,
   })
 }
 
-/** The two host fields a title joins, read the way `buildMetadata` reads them. */
+/**
+ * The host fields a title is composed from, read the way `buildMetadata` reads
+ * them.
+ *
+ * Every head that composes a title reads them THROUGH this, rather than
+ * reaching into `host.seo` itself: AGL-1341 put one composition rule in
+ * `resolveSeoTitle` and the branches still each fetched their own inputs, so
+ * `seo.titlePattern` would have reached the branches that remembered it and no
+ * others — a site setting that worked on some of its own pages.
+ */
 export function hostSeoTitleParts(
   host:
-    | { displayName?: string; seo?: { title?: string; separator?: string } }
+    | {
+        displayName?: string
+        seo?: { title?: string; separator?: string; titlePattern?: string }
+      }
     | null
     | undefined,
-): Pick<NotFoundTitleOptions, 'siteTitle' | 'separator'> {
+): Pick<NotFoundTitleOptions, 'siteTitle' | 'separator' | 'pattern'> {
   return {
     siteTitle: host?.seo?.title ?? host?.displayName,
     separator: host?.seo?.separator,
+    pattern: host?.seo?.titlePattern,
   }
 }
