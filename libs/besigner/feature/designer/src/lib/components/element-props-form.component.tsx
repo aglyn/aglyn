@@ -77,11 +77,8 @@ import {
 // By path, not the `@aglyn/aglyn` barrel: a repeat's bounds and the sources
 // an editor offers are editor business, and a published page must not pull
 // either in behind them.
-import {
-  REPEAT_MAX_RECORDS,
-  REPEAT_SELF_PROP,
-  repeatScope,
-} from '@aglyn/aglyn/app-utils/expand-repeatables'
+import { repeatScope } from '@aglyn/aglyn/app-utils/expand-repeatables'
+import { REPEAT_NODE_CAPABILITY } from '@aglyn/aglyn/app-utils/node-capabilities'
 import {
   type RepeatSource,
   repeatSourceOf,
@@ -1503,9 +1500,13 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
  * correct rather than degraded: an editor with no source has nothing to repeat
  * over.
  *
- * The bounds below are shared by every source, because they are properties of
- * the REPEAT and not of the rows: the composition applies the same filter,
- * sort and limit whatever answered with the records.
+ * The bounds are shared by every source, because they are properties of the
+ * REPEAT and not of the rows: the composition applies the same filter, sort
+ * and limit whatever answered with the records. They are declared once, in
+ * core, as {@link REPEAT_NODE_CAPABILITY} — this panel draws them, and
+ * anything that has to describe what an author can build reads the same list.
+ * While the list lived here it was invisible to every other reader, and a
+ * reader that walked component schemas to find repeat found nothing at all.
  *
  * `hasChildren` decides whether the scope field is offered at all. An element
  * with nothing inside it has only one possible reading — it repeats itself —
@@ -1561,63 +1562,22 @@ export function buildRepeatFields(options: {
         },
       } as Record<string, unknown>),
     ),
-    ...(hasChildren
-      ? [
-          {
-            name: REPEAT_SELF_PROP,
-            ...help(
-              'Repeat',
-              'Whether each record gets a copy of this element, or a copy ' +
-                'of what is inside it. A row of cards repeats the card; a ' +
-                'list that IS the row repeats its contents.',
-              '#what-repeats-the-element-or-whats-inside-it',
-            ),
-            component: FieldComponentType.SELECT,
-            condition: repeating,
-            // A real value on the default option, never `''` (AGL-1451):
-            // an empty value cannot persist, so an author who switched to
-            // "This element" could never switch back.
-            initialValue: 'false',
-            options: [
-              { value: 'false', label: 'What is inside this element' },
-              { value: 'true', label: 'This element' },
-            ],
-          },
-        ]
-      : []),
-    {
-      name: 'repeatLimit',
-      ...help(
-        'Repeat limit',
-        `Most records to render (blank = all, capped at ${REPEAT_MAX_RECORDS}).`,
-        '#the-hundred-record-ceiling',
-      ),
-      component: FieldComponentType.TEXT_FIELD,
-      type: 'number',
-      condition: repeating,
-    },
-    {
-      name: 'repeatFilter',
-      ...help(
-        'Repeat filter',
-        'Optional "field op value" filter, e.g. "price <= 20", ' +
-          '"tier == plus", or "tags contains red". Ops: == != > >= < <= ' +
-          `contains. Applies to the first ${REPEAT_MAX_RECORDS} records.`,
-        '#bound-what-renders',
-      ),
-      component: FieldComponentType.TEXT_FIELD,
-      condition: repeating,
-    },
-    {
-      name: 'repeatSort',
-      ...help(
-        'Repeat sort',
-        'Optional "field" or "field desc" ordering, e.g. "price desc".',
-        '#bound-what-renders',
-      ),
-      component: FieldComponentType.TEXT_FIELD,
-      condition: repeating,
-    },
+    ...REPEAT_NODE_CAPABILITY.attributes
+      .filter((attribute) => hasChildren || !attribute.requiresChildren)
+      .map((attribute) => {
+        const {
+          label,
+          description,
+          docsAnchor,
+          requiresChildren: _requiresChildren,
+          ...field
+        } = attribute
+        return {
+          ...field,
+          ...help(String(label ?? ''), description ?? '', docsAnchor),
+          condition: repeating,
+        }
+      }),
   ]
 }
 
