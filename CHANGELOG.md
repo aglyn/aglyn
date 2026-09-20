@@ -9,6 +9,71 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.134 — 2026-09-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.133...v1.0.0-beta.134)
+
+### Added
+
+- **core:** a node capability is declared once, where every reader can find it ([AGL-3156](https://linear.app/aglyn/issue/AGL-3156), [AGL-3111](https://linear.app/aglyn/issue/AGL-3111))
+- **mui:** a Tabs element says which tab opens first, by label ([AGL-3164](https://linear.app/aglyn/issue/AGL-3164))
+- **data:** a dataset record write refreshes the live pages that show it ([AGL-3113](https://linear.app/aglyn/issue/AGL-3113), [AGL-1150](https://linear.app/aglyn/issue/AGL-1150), [AGL-1302](https://linear.app/aglyn/issue/AGL-1302), [AGL-2462](https://linear.app/aglyn/issue/AGL-2462), [AGL-3111](https://linear.app/aglyn/issue/AGL-3111), [AGL-1466](https://linear.app/aglyn/issue/AGL-1466), [AGL-2573](https://linear.app/aglyn/issue/AGL-2573), [AGL-3105](https://linear.app/aglyn/issue/AGL-3105), [AGL-1223](https://linear.app/aglyn/issue/AGL-1223))
+- **plugins:** the entitlement shapes compose from what the plugins declare ([AGL-3124](https://linear.app/aglyn/issue/AGL-3124), [AGL-2940](https://linear.app/aglyn/issue/AGL-2940))
+- **plugins:** a capture silo hands over a person instead of importing the writer ([AGL-3124](https://linear.app/aglyn/issue/AGL-3124))
+- **plugins:** a plugin publishes where its own records are read ([AGL-3124](https://linear.app/aglyn/issue/AGL-3124))
+- **plugins:** a plugin declares the host subcollections it owns ([AGL-3124](https://linear.app/aglyn/issue/AGL-3124))
+- **plugins:** a plugin declares its own zones and what they hand a widget ([AGL-3124](https://linear.app/aglyn/issue/AGL-3124), [AGL-3082](https://linear.app/aglyn/issue/AGL-3082))
+- **billing:** annual is the plan grid's opening offer, and the label stops halving it ([AGL-3155](https://linear.app/aglyn/issue/AGL-3155))
+- **tenant:** every page type carries its full OG, Twitter and JSON-LD set ([AGL-3148](https://linear.app/aglyn/issue/AGL-3148))
+- **besigner:** the canvas draws a repeat's real copies, badged, bounded as the page is ([AGL-3111](https://linear.app/aglyn/issue/AGL-3111))
+- **workflows:** the workflow editor offers the Actions steps, from one step editor ([AGL-3105](https://linear.app/aglyn/issue/AGL-3105))
+- **besigner:** the Attributes panel offers Repeat on every element and every instance ([AGL-3111](https://linear.app/aglyn/issue/AGL-3111), [AGL-3025](https://linear.app/aglyn/issue/AGL-3025), [AGL-703](https://linear.app/aglyn/issue/AGL-703))
+- **aglyn:** a repeat is a node capability, so a leaf or a placement repeats itself ([AGL-3111](https://linear.app/aglyn/issue/AGL-3111))
+- **workflows:** a workflow step is a function call or any server-side Actions step ([AGL-3105](https://linear.app/aglyn/issue/AGL-3105))
+
+### Fixed
+
+- **ai:** the palette carries node capabilities, so a draft can set a repeat again ([AGL-3156](https://linear.app/aglyn/issue/AGL-3156), [AGL-3111](https://linear.app/aglyn/issue/AGL-3111))
+- **mui:** an image in authored prose is delivered at the size it renders ([AGL-3149](https://linear.app/aglyn/issue/AGL-3149))
+- **tools:** a picker whose answers are resolved at edit time reaches the AI palette ([AGL-3164](https://linear.app/aglyn/issue/AGL-3164), [AGL-3156](https://linear.app/aglyn/issue/AGL-3156))
+- **tenant:** a scheduled publish drops the cache key the page is actually held under ([AGL-3163](https://linear.app/aglyn/issue/AGL-3163), [AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **tenant:** a site declares the language it is written in, not English ([AGL-3153](https://linear.app/aglyn/issue/AGL-3153), [AGL-2690](https://linear.app/aglyn/issue/AGL-2690), [AGL-2708](https://linear.app/aglyn/issue/AGL-2708))
+- **mui:** a related card holds the cover ratio authors are told to upload ([AGL-3157](https://linear.app/aglyn/issue/AGL-3157))
+- **plugins:** the plugin half composes as a mapped type, not an interface ([AGL-3124](https://linear.app/aglyn/issue/AGL-3124))
+- **tools:** a sign-up is not a sign-in, so the login beacon stops counting creations ([AGL-3154](https://linear.app/aglyn/issue/AGL-3154), [AGL-1561](https://linear.app/aglyn/issue/AGL-1561), [AGL-1497](https://linear.app/aglyn/issue/AGL-1497))
+- **theme:** a stored breakpoint rule resolves the same for every reader ([AGL-3146](https://linear.app/aglyn/issue/AGL-3146))
+- **besigner:** the repeat rows key writes NUL as an escape, not a raw byte ([AGL-3111](https://linear.app/aglyn/issue/AGL-3111), [AGL-1890](https://linear.app/aglyn/issue/AGL-1890))
+- **besigner:** the editor builds a site on the base its published pages use ([AGL-3068](https://linear.app/aglyn/issue/AGL-3068))
+- **console:** the screens empty state reads the scheme's surface, not the light one ([AGL-3147](https://linear.app/aglyn/issue/AGL-3147))
+- **besigner:** the repeat badge names its ink instead of spelling it in the sx ([AGL-3111](https://linear.app/aglyn/issue/AGL-3111))
+
+### Changed
+
+- **workflows:** the automation engine lives in its plugin, behind a host-event seam ([AGL-3105](https://linear.app/aglyn/issue/AGL-3105))
+
+### Documentation
+
+- the guard tier is 125 guards in 88s, and the gate already runs it ([AGL-2752](https://linear.app/aglyn/issue/AGL-2752))
+- **plugins:** the five seams core owes a plugin, with a worked example each ([AGL-3124](https://linear.app/aglyn/issue/AGL-3124))
+- **packages:** a plugin's domain is not generic, so shared is not where it goes ([AGL-3138](https://linear.app/aglyn/issue/AGL-3138), [AGL-3124](https://linear.app/aglyn/issue/AGL-3124), [AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **besigner:** repeat over data, and the Datasets page stops calling it a component ([AGL-3111](https://linear.app/aglyn/issue/AGL-3111))
+- **workflows:** one automation engine — a workflow step is a call or an Actions step ([AGL-3105](https://linear.app/aglyn/issue/AGL-3105))
+
+<details>
+<summary>Also in this release: 2 test, 7 chore</summary>
+
+- **ai:** a field kind the palette declares is never dropped somewhere else ([AGL-3156](https://linear.app/aglyn/issue/AGL-3156), [AGL-3164](https://linear.app/aglyn/issue/AGL-3164))
+- **ai:** the palette is held to the node capabilities core declares ([AGL-3156](https://linear.app/aglyn/issue/AGL-3156))
+- **tools:** the Linear ceiling is 3164, read from the workspace ([AGL-3164](https://linear.app/aglyn/issue/AGL-3164))
+- **tools:** the issue ceiling reads AGL-3164, the workspace's highest ([AGL-3164](https://linear.app/aglyn/issue/AGL-3164), [AGL-3113](https://linear.app/aglyn/issue/AGL-3113), [AGL-3163](https://linear.app/aglyn/issue/AGL-3163), [AGL-3156](https://linear.app/aglyn/issue/AGL-3156))
+- **tools:** the Linear ceiling is 3164, read from the workspace ([AGL-3164](https://linear.app/aglyn/issue/AGL-3164), [AGL-3157](https://linear.app/aglyn/issue/AGL-3157))
+- **tools:** the Linear ceiling is 3156, read from the workspace ([AGL-3156](https://linear.app/aglyn/issue/AGL-3156))
+- **ai:** the golden pages are unnamed sites, so the audit records the tenant base ([AGL-3068](https://linear.app/aglyn/issue/AGL-3068))
+- **tools:** the Linear ceiling is 3154, read from the workspace ([AGL-3154](https://linear.app/aglyn/issue/AGL-3154))
+- **ai:** the palette follows Stack's schema, so the selection block costs less ([AGL-3111](https://linear.app/aglyn/issue/AGL-3111))
+
+</details>
+
 ## v1.0.0-beta.133 — 2026-09-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.132...v1.0.0-beta.133)

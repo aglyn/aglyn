@@ -21,6 +21,7 @@ import {
   consoleOptions,
   getGoogleFontsUrl,
   sanitizeHostTheme,
+  useHostSiteKey,
 } from '@aglyn/shared-ui-theme'
 import { deepEqual } from '@aglyn/shared-util-vendor/deep-equal'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
@@ -137,6 +138,10 @@ export function ThemeEditor(props: ThemeEditorProps) {
   const { theme, saving, onSave, proposedDraft, onProposedDraftSettled } = props
   const [draft, setDraft] = useState<HostTheme>(() => theme ?? {})
   const [scheme, setScheme] = useState<HostThemeScheme>('light')
+  // The site being edited, from the host route this editor is mounted on.
+  // Every "Default" and the preview beside them resolve the base from it,
+  // which is the base the published page builds on (AGL-3068).
+  const siteKey = useHostSiteKey()
 
   /**
    * Re-seed the draft when the saved theme changes underneath us (AGL-1021).
@@ -323,10 +328,10 @@ export function ThemeEditor(props: ThemeEditorProps) {
           key={token}
           label={label}
           value={readThemeColor(draft, scheme, token)}
-          // What the slot resolves to when it is left unset — the brand
-          // palette the site actually renders (AGL-1180) — so every
-          // "Default" names its color and a single change is attributable.
-          inheritedValue={inheritedThemeColor(scheme, token)}
+          // What the slot resolves to when it is left unset — the palette
+          // THIS site renders over (AGL-1180, AGL-3068) — so every "Default"
+          // names its color and a single change is attributable.
+          inheritedValue={inheritedThemeColor(scheme, token, siteKey)}
           onChange={setColor(token)}
         />
       ),
@@ -581,7 +586,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
               'A live sample of your theme in the selected scheme — what you see here is what the Besigner and your site render.',
           })}
         >
-          <ThemePreview theme={draft} scheme={scheme} />
+          <ThemePreview theme={draft} scheme={scheme} host={siteKey} />
         </CardDisplay>
       </Grid>
       {overridesOpen ? (

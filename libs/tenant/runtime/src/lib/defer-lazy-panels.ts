@@ -37,6 +37,11 @@
  * that the client defers is payload for nothing. The legacy `lazyPanels`
  * opt-in is subsumed by the default and no longer consulted.
  *
+ * WHICH panel survives follows the author's `opensOn` (AGL-3164) by the same
+ * rule the element applies, for the same reason: the tab that opens first is
+ * the one whose panel has to be in the page source, or the page paints an
+ * empty panel and fills it after a round trip.
+ *
  * SEO note: withheld content is not in the HTML. Where a panel holds content
  * that appears nowhere else on the page and must reach crawlers, `ssrPanels`
  * is the escape hatch — it keeps the panels in the payload AND in the markup.
@@ -71,26 +76,6 @@ function parseLabels(value: unknown): string[] {
     .filter(Boolean)
 }
 
-/**
- * The label the strip opens on, which is NOT always the first one: a tab
- * carrying a screen link navigates instead of revealing a panel, so a
- * navigation row lands on the first tab WITHOUT a link (AGL-1312 — the row
- * is placed on each screen it names, and there the tab for that screen is
- * the unlinked one). Every tab linked means no panel is really open, and
- * the client falls back to the first label; this must too, or it withholds
- * the one panel the reader is looking at.
- *
- * Duplicated from the mui plugin's prop names for the same reason
- * `parseLabels` is: tenant-runtime must not depend on a plugin bundle.
- */
-function landingLabel(props: Record<string, any>): string | undefined {
-  const labels = parseLabels(props?.labels)
-  const index = labels.findIndex(
-    (_label, position) => !props?.[`tabLink${position + 1}`],
-  )
-  return labels[index < 0 ? 0 : index]
-}
-
 const labelsMatch = (a: unknown, b: unknown): boolean =>
   String(a ?? '')
     .trim()
@@ -98,6 +83,41 @@ const labelsMatch = (a: unknown, b: unknown): boolean =>
   String(b ?? '')
     .trim()
     .toLowerCase()
+
+/**
+ * The label the strip opens on, which is NOT always the first one.
+ *
+ * Two rules, and they must be the mui plugin's `openingTabIndex` exactly —
+ * this is the function that decides whose nodes SURVIVE into the page, so a
+ * disagreement does not merely paint the wrong panel first, it ships the
+ * opening panel empty:
+ *
+ * 1. the tab the author named in `opensOn` (AGL-3164), refused when that tab
+ *    carries a screen link, because a linked tab navigates instead of
+ *    revealing a panel;
+ * 2. otherwise the first tab WITHOUT a link (AGL-1312 — a navigation row is
+ *    placed on each screen it names, and there the tab for that screen is
+ *    the unlinked one).
+ *
+ * Every tab linked means no panel is really open, and the client falls back
+ * to the first label; this must too, or it withholds the one panel the
+ * reader is looking at.
+ *
+ * Duplicated from the mui plugin's prop names for the same reason
+ * `parseLabels` is: tenant-runtime must not depend on a plugin bundle.
+ */
+function openingLabel(props: Record<string, any>): string | undefined {
+  const labels = parseLabels(props?.labels)
+  const linked = (position: number): boolean =>
+    !!props?.[`tabLink${position + 1}`]
+  const named = labels.findIndex(
+    (label, position) =>
+      !linked(position) && labelsMatch(label, props?.opensOn),
+  )
+  if (named >= 0) return labels[named]
+  const landing = labels.findIndex((_label, position) => !linked(position))
+  return labels[landing < 0 ? 0 : landing]
+}
 
 /** Every descendant id of `id`, excluding `id` itself. */
 function descendantsOf(nodes: Record<string, any>, id: string): string[] {
@@ -132,18 +152,18 @@ export function deferLazyPanelNodes(
     )
     if (!labels.length || panelIds.length < 2) continue
 
-    // The landing panel is the one matching the landing LABEL, not the first
+    // The kept panel is the one matching the OPENING label, not the first
     // child: panels can be reordered in the hierarchy independently of the
     // label list, and pruning the panel that is actually open would leave the
     // reader looking at an empty tab. If no panel matches, defer NOTHING —
     // a mislabelled set is exactly when guessing is most expensive.
-    const landing = panelIds.find((panelId) =>
-      labelsMatch(nodes[panelId]?.props?.label, landingLabel(node.props)),
+    const opening = panelIds.find((panelId) =>
+      labelsMatch(nodes[panelId]?.props?.label, openingLabel(node.props)),
     )
-    if (!landing) continue
+    if (!opening) continue
 
     for (const panelId of panelIds) {
-      if (panelId === landing) continue
+      if (panelId === opening) continue
       const kids = descendantsOf(nodes, panelId)
       if (!kids.length) continue
       kids.forEach((kid) => drop.add(kid))

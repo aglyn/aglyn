@@ -24,7 +24,7 @@ import {
 import { assignOwnerForCapture } from './assign-contact-owner'
 import { associateCompanyByDomain } from './associate-company-by-domain'
 import { emitHostEvent } from './emit-host-event'
-import type { HostEventPayload } from './run-event-workflows'
+import type { HostEventPayload } from './host-event-listeners'
 
 /**
  * THE contact capture door for a server path (AGL-2605).
@@ -40,16 +40,18 @@ import type { HostEventPayload } from './run-event-workflows'
  *
  * ## Why the binding lives here and not in the data library
  *
- * The event fan-out — `runEventActions`, `runEventWorkflows` — imports the
- * data library for its Firestore handle, its org helpers and its senders.
- * The data library emitting an event would import the fan-out back, which
- * is a cycle, and the module boundaries (`scope:data` depends on data and
- * util only) refuse it in any case. So the lower layer reports a fact and
- * this layer, which already knows how to announce one, announces it. The
- * alternative — a process-global sink the runtime registers into on
- * import — would fire only in a process that happened to have loaded the
- * runtime, and a Stripe webhook that created a contact in a process that
- * had not would announce nothing with no error anywhere.
+ * What listens for the event — the automation engine among them — imports
+ * the data library for its Firestore handle, its org helpers and its
+ * senders. The data library emitting an event would import the listeners
+ * back, which is a cycle, and the module boundaries (`scope:data` depends on
+ * data and util only) refuse it in any case. So the lower layer reports a
+ * fact and this layer, which already knows how to announce one, announces
+ * it. The alternative — a sink the runtime registers into when its module
+ * happens to be imported — would fire only in a process that had loaded the
+ * runtime, and a Stripe webhook that created a contact in a process that had
+ * not would announce nothing with no error anywhere. The listeners themselves
+ * are registered by a call made at boot (`host-event-listeners.ts`), so every
+ * process has them before its first request.
  *
  * Fire-and-forget in the same sense the capture itself is: the hook's
  * failure is caught inside `upsertHostContact`, so a runner that throws

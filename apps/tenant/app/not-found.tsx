@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
+import { PLATFORM_DEFAULT_LOCALE } from '@aglyn/aglyn/app-utils/seo-locale'
 import StatusScreenPlain from '@aglyn/shared-ui-jsx/components/status-screen-plain.component'
 import type { Metadata } from 'next'
 import { NOT_FOUND_PAGE_NAME } from '../utils/not-found-title'
+import DocumentShell from '../components/document-shell.component'
 
 /**
  * Root not-found boundary (AGL-2074).
@@ -31,6 +33,15 @@ import { NOT_FOUND_PAGE_NAME } from '../utils/not-found-title'
  * there is no theme, no logo and no name to render, and inventing one is the
  * white-label defect described in `site-status-screen.component.tsx`. Being
  * unstyled by our theme is fine; being branded as somebody else is not.
+ *
+ * It renders the document shell ITSELF (AGL-3153). The shell moved down to
+ * `[host]/layout.tsx` so `<html lang>` could be the site's own language, and
+ * this boundary is the case where there is no site — so it carries its own
+ * shell in the PLATFORM DEFAULT language, by the same reasoning that keeps the
+ * screen plain. This is also the app's `/_not-found` page, the one Next
+ * prerenders to `404.html`, and a shell rendered from a path parameter keeps
+ * that prerender: a `headers()` read in the root layout took it out of the
+ * prerender manifest entirely.
  */
 
 /**
@@ -44,13 +55,15 @@ export const metadata: Metadata = { title: NOT_FOUND_PAGE_NAME }
 
 export default function RootNotFound() {
   return (
-    <StatusScreenPlain
-      code="404"
-      title={'We can’t find that page'}
-      message={
-        'The link may be out of date, or the page may have been moved or ' +
-        'removed.'
-      }
-    />
+    <DocumentShell lang={PLATFORM_DEFAULT_LOCALE}>
+      <StatusScreenPlain
+        code="404"
+        title={'We can’t find that page'}
+        message={
+          'The link may be out of date, or the page may have been moved or ' +
+          'removed.'
+        }
+      />
+    </DocumentShell>
   )
 }

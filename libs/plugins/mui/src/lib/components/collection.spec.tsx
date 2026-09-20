@@ -1068,6 +1068,58 @@ describe('Entry body block (AGL-551)', () => {
     expect(image?.getAttribute('alt')).toBe('Diagram')
   })
 
+  /**
+   * AGL-3149, and the surface that actually matters for it: a blog post's
+   * pictures are in an entry body, not in a Markdown element.
+   *
+   * The attributes only work as a set — `srcSet` with `w` descriptors makes
+   * `sizes` the image's rendered width unless the intrinsic pair pins it, and
+   * the pair's height hint squashes the picture unless `height: auto` releases
+   * it. The Markdown element's copy of this spec carries the measurements; the
+   * point here is that the two bodies agree, through one shared call.
+   */
+  describe('body images are delivered at the size they render (AGL-3149)', () => {
+    const REF = 'media:org:jWmGooWE3L/4GF1hRJBUp'
+    const CDN = '/api/media/cdn/org:jWmGooWE3L/4GF1hRJBUp'
+    const body = `![A pipeline](${REF})`
+
+    it('carries the candidates, the pair, and a sizes taken from the pair', () => {
+      const { container } = render(
+        <CollectionEntryBody
+          markdown={body}
+          intrinsicSizes={{ [REF]: { width: 1200, height: 630 } }}
+        />,
+      )
+      const image = container.querySelector('img') as HTMLImageElement
+      expect(image.getAttribute('srcset')).toBe(
+        [320, 640, 1280, 1920].map((w) => `${CDN}?w=${w} ${w}w`).join(', '),
+      )
+      expect(image.getAttribute('sizes')).toBe('(max-width: 1200px) 100vw, 1200px')
+      expect(image.getAttribute('width')).toBe('1200')
+      expect(image.getAttribute('height')).toBe('630')
+      expect(window.getComputedStyle(image).height).toBe('auto')
+    })
+
+    it('renders exactly today’s markup for an image it has no pair for', () => {
+      const { container } = render(<CollectionEntryBody markdown={body} />)
+      const image = container.querySelector('img') as HTMLImageElement
+      expect(image.getAttribute('src')).toBe(CDN)
+      expect(image.getAttribute('srcset')).toBeNull()
+      expect(image.getAttribute('sizes')).toBeNull()
+      expect(image.getAttribute('width')).toBeNull()
+    })
+
+    it('never lets the stamped map reach the DOM as an attribute', () => {
+      const { container } = render(
+        <CollectionEntryBody
+          markdown={body}
+          intrinsicSizes={{ [REF]: { width: 1200, height: 630 } }}
+        />,
+      )
+      expect(container.querySelector('[intrinsicsizes]')).toBeNull()
+    })
+  })
+
   it('routes internal markdown links through AppLink (AGL-582)', () => {
     const { container } = render(
       <CollectionEntryBody markdown="Go [about](/about) or [out](https://example.com)." />,
@@ -1282,7 +1334,7 @@ describe('Related posts sample cards on the canvas (AGL-2486)', () => {
     const style = window.getComputedStyle(
       container.querySelector('[aria-hidden="true"]') as HTMLElement,
     )
-    expect(style.aspectRatio.replace(/\s+/g, '')).toBe('445/180')
+    expect(style.aspectRatio.replace(/\s+/g, '')).toBe('1200/630')
     expect(style.height).toBe('')
   })
 
@@ -1744,13 +1796,17 @@ describe('Related posts covers and card grid (AGL-1457)', () => {
     })
 
     /**
-     * The frame's card is 445 x 180, and the cover has to keep that SHAPE at
-     * every width, not that height. A fixed height is the regression this
-     * guards: the grid's columns widen with the viewport while the number
-     * does not, so the box flattens and `objectFit: cover` eats further into
-     * art whose whole content is a composed title lockup.
+     * The cover keeps a SHAPE at every width rather than a height, and the
+     * shape is the one the console asks authors to upload — 1200 x 630 — so
+     * a cover authored as instructed is not cropped to fit the card.
+     *
+     * Two regressions live here. A fixed height flattens the box as the
+     * grid's columns widen with the viewport, and any ratio other than the
+     * art's makes `objectFit: cover` eat into art whose whole content is a
+     * composed title lockup: the frame's own 445 x 180 card is 2.47 against
+     * 1.90, which discarded 23% of every picture at every width.
      */
-    it('holds the frame’s cover proportion instead of a fixed height', () => {
+    it('holds the recommended cover proportion, not a height and not the frame’s card', () => {
       const { container } = render(
         <CollectionRelated entries={entries} showCover />,
       )
@@ -1759,7 +1815,7 @@ describe('Related posts covers and card grid (AGL-1457)', () => {
       )
       // jsdom re-serialises the ratio without spaces, so compare the value
       // rather than its formatting.
-      expect(style.aspectRatio.replace(/\s+/g, '')).toBe('445/180')
+      expect(style.aspectRatio.replace(/\s+/g, '')).toBe('1200/630')
       expect(style.height).toBe('')
       expect(style.objectFit).toBe('cover')
     })

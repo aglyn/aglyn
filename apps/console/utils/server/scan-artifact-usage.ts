@@ -25,60 +25,36 @@ import {
   nodesRenderCollection,
   type ReusableComponentProp,
 } from '@aglyn/aglyn/server'
+import {
+  isLiveUsageCandidate as isLive,
+  scanComponentUsage,
+  scanLayoutUsage,
+  screenIdsUsingComponentDeep,
+  screenIdsUsingLayoutDeep,
+  usageCandidateLabel as labelFor,
+  type UsageCandidate,
+  type UsageDependent,
+  type UsageSources,
+} from '@aglyn/tenant-data-admin/server/live-page-usage'
 
-export interface UsageDependent {
-  type: 'screen' | 'layout' | 'component' | 'collection'
-  id: string
-  name: string
-  via: Array<'id' | 'name'>
-  versionId?: string
-  /**
-   * HOW the dependent references the artifact — screens and collection
-   * listings (AGL-703, AGL-2806).
-   *
-   * A component or a layout has exactly one kind of dependent and the noun
-   * says everything: an instance, or a binding. A screen has three, and they
-   * break in three different ways — a link goes dead, a child moves, a
-   * collection loses the page it renders through. Copy that could not tell
-   * them apart would have to describe the worst case every time. A collection
-   * listing's dependents are all links, and say so.
-   */
-  relation?: 'link' | 'child' | 'template'
+/**
+ * The corpus read and the two closures over it moved to
+ * `@aglyn/tenant-data-admin/server/live-page-usage` (AGL-3113).
+ *
+ * The console stopped being the only side that needs them: a dataset record is
+ * written from the tenant too, and the pages a form submission or an
+ * automation makes stale are found by the same walk. Re-exported rather than
+ * re-pointed at every call site, because what lives here is one module's worth
+ * of scanning and splitting its importers would be the churn without the
+ * benefit.
+ */
+export {
+  scanComponentUsage,
+  scanLayoutUsage,
+  screenIdsUsingComponentDeep,
+  screenIdsUsingLayoutDeep,
 }
-
-/** A screen/layout/component reduced to what a usage scan needs. */
-export interface UsageCandidate {
-  id: string
-  displayName?: string
-  /** Legacy field some older documents used instead of `displayName`. */
-  name?: string
-  deletedAt?: unknown
-  /**
-   * Node tree to search. For screens and layouts this is the PUBLISHED
-   * version's nodes (what visitors see); for components it is the definition
-   * tree off the component document, which is what the runtime reads.
-   */
-  nodes?: Record<string, any> | null
-  /** Published version, carried through so the caller can deep-link. */
-  versionId?: string
-  /** Screens only: the layout they render inside. */
-  layoutId?: string
-  /** Screens only: the screen they nest under, which is part of their path. */
-  parentId?: string
-  /**
-   * Components only: the properties the definition declares (AGL-1247). A
-   * Link property's default renders as a link wherever an instance leaves the
-   * property unset, and it is stored here, not in `nodes` (AGL-2846).
-   */
-  props?: ReadonlyArray<ReusableComponentProp | null | undefined> | null
-}
-
-/** `displayName`, falling back to a legacy `name`, then the raw id. */
-function labelFor(candidate: UsageCandidate): string {
-  return String(candidate.displayName ?? candidate.name ?? candidate.id)
-}
-
-const isLive = (candidate: UsageCandidate) => !candidate.deletedAt
+export type { UsageCandidate, UsageDependent, UsageSources }
 
 /**
  * Whether a document links to `target` — a screen id, or a collection
@@ -96,96 +72,6 @@ function linksTo(candidate: UsageCandidate, target: string): boolean {
     .filter((prop) => prop?.type === 'href')
     .map((prop) => prop?.defaultValue)
   return nodesReferenceScreen({ linkDefaults: { props: linkDefaults } }, target)
-}
-
-/**
- * Everything that references a reusable component (AGL-703).
- *
- * Three places, because the renderer expands instances in three places:
- * published screen versions, published layout versions, and OTHER component
- * definitions — `composeReusableComponentNodes` grafts nested instances, so
- * a component used only inside another component is genuinely used. Omitting
- * that third scan would report "used nowhere" for it and invite a confident
- * deletion, which is worse than showing nothing at all.
- */
-export function scanComponentUsage(
-  componentId: string,
-  sources: {
-    screens: UsageCandidate[]
-    layouts: UsageCandidate[]
-    components: UsageCandidate[]
-  },
-): UsageDependent[] {
-  if (!componentId) return []
-  const dependents: UsageDependent[] = []
-  const collect = (
-    candidates: UsageCandidate[],
-    type: UsageDependent['type'],
-  ) => {
-    for (const candidate of candidates) {
-      if (!isLive(candidate)) continue
-      // A component never counts as using itself, however it nests.
-      if (type === 'component' && candidate.id === componentId) continue
-      if (!nodesReferenceComponent(candidate.nodes, componentId)) continue
-      dependents.push({
-        type,
-        id: candidate.id,
-        name: labelFor(candidate),
-        // Instances reference by id, so a rename can never break them.
-        via: ['id'],
-        ...(candidate.versionId ? { versionId: candidate.versionId } : {}),
-      })
-    }
-  }
-  collect(sources.screens, 'screen')
-  collect(sources.layouts, 'layout')
-  collect(sources.components, 'component')
-  return dependents
-}
-
-/**
- * Everything rendering inside a layout (AGL-703).
- *
- * Two kinds of dependent, both expressed by the same `layoutId` pointer:
- *
- * - **screens**, which name the layout they render inside;
- * - **other layouts**, since a layout can itself sit inside one. A nested
- *   layout is a real dependent — deleting its parent unwraps every screen
- *   underneath it — so leaving layouts out would report a parent layout as
- *   used only by the screens that name it directly, and none of the ones
- *   that reach it through a child.
- *
- * A layout never counts as its own dependent; `canNestLayout` refuses that,
- * and this refuses to report it even if stored data holds one.
- */
-export function scanLayoutUsage(
-  layoutId: string,
-  screens: UsageCandidate[],
-  layouts: UsageCandidate[] = [],
-): UsageDependent[] {
-  if (!layoutId) return []
-  const dependentsOf = (
-    candidates: UsageCandidate[],
-    type: 'screen' | 'layout',
-  ) =>
-    candidates
-      .filter(
-        (candidate) =>
-          isLive(candidate) &&
-          candidate.layoutId === layoutId &&
-          candidate.id !== layoutId,
-      )
-      .map((candidate) => ({
-        type,
-        id: candidate.id,
-        name: labelFor(candidate),
-        via: ['id' as const],
-        ...(candidate.versionId ? { versionId: candidate.versionId } : {}),
-      }))
-  return [
-    ...dependentsOf(screens, 'screen'),
-    ...dependentsOf(layouts, 'layout'),
-  ]
 }
 
 /** A collection reduced to the screen pointers a usage scan cares about. */
@@ -380,125 +266,6 @@ export function scanCollectionUsage(
   collect(sources.layouts, 'layout')
   collect(sources.components, 'component')
   return dependents
-}
-
-/**
- * Every live screen rendered inside `layoutId`, at ANY nesting depth
- * (AGL-1150).
- *
- * `scanLayoutUsage` answers one level. Layouts nest — a screen points at a
- * layout, which can point at a parent layout, and `compose-screen-nodes` walks
- * that whole chain when composing a page. So publishing a layout changes every
- * screen below it, not just the ones bound to it directly, and a cache drop
- * that only handles the direct level leaves the rest showing stale chrome for
- * the full revalidate window.
- *
- * Pure, and separate from the Firestore read, so the nesting behaviour is
- * testable without a database.
- *
- * Cycle-safe. `canNestLayout` refuses to create a cycle, but a document written
- * straight to Firestore is not bound by that, and a cycle here would hang a
- * publish request rather than surface anything.
- */
-export function screenIdsUsingLayoutDeep(
-  layoutId: string,
-  screens: UsageCandidate[],
-  layouts: UsageCandidate[] = [],
-): string[] {
-  if (!layoutId) return []
-  const screenIds = new Set<string>()
-  const seenLayouts = new Set<string>([layoutId])
-  let frontier = [layoutId]
-
-  while (frontier.length) {
-    const next: string[] = []
-    for (const id of frontier) {
-      for (const dependent of scanLayoutUsage(id, screens, layouts)) {
-        if (dependent.type === 'screen') {
-          screenIds.add(dependent.id)
-        } else if (!seenLayouts.has(dependent.id)) {
-          seenLayouts.add(dependent.id)
-          next.push(dependent.id)
-        }
-      }
-    }
-    frontier = next
-  }
-
-  return [...screenIds]
-}
-
-/**
- * Every live screen whose rendered output contains `componentId`, however
- * indirectly (AGL-1161).
- *
- * `scanComponentUsage` answers one level and returns three kinds of dependent.
- * Only one of them is a screen, and the other two both reach screens by routes
- * a single-level scan cannot see:
- *
- * - a **component** dependent nests the target inside itself, and that outer
- *   component may itself only be used inside a third — so component→component
- *   edges have to be followed to a fixed point;
- * - a **layout** dependent puts the component in page chrome, which every
- *   screen under that layout renders. Layouts nest, so that is
- *   `screenIdsUsingLayoutDeep`, not a direct `layoutId` match.
- *
- * Miss either and a publish reports success while some pages keep serving the
- * old component for the full revalidate window — the failure this whole arc
- * exists to remove, and the one that is hardest to notice because the pages
- * that ARE dropped update instantly.
- *
- * Pure, and separate from the Firestore read, so the closure is testable
- * without a database — the same split `screenIdsUsingLayoutDeep` uses.
- *
- * Cycle-safe. `composeReusableComponentNodes` would not survive a cycle, but a
- * document written straight to Firestore is not bound by what the editor
- * allows, and a cycle here would hang a publish rather than surface anything.
- */
-export function screenIdsUsingComponentDeep(
-  componentId: string,
-  sources: {
-    screens: UsageCandidate[]
-    layouts: UsageCandidate[]
-    components: UsageCandidate[]
-  },
-): string[] {
-  if (!componentId) return []
-  const screenIds = new Set<string>()
-  const seenComponents = new Set<string>([componentId])
-  // Layouts are resolved through their own deep walk, so remember which ones
-  // have already been expanded: two components in the same layout would
-  // otherwise re-walk the whole layout tree once each.
-  const seenLayouts = new Set<string>()
-  let frontier = [componentId]
-
-  while (frontier.length) {
-    const next: string[] = []
-    for (const id of frontier) {
-      for (const dependent of scanComponentUsage(id, sources)) {
-        if (dependent.type === 'screen') {
-          screenIds.add(dependent.id)
-        } else if (dependent.type === 'layout') {
-          if (seenLayouts.has(dependent.id)) continue
-          seenLayouts.add(dependent.id)
-          // The layout itself renders no URL; the screens beneath it do.
-          for (const screenId of screenIdsUsingLayoutDeep(
-            dependent.id,
-            sources.screens,
-            sources.layouts,
-          )) {
-            screenIds.add(screenId)
-          }
-        } else if (!seenComponents.has(dependent.id)) {
-          seenComponents.add(dependent.id)
-          next.push(dependent.id)
-        }
-      }
-    }
-    frontier = next
-  }
-
-  return [...screenIds]
 }
 
 /**

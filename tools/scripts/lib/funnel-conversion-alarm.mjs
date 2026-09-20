@@ -75,6 +75,19 @@
  * settled window ending {@link PROCESSING_LAG_DAYS} days back. A beacon red
  * is a different incident from a door red, and the message says which.
  *
+ * ## The two sides do not count the same population, and cannot be made to
+ *
+ * Auth counts everybody. GA4's reports do not: our own sessions are stamped
+ * `traffic_type: internal` on purpose (AGL-1582) and a data filter keeps them
+ * out, and a visitor who declines analytics consent is never counted at all.
+ * Both are correct, both are one-way — a filter is not retroactive — and both
+ * subtract from the GA4 side only. {@link MIN_BEACON_TRUTH} is the whole
+ * defense: it is what says a couple of truths with no event is that gap
+ * rather than a dead beacon, and it is why this grade is a floor and not a
+ * ratio. Anything that inflates the truth side therefore does not make the
+ * alarm keener, it makes it wrong — which is what {@link countReturningLogins}
+ * is about.
+ *
  * ## Saying it once
  *
  * An hourly alarm that re-posts every hour is a channel nobody reads by
@@ -289,6 +302,55 @@ export function countWithin(records, field, { startMs, endMs }) {
   for (const record of records ?? []) {
     const at = Number(record?.[field])
     if (Number.isFinite(at) && at >= startMs && at <= endMs) n += 1
+  }
+  return n
+}
+
+/**
+ * How many of those records are a person signing back IN, rather than an
+ * account being born inside the window.
+ *
+ * `lastLoginAt` is not "a sign-in happened". Firebase Auth sets it when the
+ * credential authenticates, and creating an account authenticates it — so a
+ * brand-new account carries a `lastLoginAt` equal to its own `createdAt`, and
+ * a plain {@link countWithin} over the field reads every sign-UP as a
+ * sign-in.
+ *
+ * The console does not emit `login` for those, deliberately and by name. A
+ * Google account that turns out to be new is stood down and bounced to
+ * /signup before the event fires, because it "was never a login and used to
+ * be logged as one anyway" (AGL-1561) — it is counted once, as the `sign_up`
+ * it became. So the field and the event disagree by construction, and the
+ * beacon reading the field graded the product against a taxonomy the product
+ * is right to keep.
+ *
+ * Measured: over 2026-09-11 → 2026-09-17 the field answered three "people
+ * signed in", of which two were accounts created inside the window —
+ * `lastLoginAt` equal to `createdAt` to the millisecond on one, and 9.7
+ * seconds later on the other, which is the AGL-1497 consent bounce
+ * re-authenticating the account it just stood down. GA4 held three `sign_up`
+ * for the same days: both creations reported, correctly, as sign-ups. One
+ * genuine returning sign-in remained, under {@link MIN_BEACON_TRUTH}, and the
+ * beacon had been red on every scheduled run for over a day.
+ *
+ * An account created inside the window is therefore graded by the sign-up
+ * beacon and not by this one, which leaves every account on exactly one of
+ * the two. A creation whose owner signs in again later in the same window is
+ * given up rather than chased — like the `lastLoginAt` under-count above it,
+ * that can only make this grade QUIETER, which is the only direction a
+ * monitor may be wrong in.
+ */
+export function countReturningLogins(records, { startMs, endMs }) {
+  let n = 0
+  for (const record of records ?? []) {
+    const at = Number(record?.lastLoginAt)
+    if (!Number.isFinite(at) || at < startMs || at > endMs) continue
+    // Unreadable creation, uncounted: a sign-in can only be shown to be a
+    // RETURN by the account predating the window, and an unprovable red is
+    // the failure this whole function exists to stop.
+    const created = Number(record?.createdAt)
+    if (!Number.isFinite(created) || created >= startMs) continue
+    n += 1
   }
   return n
 }

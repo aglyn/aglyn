@@ -41,6 +41,7 @@ import {
   PROCESSING_LAG_DAYS,
   announceDecision,
   beaconWindow,
+  countReturningLogins,
   countWithin,
   doorWindow,
   doorWindowLabel,
@@ -364,6 +365,93 @@ test("countWithin reads the Identity Toolkit's millisecond strings and honours b
     0,
   )
   assert.equal(countWithin(undefined, 'createdAt', { startMs: 0, endMs: 1 }), 0)
+})
+
+/**
+ * The AGL-3154 cohort, from the Identity Toolkit, for the exact settled week
+ * six consecutive scheduled runs graded red: 2026-09-11 → 2026-09-17 Chicago.
+ * Two of the three are accounts born inside it — one whose `lastLoginAt` is
+ * its `createdAt` to the millisecond, one 9.7 seconds after, which is the
+ * AGL-1497 consent bounce signing back into the account it just stood down.
+ * GA4 held three `sign_up` for those days and no `login`.
+ */
+const SEPTEMBER_WEEK = {
+  startMs: Date.parse('2026-09-11T05:00:00Z'),
+  endMs: Date.parse('2026-09-18T05:00:00Z'),
+}
+const SEPTEMBER_ACCOUNTS = [
+  {
+    createdAt: String(Date.parse('2026-07-16T18:29:48.753Z')),
+    lastLoginAt: String(Date.parse('2026-09-17T08:39:57.355Z')),
+  },
+  {
+    createdAt: String(Date.parse('2026-09-17T00:39:26.887Z')),
+    lastLoginAt: String(Date.parse('2026-09-17T00:39:26.887Z')),
+  },
+  {
+    createdAt: String(Date.parse('2026-09-14T16:30:39.116Z')),
+    lastLoginAt: String(Date.parse('2026-09-14T16:30:48.860Z')),
+  },
+]
+
+test('THE FALSE RED: two of those three "people signed in" were accounts being created', () => {
+  assert.equal(
+    countWithin(SEPTEMBER_ACCOUNTS, 'lastLoginAt', SEPTEMBER_WEEK),
+    3,
+    'the field the alarm used to read answers three',
+  )
+  assert.equal(
+    countReturningLogins(SEPTEMBER_ACCOUNTS, SEPTEMBER_WEEK),
+    1,
+    'one person actually came back',
+  )
+  // And one is under the floor, so the week grades green on its own numbers.
+  const graded = gradeBeacon({
+    ...signinDoor,
+    truth: countReturningLogins(SEPTEMBER_ACCOUNTS, SEPTEMBER_WEEK),
+    events: 0,
+  })
+  assert.equal(graded.verdict, 'green')
+  assert.match(graded.reason, /under the/)
+})
+
+test('a sign-up beacon still sees every one of those creations', () => {
+  assert.equal(countWithin(SEPTEMBER_ACCOUNTS, 'createdAt', SEPTEMBER_WEEK), 2)
+})
+
+test('countReturningLogins still reds a real sign-in drought, and never guesses', () => {
+  const window = { startMs: 2000, endMs: 3000 }
+  const returning = [
+    { createdAt: '1000', lastLoginAt: '2500' },
+    { createdAt: '1500', lastLoginAt: '3000' },
+    { createdAt: '999', lastLoginAt: '2000' },
+  ]
+  assert.equal(
+    countReturningLogins(returning, window),
+    3,
+    'both bounds respected for accounts that predate the window',
+  )
+  assert.equal(
+    gradeBeacon({ ...signinDoor, truth: 3, events: 0 }).verdict,
+    'red',
+    'the check can still go red, or it is decoration',
+  )
+  assert.equal(
+    countReturningLogins([{ createdAt: '2500', lastLoginAt: '2500' }], window),
+    0,
+    'born inside the window: a sign-up, graded by the other beacon',
+  )
+  assert.equal(
+    countReturningLogins([{ lastLoginAt: '2500' }], window),
+    0,
+    'no readable creation, no provable return',
+  )
+  assert.equal(
+    countReturningLogins([{ createdAt: '1000', lastLoginAt: '9000' }], window),
+    0,
+    'signed in after the window',
+  )
+  assert.equal(countReturningLogins(undefined, window), 0)
 })
 
 /* ========================================================================= *

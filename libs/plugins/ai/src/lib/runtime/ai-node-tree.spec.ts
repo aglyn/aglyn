@@ -1145,6 +1145,64 @@ describe('validateAiNodeTree site references (AGL-2935)', () => {
     ])
   })
 
+  it('lets a draft bound a repeat on any element, and offers the scope only where children exist (AGL-3156)', () => {
+    // Repeat is a node capability, not a Stack's feature (AGL-3111). The
+    // palette declares it once and every element carries it, so these props
+    // survive on a Stack and on a leaf alike — before this they were props of
+    // no component, and the sanitizer dropped every one of them.
+    const placed = tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'section',
+          props: { element: 'section' },
+          children: [
+            {
+              componentId: 'muiStack',
+              props: {
+                repeatLimit: '6',
+                repeatSort: 'price desc',
+                repeatFilter: 'tier == plus',
+                repeatSelf: 'true',
+              },
+              children: [
+                {
+                  componentId: 'muiTypography',
+                  props: {
+                    children: '{{item.name}}',
+                    repeatLimit: '3',
+                    // A leaf can only repeat itself, so the scope is not
+                    // offered on one and a draft that writes it is repaired.
+                    repeatSelf: 'true',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+    const result = validateAiNodeTree(placed, 'screen')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const stack = Object.values(result.nodes).find(
+      (node) => node.componentId === 'muiStack',
+    )
+    expect(stack?.props).toEqual({
+      repeatLimit: '6',
+      repeatSort: 'price desc',
+      repeatFilter: 'tier == plus',
+      repeatSelf: 'true',
+    })
+    const leaf = Object.values(result.nodes).find(
+      (node) => node.componentId === 'muiTypography',
+    )
+    expect(leaf?.props).toEqual({ children: '{{item.name}}', repeatLimit: '3' })
+    expect(result.repairs).toEqual([
+      expect.stringContaining('repeatSelf is not a prop of'),
+    ])
+  })
+
   it('keeps a form bound to a form and a dataset the site has, and drops a binding it does not', () => {
     const kept = validateAiNodeTree(
       formPlaced({ formId: 'frm-contact', datasetId: 'ds-leads' }),

@@ -145,6 +145,7 @@ import {
   claimHostForOrg,
   findSubdomainConflict,
 } from './server/provision-host'
+import { announceDatasetChange } from './server/announce-dataset-change'
 import { postTenantRevalidate } from './server/tenant-revalidate'
 import { mediaStorageGate, scopeBillsStorageOverage } from './storage-overage'
 
@@ -644,6 +645,15 @@ async function createRecord(
     })
     const created = await recordsRef.doc(recordId).get()
     const view = recordView(created)
+    // AGL-2462 recorded that a `/v1` write cannot publish, and the ONLY thing
+    // that made it visible was the hour. It announces now (AGL-3113): the
+    // pages repeating over this dataset are dropped, on every site it is
+    // shared with. Best effort — the record is already stored.
+    await announceDatasetChange({
+      firestore: ctx.firestore,
+      orgId: ctx.orgId,
+      datasetId: datasetSnap.id,
+    })
     // Recorded as 200, never the 201 this answers: `conventions.md` publishes
     // the status as how a client tells a fresh create from a replay, and that
     // is the contract integrations branch on.
@@ -713,6 +723,12 @@ async function updateRecord(
     updatedAt: Timestamp.now(),
   })
   const updated = await recordRef.get()
+  // An edited row is as stale on a live page as a new one (AGL-3113).
+  await announceDatasetChange({
+    firestore: ctx.firestore,
+    orgId: ctx.orgId,
+    datasetId: datasetSnap.id,
+  })
   return apiJson(recordView(updated), { headers: ctx.headers })
 }
 
@@ -777,6 +793,13 @@ async function deleteRecord(
       return ApiErrors.notFound({ message: 'No such record', headers: ctx.headers })
     }
     await recordRef.delete()
+    // A row that is gone is the same staleness as a row that changed: the
+    // page goes on rendering it until its cache is dropped (AGL-3113).
+    await announceDatasetChange({
+      firestore: ctx.firestore,
+      orgId: ctx.orgId,
+      datasetId,
+    })
     const view = { id: recordRef.id, object: 'record', deleted: true }
     await claim.record(200, view)
     return apiJson(view, { headers: ctx.headers })

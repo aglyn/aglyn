@@ -56,6 +56,7 @@ import {
   PROPERTY_TIME_ZONE_FALLBACK,
   announceDecision,
   beaconWindow,
+  countReturningLogins,
   countWithin,
   doorWindow,
   doorWindowLabel,
@@ -289,6 +290,12 @@ async function truthPage(token, projectId, sortBy) {
  * `lastLoginAt` is a person's LATEST sign-in, so for a settled window it
  * under-counts anyone who signed in again after it — which only ever makes
  * the beacon grade quieter.
+ *
+ * The keys are the Auth FIELD each number is read from, which is what
+ * `door.truthField` selects. `lastLoginAt` is counted through
+ * {@link countReturningLogins} rather than {@link countWithin}: the field
+ * also moves when an account is created, and a creation is a `sign_up` to
+ * every door here, never a `login`.
  */
 async function measureTruth(token, projectId, windows) {
   const [byCreated, byLogin] = await Promise.all([
@@ -299,7 +306,7 @@ async function measureTruth(token, projectId, windows) {
   for (const [name, window] of Object.entries(windows)) {
     counts[name] = {
       createdAt: countWithin(byCreated, 'createdAt', window),
-      lastLoginAt: countWithin(byLogin, 'lastLoginAt', window),
+      lastLoginAt: countReturningLogins(byLogin, window),
     }
   }
   return counts

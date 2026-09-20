@@ -21,6 +21,8 @@ import TabsElement, {
   atLeastLabels,
   labelSlug,
   labelsMatch,
+  openingTabIndex,
+  opensOnFieldProps,
   parseLabels,
   TabPanelElement,
   tabPanelSchema,
@@ -931,5 +933,298 @@ describe('a tab linked to a collection listing (AGL-2799)', () => {
     const blogTab = document.getElementById('tab-blog') as HTMLButtonElement
     expect(blogTab.disabled).toBe(true)
     expect(blogTab.hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR)).toBe(true)
+  })
+})
+
+/**
+ * Which tab opens (AGL-3164).
+ *
+ * Before this, a Tabs element always opened on tab one, so "open the annual
+ * prices first" could only be said by REORDERING the tabs — changing the
+ * design to obtain a behavior. These pin the attribute that says it instead:
+ * unset behaves exactly as before, a label that has gone falls back rather
+ * than rendering nothing, and the panel that reaches the page source is the
+ * one that opens (the half most likely to be wrong, because a mismatch there
+ * is a visible swap on a published page rather than a failing assertion).
+ */
+describe('which tab opens (AGL-3164)', () => {
+  const three = (
+    props: Partial<React.ComponentProps<typeof TabsElement>> = {},
+  ) => (
+    <TabsElement labels={'Monthly\nAnnual\nEnterprise'} {...props}>
+      <TabPanelElement label="Monthly">{'Monthly body'}</TabPanelElement>
+      <TabPanelElement label="Annual">{'Annual body'}</TabPanelElement>
+      <TabPanelElement label="Enterprise">{'Enterprise body'}</TabPanelElement>
+    </TabsElement>
+  )
+
+  const selected = (): string | null =>
+    document.querySelector('[role=tab][aria-selected=true]')?.textContent ??
+    null
+
+  describe('openingTabIndex', () => {
+    const labels = ['Monthly', 'Annual', 'Enterprise']
+
+    it('opens the first tab when nothing is named', () => {
+      expect(openingTabIndex(labels)).toBe(0)
+      expect(openingTabIndex(labels, undefined)).toBe(0)
+      expect(openingTabIndex(labels, null)).toBe(0)
+      expect(openingTabIndex(labels, '')).toBe(0)
+    })
+
+    it('opens the tab whose label was named', () => {
+      expect(openingTabIndex(labels, 'Annual')).toBe(1)
+      expect(openingTabIndex(labels, 'Enterprise')).toBe(2)
+    })
+
+    it('matches the way panels are matched, not by retyping exactly', () => {
+      expect(openingTabIndex(labels, '  annual ')).toBe(1)
+      expect(openingTabIndex(labels, 'ANNUAL')).toBe(1)
+    })
+
+    it('falls back to the first tab when that label is gone', () => {
+      // Renamed, deleted, or typed against an older version of the list.
+      expect(openingTabIndex(labels, 'Yearly')).toBe(0)
+      expect(openingTabIndex(['Monthly'], 'Annual')).toBe(0)
+    })
+
+    it('refuses a tab that navigates, which has no panel to open', () => {
+      // `Annual` carries a screen link, so it leaves the page rather than
+      // revealing anything; the strip lands on the unlinked tab instead.
+      expect(openingTabIndex(labels, 'Annual', [undefined, 'screen-x'])).toBe(0)
+      expect(openingTabIndex(labels, 'Monthly', ['screen-x', undefined])).toBe(
+        1,
+      )
+    })
+
+    it('still answers in range when every tab navigates', () => {
+      // `landing` is -1 there and the strip shows no indicator, but callers
+      // read a label with this index.
+      expect(openingTabIndex(labels, 'Annual', ['a', 'b', 'c'])).toBe(0)
+      expect(openingTabIndex([], 'Annual')).toBe(0)
+    })
+  })
+
+  describe('on the live site', () => {
+    it('opens the first tab when the attribute is unset', () => {
+      // The behavior every Tabs already in the wild has; this must not
+      // become a field they are all suddenly missing.
+      render(three())
+      expect(selected()).toBe('Monthly')
+      expect(screen.getByText('Monthly body')).toBeTruthy()
+      expect(screen.queryByText('Annual body')).toBeNull()
+    })
+
+    it('opens the tab the author named', () => {
+      render(three({ opensOn: 'Annual' }))
+      expect(selected()).toBe('Annual')
+      expect(
+        (document.getElementById('tabpanel-annual') as HTMLElement).hidden,
+      ).toBe(false)
+      expect(
+        (document.getElementById('tabpanel-monthly') as HTMLElement).hidden,
+      ).toBe(true)
+    })
+
+    /**
+     * THE SSR CASE. Panels are built the first time their tab is opened
+     * (AGL-1283), so whatever this render puts in the document IS the page
+     * source. If the opening tab were not the rendered one, a published page
+     * would paint the wrong panel and swap — a visible flash.
+     */
+    it('renders the opening panel, and only it, into the page source', () => {
+      render(three({ opensOn: 'Annual' }))
+      expect(screen.getByText('Annual body')).toBeTruthy()
+      expect(screen.queryByText('Monthly body')).toBeNull()
+      expect(screen.queryByText('Enterprise body')).toBeNull()
+    })
+
+    it('keeps the opening panel mounted after the reader moves away', () => {
+      // The same round trip the landing panel has always had: the panel that
+      // was open from the start is in `opened` without anyone clicking it.
+      render(three({ opensOn: 'Annual' }))
+      fireEvent.click(screen.getByRole('tab', { name: 'Enterprise' }))
+      expect(screen.getByText('Annual body')).toBeTruthy()
+      expect(screen.getByText('Enterprise body')).toBeTruthy()
+    })
+
+    it('still lets the reader pick any other tab', () => {
+      render(three({ opensOn: 'Annual' }))
+      fireEvent.click(screen.getByRole('tab', { name: 'Monthly' }))
+      expect(selected()).toBe('Monthly')
+      expect(screen.getByText('Monthly body')).toBeTruthy()
+    })
+
+    it('opens the first tab when the named label no longer exists', () => {
+      // Renaming a tab must not leave the strip pointing at nothing.
+      render(three({ opensOn: 'Yearly' }))
+      expect(selected()).toBe('Monthly')
+      expect(screen.getByText('Monthly body')).toBeTruthy()
+    })
+
+    it('ships every panel with ssrPanels, and still opens the named one', () => {
+      render(three({ opensOn: 'Annual', ssrPanels: true }))
+      expect(screen.getByText('Monthly body')).toBeTruthy()
+      expect(screen.getByText('Enterprise body')).toBeTruthy()
+      expect(
+        (document.getElementById('tabpanel-annual') as HTMLElement).hidden,
+      ).toBe(false)
+      expect(
+        (document.getElementById('tabpanel-monthly') as HTMLElement).hidden,
+      ).toBe(true)
+    })
+
+    it('never leaks the attribute onto the dom', () => {
+      const { container } = render(three({ opensOn: 'Annual' }))
+      expect(container.querySelector('[opensOn]')).toBeNull()
+      expect(container.querySelector('[openson]')).toBeNull()
+    })
+
+    it('gives way to the navigation row that lands on its own page', () => {
+      // A linked tab navigates (AGL-1312) and reveals no panel, so naming it
+      // cannot open it; the unlinked tab — the page this row is on — wins.
+      render(
+        <Aglyn.ScreenLinkContext.Provider
+          value={{ screens: { 'screen-newsroom': 'newsroom' } }}
+        >
+          <TabsElement
+            labels={'Blog\nNewsroom'}
+            tabLink2="screen-newsroom"
+            opensOn="Newsroom"
+          >
+            <TabPanelElement label="Blog">{'Blog body'}</TabPanelElement>
+          </TabsElement>
+        </Aglyn.ScreenLinkContext.Provider>,
+      )
+      expect(
+        document.getElementById('tab-blog')?.getAttribute('aria-current'),
+      ).toBe('page')
+      expect(screen.getByText('Blog body')).toBeTruthy()
+    })
+  })
+
+  describe('on the besigner canvas', () => {
+    it('shows the named tab selected, so the attribute is visibly doing something', () => {
+      // Nothing can move the selection here (`onChange` is inert), so the
+      // strip reads the attribute itself rather than state seeded at mount.
+      renderEditor(three({ opensOn: 'Enterprise' }))
+      expect(selected()).toBe('Enterprise')
+    })
+
+    it('still stacks every panel for editing', () => {
+      renderEditor(three({ opensOn: 'Annual' }))
+      expect(screen.getByText('Monthly body')).toBeTruthy()
+      expect(screen.getByText('Enterprise body')).toBeTruthy()
+    })
+
+    it('is unchanged by an unset attribute', () => {
+      renderEditor(three())
+      expect(selected()).toBe('Monthly')
+    })
+  })
+
+  describe('the authoring surface', () => {
+    const field = (tabsSchema.attributes ?? []).find(
+      (a: any) => a.name === 'opensOn',
+    ) as any
+
+    it('is a picker, phrased for a person, and never required', () => {
+      expect(field).toBeDefined()
+      expect(field.component).toBe(Aglyn.FieldComponentType.SELECT)
+      expect(field.label).toBe('Opens on')
+      expect(field.validate ?? []).toEqual([])
+      expect(field.isRequired).toBeUndefined()
+    })
+
+    it('offers the element’s own tabs as its answers', () => {
+      // Not a hand-typed index, which goes on meaning "the second tab" after
+      // a reorder with nothing on screen to say the wrong panel now opens.
+      const resolved = field.resolveProps(
+        {},
+        { input: { value: undefined } },
+        { getFieldState: () => ({ value: 'Monthly\nAnnual, Enterprise' }) },
+      )
+      expect(resolved.options).toEqual([
+        { value: 'Monthly', label: 'Monthly' },
+        { value: 'Annual', label: 'Annual' },
+        { value: 'Enterprise', label: 'Enterprise' },
+      ])
+    })
+
+    it('reads the labels from the form when the field has not registered', () => {
+      const resolved = field.resolveProps(
+        {},
+        { input: {} },
+        {
+          getState: () => ({ values: { labels: 'One\nTwo' } }),
+        },
+      )
+      expect(resolved.options.map((o: any) => o.value)).toEqual(['One', 'Two'])
+    })
+
+    it('names a stored label the list no longer holds', () => {
+      // Rendering it BLANK would read as "not set", and the author would
+      // never learn their choice had stopped being honoured (cf. AGL-1893).
+      const resolved = field.resolveProps(
+        {},
+        { input: { value: 'Yearly' } },
+        { getFieldState: () => ({ value: 'Monthly\nAnnual' }) },
+      )
+      expect(resolved.options).toContainEqual({
+        value: 'Yearly',
+        label: 'Yearly (no longer a tab)',
+      })
+    })
+
+    it('does not strand a label it already offers', () => {
+      const resolved = field.resolveProps(
+        {},
+        { input: { value: ' annual ' } },
+        { getFieldState: () => ({ value: 'Monthly\nAnnual' }) },
+      )
+      expect(resolved.options).toHaveLength(2)
+    })
+
+    it('offers nothing rather than throwing with no form around it', () => {
+      expect(opensOnFieldProps({}, {}).options).toEqual([])
+    })
+
+    it('appears once there are two tabs to choose between', () => {
+      const pattern = (field.condition as any).pattern
+      const shows = (labels: string) => new RegExp(pattern).test(labels)
+      expect(shows('')).toBe(false)
+      expect(shows('Monthly')).toBe(false)
+      expect(shows('Monthly\nAnnual')).toBe(true)
+      expect(shows('Monthly, Annual')).toBe(true)
+    })
+
+    it('offers the way back to "the first tab"', () => {
+      // An `''` option could not persist (AGL-1191), so unset is reached by
+      // clearing the field rather than by choosing an answer.
+      expect(field.clearable).toBe(true)
+      for (const option of field.options ?? []) {
+        expect(option.value).not.toBe('')
+      }
+    })
+
+    it('leaves tabLink1 sitting with the label list it indexes into', () => {
+      const names = (tabsSchema.attributes ?? []).map((a: any) => a.name)
+      expect(names.indexOf('tabLink1')).toBe(names.indexOf('labels') + 1)
+      expect(names.indexOf('opensOn')).toBeGreaterThan(
+        names.indexOf(`tabLink${TAB_LINK_SLOTS}`),
+      )
+    })
+
+    it('is declared in the shape the AI palette can carry', () => {
+      // `generate-ai-palette.mts` drops a picker that lists no answers and
+      // computes none either, so a model could not set this at all. The two
+      // facts it keys on: a select, with its answers resolved when the field
+      // is drawn. A STATIC option list would be the other way to satisfy it
+      // and is the wrong one — it would freeze whichever labels happened to
+      // exist the day the schema was written.
+      expect(field.component).toBe(Aglyn.FieldComponentType.SELECT)
+      expect(typeof field.resolveProps).toBe('function')
+      expect(Array.isArray(field.options)).toBe(false)
+    })
   })
 })

@@ -65,15 +65,15 @@
  * list materializer states: a bound on WORK is not a bound on PEOPLE.
  */
 
-import {
-  type HostAction,
-  type HostActionStep,
-  personKey,
-} from '@aglyn/aglyn/server'
+import { personKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { PluginJobHostGate } from '@aglyn/aglyn/server'
+import type { WorkflowStep } from './workflow-steps'
 
-/** `hosts/{hostId}/flowEnrollments/{actionId__personKey}`. */
+/**
+ * `hosts/{hostId}/flowEnrollments/{actionId__personKey}` for an action, and
+ * `{workflow-<workflowId>__personKey}` for a workflow.
+ */
 export const FLOW_ENROLLMENTS_SUBCOLLECTION = 'flowEnrollments'
 
 /**
@@ -123,6 +123,13 @@ export type FlowEnrollmentEnding =
 
 export interface FlowEnrollment {
   hostId: string
+  /**
+   * What is waiting: `workflow` for a workflow's run, absent for an action's
+   * — which is every enrollment written before a workflow could wait, so an
+   * absent field is read as an action for as long as those rows exist.
+   */
+  automation?: 'workflow'
+  /** The automation's document id: the action's, or the workflow's. */
   actionId: string
   actionName: string
   status: FlowEnrollmentStatus
@@ -146,9 +153,11 @@ export interface FlowEnrollment {
    * does not fix it for the people mid-wait; the alternative trade is sending
    * them a step from a different flow, which is worse and silent.
    *
-   * Bounded by `ACTION_MAX_STEPS`, so the snapshot is ten small objects.
+   * Bounded by `ACTION_MAX_STEPS` for an action, so the snapshot is ten
+   * small objects, and by `WORKFLOW_MAX_STEPS` for a workflow, whose snapshot
+   * holds its function calls beside its Actions steps.
    */
-  steps: HostActionStep[]
+  steps: WorkflowStep[]
   /** The event a `waitForEvent` is watching for; absent for a plain wait. */
   awaitingEvent?: string | null
   /** `sha256` of the person's address — the wake lookup key. */
@@ -179,8 +188,16 @@ export interface FlowEnrollment {
  * enrollments would key on something narrower than the person (the cart, the
  * order), which is a change to this function and to nothing else.
  */
-export function flowEnrollmentId(actionId: string, key: string): string {
-  return `${actionId}__${key}`
+export function flowEnrollmentId(
+  actionId: string,
+  key: string,
+  automation?: 'workflow',
+): string {
+  // A workflow's id is kept apart from an action's, so the two kinds can
+  // never share a row whatever ids their collections hand out.
+  return automation === 'workflow'
+    ? `workflow-${actionId}__${key}`
+    : `${actionId}__${key}`
 }
 
 function enrollmentsRef(
@@ -195,8 +212,11 @@ function enrollmentsRef(
 
 export interface EnrollInFlowOptions {
   hostId: string
+  /** `workflow` for a workflow's run; absent for an action's. */
+  automation?: 'workflow'
+  /** The automation's document id. */
   actionId: string
-  action: Pick<HostAction, 'name' | 'steps'>
+  action: { name?: string; steps?: readonly WorkflowStep[] }
   /** The address the flow is about. A flow with no person cannot wait. */
   email: string
   event: string
@@ -231,7 +251,7 @@ export async function enrollInFlow(
   if (!key) return { enrolled: false, reason: 'no-person' }
   const nowMs = options.nowMs ?? Date.now()
   const ref = enrollmentsRef(options.hostId, options.firestore).doc(
-    flowEnrollmentId(options.actionId, key),
+    flowEnrollmentId(options.actionId, key, options.automation),
   )
   const firestore = options.firestore ?? firebaseAdmin.app().firestore()
   return await firestore.runTransaction(
@@ -257,6 +277,9 @@ export async function enrollInFlow(
       }
       const enrollment: FlowEnrollment = {
         hostId: options.hostId,
+        ...(options.automation === 'workflow'
+          ? { automation: 'workflow' as const }
+          : {}),
         actionId: options.actionId,
         actionName: String(options.action.name ?? ''),
         status: 'waiting',

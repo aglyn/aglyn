@@ -38,6 +38,12 @@ import {
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
   STYLE_OVERRIDES_ROOT_KEY,
 } from './reusable-component-keys'
+import {
+  REPEAT_DIRECTIVE_PROPS,
+  REPEAT_SELF_PROP,
+  repeatKey,
+  withoutRepeatDirective,
+} from './expand-repeatables'
 import { mergeNodeSx } from './merge-node-sx'
 import {
   hasUrlScheme,
@@ -1321,6 +1327,30 @@ export function composeReusableComponentNodes<
           if (value !== undefined) carried[key] = value
         }
         /*
+         * A placement's repeat moves across too, and the element repeats
+         * ITSELF (AGL-3111).
+         *
+         * It is the other universal directive authored against "this
+         * placement": the page asked for one copy of the component per record.
+         * After the merge that component is an element whose children are the
+         * component's own, which would read as the item template, so the scope
+         * is stated rather than left to the child list. The placement's repeat
+         * replaces one on the component's root rather than mixing with it —
+         * repeats do not nest, and a filter meant for the root's rows applied
+         * to the placement's would be neither author's.
+         */
+        const repeatsPlacement = repeatKey(instanceNode) !== ''
+        if (repeatsPlacement) {
+          for (const key of REPEAT_DIRECTIVE_PROPS) {
+            const value = (instanceNode.props as Record<string, unknown>)?.[key]
+            if (value !== undefined) carried[key] = value
+          }
+          carried[REPEAT_SELF_PROP] = true
+        }
+        const rootProps = repeatsPlacement
+          ? withoutRepeatDirective(graftedRoot).props
+          : graftedRoot.props
+        /*
          * Classes from BOTH nodes, the component root's first.
          *
          * A class names the element for the site's stylesheet and for the
@@ -1365,8 +1395,8 @@ export function composeReusableComponentNodes<
           // Only when there is something to say: materializing an empty
           // `props` on a node that had none is a visible difference to
           // everything that asks whether a node was authored with any.
-          ...(graftedRoot.props !== undefined || Object.keys(carried).length
-            ? { props: { ...(graftedRoot.props as object), ...carried } }
+          ...(rootProps !== undefined || Object.keys(carried).length
+            ? { props: { ...(rootProps as object), ...carried } }
             : {}),
           ...(nodeClassName ? { className: nodeClassName } : {}),
           // Absent rather than empty, like `props` above: a node the author

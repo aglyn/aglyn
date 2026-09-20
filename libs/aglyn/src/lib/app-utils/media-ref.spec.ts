@@ -26,6 +26,8 @@ import {
   mediaPosterSrc,
   mediaRefFromCdnPath,
   mediaRefPattern,
+  mediaBodyImageAttributes,
+  mediaCdnSrcSet,
   mediaRenditionSrc,
   mediaVariantSrc,
   MEDIA_CDN_ROUTE,
@@ -637,6 +639,93 @@ describe('media references (AGL-1215)', () => {
       // The entitlement gate is `cdnPath`, and a `contentHash` must not
       // become a second way to reach paid delivery.
       expect(mediaNodeSrc({ url: RAW_URL, contentHash: PIN })).toBe(RAW_URL)
+    })
+  })
+})
+
+/**
+ * AGL-3149. The Image element built its own candidate list for a year, which
+ * is exactly why the two body renderers had none — so the list lives here now
+ * and all three ask for it.
+ *
+ * The contract these pin is the SAFETY one. `srcSet` with `w` descriptors is
+ * not a delivery-only attribute: the browser derives the image's
+ * density-corrected intrinsic size from `sizes`, so an `<img>` with the list
+ * and no intrinsic pair renders at `sizes` instead of at its own size —
+ * measured in Chrome, a 320px asset in a 712px column rendered at 668px. An
+ * asset nothing could measure must therefore come out with NO srcSet and NO
+ * sizes rather than half the treatment.
+ */
+describe('a body image asks for the size it renders (AGL-3149)', () => {
+  const REF = 'media:org:acme/med1'
+  const CDN = '/api/media/cdn/org:acme/med1'
+
+  describe('mediaCdnSrcSet', () => {
+    it('offers every variant width, each as a ?w= url', () => {
+      expect(mediaCdnSrcSet(CDN)).toBe(
+        [320, 640, 1280, 1920].map((w) => `${CDN}?w=${w} ${w}w`).join(', '),
+      )
+    })
+
+    it('merges the width into a query the url already carries', () => {
+      // `?poster=1?w=320` is a request the CDN answers with the master film
+      // (AGL-2958), so the merge is not cosmetic.
+      expect(mediaCdnSrcSet(`${CDN}?poster=1`)).toContain(`${CDN}?poster=1&w=320 320w`)
+    })
+
+    it('offers nothing for a url that is not ours', () => {
+      // No variants behind it, and a `?w=` there is a query string on a
+      // stranger's origin.
+      expect(mediaCdnSrcSet('https://images.example.com/x.png')).toBeUndefined()
+      expect(mediaCdnSrcSet(undefined)).toBeUndefined()
+      expect(mediaCdnSrcSet('')).toBeUndefined()
+    })
+  })
+
+  describe('mediaBodyImageAttributes', () => {
+    it('gives an unmeasured image the resolved src and nothing else', () => {
+      expect(mediaBodyImageAttributes({ src: REF })).toEqual({ src: CDN })
+    })
+
+    it('adds the pair and a sizes derived from it once the asset is measured', () => {
+      expect(
+        mediaBodyImageAttributes({ src: REF, size: { width: 900, height: 600 } }),
+      ).toEqual({
+        src: CDN,
+        width: 900,
+        height: 600,
+        sizes: '(max-width: 900px) 100vw, 900px',
+        srcSet: [320, 640, 1280, 1920]
+          .map((w) => `${CDN}?w=${w} ${w}w`)
+          .join(', '),
+      })
+    })
+
+    it('describes the IMAGE rather than the column', () => {
+      // A 320px asset under a fixed `sizes="712px"` fetches `?w=1280` for a
+      // 320px slot; under its own width it fetches `?w=320`.
+      expect(
+        mediaBodyImageAttributes({ src: REF, size: { width: 320, height: 168 } }).sizes,
+      ).toBe('(max-width: 320px) 100vw, 320px')
+    })
+
+    it('reserves the box for a measured hotlink but offers it no variants', () => {
+      const hotlink = 'https://images.example.com/x.png'
+      expect(
+        mediaBodyImageAttributes({ src: hotlink, size: { width: 800, height: 400 } }),
+      ).toEqual({ src: hotlink, width: 800, height: 400 })
+    })
+
+    it('resolves against the site actually rendering', () => {
+      expect(
+        mediaBodyImageAttributes({ src: 'media:org:acme:site-a/med1', hostId: 'site-b' })
+          .src,
+      ).toBe('/api/media/cdn/org:acme:site-b/med1')
+    })
+
+    it('has no src for a value that is not one', () => {
+      expect(mediaBodyImageAttributes({ src: undefined }).src).toBeUndefined()
+      expect(mediaBodyImageAttributes({ src: 42 }).src).toBeUndefined()
     })
   })
 })

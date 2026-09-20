@@ -56,8 +56,9 @@ display name, a blog post's headline, a collection's name — joined to the site
 | Screen named `Contact`, no search title | `Contact – Acme Widgets` |
 | Neither | `Acme Widgets` |
 
-Your brand still travels with every share regardless: the site title is published as
-`og:site_name` on every page.
+Your brand still travels with every share regardless: `og:site_name` is published on
+every page, from your site **Title**, then your **Entity** name, then the site's own
+name — so a site that has filled in any one of the three is named on every card.
 
 ### Site-wide defaults
 
@@ -78,6 +79,32 @@ The **Social image** card is the default card for the whole site — every page 
 sets none of its own uses it, including collection lists and blog entries with no
 cover image. Set one and no page of your site ever shares as a bare, image-less
 link again.
+
+### What language your site says it is in
+
+Every page your site serves declares a language in its markup, as
+`<html lang="…">`. Browsers offer to translate from it, screen readers pick a
+voice with it, and search engines use it to decide who to show the page to — so
+a site written in Spanish that declares English is mis-served to everybody.
+
+It comes from your **Languages** card in site setup, and nothing else:
+
+1. the site's **default language**, if you set one;
+2. otherwise the **first language** you added;
+3. otherwise **English**, for a site that has not been set up for more than one
+   language.
+
+You do not set this per page. It describes the site, so it is the same on every
+page of it, and it updates everywhere the moment you change the card.
+
+A **locale variant** — the same page written in another language — still
+advertises its own language where it counts for sharing and search: `og:locale`
+and the `inLanguage` in its structured data name the variant's language, and its
+`hreflang` links point search engines at it. The `<html lang>` on the variant
+names the site it belongs to.
+
+See [Multilingual](../multilingual/overview.md) for adding a language and a
+language switcher.
 
 ## Search engine visibility
 
@@ -184,8 +211,42 @@ so a freshly published page never waits on the cache.
 ## Social cards
 
 Every published page emits **Open Graph** and **Twitter** metadata: title,
-description, canonical URL, site name, and — once an image is set — `og:image`
-with its `og:image:width` and `og:image:height`.
+description, canonical URL, site name, the page's language, and — once an image
+is set — `og:image` with its `og:image:width`, `og:image:height` and
+`og:image:alt`.
+
+### What each kind of page emits
+
+Some properties are the same on every page of your site; others describe the one
+page you are looking at. Both sets are listed here so you can check a page
+against them.
+
+**On every page, whatever kind it is:**
+
+| Property | Where it comes from |
+| --- | --- |
+| `og:title`, `og:description` | The page's search title and description |
+| `og:url` | The page's canonical address, always absolute |
+| `og:site_name` | Setup → SEO **Title**, then the **Entity** name, then the site's name |
+| `og:locale` | The page's language — the screen's, then the site's default |
+| `og:image` + `width`, `height`, `alt` | The winning card image, below |
+| `twitter:card`, `title`, `description`, `image` | The same values as the card above |
+| `twitter:site` | The X profile in Setup → Details → **Social links** |
+
+**And per kind of page:**
+
+| Page | `og:type` | What it adds |
+| --- | --- | --- |
+| Home, and any other screen | `website` | `og:locale:alternate` for each language this page is translated into |
+| A collection listing, and a category listing | `website` | — |
+| A blog or collection entry | `article` | `article:published_time`, `article:modified_time`, `article:author` (their author page), `article:section` (its category), `article:tag`, and `twitter:creator` |
+| An author page | `profile` | `profile:username` and `twitter:creator`, from the author's own X profile |
+
+Anything with nothing behind it is left out rather than filled in. A site that
+has set no name at all publishes no `og:site_name`; an entry that was never
+published publishes no `article:published_time`; an author with no X profile is
+still shown on a card, just without a byline credit on it. An empty tag is worse
+than a missing one — it is a claim that the answer is "nothing".
 
 Which image a page uses is decided in this order:
 
@@ -209,14 +270,33 @@ page to resolve a relative path against, so a relative address is a blank card.
 
 ## Structured data
 
-Published sites emit **JSON-LD** for blogs, the site, and breadcrumbs, giving search
-engines rich context about your content.
+Published sites emit **JSON-LD**, giving search engines and AI assistants rich
+context about your content.
 
-Every page also carries a top-level **`Organization`** (or `Person`) describing who
-publishes the site — the entity AI assistants read when someone asks who you are or
-how to reach you. It is filled in from **Setup → SEO → Entity**, and it falls back to
-your site name and description, so a site that has never touched that form still
-publishes a named, described entity.
+**Every page** carries two site-wide nodes:
+
+- a top-level **`Organization`** (or `Person`) describing who publishes the site —
+  the entity an assistant reads when someone asks who you are or how to reach you.
+  It is filled in from **Setup → SEO → Entity**, and it falls back to your site name
+  and description, so a site that has never touched that form still publishes a
+  named, described entity;
+- a **`WebSite`** naming the site and its address, with the language it is
+  published in (`inLanguage`).
+
+**And per kind of page:**
+
+| Page | What it publishes |
+| --- | --- |
+| A collection listing, and a category listing | `ItemList` of the entries on that page, in their real positions |
+| A blog or collection entry | The article type its collection declares — `BlogPosting`, `NewsArticle`, `Article` — with its headline, cover, dates, byline, section and language |
+| An author page | `ProfilePage` wrapping the author as a `Person` or `Organization` |
+| A product page | `Product` with its `Offer`, availability and — where you have reviews — an `AggregateRating` |
+| Any page more than one level deep | `BreadcrumbList` naming the trail to it |
+
+Your **social links**, from Setup → Details → **Business details**, are published as
+the entity's `sameAs` — the property that tells a search engine your site, your
+LinkedIn page and your X account are all the same organization. You do not have to
+retype them anywhere; the list the site already renders is the list it publishes.
 
 Two fields are worth adding by hand, because nothing can guess them:
 

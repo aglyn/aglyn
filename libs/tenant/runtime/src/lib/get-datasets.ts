@@ -23,6 +23,7 @@ import {
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
 import { FieldPath } from 'firebase-admin/firestore'
+import { repeatRecordsFromPages } from './repeat-record-pages'
 
 /**
  * The render path's largest read (AGL-1302): up to two pages of records per
@@ -166,48 +167,35 @@ async function readDatasets(
 /**
  * The records a repeat renders, in the order it renders them.
  *
- * The rows a repeat shows are the ones `sortDatasetRecords` puts first: every
- * record with an editor `order`, ascending, then the records without one —
- * forms and Actions append those — by document id. A `limit()` with no
- * `orderBy` cannot find them: Firestore answers it in document-id order, so on
- * a dataset past the bound it reads an arbitrary sample, and sorting that
- * sample afterwards only makes it look ordered.
- *
  * `orderBy('order')` reads the first group, and matches only documents that
  * carry the field. When it comes back short, every ordered record is already
  * in hand — so at most that many rows of the first page by document id can be
  * ordered, and the rest of that page is exactly the first unordered records.
- * Two bounded reads, never a walk of the collection.
+ * Two bounded reads, never a walk of the collection; which rows win, and in
+ * what order, is {@link repeatRecordsFromPages}, the rule the besigner's
+ * canvas preview reads through as well (AGL-3111).
  */
 async function readRepeatRecords(
   datasetRef: FirebaseFirestore.DocumentReference,
 ): Promise<Array<Record<string, unknown>>> {
   const recordsRef = datasetRef.collection('records')
+  const page = (snapshot: FirebaseFirestore.QuerySnapshot) =>
+    snapshot.docs.map((doc) => ({
+      id: doc.id,
+      data: doc.data() as Aglyn.HostDatasetRecord,
+    }))
   const byOrder = await recordsRef
     .orderBy('order')
     .limit(Aglyn.REPEAT_MAX_RECORDS)
     .get()
-  const snapshots = [...byOrder.docs]
-  if (byOrder.docs.length < Aglyn.REPEAT_MAX_RECORDS) {
-    const held = new Set(byOrder.docs.map((snapshot) => snapshot.id))
-    const byId = await recordsRef
-      .orderBy(FieldPath.documentId())
-      .limit(Aglyn.REPEAT_MAX_RECORDS)
-      .get()
-    snapshots.push(...byId.docs.filter((snapshot) => !held.has(snapshot.id)))
-  }
-  return (
-    Aglyn.sortDatasetRecords(
-      snapshots.map((snapshot) => ({
-        $id: snapshot.id,
-        ...(snapshot.data() as Aglyn.HostDatasetRecord),
-      })),
-    )
-      .slice(0, Aglyn.REPEAT_MAX_RECORDS)
-      // `$id` rides inside the value map so incoming reference hops (AGL-180)
-      // can resolve rows; the model carries field configs.
-      .map((record) => ({ ...(record.values ?? {}), $id: record.$id }))
-  )
+  const byId =
+    byOrder.docs.length < Aglyn.REPEAT_MAX_RECORDS
+      ? await recordsRef
+          .orderBy(FieldPath.documentId())
+          .limit(Aglyn.REPEAT_MAX_RECORDS)
+          .get()
+      : undefined
+  return repeatRecordsFromPages(page(byOrder), byId ? page(byId) : [])
 }
 
 export default getDatasets

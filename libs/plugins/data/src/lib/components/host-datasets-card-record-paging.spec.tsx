@@ -337,7 +337,7 @@ describe('no field on a dataset record is written by every writer', () => {
   })
 
   it('the workflow append actions write `createdAt` and no `order`', () => {
-    const source = readRepo('libs/tenant/runtime/src/lib/run-event-actions.ts')
+    const source = readRepo('libs/plugins/workflows/src/lib/engine/run-event-actions.ts')
     const appends = [
       ...source.matchAll(/\.collection\('records'\)\.add\(\{[\s\S]{0,800}?\}\)/g),
     ].map((match) => match[0])
