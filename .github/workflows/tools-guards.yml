@@ -966,6 +966,10 @@ jobs:
       # its forced reds, over a synthetic build.
       - run: npm run test:tenant-wire-weight
 
+      # A plugin loads only where it is used (AGL-3116). The gate reads a
+      # production build where CI makes one; these are its forced reds.
+      - run: npm run test:plugins-load-where-used
+
       # NEXT_PUBLIC access form (AGL-2037, AGL-2172). Next substitutes only the
       # dot form, so a bracket read in a client-reachable module is `undefined`
       # in the browser and the value silently falls back to Aglyn's default —

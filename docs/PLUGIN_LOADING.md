@@ -223,6 +223,15 @@ Generate the key pair with
 - **Realm artifacts** are immutable content-addressed objects published
   with `public, max-age=31536000, immutable`; front them with a CDN and
   cache hits are free forever (a new version is a new URL).
+- **Whose bytes a published page downloads** (AGL-3116):
+  `npm run check:plugins-load-where-used` reads a tenant production build
+  and refuses a plugin surface a published page cannot render. Four rules:
+  a plugin with both a site and a console surface names `modules.site`; a
+  plugin with no site surface contributes nothing before settle; a site
+  plugin contributes only what its site module reaches statically; and the
+  module a `register.console` names is never there, whatever imports it. It
+  reads the same before-settle chunk set `check:tenant-wire-weight` budgets
+  — that gate asks how many bytes, this one asks whose.
 
 ## Artifact retention (AGL-942)
 

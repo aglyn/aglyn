@@ -179,6 +179,9 @@ jobs:
       # The published page's before-settle JavaScript, read from the build
       # above (AGL-3082): the bytes the page-view rate is priced on. ~1s.
       - run: node tools/scripts/check-tenant-wire-weight.mjs
+      # Whose bytes they are (AGL-3116): no plugin surface a published page
+      # cannot render may be in its before-settle load.
+      - run: node tools/scripts/check-plugins-load-where-used.mjs
       - run: npx nx run docs:build
 
   # The aggregator. `success` from every part is the only pass: a part that did
