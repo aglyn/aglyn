@@ -443,6 +443,46 @@ export function aiRawOutputOf(output: unknown): string {
 }
 
 /**
+ * WHERE THE OUTPUT WENT, as a log may carry it (AGL-3143): the figures that
+ * separate the shapes a call cut off at its ceiling comes in, and nothing
+ * else.
+ *
+ * Thinking accounts for the spend first, because the thinking budget is
+ * drawn from the same ceiling as the answer: a call can spend nearly all of
+ * one thinking and still be cut off with a correct, tiny tool input, which
+ * is a ceiling to raise rather than a decoder to fix. What thinking does not
+ * account for is told apart by how much was written — long, and a runaway
+ * string the partial parse discarded; short, and decoding wrote nothing
+ * usable.
+ *
+ * It takes the raw output rather than a count on purpose. The bytes are the
+ * model's own words and therefore the site's content, so they belong to the
+ * trace alone and never to a log; passing them through one function that can
+ * only ever return their LENGTH is what holds that rule at every door,
+ * instead of asking each one to remember it.
+ */
+export function aiCutOffFigures(call: {
+  usage: AiUsage
+  /** The tool input that still parsed, or null where none did. */
+  parsed: unknown
+  rawOutput: string | null | undefined
+}): {
+  outputTokens: number
+  thinkingTokens: number | null
+  parsedChars: number
+  rawChars: number | null
+} {
+  const parsed =
+    call.parsed === null || call.parsed === undefined ? '' : (JSON.stringify(call.parsed) ?? '')
+  return {
+    outputTokens: call.usage.outputTokens,
+    thinkingTokens: call.usage.thinkingTokens ?? null,
+    parsedChars: parsed.length,
+    rawChars: call.rawOutput?.length ?? null,
+  }
+}
+
+/**
  * The model declined. Tokens were spent, so the usage is real and the
  * caller meters it; the text is whatever partial answer preceded the stop,
  * usually nothing. Every adapter maps its provider's own decline signal —

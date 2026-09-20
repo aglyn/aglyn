@@ -30,7 +30,7 @@ import {
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
 import type { AiStepKind } from '../providers/catalog'
-import { aiStoppedAtCeiling, type AiProvider } from '../providers/contract'
+import { aiCutOffFigures, aiStoppedAtCeiling, type AiProvider } from '../providers/contract'
 import { AI_ROUTING_TABLE, aiModelForStep, type AiPluginSettings } from '../providers/routing'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
@@ -1148,10 +1148,7 @@ export async function runValidatedGeneration(
         kind,
         model,
         maxTokens,
-        outputTokens: spend.usage.outputTokens,
-        thinkingTokens: spend.usage.thinkingTokens ?? null,
-        parsedChars: answer ? JSON.stringify(answer).length : 0,
-        rawChars: rawOutput?.length ?? null,
+        ...aiCutOffFigures({ usage: spend.usage, parsed: answer, rawOutput }),
       })
     }
     violations = cutOff
