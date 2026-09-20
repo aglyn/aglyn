@@ -25,6 +25,7 @@ import { overrideWriteValue } from '@aglyn/aglyn/app-utils/marketplace-overrides
 import * as Aglyn from '@aglyn/aglyn'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
+import { DEFAULT_TITLE_PATTERN } from '@aglyn/aglyn/app-utils/seo-title-variables'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import {
   FieldComponentType,
@@ -183,6 +184,21 @@ const CLEARABLE_TRACKING_PATHS = [
   'analytics.adTags.google-ads',
   'analytics.adTags.linkedin',
 ] as const
+
+/**
+ * The SEO fields that must be able to go back to EMPTY (AGL-3197).
+ *
+ * `seo.titlePattern` is the only one, and it needs this for the same reason
+ * the tracking ids do: the renderer drops an empty input from the submitted
+ * values, so clearing the box would save nothing and report "Saved!". Here the
+ * cost is that a site which tried a pattern and wants the default back is
+ * stuck with the pattern — empty means "the default", and a field that cannot
+ * be emptied cannot say it.
+ *
+ * `seo.title`, `seo.description` and `seo.separator` are all REQUIRED, so
+ * their empty case never reaches a save and they stay out of this list.
+ */
+const CLEARABLE_SEO_PATHS = ['seo.titlePattern'] as const
 
 const trackingSchema: FormSchema = {
   id: 'hostTracking',
@@ -504,6 +520,44 @@ const seoSchema: FormSchema = {
           type: FieldValidatorType.MAX_LENGTH,
           threshold: 3,
           message: 'Please enter a shorter title separator',
+        },
+      ],
+    },
+    /*
+      HOW A TITLE IS BUILT, as a pattern rather than as code (AGL-3197).
+
+      The two fields above are the PIECES; this is the sentence they go into,
+      and until now that sentence lived in `resolveSeoTitle` where a site could
+      change nothing about it but the separator. A site whose brand reads
+      better in front — "Aglyn — Pricing" — or that wants no site name in the
+      composition at all had no way to say so.
+
+      Left empty it means the default, which is the composition the code
+      performed before this field existed. `seo-title-variables.spec` pins the
+      two against each other, so no site's untitled pages change their title
+      because this shipped.
+    */
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.titlePattern',
+      label: 'Title pattern',
+      type: 'text',
+      placeholder: DEFAULT_TITLE_PATTERN,
+      helperText:
+        'How a screen with no SEO title of its own is titled. Leave empty ' +
+        `for ${DEFAULT_TITLE_PATTERN}.`,
+      help: docsHelp('seo', {
+        anchor: '#how-a-page-title-is-built',
+        excerpt:
+          'The pattern a screen with no SEO title of its own is titled ' +
+          'with — page name, separator and site name, in whatever order ' +
+          'the site wants them.',
+      }),
+      validate: [
+        {
+          type: FieldValidatorType.MAX_LENGTH,
+          threshold: 120,
+          message: 'Please enter a shorter title pattern',
         },
       ],
     },
@@ -1443,7 +1497,8 @@ export function HostSettingsScopeProvider({
     {
       schema: seoSchema,
       initialValues: seedFor(seoSchema.id),
-      onSubmit: (fields: any) => saveAndClearDraft(seoSchema.id, fields),
+      onSubmit: (fields: any) =>
+        saveAndClearDraft(seoSchema.id, fields, CLEARABLE_SEO_PATHS),
     },
     {
       schema: trackingSchema,

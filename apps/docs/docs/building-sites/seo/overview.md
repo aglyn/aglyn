@@ -60,11 +60,41 @@ Your brand still travels with every share regardless: `og:site_name` is publishe
 every page, from your site **Title**, then your **Entity** name, then the site's own
 name — so a site that has filled in any one of the three is named on every card.
 
+### Variables, so a title is not a copy of your site name
+
+A title can name the things it depends on instead of repeating them:
+
+| Variable | What it stands for |
+| --- | --- |
+| `{{page.name}}` | What this page is called — a screen's display name |
+| `{{site.separator}}` | Your **Separator** from Setup → SEO |
+| `{{site.name}}` | Your site **Title** from Setup → SEO |
+
+Type `{{` in a title and the list appears, filtered as you keep typing; the **+**
+beside the field offers the same list. Either way what is stored is the text you
+see — `{{site.name}}` — and the line under the field shows you the title as the
+live page will render it, counted against the ~60 characters a search result shows.
+That count is the resolved one, because that is the title people read.
+
+Write `Plans and pricing {{site.separator}} {{site.name}}` once, and renaming your
+site in Setup → SEO renames it on that page too. A title that names no variables is
+published exactly as it always was, so nothing you have already written changes.
+
+**Title pattern**, in Setup → SEO, is the same idea for every page that has no
+search title of its own. It defaults to `{{page.name}} {{site.separator}}
+{{site.name}}` — the composition in the table above — and you can reorder it
+(`{{site.name}} {{site.separator}} {{page.name}}`) or drop the site name from it
+entirely (`{{page.name}}`). Clear the field to go back to the default.
+
+A separator with nothing rendered on one side of it is left out, so a page that is
+missing one of the pieces never renders a title that starts or ends with a dash.
+
 ### Site-wide defaults
 
 **Setup → SEO** holds the site-level fields every screen inherits: the site **Title**
 and **Description**, the **Separator** used to join a page's name to the site title
-when that page has no search title of its own (default `–`), the **Favicon**, an
+when that page has no search title of its own (default `–`), the **Title pattern**
+that decides how those pieces are put together, the **Favicon**, an
 **App icon**, a **Social image**, and an **Entity** block (Organization or Person,
 with a name and logo) that feeds the site's structured data.
 
