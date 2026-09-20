@@ -1508,12 +1508,18 @@ export function buildRepeatFields(options: {
 }): Array<Record<string, unknown>> {
   const { sources, hasChildren, resolveKeyField } = options
   if (!sources.length) return []
-  const help = (label: string, description: string) => ({
+  const help = (label: string, description: string, anchor?: string) => ({
     label,
     description,
     // Same tooltip treatment the schema attributes get (AGL-600); these
-    // fields never reach the `withAttributeHelp` map above.
-    help: { title: label, excerpt: description },
+    // fields never reach the `withAttributeHelp` map above. The docs link is
+    // the one thing a tooltip cannot carry: which scope to pick and what the
+    // hundred-record ceiling means are a page, not a sentence.
+    help: {
+      title: label,
+      excerpt: description,
+      href: besignerDocsUrl('repeat', anchor as never),
+    },
   })
   /**
    * True while the element repeats over ANYTHING. One rule per source, ORed,
@@ -1537,6 +1543,7 @@ export function buildRepeatFields(options: {
         help: {
           title: source.keyAttribute.label ?? source.label,
           excerpt: source.keyAttribute.description ?? '',
+          href: besignerDocsUrl('repeat'),
         },
       } as Record<string, unknown>),
     ),
@@ -1549,6 +1556,7 @@ export function buildRepeatFields(options: {
               'Whether each record gets a copy of this element, or a copy ' +
                 'of what is inside it. A row of cards repeats the card; a ' +
                 'list that IS the row repeats its contents.',
+              '#what-repeats-the-element-or-whats-inside-it',
             ),
             component: FieldComponentType.SELECT,
             condition: repeating,
@@ -1568,6 +1576,7 @@ export function buildRepeatFields(options: {
       ...help(
         'Repeat limit',
         `Most records to render (blank = all, capped at ${REPEAT_MAX_RECORDS}).`,
+        '#the-hundred-record-ceiling',
       ),
       component: FieldComponentType.TEXT_FIELD,
       type: 'number',
@@ -1580,6 +1589,7 @@ export function buildRepeatFields(options: {
         'Optional "field op value" filter, e.g. "price <= 20", ' +
           '"tier == plus", or "tags contains red". Ops: == != > >= < <= ' +
           `contains. Applies to the first ${REPEAT_MAX_RECORDS} records.`,
+        '#bound-what-renders',
       ),
       component: FieldComponentType.TEXT_FIELD,
       condition: repeating,
@@ -1589,6 +1599,7 @@ export function buildRepeatFields(options: {
       ...help(
         'Repeat sort',
         'Optional "field" or "field desc" ordering, e.g. "price desc".',
+        '#bound-what-renders',
       ),
       component: FieldComponentType.TEXT_FIELD,
       condition: repeating,

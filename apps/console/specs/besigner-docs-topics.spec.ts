@@ -169,6 +169,12 @@ const TOPIC_SURFACES: Record<string, { file: string; marker: string }> = {
     marker: "{'Interactions'}",
   },
   layouts: { file: SCREEN_EDITOR, marker: "{'Shared layout'}" },
+  // The Repeat section of the Attributes panel, offered on every element
+  // (AGL-3111). Every field in it carries the link.
+  repeat: {
+    file: `${DESIGNER}/element-props-form.component.tsx`,
+    marker: 'const help = (label: string, description: string, anchor?: string)',
+  },
   responsiveStyling: {
     file: `${DESIGNER}/element-styles-form.component.tsx`,
     marker: '<BoxStyler',

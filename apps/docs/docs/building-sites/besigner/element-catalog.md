@@ -73,7 +73,7 @@ for the site.
 | **Box** | The plain container. No styling of its own — you give it padding, background and borders from the Styles panel. Renders as `div`, `span`, `p`, `figure`, `figcaption`, `blockquote` or `pre`. For a landmark that needs an accessible name, use **Section**. |
 | **Section** | Grouping inside a semantic HTML element (`section`, `article`, `aside`, `nav`, `header`, `footer`) with an accessible label, so the page keeps a meaningful document outline. `main` is not on the list — see [The page's `main` landmark](#the-pages-main-landmark). |
 | **Container** | Centers content and caps its maximum width. |
-| **Stack** | One-dimensional row or column with a gap. Also the element that carries **repeat over a dataset**. |
+| **Stack** | One-dimensional row or column with a gap. A natural frame for a [repeat](repeat.md), though every element can repeat. |
 | **Grid** | Responsive 12-column layout. See [Grid](#grid) below. |
 | **Layout slot** | Where a bound layout injects the screen's own content. Its **Component** is `main` unless you change it — see below. |
 
