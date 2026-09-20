@@ -46,7 +46,7 @@
     "react": "^19.2.8"
   },
   "sideEffects": [
-    "./src/lib/foundation/constants/_internal.ts",
-    "./src/lib/foundation/constants/symbol.ts"
+    "./src/lib/foundation/constants/_internal.*",
+    "./src/lib/foundation/constants/symbol.*"
   ]
 }

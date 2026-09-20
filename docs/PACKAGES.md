@@ -477,7 +477,13 @@ Every lib carries, today:
 - `peerDependencies`: `react`, `react-dom`, `next`, `firebase`,
   `firebase-admin` and each `@mui/*` package the lib's shipped source imports,
   at the root's range. A consumer has one of each; a lib never carries its own.
-- `sideEffects`: `false`, or the list of modules that register on import.
+- `sideEffects`: `false`, or the list of modules that register on import, each
+  named with its extension left open (`./src/lib/server.*`). A lib is read as
+  `.ts` source by this repo's apps and as emitted `.js` by a consumer; an entry
+  naming either extension matches nothing for the other reader, whose bundler
+  then takes the module for side-effect free and drops a bare import of it —
+  measured in webpack and in vite. `check:lib-boundaries` refuses a closed
+  extension and an entry that matches no module.
 - `dependencies`: every package the lib's shipped source imports that is not
   a peer (AGL-3201). Inside this repo an import resolves through a tsconfig
   alias or the root `node_modules`, so a lib that declares nothing builds and
@@ -544,11 +550,6 @@ them:
 
 A follow-up project, not this document's commit:
 
-- **`sideEffects` names `.ts` files and the package ships `.js`** (AGL-3201).
-  The swc build copies the array as written, so a consumer's bundler would
-  read every listed module as side-effect free and drop its registration —
-  the AGL-3025 failure, in somebody else's build. It has to be rewritten to
-  the emitted extension at build or pack time before anything is published.
 - `nx release` with independent versioning and `publishConfig` per package.
 - A `publish-packages.yml` workflow on the `production` promotion tag that
   publishes every changed package with provenance, and a `CHANGELOG` per

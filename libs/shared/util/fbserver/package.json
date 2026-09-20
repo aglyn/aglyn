@@ -20,6 +20,6 @@
     "firebase-admin": "^14.3.0"
   },
   "sideEffects": [
-    "./src/lib/fbserver.ts"
+    "./src/lib/fbserver.*"
   ]
 }

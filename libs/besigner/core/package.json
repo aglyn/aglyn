@@ -33,7 +33,7 @@
     "react": "^19.2.8"
   },
   "sideEffects": [
-    "./src/lib/clipboard-manager/clipboard-manager.ts",
-    "./src/lib/clipboard-manager/style-clipboard.ts"
+    "./src/lib/clipboard-manager/clipboard-manager.*",
+    "./src/lib/clipboard-manager/style-clipboard.*"
   ]
 }

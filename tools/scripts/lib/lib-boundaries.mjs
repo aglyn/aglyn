@@ -529,7 +529,37 @@ export function declarationsOwed(imported) {
  * @param {ReadonlySet<string>} [args.workspacePackages] npm names that are this repo's own libs
  * @param {Record<string, string>} [args.rootRanges] the root package.json's ranges, by package
  */
-export function packageFindings({ project, pkg, rootVersion, peers, hasServerEntry, dependencies = [], workspacePackages = new Set(), rootRanges = {} }) {
+/**
+ * What is wrong with a `sideEffects` list (AGL-3201).
+ *
+ * A lib is read two ways: as SOURCE by this repo's apps, where the module is
+ * `server.ts`, and as the built package by everyone else, where it is
+ * `server.js`. An entry naming one extension is silently wrong for the other
+ * reader — that bundler finds no match, takes the module for side-effect free
+ * and drops the registration it exists to make, with nothing failing. So an
+ * entry names the module and leaves the extension open (`./src/lib/server.*`),
+ * and it has to be a module that exists: a list that outlived a rename
+ * protects nothing.
+ *
+ * `moduleExists(stem)` answers for `./src/lib/server`; omit it to check shape
+ * alone.
+ */
+export function sideEffectsFindings(sideEffects, moduleExists) {
+  if (!Array.isArray(sideEffects)) return []
+  const findings = []
+  for (const entry of sideEffects) {
+    if (typeof entry !== 'string' || !entry.endsWith('.*') || !entry.startsWith('./')) {
+      findings.push(`sideEffects entry "${entry}" must name the module with the extension left open ("./src/lib/x.*"): this repo reads the .ts and a consumer reads the emitted .js`)
+      continue
+    }
+    if (moduleExists && !moduleExists(entry.slice(0, -2))) {
+      findings.push(`sideEffects entry "${entry}" matches no module in the lib`)
+    }
+  }
+  return findings
+}
+
+export function packageFindings({ project, pkg, rootVersion, peers, hasServerEntry, dependencies = [], workspacePackages = new Set(), rootRanges = {}, moduleExists }) {
   const findings = []
   if (project.alias && pkg.name !== project.alias) {
     findings.push(`name is "${pkg.name}" but the alias, which is the npm name, is "${project.alias}"`)
@@ -544,6 +574,7 @@ export function packageFindings({ project, pkg, rootVersion, peers, hasServerEnt
     findings.push('exports has no "./*" entry but tsconfig.base.json publishes a deep alias')
   }
   if (!('sideEffects' in pkg)) findings.push('sideEffects is not declared')
+  findings.push(...sideEffectsFindings(pkg.sideEffects, moduleExists))
   const declared = pkg.peerDependencies ?? {}
   for (const family of peers) {
     if (!(family in declared)) findings.push(`peerDependencies lacks ${family}, which the shipped source imports`)

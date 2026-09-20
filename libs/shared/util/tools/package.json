@@ -20,6 +20,6 @@
     "php-serialize": "^5.1.3"
   },
   "sideEffects": [
-    "./src/lib/array/array-overrides.ts"
+    "./src/lib/array/array-overrides.*"
   ]
 }

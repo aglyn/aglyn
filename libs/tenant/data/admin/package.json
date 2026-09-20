@@ -35,8 +35,8 @@
     "react": "^19.2.8"
   },
   "sideEffects": [
-    "./src/lib/server/client-error-report.ts",
-    "./src/lib/server/email-marketing-gate.ts",
-    "./src/lib/server/email-send-rate.ts"
+    "./src/lib/server/client-error-report.*",
+    "./src/lib/server/email-marketing-gate.*",
+    "./src/lib/server/email-send-rate.*"
   ]
 }

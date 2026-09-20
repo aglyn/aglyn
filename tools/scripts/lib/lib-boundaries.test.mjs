@@ -38,6 +38,7 @@ import {
   missingMapRows,
   overrideWiring,
   packageFindings,
+  sideEffectsFindings,
   packageOfSpecifier,
   packagesImported,
   peerFamiliesImported,
@@ -394,5 +395,27 @@ describe('the real workspace', () => {
     for (const scope of ['scope:shared', 'scope:core', 'scope:renderer', 'scope:besigner', 'scope:besigner-ui', 'scope:tenant', 'scope:console', 'scope:plugin']) {
       assert.ok(sources.has(scope), scope)
     }
+  })
+})
+
+describe('a sideEffects list is read by two bundlers', () => {
+  it('accepts false, and a module named with its extension left open', () => {
+    assert.deepEqual(sideEffectsFindings(false), [])
+    assert.deepEqual(sideEffectsFindings(['./src/lib/server.*'], (stem) => stem === './src/lib/server'), [])
+  })
+
+  it('refuses the source extension, which a consumer of the built package never matches', () => {
+    const findings = sideEffectsFindings(['./src/lib/server.ts'])
+    assert.equal(findings.length, 1)
+    assert.match(findings[0], /extension left open/)
+  })
+
+  it('refuses the emitted extension too, which this repo never matches', () => {
+    assert.equal(sideEffectsFindings(['./src/lib/server.js']).length, 1)
+  })
+
+  it('refuses an entry that outlived its module', () => {
+    const findings = sideEffectsFindings(['./src/lib/gone.*'], () => false)
+    assert.match(findings[0], /matches no module/)
   })
 })
