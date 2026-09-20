@@ -38,7 +38,7 @@ import { RELEASE_FLAGS, type ReleaseFlagKey } from '@aglyn/aglyn'
 
 /**
  * The admonition a page that is ABOUT an unreleased feature must open with —
- * `docs/content-and-data/crm/outreach.md` carries it today. Matched on the
+ * `docs/content-and-data/crm/sequences.md` carries it today. Matched on the
  * marker, not on loose prose — "we're working on it" further down the page is
  * not disclosure.
  */
@@ -133,13 +133,14 @@ export const FLAG_DOC_PAGES: Partial<
     },
   ],
 
-  // AGL-2974. The flag closes Outreach's console hub and its API routes
+  // AGL-2974. The flag closes the Sequences console hub and its API routes
   // together, and the one page about it is ABOUT the feature, so it takes the
   // admonition treatment, whole-file. No plan carries the entitlement either,
-  // which the price assertions keep the page from implying.
+  // which the price assertions keep the page from implying. The page moved to
+  // `sequences.md` with the rename (AGL-3199); the flag key did not.
   release_outreach: [
     {
-      path: 'docs/content-and-data/crm/outreach.md',
+      path: 'docs/content-and-data/crm/sequences.md',
       disclosure: 'admonition',
       checkNoPriceClaim: true,
     },

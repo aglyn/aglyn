@@ -223,8 +223,8 @@ export const PLUGIN_DOCS = {
     excerpt: 'Let visitors sign up as members and gate screens so only members can view them.',
   },
   outreach: {
-    path: '/content-and-data/crm/outreach',
-    title: 'Outreach',
+    path: '/content-and-data/crm/sequences',
+    title: 'Sequences',
     excerpt: 'One-to-one email sequences a rep sends to a person from their own connected mailbox, kept with the CRM. Rolling out.',
   },
   plugins: {
