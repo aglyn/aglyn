@@ -12,6 +12,16 @@
     },
     "./package.json": "./package.json"
   },
+  "dependencies": {
+    "@aglyn/aglyn": "1.0.0-beta.140",
+    "@aglyn/shared-data-types": "1.0.0-beta.140",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.140",
+    "@aglyn/shared-ui-theme": "1.0.0-beta.140",
+    "@aglyn/shared-util-tools": "1.0.0-beta.140",
+    "@aglyn/shared-util-vendor": "1.0.0-beta.140",
+    "mobx-react-lite": "^4.1.1",
+    "react-is": "^19.2.8"
+  },
   "peerDependencies": {
     "react": "^19.2.8"
   },

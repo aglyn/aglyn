@@ -51,10 +51,12 @@ import {
   DEP_CONSTRAINTS,
   OVERRIDES_CALL,
   compareToAllowlist,
+  declarationsOwed,
   evaluateEdges,
   missingMapRows,
   overrideWiring,
   packageFindings,
+  packagesImported,
   peerFamiliesImported,
   readPackageMap,
 } from './lib/lib-boundaries.mjs'
@@ -135,6 +137,7 @@ for (const source of overrideWiring(allowlist, packageMap, (path) => (existsSync
 
 // 4. The packages.
 const rootVersion = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8')).version
+const workspacePackages = new Set(packageMap.map((project) => project.alias).filter(Boolean))
 for (const project of packageMap) {
   const root = join(REPO_ROOT, project.root)
   if (project.projectType !== 'library') continue
@@ -149,6 +152,10 @@ for (const project of packageMap) {
     rootVersion,
     peers: peerFamiliesImported(root),
     hasServerEntry: existsSync(join(root, 'src', 'server.ts')),
+    // What the shipped source imports and the package must therefore declare
+    // (AGL-3201); `sync:lib-dependencies` writes them.
+    dependencies: declarationsOwed(packagesImported(root, project.alias)).dependencies,
+    workspacePackages,
   })
   for (const finding of findings) problems.push(`${project.root}/package.json: ${finding}`)
 }

@@ -32,6 +32,7 @@
 // target's tags, every matching constraint, no exceptions.
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { builtinModules } from 'node:module'
 import { join, relative, sep } from 'node:path'
 
 /**
@@ -441,6 +442,81 @@ export function peerFamiliesImported(libRoot) {
 }
 
 /**
+ * A module specifier in a statement that is really an import: `import … from`,
+ * a bare `import '…'`, `export … from`, and a closing `} from '…'` of a
+ * multi-line one; then `import('…')` and `require('…')` anywhere on a line
+ * that is not a comment. `IMPORT_SOURCE` above is looser on purpose — it only
+ * feeds a filter for six peer families — and would read a quoted word in a
+ * doc comment as a package, which here would demand a dependency on prose.
+ */
+const STATEMENT_IMPORT = /^\s*(?:import\s+(?:type\s+)?(?:[^'"]*?\sfrom\s+)?|export\s+(?:type\s+)?(?:\*|\{[^}]*\})\s*(?:as\s+\w+\s+)?from\s+|\}\s*from\s+)['"]([^'"]+)['"]/
+const CALL_IMPORT = /\b(?:import|require)\s*\(\s*['"]([^'"]+)['"]\s*\)/g
+const COMMENT_LINE = /^\s*(?:\/\/|\*|\/\*)/
+/** A Storybook story documents a component; it is not what the package ships. */
+const STORY_FILE = /\.stories\.[cm]?[jt]sx?$/
+const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*/i
+
+/** `@scope/name/sub/path` → `@scope/name`; `name/sub` → `name`; else `null`. */
+export function packageOfSpecifier(specifier) {
+  if (!specifier || specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('node:')) return null
+  const match = PACKAGE_NAME.exec(specifier)
+  return match ? match[0] : null
+}
+
+/**
+ * Every package a lib's SHIPPED source imports, by package name.
+ *
+ * A type-only import counts: the published `.d.ts` names the package too, so a
+ * consumer's compiler has to find it. Specs do not count, a lib's import of
+ * itself does not, and neither does a Node builtin.
+ *
+ * @param {string} libRoot absolute path of the lib
+ * @param {string | null} ownName the lib's own npm name
+ * @param {ReadonlySet<string>} [builtins] Node builtin module names
+ * @returns {string[]} sorted package names
+ */
+export function packagesImported(libRoot, ownName, builtins = NODE_BUILTINS) {
+  const found = new Set()
+  for (const file of walk(join(libRoot, 'src'), (name) => SOURCE_FILE.test(name) && !SPEC_FILE.test(name) && !STORY_FILE.test(name))) {
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+      if (COMMENT_LINE.test(line)) continue
+      const specifiers = []
+      const statement = STATEMENT_IMPORT.exec(line)
+      if (statement) specifiers.push(statement[1])
+      for (const call of line.matchAll(CALL_IMPORT)) specifiers.push(call[1])
+      for (const specifier of specifiers) {
+        const name = packageOfSpecifier(specifier)
+        if (!name || name === ownName || builtins.has(name)) continue
+        found.add(name)
+      }
+    }
+  }
+  return [...found].sort()
+}
+
+/** `unist` → `@types/unist`; `@scope/name` → `@types/scope__name`. */
+export function typesPackageOf(name) {
+  return `@types/${name.startsWith('@') ? name.slice(1).replace('/', '__') : name}`
+}
+
+/** Node's own modules, which a package never declares. */
+const NODE_BUILTINS = new Set(builtinModules)
+
+/**
+ * What a lib must declare, split the way its `package.json` splits it: the
+ * framework families are peers (a consumer has one of each), and everything
+ * else the shipped source imports is a dependency.
+ *
+ * @param {string[]} imported from {@link packagesImported}
+ */
+export function declarationsOwed(imported) {
+  const peers = []
+  const dependencies = []
+  for (const name of imported) (PEER_FAMILY.test(name) ? peers : dependencies).push(name)
+  return { peers, dependencies }
+}
+
+/**
  * What a lib's `package.json` is missing for the map, as one line each.
  *
  * @param {object} args
@@ -449,8 +525,10 @@ export function peerFamiliesImported(libRoot) {
  * @param {string} args.rootVersion the repo version
  * @param {string[]} args.peers the families the lib imports
  * @param {boolean} args.hasServerEntry whether `src/server.ts` exists
+ * @param {string[]} [args.dependencies] the non-peer packages the shipped source imports
+ * @param {ReadonlySet<string>} [args.workspacePackages] npm names that are this repo's own libs
  */
-export function packageFindings({ project, pkg, rootVersion, peers, hasServerEntry }) {
+export function packageFindings({ project, pkg, rootVersion, peers, hasServerEntry, dependencies = [], workspacePackages = new Set() }) {
   const findings = []
   if (project.alias && pkg.name !== project.alias) {
     findings.push(`name is "${pkg.name}" but the alias, which is the npm name, is "${project.alias}"`)
@@ -472,6 +550,23 @@ export function packageFindings({ project, pkg, rootVersion, peers, hasServerEnt
   const bundled = pkg.dependencies ?? {}
   for (const family of Object.keys(bundled)) {
     if (PEER_FAMILY.test(family)) findings.push(`dependencies carries ${family}; it must be a peer`)
+  }
+  // A PACKAGE SAYS WHAT IT NEEDS (AGL-3201). Inside this repo every import
+  // resolves through a tsconfig alias or the root node_modules, so a lib that
+  // declares nothing builds and tests green — and installs from the registry
+  // unable to find its own imports. Each one is declared, and one of this
+  // repo's own libs is declared at the repo version, which is the only number
+  // it is ever published beside.
+  for (const name of dependencies) {
+    // A package that ships only types is declared by its `@types/` name.
+    if (!(name in bundled) && !(name in declared) && !(typesPackageOf(name) in bundled)) {
+      findings.push(`dependencies lacks ${name}, which the shipped source imports (sync:lib-dependencies writes it)`)
+    }
+  }
+  for (const [name, range] of Object.entries(bundled)) {
+    if (workspacePackages.has(name) && range !== rootVersion) {
+      findings.push(`dependencies["${name}"] is "${range}" but the repo version is "${rootVersion}" (release:prepare writes it)`)
+    }
   }
   return findings
 }

@@ -343,10 +343,23 @@ function main() {
   // find out at the guard. `@aglyn/cli` is left alone: it is on the registry
   // at its own number.
   const libPackages = versionedLibPackages(repoRoot)
+  const libNames = new Set(
+    libPackages.map(
+      (lib) => JSON.parse(read(join(repoRoot, lib.path), 'utf8')).name,
+    ),
+  )
   for (const lib of libPackages) {
     const libPath = join(repoRoot, lib.path)
     const libPkg = JSON.parse(read(libPath, 'utf8'))
     libPkg.version = version
+    // …and so does every one of this repo's own libs it depends on (AGL-3201).
+    // A lib is published beside its siblings at one number, so a declared
+    // `@aglyn/*` dependency left at the last release would name a version
+    // that is never published next to this one. `check:lib-boundaries`
+    // refuses the disagreement; this is what keeps a bump from causing it.
+    for (const name of Object.keys(libPkg.dependencies ?? {})) {
+      if (libNames.has(name)) libPkg.dependencies[name] = version
+    }
     write(libPath, `${JSON.stringify(libPkg, null, 2)}\n`)
   }
 

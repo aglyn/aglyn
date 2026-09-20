@@ -13,7 +13,9 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@swc/helpers": "~0.3.3"
+    "@aglyn/shared-util-tools": "1.0.0-beta.140",
+    "@swc/helpers": "~0.3.3",
+    "react-color": "^2.19.3"
   },
   "peerDependencies": {
     "@mui/material": "^9.3.1",

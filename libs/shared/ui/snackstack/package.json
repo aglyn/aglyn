@@ -13,7 +13,8 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@swc/helpers": "~0.3.3"
+    "@swc/helpers": "~0.3.3",
+    "clsx": "^2.1.1"
   },
   "peerDependencies": {
     "@aglyn/shared-ui-theme": "*",
