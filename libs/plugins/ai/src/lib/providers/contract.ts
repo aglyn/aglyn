@@ -394,8 +394,10 @@ export interface AiCompletion {
    * provider could still parse, and the parsed input alone cannot say where
    * the tokens went: a runaway string the partial parse discarded and a
    * decoding stall that wrote nothing usable both leave a small input
-   * against a spent ceiling. This is what tells them apart. It is for the
-   * trace — a log, a recording — and never travels to a customer.
+   * against a spent ceiling. This is what tells them apart. These are the
+   * model's own words, so they belong to the trace alone: never to a reader,
+   * and never to a log, which carries the figures that separate the two
+   * shapes — `outputTokens`, `parsedChars`, `rawChars`.
    */
   rawOutput?: string
 }
