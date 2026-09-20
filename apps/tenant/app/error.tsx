@@ -17,8 +17,10 @@
 'use client'
 
 import { redispatchCaughtError } from '@aglyn/aglyn/app-utils/redispatch-caught-error'
+import { PLATFORM_DEFAULT_LOCALE } from '@aglyn/aglyn/app-utils/seo-locale'
 import { useEffect } from 'react'
 import StatusScreenPlain from '@aglyn/shared-ui-jsx/components/status-screen-plain.component'
+import DocumentShell from '../components/document-shell.component'
 
 /**
  * Root error boundary (AGL-2074).
@@ -29,9 +31,16 @@ import StatusScreenPlain from '@aglyn/shared-ui-jsx/components/status-screen-pla
  * exactly the case in which no host data exists, so the plain screen is not a
  * shortcut here, it is the only honest option.
  *
- * The root layout still wraps this, so `ErrorBeacon` is mounted and the
- * document shell is intact. `global-error.tsx` is the rung above again, for
- * when even that is gone.
+ * It renders the document shell ITSELF (AGL-3153). An error boundary replaces
+ * its segment's children, and the shell moved down to `[host]/layout.tsx` so
+ * that `<html lang>` could be the site's own language — which is precisely the
+ * layout a throw here has taken out of the tree. So this rung carries its own,
+ * and `ErrorBeacon` is mounted exactly as it was when the root layout held it.
+ *
+ * The PLATFORM DEFAULT language, for the same reason the screen is plain:
+ * there is no resolved host at this point, so there is no site whose language
+ * could be named. `global-error.tsx` is the rung above again, for when even
+ * this is gone.
  */
 export default function RootError({
   error,
@@ -43,29 +52,31 @@ export default function RootError({
   useEffect(() => redispatchCaughtError(error), [error])
 
   return (
-    <StatusScreenPlain
-      code="500"
-      title={'Something went wrong'}
-      message={'This page didn’t load properly. Please try again.'}
-      action={
-        <button
-          type="button"
-          onClick={() => reset()}
-          style={{
-            padding: '0.6rem 1.1rem',
-            borderRadius: '0.5rem',
-            borderStyle: 'solid',
-            borderWidth: '1px',
-            background: 'transparent',
-            color: 'inherit',
-            font: 'inherit',
-            fontWeight: 500,
-            cursor: 'pointer',
-          }}
-        >
-          {'Try again'}
-        </button>
-      }
-    />
+    <DocumentShell lang={PLATFORM_DEFAULT_LOCALE}>
+      <StatusScreenPlain
+        code="500"
+        title={'Something went wrong'}
+        message={'This page didn’t load properly. Please try again.'}
+        action={
+          <button
+            type="button"
+            onClick={() => reset()}
+            style={{
+              padding: '0.6rem 1.1rem',
+              borderRadius: '0.5rem',
+              borderStyle: 'solid',
+              borderWidth: '1px',
+              background: 'transparent',
+              color: 'inherit',
+              font: 'inherit',
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            {'Try again'}
+          </button>
+        }
+      />
+    </DocumentShell>
   )
 }

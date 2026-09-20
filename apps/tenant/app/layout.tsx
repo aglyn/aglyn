@@ -21,28 +21,44 @@
 // ROOT LAYOUT of every published page, so the barrel's reach is every page's
 // reach, for one application constant.
 import { APP_CONSOLE } from '@aglyn/shared-data-enums/aglyn-applications'
-// Deep import (not the barrel) so this Server Component doesn't pull the theme
-// lib's createContext HOCs into the RSC graph (AGL-405).
-import { APP_EMOTION_CACHE_OPTIONS } from '@aglyn/shared-ui-theme/util/emotion-cache'
-import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter'
 import type { Metadata, Viewport } from 'next'
 import type { ReactNode } from 'react'
-import ErrorBeacon from '../components/error-beacon.component'
 
 /**
  * App Router root layout (migrated from pages/_app + _document). It owns the
- * document shell and the emotion/MUI SSR cache — `AppRouterCacheProvider`
- * replaces the Pages Router `_EmotionDocumentComponent` extraction, injecting
- * the streamed emotion styles during App Router SSR. Per-host theming and
- * fonts live one level down in `[host]/[scheme]/layout` (they depend on the
- * resolved tenant host), so this layout stays host-agnostic.
+ * document-wide `metadata` and `viewport` defaults. Per-host theming and fonts
+ * live one level down in `[host]/[scheme]/layout` (they depend on the resolved
+ * tenant host), so this layout stays host-agnostic.
+ *
+ * ⚠️ IT NO LONGER RENDERS `<html>` (AGL-3153). The shell — `<html>`, `<body>`
+ * and the emotion/MUI SSR cache — is `DocumentShell`, rendered by each segment
+ * that can say what language the document is in: `[host]/layout.tsx` for a
+ * tenant site, and the two host-agnostic boundaries beside this file for a
+ * request that resolves to no site.
+ *
+ * Being host-agnostic is exactly why it cannot own the shell any more. The
+ * `lang` attribute was the literal `"en"` here, so a site written in Spanish
+ * still told every browser, screen reader and search engine it was English.
+ * This segment sits above `[host]` and Next gives it no params, so the only
+ * way to answer from here is `headers()` — and a dynamic API in the root
+ * layout de-opts static generation for everything beneath it. Measured on
+ * this app: adding one dropped `/_not-found` out of the prerender manifest
+ * entirely, and the catch-all's `revalidate = 3600` would fall the same way
+ * when it regenerates at request time.
+ *
+ * Next's root-layout check reads the streamed document for `<html>` and
+ * `<body>` rather than this file, so moving them down a segment satisfies it.
+ * Every route below either passes through `[host]/layout.tsx` or is one of the
+ * boundaries that renders its own shell; `global-error.tsx` has always
+ * rendered its own, because it replaces this tree rather than nesting in it.
  *
  * The cache options are named rather than defaulted (AGL-1266). Emotion's
  * class name is `${cache.key}-${hash}`, so a surface that renders under a
  * different cache emits `css-13b992c` where this one emits `mui-13b992c` —
  * identical styles, different prefix — and React discards the entire server
  * tree at hydration over it. `APP_EMOTION_CACHE_OPTIONS` is the single place
- * that key is decided, shared with the console's root layout.
+ * that key is decided, shared with the console's root layout, and
+ * `DocumentShell` is now the single place it is applied.
  */
 export const metadata: Metadata = {
   description: APP_CONSOLE.DESCRIPTION,
@@ -54,40 +70,5 @@ export const viewport: Viewport = {
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-  return (
-    <html lang="en">
-      <body>
-        <AppRouterCacheProvider options={APP_EMOTION_CACHE_OPTIONS}>
-          {/* THE DOCUMENT'S ONE `main` LANDMARK LIVES ON THE PAGE, NOT HERE
-              (AGL-2486).
-
-              It was this wrapper, which made the landmark exist and put the
-              site nav and the site footer inside it — the one thing `main` is
-              defined as excluding, and the reason a "skip to content" link
-              would land on the top of the chrome it was meant to skip.
-
-              Composition places it now, on the region it names: the layout's
-              slot (the page content between the chrome), or the screen root
-              when a screen has no layout, or wherever an author's HTML-element
-              picker put it — `stampDocumentLandmark` picks exactly one. The
-              screens that compose no author nodes carry their own: the root
-              error and not-found boundaries render `StatusScreenPlain`, and
-              the branded site status screen names its own content region.
-
-              ⚠️ STILL EXACTLY ONE. `main` remains unofferable in the Section
-              element picker and in author HTML — see `SECTION_ELEMENTS` and
-              `ALLOWED_AUTHOR_HTML_ELEMENTS`, both of which drop it and say
-              why. The two nodes that may carry it are the ones composition
-              arbitrates between. */}
-          {children}
-          {/* First-party error beacon (AGL-1538): uncaught browser errors
-              → /api/errors → Cloud Error Reporting. Sits OUTSIDE the page's
-              suspense boundaries so it reports even when a page component
-              stays suspended (the AGL-1285-adjacent hydration stall is
-              exactly the failure mode it must survive). */}
-          <ErrorBeacon />
-        </AppRouterCacheProvider>
-      </body>
-    </html>
-  )
+  return children
 }
