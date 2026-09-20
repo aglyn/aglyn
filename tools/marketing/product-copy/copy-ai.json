@@ -1,0 +1,343 @@
+{
+  "page": "Aglyn AI",
+  "route": "/product/ai",
+  "figmaNodeId": null,
+  "frameName": null,
+  "frameSize": null,
+  "notes": "The Aglyn AI hub page (AGL-2920). AUTHORED, not extracted: there is no Figma frame for it, so `figmaNodeId`, `frameName` and `frameSize` are null and every `notes` field describes the section of the /product/besigner skeleton the copy pours into rather than a frame that already draws it. Same 8-section skeleton as the other detail pages, so `apply-page-copy.js` pours it unchanged; `explore` carries TEN cards (the roster, which Aglyn AI is not a member of — it is the eleventh card on /product, AGL-2920 decision of 2026-09-15), so the Explore grid must be grown to ten before pouring, exactly as `copy-datasets.json` requires. Every capability claim on this page is sourced from `apps/docs/docs/ai/` and the AI plugin's own code; the provenance for each is in `claimsToVerify` under the `source` key. Three things about this page are unlike the others and are deliberate. (1) `disclosure` is a top-level key, not a section: generative building is behind `release_ai_generative`, which is OFF in production, so the page carries a rolling-out notice as its own removable band — see that key. (2) `placements` records the nav entry, the footer entry and the /product grid card that AGL-2920 also covers; they belong to the layout and to another page, so they are not sections here and the applier never sees them. (3) `seo` carries the title and description the keyword plan recommends, because neither is a text node on the page — /pricing's SEO description is the surface `docs/PRICING_SURFACES.md` records as missed twice, and this page has the same shape of field.",
+  "seo": {
+    "title": "Aglyn AI: Describe It, Draft It, Edit Anything",
+    "description": "For agencies and multi-brand teams: describe a page, form, email, campaign or product listing, get a draft, edit anything, and publish it yourself.",
+    "primaryQuery": "AI website builder",
+    "secondaryQueries": [
+      "generate a website from a prompt",
+      "AI website builder for agencies"
+    ],
+    "notes": "From `Platform Docs/Pricing & Packaging/07-GTM-and-Marketing/AI-Keyword-Plan.md` §3, with one change: the plan's recommended description names a workflow, and drafting an automation from a description is NOT released (`apps/docs/docs/ai/automations-with-ai.md#draft`). It is replaced with capabilities that are. The plan's recommended H1 — 'Aglyn AI: for agencies and multi-brand teams, an AI website builder that drafts what you describe' — is 96 characters and the skeleton's H1 is 72px Black in a 600px column, so the hero heading below is the short form and the hero body carries the head term and the audience. Title 46 chars (limit 60), description 147 (limit 155). The description is a separate field on the screen's detail page, not a text node the applier can pour — set it by hand in the same pass as the body."
+  },
+  "disclosure": {
+    "id": "ai-rolling-out",
+    "placement": "Its own band directly below the hero, above the statement — a full-width notice, not a section of the skeleton.",
+    "label": "Rolling out",
+    "body": "Aglyn AI is a release-flagged feature, currently being rolled out — the doors described on this page do not all appear in every workspace yet. Aglyn Assist, the assistant that answers questions about the product, is available today.",
+    "removeAtFlip": true,
+    "notes": "Generative building is gated on `release_ai_generative`, which is OFF in production: every generative route answers 404, so a page that reads as though Aglyn AI is available today would be a misrepresentation on the live site. The wording is the one `apps/docs/docs/ai/overview.md` has carried all along, so the two surfaces agree. It is a DISCRETE element on purpose: when the flag flips, this band is deleted and the page is correct, rather than the page being rewritten sentence by sentence — the same way the `:::caution Rolling out` admonitions come out of the docs. The second sentence is the honest split: `release_assist` gates the assistant that answers questions and has been on since 2026-08-23, and `libs/plugins/ai/src/lib/server/ai-assist.ts` carries no release flag at all, while `release_ai_generative` gates every build job (`ai-jobs-gate.ts`, `ai-jobs-route.ts`, `assist-chat.ts`). A page that blurs the two undersells what works or oversells what does not. ⛔ `apply-page-copy.js` pours `sections` and nothing else, so this band is NOT poured — it is placed by hand in the same pass, and deleted by hand at the flip."
+  },
+  "sections": [
+    {
+      "kind": "hero",
+      "figmaNodeId": null,
+      "eyebrow": "AGLYN AI · DESCRIBE IT, EDIT IT",
+      "heading": "Describe it. Get a draft. Edit anything.",
+      "subheading": null,
+      "body": [
+        "Aglyn AI is an AI website builder inside the console you already run. Describe a page, a whole small site, a form, a reusable component, an email or a campaign, and it builds a draft from your own theme, layout and components — for you to edit, and for you to publish."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See how it works", "variant": "text" }
+      ],
+      "items": [],
+      "image": {
+        "describe": "AI jobs panel mockup, 920×580, floating card with the hero shadow. Header 'AI jobs' with a close glyph and a job chip 'Needs review'. The job at the top reads 'Describe a page' with the brief beneath it in quotes: 'A services page for a two-person landscaping company — what we do, before-and-after photos, and a quote request form.' Below it the PLAN, in three labeled groups. 'Reuse' lists three rows with a recycle glyph: Layout · Site header & footer; Component · Service card; Form · Quote request. 'Create' lists two rows with a plus glyph: Section · Before and after, because the site has no gallery component; Dataset · Services, proposed from the six services in the brief. 'Screens' lists one row: /services · Site header & footer · 'Landscaping services in Ashford'. Bottom bar: an estimate chip reading 'Estimated · 1,850 credits', a text button 'Cancel' and a primary button 'Confirm plan'. Right of the panel, a second, smaller card labeled 'Draft · not published' showing a page thumbnail with an 'Open draft' link and a small amber row reading '1 gap to fill: [phone number]'.",
+        "figmaNodeId": null
+      },
+      "notes": "Two columns: 600px text column left (80px left inset, no right padding), mockup right, bleeding off the right edge — the deliberate container-overflow exception the skeleton records. Eyebrow is the 28×2px magenta rule plus the uppercase tracked label. Heading is Display/XL 72px Black and fits three short sentences on two lines at that size. ⛔ The mockup is the page's one chance to show the draft-first rule without prose, so it must show a PLAN awaiting confirmation and a DRAFT that is not published — never a published page, never a live URL, never a Send button. The credits figure is illustrative and is flagged in `claimsToVerify`; it carries no dollar amount, and no plan tier or price may appear anywhere in this shot. The '1 gap to fill' row is building rule 14 (`apps/docs/docs/ai/how-aglyn-ai-builds.md`), which marks a missing fact in square brackets rather than inventing it."
+    },
+    {
+      "kind": "statement",
+      "figmaNodeId": null,
+      "eyebrow": null,
+      "heading": "Most AI builders hand you a finished website and dare you to change it. Aglyn AI hands you a draft — made from your own components, your layout and your theme — and every part of it opens in the editor you already use.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": "Single full-bleed 34px Bold pull-quote at text/muted (#757575), 80px side padding, 64px vertical, left-aligned. The phrase 'a draft' is emphasized in text/primary (#212121) — the rest stays muted, as on the Console page where 'one place' carries the emphasis. The first clause is a claim about the shape of the category, not about a named competitor, so it is outside `check:external-facts` and outside the comparison rule; nothing here concedes or asserts anything about another vendor. Keep it that way — a named product in this slot becomes an `/alternatives/*` row with a verification burden."
+    },
+    {
+      "kind": "capabilities",
+      "figmaNodeId": null,
+      "eyebrow": "WHAT AGLYN AI BUILDS",
+      "heading": "A draft for most of what you make.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Pages, and whole small sites",
+          "body": "Describe a page and it builds a screen in your layout. Describe a business and it plans a small site — the pages, their addresses, a shared layout and a contact form — before it builds anything.",
+          "meta": null
+        },
+        {
+          "title": "Layouts, templates, components",
+          "body": "A header, navigation and footer as one layout. A page template for pages that differ only by content. A block that repeats built once as a reusable component.",
+          "meta": null
+        },
+        {
+          "title": "Forms that are ready to collect",
+          "body": "Describe a form and it arrives on the Forms page with its fields, the answers it requires, a marketing consent box when it asks for an email address, and where each submission goes.",
+          "meta": null
+        },
+        {
+          "title": "Emails and campaigns, unsent",
+          "body": "A draft email built from the email blocks, with three subject lines and three preheaders to choose between — or that design plus the draft campaign that would send it.",
+          "meta": null
+        },
+        {
+          "title": "Copy, themes and search listings",
+          "body": "Rewrite any text on the canvas, or write it from nothing. Describe a theme change and get a proposal in the theme editor's own controls. Have a page or product's search title and description written for you.",
+          "meta": null
+        },
+        {
+          "title": "Products, records and your figures",
+          "body": "Product copy and catalog ideas as proposals. A summary and a suggested next step on a CRM record. Plain-words answers about your own numbers, with every figure traced to the row it came from.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "Centered eyebrow and heading, 3-column card grid, 2 rows, 410px cards with the 44px icon tile top-left. ⛔ These six are the released doors and no more. Drafting an automation from a description is NOT among them — `apps/docs/docs/ai/automations-with-ai.md#draft` says the door is shut on every plan because a multi-step description can come back as a one-step draft. Explaining an automation you already have, and answering why a run failed, ARE released, and they sit in the deep-dive rather than here so that no card reads as 'AI builds your automations'. The heading deliberately says 'most of what you make' rather than a count: `project_product_roster_is_ten_no_counters` bans a counter in copy, and a list of doors goes stale on every release."
+    },
+    {
+      "kind": "deep-dive",
+      "figmaNodeId": null,
+      "eyebrow": "DRAFTS ONLY",
+      "heading": "It builds. You publish.",
+      "subheading": null,
+      "body": [
+        "Every generation writes a draft, or a new unpublished version of something you already have. It never flips a published version, never registers an address on your live site, never changes your navigation and never sends anything. Publishing stays yours, through the buttons you already use."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "title": "A plan before any work",
+          "body": "Each build job first proposes what it will reuse, what it will create and why, and what each screen will hold. Nothing is generated until you confirm it.",
+          "meta": null
+        },
+        {
+          "title": "Built from what you already have",
+          "body": "Your layout, your components, your forms, your theme's colors and spacing — checked against the building rules before you see it, and asked again when an answer breaks one.",
+          "meta": null
+        },
+        {
+          "title": "Safe to run, safe to abandon",
+          "body": "A job you don't like costs the credits it spent and a draft you delete. It can also read what you already have: what a saved automation does, or why one of its runs failed.",
+          "meta": null
+        }
+      ],
+      "image": {
+        "describe": "Besigner canvas mockup, 768×580, showing a generated page open as a draft. Top bar carries the screen name 'Services', a grey status pill reading 'Draft · never published', and a primary 'Publish' button that is the only way it goes live. Left rail shows the layer tree with a highlighted 'Service card' component instance repeated three times — one component, three instances, not three copies. Right rail shows the Attributes panel with theme tokens selected rather than hex values ('Primary', 'Spacing 4'). Across the canvas, a services section with three cards and a quote form block labeled 'Quote request · placed by reference'. Bottom-left, a small toast: 'Draft created. Nothing on your live site has changed.'",
+        "figmaNodeId": null
+      },
+      "notes": "Combined deep-dive + canvas/visual section — the page's one big visual moment. Two columns: 440px text column left, 768px mockup right, on the tinted band. The three items are checkmark-bulleted rows, not cards. This section carries the single most load-bearing true claim on the page, so its body is close to verbatim from `apps/docs/docs/ai/overview.md#drafts-only` and building rule 13 — the four nevers are the ones the product actually enforces, and no one of them may be softened or dropped for rhythm. Item three carries the automation doors deliberately: 'read what you already have' is exactly what Explain it and Why did this fail? do, and neither drafts nor runs anything."
+    },
+    {
+      "kind": "how-it-works",
+      "figmaNodeId": null,
+      "eyebrow": "HOW IT WORKS",
+      "heading": "From one sentence to something you can edit.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Describe it",
+          "body": "Open the page that lists what you want built — Screens, Layouts, Templates, Forms or Components — and choose Describe it beside its create button.",
+          "meta": "01"
+        },
+        {
+          "title": "Read the plan",
+          "body": "The job answers with a plan: what it will reuse, what it will create and why, and the screens it will build. Confirm it to build, or cancel and pay nothing more.",
+          "meta": "02"
+        },
+        {
+          "title": "Edit, then publish",
+          "body": "The draft opens in the editor you already use. Change anything, fill the gaps it marked in square brackets, and publish when you are ready.",
+          "meta": "03"
+        }
+      ],
+      "image": null,
+      "notes": "LEFT-aligned eyebrow and heading, three equal columns each topped by a 3px rule, then the 2-digit step numeral, title and body. `meta` here is the step numeral and IS display copy — the opposite of the early-access band below, where `meta: 'stat'` is the extractor's type tag. AGL-1233 published the literal word 'stat' on eight pages by flattening the two the same way; the applier now flattens them differently and `verify-applier.mjs` asserts the values rather than the count."
+    },
+    {
+      "kind": "explore",
+      "figmaNodeId": null,
+      "eyebrow": "ONE PLATFORM",
+      "heading": "Aglyn AI works with the rest of Aglyn.",
+      "subheading": "Every product below runs on the same platform — explore what else is built in.",
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Besigner",
+          "body": "Design on a live canvas and publish in one click.",
+          "meta": null
+        },
+        {
+          "title": "Console",
+          "body": "Manage every site, team, and setting in one place.",
+          "meta": null
+        },
+        {
+          "title": "Commerce",
+          "body": "Storefronts, checkout, subscriptions & digital goods.",
+          "meta": null
+        },
+        {
+          "title": "Forms & Inbox",
+          "body": "Collect submissions in one Inbox and route them onward.",
+          "meta": null
+        },
+        {
+          "title": "CRM",
+          "body": "Leads, contacts, deals & tasks.",
+          "meta": null
+        },
+        {
+          "title": "Media",
+          "body": "A real DAM — folders, drag-and-drop, metadata.",
+          "meta": null
+        },
+        {
+          "title": "Workflows",
+          "body": "Automate the busywork with triggers & actions.",
+          "meta": null
+        },
+        {
+          "title": "Plugins",
+          "body": "Install templates and layouts, or publish and sell your own.",
+          "meta": null
+        },
+        {
+          "title": "Analytics",
+          "body": "Privacy-first traffic, top pages, and store revenue.",
+          "meta": null
+        },
+        {
+          "title": "Marketing",
+          "body": "Email campaigns, popups, and A/B testing.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "TEN link-cards on a pale grey band, centered eyebrow, heading and subheading. The ten are the roster (`project_product_roster_is_ten_no_counters`); Aglyn AI is not one of them, so there is no self-link to omit and no Datasets card — /product/datasets sits outside the roster, which is why its own Explore grid carries these same ten. Every title and blurb is verbatim from `copy-datasets.json` so the grids stay identical across pages; changing one here silently forks it. The heading follows the live detail pages' '<Product> works with the rest of Aglyn.' and the subheading is the one seven of them share. ⛔ The grid must be grown from seven cards to ten BEFORE pouring — `apply-page-copy.js` takes this section's slot count from `explore.items` and refuses a canvas whose grid holds a different number — and each card's `screenId` re-pointed from the screens table at apply time, never transcribed from a dry run."
+    },
+    {
+      "kind": "early-access",
+      "figmaNodeId": null,
+      "eyebrow": "An add-on, not a plan",
+      "heading": "Aglyn AI is an add-on on every paid plan.",
+      "subheading": null,
+      "body": [
+        "Bought once for the workspace — not per seat and not per site — it adds a band of AI credits to the band your plan already includes, and every member with the permission can use every door on every site. Free workspaces get a small monthly allowance instead, and stop there rather than billing you."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See what’s included", "variant": "outlined" }
+      ],
+      "items": [
+        { "title": "1", "body": "credit pool for the whole workspace", "meta": "stat" },
+        { "title": "0", "body": "pages published without you", "meta": "stat" },
+        { "title": "2", "body": "tries, then a job stops rather than break a rule", "meta": "stat" },
+        { "title": "180", "body": "days a brief is kept, then deleted", "meta": "stat" }
+      ],
+      "image": null,
+      "notes": "⛔ NO PRICES ON THIS PAGE. `docs/PRICING_SURFACES.md` counts nine surfaces a charged price has to reach and two of them are edited by hand here; a figure on this page would be a tenth that no guard can see. The band says what the add-on IS and sends the reader to /pricing for what it costs. Unlike the other detail pages the chip is POURED rather than kept: `eyebrow` is set, so the applier writes 'An add-on, not a plan' over the skeleton's 'Now in early access' — the datasets page changed the same chip to 'Included from Starter' by hand, and pouring it is the mechanical version of that. The four stats are figures that do not go stale with the roster: one workspace credit pool with no second meter per feature, the draft-first rule as a number, the two attempts a generation gets before a job stops (`AI_GENERATION_MAX_ATTEMPTS`), and the 180 days a brief is kept. Section background is bg/default (#F8F9FA); the stat figures take the primary.dark token and never the retired brand-blue literal (AGL-1293)."
+    },
+    {
+      "kind": "cta",
+      "figmaNodeId": null,
+      "eyebrow": null,
+      "heading": "Start from a draft, not a blank canvas.",
+      "subheading": null,
+      "body": [
+        "Describe what you want, edit what comes back, and publish it yourself."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See pricing", "variant": "text" }
+      ],
+      "items": [],
+      "image": null,
+      "notes": "Full-bleed gradient band, all text white and centered, the shared 190.72deg literal. Heading is Display/L 56px Black and fits one line at the 900px cap. The body is deliberately short and deliberately ends on 'publish it yourself' — the last thing a reader takes off the page is the draft-first rule, not a feature list."
+    }
+  ],
+  "placements": {
+    "notes": "AGL-2920 covers three entries that are not text nodes on this page: two belong to the layout (which a screen document does not contain — see the README's 'Chrome is not a page section') and one belongs to /product. `apply-page-copy.js` never sees them; they are placed by hand in the same pass as the page.",
+    "navEntry": {
+      "surface": "Mega menu → Product column",
+      "label": "Aglyn AI",
+      "blurb": "Describe it, get a draft, edit anything.",
+      "href": "/product/ai",
+      "position": "Last in the column, after Marketing.",
+      "notes": "Last, to mirror the /product grid card, which Zach placed as the ELEVENTH card on 2026-09-15 rather than as a band above the grid. No separate decision exists for the menu, so it follows the one that does rather than inventing a second. Reversible: moving it first is a one-node change if he wants the hub term leading."
+    },
+    "footerEntry": {
+      "surface": "Footer → Product column",
+      "label": "Aglyn AI",
+      "href": "/product/ai",
+      "position": "Appended after Marketing.",
+      "notes": "The footer's Product column lists the roster as plain links with no blurb; this is one more link in the same shape. The footer keeps its beta chip by decision — do not touch it while adding this."
+    },
+    "productIndexCard": {
+      "surface": "/product → the roster grid",
+      "title": "Aglyn AI",
+      "body": "Describe it, get a draft, edit anything.",
+      "href": "/product/ai",
+      "position": "Eleventh card, after Marketing.",
+      "plate": "Grey, outside the positional accent triad.",
+      "notes": "Zach's decision of 2026-09-15 on AGL-2920: option (a), an eleventh card on a grey plate, NOT the recommended AI band above the grid. It supersedes the ten-card rule for this card only; the rest of `project_product_roster_is_ten_no_counters` still holds, so the grid's heading must still print no count. ⛔ The live /product grid (version `ehpYO8ysOP`, 2026-09-13) already carries ten cards while `copy-product-overview.json` still records the older nine-card grid under a 'Nine products, one platform.' heading — that file is a stale extraction of a page that has since been rebuilt, so the eleventh card is recorded HERE rather than appended to a list that matches neither the live page nor the design. Re-extract /product before trusting that file for anything."
+    }
+  },
+  "claimsToVerify": [
+    {
+      "section": "hero, capabilities, deep-dive, how-it-works",
+      "phrase": "Describe a page / a whole small site / a form / a reusable component / an email or a campaign … it builds a draft",
+      "source": "apps/docs/docs/ai/overview.md#what-it-can-build, generate-a-site.md, generate-a-form.md, generate-a-page.md, generate-with-ai.md (email campaigns), copy-assist.md, theme-assist.md, seo-by-ai.md, products-with-ai.md, crm-by-ai.md, insights.md",
+      "concern": "RESOLVED against the docs tree on 2026-09-20, which is the recently reviewed record of what each door does. Every capability named on this page has a docs page describing it; nothing on this page describes a door the docs do not."
+    },
+    {
+      "section": "capabilities",
+      "phrase": "no card claims an automation drafted from a description",
+      "source": "apps/docs/docs/ai/automations-with-ai.md#draft — 'not open yet, on any plan'",
+      "concern": "RESOLVED by omission, and the omission is load-bearing. The keyword plan's recommended /product/ai description names a workflow, and /product/workflows is assigned the 'AI workflow builder' primary with the H1 'workflows you describe, then edit'. Neither is true today: a multi-step description can come back as a one-step draft, so the door is shut. The deep-dive says what IS released — explain a saved automation, and why a run failed. When drafting opens, this page gains a card and /product/workflows gains its H1; until then that wording must not be copied here from the plan."
+    },
+    {
+      "section": "capabilities (card 6, 'your figures')",
+      "phrase": "Plain-words answers about your own numbers, with every figure traced to the row it came from",
+      "source": "apps/docs/docs/marketing-and-automation/analytics/insights.md — 'It never guesses a number: every insight links to the rows it was read from, and an insight whose numbers cannot be found in those rows is left out.'",
+      "concern": "RESOLVED. Stated as tracing rather than as analysis, because the guarantee the product actually makes is provenance, not interpretation."
+    },
+    {
+      "section": "not on the page — A/B variants",
+      "phrase": "describe an A/B variant, generate a draft",
+      "source": "libs/plugins/ai/src/lib/model/ai-experiment.ts and jobs/ai-job-experiment-step.ts (AGL-2914); registered in server.ts",
+      "concern": "OPEN — deliberately left off this page. The runner exists and its contract is exact: variants are PROPOSED, never written ('Nothing here writes an experiment, starts one, or moves traffic'), and an explanation may name a winner only where `readAiExperimentResult` found one in the counts. But no console surface starts an `experiment` job — nothing outside `libs/plugins/ai` references the module — and there is no docs page for it, so it is a runner without a door. The keyword plan assigns /product/analytics the 'AI A/B testing' primary; that row needs the console surface and a docs page before any marketing page claims it. If it ships first, the accurate wording is proposed variants you paste into the A/B testing card, and a result explained only when the numbers support a winner — never 'AI runs your tests'."
+    },
+    {
+      "section": "hero (mockup content, not prose)",
+      "phrase": "Estimated · 1,850 credits",
+      "source": "apps/docs/docs/ai/generate-a-site.md — 'the plan shows an estimated cost in credits beside the button that confirms it'",
+      "concern": "OPEN. The behavior is real and the unit is right, but the figure is invented for the shot. Replace it with a measured estimate from a real page job before the mockup is built, or drop the numeral and keep the chip's label. It carries no dollar amount and must not acquire one — a price in a mockup is a pricing surface no guard in `docs/PRICING_SURFACES.md` can see."
+    },
+    {
+      "section": "early-access",
+      "phrase": "an add-on on every paid plan … Free workspaces get a small monthly allowance instead",
+      "source": "apps/docs/docs/ai/overview.md#the-add-on; libs/aglyn/src/lib/foundation/definitions/org-billing.types.ts → `aiGenerative` ('No self-serve tier includes it; the Aglyn AI add-on switches it on')",
+      "concern": "RESOLVED as a shape, NOT as a number. No price, no band size and no plan table appears on this page — both figures live on /pricing and in Billing, and `docs/PRICING_SURFACES.md` is explicit that a price reaching an unguarded hand-edited surface is how this fails. Re-read it before anyone adds a figure here. Starter's position (no AI credits of its own, so the add-on is what gives it something to generate against) and Enterprise's (generative building in the agreement rather than the add-on) are both true and both deliberately left to /pricing."
+    },
+    {
+      "section": "disclosure",
+      "phrase": "a release-flagged feature, currently being rolled out … Aglyn Assist … is available today",
+      "source": "release flags: `release_ai_generative` in ai-jobs-gate.ts / ai-jobs-route.ts / assist-chat.ts; `release_assist` in assist-chat.ts and ai-gate.spec.ts; ai-assist.ts carries no flag",
+      "concern": "MUST BE TRUE AT PUBLISH TIME, and it is the one line on the page whose truth has an expiry. While `release_ai_generative` is off in production the band is required; when it flips, the band is deleted in the same pass as the docs admonitions, per `project_release_ai_generative_flip_sequence`. ⛔ Do not publish this page with the band removed 'in anticipation' — the flip is a four-part change and the flag is the last part."
+    },
+    {
+      "section": "whole page",
+      "phrase": "no comparison, no named competitor",
+      "source": "feedback_comparison_pages_concede_only_verified_gaps",
+      "concern": "RESOLVED by construction. The statement band contrasts a category habit, not a product; nothing on the page concedes or asserts a competitor fact. The comparison rows the keyword plan wants belong on /alternatives/*, where each fact carries a date and a source."
+    }
+  ]
+}

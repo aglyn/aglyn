@@ -258,6 +258,47 @@ them out before matching. Analytics and Marketing looked like 10-section pages
 purely because of that; all **eight detail pages are the same 8-section
 skeleton**, and all eight pour cleanly (73–74 writes each).
 
+## `copy-ai.json` is authored, not extracted (AGL-2920)
+
+Every other file here is a record of a Figma frame. `/product/ai` has no
+frame, so `figmaNodeId`, `frameName` and `frameSize` are null, each `notes`
+describes the skeleton slot rather than a drawn section, and every capability
+claim carries its source in `claimsToVerify` — a path under
+`apps/docs/docs/ai/` or in the AI plugin — because there was no design to
+check the copy against, only the product.
+
+It pours through the unchanged applier as an ordinary 8-section deck, with two
+differences from the older ones:
+
+- **Ten Explore cards**, like `copy-datasets.json`: Aglyn AI is not one of the
+  roster of ten, so there is no self-link to omit. Grow the grid to ten before
+  pouring — the applier takes that section's count from `explore.items`.
+- **The early-access chip is poured**, not kept. `eyebrow` is set, so the
+  applier writes over the skeleton's "Now in early access"; every other deck
+  leaves it null. That is why the page writes 80 slots where Datasets writes
+  79, and the harness derives the figure rather than pinning it.
+
+It also carries three keys the applier never reads and a besigner pass must
+place by hand: `seo` (title and description are fields on the screen's detail
+page, not text nodes — the surface `docs/PRICING_SURFACES.md` records as
+missed twice), `disclosure` (the rolling-out notice, below), and `placements`
+(the nav entry, the footer entry and the eleventh `/product` grid card, which
+belong to the layout and to another page).
+
+### The rolling-out line is a slot, not a sentence
+
+`disclosure` is a **discrete, removable** element: its own notice band under
+the hero, not a qualifier threaded through the prose. Generative building is
+behind `release_ai_generative`, which is off in production — every generative
+route answers 404 — so the notice is required until the flip, and the flip
+then **deletes** it rather than rewriting the page around it, the same way the
+`:::caution Rolling out` admonitions come out of `apps/docs/docs/ai/`.
+
+The split it makes is the honest one: the assistant that answers questions is
+released (`release_assist`, and `ai-assist.ts` carries no flag at all); it is
+generative **building** that is rolling out. A page that blurs the two
+undersells what works or oversells what does not.
+
 `copy-product-overview.json` is the real exception: **11 page sections**. It is
 the `/product` index, not a detail page — no Statement, no Capabilities/
 Deep-dive pair, a centred hero with the mockup below, and three sections the

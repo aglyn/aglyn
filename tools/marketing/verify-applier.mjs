@@ -16,6 +16,8 @@ import { readFileSync } from 'node:fs'
 
 const SLOTS = [5, 1, 14, 9, 11, 17, 13, 4]
 const PAGES = ['console','commerce','forms','media','workflows','plugins','analytics','marketing']
+/** Decks whose Explore grid carries the whole roster, so section 5 is wider. */
+const TEN_CARD_PAGES = ['datasets', 'ai']
 
 /** Early-access is section 6; its 4 stat pairs start after eyebrow+heading+intro+2 actions. */
 const SLOT_INDEX = { earlyaccess: { section: 6, first: 5 } }
@@ -119,11 +121,11 @@ for (const page of PAGES) {
 // Explore carries one card per product other than the page's own, so its slot
 // count comes from the copy rather than from a fixed contract. A ten-card deck
 // must pour into a ten-card grid and be refused by a seven-card one.
-{
-  const COPY = JSON.parse(readFileSync('tools/marketing/product-copy/copy-datasets.json', 'utf8'))
+for (const page of TEN_CARD_PAGES) {
+  const COPY = JSON.parse(readFileSync(`tools/marketing/product-copy/copy-${page}.json`, 'utf8'))
   const explore = COPY.sections.find((s) => s.kind === 'explore')
   const slots = SLOTS.map((n, i) => (i === 5 ? 3 + 2 * explore.items.length : n))
-  console.log(`datasets — ${explore.items.length} explore cards`)
+  console.log(`${page} — ${explore.items.length} explore cards`)
 
   globalThis.window = { AglynModule: { canvas: stubCanvas(), CANVAS_ROOT_ELEMENT_ID: '_@_' } }
   let applyPageCopy = eval(`${src}; applyPageCopy`)
@@ -133,15 +135,19 @@ for (const page of PAGES) {
   globalThis.window = { AglynModule: { canvas, CANVAS_ROOT_ELEMENT_ID: '_@_' } }
   applyPageCopy = eval(`${src}; applyPageCopy`)
   const res = applyPageCopy(COPY, { dryRun: false })
-  // Every slot is written except the early-access chip, which the copy leaves null.
-  const expectedWrites = slots.reduce((sum, n) => sum + n, 0) - 1
+  // Every slot is written except the ones the copy leaves null, which on these
+  // decks is the early-access chip — kept from the skeleton on the pages that
+  // do not name it, poured on the ones that do (Aglyn AI changes it).
+  const earlyAccess = COPY.sections.find((s) => s.kind === 'early-access')
+  const kept = earlyAccess.eyebrow == null ? 1 : 0
+  const expectedWrites = slots.reduce((sum, n) => sum + n, 0) - kept
   check(res.wrote === expectedWrites, `${expectedWrites} writes (got ${res.wrote}${res.problems ? `; ${res.problems.join('; ')}` : ''})`)
   const labels = explore.items.map((_, k) => canvas._nodes.get(`5:${3 + 2 * k}`).props.children)
   check(
     labels.every((label, k) => label === explore.items[k].title),
     `explore labels land in card order (last two: ${JSON.stringify(labels.slice(-2))})`,
   )
-  const stats = COPY.sections.find((s) => s.kind === 'early-access').items.flatMap((item) => [item.title, item.body])
+  const stats = earlyAccess.items.flatMap((item) => [item.title, item.body])
   const got = Array.from({ length: 8 }, (_, k) => canvas._nodes.get(`6:${5 + k}`).props.children)
   check(got.every((v, k) => v === stats[k]), `stat band is figure-then-label (got ${JSON.stringify(got.slice(0, 4))}…)`)
 }
