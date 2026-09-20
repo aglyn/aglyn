@@ -202,13 +202,40 @@ registerPluginJob({
         const target = routePath ?? previousPath
         if (!target) continue
 
-        // Same cache key the middleware rewrites to:
-        // `/{host}/{scheme}{path}`, NOT the public URL. One call per scheme,
-        // because the scheme is a path segment and each is its own entry
-        // (AGL-2708).
+        /**
+         * Same cache key the middleware rewrites to:
+         * `/{alias}/{scheme}{path}`, NOT the public URL and NOT the host
+         * document id (AGL-3163).
+         *
+         * The first segment is the tenant host ALIAS — the subdomain label, or
+         * the `cname--` sentinel for an attached domain. `getHost` QUERIES the
+         * document id from that alias, which is what makes the two different
+         * values; this loop passed the id, so every scheduled publish dropped
+         * a key nothing holds and the page served its old version for the rest
+         * of the window. The tag bust above was never affected —
+         * `tenant-data:{hostId}` really is keyed on the id — so the documents
+         * were fresh and the HTML was not, which is the hardest version of
+         * this to notice.
+         *
+         * BOTH aliases, because a site with a domain attached caches the same
+         * page under two keys and the domain's is the one visitors read
+         * (AGL-1152). One call per scheme on each, because the scheme is a
+         * path segment and each is its own entry (AGL-2708).
+         */
         const url = screenRoutePathToUrl(target)
-        for (const scheme of SCHEME_ROUTE_SEGMENTS) {
-          revalidatePath(`/${hostId}/${scheme}${url === '/' ? '' : url}`)
+        const subdomain = String(hostSnapshot.get('subdomain') ?? '')
+        const cname = String(hostSnapshot.get('cname') ?? '')
+          .trim()
+          .toLowerCase()
+        const aliases = [
+          ...(subdomain ? [subdomain] : []),
+          // The sentinel the middleware builds, byte for byte.
+          ...(cname ? [`cname--${cname}`] : []),
+        ]
+        for (const alias of aliases) {
+          for (const scheme of SCHEME_ROUTE_SEGMENTS) {
+            revalidatePath(`/${alias}/${scheme}${url === '/' ? '' : url}`)
+          }
         }
       } catch (error) {
         // One bad screen must not stop the batch — the rest are still due.
