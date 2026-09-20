@@ -46,10 +46,11 @@ import { MEDIA_CDN_VARIANT_WIDTHS } from './serve-media-cdn'
  * **generate variants and say what happened**, and the two failure classes
  * are kept apart on purpose:
  *
- * - `variants: []` with **no** `error` — nothing was ELIGIBLE. An SVG, a
- *   non-image, or a source already narrower than every target width. This is
- *   the correct, common, uninteresting outcome and must never look like a
- *   fault or the fault signal is worthless.
+ * - `variants: []` with **no** `error` — nothing was ELIGIBLE. A type in
+ *   {@link MEDIA_TYPES_WITHOUT_VARIANTS}, a non-image, or a source already
+ *   narrower than every target width. This is the correct, common,
+ *   uninteresting outcome and must never look like a fault or the fault signal
+ *   is worthless.
  * - `variants: []` with an `error` — generation was attempted and did not
  *   complete. That string goes onto the media document and bumps a counter,
  *   which is what makes "how many assets failed?" a query instead of an
@@ -99,6 +100,29 @@ const SOURCE_WIDTH_WEBP_TYPES: ReadonlySet<string> = new Set([
 ])
 
 /**
+ * `image/*` types that produce no variants, for two different reasons.
+ *
+ * SVG is a vector: there is nothing to downscale, and rasterizing it would be
+ * a different asset rather than a variant of this one.
+ *
+ * ICO carries no `sharp` decoder at all, so attempting it raises an
+ * unsupported-format error from `toBuffer` — an ERROR on the media document,
+ * which is the signal reserved for generation that was attempted and broke. An
+ * icon having no variants is neither attempted nor broken; it is the ordinary
+ * outcome, and it has to read as one or the fault counter measures the favicon
+ * instead of a fault (AGL-3121).
+ *
+ * Exported because the backfill script has to skip exactly this set. It kept a
+ * second copy of the SVG half, which is how ICO came to be missing from one
+ * and not the other.
+ */
+export const MEDIA_TYPES_WITHOUT_VARIANTS: ReadonlySet<string> = new Set([
+  'image/svg+xml',
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
+])
+
+/**
  * Which widths this source should produce.
  *
  * Split out and exported because it is the predicate that decides whether an
@@ -116,9 +140,7 @@ export function mediaVariantWidthsFor(options: {
   sourceWidth?: number | null
 }): number[] {
   if (!options.contentType.startsWith('image/')) return []
-  // Vector: there is nothing to downscale, and rasterising it would be a
-  // different asset rather than a variant of this one.
-  if (options.contentType === 'image/svg+xml') return []
+  if (MEDIA_TYPES_WITHOUT_VARIANTS.has(options.contentType)) return []
   const sourceWidth = options.sourceWidth ?? 0
   // No known width means generate and let `withoutEnlargement` decide, which
   // is the same call the loop made before: an unreadable header must not

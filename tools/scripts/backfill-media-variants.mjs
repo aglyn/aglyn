@@ -40,8 +40,11 @@
  *
  * ## What it does and does not touch
  *
- * - Only `image/*`, never `image/svg+xml` — there is nothing to downscale in a
- *   vector and rasterising it would be a different asset.
+ * - Only `image/*`, and never a type in `MEDIA_TYPES_WITHOUT_VARIANTS`: there
+ *   is nothing to downscale in a vector, and `sharp` has no ICO decoder at
+ *   all, so attempting one reports a fault for an asset that never had one
+ *   (AGL-3121). That set is imported, not restated, because this script
+ *   carrying its own copy of the rule is why ICO was missing from it.
  * - The widths `mediaVariantWidthsFor` names, its own rule reused rather than
  *   restated: every width below the source, and for a JPEG or PNG the widths
  *   at and above it as a WebP at the source's own width. Nothing is upscaled,
@@ -113,9 +116,11 @@ const alias = Object.fromEntries(
 )
 const jiti = createJiti(import.meta.url, { interopDefault: true, alias })
 const srv = '../../libs/tenant/data/admin/src/lib/server'
-const { mediaVariantWidthsFor, generateStoredMediaVariants } = jiti(
-  `${srv}/media-variants.ts`,
-)
+const {
+  mediaVariantWidthsFor,
+  generateStoredMediaVariants,
+  MEDIA_TYPES_WITHOUT_VARIANTS,
+} = jiti(`${srv}/media-variants.ts`)
 const { MEDIA_CDN_VARIANT_WIDTHS } = jiti(
   '../../libs/aglyn/src/lib/app-utils/media-ref.ts',
 )
@@ -133,7 +138,7 @@ console.log(`media documents: ${snapshot.size}`)
 
 const plan = []
 let skippedNonImage = 0
-let skippedSvg = 0
+let skippedNonRaster = 0
 let skippedNoPath = 0
 let skippedComplete = 0
 let skippedTooSmall = 0
@@ -144,7 +149,7 @@ for (const doc of snapshot.docs) {
   const contentType = String(d.contentType ?? '')
   const storagePath = d.storagePath
   if (!contentType.startsWith('image/')) { skippedNonImage++; continue }
-  if (contentType === 'image/svg+xml') { skippedSvg++; continue }
+  if (MEDIA_TYPES_WITHOUT_VARIANTS.has(contentType)) { skippedNonRaster++; continue }
   if (!storagePath) { skippedNoPath++; continue }
 
   /*
@@ -186,7 +191,7 @@ for (const doc of snapshot.docs) {
 }
 
 console.log(
-  `\nskipped: ${skippedNonImage} non-image, ${skippedSvg} svg, ` +
+  `\nskipped: ${skippedNonImage} non-image, ${skippedNonRaster} non-raster, ` +
     `${skippedNoPath} no storagePath, ${skippedTooSmall} smaller than every width, ` +
     `${skippedComplete} already complete`,
 )
