@@ -520,7 +520,7 @@ entry that imports them, and runs it.
 | story | asks for | brings | must not need | holds |
 | -- | -- | -- | -- | -- |
 | `logic-only` | `@aglyn/aglyn`, `@aglyn/besigner` | `react` | `next`, `firebase`, `firebase-admin`, `@mui/material`, `@aglyn/besigner-ui` | yes — eleven packages in the closure, none of them a UI library |
-| `besigner-ui` | `@aglyn/besigner-ui`, `@aglyn/aglyn-node-renderer` | `react`, `react-dom`, `next`, `firebase`, `@mui/*`, `@emotion/*` | `firebase-admin`, any `@aglyn/tenant-*`, any `@aglyn/plugins-*` | **not yet.** All 21 packages build, pack and install, and no console, tenant runtime or plugin is in the closure — the separation holds. The bundle fails on `@aglyn/shared-data-mdi`, whose entry imports `../../generated/6.5.95/mdi-icons`, 29 MB of generated source outside `src/` that the build never emits. |
+| `besigner-ui` | `@aglyn/besigner-ui`, `@aglyn/aglyn-node-renderer` | `react`, `react-dom`, `next`, `firebase`, `@mui/*`, `@emotion/*` | `firebase-admin`, any `@aglyn/tenant-*`, any `@aglyn/plugins-*` | yes — 22 packages in the closure, and no console, tenant runtime or plugin among them. It holds WITH two peers an embeddable editor should not need, `next` and `firebase`; see below. |
 
 What a build must do for this to hold, all of it invisible from inside: the
 swc output is ESM with `"type": "module"`, so `.swcrc` sets `resolveFully` and
@@ -531,17 +531,26 @@ load `mobx-utils/lib/*`, whose own files import each other without extensions
 — that is `mobx-utils`' packaging, a bundler resolves it, and every consumer of
 a React library has one.
 
-What stands between `besigner-ui` and holding, in the order a consumer meets
-them:
+Two more the proof found, both invisible from inside. The build compiles a
+lib's `sourceRoot`, so `@aglyn/shared-data-mdi`'s generated icon set — which
+sits beside `src/`, not in it — was typed and never emitted; its `sourceRoot`
+is the project root, with the generator scripts and the retired 5.9.55 set
+excluded, and the catalog JSON ships as an asset. And `.swcrc` said nothing
+about JSX, so every component compiled to `React.createElement` in a file that
+imports no `React` — this repo's apps and jest compile lib source with the
+automatic runtime and never met it. Every `.swcrc` sets
+`jsc.transform.react.runtime: "automatic"`.
 
-1. **`@aglyn/shared-data-mdi` does not ship its icons.** Decide whether the
-   package carries the generated set (and at what size) or depends on the
-   upstream icon package; either way the entry must not reach outside `src/`.
-2. **`next` is a peer for two `next/dynamic` calls** in the designer
+The owner's call (2026-09-20) is that the icon package ships its generated set
+for now; depending on the upstream icon package is a later option.
+
+What still stands between `besigner-ui` and an editor that embeds anywhere:
+
+1. **`next` is a peer for two `next/dynamic` calls** in the designer
    (`viewport-canvas`, `workspace-editor`). They carry SSR semantics the
    console's editor route relies on, so replacing them wants a signed-in editor
    to verify against.
-3. **`firebase` is a peer because the working-draft store writes Firestore
+2. **`firebase` is a peer because the working-draft store writes Firestore
    itself** (`drafts/besigner-server-draft.ts`). An embeddable editor takes a
    draft store from whoever embeds it; the contract belongs in
    `@aglyn/besigner` and the Firestore implementation beside the console.

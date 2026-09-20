@@ -1,7 +1,7 @@
 {
   "name": "shared-data-mdi",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "libs/shared/data/mdi/src",
+  "sourceRoot": "libs/shared/data/mdi",
   "projectType": "library",
   "tags": ["scope:lib", "scope:shared", "scope:data", "type:data"],
   "targets": {
@@ -12,7 +12,14 @@
         "outputPath": "dist/libs/shared/data/mdi",
         "main": "libs/shared/data/mdi/src/index.ts",
         "tsConfig": "libs/shared/data/mdi/tsconfig.lib.json",
-        "assets": ["libs/shared/data/mdi/*.md"]
+        "assets": [
+          "libs/shared/data/mdi/*.md",
+          {
+            "input": "libs/shared/data/mdi/generated/6.5.95",
+            "glob": "*.json",
+            "output": "generated/6.5.95"
+          }
+        ]
       }
     },
     "lint": {
