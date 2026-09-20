@@ -1214,5 +1214,17 @@ describe('which tab opens (AGL-3164)', () => {
         names.indexOf(`tabLink${TAB_LINK_SLOTS}`),
       )
     })
+
+    it('is declared in the shape the AI palette can carry', () => {
+      // `generate-ai-palette.mts` drops a picker that lists no answers and
+      // computes none either, so a model could not set this at all. The two
+      // facts it keys on: a select, with its answers resolved when the field
+      // is drawn. A STATIC option list would be the other way to satisfy it
+      // and is the wrong one — it would freeze whichever labels happened to
+      // exist the day the schema was written.
+      expect(field.component).toBe(Aglyn.FieldComponentType.SELECT)
+      expect(typeof field.resolveProps).toBe('function')
+      expect(Array.isArray(field.options)).toBe(false)
+    })
   })
 })

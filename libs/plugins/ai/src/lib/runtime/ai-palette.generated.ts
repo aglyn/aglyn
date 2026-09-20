@@ -3355,6 +3355,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
         tabLink8: {
           type: 'string',
         },
+        opensOn: {
+          type: 'string',
+        },
         orientation: {
           type: 'string',
           enum: ['horizontal', 'vertical'],
@@ -3407,6 +3410,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       tabLink6: 'screen-select',
       tabLink7: 'screen-select',
       tabLink8: 'screen-select',
+      opensOn: 'select',
       orientation: 'select',
       variant: 'select',
       ssrPanels: 'switch',

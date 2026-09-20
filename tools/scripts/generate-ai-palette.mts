@@ -254,6 +254,20 @@ function declareProp(
     if (!values.length) return null
     schema.type = 'string'
     schema.enum = [...new Set(values as string[])]
+  } else if (
+    ENUM_FIELDS.has(component) &&
+    typeof attribute.resolveProps === 'function'
+  ) {
+    // A picker whose ANSWERS are computed when the field is drawn rather than
+    // listed in the schema: Tabs' "Opens on" offers the element's own tab
+    // labels (AGL-3164). There is no fixed enum to publish, but the persisted
+    // value is an ordinary string, and a model composing the element already
+    // holds the values because it wrote the list they come from.
+    //
+    // Dropping it — what happened before this, since the branch above needs a
+    // static option array — meant the palette silently withheld a capability
+    // the besigner had, which is the same shape of gap as AGL-3156.
+    schema.type = 'string'
   } else if (BOOLEAN_FIELDS.has(component)) {
     schema.type = 'boolean'
   } else if (NUMBER_FIELDS.has(component)) {
