@@ -21,7 +21,10 @@ import {
   hostCollectionKind,
   pluginRequestFromWeb,
   SCREEN_KIND_EMAIL,
+  SCREEN_KIND_ERROR,
   SCREEN_KIND_TEMPLATE,
+  screenClaimsToBeAPage,
+  type ScreenPageClaim,
 } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -98,8 +101,41 @@ function readPointerWrite(data: Record<string, unknown>): PointerWrite {
  * AGL-1390 had to close by refusal: a `listScreenId` on a catalog-kind or
  * slugless collection — where AGL-1387's condition stopped — now excuses
  * nothing at all, because it converts nothing.
+ *
+ * Not converting is only half of it, though. Because the list pointer leaves
+ * the screen as it found it, it also never asked what it found — and a screen
+ * that is ALREADY a template is served at `/{collectionSlug}` for free. That
+ * is the refusal in {@link writeTemplatePointers} (AGL-3107).
  */
 const ENTRY_TEMPLATE_FIELDS = ['entryScreenId', 'templateScreenId'] as const
+
+/** The pointer that designates a LIST template — the one that stays a page. */
+const LIST_TEMPLATE_FIELD = 'listScreenId'
+
+/** The two fields {@link screenClaimsToBeAPage} reads, off a screen snapshot. */
+interface ScreenFacts extends ScreenPageClaim {
+  displayName?: unknown
+}
+
+/**
+ * Why this screen is not a page of the site — `null` when it is one.
+ *
+ * The VERDICT is `screenClaimsToBeAPage`'s, the same predicate
+ * `countBillableScreens` subtracts by and `getScreen` refuses by; what is added
+ * here is only the phrase for the refusal, because "that screen cannot be a
+ * list screen" is unactionable to somebody who picked it out of a select that
+ * offered every screen on the site. Deliberately NOT a second reading of
+ * `kind`: if the predicate says the screen is a page, this returns `null`
+ * whatever the fields say.
+ */
+function nonPageScreenReason(screen: ScreenFacts): string | null {
+  if (screenClaimsToBeAPage(screen)) return null
+  if (screen.deletedAt != null) return 'a deleted screen'
+  if (screen.kind === SCREEN_KIND_EMAIL) return 'an email design'
+  if (screen.kind === SCREEN_KIND_TEMPLATE) return 'a collection entry template'
+  if (screen.kind === SCREEN_KIND_ERROR) return 'an error screen'
+  return 'not a page of this site'
+}
 
 /**
  * Assigning, moving or clearing a collection's template screens — and where a
@@ -127,6 +163,12 @@ const ENTRY_TEMPLATE_FIELDS = ['entryScreenId', 'templateScreenId'] as const
  *    page back is one explicit click that meets the same gate a create does.
  *  - **An email document is never converted.** Overwriting `kind` there would
  *    move it off the Emails page — a destructive edit dressed as a quota one.
+ *    Since AGL-3107 that exclusion is the page CLAIM rather than two kinds by
+ *    name, so an error screen keeps its slot binding for the same reason.
+ *  - **A list screen must already be a page** (AGL-3107), because this is the
+ *    pointer that does not stamp the screen: it installs whatever it names at
+ *    `/{collectionSlug}`, and a template, an email or a deleted screen is one
+ *    the site would serve without paying for.
  */
 async function writeTemplatePointers(options: {
   firestore: FirebaseFirestore.Firestore
@@ -148,16 +190,68 @@ async function writeTemplatePointers(options: {
     return Response.json({ error: 'Unknown collection' }, { status: 404 })
   }
 
-  const screenKinds = new Map(
-    screensSnapshot.docs.map((screen) => [screen.id, screen.get('kind')]),
+  const screens = new Map<string, ScreenFacts>(
+    screensSnapshot.docs.map((screen) => [
+      screen.id,
+      {
+        kind: screen.get('kind') as string | undefined,
+        deletedAt: screen.get('deletedAt'),
+        displayName: screen.get('displayName'),
+      },
+    ]),
   )
-  // A pointer at a screen this host does not have designates nothing, so it
-  // would leave a dangling reference the tenant runtime resolves to a 404.
-  // Rejected rather than stored.
   for (const [field, value] of Object.entries(write)) {
-    if (value && !screenKinds.has(value)) {
+    if (!value) continue
+    const screen = screens.get(value)
+    // A pointer at a screen this host does not have designates nothing, so it
+    // would leave a dangling reference the tenant runtime resolves to a 404.
+    // Rejected rather than stored.
+    if (!screen) {
       return Response.json({
         error: `No screen ${value} on this site (${field})`,
+      }, { status: 400 })
+    }
+    /*==========================================
+     * A LIST SCREEN MUST BE A PAGE (AGL-3107).
+     *
+     * The list pointer is the one that does NOT demote what it names, because
+     * `/{collectionSlug}` renders that exact screen (AGL-1387): a list
+     * template is a designed, reachable page and the plan keeps paying for it.
+     * Nothing checked what the screen already WAS, so the demotion this route
+     * performs was also a supply — designate a page as one collection's ENTRY
+     * template (stamped `kind: 'template'`, and it stops counting), then point
+     * a SECOND collection's list at it. `composeCollectionTemplatePage` asks
+     * for it with `allowTemplate`, so the site serves it at `/{slug}` while
+     * `screenClaimsToBeAPage` keeps it off the bill — one such page per content
+     * collection, up to `COLLECTIONS_MAX_PER_HOST`.
+     *
+     * Refused rather than billed: a screen that is not a page of the site is
+     * not a page this route may install as one, and inventing a charge for a
+     * misconfiguration would make the pointer an input to the count again —
+     * the join AGL-1400 spent four issues removing.
+     *
+     * Unconditional, and not narrowed to slugged content collections the way
+     * the RENDERING condition is. Whether the route exists today is a fact on
+     * the collection document, which an ordinary rename can change; a rule
+     * that reads it is the same editable join in a smaller hat.
+     *
+     * The ENTRY pointers are deliberately not held to this. An entry template
+     * is unbilled by design — that is what the demotion below means — so
+     * naming one buys nothing, and re-pointing an orphaned template at a second
+     * collection is how a collection starts from an existing design (AGL-3102).
+     *=========================================*/
+    if (field !== LIST_TEMPLATE_FIELD) continue
+    const reason = nonPageScreenReason(screen)
+    if (reason) {
+      const name =
+        typeof screen.displayName === 'string' && screen.displayName
+          ? screen.displayName
+          : value
+      return Response.json({
+        error:
+          `${name} is ${reason}, so it cannot be a list screen — it would ` +
+          'serve this collection a page the site does not pay for. Pick a ' +
+          'page, or convert this screen back to one first.',
       }, { status: 400 })
     }
   }
@@ -167,12 +261,20 @@ async function writeTemplatePointers(options: {
     update[field] = value ?? FieldValue.delete()
   }
 
+  // Only a PAGE is demoted, which is the same question asked of the list
+  // pointer above and one the two named kinds only half answered (AGL-3107).
+  // An email document was already excluded by name — overwriting `kind` there
+  // moves it off the Emails page — and a screen that is already a template has
+  // nothing to stamp. What the name list missed is `kind: 'error'`: stamping
+  // `template` over an error screen unbinds the host's own 404, because the
+  // error render path resolves it WITHOUT `allowTemplate` and a template is a
+  // 404 to every caller that does.
   const demote = new Set<string>()
   for (const field of ENTRY_TEMPLATE_FIELDS) {
     const screenId = write[field]
     if (!screenId) continue
-    const kind = screenKinds.get(screenId)
-    if (kind === SCREEN_KIND_EMAIL || kind === SCREEN_KIND_TEMPLATE) continue
+    const screen = screens.get(screenId)
+    if (!screen || !screenClaimsToBeAPage(screen)) continue
     demote.add(screenId)
   }
 

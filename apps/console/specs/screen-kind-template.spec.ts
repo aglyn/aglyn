@@ -595,6 +595,125 @@ describe('the pointer route itself', () => {
 })
 
 /**
+ * A LIST screen must be a page of the site (AGL-3107).
+ *
+ * The one template kind that stays billable is a collection's LIST template,
+ * because `/{collectionSlug}` renders that exact screen (AGL-1387) — which is
+ * why designating one deliberately does not demote it. The pointer was never
+ * checked against what the screen IS, so the demotion this route performs was
+ * also a supply: designate a page as some collection's ENTRY template (it is
+ * stamped `kind: 'template'`, and stops counting), then point a SECOND
+ * collection's `listScreenId` at it. `composeCollectionTemplatePage` asks for
+ * it with `allowTemplate`, so the site serves a designed page at `/{slug}`
+ * that `screenClaimsToBeAPage` excluded from the bill — one per content
+ * collection.
+ *
+ * Refused at the write rather than billed, because a template screen is not a
+ * page the site serves and a misconfiguration is not a product. The predicate
+ * is `screenClaimsToBeAPage` itself — the same one the count and the serve
+ * path ask — so there is no second definition of what a template is.
+ */
+describe('a list screen must be a page (AGL-3107)', () => {
+  /** Two content collections, so one can borrow the other's entry template. */
+  const seedTwo = () =>
+    seed({
+      collections: {
+        blog: { slug: 'blog', kind: 'content', displayName: 'Blog' },
+        news: { slug: 'news', kind: 'content', displayName: 'News' },
+      },
+    })
+
+  it('THE CONTROL — a page is still assignable as a list screen', async () => {
+    // First, because every refusal below also passes against a route that
+    // refuses every list pointer there is.
+    seedTwo()
+    expect((await setTemplate({ listScreenId: 's1' }, 'news')).status).toBe(200)
+    expect(mockStore.collections.news.listScreenId).toBe('s1')
+    expect(kindOf('s1')).toBe('page')
+    expect(billableNow()).toBe(5)
+  })
+
+  it('refuses an entry template, which would serve /news for free', async () => {
+    seedTwo()
+    // Demoted the ordinary way: the blog designates it as its entry template.
+    expect((await setTemplate({ entryScreenId: 's1' })).status).toBe(200)
+    expect(kindOf('s1')).toBe('template')
+    expect(billableNow()).toBe(4)
+
+    const refused = await setTemplate({ listScreenId: 's1' }, 'news')
+    expect(refused.status).toBe(400)
+    // Names the screen and says why — the person reading it picked from a
+    // select that offered every screen on the site.
+    expect(refused.body.error).toContain('Page s1')
+    expect(refused.body.error).toContain('entry template')
+    expect(mockStore.collections.news.listScreenId).toBeUndefined()
+    // /news keeps the built-in listing and the count did not move: no designed
+    // page arrived on the site without arriving on the bill.
+    expect(billableNow()).toBe(4)
+  })
+
+  it('refuses an email design and a deleted screen the same way', async () => {
+    seedTwo()
+    mockStore.screens.s1 = { displayName: 'Welcome', kind: 'email' }
+    mockStore.screens.s2 = {
+      displayName: 'Old page',
+      kind: 'page',
+      deletedAt: { seconds: 1 },
+    }
+    const email = await setTemplate({ listScreenId: 's1' }, 'news')
+    expect(email.status).toBe(400)
+    expect(email.body.error).toContain('email')
+    const deleted = await setTemplate({ listScreenId: 's2' }, 'news')
+    expect(deleted.status).toBe(400)
+    expect(deleted.body.error).toContain('deleted')
+    expect(mockStore.collections.news.listScreenId).toBeUndefined()
+  })
+
+  it('writes nothing at all when the list pointer is refused', async () => {
+    seedTwo()
+    await setTemplate({ entryScreenId: 's1' })
+    mockLogHostActivity.mockClear()
+
+    const refused = await setTemplate(
+      { listScreenId: 's1', entryScreenId: 's2' },
+      'news',
+    )
+    expect(refused.status).toBe(400)
+    // The whole request is refused, so the entry pointer beside it is not
+    // applied either and s2 is still a page of the site.
+    expect(mockStore.collections.news.listScreenId).toBeUndefined()
+    expect(mockStore.collections.news.entryScreenId).toBeUndefined()
+    expect(kindOf('s2')).toBe('page')
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
+  })
+
+  /*
+   * The SIBLING pointers, checked rather than assumed. `entryScreenId` and the
+   * legacy `templateScreenId` do not have this hole — an entry template is
+   * unbilled by design, so naming one buys nothing — and re-pointing an orphan
+   * template at a second collection is the flow AGL-3102 exists to support.
+   * What they did share is the other half of the miss: the demotion read two
+   * kinds by name instead of asking whether the screen is a page.
+   */
+  it('still lets an ENTRY pointer name an existing template', async () => {
+    seedTwo()
+    await setTemplate({ entryScreenId: 's1' })
+    expect((await setTemplate({ entryScreenId: 's1' }, 'news')).status).toBe(200)
+    expect(mockStore.collections.news.entryScreenId).toBe('s1')
+    expect(kindOf('s1')).toBe('template')
+  })
+
+  it('does not overwrite an error screen designated as an entry template', async () => {
+    // `kind: 'error'` binds the screen to one of the host's four error slots,
+    // and the error render path resolves it WITHOUT `allowTemplate` — so
+    // stamping `template` over it would silently 404 the site's own 404.
+    mockStore.screens.s1 = { displayName: 'Not found', kind: 'error' }
+    expect((await setTemplate({ entryScreenId: 's1' })).status).toBe(200)
+    expect(kindOf('s1')).toBe('error')
+  })
+})
+
+/**
  * The collection log, moved off the browser (AGL-118).
  *
  * `Created collection` / `Updated collection` were appended by the content
