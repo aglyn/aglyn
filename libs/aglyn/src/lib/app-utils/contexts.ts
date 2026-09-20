@@ -27,6 +27,7 @@
 export * from './console-widget-slot-context'
 export * from './enabled-plugins-context'
 export * from './entity-picker-context'
+export * from './link-target-search-context'
 export * from './media-picker-context'
 export * from './node-identity'
 export * from './page-header-actions-context'

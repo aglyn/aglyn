@@ -1095,6 +1095,94 @@ describe('Entry body block (AGL-551)', () => {
   })
 })
 
+/**
+ * A body link that NAMES its target (AGL-3118).
+ *
+ * A post linking another post by `/blog/old-slug` breaks on the next rename,
+ * so the link stores ids and the renderer resolves them against the routing
+ * map the page provides — the same map an element link reads. The stored
+ * `entry:…` must never reach an `href`: on the published page it is not an
+ * address, and a browser would resolve it as a relative path.
+ */
+describe('Entry body link references (AGL-3118)', () => {
+  const ROUTES = {
+    home: '/',
+    'collection:blog': 'blog',
+    'entry:blog/e1': 'blog/we-launched',
+  }
+
+  const renderBody = (markdown: string, value: Record<string, unknown> = {}) =>
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={{ screens: ROUTES, ...value }}>
+        <CollectionEntryBody markdown={markdown} />
+      </Aglyn.ScreenLinkContext.Provider>,
+    ).container
+
+  it('links an entry at the address it is served from, through AppLink', () => {
+    const container = renderBody('Read [the launch](entry:blog/e1) first.')
+    const anchor = container.querySelector('a')
+    expect(anchor?.getAttribute('href')).toBe('/blog/we-launched')
+    expect(anchor?.className).toContain('AglynAppLink')
+  })
+
+  it('follows a renamed entry, and a renamed collection, with no edit', () => {
+    const container = render(
+      <Aglyn.ScreenLinkContext.Provider
+        value={{ screens: { 'entry:blog/e1': 'news/the-launch' } }}
+      >
+        <CollectionEntryBody markdown="[the launch](entry:blog/e1)" />
+      </Aglyn.ScreenLinkContext.Provider>,
+    ).container
+    expect(container.querySelector('a')?.getAttribute('href')).toBe(
+      '/news/the-launch',
+    )
+  })
+
+  it('renders a listing and a feed reference through the same map', () => {
+    const container = renderBody(
+      'See [every post](collection:blog) or [the feed](feed:blog).',
+    )
+    const hrefs = [...container.querySelectorAll('a')].map((a) =>
+      a.getAttribute('href'),
+    )
+    // The feed has no key in this map, so it is not offered at all.
+    expect(hrefs).toEqual(['/blog'])
+    expect(screen.getByText('the feed').tagName).toBe('SPAN')
+  })
+
+  it('renders the words alone when the entry is not live', () => {
+    const container = renderBody('Read [the draft](entry:blog/draft) first.')
+    expect(container.querySelector('a')).toBeNull()
+    expect(container.innerHTML).not.toContain('entry:')
+    expect(container.textContent).toBe('Read the draft first.')
+  })
+
+  it('never emits the stored value as an href, even with no map at all', () => {
+    const { container } = render(
+      <CollectionEntryBody markdown="Read [the launch](entry:blog/e1)." />,
+    )
+    expect(container.querySelector('a')).toBeNull()
+    expect(container.innerHTML).not.toContain('entry:')
+  })
+
+  it('keeps the link look on an editing surface until the map says otherwise', () => {
+    // The console's map carries screens and listings, never entries, so a
+    // canvas that flashed every entry link as plain text would teach authors
+    // to ignore the one that is actually broken.
+    const canvas = renderBody('[the launch](entry:blog/e1)', {
+      screens: { home: '/' },
+      suppressNavigation: true,
+    })
+    expect(canvas.querySelector('a')).toBeNull()
+    expect(canvas.querySelector('span.MuiLink-root')).toBeTruthy()
+
+    const judged = renderBody('[the draft](entry:blog/gone)', {
+      suppressNavigation: true,
+    })
+    expect(judged.querySelector('.MuiLink-root')).toBeNull()
+  })
+})
+
 describe('Related posts block (AGL-582)', () => {
   const entries = [
     {

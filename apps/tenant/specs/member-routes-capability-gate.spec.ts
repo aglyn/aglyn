@@ -83,6 +83,11 @@ jest.mock('@aglyn/tenant-runtime/get-screen', () => ({
     error: null,
   })),
 }))
+jest.mock('@aglyn/tenant-runtime/entry-link-routes', () => ({
+  __esModule: true,
+  resolveEntryLinkRoutes: jest.fn(async () => ({})),
+  default: jest.fn(async () => ({})),
+}))
 jest.mock('@aglyn/tenant-runtime/get-collection-content', () => ({
   __esModule: true,
   default: jest.fn(async () => ({

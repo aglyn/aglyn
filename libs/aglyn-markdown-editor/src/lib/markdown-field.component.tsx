@@ -19,8 +19,12 @@
 import { Stack, TextField, Typography } from '@mui/material'
 import { useRef, useState } from 'react'
 import MarkdownEditorToolbar from './markdown-editor-toolbar.component'
+import MarkdownLinkDialog, {
+  type MarkdownLink,
+} from './markdown-link-dialog.component'
 import {
   applyCommandToSource,
+  applyLinkToSource,
   MARKDOWN_SOURCE_HINT,
 } from './markdown-source-command'
 import MarkdownVisualEditor, {
@@ -85,6 +89,20 @@ export function MarkdownField(
   // often arrive holding a README they wrote somewhere else.
   const [mode, setMode] = useState<'visual' | 'markdown'>('visual')
   const [context, setContext] = useState<MarkdownEditorContext | null>(null)
+  /** The source-mode selection a link is being written over (AGL-3119). */
+  const [sourceLink, setSourceLink] = useState<{
+    start: number
+    end: number
+    text: string
+  } | null>(null)
+
+  const commitSourceEdit = (edit: { body: string; start: number; end: number }) => {
+    onChange(edit.body)
+    requestAnimationFrame(() => {
+      sourceRef.current?.focus()
+      sourceRef.current?.setSelectionRange(edit.start, edit.end)
+    })
+  }
 
   // One toolbar, two surfaces (AGL-985): in Visual a command mutates the
   // editor's block model; in Markdown it wraps the textarea selection.
@@ -94,17 +112,22 @@ export function MarkdownField(
       return
     }
     const input = sourceRef.current
-    const edit = applyCommandToSource(
-      value,
-      input?.selectionStart ?? value.length,
-      input?.selectionEnd ?? value.length,
-      command,
-    )
-    onChange(edit.body)
-    requestAnimationFrame(() => {
-      input?.focus()
-      input?.setSelectionRange(edit.start, edit.end)
-    })
+    const start = input?.selectionStart ?? value.length
+    const end = input?.selectionEnd ?? value.length
+    // Both surfaces ask for a link the same way (AGL-3119), so a target
+    // picked here is the same reference the visual editor would insert.
+    if (command === 'link') {
+      setSourceLink({ start, end, text: value.slice(start, end) })
+      return
+    }
+    commitSourceEdit(applyCommandToSource(value, start, end, command))
+  }
+
+  const handleSourceLink = (link: MarkdownLink) => {
+    const target = sourceLink
+    setSourceLink(null)
+    if (!target) return
+    commitSourceEdit(applyLinkToSource(value, target.start, target.end, link))
   }
 
   return (
@@ -152,6 +175,13 @@ export function MarkdownField(
           {helperText}
         </Typography>
       ) : null}
+      <MarkdownLinkDialog
+        open={Boolean(sourceLink)}
+        text={sourceLink?.text}
+        withText
+        onClose={() => setSourceLink(null)}
+        onConfirm={handleSourceLink}
+      />
     </Stack>
   )
 }

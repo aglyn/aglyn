@@ -30,12 +30,65 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   HEADING_ANCHOR_SCROLL_MARGIN,
+  isMarkdownLinkReference,
+  LinkTargetSearchContext,
+  linkTargetKind,
   markdownHeadingSlugs,
   parseMarkdownLite,
+  parseScreenLinkValue,
   resolveMediaSrc,
+  useLinkTargetLabel,
 } from '@aglyn/aglyn'
 import { Box, Link as MuiLink, Stack, Typography } from '@mui/material'
-import { useMemo } from 'react'
+import { useContext, useMemo, type ReactNode } from 'react'
+
+/** What a reference names, for a surface that cannot resolve it. */
+const REFERENCE_NOUNS: Readonly<Record<Aglyn.LinkTargetKind, string>> = {
+  screen: 'a page on this site',
+  collection: 'a collection listing on this site',
+  feed: 'a collection feed on this site',
+  entry: 'an entry on this site',
+}
+
+/**
+ * A link that names its target by reference (AGL-3118) as TEXT, not an
+ * anchor: `entry:Hq3…/9fK…` is not an address, so an `<a href>` built from it
+ * is a link that goes nowhere. This preview belongs to the console, which
+ * does not serve the site the reference points into; what it owes the reader
+ * is what the link says and where it will go, which the title carries —
+ * resolved through the routing map and the search seam where a surface
+ * provides them.
+ */
+function ReferenceLinkText({
+  href,
+  children,
+}: {
+  href: string
+  children: ReactNode
+}) {
+  const key = parseScreenLinkValue(href)
+  const search = useContext(LinkTargetSearchContext)
+  const target = useLinkTargetLabel(key)
+  // Named only where something could name it: with no routing map the label
+  // falls back to the key, and with no search seam an entry's is a stand-in.
+  const named =
+    target &&
+    !target.pending &&
+    target.label !== key &&
+    (linkTargetKind(key ?? href) !== 'entry' || search.available)
+  return (
+    <Box
+      component="span"
+      data-md-reference=""
+      title={`Links to ${
+        named ? target.label : REFERENCE_NOUNS[linkTargetKind(key ?? href)]
+      }`}
+      sx={{ color: 'primary.main', textDecoration: 'underline dotted' }}
+    >
+      {children}
+    </Box>
+  )
+}
 
 const renderInlines = (inlines: Aglyn.MarkdownInline[]) =>
   inlines.map((inline, index) =>
@@ -44,15 +97,21 @@ const renderInlines = (inlines: Aglyn.MarkdownInline[]) =>
     ) : inline.type === 'italic' ? (
       <em key={index}>{inline.text}</em>
     ) : inline.type === 'link' ? (
-      <MuiLink
-        key={index}
-        href={inline.href}
-        target="_blank"
-        rel="noopener noreferrer"
-        underline="hover"
-      >
-        {inline.text}
-      </MuiLink>
+      isMarkdownLinkReference(inline.href) ? (
+        <ReferenceLinkText key={index} href={inline.href}>
+          {inline.text}
+        </ReferenceLinkText>
+      ) : (
+        <MuiLink
+          key={index}
+          href={inline.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          underline="hover"
+        >
+          {inline.text}
+        </MuiLink>
+      )
     ) : (
       <span key={index}>{inline.text}</span>
     ),

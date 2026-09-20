@@ -314,6 +314,8 @@ jest.mock('../components/binding-picker-provider.component', () => passthrough)
 jest.mock('../components/interactions-provider.component', () => passthrough)
 jest.mock('../components/besigner-media-picker-provider.component', () => passthrough)
 jest.mock('../components/entity-picker-provider.component', () => passthrough)
+// The entry lookup the link pickers search (AGL-3119); nothing here opens one.
+jest.mock('../components/link-target-search-provider.component', () => passthrough)
 jest.mock('../components/reusable-components-provider.component', () => passthrough)
 jest.mock('../components/console-plugins-gate.component', () => ({
   withSitePlugins: (component: unknown) => component,
