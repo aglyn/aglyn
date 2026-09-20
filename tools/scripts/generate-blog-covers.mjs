@@ -93,6 +93,40 @@ const POSTS = [
     pill: 'Guides',
     accent: '#34d399', // emerald
   },
+  // The three AGL-2922 posts. Slug, eyebrow, title and pill are the `cover`
+  // block of the matching tools/marketing/blog-copy/post-*.json, so the deck
+  // and the image cannot drift apart. Accents are new hues rather than the
+  // four above — sky, fuchsia and rose sit in the gaps at roughly 199, 290 and
+  // 350 degrees, so no two covers in the set read as the same post.
+  //
+  // Not the marketing site's plate: copy-ai.json keeps /product/ai GREY and
+  // outside the positional accent triad deliberately. That decision is about a
+  // page in the product roster; this is the blog's own per-post system, where
+  // every cover carries an accent and a grey one would read as unfinished.
+  {
+    slug: 'how-to-generate-a-page-with-ai-and-keep-your-brand',
+    out: 'blogCoverAiBrand.png',
+    eyebrow: 'Aglyn AI',
+    title: 'How to generate a page with AI and keep your brand',
+    pill: 'Guides',
+    accent: '#38bdf8', // sky
+  },
+  {
+    slug: 'ai-email-campaigns-without-the-spam',
+    out: 'blogCoverAiEmail.png',
+    eyebrow: 'Marketing + Aglyn AI',
+    title: 'AI email campaigns without the spam',
+    pill: 'Guides',
+    accent: '#e879f9', // fuchsia
+  },
+  {
+    slug: 'agencies-20-client-sites-from-one-brief',
+    out: 'blogCoverAiAgencies.png',
+    eyebrow: 'Agencies + Aglyn AI',
+    title: 'Agencies: 20 client sites from one brief',
+    pill: 'Guides',
+    accent: '#fb7185', // rose
+  },
 ]
 
 const escapeHtml = (value) =>
