@@ -26,6 +26,16 @@
  * only once the questions are answered, if it stops reaching the zone's
  * `startBlank`, or if leaving creates anything. Reverting the skip must turn
  * that block red.
+ *
+ * `describe('leaving the full screen dialog', …)` is the second half of that
+ * control, and it exists because the questions take the whole screen: a
+ * takeover has exits a card does not have, and each of them has to BE the
+ * skip. Escape, the close control, and the skip while a request is in flight.
+ *
+ * Both are written against the portal as well as the container. A `Dialog`
+ * renders outside the tree it was mounted in, so `container.textContent` is
+ * empty for a dialog covering the page and for no dialog at all — which is
+ * the one distinction the absence tests are here to make.
  */
 
 import { CONSOLE_WIDGET_SLOTS, listConsoleWidgets } from '@aglyn/aglyn'
@@ -90,13 +100,31 @@ afterEach(() => {
   for (const [url] of mockFetch.mock.calls) expect(String(url)).toMatch(/^\/api\/ai\/jobs/)
 })
 
-/** Renders the card once the jobs route has admitted this workspace. */
+/** Renders the dialog once the jobs route has admitted this workspace. */
 async function openCard(patch: Partial<ConsoleHostFirstRunZoneProps> = {}) {
   const Widget = widget()
   mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
   const view = render(<Widget {...zoneProps(patch)} />)
   await screen.findByText('Start this site with AI')
   return view
+}
+
+/**
+ * Nothing drawn, anywhere: not in the tree the widget was mounted in, and not
+ * in the document a dialog portals into.
+ *
+ * The portal is the whole point. `container` is empty whether the widget
+ * returned nothing or covered the screen with a dialog, so a container-only
+ * assertion cannot tell a flag-off workspace's blank page from a takeover it
+ * then watches disappear. The class check is the strictest of the three: it
+ * fails on a dialog that is mounted and merely closed, which is what a
+ * `keepMounted` would leave behind.
+ */
+function expectNothingDrawn(container: HTMLElement) {
+  expect(container.textContent).toBe('')
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(document.body.textContent).toBe('')
+  expect(document.querySelector('[class*="MuiDialog"]')).toBeNull()
 }
 
 const typeAnswer = (label: string | RegExp, value: string) =>
@@ -143,7 +171,7 @@ describe('whether the guided start is here at all', () => {
     mockFetch.mockResolvedValue(json({ error: 'No' }, status))
     const { container } = render(<Widget {...zoneProps()} />)
     await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+    expectNothingDrawn(container)
   })
 
   it('stays absent when the route cannot be reached', async () => {
@@ -151,7 +179,7 @@ describe('whether the guided start is here at all', () => {
     mockFetch.mockRejectedValue(new Error('offline'))
     const { container } = render(<Widget {...zoneProps()} />)
     await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+    expectNothingDrawn(container)
   })
 
   it('stays absent while the probe is still out, and asks the route once', async () => {
@@ -161,7 +189,7 @@ describe('whether the guided start is here at all', () => {
     rerender(<Widget {...zoneProps()} />)
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
     expect(String(mockFetch.mock.calls[0][0])).toBe('/api/ai/jobs?orgId=org-1&limit=1')
-    expect(container.textContent).toBe('')
+    expectNothingDrawn(container)
   })
 
   it('asks nothing while the page has not resolved its org', async () => {
@@ -169,7 +197,19 @@ describe('whether the guided start is here at all', () => {
     const { container } = render(<Widget {...zoneProps({ orgId: undefined })} />)
     await Promise.resolve()
     expect(mockFetch).not.toHaveBeenCalled()
+    expectNothingDrawn(container)
+  })
+
+  /**
+   * The negative control on {@link expectNothingDrawn}: a helper that cannot
+   * see the dialog it is meant to rule out reports every absence above as a
+   * pass, including the one where the page was taken over.
+   */
+  it('is a dialog when it IS here, which is what the absences rule out', async () => {
+    const { container } = await openCard()
+    expect(screen.getByRole('dialog')).toBeTruthy()
     expect(container.textContent).toBe('')
+    expect(() => expectNothingDrawn(container)).toThrow()
   })
 })
 
@@ -222,6 +262,85 @@ describe('the skip', () => {
     await screen.findByText(/Your site is being planned/)
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(mockStartBlank).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * The exits a full screen dialog has and a card does not.
+ *
+ * A surface that covers the page and cannot be dismissed is the funnel the
+ * zone was built to refuse, so every way a person reaches for to leave one is
+ * asserted to be the same `startBlank` — and to create nothing on the way.
+ * Deleting the close control, dropping `onClose`, or turning a dismissal into
+ * a state to come back to turns this block red.
+ */
+describe('leaving the full screen dialog', () => {
+  const dismiss = () =>
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' })
+
+  it('takes Escape, which is the first thing a person presses at a takeover', async () => {
+    await openCard()
+    dismiss()
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+  })
+
+  it('takes the close control, drawn at the start of the bar above the questions', async () => {
+    await openCard()
+    fireEvent.click(screen.getByRole('button', { name: 'Close the guided start' }))
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['Escape', dismiss],
+    [
+      'the close control',
+      () => fireEvent.click(screen.getByRole('button', { name: 'Close the guided start' })),
+    ],
+  ])('creates nothing when the way out is %s', async (_how, leave) => {
+    await openCard()
+    // Half-answered, which is where somebody most plausibly leaves.
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    fireEvent.click(exampleChip(0))
+    const asked = mockFetch.mock.calls.length
+    leave()
+    await Promise.resolve()
+    expect(mockFetch.mock.calls.length).toBe(asked)
+    expect(mockFetch.mock.calls.every(([, init]) => !init || init.method !== 'POST')).toBe(true)
+  })
+
+  it('keeps the skip enabled while a request is in flight, and leaves on it', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    // The request never answers, which is the whole of "in flight".
+    mockFetch.mockReturnValue(new Promise(() => undefined))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
+    expect(screen.getByRole('button', { name: 'Starting…' })).toBeTruthy()
+    const skip = screen.getByRole('button', { name: 'Skip and start blank' }) as HTMLButtonElement
+    const close = screen.getByRole('button', {
+      name: 'Close the guided start',
+    }) as HTMLButtonElement
+    expect([skip.disabled, close.disabled]).toEqual([false, false])
+    fireEvent.click(skip)
+    expect(mockStartBlank).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * The questions scroll; the way out does not. The bar carrying both exits is
+   * the dialog's own chrome rather than a row inside its body, which is what
+   * `scroll="paper"` keeps in place — a skip that scrolls away is a skip
+   * somebody with eight questions above them cannot reach.
+   */
+  it('draws both exits outside the scrolling body', async () => {
+    await openCard()
+    const body = document.querySelector('.MuiDialogContent-root')
+    expect(body).toBeTruthy()
+    for (const name of ['Skip and start blank', 'Close the guided start']) {
+      expect(body?.contains(screen.getByRole('button', { name }))).toBe(false)
+    }
+    // And the questions ARE in it, so the assertion above is about placement
+    // rather than about a body that holds nothing.
+    expect(body?.contains(screen.getByLabelText(/What kind of site are you creating\?/))).toBe(true)
   })
 })
 

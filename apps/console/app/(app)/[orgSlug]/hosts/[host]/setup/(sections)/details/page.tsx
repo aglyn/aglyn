@@ -68,7 +68,7 @@ export default function HostSetupDetailsSection() {
   const host = useHostSubdomain()
   /*
    * Starts closed and opens once the browser has been asked, so a reader who
-   * skipped never sees the card flash back on a reload. `localStorage` is not
+   * skipped never sees the offer flash back on a reload. `localStorage` is not
    * readable while the page renders on the server.
    */
   const [offerStart, setOfferStart] = useState(false)
@@ -82,16 +82,18 @@ export default function HostSetupDetailsSection() {
   return (
     <>
       {offerStart && (
-        <div style={{ marginBottom: 24 }}>
-          <PluginWidgetSlot
-            slot="hostFirstRun"
-            hostId={hostId}
-            orgId={orgId}
-            orgSlug={orgSlug}
-            host={host ?? null}
-            startBlank={startBlank}
-          />
-        </div>
+        /* The zone carries its own gap from the cards below and takes no room
+           at all when its widget drew nothing here — a widget that draws in a
+           portal, or none at all. A wrapper with a margin of its own would
+           leave that gap behind as a band above the first card. */
+        <PluginWidgetSlot
+          slot="hostFirstRun"
+          hostId={hostId}
+          orgId={orgId}
+          orgSlug={orgSlug}
+          host={host ?? null}
+          startBlank={startBlank}
+        />
       )}
       {/* Site brand mark (AGL-594): shown by the tenant's navigation loader. */}
       <div>

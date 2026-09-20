@@ -19,17 +19,26 @@
 
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import type { ConsoleHostFirstRunZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
+  AppBar,
   Box,
   Button,
   Chip,
+  Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  Divider,
+  IconButton,
   MenuItem,
   Stack,
   TextField,
+  Toolbar,
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -48,20 +57,40 @@ import {
  * The guided start (AGL-2918), on the `hostFirstRun` zone of the page a newly
  * created site lands on: a few questions, and the site scaffold they become.
  *
- * ── Skipping is beside the questions, not after them ─────────────────────
+ * ── A full screen dialog, and therefore three ways out ───────────────────
  *
- * "Start blank" is drawn in the same row as the button that plans, from the
- * first render, before anything has been typed or picked. It calls the zone's
- * `startBlank` and nothing else: no job, no draft, no record of a site half
- * begun — the person keeps the blank site they already have, on the page
- * they are already on, and the card does not come back.
+ * The questions take the whole screen, which is the only presentation that
+ * gets them read — but a surface that takes the screen and cannot be left is
+ * a funnel, so leaving is drawn first and works three ways:
  *
- * That the card is even drawn is the last of a stack of gates: the shell held
- * the plan's `aiGenerative` entitlement, the site's AI switch and the
- * reader's `ai.generate` before mounting it, and the release flag is the jobs
- * route's to decide — so a 404 or a 403 there is this card staying absent and
- * the ordinary blank page being all there is. A lockdown is the start door's
- * to say, here, in its own words.
+ *  - the close control at the start of the app bar,
+ *  - "Skip and start blank" beside it, at the end of the same bar,
+ *  - Escape, which `Dialog` reports through `onClose`.
+ *
+ * All three are the zone's own `startBlank` and nothing else: no job, no
+ * draft, no record of a site half begun. Dismissing is LEAVING, not a pause
+ * that could be returned to — the person keeps the blank site they already
+ * have, on the page under the dialog, and the site does not ask again.
+ *
+ * The bar carrying them is the dialog's own chrome rather than part of its
+ * body, so `scroll="paper"` keeps it in place while the questions scroll: the
+ * way out cannot be scrolled off, and it is never disabled — least of all
+ * while a request is in flight, which is the moment a person most wants it.
+ *
+ * Nothing is focused ahead of the dialog's own frame, so the first thing a
+ * keyboard reaches is the close control rather than the first question.
+ *
+ * ── It is absent until the route has answered ────────────────────────────
+ *
+ * The dialog covers the page, so being drawn on a guess is worse here than it
+ * is for a card: it would be a takeover every flag-off workspace watches
+ * disappear. Nothing renders at all — no `Dialog`, no portal — until the jobs
+ * route has admitted this workspace, and a 404, a 403 or an unreachable route
+ * is this widget staying absent and the ordinary blank page being all there
+ * is. That the widget is mounted is itself the last of a stack of gates: the
+ * shell held the plan's `aiGenerative` entitlement, the site's AI switch and
+ * the reader's `ai.generate` first. A lockdown is the start door's to say,
+ * here, in its own words.
  *
  * ── It asks, it does not build ───────────────────────────────────────────
  *
@@ -73,6 +102,9 @@ import {
  */
 
 type Verdict = 'checking' | 'ready' | 'hidden'
+
+/** Labels the dialog for a reader, from its own heading. */
+const TITLE_ID = 'ai-site-start-title'
 
 export function AiSiteStartCard({
   hostId,
@@ -161,132 +193,161 @@ export function AiSiteStartCard({
   })
 
   return (
-    <CardDisplay
-      contentGutterX
-      contentGutterY
-      HeaderProps={{
-        title: 'Start this site with AI',
-        subheader:
-          'Answer a few questions and AI plans the whole site — its pages, its navigation, ' +
-          'its layout and a contact form. Nothing is built until you confirm the plan, and ' +
-          'everything it builds is an unpublished draft.',
-      }}
-    >
-      <Stack spacing={3}>
-        {notice && <Alert severity="info">{notice}</Alert>}
-        {started ? (
-          <Alert severity="success">
-            {'Your site is being planned. Open AI jobs in the Assist panel to read the plan ' +
-              'and confirm it — nothing is built, and nothing is published, until you do.'}
-          </Alert>
-        ) : (
-          <>
-            <Box>
-              <TextField
-                fullWidth
-                label="What kind of site are you creating?"
-                placeholder="a neighborhood dog groomer that takes bookings"
-                value={answers.siteType}
-                onChange={(event) => answer({ siteType: event.target.value })}
-              />
-              <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1, rowGap: 1 }}>
-                {AI_SITE_START_TYPES.map((type) => (
-                  <Chip
-                    key={type}
-                    label={type}
-                    size="small"
-                    variant={answers.siteType === type ? 'filled' : 'outlined'}
-                    onClick={() => answer({ siteType: type })}
-                  />
-                ))}
-              </Stack>
-            </Box>
-            <TextField
-              fullWidth
-              label="Who is it for?"
-              placeholder="local dog owners who want a regular groom booked online"
-              value={answers.audience}
-              onChange={(event) => answer({ audience: event.target.value })}
-              helperText="Optional. It narrows who the pages are written for."
-            />
-            <Box>
-              <Typography variant="subtitle2" gutterBottom>
-                {'Which of these do you like?'}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                {'Optional. Picking one steers the shape of the site, not its words.'}
-              </Typography>
-              <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-                {AI_SITE_START_EXAMPLES.map((example) => (
-                  <Chip
-                    key={example.id}
-                    label={`${example.label} — ${example.blurb}`}
-                    variant={answers.example === example.id ? 'filled' : 'outlined'}
-                    onClick={() =>
-                      answer({
-                        example: answers.example === example.id ? null : example.id,
-                      })
-                    }
-                  />
-                ))}
-              </Stack>
-            </Box>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField
-                select
-                label="Pages"
-                value={answers.pages}
-                onChange={(event) => answer({ pages: Number(event.target.value) })}
-                sx={{ minWidth: 160 }}
-              >
-                {Array.from(
-                  { length: AI_SITE_PAGES.max - AI_SITE_PAGES.min + 1 },
-                  (_, index) => AI_SITE_PAGES.min + index,
-                ).map((count) => (
-                  <MenuItem key={count} value={count}>
-                    {count}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                select
-                label="Welcome email"
-                value={answers.welcomeEmail ? 'yes' : 'no'}
-                onChange={(event) => answer({ welcomeEmail: event.target.value === 'yes' })}
-                sx={{ minWidth: 160 }}
-              >
-                <MenuItem value="yes">{'Draft one'}</MenuItem>
-                <MenuItem value="no">{'No'}</MenuItem>
-              </TextField>
-            </Stack>
-            <Typography variant="body2" color="text.secondary">
-              {`About ${estimate.toLocaleString('en-US')} credits, estimated. What it really ` +
-                'costs is what each step spends, and you can watch that add up while it runs.'}
-            </Typography>
-          </>
-        )}
-        {/*
-          The way out, in the same row as the way on, and drawn whether or not
-          a question has been answered. `startBlank` creates nothing: the site
-          stays the blank one it already is.
-        */}
-        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-          {!started && (
-            <Button variant="contained" disabled={busy || Boolean(refusal)} onClick={plan}>
-              {busy ? 'Starting…' : 'Plan my site'}
-            </Button>
-          )}
-          <Button variant="text" onClick={startBlank}>
+    <Dialog open fullScreen onClose={startBlank} aria-labelledby={TITLE_ID}>
+      {/*
+        The way out, before anything it is a way out of. On a narrow screen it
+        is the HEADING that gives way — the bar's one elastic element, so the
+        exit keeps its words at every width rather than collapsing into an
+        icon somebody has to recognize.
+
+        Shared app-bar treatment (AGL-704) — see the console's
+        secondary-app-bar; enableColorOnDark is required or AppBar substitutes
+        its own dark-mode colour.
+      */}
+      <AppBar position="relative" color="surface" enableColorOnDark>
+        <Toolbar>
+          <IconButton
+            edge="start"
+            color="inherit"
+            onClick={startBlank}
+            aria-label="Close the guided start"
+          >
+            <MdiIcon path={ICON_VARIANT_CLOSE.path} />
+          </IconButton>
+          <Typography
+            id={TITLE_ID}
+            variant="h6"
+            component="div"
+            noWrap
+            sx={{ textOverflow: 'ellipsis', ml: 2, flex: 1 }}
+          >
+            {'Start this site with AI'}
+          </Typography>
+          <Divider sx={{ height: 28, m: 0.5 }} orientation="vertical" />
+          <Button color="inherit" onClick={startBlank}>
             {started ? 'Close' : 'Skip and start blank'}
           </Button>
-          {!started && refusal && (
+        </Toolbar>
+      </AppBar>
+      <DialogContent>
+        {/* A line of questions is read at a column's width, not a screen's. */}
+        <Container maxWidth="md" disableGutters sx={{ py: 2 }}>
+          <Stack spacing={3}>
             <Typography variant="body2" color="text.secondary">
+              {'Answer a few questions and AI plans the whole site — its pages, its ' +
+                'navigation, its layout and a contact form. Nothing is built until you ' +
+                'confirm the plan, and everything it builds is an unpublished draft.'}
+            </Typography>
+            {notice && <Alert severity="info">{notice}</Alert>}
+            {started ? (
+              <Alert severity="success">
+                {'Your site is being planned. Open AI jobs in the Assist panel to read the plan ' +
+                  'and confirm it — nothing is built, and nothing is published, until you do.'}
+              </Alert>
+            ) : (
+              <>
+                <Box>
+                  <TextField
+                    fullWidth
+                    label="What kind of site are you creating?"
+                    placeholder="a neighborhood dog groomer that takes bookings"
+                    value={answers.siteType}
+                    onChange={(event) => answer({ siteType: event.target.value })}
+                  />
+                  <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1, rowGap: 1 }}>
+                    {AI_SITE_START_TYPES.map((type) => (
+                      <Chip
+                        key={type}
+                        label={type}
+                        size="small"
+                        variant={answers.siteType === type ? 'filled' : 'outlined'}
+                        onClick={() => answer({ siteType: type })}
+                      />
+                    ))}
+                  </Stack>
+                </Box>
+                <TextField
+                  fullWidth
+                  label="Who is it for?"
+                  placeholder="local dog owners who want a regular groom booked online"
+                  value={answers.audience}
+                  onChange={(event) => answer({ audience: event.target.value })}
+                  helperText="Optional. It narrows who the pages are written for."
+                />
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom>
+                    {'Which of these do you like?'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    {'Optional. Picking one steers the shape of the site, not its words.'}
+                  </Typography>
+                  <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+                    {AI_SITE_START_EXAMPLES.map((example) => (
+                      <Chip
+                        key={example.id}
+                        label={`${example.label} — ${example.blurb}`}
+                        variant={answers.example === example.id ? 'filled' : 'outlined'}
+                        onClick={() =>
+                          answer({
+                            example: answers.example === example.id ? null : example.id,
+                          })
+                        }
+                      />
+                    ))}
+                  </Stack>
+                </Box>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  <TextField
+                    select
+                    label="Pages"
+                    value={answers.pages}
+                    onChange={(event) => answer({ pages: Number(event.target.value) })}
+                    sx={{ minWidth: 160 }}
+                  >
+                    {Array.from(
+                      { length: AI_SITE_PAGES.max - AI_SITE_PAGES.min + 1 },
+                      (_, index) => AI_SITE_PAGES.min + index,
+                    ).map((count) => (
+                      <MenuItem key={count} value={count}>
+                        {count}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField
+                    select
+                    label="Welcome email"
+                    value={answers.welcomeEmail ? 'yes' : 'no'}
+                    onChange={(event) => answer({ welcomeEmail: event.target.value === 'yes' })}
+                    sx={{ minWidth: 160 }}
+                  >
+                    <MenuItem value="yes">{'Draft one'}</MenuItem>
+                    <MenuItem value="no">{'No'}</MenuItem>
+                  </TextField>
+                </Stack>
+                <Typography variant="body2" color="text.secondary">
+                  {`About ${estimate.toLocaleString('en-US')} credits, estimated. What it really ` +
+                    'costs is what each step spends, and you can watch that add up while it runs.'}
+                </Typography>
+              </>
+            )}
+          </Stack>
+        </Container>
+      </DialogContent>
+      {!started && (
+        /* Wraps, because the reason and the button together are wider than a
+           phone: on one line the reason would push the button off the edge. */
+        <DialogActions sx={{ px: 3, py: 2, flexWrap: 'wrap', rowGap: 1 }}>
+          {refusal && (
+            <Typography variant="body2" color="text.secondary" sx={{ mr: 'auto' }}>
               {refusal}
             </Typography>
           )}
-        </Stack>
-      </Stack>
-    </CardDisplay>
+          <Button variant="contained" disabled={busy || Boolean(refusal)} onClick={plan}>
+            {busy ? 'Starting…' : 'Plan my site'}
+          </Button>
+        </DialogActions>
+      )}
+    </Dialog>
   )
 }
 

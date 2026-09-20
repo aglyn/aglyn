@@ -578,6 +578,13 @@ export const CONSOLE_WIDGET_SLOTS = {
    * them, and taking it leaves the person on this same page with nothing
    * begun behind them. The shell remembers the choice for this site and stops
    * asking.
+   *
+   * A widget that takes the screen rather than sitting on the page — a full
+   * screen dialog, an overlay — owes the same exit in every shape it has one:
+   * a close control, and the key a person presses to dismiss it. Each of them
+   * is `startBlank`, because a takeover somebody can only dismiss BACK INTO is
+   * the funnel this zone exists to refuse, and nothing here is a half-answered
+   * state worth returning to.
    */
   hostFirstRun: 'hostFirstRun',
   /**
@@ -891,8 +898,9 @@ export interface ConsoleHostFirstRunZoneProps {
    * same page, with nothing created and nothing begun. The shell records the
    * choice for this site and draws the zone no more.
    *
-   * Required of every widget on this zone, and drawn where its questions
-   * start rather than after them — see `hostFirstRun` in
+   * Required of every widget on this zone, drawn where its questions start
+   * rather than after them, and — for a widget that takes the screen — what
+   * every way of dismissing it does. See `hostFirstRun` in
    * {@link CONSOLE_WIDGET_SLOTS}.
    */
   startBlank: () => void
