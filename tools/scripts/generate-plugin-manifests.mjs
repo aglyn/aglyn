@@ -515,6 +515,78 @@ const MANIFESTS = [
   },
 ]
 
+/**
+ * The switchboard catalog, compiled into the core (AGL-3080).
+ *
+ * Every plugin declares its own row — `catalog` on its entry, and on each of
+ * its `capabilities` — and the core reads the compiled list, so adding a
+ * plugin edits no core file. It is compiled rather than registered at runtime
+ * on purpose: the resolvers that read it are synchronous and run in every
+ * bundle of both apps, the middleware and the functions included, and a
+ * registry one of those bundles had not filled would resolve every plugin as
+ * OFF on a published site without an error anywhere (the shape of AGL-3025).
+ */
+const CATALOG_FILE = 'libs/aglyn/src/lib/plugin-manager/first-party-plugins.generated.ts'
+const SITE_IMPACTS = ['elements', 'routes', 'console-only']
+
+function catalogRows() {
+  const rows = []
+  for (const plugin of config.plugins) {
+    for (const source of [plugin, ...(plugin.capabilities ?? [])]) {
+      if (!source.catalog) continue
+      const { order, publishedSiteImpact, $comment: _note, ...fields } = source.catalog
+      const where = `plugins.config.json: "${source.id}" catalog`
+      if (!Number.isInteger(order)) throw new Error(`${where} needs an integer "order"`)
+      if (typeof fields.label !== 'string' || !fields.label) throw new Error(`${where} needs a "label"`)
+      if (!SITE_IMPACTS.includes(publishedSiteImpact)) {
+        throw new Error(`${where} needs "publishedSiteImpact": one of ${SITE_IMPACTS.join(', ')}`)
+      }
+      // A bundle that registers site components changes what a visitor sees.
+      if (source === plugin && Boolean(plugin.register?.site) !== (publishedSiteImpact === 'elements')) {
+        throw new Error(`${where}: "publishedSiteImpact" is "elements" exactly when the entry has register.site`)
+      }
+      rows.push({ order, impact: publishedSiteImpact, plugin: { id: source.id, ...fields } })
+    }
+  }
+  rows.sort((a, b) => a.order - b.order)
+  const ids = rows.map((row) => row.plugin.id)
+  const orders = rows.map((row) => row.order)
+  if (new Set(ids).size !== ids.length) throw new Error('plugins.config.json: a catalog id is declared twice')
+  if (new Set(orders).size !== orders.length) throw new Error('plugins.config.json: two catalog rows share an "order"')
+  for (const row of rows) {
+    for (const required of row.plugin.requires ?? []) {
+      if (!ids.includes(required)) throw new Error(`plugins.config.json: "${row.plugin.id}" requires "${required}", which has no catalog row`)
+    }
+  }
+  return rows
+}
+
+function catalogContent() {
+  const rows = catalogRows()
+  const indent = (json) => json.split('\n').join('\n  ')
+  return (
+    `/**
+ * GENERATED FILE — do not edit. Regenerate with:
+ *   node tools/scripts/generate-plugin-manifests.mjs
+ *
+ * The switchboard catalog (AGL-3080): one row per plugin and capability, each
+ * declared by its own \`catalog\` block in plugins.config.json. The core holds
+ * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
+ */
+
+import type { FirstPartyPlugin, PublishedSiteImpact } from './enabled-plugins'
+
+export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
+${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
+]
+
+export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
+${rows.map((row) => `  ${JSON.stringify(row.plugin.id)}: ${JSON.stringify(row.impact)},`).join('\n')}
+}
+`
+  )
+}
+
 const check = process.argv.includes('--check')
 const drifted = []
 
@@ -529,6 +601,7 @@ const ALL = [
     ...manifest,
     content: declarationsContent(manifest.surfaces, manifest.constName, manifest.entryPoint),
   })),
+  { file: CATALOG_FILE, content: catalogContent() },
   {
     file: SUBPROCESSORS_MANIFEST,
     content: subprocessorsContent(await pluginSubprocessors()),

@@ -1,20 +1,20 @@
 ---
 sidebar_position: 15
-title: Outreach
+title: Sequences
 description: One-to-one email sequences a rep sends to a person from their own connected mailbox, kept with the CRM. Rolling out.
 ---
 
-# Outreach
+# Sequences
 
 :::caution Rolling out
-Outreach is a **release-flagged feature, currently being rolled out** — it is
+Sequences is a **release-flagged feature, currently being rolled out** — it is
 not available in your workspace yet. This page says what it is for, and grows
 with the feature.
 :::
 
 ## What it is for
 
-Outreach is for one-to-one selling. A rep writes a short **sequence** — a
+Sequences is for one-to-one selling. A rep writes a short **sequence** — a
 first email and the follow-ups after it, each a set number of days apart — and
 enrolls people from the CRM in it. Every email goes to one person, as a message
 from the rep rather than as a campaign.
@@ -25,7 +25,7 @@ are for, sent from your site's sending identity to a segment of your contacts.
 
 ## Sent from your own mailbox
 
-Outreach sends from the **rep's own mailbox**, connected to the workspace
+A sequence sends from the **rep's own mailbox**, connected to the workspace
 through the rep's Google account. The email leaves from that address, sits in
 that rep's sent mail like any other, and a reply comes back to the same inbox
 — which is what makes it a conversation between two people rather than a
@@ -33,25 +33,24 @@ broadcast.
 
 ## Where it lives
 
-Outreach is a tab of its own at the **organization** level, beside the CRM, at
-`…/{organization}/outreach`. It has three sections: **Sequences**,
-**Mailboxes** and **Compliance**.
+Sequences is a tab of its own at the **organization** level, beside the CRM. It
+has three sections: **All sequences**, **Mailboxes** and **Compliance**.
 
-Opening it takes the **Use Outreach** permission, which owners and admins hold
+Opening it takes the **Use Sequences** permission, which owners and admins hold
 by default. A [custom role](../../workspace-and-billing/teams-and-roles/custom-roles.md)
 can grant it to other members of the organization. A collaborator added to
-particular sites cannot open it, because Outreach covers the whole
+particular sites cannot open it, because Sequences covers the whole
 organization.
 
 ## Connect a mailbox {#connect-a-mailbox}
 
-Each rep connects their **own** Google mailbox in **Outreach → Mailboxes**:
+Each rep connects their **own** Google mailbox in **Sequences → Mailboxes**:
 
 1. Select **Connect with Google** and choose your Google account.
-2. Google asks you to let Outreach **send email on your behalf** and **read
+2. Google asks you to let Aglyn **send email on your behalf** and **read
    your email**. Allow both. Sending is how a sequence's messages go out as
-   you; reading is how Outreach notices a reply or a bounce, so a sequence
-   stops when somebody answers. If either is left unticked, the connection is
+   you; reading is how a reply or a bounce is noticed, so a sequence stops
+   when somebody answers. If either is left unticked, the connection is
    refused and nothing is saved.
 3. You come back to Mailboxes with the mailbox listed as **Active**.
 
@@ -62,15 +61,15 @@ five mailboxes.
 
 If Mailboxes says connecting a Google mailbox isn't configured, your deployment
 has no Google OAuth client set up. On a self-hosted install, see
-[Environment variables](../../developers/self-hosting-environment.md#outreach).
+[Environment variables](../../developers/self-hosting-environment.md#sequences).
 
 ### Send-as address and display name {#send-as}
 
 A mailbox sends **as** one address: the account's own, or an alias Gmail has
 already verified for it — one added under **Settings → Accounts → Send mail
-as** in Gmail and confirmed there. Outreach only offers addresses Gmail lists
-as verified. To use a new alias, add it in Gmail first, then connect the
-mailbox again so Outreach sees it.
+as** in Gmail and confirmed there. Only addresses Gmail lists as verified are
+offered. To use a new alias, add it in Gmail first, then connect the mailbox
+again so the new alias is seen.
 
 If the same address is waiting for verification under
 [Your sending addresses](./settings.md#your-sending-addresses), connecting the
@@ -137,17 +136,17 @@ Organization owners and admins can change the settings of, pause and
 disconnect any member's mailbox — a departing rep's mailbox has to be
 stoppable by somebody. Other members manage only their own.
 
-When a member deletes their account, Outreach deletes the mailboxes they
-connected and the access stored for them, and asks Google to revoke it; when
-an organization is deleted, it asks Google to revoke the access of every
-mailbox in it. Access another connected mailbox still uses is left in place
-for that mailbox, as with a disconnect.
+When a member deletes their account, the mailboxes they connected and the
+access stored for them are deleted, and Google is asked to revoke it; when an
+organization is deleted, Google is asked to revoke the access of every mailbox
+in it. Access another connected mailbox still uses is left in place for that
+mailbox, as with a disconnect.
 
 ## Compliance settings {#compliance-settings}
 
-Every Outreach email ends with a footer saying who sent it, where they can be
-reached by post, that the email is a business solicitation, and how to stop
-more of them:
+Every email a sequence sends ends with a footer saying who sent it, where they
+can be reached by post, that the email is a business solicitation, and how to
+stop more of them:
 
 ```text
 Example Co LLC · 100 Example St, Springfield, IL 62701
@@ -155,9 +154,8 @@ This is a business solicitation from Example Co. Not relevant? Reply "no" and I 
 ```
 
 The United States' CAN-SPAM Act requires those things of a commercial email,
-so Outreach adds the footer to every email itself, after your text — no
-template or merge field can leave it off. You set what it says in
-**Outreach → Compliance**:
+so the footer is added to every email after your text — no template or merge
+field can leave it off. You set what it says in **Sequences → Compliance**:
 
 - **Legal name** — your organization's legal name, as the footer prints it.
 - **Brand name** — the name the solicitation sentence uses, when it isn't the
@@ -173,21 +171,21 @@ empty**, and an email with neither is never sent.
 
 ### Allowed countries {#allowed-countries}
 
-The countries Outreach may send to at all, **United States** by default. Every
-sequence sends only to the countries both it and this list allow, so taking a
-country off here takes it off every sequence at once.
+The countries a sequence may send to at all, **United States** by default.
+Every sequence sends only to the countries both it and this list allow, so
+taking a country off here takes it off every sequence at once.
 
 The others are off because the law is different there. Canada, the United
 Kingdom and most of the European Union require a consent basis that an email
-to someone who never contacted you does not have. So Outreach never sends a
-**cold** email — to someone who never filled in a form, signed up, ordered or
-booked with you, or wrote to you — outside the United States, whatever this
-list says. Add another country only for people who came to you first.
+to someone who never contacted you does not have. So a **cold** email — to
+someone who never filled in a form, signed up, ordered or booked with you, or
+wrote to you — never goes outside the United States, whatever this list says.
+Add another country only for people who came to you first.
 
 ## Sequences {#sequences}
 
 A **sequence** is the emails, and the tasks between them, one person gets from
-one rep. **Outreach → Sequences** lists each one with its mailbox, its status,
+one rep. **Sequences → All sequences** lists each one with its mailbox, its status,
 and how many people it has enrolled, and how many of them are still active,
 replied, bounced or opted out.
 
@@ -254,15 +252,15 @@ them.
 Select **Enroll people** on an active sequence, and choose them from a saved
 [Contacts view](./views.md) or by searching your contacts at the sequence's
 site — up to 50 at a time. Enrolling reads your contacts, so it takes the
-**Manage data** permission as well as **Use Outreach**.
+**Manage data** permission as well as **Use Sequences**.
 
 Before anything is enrolled, each person is marked:
 
 - **Eligible** — enrolled as they are.
 - **Needs you** — enrolled once you've written their personal line and
   confirmed what's asked below.
-- **Blocked** — not enrolled, with the reason: a personal mailbox, which cold
-  outreach never goes to; an address outside the allowed countries, or in no
+- **Blocked** — not enrolled, with the reason: a personal mailbox, which a
+  cold email never goes to; an address outside the allowed countries, or in no
   known country; on the platform's or your site's suppression list after a
   bounce, a complaint or an unsubscribe; opted out of sales email from the
   site; on
@@ -303,8 +301,8 @@ one went, and why they stopped when they have. For each one you can:
 
 ## How sends are scheduled {#sending}
 
-Every **15 minutes**, Outreach sends the steps that have come due, from each
-rep's own mailbox:
+Every **15 minutes**, the steps that have come due are sent, from each rep's
+own mailbox:
 
 - **In the sending hours** of the sequence, or of its mailbox, read in the
   mailbox's timezone. A step that comes due outside them waits for the next
@@ -330,9 +328,9 @@ sequences wait.
 
 ## What stops a sequence {#what-stops-a-sequence}
 
-Outreach reads each connected mailbox every 15 minutes for what came back:
+Each connected mailbox is read every 15 minutes for what came back:
 
-| What happens | What Outreach does |
+| What happens | What it does |
 | --- | --- |
 | **The person replies** | Stops the sequence (**Replied**), files the reply on the contact's timeline, and gives the rep the task **Reply from** *their name*. |
 | **An out-of-office reply** | Keeps the sequence going, and moves the next step to at least five business days after the reply. |
@@ -348,7 +346,8 @@ the reply asks not to be emailed.
 
 ## Unsubscribe {#unsubscribe}
 
-Every Outreach email carries two ways out beside the footer's "reply no":
+Every email a sequence sends carries two ways out beside the footer's
+"reply no":
 
 - a **one-click unsubscribe link** in the email's `List-Unsubscribe` header,
   which Gmail, Yahoo and most mail apps show as an **Unsubscribe** button;
@@ -358,7 +357,7 @@ Every Outreach email carries two ways out beside the footer's "reply no":
 Either one stops the person's sequences, puts the address on your
 do-not-contact list and unsubscribes it from the site's **Sales outreach**
 email. The link needs no sign-in, shows a plain page saying it is done, and
-keeps working for good — including after Outreach is paused for your
+keeps working for good — including after Sequences is paused for your
 workspace.
 
 When a person is erased from your workspace, their enrollments are deleted

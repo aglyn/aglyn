@@ -46,9 +46,8 @@
  * Tasks are not CRM records for the band: no quota is asked.
  */
 
+import { CRM_COLLECTIONS, type PluginApiHandler } from '@aglyn/aglyn/server'
 import {
-  CRM_COLLECTIONS,
-  type PluginApiHandler,
   TASK_IMPORT_CHUNK_SIZE,
   TASK_IMPORT_MAX_BODY_BYTES,
   type TaskImportChunkResult,
@@ -56,7 +55,7 @@ import {
   type TaskImportRow,
   type TaskImportSkippedRow,
   normalizeTaskImportRow,
-} from '@aglyn/aglyn/server'
+} from '../model/crm-task-import'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { ownerDirectory, readImportRows, resolveImportContext } from './import-context'

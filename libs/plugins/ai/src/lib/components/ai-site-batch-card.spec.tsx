@@ -49,7 +49,11 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 }))
 
 import type { ConsoleOrgSitesZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
-import { AI_SITE_PAGES, aiSiteCreditEstimate } from '../model/ai-site-job'
+import {
+  AI_SITE_PAGES,
+  AI_SITE_SUBMISSION_CHOICES,
+  aiSiteCreditEstimate,
+} from '../model/ai-site-job'
 import AiSiteBatchCard, {
   aiLatestSiteBatch,
   aiSiteBatchJobs,
@@ -109,6 +113,25 @@ beforeEach(() => {
   global.fetch = mockFetch as unknown as typeof fetch
 })
 
+/**
+ * Nothing drawn, anywhere: not in the tree the card was mounted in, and not
+ * in the document its own fields would portal a menu into.
+ *
+ * `container` alone is empty whether the card returned nothing or drew
+ * something outside its own tree, so it cannot tell a flag-off workspace's
+ * page from one the card reached past its container to write on. Every
+ * question the card asks is ruled out by name for the same reason: a control
+ * a workspace may not have is not present to read, not merely unopened.
+ */
+function expectNothingDrawn(container: HTMLElement) {
+  expect(container.textContent).toBe('')
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(document.body.textContent).toBe('')
+  expect(document.querySelector('[class*="MuiDialog"]')).toBeNull()
+  expect(screen.queryByLabelText(/Where do form submissions go\?/)).toBeNull()
+  expect(screen.queryByRole('button', { name: /Generate/ })).toBeNull()
+}
+
 /** Opens the form and fills what the door requires. */
 async function openForm() {
   render(<AiSiteBatchCard {...props} />)
@@ -129,7 +152,7 @@ describe('what the card shows', () => {
     mockFetch.mockResolvedValue(json({ error: 'Not found' }, 404))
     const { container } = render(<AiSiteBatchCard {...props} />)
     await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+    expectNothingDrawn(container)
   })
 
   it('stays absent on a workspace with one site, where a batch is a scaffold', async () => {
@@ -140,7 +163,7 @@ describe('what the card shows', () => {
       />,
     )
     await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+    expectNothingDrawn(container)
   })
 
   it('stays absent until the page has resolved its sites', async () => {
@@ -151,7 +174,20 @@ describe('what the card shows', () => {
       />,
     )
     await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
+    expectNothingDrawn(container)
+  })
+
+  /**
+   * The negative control on {@link expectNothingDrawn}: a helper that cannot
+   * see what the card draws would report every absence above as a pass.
+   */
+  it('is here when the workspace may have it, which is what the absences rule out', async () => {
+    const { container } = await (async () => {
+      const view = render(<AiSiteBatchCard {...props} />)
+      await screen.findByRole('button', { name: /Generate for several sites/ })
+      return view
+    })()
+    expect(() => expectNothingDrawn(container)).toThrow()
   })
 
   it('offers a row per site the page resolved, named as the page names it', async () => {
@@ -252,6 +288,56 @@ describe('starting a run', () => {
       { hostId: 'host-a', businessName: 'Wag & Co', city: 'Austin', brand: '' },
       { hostId: 'host-b', businessName: 'Paws', city: '', brand: 'coral' },
     ])
+  })
+
+  /*
+   * Where a run's submissions go (AGL-2918). A batch is one brief built again
+   * and again, so its forms are the same form: asked once, carried onto every
+   * job, binding on each site's form step rather than left to a proposal.
+   */
+  it('asks where submissions go, offering every answer the form step can bind', async () => {
+    await openForm()
+    const field = screen.getByLabelText(/Where do form submissions go\?/)
+    fireEvent.mouseDown(field)
+    expect(
+      screen.getAllByRole('option').map((option) => option.getAttribute('data-value')),
+    ).toEqual(AI_SITE_SUBMISSION_CHOICES.map((option) => option.id))
+  })
+
+  it('posts the run’s one answer, and starts on the Inbox when nobody changed it', async () => {
+    await openForm()
+    fireEvent.click(screen.getByLabelText('Generate for Wag & Co'))
+    mockFetch.mockResolvedValue(
+      json({ batchId: 'batch-1', jobs: [job()], refused: [] }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Generate for 1 site' }))
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.some((call) => String(call[0]).includes('/jobs/batch')),
+      ).toBe(true),
+    )
+    const first = mockFetch.mock.calls.find((call) =>
+      String(call[0]).includes('/jobs/batch'),
+    )
+    expect(JSON.parse(String((first?.[1] as { body: string }).body)).submissions).toBe(
+      'inbox',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Generate for several sites/ }))
+    fireEvent.mouseDown(screen.getByLabelText(/Where do form submissions go\?/))
+    fireEvent.click(screen.getByRole('option', { name: /CRM as a lead/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Generate for 1 site' }))
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.filter((call) => String(call[0]).includes('/jobs/batch')),
+      ).toHaveLength(2),
+    )
+    const second = mockFetch.mock.calls
+      .filter((call) => String(call[0]).includes('/jobs/batch'))
+      .at(-1)
+    expect(JSON.parse(String((second?.[1] as { body: string }).body)).submissions).toBe(
+      'lead',
+    )
   })
 
   it('shows the run’s progress, and links a site that has an address', async () => {

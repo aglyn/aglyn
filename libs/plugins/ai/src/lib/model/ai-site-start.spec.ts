@@ -26,13 +26,13 @@ import { STARTER_TEMPLATES } from '@aglyn/aglyn/app-utils/starter-templates'
 import {
   AI_SITE_INPUT_MAX_CHARS,
   AI_SITE_PAGES,
+  AI_SITE_SUBMISSION_CHOICES,
   AI_SITE_SUBMISSIONS,
   parseAiSiteJobInputs,
 } from './ai-site-job'
 import {
   AI_SITE_START_ANSWERS,
   AI_SITE_START_EXAMPLES,
-  AI_SITE_START_SUBMISSIONS,
   AI_SITE_START_TYPES,
   aiSiteStartBrief,
   aiSiteStartExample,
@@ -175,8 +175,8 @@ describe('where the contact form’s submissions go', () => {
     // The form step's own vocabulary has a mailing list, which it can only
     // answer with a note: offering it would be asking for an outcome the
     // stored routing has no place for.
-    expect(AI_SITE_START_SUBMISSIONS.map((option) => option.id)).toEqual([...AI_SITE_SUBMISSIONS])
-    for (const option of AI_SITE_START_SUBMISSIONS) {
+    expect(AI_SITE_SUBMISSION_CHOICES.map((option) => option.id)).toEqual([...AI_SITE_SUBMISSIONS])
+    for (const option of AI_SITE_SUBMISSION_CHOICES) {
       expect(aiSiteStartRefusal(answered({ submissions: option.id }))).toBeNull()
     }
   })

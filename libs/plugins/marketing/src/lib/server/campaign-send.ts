@@ -102,7 +102,7 @@ import {
   readCampaignSettled,
   recordCampaignReach,
   recordCampaignSkipped,
-} from '@aglyn/tenant-data-admin/server/email-campaign-reach'
+} from './email-campaign-reach'
 /*
  * The LEAF module for the reputation controls too, and for the same reason
  * as the three above it: every spec that reaches this file mocks the

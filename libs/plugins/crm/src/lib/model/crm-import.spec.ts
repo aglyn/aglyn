@@ -43,7 +43,7 @@ import {
   parseContactImportLifecycleStage,
   parseContactImportTags,
 } from './crm-import'
-import type { ContactFieldDefinition } from './crm'
+import type { ContactFieldDefinition } from '@aglyn/aglyn/app-utils/crm'
 
 const field = (
   key: string,

@@ -167,14 +167,14 @@ export function OutreachMailboxesSection(props: OutreachMailboxesSectionProps) {
     <Stack spacing={2}>
       <CardDisplay
         header="Mailboxes"
-        help={pluginDocsHelp('outreach', { anchor: '#connect-a-mailbox' })}
+        help={pluginDocsHelp('sequences', { anchor: '#connect-a-mailbox' })}
         contentGutterX
         contentGutterY
         HeaderProps={{ action: listed.mailboxes.length ? connectButton : undefined }}
       >
         <Stack spacing={1.5}>
           <Typography variant="body2" color="text.secondary">
-            {'Outreach sends from your own Google mailbox, so a message sits in your Sent mail ' +
+            {'A sequence sends from your own Google mailbox, so a message sits in your Sent mail ' +
               'and a reply comes back to your inbox. Each member connects their own.'}
           </Typography>
           {availability.status === 'ready' && !availability.configured ? (

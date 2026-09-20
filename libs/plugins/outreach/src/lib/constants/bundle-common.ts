@@ -25,7 +25,7 @@ import type { PluginPermission } from '@aglyn/aglyn'
 export const OUTREACH_PLUGIN_ID = 'outreach'
 
 /**
- * The permission that opens Outreach.
+ * The permission that opens Sequences.
  *
  * Dotted like the catalog's keys but declared by this plugin, so the console
  * answers it from the resolved permission map and a custom role or a
@@ -35,21 +35,25 @@ export const OUTREACH_PLUGIN_ID = 'outreach'
 export const OUTREACH_USE_PERMISSION = 'outreach.use'
 
 /**
- * Outreach's plugin-declared permissions (AGL-435 registry). Registered by
- * both halves, so the console gate and a route's resolution agree.
+ * This plugin's declared permissions (AGL-435 registry). Registered by both
+ * halves, so the console gate and a route's resolution agree.
  *
  * Owners and admins hold it by default — `owner` resolves onto the admin
  * tier — and editors and viewers do not: a sequence sends mail as a person
  * from their own mailbox, which is a decision for the people who run the
  * workspace to hand out, one member or one custom role at a time.
+ *
+ * The KEY is `outreach.use` and the LABEL reads "Use Sequences" (AGL-3199):
+ * the key is stored on custom roles and stamped on members, and the label is
+ * the only half anyone reads.
  */
 export const OUTREACH_PERMISSIONS: readonly PluginPermission[] = [
   {
     key: OUTREACH_USE_PERMISSION,
     pluginId: OUTREACH_PLUGIN_ID,
-    label: 'Use Outreach',
+    label: 'Use Sequences',
     description:
-      'Open Outreach, and work sequences and connected mailboxes.',
+      'Open Sequences, and work its email sequences and connected mailboxes.',
     defaults: { admin: true, editor: false, viewer: false },
   },
 ]

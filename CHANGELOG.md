@@ -9,6 +9,48 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.140 — 2026-09-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.139...v1.0.0-beta.140)
+
+### Added
+
+- **marketing:** the three AI posts have covers to render ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922))
+- **ai:** the agency batch asks where its sites' submissions go ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **ai:** a scaffold's email says which kind of email it is ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+
+### Fixed
+
+- **console:** the Automation spec reads the switchboard row where it is declared ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **tools:** a plugin id named in a comment is prose, not a switch over ids ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+### Changed
+
+- **plugins:** three single-reader modules move to the plugin that reads them ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **data:** the record-view descriptors live in the data plugin ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **crm:** the five CSV importers live in the CRM plugin ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **marketplace:** the three-way artifact update plan lives in its plugin ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** a plugin declares its own switchboard row; the core holds none ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **outreach:** the entitlement's comment names no plugin id in quotes ([AGL-3199](https://linear.app/aglyn/issue/AGL-3199))
+- **outreach:** the hub's first section is All sequences ([AGL-3199](https://linear.app/aglyn/issue/AGL-3199))
+- **outreach:** the subprocessor rows and two READMEs read Sequences ([AGL-3199](https://linear.app/aglyn/issue/AGL-3199))
+- **outreach:** the name people read is Sequences ([AGL-3199](https://linear.app/aglyn/issue/AGL-3199))
+
+### Documentation
+
+- **outreach:** the Outreach page becomes Sequences, with a redirect ([AGL-3199](https://linear.app/aglyn/issue/AGL-3199))
+
+<details>
+<summary>Also in this release: 3 test, 2 chore</summary>
+
+- **aglyn:** the applier's allowance says what would move its count ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922), [AGL-2716](https://linear.app/aglyn/issue/AGL-2716))
+- **aglyn:** the blog link checker's docs origin is an allowed host ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922))
+- **ai:** the console plugin manifest matches plugins.config.json ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914), [AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **outreach:** one spec holds the rename from both sides ([AGL-3199](https://linear.app/aglyn/issue/AGL-3199))
+- **tools:** the linear id ceiling reads AGL-3201 from the workspace ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201), [AGL-3199](https://linear.app/aglyn/issue/AGL-3199), [AGL-3196](https://linear.app/aglyn/issue/AGL-3196), [AGL-3197](https://linear.app/aglyn/issue/AGL-3197), [AGL-3198](https://linear.app/aglyn/issue/AGL-3198))
+
+</details>
+
 ## v1.0.0-beta.139 — 2026-09-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/d20eca5ea...v1.0.0-beta.139)

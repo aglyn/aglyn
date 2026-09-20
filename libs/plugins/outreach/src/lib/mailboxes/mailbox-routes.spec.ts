@@ -405,7 +405,7 @@ describe('the member gate every authenticated mailbox route climbs (AGL-2978)', 
 
     docs.set(`orgs/${ORG}`, { slug: 'acme' })
     expect((await run('connect', post('outreach/mailboxes/connect', { orgId: ORG }))).body).toEqual({
-      error: "Outreach isn't available to this workspace yet.",
+      error: "Sequences isn't available to this workspace yet.",
       reason: 'entitlement',
     })
   })
@@ -545,7 +545,7 @@ describe('connect/complete (AGL-2978)', () => {
     expect(aliasCalls).toEqual([
       { orgId: ORG, uid: REP, addresses: ['avery@rep.example.com', 'sales@rep.example.com'], nowMs: NOW },
     ])
-    expect(activity).toEqual([{ orgId: ORG, action: 'Connected an Outreach mailbox', target: { type: 'outreach:mailbox', id: mailbox.id, name: 'avery@rep.example.com' } }])
+    expect(activity).toEqual([{ orgId: ORG, action: 'Connected a mailbox in Sequences', target: { type: 'outreach:mailbox', id: mailbox.id, name: 'avery@rep.example.com' } }])
   })
 
   it('refuses a replayed state, and writes no second mailbox', async () => {
@@ -657,7 +657,7 @@ describe('connect/complete (AGL-2978)', () => {
       connectedAtMs: NOW + 60_000,
       health: { bounces: 2 },
     })
-    expect(activity.map((entry) => entry.action)).toEqual(['Connected an Outreach mailbox', 'Reconnected an Outreach mailbox'])
+    expect(activity.map((entry) => entry.action)).toEqual(['Connected a mailbox in Sequences', 'Reconnected a mailbox in Sequences'])
   })
 
   it('returns a reconnect_required mailbox to active', async () => {
@@ -724,7 +724,7 @@ describe('settings and status (AGL-2978)', () => {
     expect((await status(true)).body.mailbox.status).toBe('paused')
     expect(docs.get(mailboxPath(mailbox.id))?.['status']).toBe('paused')
     expect((await status(false, 'token-admin')).body.mailbox.status).toBe('connected')
-    expect(activity.map((entry) => entry.action).slice(-2)).toEqual(['Paused an Outreach mailbox', 'Resumed an Outreach mailbox'])
+    expect(activity.map((entry) => entry.action).slice(-2)).toEqual(['Paused a mailbox in Sequences', 'Resumed a mailbox in Sequences'])
 
     docs.set(mailboxPath(mailbox.id), { ...docs.get(mailboxPath(mailbox.id)), status: 'reconnect_required' })
     expect((await status(true)).body.reason).toBe('reconnect-required')
@@ -810,7 +810,7 @@ describe('disconnect (AGL-2978)', () => {
     expect(new URLSearchParams(googleCalls.find((call) => call.url === GOOGLE_OAUTH_ENDPOINTS.revoke)?.body ?? '').get('token')).toBe(REFRESH_TOKEN)
     expect(docs.has(mailboxPath(mailbox.id))).toBe(false)
     expect(docs.has(credentialPath(mailbox.id))).toBe(false)
-    expect(activity.at(-1)?.action).toBe('Disconnected an Outreach mailbox')
+    expect(activity.at(-1)?.action).toBe('Disconnected a mailbox in Sequences')
   })
 
   it('keeps the grant while another mailbox still uses the same Google account', async () => {

@@ -51,6 +51,14 @@
 
 import {
   checkCrmRecordsQuota,
+  type ContactFieldDefinition,
+  CRM_COLLECTIONS,
+  fieldDefinitionsForObject,
+  nameSearchFields,
+  type PluginApiHandler,
+  visibleToTokens,
+} from '@aglyn/aglyn/server'
+import {
   COMPANY_IMPORT_CHUNK_SIZE,
   COMPANY_IMPORT_MAX_BODY_BYTES,
   type CompanyImportChunkResult,
@@ -58,14 +66,8 @@ import {
   type CompanyImportRow,
   type CompanyImportSkippedRow,
   companyImportMatchKey,
-  type ContactFieldDefinition,
-  CRM_COLLECTIONS,
-  fieldDefinitionsForObject,
-  nameSearchFields,
   normalizeCompanyImportRow,
-  type PluginApiHandler,
-  visibleToTokens,
-} from '@aglyn/aglyn/server'
+} from '../model/crm-company-import'
 import { crmRecordsQuotaForOrg, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {

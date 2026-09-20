@@ -170,7 +170,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('@aglyn/aglyn/app-utils/contacts'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/consent-groups'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm'),
-  ...jest.requireActual('@aglyn/aglyn/app-utils/crm-lead-import'),
+  ...jest.requireActual('../model/crm-lead-import'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/form-abuse-ceiling'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/marketing-consent'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/person-key'),

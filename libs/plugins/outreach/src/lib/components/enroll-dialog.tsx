@@ -289,7 +289,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
       <DialogTitle>
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
           <span>{title}</span>
-          <HelpTip {...pluginDocsHelp('outreach', { anchor: '#enroll' })} />
+          <HelpTip {...pluginDocsHelp('sequences', { anchor: '#enroll' })} />
         </Stack>
       </DialogTitle>
       <DialogContent dividers>

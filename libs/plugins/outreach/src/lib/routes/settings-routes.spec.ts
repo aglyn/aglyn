@@ -173,7 +173,7 @@ describe('the Outreach route gate (AGL-2980)', () => {
     expect((await call('GET', { token: 'uid-collaborator' })).body.reason).toBe('not-org-wide')
     const editor = await call('GET', { token: 'uid-editor' })
     expect(editor.status).toBe(403)
-    expect(editor.body).toMatchObject({ reason: 'permission', error: 'Your role does not include Use Outreach.' })
+    expect(editor.body).toMatchObject({ reason: 'permission', error: 'Your role does not include Use Sequences.' })
   })
 
   it('refuses an organization without the entitlement — no plan carries it', async () => {
@@ -260,7 +260,7 @@ describe('outreach/settings (AGL-2980)', () => {
     expect(status).toBe(400)
     expect(body.reason).toBe('invalid-settings')
     expect(body.issues).toEqual([
-      { field: 'allowedCountries', message: 'Choose at least one country Outreach may send to.' },
+      { field: 'allowedCountries', message: 'Choose at least one country a sequence may send to.' },
     ])
     expect(docs.has(SETTINGS_PATH)).toBe(false)
   })

@@ -183,7 +183,7 @@ describe('a sequence: what it shows (AGL-2980)', () => {
     failed.unmount()
     mockSequence = { status: 'refused', data: null }
     const refused = renderDetail()
-    expect(screen.getByText(/Use Outreach permission/)).toBeTruthy()
+    expect(screen.getByText(/Use Sequences permission/)).toBeTruthy()
     refused.unmount()
     mockSequence = { status: 'ready', data: null }
     renderDetail()
@@ -227,7 +227,7 @@ describe('a sequence: what it does (AGL-2980)', () => {
   it('activates, or says every reason activation was refused', async () => {
     mockApi.setSequenceStatus.mockRejectedValueOnce(
       new OutreachRouteError(
-        "Add your organization's postal address in Outreach settings.",
+        "Add your organization's postal address in Sequences settings.",
         'activation-refused',
         409,
         [
@@ -236,7 +236,7 @@ describe('a sequence: what it does (AGL-2980)', () => {
             code: 'postal_address_required',
             severity: 'error',
             message:
-              "Add your organization's postal address in Outreach settings.",
+              "Add your organization's postal address in Sequences settings.",
           },
           {
             path: 'mailboxId',
@@ -251,7 +251,7 @@ describe('a sequence: what it does (AGL-2980)', () => {
     fireEvent.click(button('Activate') as HTMLButtonElement)
     expect(
       await screen.findByText(
-        "Add your organization's postal address in Outreach settings.",
+        "Add your organization's postal address in Sequences settings.",
       ),
     ).toBeTruthy()
     expect(
@@ -368,7 +368,7 @@ describe('a sequence: what stops activation, said before a click (AGL-2980)', ()
     renderDetail({ settings: settingsOf({ ...footer, postalAddress: '' }) })
     expect(button('Activate')?.disabled).toBe(true)
     const said = blockers() as HTMLElement
-    expect(said.textContent).toContain("Add your organization's postal address in Outreach settings.")
+    expect(said.textContent).toContain("Add your organization's postal address in Sequences settings.")
     fireEvent.click(within(said).getByRole('link', { name: 'Open Compliance' }))
     expect(mockPush).toHaveBeenCalledWith(COMPLIANCE)
   })

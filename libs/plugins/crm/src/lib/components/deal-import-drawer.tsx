@@ -27,6 +27,7 @@
  * has no key, so every row is a new deal.
  */
 
+import { pluginDocsHelp } from '@aglyn/aglyn'
 import {
   DEAL_IMPORT_CHUNK_SIZE,
   DEAL_IMPORT_FIELD_LABELS,
@@ -42,8 +43,7 @@ import {
   guessDealImportMapping,
   mapDealImportRow,
   mergeDealImportResults,
-  pluginDocsHelp,
-} from '@aglyn/aglyn'
+} from '../model/crm-deal-import'
 import { dealsCsv } from '../model/deals-csv'
 import {
   CsvImportButton,

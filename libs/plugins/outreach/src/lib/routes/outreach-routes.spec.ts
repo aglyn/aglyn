@@ -729,7 +729,7 @@ describe('outreach/enroll (AGL-2980)', () => {
     })
     expect(typeof stored?.['nextDueAtMs']).toBe('number')
     expect(activity.at(-1)).toEqual({
-      action: 'Enrolled 1 person in an Outreach sequence',
+      action: 'Enrolled 1 person in a sequence',
       target: { type: 'outreach:sequence', id: sequenceId, name: 'Second locations' },
     })
   })

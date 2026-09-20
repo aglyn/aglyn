@@ -195,7 +195,7 @@ export async function applyOutreachMailboxHealth(
   await deps.logOrgActivity(
     input.orgId,
     { uid: null },
-    `Paused an Outreach mailbox automatically: ${outcome.decision.message}`,
+    `Paused a mailbox in Sequences automatically: ${outcome.decision.message}`,
     { type: MAILBOX_TARGET, id: input.mailboxId, name: outcome.email },
   )
   return outcome.decision

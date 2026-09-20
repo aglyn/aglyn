@@ -65,8 +65,8 @@ const EMPTY: OutreachComplianceSettings = {
 }
 
 /**
- * Outreach → Compliance (AGL-2980): who every email says sent it, and the
- * countries Outreach may send to at all.
+ * Sequences → Compliance (AGL-2980): who every email says sent it, and the
+ * countries a sequence may send to at all.
  *
  * The footer is previewed from what is typed, by the engine's own
  * `composeOutreachFooter`, so the page shows the lines every email will end
@@ -171,15 +171,15 @@ export function OutreachComplianceSection(
     <Stack spacing={2}>
       <CardDisplay
         header="Sender identity"
-        help={pluginDocsHelp('outreach', { anchor: '#compliance-settings' })}
+        help={pluginDocsHelp('sequences', { anchor: '#compliance-settings' })}
         contentGutterX
         contentGutterY
       >
         <Stack spacing={2}>
           <Typography variant="body2" color="text.secondary">
-            {'Every Outreach email ends with a footer naming your organization, its postal address, that ' +
-              'the email is a business solicitation, and how to stop more of them. The law requires ' +
-              'these on commercial email, so Outreach adds them to every email itself.'}
+            {'Every email a sequence sends ends with a footer naming your organization, its postal ' +
+              'address, that the email is a business solicitation, and how to stop more of them. The law ' +
+              'requires these on commercial email, so every email gets the footer automatically.'}
           </Typography>
           <TextField
             label="Legal name"
@@ -248,14 +248,14 @@ export function OutreachComplianceSection(
 
       <CardDisplay
         header="Allowed countries"
-        help={pluginDocsHelp('outreach', { anchor: '#allowed-countries' })}
+        help={pluginDocsHelp('sequences', { anchor: '#allowed-countries' })}
         contentGutterX
         contentGutterY
       >
         <Stack spacing={2}>
           <Typography variant="body2" color="text.secondary">
-            {'Outreach sends only to people in these countries, and every sequence only to the ones it and ' +
-              'this list both allow. The United States is the default: Canada, the United Kingdom and most ' +
+            {'Sequences may send only to people in these countries, and every sequence only to the ones ' +
+              'it and this list both allow. The United States is the default: Canada, the United Kingdom and most ' +
               'of the European Union require a consent basis that an email to someone who never contacted ' +
               'you does not have, so a cold email never goes outside the United States whatever this list ' +
               'says. Add another country only for people who came to you first.'}

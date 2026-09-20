@@ -297,7 +297,7 @@ describe('docs release-flag registry (AGL-1605)', () => {
             const matched = pattern.test(source)
             if (off && !matched) {
               throw new Error(
-                `${key} is OFF by default, but apps/docs/${page.path} does not disclose it: ${pattern} found no match. Readers are told a feature they cannot open is available. See docs/content-and-data/crm/outreach.md for the treatment.`,
+                `${key} is OFF by default, but apps/docs/${page.path} does not disclose it: ${pattern} found no match. Readers are told a feature they cannot open is available. See docs/content-and-data/crm/sequences.md for the treatment.`,
               )
             }
             if (!off && matched) {

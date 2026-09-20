@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { normalizeContactEmail } from './contacts'
+import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 
 /**
  * `personKey`, for a browser (AGL-2612).

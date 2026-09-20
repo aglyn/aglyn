@@ -20,8 +20,8 @@ import {
   type DatasetFieldType,
   type DatasetModel,
   formatDatasetValue,
-} from './dataset-models'
-import { humanizeDatasetFieldId } from './datasets'
+} from '@aglyn/aglyn/app-utils/dataset-models'
+import { humanizeDatasetFieldId } from '@aglyn/aglyn/app-utils/datasets'
 
 /**
  * Reading a whole record, as opposed to skimming a row of it.

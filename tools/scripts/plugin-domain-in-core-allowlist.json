@@ -451,8 +451,7 @@
     {
       "path": "apps/console/constants/legal-documents.ts",
       "rules": [
-        "vendor:wistia",
-        "plugin-id"
+        "vendor:wistia"
       ],
       "lane": "stays",
       "why": "Legal text names the vendors it discloses."
@@ -566,13 +565,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/tenant/app/[host]/[scheme]/[[...slug]]/load-page-data.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "apps/tenant/app/[host]/[scheme]/[[...slug]]/site-analytics.tsx",
       "rules": [
         "vendor:ga4",
@@ -607,13 +599,6 @@
         "vendor:ga4"
       ],
       "lane": "marketing"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/analytics-events.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/assist-credits.ts",
@@ -672,13 +657,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/console-routes.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
       "rules": [
         "domain-name"
@@ -715,21 +693,7 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/crm-company-import.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/crm-csv.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm-deal-import.ts",
       "rules": [
         "domain-name"
       ],
@@ -751,13 +715,6 @@
       "lane": "crm"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/crm-import.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/crm-inbound.ts",
       "rules": [
         "domain-name",
@@ -767,14 +724,6 @@
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/crm-kinds.ts",
-      "rules": [
-        "domain-name",
-        "plugin-id"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm-lead-import.ts",
       "rules": [
         "domain-name"
       ],
@@ -789,13 +738,6 @@
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/crm-reports.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "crm"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm-task-import.ts",
       "rules": [
         "domain-name"
       ],
@@ -832,13 +774,6 @@
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/dataset-query.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/dataset-record-view.ts",
       "rules": [
         "domain-name"
       ],
@@ -925,13 +860,6 @@
       "lane": "marketplace"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/marketplace-merge.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/marketplace-overrides.ts",
       "rules": [
         "domain-name"
@@ -941,8 +869,7 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/marketplace-provenance.ts",
       "rules": [
-        "domain-name",
-        "plugin-id"
+        "domain-name"
       ],
       "lane": "marketplace"
     },
@@ -1019,13 +946,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/server.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/starter-templates.ts",
       "rules": [
         "plugin-id"
@@ -1096,34 +1016,6 @@
         "domain-name"
       ],
       "lane": "commerce"
-    },
-    {
-      "path": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/aglyn/src/lib/plugin-manager/order-fulfilment.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "commerce"
-    },
-    {
-      "path": "libs/aglyn/src/lib/plugin-manager/plugin-loader.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/aglyn/src/lib/plugin-manager/plugin-manager.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
     },
     {
       "path": "libs/besigner/feature/designer/src/lib/form-fields/form-fields.tsx",
@@ -1263,8 +1155,7 @@
     {
       "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-container.ts",
       "rules": [
-        "domain-name",
-        "plugin-id"
+        "domain-name"
       ],
       "lane": "marketing"
     },
@@ -1317,13 +1208,6 @@
         "vendor:resend"
       ],
       "lane": "mail-provider"
-    },
-    {
-      "path": "libs/shared/util/email/src/lib/marketing-send.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "marketing"
     },
     {
       "path": "libs/shared/util/email/src/lib/received-email.ts",
@@ -1481,13 +1365,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/email-marketing-gate.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "marketing"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/email-topic-confirmation.ts",
       "rules": [
         "domain-name"
@@ -1524,13 +1401,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/serve-media-cdn.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/stripe-account-mode.ts",
       "rules": [
         "domain-name"
@@ -1540,17 +1410,9 @@
     {
       "path": "libs/tenant/feature/instance/src/lib/hooks/firebase/firebase-services.tsx",
       "rules": [
-        "vendor:ga4",
-        "plugin-id"
+        "vendor:ga4"
       ],
       "lane": "analytics-provider"
-    },
-    {
-      "path": "libs/tenant/feature/instance/src/lib/hooks/host-collection-queries.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
     },
     {
       "path": "libs/tenant/runtime/src/lib/collection-fallback-nodes.ts",
@@ -1568,13 +1430,6 @@
     },
     {
       "path": "libs/tenant/runtime/src/lib/get-variables.ts",
-      "rules": [
-        "plugin-id"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "libs/tenant/runtime/src/lib/required-site-plugins.ts",
       "rules": [
         "plugin-id"
       ],

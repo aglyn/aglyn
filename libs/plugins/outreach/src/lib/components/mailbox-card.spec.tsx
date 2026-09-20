@@ -181,7 +181,7 @@ describe('MailboxCard — status and health (AGL-2978)', () => {
       },
     })
     expect(screen.getByRole('alert').textContent).toBe(
-      'Outreach paused this mailbox on Sep 15, 2026. Paused after 2 hard bounces today. Re-check the addresses in your sequences before resuming. Nothing sends from it until it is resumed.',
+      'Sequences paused this mailbox on Sep 15, 2026. Paused after 2 hard bounces today. Re-check the addresses in your sequences before resuming. Nothing sends from it until it is resumed.',
     )
     fireEvent.click(button(MAILBOX_ACTION_LABELS.resume) as HTMLElement)
     await waitFor(() => expect(props.api.setPaused).toHaveBeenCalledWith('gm_1', false))

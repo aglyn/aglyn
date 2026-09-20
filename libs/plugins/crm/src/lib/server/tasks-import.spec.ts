@@ -48,7 +48,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   registerPluginApiRoute: jest.fn(),
   // The plan tables the suite gate reads, first so no module below is shadowed.
   ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
-  ...jest.requireActual('@aglyn/aglyn/app-utils/crm-task-import'),
+  ...jest.requireActual('../model/crm-task-import'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/scope-tokens'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/consent-groups'),

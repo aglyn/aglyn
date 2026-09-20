@@ -189,7 +189,7 @@ export function gmailApiError(
     return make('quota_exceeded', 'This mailbox has spent its Gmail quota for the day.')
   }
   if (has('insufficientPermissions', 'ACCESS_TOKEN_SCOPE_INSUFFICIENT')) {
-    return make('insufficient_scope', 'The mailbox grant is missing a permission Outreach needs.')
+    return make('insufficient_scope', 'The mailbox grant is missing a permission Sequences needs.')
   }
   if (status >= 500) return make('unavailable', `Gmail is unavailable${detail}`)
   if (status === 401) return make('unauthorized', 'Gmail refused the mailbox’s access token.')

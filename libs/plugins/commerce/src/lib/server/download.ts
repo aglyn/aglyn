@@ -19,11 +19,13 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import {
-  createPaidMediaDeliveryIo,
   firebaseAdmin,
   PAID_DOWNLOAD_LINK_TTL_MS,
-  resolvePaidMediaDelivery,
 } from '@aglyn/tenant-data-admin'
+import {
+  createPaidMediaDeliveryIo,
+  resolvePaidMediaDelivery,
+} from './paid-media-delivery'
 import { createHmac, timingSafeEqual } from 'crypto'
 
 /**

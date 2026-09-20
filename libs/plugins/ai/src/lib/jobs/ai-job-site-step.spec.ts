@@ -50,7 +50,11 @@ import type {
   AiJobOutput,
   AiJobPlan,
 } from '../model/ai-jobs.types'
-import { AI_SITE_MAX_SECTIONS, AI_SITE_PAGES } from '../model/ai-site-job'
+import {
+  AI_SITE_EMAIL_TYPE,
+  AI_SITE_MAX_SECTIONS,
+  AI_SITE_PAGES,
+} from '../model/ai-site-job'
 import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
@@ -625,15 +629,42 @@ describe('one unit a pass', () => {
 describe('what the welcome email is told', () => {
   const emailUnit = () => aiSiteJobUnits(confirmedPlan(), { welcomeEmail: true }).at(-1)
 
-  const emailBrief = (inputs: Record<string, unknown>) => {
+  const emailJob = (inputs: Record<string, unknown> = {}) => {
     const unit = emailUnit()
     if (!unit || unit.kind !== 'email') throw new Error('the last unit is not the email')
     return aiSiteUnitJob(
       siteJob({ inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, ...inputs } }),
       unit,
       new Map(),
-    ).brief
+    )
   }
+
+  const emailBrief = (inputs: Record<string, unknown>) => emailJob(inputs).brief
+
+  it('says which kind of email it is, which the email step reads off the inputs', () => {
+    expect(emailJob().inputs?.['emailType']).toBe(AI_SITE_EMAIL_TYPE)
+    // ⛔ Never the signup label. It is the nearest one in the catalog and it
+    // describes a thing that did not happen.
+    expect(AI_SITE_EMAIL_TYPE).not.toBe('welcome')
+  })
+
+  it('says it of the email alone, leaving every other unit’s inputs as they were', () => {
+    const units = aiSiteJobUnits(confirmedPlan(), { welcomeEmail: true })
+    const job = siteJob({
+      inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, welcomeEmail: true },
+    })
+    for (const unit of units.filter((each) => each.kind !== 'email')) {
+      expect(aiSiteUnitJob(job, unit, new Map()).inputs?.['emailType']).toBeUndefined()
+    }
+  })
+
+  it('keeps the scaffold’s own answers on the email’s inputs beside the kind', () => {
+    // The kind is added to the inputs, not swapped for them: the form's
+    // routing and the audience are read off the same job.
+    const inputs = emailJob({ audience: 'local dog owners', submissions: 'lead' }).inputs
+    expect(inputs?.['audience']).toBe('local dog owners')
+    expect(inputs?.['submissions']).toBe('lead')
+  })
 
   it('still says what it always said', () => {
     expect(emailBrief({})).toContain(

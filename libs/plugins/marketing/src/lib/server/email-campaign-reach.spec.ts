@@ -13,6 +13,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * @jest-environment node
  */
 
 /**
@@ -66,7 +68,7 @@ const mockFirestore = () => ({
   collection: (name: string) => collectionRef(name),
 })
 
-jest.mock('./firebase-admin', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
   __esModule: true,
   default: {
     app: () => ({ firestore: () => mockFirestore() }),
@@ -84,7 +86,7 @@ import {
   partitionByCampaignReach,
   readCampaignReach,
 } from './email-campaign-reach'
-import { emailSuppressionKey } from './email-suppression'
+import { emailSuppressionKey } from '@aglyn/tenant-data-admin/server/email-suppression'
 
 const key = (email: string) => emailSuppressionKey(email) as string
 

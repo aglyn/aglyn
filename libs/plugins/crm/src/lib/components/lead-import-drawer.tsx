@@ -37,6 +37,7 @@
  * answered.
  */
 
+import { normalizeContactEmail, pluginDocsHelp } from '@aglyn/aglyn'
 import {
   LEAD_IMPORT_CHUNK_SIZE,
   LEAD_IMPORT_FIELD_LABELS,
@@ -52,9 +53,7 @@ import {
   leadImportSkippedCsv,
   mapLeadImportRow,
   mergeLeadImportResults,
-  normalizeContactEmail,
-  pluginDocsHelp,
-} from '@aglyn/aglyn'
+} from '../model/crm-lead-import'
 import { leadsCsv } from '../model/leads-csv'
 import {
   CsvImportButton,

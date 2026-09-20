@@ -53,7 +53,7 @@ function sectionBody(section: OutreachConsoleSectionId, props: ConsolePluginPage
 }
 
 /**
- * The Outreach hub (AGL-2974), mounted by the console's generic
+ * The Sequences hub (AGL-2974), mounted by the console's generic
  * ORGANIZATION-level route at `/[orgSlug]/outreach/<section>`.
  *
  * The shell has already decided everything about access before this renders:

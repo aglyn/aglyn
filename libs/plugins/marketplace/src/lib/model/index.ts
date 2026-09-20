@@ -51,7 +51,7 @@ export {
   type ArtifactChange,
   type ArtifactUpdatePlan,
   type ChangeKind,
-} from '@aglyn/aglyn/app-utils/marketplace-merge'
+} from './artifact-merge'
 export {
   compareArtifactVersions,
   resolveUpdateState,

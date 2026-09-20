@@ -44,13 +44,13 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AI_SITE_PAGES,
+  AI_SITE_SUBMISSION_CHOICES,
   aiSiteCreditEstimate,
   type AiSiteSubmissions,
 } from '../model/ai-site-job'
 import {
   AI_SITE_START_ANSWERS,
   AI_SITE_START_EXAMPLES,
-  AI_SITE_START_SUBMISSIONS,
   AI_SITE_START_TYPES,
   aiSiteStartBrief,
   aiSiteStartInputs,
@@ -316,7 +316,7 @@ export function AiSiteStartCard({
                   }
                   helperText="You can change this on the form itself afterwards."
                 >
-                  {AI_SITE_START_SUBMISSIONS.map((option) => (
+                  {AI_SITE_SUBMISSION_CHOICES.map((option) => (
                     <MenuItem key={option.id} value={option.id}>
                       {`${option.label} — ${option.blurb}`}
                     </MenuItem>

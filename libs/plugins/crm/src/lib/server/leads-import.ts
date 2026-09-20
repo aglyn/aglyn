@@ -79,17 +79,19 @@
 import {
   checkVisitorRecordCeiling,
   type ContactSource,
+  LEADS_MAX_PER_HOST,
+  personKey,
+  type PluginApiHandler,
+} from '@aglyn/aglyn/server'
+import {
   LEAD_IMPORT_CHUNK_SIZE,
   LEAD_IMPORT_MAX_BODY_BYTES,
   type LeadImportChunkResult,
   type LeadImportRawRow,
   type LeadImportRow,
   type LeadImportSkippedRow,
-  LEADS_MAX_PER_HOST,
   normalizeLeadImportRow,
-  personKey,
-  type PluginApiHandler,
-} from '@aglyn/aglyn/server'
+} from '../model/crm-lead-import'
 import { addHostLead, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {

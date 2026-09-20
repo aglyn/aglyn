@@ -62,19 +62,21 @@
  */
 
 import {
+  type ContactFieldDefinition,
+  CRM_COLLECTIONS,
+  nameSearchFields,
+  type PluginApiHandler,
+  visibleToTokens,
+} from '@aglyn/aglyn/server'
+import {
   CONTACT_IMPORT_CHUNK_SIZE,
   CONTACT_IMPORT_MAX_BODY_BYTES,
-  type ContactFieldDefinition,
   type ContactImportChunkResult,
   type ContactImportRawRow,
   type ContactImportRow,
   type ContactImportSkippedRow,
-  CRM_COLLECTIONS,
-  nameSearchFields,
   normalizeContactImportRow,
-  type PluginApiHandler,
-  visibleToTokens,
-} from '@aglyn/aglyn/server'
+} from '../model/crm-import'
 import { crmRecordsQuotaForOrg, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { captureHostContact } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'

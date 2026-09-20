@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { COMPANY_IMPORT_FIELDS, guessCompanyImportMapping } from '@aglyn/aglyn'
+import {
+  COMPANY_IMPORT_FIELDS,
+  guessCompanyImportMapping,
+} from './crm-company-import'
 import {
   COMPANY_CSV_COLUMNS,
   companiesCsv,

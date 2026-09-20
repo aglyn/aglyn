@@ -154,7 +154,7 @@ export function useOutreachApi(orgId: string | null): OutreachApi {
         })
       } catch {
         throw new OutreachRouteError(
-          'Outreach could not be reached. Try again.',
+          'Sequences could not be reached. Try again.',
           'unreachable',
           0,
         )
@@ -167,8 +167,8 @@ export function useOutreachApi(orgId: string | null): OutreachApi {
           refusal.error && refusal.reason
             ? refusal.error
             : response.status === 404
-              ? "Outreach isn't available to this workspace yet."
-              : 'Outreach could not be reached. Try again.',
+              ? "Sequences isn't available to this workspace yet."
+              : 'Sequences could not be reached. Try again.',
           refusal.reason ??
             (response.status === 404 ? 'not-found' : 'unreachable'),
           response.status,

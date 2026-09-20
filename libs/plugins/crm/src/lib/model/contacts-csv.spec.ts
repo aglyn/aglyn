@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { CONTACT_IMPORT_FIELDS, guessContactImportMapping } from '@aglyn/aglyn'
+import { CONTACT_IMPORT_FIELDS, guessContactImportMapping } from './crm-import'
 import {
   CONTACT_CSV_COLUMNS,
   contactCsvHeader,

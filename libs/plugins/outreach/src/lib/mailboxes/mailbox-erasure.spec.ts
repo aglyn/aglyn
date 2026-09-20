@@ -196,7 +196,7 @@ describe('the workspace eraser (AGL-2978)', () => {
     })
   })
 
-  it('counts a grant it cannot open, or a deployment with no Outreach config, as failed without asking Google', async () => {
+  it('counts a grant it cannot open, or a deployment with no mailbox OAuth config, as failed without asking Google', async () => {
     storeCredential('gm_a', 'org-erased', 'account-1', 'refresh-a')
     const otherKeyring = parseSecretBoxKeyring(
       Buffer.from(createSecretBoxKey(Buffer.alloc(32, 9)).material).toString('base64'),

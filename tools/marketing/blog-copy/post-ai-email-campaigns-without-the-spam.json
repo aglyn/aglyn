@@ -18,8 +18,9 @@
   },
   "excerpt": "A generator that can send is a generator that can send the wrong thing. Aglyn AI writes the email and the campaign as drafts, aimed at nobody, and leaves the audience, the consent check and the send to you.",
   "cover": {
-    "status": "not generated",
-    "how": "tools/scripts/generate-blog-covers.mjs — add a POSTS entry with this slug and run it; the PNG is uploaded to the media library separately.",
+    "status": "rendered, not uploaded",
+    "out": "blogCoverAiEmail.png",
+    "how": "POSTS entry added to tools/scripts/generate-blog-covers.mjs; `node tools/scripts/generate-blog-covers.mjs --out=<dir>` renders it. Still to do: upload the PNG to the media library and set it as the post's cover. Agents CAN upload a DAM asset under 10 MB — only films are blocked — so the earlier note here saying otherwise was wrong; what actually blocks it today is that app.aglyn.com is signed out.",
     "eyebrow": "Marketing + Aglyn AI",
     "pill": "Guides"
   },

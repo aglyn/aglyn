@@ -96,11 +96,11 @@ const ARCHIVE_PAGE = 400
 
 /** The activity line each lifecycle act writes. */
 export const OUTREACH_SEQUENCE_ACTIVITY = {
-  create: 'Created an Outreach sequence',
-  activate: 'Activated an Outreach sequence',
-  pause: 'Paused an Outreach sequence',
-  archive: 'Archived an Outreach sequence',
-  delete: 'Deleted an Outreach sequence',
+  create: 'Created a sequence',
+  activate: 'Activated a sequence',
+  pause: 'Paused a sequence',
+  archive: 'Archived a sequence',
+  delete: 'Deleted a sequence',
 } as const
 
 /** Where each action may start, and where it ends. */
@@ -197,7 +197,7 @@ async function draftPlacementIssues(
       issue(
         'settings.allowedCountries',
         'country_not_in_org',
-        `${outside.join(', ')} ${outside.length === 1 ? "isn't" : "aren't"} among the countries your organization allows. Add ${outside.length === 1 ? 'it' : 'them'} in Outreach compliance settings first.`,
+        `${outside.join(', ')} ${outside.length === 1 ? "isn't" : "aren't"} among the countries your organization allows. Add ${outside.length === 1 ? 'it' : 'them'} in Sequences compliance settings first.`,
       ),
     )
   }

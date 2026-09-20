@@ -13,6 +13,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * @jest-environment node
  */
 
 /**
@@ -24,7 +26,7 @@
  * So the assertion is against the Node derivation itself, not a pasted hex.
  */
 
-import { personKey } from './person-key'
+import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { personKeyInBrowser } from './person-key-web'
 
 describe('personKeyInBrowser', () => {

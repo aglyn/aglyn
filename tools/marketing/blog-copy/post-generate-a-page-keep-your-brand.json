@@ -18,8 +18,9 @@
   },
   "excerpt": "Prompt-built pages drift off-brand because the generator has nothing of yours to build from. Aglyn AI has your theme, your layout and your components — and it hands the result back as a draft you edit and publish yourself.",
   "cover": {
-    "status": "not generated",
-    "how": "tools/scripts/generate-blog-covers.mjs renders the covers; add a POSTS entry with this slug, an eyebrow, the title and a category pill, then run it and upload the PNG to the media library separately. An agent cannot upload a DAM asset.",
+    "status": "rendered, not uploaded",
+    "out": "blogCoverAiBrand.png",
+    "how": "POSTS entry added to tools/scripts/generate-blog-covers.mjs; `node tools/scripts/generate-blog-covers.mjs --out=<dir>` renders it. Still to do: upload the PNG to the media library and set it as the post's cover. Agents CAN upload a DAM asset under 10 MB — only films are blocked — so the earlier note here saying otherwise was wrong; what actually blocks it today is that app.aglyn.com is signed out.",
     "eyebrow": "Aglyn AI",
     "pill": "Guides"
   },

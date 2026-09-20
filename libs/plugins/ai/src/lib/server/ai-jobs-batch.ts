@@ -33,6 +33,8 @@ import {
   AI_SITE_BATCH_MIN_HOST_LIMIT,
   AI_SITE_INPUT_MAX_CHARS,
   AI_SITE_PAGES,
+  aiSiteSubmissions,
+  type AiSiteSubmissions,
 } from '../model/ai-site-job'
 import { aiGateLadder } from '../runtime/ai-gate'
 import { releaseAssistMessage } from '../usage/assist-usage'
@@ -47,6 +49,15 @@ import { releaseAssistMessage } from '../usage/assist-usage'
  * them, each plans and waits for its own confirmation, each writes only
  * drafts — and the batch id is what lets the org Sites page show them as one
  * run with a link into each.
+ *
+ * ── The one answer that is not per site (AGL-2918) ───────────────────────
+ *
+ * Where a contact form's submissions go is asked once and carried onto every
+ * job, because a batch is one brief built again and again and the forms it
+ * makes are the same form. It is the one thing about a contact form a model
+ * cannot know — a note to read or a lead to chase is a decision about how the
+ * business runs — so each job binds the form step with it exactly as the
+ * guided start does, rather than twenty forms each keeping a guess.
  *
  * ── Why the batch has a door of its own ──────────────────────────────────
  *
@@ -99,6 +110,16 @@ export interface CreateAiSiteBatchBody {
   businessType: string
   pages: number
   welcomeEmail: boolean
+  /**
+   * Where every site in the run routes its contact form's submissions
+   * (AGL-2918); `null` where the caller did not say, which leaves each form
+   * step's own proposal standing as it always did.
+   *
+   * One answer for the whole run, because a batch is one brief built again
+   * and again: the forms it makes are the same form, and twenty of them
+   * routed by a model's guess is the run where a wrong default costs most.
+   */
+  submissions: AiSiteSubmissions | null
   sites: AiSiteBatchSite[]
   model: string | null
 }
@@ -166,6 +187,10 @@ export function parseAiSiteBatchBody(
     businessType,
     pages,
     welcomeEmail: body['welcomeEmail'] !== false,
+    // Admitted only as one of the two the form step can bind, exactly as the
+    // single-site door admits it: anything else is nobody having said, and
+    // the whole run is not refused over an answer that is not a refusal.
+    submissions: aiSiteSubmissions(body),
     sites,
     model: rawModel && rawModel !== 'auto' ? rawModel : null,
   }
@@ -254,6 +279,7 @@ export async function POST(request: Request): Promise<Response> {
       businessType: parsed.businessType,
       pages: parsed.pages,
       welcomeEmail: parsed.welcomeEmail,
+      submissions: parsed.submissions,
       businessName: site.businessName,
       city: site.city,
       brand: site.brand,

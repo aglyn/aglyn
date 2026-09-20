@@ -103,7 +103,11 @@ import type { AiJobStepRunner } from '../jobs/ai-job-text-step'
 import { registerAiJobStep } from '../jobs/ai-jobs'
 // The scaffold's own admission, which every site in a batch meets.
 import { registerAiSiteJob } from '../jobs/ai-job-site-step'
-import { AI_SITE_BATCH_MAX, AI_SITE_PAGES } from '../model/ai-site-job'
+import {
+  AI_SITE_BATCH_MAX,
+  AI_SITE_PAGES,
+  AI_SITE_SUBMISSIONS,
+} from '../model/ai-site-job'
 import {
   AI_SITE_BATCH_PLAN_REFUSAL,
   POST as createBatch,
@@ -198,9 +202,33 @@ describe('the body a batch takes', () => {
       businessType: 'dog groomer',
       pages: AI_SITE_PAGES.min,
       welcomeEmail: true,
+      submissions: null,
       sites: SITES,
       model: null,
     })
+  })
+
+  /*
+   * Where a run's forms route what visitors write (AGL-2918). A batch is one
+   * brief built again and again, so the forms it makes are the same form —
+   * and twenty of them keeping a model's proposal is where a wrong routing
+   * default costs most.
+   */
+  it('reads where submissions go, as one answer for the whole run', () => {
+    for (const answer of AI_SITE_SUBMISSIONS) {
+      const parsed = parseAiSiteBatchBody({ ...BODY, submissions: answer })
+      expect(typeof parsed === 'string' ? parsed : parsed.submissions).toBe(answer)
+    }
+  })
+
+  it('reads an answer it cannot bind as nobody having said, rather than refusing the run', () => {
+    // The form step can only bind two of its three routings, and a body that
+    // names the third — or anything else — leaves the model's own proposal
+    // standing exactly as it stood before the question existed.
+    for (const answer of ['list', '', 'INBOX', 7, null, undefined]) {
+      const parsed = parseAiSiteBatchBody({ ...BODY, submissions: answer })
+      expect(typeof parsed === 'string' ? parsed : parsed.submissions).toBeNull()
+    }
   })
 
   it('refuses no workspace, no brief, no business, a bad page count and no site', () => {
@@ -275,6 +303,21 @@ describe('what the door answers', () => {
     expect(batches.size).toBe(1)
     expect([...batches][0]).toBe(answer['batchId'])
     expect(mockCreated.every((input) => input['kind'] === 'site')).toBe(true)
+  })
+
+  it('carries the run’s one routing answer onto every site’s job', async () => {
+    await createBatch(request({ ...BODY, submissions: 'lead' }))
+    expect(mockCreated).toHaveLength(2)
+    for (const input of mockCreated) {
+      expect((input['inputs'] as Record<string, unknown>)['submissions']).toBe('lead')
+    }
+  })
+
+  it('carries no routing where the caller did not answer', async () => {
+    await createBatch(request(BODY))
+    for (const input of mockCreated) {
+      expect((input['inputs'] as Record<string, unknown>)['submissions']).toBeNull()
+    }
   })
 
   it('gives each site its own variables and the one brief', async () => {

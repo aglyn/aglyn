@@ -22,11 +22,13 @@ import {
 } from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import {
-  createPaidMediaDeliveryIo,
   firebaseAdmin,
   GATED_VIDEO_SESSION_TTL_MS,
-  resolvePaidMediaDelivery,
 } from '@aglyn/tenant-data-admin'
+import {
+  createPaidMediaDeliveryIo,
+  resolvePaidMediaDelivery,
+} from './paid-media-delivery'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { requireActiveMember } from './membership'
 import { checkMemberEntitlement } from './gate'

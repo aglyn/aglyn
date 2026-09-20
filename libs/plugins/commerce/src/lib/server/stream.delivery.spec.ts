@@ -77,7 +77,7 @@ const fakeBucket = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => {
-  const delivery = jest.requireActual('@aglyn/tenant-data-admin/server/paid-media-delivery')
+  const delivery = jest.requireActual('./paid-media-delivery')
   const signing = jest.requireActual('@aglyn/tenant-data-admin/server/media-signing')
   return {
     firebaseAdmin: {
