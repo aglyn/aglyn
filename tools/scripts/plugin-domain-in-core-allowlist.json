@@ -1,5 +1,5 @@
 {
-  "note": "Files outside libs/plugins/** that carry a plugin's domain today (AGL-3080): a domain-named file or route directory, a vendor literal, a quoted first-party plugin id, or a static plugin import. `lane` is the line of AGL-3080's move set that takes the file out; `\"lane\": \"stays\"` is a binding argued to be the platform's own, with the argument in `why`. Read by check-plugin-domain-in-core.mjs, which is red for a finding missing here AND for a row or rule nothing trips any more (`--prune` drops those). This list may shrink and must never grow: a new finding is refused, not recorded.",
+  "note": "Files outside libs/plugins/** that carry a plugin's domain today (AGL-3080): a domain-named file or route directory, a vendor literal, a quoted first-party plugin id, a static plugin import, a plugin-owned Firestore collection addressed from outside the plugin, or exports that are mostly one plugin's vocabulary. The last two were added by the content sweep of 2026-09-20, which is the one time this list grew: the rules were new, the files were not. `lane` is the line of AGL-3080's move set that takes the file out; `\"lane\": \"stays\"` is a binding argued to be the platform's own, with the argument in `why`. Read by check-plugin-domain-in-core.mjs, which is red for a finding missing here AND for a row or rule nothing trips any more (`--prune` drops those). This list may shrink and must never grow: a new finding is refused, not recorded.",
   "files": [
     {
       "path": "apps/console/app/(app)/[orgSlug]/billing/(sections)/page.tsx",
@@ -125,7 +125,8 @@
     {
       "path": "apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/page.tsx",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "plugin-collection:marketplace"
       ],
       "lane": "marketplace"
     },
@@ -153,7 +154,8 @@
     {
       "path": "apps/console/app/(app)/[orgSlug]/marketplace/publish/plugin/page.tsx",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "plugin-collection:marketplace"
       ],
       "lane": "plugin-id"
     },
@@ -170,6 +172,20 @@
         "domain-name"
       ],
       "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/plugins/[pluginRef]/page.tsx",
+      "rules": [
+        "plugin-collection:marketplace"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/(app)/admin/orgs/[orgId]/page.tsx",
+      "rules": [
+        "plugin-collection:data"
+      ],
+      "lane": "data"
     },
     {
       "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/layout.tsx",
@@ -200,6 +216,13 @@
       "lane": "plugin-id"
     },
     {
+      "path": "apps/console/app/api/_lib/org-cogs.ts",
+      "rules": [
+        "plugin-collection:ai"
+      ],
+      "lane": "ai"
+    },
+    {
       "path": "apps/console/app/api/_lib/publisher-review-email.ts",
       "rules": [
         "domain-name"
@@ -214,23 +237,102 @@
       "lane": "plugin-id"
     },
     {
+      "path": "apps/console/app/api/admin/backfill-scope/route.ts",
+      "rules": [
+        "plugin-collection:data"
+      ],
+      "lane": "data"
+    },
+    {
+      "path": "apps/console/app/api/admin/margin-utilization/route.ts",
+      "rules": [
+        "plugin-collection:ai"
+      ],
+      "lane": "ai"
+    },
+    {
+      "path": "apps/console/app/api/admin/overview/route.ts",
+      "rules": [
+        "plugin-collection:marketplace"
+      ],
+      "lane": "marketplace"
+    },
+    {
       "path": "apps/console/app/api/admin/plugin-reviews/route.ts",
       "rules": [
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:marketplace"
       ],
       "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/api/admin/reap-plugin-artifacts/route.ts",
+      "rules": [
+        "plugin-collection:marketplace"
+      ],
+      "lane": "marketplace"
     },
     {
       "path": "apps/console/app/api/admin/revenue/route.ts",
       "rules": [
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:commerce",
+        "plugin-collection:marketplace"
       ],
       "lane": "plugin-id"
     },
     {
+      "path": "apps/console/app/api/admin/reverify-plugin-versions/route.ts",
+      "rules": [
+        "plugin-collection:marketplace"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/api/admin/sign-plugin/route.ts",
+      "rules": [
+        "plugin-collection:marketplace"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/api/admin/tax-return/route.ts",
+      "rules": [
+        "plugin-collection:marketplace"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/api/billing/report-usage/route.ts",
+      "rules": [
+        "plugin-collection:ai",
+        "plugin-collection:crm",
+        "plugin-collection:data",
+        "plugin-collection:forms"
+      ],
+      "lane": "ai"
+    },
+    {
+      "path": "apps/console/app/api/billing/usage-alerts/route.ts",
+      "rules": [
+        "plugin-collection:ai",
+        "plugin-collection:data"
+      ],
+      "lane": "ai"
+    },
+    {
+      "path": "apps/console/app/api/billing/usage-budget/route.ts",
+      "rules": [
+        "plugin-collection:ai"
+      ],
+      "lane": "ai"
+    },
+    {
       "path": "apps/console/app/api/crm/daily-digest/route.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "plugin-collection:crm",
+        "domain-exports:crm"
       ],
       "lane": "crm"
     },
@@ -238,7 +340,8 @@
       "path": "apps/console/app/api/crm/export/route.ts",
       "rules": [
         "domain-name",
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:crm"
       ],
       "lane": "crm"
     },
@@ -253,14 +356,16 @@
     {
       "path": "apps/console/app/api/crm/task-reminders/route.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:crm"
       ],
       "lane": "crm"
     },
     {
       "path": "apps/console/app/api/hosts/export/route.ts",
       "rules": [
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:data"
       ],
       "lane": "plugin-id"
     },
@@ -274,7 +379,8 @@
     {
       "path": "apps/console/app/api/hosts/import/route.ts",
       "rules": [
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:data"
       ],
       "lane": "plugin-id"
     },
@@ -288,21 +394,24 @@
     {
       "path": "apps/console/app/api/hosts/where-used/route.ts",
       "rules": [
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:workflows"
       ],
       "lane": "plugin-id"
     },
     {
       "path": "apps/console/app/api/orgs/datasets/export/route.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "plugin-collection:data"
       ],
       "lane": "data"
     },
     {
       "path": "apps/console/app/api/orgs/datasets/route.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "plugin-collection:data"
       ],
       "lane": "data"
     },
@@ -321,6 +430,13 @@
       "lane": "ai"
     },
     {
+      "path": "apps/console/components/billing/billing-metered-estimate.component.tsx",
+      "rules": [
+        "plugin-collection:forms"
+      ],
+      "lane": "forms"
+    },
+    {
       "path": "apps/console/components/billing/billing-plan-cards.component.tsx",
       "rules": [
         "plugin-id"
@@ -330,7 +446,9 @@
     {
       "path": "apps/console/components/billing/billing-usage.component.tsx",
       "rules": [
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:crm",
+        "plugin-collection:data"
       ],
       "lane": "plugin-id"
     },
@@ -358,9 +476,18 @@
     {
       "path": "apps/console/components/interaction-builder-dialog.component.tsx",
       "rules": [
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:marketing",
+        "plugin-collection:workflows"
       ],
       "lane": "workflows"
+    },
+    {
+      "path": "apps/console/components/interactions-provider.component.tsx",
+      "rules": [
+        "plugin-collection:marketing"
+      ],
+      "lane": "marketing"
     },
     {
       "path": "apps/console/components/marketplace-payments-notice.component.tsx",
@@ -414,11 +541,46 @@
       "lane": "plugin-id"
     },
     {
+      "path": "apps/console/components/org-licences-panel.component.tsx",
+      "rules": [
+        "plugin-collection:marketplace"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/components/org-publish-panel.component.tsx",
+      "rules": [
+        "plugin-collection:data"
+      ],
+      "lane": "data"
+    },
+    {
+      "path": "apps/console/components/org-seller-panel.component.tsx",
+      "rules": [
+        "plugin-collection:marketplace"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/components/quota-warnings-banner.component.tsx",
+      "rules": [
+        "plugin-collection:data"
+      ],
+      "lane": "data"
+    },
+    {
       "path": "apps/console/components/site-accounts-card.component.tsx",
       "rules": [
         "plugin-id"
       ],
       "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/components/site-member-drawer.component.tsx",
+      "rules": [
+        "plugin-collection:commerce"
+      ],
+      "lane": "commerce"
     },
     {
       "path": "apps/console/components/site-security-cards.component.tsx",
@@ -430,14 +592,16 @@
     {
       "path": "apps/console/components/templates/host-templates-card.component.tsx",
       "rules": [
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:marketplace"
       ],
       "lane": "plugin-id"
     },
     {
       "path": "apps/console/components/templates/template-gallery-dialog.component.tsx",
       "rules": [
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:marketplace"
       ],
       "lane": "plugin-id"
     },
@@ -459,7 +623,8 @@
     {
       "path": "apps/console/constants/marketplace-sections.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:marketplace"
       ],
       "lane": "marketplace"
     },
@@ -476,7 +641,8 @@
     {
       "path": "apps/console/next.config.js",
       "rules": [
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:workflows"
       ],
       "lane": "plugin-id"
     },
@@ -490,7 +656,11 @@
     {
       "path": "apps/console/utils/api-v1-resources.ts",
       "rules": [
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:commerce",
+        "plugin-collection:crm",
+        "plugin-collection:data",
+        "plugin-collection:forms"
       ],
       "lane": "plugin-id"
     },
@@ -518,7 +688,8 @@
     {
       "path": "apps/console/utils/api-v1/crm-deals.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "plugin-collection:crm"
       ],
       "lane": "crm"
     },
@@ -532,7 +703,8 @@
     {
       "path": "apps/console/utils/api-v1/crm-leads.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "plugin-collection:crm"
       ],
       "lane": "crm"
     },
@@ -558,11 +730,32 @@
       "lane": "crm"
     },
     {
+      "path": "apps/console/utils/over-limit-summary.ts",
+      "rules": [
+        "plugin-collection:data"
+      ],
+      "lane": "data"
+    },
+    {
       "path": "apps/console/utils/revenue-view.ts",
       "rules": [
         "plugin-id"
       ],
       "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/utils/server/capacity-in-use.ts",
+      "rules": [
+        "plugin-collection:data"
+      ],
+      "lane": "data"
+    },
+    {
+      "path": "apps/console/utils/server/paid-media-uses.ts",
+      "rules": [
+        "plugin-collection:commerce"
+      ],
+      "lane": "commerce"
     },
     {
       "path": "apps/tenant/app/[host]/[scheme]/[[...slug]]/site-analytics.tsx",
@@ -571,6 +764,13 @@
         "plugin-id"
       ],
       "lane": "analytics-provider"
+    },
+    {
+      "path": "apps/tenant/app/api/analytics/collect/route.ts",
+      "rules": [
+        "plugin-collection:marketing"
+      ],
+      "lane": "marketing"
     },
     {
       "path": "apps/tenant/app/api/edit-context/route.ts",
@@ -582,9 +782,31 @@
     {
       "path": "apps/tenant/app/api/forms/submit/route.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "plugin-collection:forms"
       ],
       "lane": "forms"
+    },
+    {
+      "path": "apps/tenant/app/api/health/funnel/funnel-probe.ts",
+      "rules": [
+        "plugin-collection:forms"
+      ],
+      "lane": "forms"
+    },
+    {
+      "path": "apps/tenant/app/api/sitemap/route.ts",
+      "rules": [
+        "plugin-collection:commerce"
+      ],
+      "lane": "commerce"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/actions.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "workflows"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/advertising-tag-mounts.tsx",
@@ -603,9 +825,18 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/assist-credits.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:ai"
       ],
       "lane": "ai"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/automation-placeholders.ts",
+      "rules": [
+        "domain-name",
+        "domain-exports:workflows"
+      ],
+      "lane": "workflows"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/binding-token-catalog.ts",
@@ -617,7 +848,8 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/campaign-attribution.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:marketing"
       ],
       "lane": "marketing"
     },
@@ -631,7 +863,8 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/campaign-membership.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:marketing"
       ],
       "lane": "marketing"
     },
@@ -652,9 +885,20 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/console-record-links.ts",
       "rules": [
-        "plugin-id"
+        "plugin-id",
+        "domain-exports:crm"
       ],
       "lane": "plugin-id"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/console-routes.ts",
+      "rules": [
+        "plugin-collection:bookings",
+        "plugin-collection:commerce",
+        "plugin-collection:crm",
+        "plugin-collection:workflows"
+      ],
+      "lane": "bookings"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
@@ -688,7 +932,8 @@
       "path": "libs/aglyn/src/lib/app-utils/crm-booking.ts",
       "rules": [
         "domain-name",
-        "plugin-id"
+        "plugin-id",
+        "domain-exports:crm"
       ],
       "lane": "crm"
     },
@@ -703,14 +948,16 @@
       "path": "libs/aglyn/src/lib/app-utils/crm-digest.ts",
       "rules": [
         "domain-name",
-        "plugin-id"
+        "plugin-id",
+        "domain-exports:crm"
       ],
       "lane": "crm"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:crm"
       ],
       "lane": "crm"
     },
@@ -718,14 +965,16 @@
       "path": "libs/aglyn/src/lib/app-utils/crm-inbound.ts",
       "rules": [
         "domain-name",
-        "plugin-id"
+        "plugin-id",
+        "domain-exports:crm"
       ],
       "lane": "crm"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/crm-kinds.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:crm"
       ],
       "lane": "crm"
     },
@@ -746,7 +995,8 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/crm-task-reminders.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:crm"
       ],
       "lane": "crm"
     },
@@ -754,28 +1004,32 @@
       "path": "libs/aglyn/src/lib/app-utils/crm.ts",
       "rules": [
         "domain-name",
-        "plugin-id"
+        "plugin-id",
+        "domain-exports:crm"
       ],
       "lane": "crm"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/dataset-csv.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:data"
       ],
       "lane": "data"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/dataset-models.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:data"
       ],
       "lane": "data"
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/dataset-query.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:data"
       ],
       "lane": "data"
     },
@@ -789,7 +1043,8 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/dynamic-list-rule.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:email"
       ],
       "lane": "marketing"
     },
@@ -853,6 +1108,13 @@
       "lane": "marketing"
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/marketing-consent.ts",
+      "rules": [
+        "domain-exports:marketing"
+      ],
+      "lane": "marketing"
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/marketplace-listing-visibility.ts",
       "rules": [
         "domain-name"
@@ -895,6 +1157,13 @@
       "lane": "marketplace"
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/node-definition-sanitizer.ts",
+      "rules": [
+        "domain-exports:marketplace"
+      ],
+      "lane": "marketplace"
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/notifications.ts",
       "rules": [
         "plugin-id"
@@ -927,7 +1196,8 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/publisher-agreement.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:marketplace"
       ],
       "lane": "marketplace"
     },
@@ -1148,42 +1418,48 @@
     {
       "path": "libs/shared/ui/email-campaigns/src/lib/components/campaign-picker.component.tsx",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:marketing"
       ],
       "lane": "marketing"
     },
     {
       "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-container.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:marketing"
       ],
       "lane": "marketing"
     },
     {
       "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-conversions.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:marketing"
       ],
       "lane": "marketing"
     },
     {
       "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-report.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:marketing"
       ],
       "lane": "marketing"
     },
     {
       "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-revenue.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:marketing"
       ],
       "lane": "marketing"
     },
     {
       "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-send-time.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:marketing"
       ],
       "lane": "marketing"
     },
@@ -1247,7 +1523,9 @@
     {
       "path": "libs/tenant/data/admin/src/lib/server/campaign-conversion-attribution.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "plugin-collection:marketing",
+        "domain-exports:marketing"
       ],
       "lane": "marketing"
     },
@@ -1296,7 +1574,8 @@
     {
       "path": "libs/tenant/data/admin/src/lib/server/contact-merge.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "plugin-collection:crm"
       ],
       "lane": "crm"
     },
@@ -1311,42 +1590,50 @@
       "path": "libs/tenant/data/admin/src/lib/server/crm-booking-activity.ts",
       "rules": [
         "domain-name",
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:crm"
       ],
       "lane": "crm"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/crm-email-activity.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:crm"
       ],
       "lane": "crm"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/crm-inbound-email.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "plugin-collection:crm",
+        "domain-exports:crm"
       ],
       "lane": "crm"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/crm-next-activity.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "domain-exports:crm"
       ],
       "lane": "crm"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/crm-records.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "plugin-collection:crm",
+        "domain-exports:crm"
       ],
       "lane": "crm"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/dataset-live-pages.ts",
       "rules": [
-        "domain-name"
+        "domain-name",
+        "plugin-collection:data"
       ],
       "lane": "data"
     },
@@ -1365,6 +1652,20 @@
       "lane": "marketing"
     },
     {
+      "path": "libs/tenant/data/admin/src/lib/server/email-flow-gate.ts",
+      "rules": [
+        "plugin-collection:crm"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/email-revenue-attribution.ts",
+      "rules": [
+        "plugin-collection:marketing"
+      ],
+      "lane": "marketing"
+    },
+    {
       "path": "libs/tenant/data/admin/src/lib/server/email-topic-confirmation.ts",
       "rules": [
         "domain-name"
@@ -1374,9 +1675,19 @@
     {
       "path": "libs/tenant/data/admin/src/lib/server/erase-person.ts",
       "rules": [
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:bookings",
+        "plugin-collection:commerce",
+        "plugin-collection:crm"
       ],
       "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/erase.ts",
+      "rules": [
+        "plugin-collection:marketplace"
+      ],
+      "lane": "marketplace"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/form-dataset-binding-token.ts",
@@ -1394,11 +1705,25 @@
       "lane": "analytics-provider"
     },
     {
+      "path": "libs/tenant/data/admin/src/lib/server/host-visitor-records.ts",
+      "rules": [
+        "plugin-collection:crm"
+      ],
+      "lane": "crm"
+    },
+    {
       "path": "libs/tenant/data/admin/src/lib/server/list-members.ts",
       "rules": [
         "domain-name"
       ],
       "lane": "marketing"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/realm-plugins.ts",
+      "rules": [
+        "plugin-collection:marketplace"
+      ],
+      "lane": "marketplace"
     },
     {
       "path": "libs/tenant/data/admin/src/lib/server/stripe-account-mode.ts",
@@ -1415,11 +1740,39 @@
       "lane": "analytics-provider"
     },
     {
+      "path": "libs/tenant/feature/instance/src/lib/hooks/use-host-campaigns.ts",
+      "rules": [
+        "plugin-collection:marketing"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/tenant/runtime/src/lib/assign-contact-owner.ts",
+      "rules": [
+        "plugin-collection:crm"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/runtime/src/lib/associate-company-by-domain.ts",
+      "rules": [
+        "plugin-collection:crm"
+      ],
+      "lane": "crm"
+    },
+    {
       "path": "libs/tenant/runtime/src/lib/collection-fallback-nodes.ts",
       "rules": [
         "vendor:wistia"
       ],
       "lane": "video-embed-provider"
+    },
+    {
+      "path": "libs/tenant/runtime/src/lib/convert-host-lead.ts",
+      "rules": [
+        "plugin-collection:crm"
+      ],
+      "lane": "crm"
     },
     {
       "path": "libs/tenant/runtime/src/lib/get-collection-content.ts",
@@ -1429,9 +1782,17 @@
       "lane": "video-embed-provider"
     },
     {
+      "path": "libs/tenant/runtime/src/lib/get-plugin-installs.ts",
+      "rules": [
+        "plugin-collection:marketplace"
+      ],
+      "lane": "marketplace"
+    },
+    {
       "path": "libs/tenant/runtime/src/lib/get-variables.ts",
       "rules": [
-        "plugin-id"
+        "plugin-id",
+        "plugin-collection:workflows"
       ],
       "lane": "plugin-id"
     },
