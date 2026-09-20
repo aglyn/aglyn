@@ -204,8 +204,9 @@ export interface CoreOrgFeatureFlags {
   crm?: boolean
   /**
    * SEQUENCES (AGL-2974): one-to-one, multi-step email sequences a rep sends
-   * from their own connected mailbox, logged on the CRM's records. The KEY
-   * stays `outreach` — it is stored on the org (AGL-3199).
+   * from their own connected mailbox, logged on the CRM's records. The key
+   * below keeps the name the feature shipped under, because it is stored on
+   * the org (AGL-3199).
    *
    * False on EVERY plan, Enterprise included. Which tiers carry sequences
    * and connected mailboxes, and at what caps, is a packaging decision that
