@@ -68,6 +68,11 @@ export {
 } from './definitions/org-billing.types'
 export type {
   AglynOrgBilling,
+  // The core halves of the two composed shapes (AGL-3124): what a plan table
+  // declares exhaustively, beside the plugin half every reader gets through
+  // `OrgEntitlements` / `OrgFeatureFlags`.
+  CoreOrgEntitlements,
+  CoreOrgFeatureFlags,
   OrgBandwidthCap,
   OrgBrandingProfile,
   OrgCrmAssignmentRule,

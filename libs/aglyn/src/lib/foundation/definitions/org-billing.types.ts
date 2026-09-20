@@ -40,6 +40,24 @@ import type {
   OrgUid,
   UserUid,
 } from './platform.types'
+/*
+ * The plugin half of the two composed shapes below (AGL-3124).
+ *
+ * Each is an EMPTY interface a plugin augments with `declare module`, so the
+ * keys a plugin owns are part of `OrgEntitlements` and `OrgFeatureFlags`
+ * without the core listing them. Nothing composes today — the interfaces are
+ * empty until a plugin declares into them — so this changes no shape at this
+ * sha; what it changes is where the NEXT key is declared.
+ *
+ * `import type` and nothing else: TypeScript erases it, so the plugin-manager
+ * module is not on this module's runtime graph and a published page that
+ * reaches the billing types (through the foundation barrel it must not reach
+ * anyway) carries nothing new.
+ */
+import type {
+  PluginEntitlementFeatures,
+  PluginEntitlementQuotas,
+} from '../../plugin-manager/plugin-entitlement-keys'
 
 export type { OrgUid } from './platform.types'
 
@@ -68,8 +86,13 @@ export type OrgPlan =
   | 'agency'
   | 'enterprise'
 
-/** Boolean feature gates per plan; quotas live beside them as numbers. */
-export interface OrgFeatureFlags {
+/**
+ * The CORE boolean feature gates per plan; quotas live beside them as
+ * numbers. Read {@link OrgFeatureFlags} instead — this half exists so the
+ * plan tables can stay exhaustive over the platform's own gates while a
+ * plugin declares its own (AGL-3124).
+ */
+export interface CoreOrgFeatureFlags {
   /** A/B experiments (AGL-252); Business tier. */
   abTesting?: boolean
   versioning?: boolean
@@ -279,6 +302,23 @@ export interface OrgFeatureFlags {
 }
 
 /**
+ * Boolean feature gates per plan, the platform's and its plugins' together.
+ *
+ * {@link CoreOrgFeatureFlags} is the platform's own set — what
+ * `PLAN_ENTITLEMENTS` declares for every plan, and what
+ * `Required<CoreOrgFeatureFlags>` keeps exhaustive.
+ * {@link PluginEntitlementFeatures} is the plugin half (AGL-3124): empty
+ * until a plugin declares a gate of its own into it with `declare module`,
+ * and resolved from that plugin's `registerPluginEntitlements` defaults
+ * rather than from a row in a core plan table — which is why a plugin's gate
+ * joins HERE and not above. Every reader keeps reading `OrgFeatureFlags`, and
+ * `keyof OrgFeatureFlags` admits a plugin's key the moment it is declared.
+ */
+export interface OrgFeatureFlags
+  extends CoreOrgFeatureFlags,
+    PluginEntitlementFeatures {}
+
+/**
  * An org's white-label brand identity (White-Label Phase 1). Populated on
  * the org doc (`orgs/{orgId}.brandingProfile`) and applied ONLY when the org
  * carries the `whiteLabel` entitlement (Agency or Enterprise plan, or a
@@ -415,8 +455,13 @@ export interface OrgSsoDomainClaim {
  * Effective limits/gates for a tenant. Plan defaults come from
  * `PLAN_ENTITLEMENTS` (versioned with the app); per-tenant overrides can be
  * stored on the tenant doc and win over the plan defaults.
+ *
+ * The CORE half. Read {@link OrgEntitlements} instead: it is this plus
+ * whatever the plugins declare. The keys spelled out below predate the seam
+ * and move to their plugins with the rest of AGL-3080; every NEW key is
+ * declared by whoever owns it.
  */
-export interface OrgEntitlements {
+export interface CoreOrgEntitlements {
   hostLimit?: number
   screensPerHost?: number
   sharedLayoutsPerHost?: number
@@ -643,6 +688,24 @@ export interface OrgEntitlements {
    */
   planComp?: OrgPlanComp
 }
+
+/**
+ * Effective limits and gates for a tenant, the platform's and its plugins'
+ * together (AGL-3124).
+ *
+ * {@link CoreOrgEntitlements} is what `PLAN_ENTITLEMENTS` declares per plan
+ * and what `ResolvedOrgEntitlements` keeps exhaustive.
+ * {@link PluginEntitlementQuotas} is the plugin half: empty until a plugin
+ * declares a key of its own into it with `declare module` and registers it
+ * with `registerPluginEntitlementKeys`, and resolved from that plugin's seat
+ * add-on declaration rather than from a row in a core plan table. So
+ * `resolveOrgEntitlements` carries a plugin's band, and `keyof
+ * OrgEntitlements` admits its key, without this file naming the plugin's
+ * domain.
+ */
+export interface OrgEntitlements
+  extends CoreOrgEntitlements,
+    PluginEntitlementQuotas {}
 
 /**
  * A plan staff GRANTED a workspace that no live subscription pays for
@@ -1063,6 +1126,18 @@ export interface OrgBandwidthCap {
   includedPageViews?: number
 }
 
+/**
+ * The organization document.
+ *
+ * NOT composed from a plugin-augmented interface, deliberately (AGL-3124).
+ * `org-write-deny-coverage.spec.ts` enumerates this interface's fields by
+ * reading THIS FILE'S SOURCE, and checks every one of them against the
+ * Firestore write-deny rules; a field a plugin declared from its own file
+ * would be invisible to that sweep, so composing here would open a rules
+ * coverage hole to save a plugin an already-solved problem. A plugin's own
+ * settings block goes through `registerPluginConfigSchema` into
+ * `pluginSettings/{pluginId}`, which is its own document under its own rule.
+ */
 export interface AglynOrgBilling extends AglynDocument {
   /** The document id, injected by the reader — never a stored field. */
   $id: OrgUid

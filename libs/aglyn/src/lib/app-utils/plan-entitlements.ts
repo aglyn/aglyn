@@ -17,6 +17,8 @@
 
 import type {
   AglynOrgBilling,
+  CoreOrgEntitlements,
+  CoreOrgFeatureFlags,
   OrgBrandingProfile,
   OrgDiscount,
   OrgEntitlements,
@@ -24,6 +26,10 @@ import type {
   OrgPlan,
   OrgSeatAddons,
 } from '../foundation'
+import type {
+  PluginEntitlementFeatures,
+  PluginEntitlementQuotas,
+} from '../plugin-manager/plugin-entitlement-keys'
 import {
   isOrgOverrideReasonCode,
   type OrgOverrideReasonCode,
@@ -227,18 +233,31 @@ type RetiredEntitlementKeys = 'totalSiteSizeMb'
  */
 type NonQuotaEntitlementKeys = 'planComp'
 
-/** Fully-resolved entitlements: every LIVE quota present, features complete. */
+/**
+ * Fully-resolved entitlements: every LIVE CORE quota present, the core
+ * features complete, and whatever the plugins declared beside them.
+ *
+ * `Required` is over the CORE halves on purpose (AGL-3124). It is what keeps
+ * a plan table honest — a plan that forgets a platform quota or a platform
+ * gate does not compile — and that reasoning does not carry to a plugin's
+ * key: a plugin's band comes from its own seat-add-on declaration, and
+ * requiring it here would mean every plan row in the core naming every
+ * installed plugin's keys, which is the arrangement the seam retires. So the
+ * plugin halves join as declared: present once a plugin declares them, and
+ * optional, because a workspace without the plugin has no value for them.
+ */
 export type ResolvedOrgEntitlements = Required<
   Omit<
-    OrgEntitlements,
+    CoreOrgEntitlements,
     | 'features'
     | LegacyEntitlementKeys
     | RetiredEntitlementKeys
     | NonQuotaEntitlementKeys
   >
-> & {
-  features: Required<OrgFeatureFlags>
-}
+> &
+  PluginEntitlementQuotas & {
+    features: Required<CoreOrgFeatureFlags> & PluginEntitlementFeatures
+  }
 
 /**
  * Aglyn Assist credits an Enterprise agreement includes per month, before the
