@@ -1,0 +1,59 @@
+{
+  "id": "experiment-checkout-result-inconclusive",
+  "kind": "experiment",
+  "brief": "What does the checkout button test say? Can we call it?",
+  "framing": null,
+  "inventory": null,
+  "experiment": {
+    "task": "explain",
+    "test": "Checkout button",
+    "arms": [
+      { "id": "Pay now", "exposures": 4120, "conversions": 206, "rate": 5, "lift": null, "confidence": null },
+      { "id": "Complete order", "exposures": 4090, "conversions": 217, "rate": 5.3, "lift": 6.1, "confidence": 71.4 }
+    ]
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer written by hand for a result that settles nothing: it says what the figures show, says plainly that the difference is inside what chance explains, names no winner and recommends nothing.",
+      "plan": null,
+      "answer": {
+        "headline": "Both buttons converted at about the same rate, and the difference between them is inside what chance explains.",
+        "points": [
+          "Pay now was shown to 4,120 visitors and converted 206 of them, a rate of 5%.",
+          "Complete order was shown to 4,090 and converted 217, a rate of 5.3%.",
+          "The gap between the two is small enough that running the test again could easily reverse it."
+        ],
+        "winner": "",
+        "next": ""
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 5, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "Declares a winner on a result the figures do not support — the one thing this kind exists to catch.",
+      "answer": {
+        "headline": "Complete order is the winner, converting better than Pay now.",
+        "points": ["Complete order beat Pay now by 6.1%."],
+        "winner": "Complete order",
+        "next": "Roll Complete order out to everyone."
+      },
+      "fails": ["readable"]
+    },
+    {
+      "why": "Hedges the headline but still recommends one variant, which is naming a winner in other words.",
+      "answer": {
+        "headline": "Both buttons converted at about the same rate.",
+        "points": ["Go with Complete order from here; it is slightly ahead."],
+        "winner": "Complete order",
+        "next": "Ship Complete order."
+      },
+      "fails": ["rules"]
+    }
+  ]
+}

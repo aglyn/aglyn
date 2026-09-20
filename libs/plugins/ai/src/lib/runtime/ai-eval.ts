@@ -30,6 +30,27 @@ import {
   type AiPlanCapabilities,
   type AiPlanCreation,
 } from '../model/ai-plan-capabilities'
+import {
+  AI_EXPERIMENT_BODY_MAX_CHARS,
+  AI_EXPERIMENT_HEADLINE_MAX_CHARS,
+  AI_EXPERIMENT_LINE_MAX_CHARS,
+  AI_EXPERIMENT_MAX_POINTS,
+  AI_EXPERIMENT_NAME_MAX_CHARS,
+  AI_EXPERIMENT_NEXT_MAX_CHARS,
+  AI_EXPERIMENT_POINT_MAX_CHARS,
+  AI_EXPERIMENT_RATIONALE_MAX_CHARS,
+  aiExperimentVariantFields,
+  checkAiExperimentExplanation,
+  checkAiExperimentVariants,
+  readAiExperimentResult,
+  type AiExperimentArm,
+  type AiExperimentTarget,
+  type AiExperimentTask,
+} from '../model/ai-experiment'
+import {
+  parseAiExperimentExplanation,
+  parseAiExperimentVariants,
+} from '../tools/ai-experiment-tool'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import type { AiAutomationCapabilities } from '../model/ai-workflow-job'
 import type { AiStepKind } from '../providers/catalog'
@@ -144,6 +165,7 @@ export type AiEvalKind =
   | 'workflow'
   | 'insight'
   | 'crm'
+  | 'experiment'
 
 export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'page',
@@ -165,6 +187,7 @@ export const AI_EVAL_KINDS: readonly AiEvalKind[] = [
   'workflow',
   'insight',
   'crm',
+  'experiment',
 ]
 
 /** The document kind a tree kind is held to; a section rewrite is one reusable block. */
@@ -404,6 +427,12 @@ export interface AiEvalCase {
    */
   crm?: AiEvalCrmContext
   /**
+   * For an A/B test brief (AGL-2914): which half of the step the brief asks
+   * for, what the test varies, the copy under test, and — for a result — the
+   * test's arms as the results reader published them.
+   */
+  experiment?: AiEvalExperiment
+  /**
    * What the workspace may create on the case's site (AGL-3030): a brief
    * for a workspace that keeps no reusable components is held to the inline
    * doctrine, and its plan to what the workspace may create. Absent, the
@@ -427,6 +456,18 @@ export interface AiEvalAutomation {
   action: HostAction
   /** A failed run of it; given, the brief asks why that run failed. */
   run?: AiRunRecord
+}
+
+/** An A/B test brief, as the experiment step is given one. */
+export interface AiEvalExperiment {
+  task: AiExperimentTask
+  /** What the test varies; a variants brief always names one. */
+  target?: AiExperimentTarget
+  /** The copy under test, as the surface handed it over. */
+  subject?: string
+  /** A result brief's test, and its arms as the results reader published them. */
+  test?: string
+  arms?: AiExperimentArm[]
 }
 
 /** A fixture file a case's media names: a relative path to a picture, never out of its folder. */
@@ -476,6 +517,7 @@ export const AI_EVAL_FLOORS: Readonly<Record<AiEvalKind, AiEvalFloor>> = {
   workflow: { passRate: 1, meanScore: 0.9 },
   insight: { passRate: 1, meanScore: 0.9 },
   crm: { passRate: 1, meanScore: 0.9 },
+  experiment: { passRate: 1, meanScore: 0.9 },
 }
 
 /** A rubric passes at this mean, with no criterion below three. */
@@ -878,6 +920,99 @@ function checkCrm(evalCase: AiEvalCase, answer: unknown): Checked {
   }
 }
 
+/** What an experiment answer is refused for, by the check it fails. */
+const EXPERIMENT_RULE_FINDINGS = new Set([
+  'variant-carries-markup',
+  'variant-fills-another-targets-fields',
+  'variant-repeats-another',
+  'variant-has-no-copy',
+])
+
+/**
+ * An A/B test answer (AGL-2914), held by the checks its step holds it by.
+ *
+ * A variants answer is readable when at least two variants survive, breaks a
+ * rule when one carried markup, repeated another or answered a different
+ * target, and is over budget when a field ran past the length the card
+ * stores. A result answer is readable when an explanation survives its
+ * reading, and breaks a rule when the reading had to take a winner out of it
+ * — which is the whole point of the kind: an explanation that claims more
+ * than the figures support does not pass here.
+ */
+function checkExperiment(evalCase: AiEvalCase, answer: unknown): Checked {
+  const brief = evalCase.experiment
+  if (!brief) {
+    return { readable: false, rules: false, budget: false, findings: ['experiment-brief-missing'] }
+  }
+  if (brief.task === 'variants') {
+    const target: AiExperimentTarget = brief.target ?? 'screen'
+    const parsed = parseAiExperimentVariants(answer)
+    const checked = checkAiExperimentVariants(parsed, target)
+    if (!parsed || !checked) {
+      return { readable: false, rules: false, budget: false, findings: ['experiment-no-variants'] }
+    }
+    const fields = aiExperimentVariantFields(target)
+    const over = parsed.variants.flatMap((variant) => [
+      ...(variant.name.length > AI_EXPERIMENT_NAME_MAX_CHARS ? ['experiment-name-over'] : []),
+      ...(variant.rationale.length > AI_EXPERIMENT_RATIONALE_MAX_CHARS ? ['experiment-rationale-over'] : []),
+      ...fields.flatMap((field) =>
+        String(variant[field] ?? '').length >
+        (field === 'body' ? AI_EXPERIMENT_BODY_MAX_CHARS : AI_EXPERIMENT_LINE_MAX_CHARS)
+          ? [`experiment-${field}-over`]
+          : [],
+      ),
+    ])
+    const samples = checked.proposal.variants.flatMap((variant) =>
+      fields.map((field) => ({ at: `${variant.name}.${field}`, text: String(variant[field] ?? '') })),
+    )
+    const broken = [
+      ...checked.findings.filter((finding) => EXPERIMENT_RULE_FINDINGS.has(finding)),
+      ...codes(detectPublishIntent(answer)),
+      ...codes(detectOffVoiceCopy(samples.filter((sample) => sample.text), evalCase.framing)),
+    ]
+    return {
+      readable: true,
+      rules: broken.length === 0,
+      budget: over.length === 0,
+      findings: [...new Set([...broken, ...over])],
+    }
+  }
+
+  const reading = readAiExperimentResult(brief.test ?? '', brief.arms ?? [])
+  const parsed = parseAiExperimentExplanation(answer)
+  const explained = checkAiExperimentExplanation(parsed, reading)
+  if (!parsed || !explained) {
+    return { readable: false, rules: false, budget: false, findings: ['experiment-no-explanation'] }
+  }
+  const over = [
+    ...(parsed.headline.length > AI_EXPERIMENT_HEADLINE_MAX_CHARS ? ['experiment-headline-over'] : []),
+    ...(parsed.points.length > AI_EXPERIMENT_MAX_POINTS ? ['experiment-points-over'] : []),
+    ...parsed.points.flatMap((point) =>
+      point.length > AI_EXPERIMENT_POINT_MAX_CHARS ? ['experiment-point-over'] : [],
+    ),
+    ...(parsed.next.length > AI_EXPERIMENT_NEXT_MAX_CHARS ? ['experiment-next-over'] : []),
+  ]
+  const broken = [
+    ...explained.findings,
+    ...codes(detectPublishIntent(answer)),
+    ...codes(
+      detectOffVoiceCopy(
+        [
+          { at: 'headline', text: explained.headline },
+          ...explained.points.map((point, index) => ({ at: `points.${index}`, text: point })),
+        ],
+        evalCase.framing,
+      ),
+    ),
+  ]
+  return {
+    readable: true,
+    rules: broken.length === 0,
+    budget: over.length === 0,
+    findings: [...new Set([...broken, ...over])],
+  }
+}
+
 /** An answer held to its kind's checks; a page's links to the sections of the plan it was built from. */
 function checkAnswer(evalCase: AiEvalCase, answer: unknown, plan?: unknown): Checked {
   const outputKind = AI_EVAL_TREE_OUTPUT[evalCase.kind]
@@ -905,6 +1040,8 @@ function checkAnswer(evalCase: AiEvalCase, answer: unknown, plan?: unknown): Che
       return checkInsight(evalCase, answer)
     case 'crm':
       return checkCrm(evalCase, answer)
+    case 'experiment':
+      return checkExperiment(evalCase, answer)
     default:
       return { readable: false, rules: false, budget: false, findings: ['kind-unknown'] }
   }
