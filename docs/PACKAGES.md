@@ -8,7 +8,7 @@ runtime and every plugin are each one package. Publishing is a later project
 (see [Later](#later)); what this document does now is state the map, so that
 every change made from here on keeps to it, and describe how the map is held.
 
-The map is held in three places, and they agree by construction:
+The map is held in these places, and they agree by construction:
 
 | where | what |
 | -- | -- |
@@ -16,10 +16,14 @@ The map is held in three places, and they agree by construction:
 | `eslint.config.mjs` | `@nx/enforce-module-boundaries` takes those constraints, so every file is judged at lint; a project on the allowlist spreads `boundaryOverridesFor(import.meta.url)` from its own `eslint.config.mjs`, which allows exactly its listed targets and nothing more |
 | `tools/scripts/check-lib-boundaries.mjs` | `check:lib-boundaries` judges the same constraints over `nx graph`, checks this document has a row for every project, and checks every lib `package.json` |
 | `tools/scripts/lib-boundaries-allowlist.json` | the edges that break the map today, one row each; the guard is red for a row that is missing **and** for a row the graph no longer has |
+| `tools/scripts/check-plugin-domain-in-core.mjs` | `check:plugin-domain-in-core` holds Rule 3, which the import graph cannot see: a domain-named file or route directory, a vendor literal, a first-party plugin id or a static plugin import in any tree that is not a plugin |
+| `tools/scripts/plugin-domain-in-core-allowlist.json` | the files that carry a plugin's domain outside its plugin today, each with the AGL-3080 lane that moves it, or `stays` and the argument; red for a finding with no row **and** for a row nothing trips (`--prune`) |
 
 ```sh
 npm run check:lib-boundaries                        # the guard (a few seconds; runs `nx graph`)
 npm run test:lib-boundaries                         # its forced reds
+npm run check:plugin-domain-in-core                 # Rule 3 (a second; reads tracked source)
+npm run test:plugin-domain-in-core                  # its forced reds
 npx nx graph --file=/tmp/graph.json                 # the baseline this document summarizes
 node tools/scripts/run-guards.mjs --only check:lib-boundaries
 ```
@@ -415,7 +419,9 @@ until that child lands.
    over plugin ids sits behind a contract any implementer can satisfy. A
    binding that is genuinely the platform's own infrastructure is argued case
    by case and written down where it is argued, never assumed from the fact
-   that it is already there.
+   that it is already there. `check:plugin-domain-in-core` refuses a new one, and
+   its allowlist is where an argued binding is written: a `stays` row with its
+   `why`.
 4. **`libs/shared` stays generic.** Widen a narrow shared utility rather than
    fork it — but never at a bundle cost. A shared lib that would need the
    core to do its job belongs one layer up, not in `shared` with a copy. And

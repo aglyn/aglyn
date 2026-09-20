@@ -864,12 +864,13 @@ jobs:
       - run: npm run test:brand-literals
       - run: npm run check:brand-literals
 
-      # AI stays in its plugin (AGL-2939): a vendor host, header or model id
-      # outside `libs/plugins/ai/src/lib/providers`, or an app importing the
-      # plugin outside the generated manifests, is a red. The forced-red
+      # A plugin's domain stays in its plugin (AGL-3080, from AGL-2939): a
+      # domain-named file or route directory, a vendor literal, a first-party
+      # plugin id or a static plugin import in any tree that is not a plugin
+      # is a red unless its row is on a list that only shrinks. The forced-red
       # fixture runs first so a detector that matched nothing cannot pass.
-      - run: npm run test:ai-in-core
-      - run: npm run check:ai-in-core
+      - run: npm run test:plugin-domain-in-core
+      - run: npm run check:plugin-domain-in-core
 
       # The AI eval harness (AGL-2937): every golden brief under
       # tools/ai-eval/cases scored offline — the tree validator, the doctrine's
