@@ -168,6 +168,25 @@ along with the site variables that function names — and only those. Do not put
 a function, or in a variable a widget's function reads, that a visitor should not be able
 to see.
 
+### A calculator you lay out
+
+A Function Widget draws a whole calculator for you: the inputs in a row, a button, the
+result. When the design is yours — a number box with quick picks beside it, two questions
+asked as lists, a table whose rows a filter removes, one row highlighted, a sentence under
+it — build it from four elements instead, all under **Input** in the Elements panel:
+
+1. Place a **Calculator** and give it the function's name. It is an ordinary container.
+2. Inside it, place a **Calculator Input** for each question and name the parameter it
+   asks. Two inputs may ask the same parameter, and they stay in step.
+3. Place a **Calculator Result** wherever a value belongs and name the parameter or
+   variable it shows. Style it like any text.
+4. Wrap anything that should appear only some of the time in a **Show When** and name the
+   value that decides it.
+
+The function does the arithmetic and decides what shows: give it a local variable for every
+figure on the page, and a true/false for every row a filter can turn off. The layout
+between those elements is whatever you build.
+
 ## Where-used & safety
 
 Before you rename or delete a variable or function, run the **where-used scan** to see
