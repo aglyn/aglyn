@@ -167,6 +167,11 @@ Steps run in order and mix **in-page effects** with **server-side work**:
 On plans without the automations entitlement, an automation that mixes tiers still runs
 its basic in-page steps — the Pro+ steps are simply skipped until you upgrade.
 
+Everything above that runs **on the server** — the server-side, CRM and flow steps — is
+also a step you can add to a [workflow](build-a-workflow.md#3-add-steps), beside its
+function calls. The in-page effects are not, because a workflow runs on a server event
+with no page open.
+
 ### CRM steps {#crm-steps}
 
 Five server steps act on the [CRM](../../content-and-data/crm/overview.md).
@@ -309,11 +314,16 @@ section"**, which creates a draft section experiment for the element.
 
 ## When to use which
 
+Both builders run **the same steps** — everything listed under [Steps](#steps) that runs
+on the server is offered in a [workflow](build-a-workflow.md#3-add-steps) too, with the
+same fields, conditions and plan tiers. What differs is what starts the automation and
+whether there is a page in front of it:
+
 | Use the actions builder | Use a workflow |
 | --- | --- |
-| One event → one action | Several ordered steps |
-| Simple, no branching | Composes functions/variables |
-| Fastest to set up | More control |
+| Something a visitor does — a click, a hover, exit intent, a scroll depth | Something that happened on the server — a submission, an order, a CRM event |
+| Anything that changes the page: menus, drawers, class toggles, overlays, redirects | Server-side work only; the in-page effects are not offered |
+| Fastest to set up | Composes your functions and variables, and binds each result for the steps after it |
 
 ## Related
 

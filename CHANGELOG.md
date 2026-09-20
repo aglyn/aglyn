@@ -9,6 +9,43 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.133 — 2026-09-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.132...v1.0.0-beta.133)
+
+### Added
+
+- **tools:** a guard refuses a plugin surface a published page cannot render ([AGL-3116](https://linear.app/aglyn/issue/AGL-3116))
+- **plugins:** a published page loads only the plugins it uses ([AGL-3116](https://linear.app/aglyn/issue/AGL-3116), [AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-1225](https://linear.app/aglyn/issue/AGL-1225))
+- **plugins:** a plugin declares what it contributes, and where it is used ([AGL-3116](https://linear.app/aglyn/issue/AGL-3116))
+- **outreach:** the auto-pause banner, the runtime's indexes, and what Gmail reads ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+- **outreach:** send and sync jobs, one-click unsubscribe, person eraser — in progress ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+- **email:** a purpose-bound signed link and a one-topic opt-out for plugins ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+- **plugins:** a recipient link answers whatever its plugin's release says now ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+- **plugins:** a record-timeline writer contract, provided by the CRM ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+- **plugins:** a plugin's share of a person erasure ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+- **plugins:** plugins declare console jobs; one route runs them every 15 minutes ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+
+### Fixed
+
+- **ai:** a section pass answers only for the section it wrote, so its review keeps ids ([AGL-3078](https://linear.app/aglyn/issue/AGL-3078))
+- **outreach:** a task step's id is assigned where it is known ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+- **outreach:** the unsubscribe page takes the reader's own colors ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+
+### Documentation
+
+- **outreach:** the README names the sending runtime's modules ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+- **outreach:** how sends are scheduled, what stops a sequence, and unsubscribe ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+
+<details>
+<summary>Also in this release: 3 test</summary>
+
+- **tenant:** /search composition declines the host's chrome instead of hoping it fails ([AGL-3123](https://linear.app/aglyn/issue/AGL-3123))
+- **outreach:** the unsubscribe page is declared in the image-sink inventory ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981), [AGL-1725](https://linear.app/aglyn/issue/AGL-1725))
+- **outreach:** the runtime on the emulator, with a fake Gmail ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+
+</details>
+
 ## v1.0.0-beta.132 — 2026-09-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.131...v1.0.0-beta.132)

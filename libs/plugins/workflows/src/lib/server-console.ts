@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { registerWorkflowsServerDeclarations } from './declarations.server'
 import { registerAutomationDraftWriter } from './server-automation-drafts'
 
 /**
@@ -28,5 +29,9 @@ import { registerAutomationDraftWriter } from './server-automation-drafts'
  * (AGL-3026).
  */
 export function registerWorkflowsConsoleApi(): void {
+  // The console raises host events too — a CRM stage moved, a deal won, a
+  // task completed — so the engine's listener is registered here as well as
+  // at boot (see `declarations.server.ts`).
+  registerWorkflowsServerDeclarations()
   registerAutomationDraftWriter()
 }

@@ -396,8 +396,8 @@ export function isPendingScheduled(
  * a reason that may not be true a second later.
  *
  * Withholding on `unresolved` rather than publishing is what every other
- * entitlement caller in this library already does: `run-event-actions`,
- * `run-event-workflows` and `apply-publish-schedule` all pass a possibly
+ * entitlement caller on the tenant runtime already does: `apply-publish-schedule`
+ * here, and the automation engine's two runners, all pass a possibly
  * undefined org straight into `checkEntitlement`, which resolves a missing
  * plan as free and denies (AGL-247). Opening here instead would make this the
  * one gate in the lib that admits when it cannot see — the exact shape of the

@@ -23,11 +23,14 @@ import {
   HOST_EVENT_TYPES,
   hostEventLabel,
   hostEventPayloadHint,
+  type HostActionStep,
+  type HostActionStepType,
   type HostFunction,
   type HostVariable,
-  type HostWorkflow,
+  type HostWorkflowStep,
   pluginDocsHelp,
   runWorkflow,
+  WORKFLOW_MAX_STEPS,
 } from '@aglyn/aglyn'
 /*
  * The MODULE, not the barrel, for the two PURE helpers — every spec that
@@ -54,7 +57,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  IconButton,
   MenuItem,
   Stack,
   TextField,
@@ -76,7 +78,25 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  AutomationStepFields,
+  type AutomationStepKind,
+  defaultStep,
+} from './automation-step-fields.component'
+import {
+  type AutomationWorkflow,
+  isWorkflowActionStep,
+  validateWorkflowSteps,
+  WORKFLOW_ACTION_STEP_TYPES,
+  workflowFunctionCalls,
+  type WorkflowStep,
+  workflowStepTypeLabel,
+} from '../engine/workflow-steps'
 import HostRunHistoryCard from './host-run-history-card.component'
+import {
+  EDITOR_OPTION_CEILING,
+  useAutomationStepPickers,
+} from './use-automation-step-pickers'
 import { WhereUsedDialog } from '@aglyn/plugins-logic'
 import {
   fetchWhereUsed,
@@ -92,14 +112,24 @@ import {
  */
 const WORKFLOW_CEILING = 100
 
+/** The "Do" entry for the step kind a workflow has always had: a call. */
+const FUNCTION_CALL_KIND = 'functionCall'
+
 /**
- * How many functions and variables the step editor offers.
+ * What a step may be (AGL-3105).
  *
- * Paid for only while the editor is open, which is what makes a ceiling this
- * size affordable: it is one author mid-edit rather than every visitor to the
- * page.
+ * The function call comes first because it is what a workflow was before the
+ * two engines became one, and is still what a new step is. After it comes
+ * every Actions step a SERVER event can run — the client-only interactions
+ * are absent, because a workflow runs where there is no page to run them on.
  */
-const EDITOR_OPTION_CEILING = 100
+const STEP_KINDS: AutomationStepKind[] = [
+  { value: FUNCTION_CALL_KIND, label: 'Call a function' },
+  ...WORKFLOW_ACTION_STEP_TYPES.map((value) => ({
+    value,
+    label: workflowStepTypeLabel(value),
+  })),
+]
 
 export interface HostWorkflowsCardProps {
   hostId: string
@@ -107,7 +137,7 @@ export interface HostWorkflowsCardProps {
   org?: Partial<AglynOrgBilling>
 }
 
-interface WorkflowDraft extends HostWorkflow {
+interface WorkflowDraft extends AutomationWorkflow {
   id: string | null
 }
 
@@ -129,9 +159,12 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   const duplicate = useDuplicateResource({
     hostId,
     onDuplicated: (_kind, copy) =>
-      enqueueSnackbar(`Duplicated as “${copy.name}” — arm its trigger to run it`, {
-        variant: 'success',
-      }),
+      enqueueSnackbar(
+        `Duplicated as “${copy.name}” — arm its trigger to run it`,
+        {
+          variant: 'success',
+        },
+      ),
   })
   const { confirm } = useConfirmationContext()
   const { org } = props
@@ -246,6 +279,16 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
     () => ceilingedWindow<any>(variableRead, EDITOR_OPTION_CEILING),
     [variableRead],
   )
+  /*
+   * What an ACTIONS step can be pointed at, on the same latch (AGL-3105).
+   *
+   * The hook the Actions builder uses, because a workflow step may be any
+   * server-side Actions step and the two editors therefore offer one set of
+   * records. Read on the editor's first open, like the two windows above, so
+   * a reader who never edits a workflow still pays nothing for them.
+   */
+  const { pickers: stepPickers, truncated: truncatedPickers } =
+    useAutomationStepPickers(hostId, editorOpened)
   // Sorting is safe here in a way it is not on a paged list: these rows are
   // the whole collection below the ceiling, not a slice of one.
   const workflows = useMemo(
@@ -347,11 +390,11 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   // unambiguous for computed-variable lookups keyed by name.
   const nameTaken = Boolean(
     draft &&
-      workflows.some(
-        (definition: any) =>
-          String(definition.name ?? '').toLowerCase() ===
-            draft.name.trim().toLowerCase() && definition.$id !== draft.id,
-      ),
+    workflows.some(
+      (definition: any) =>
+        String(definition.name ?? '').toLowerCase() ===
+          draft.name.trim().toLowerCase() && definition.$id !== draft.id,
+    ),
   )
 
   const patch = useCallback(
@@ -397,9 +440,47 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
     })
   }, [org, workflowCount, enqueueSnackbar])
 
+  /**
+   * Every list the ceiling cut, named — the editor's two and the step
+   * pickers' six, in one notice for the reason the Actions builder gives:
+   * they are one read, and an author told the function list is short learns
+   * nothing from being told again about datasets.
+   */
+  const shortLists = useMemo(
+    () =>
+      [
+        functionsTruncated ? 'functions' : null,
+        variablesTruncated ? 'variables' : null,
+        ...truncatedPickers,
+      ].filter((name): name is string => name !== null),
+    [functionsTruncated, variablesTruncated, truncatedPickers],
+  )
+
+  /**
+   * The first thing wrong with the steps, said the way the editors say it.
+   *
+   * The same check the engine makes of what it is handed: an Actions step is
+   * held to the Actions validator, a call has to name a function, and a step
+   * only a visitor's browser can run is refused. Said while the author is
+   * still in the dialog rather than after a save that stores a step nothing
+   * can run.
+   */
+  const stepProblem = useMemo(
+    () => (draft ? validateWorkflowSteps(draft.steps) : null),
+    [draft],
+  )
+
   const handleTestRun = useCallback(() => {
     if (!draft) return
-    const run = runWorkflow(draft, functions, variables)
+    /*
+     * The FUNCTION CALLS, evaluated. A test run is the pure evaluator, and
+     * an Actions step is not something to evaluate — it sends, writes and
+     * charges. Running one here would perform it against the live site from
+     * a button labelled "Test run", so the calls are evaluated, each keeping
+     * the result name it holds among all the steps, and the rest is left to
+     * the run itself.
+     */
+    const run = runWorkflow(workflowFunctionCalls(draft), functions, variables)
     setTestResult(
       run.ok === false
         ? `Error: ${run.error}`
@@ -411,6 +492,14 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
 
   const handleSave = useCallback(async () => {
     if (!draft || !draft.name.trim() || nameTaken) return
+    // The steps are checked at the door, not after the write: a stored step
+    // nothing can run is a run that fails on the site rather than here.
+    if (stepProblem) {
+      return void enqueueSnackbar(stepProblem, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     const { id: draftId, ...definition } = draft
     const fields = { ...definition, name: draft.name.trim().slice(0, 60) }
     try {
@@ -467,6 +556,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   }, [
     draft,
     nameTaken,
+    stepProblem,
     firestore,
     hostId,
     createHostResource,
@@ -698,149 +788,158 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
             editor simply cannot name it, and a test run resolves its
             expression against an incomplete variable set.
            */}
-          {functionsTruncated || variablesTruncated ? (
+          {shortLists.length > 0 ? (
             <Alert severity="info">
               {`Offering the first ${EDITOR_OPTION_CEILING} ` +
-                (functionsTruncated && variablesTruncated
-                  ? 'functions and variables'
-                  : functionsTruncated
-                    ? 'functions'
-                    : 'variables') +
-                ' on this site, ordered by id. There are more, so the ' +
-                'pickers below are short and a test run may not resolve ' +
-                'every expression.'}
+                `${shortLists.join(', ')} on this site, ordered by id. ` +
+                'There are more, so the pickers below are short and a test ' +
+                'run may not resolve every expression.'}
             </Alert>
           ) : null}
           {(draft?.steps ?? []).map((step, index) => {
-            const definition =
-              functions[(step as any).functionId ?? ''] ??
-              functions[step.functionName]
+            const call = isWorkflowActionStep(step)
+              ? null
+              : (step as HostWorkflowStep)
+            const definition = call
+              ? (functions[(call as any).functionId ?? ''] ??
+                functions[call.functionName])
+              : null
             return (
-              <Stack
+              <AutomationStepFields
                 key={index}
-                spacing={1}
-                sx={{
-                  border: 1,
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  p: 1.5,
-                }}
-              >
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center' }}
-                >
-                  <Typography variant="caption" color="text.secondary">
-                    {`${index + 1}`}
-                  </Typography>
-                  <TextField
-                    label="Function"
-                    // Stored by id (AGL-261); legacy steps carry only the
-                    // name and resolve through the double-keyed map.
-                    value={
-                      (step as any).functionId ??
-                      (functions[step.functionName] as any)?.$id ??
-                      ''
-                    }
-                    onChange={(event) =>
-                      patch((previous) => ({
-                        ...previous,
-                        steps: previous.steps.map((s, index2) =>
-                          index2 === index
-                            ? {
-                                ...s,
-                                functionId: event.target.value,
-                                functionName:
-                                  functionOptions.find(
-                                    (option) =>
-                                      option.id === event.target.value,
-                                  )?.name ?? s.functionName,
-                              }
-                            : s,
+                /*
+                 * The editor speaks the Actions vocabulary. A function call
+                 * has no Actions type, so it takes none of those fields and
+                 * renders its own through `fields` instead — which is what
+                 * keeps this one editor rather than two.
+                 */
+                step={step as HostActionStep}
+                index={index}
+                kind={call ? FUNCTION_CALL_KIND : (step as HostActionStep).type}
+                kinds={STEP_KINDS}
+                stepForKind={(value) =>
+                  (value === FUNCTION_CALL_KIND
+                    ? { functionName: '', args: [], resultName: '' }
+                    : defaultStep(
+                        value as HostActionStepType,
+                      )) as HostActionStep
+                }
+                pickers={stepPickers}
+                onSteps={(update) =>
+                  patch((previous) => ({
+                    ...previous,
+                    steps: update(
+                      previous.steps as HostActionStep[],
+                    ) as WorkflowStep[],
+                  }))
+                }
+                fields={
+                  call ? (
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{ alignItems: 'center', flex: 1, flexWrap: 'wrap' }}
+                    >
+                      <TextField
+                        label="Function"
+                        // Stored by id (AGL-261); legacy steps carry only the
+                        // name and resolve through the double-keyed map.
+                        value={
+                          (call as any).functionId ??
+                          (functions[call.functionName] as any)?.$id ??
+                          ''
+                        }
+                        onChange={(event) =>
+                          patch((previous) => ({
+                            ...previous,
+                            steps: previous.steps.map((s, index2) =>
+                              index2 === index
+                                ? {
+                                    ...s,
+                                    functionId: event.target.value,
+                                    functionName:
+                                      functionOptions.find(
+                                        (option) =>
+                                          option.id === event.target.value,
+                                      )?.name ??
+                                      (s as HostWorkflowStep).functionName,
+                                  }
+                                : s,
+                            ),
+                          }))
+                        }
+                        size="small"
+                        select
+                        sx={{ minWidth: 160, flex: 1 }}
+                      >
+                        {functionOptions.map((option) => (
+                          <MenuItem key={option.id} value={option.id}>
+                            {option.name}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                      <TextField
+                        label="Result name"
+                        placeholder={`step${index + 1}`}
+                        value={call.resultName ?? ''}
+                        onChange={(event) =>
+                          patch((previous) => ({
+                            ...previous,
+                            steps: previous.steps.map((s, index2) =>
+                              index2 === index
+                                ? {
+                                    ...s,
+                                    resultName: event.target.value.replace(
+                                      /[^a-zA-Z0-9_]/g,
+                                      '',
+                                    ),
+                                  }
+                                : s,
+                            ),
+                          }))
+                        }
+                        size="small"
+                        sx={{ width: 140 }}
+                      />
+                      {(definition?.parameters ?? []).map(
+                        (parameter, parameterIndex) => (
+                          <TextField
+                            key={parameter.name}
+                            label={`${parameter.name} expression`}
+                            placeholder={
+                              parameterIndex === 0 && index > 0
+                                ? `step${index}`
+                                : 'a variable, number, or expression'
+                            }
+                            value={call.args?.[parameterIndex] ?? ''}
+                            onChange={(event) =>
+                              patch((previous) => ({
+                                ...previous,
+                                steps: previous.steps.map((s, index2) => {
+                                  if (index2 !== index) return s
+                                  const args = [
+                                    ...((s as HostWorkflowStep).args ?? []),
+                                  ]
+                                  args[parameterIndex] = event.target.value
+                                  return { ...s, args }
+                                }),
+                              }))
+                            }
+                            size="small"
+                            sx={{ minWidth: 180, flex: 1 }}
+                          />
                         ),
-                      }))
-                    }
-                    size="small"
-                    select
-                    sx={{ minWidth: 160, flex: 1 }}
-                  >
-                    {functionOptions.map((option) => (
-                      <MenuItem key={option.id} value={option.id}>
-                        {option.name}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <TextField
-                    label="Result name"
-                    placeholder={`step${index + 1}`}
-                    value={step.resultName ?? ''}
-                    onChange={(event) =>
-                      patch((previous) => ({
-                        ...previous,
-                        steps: previous.steps.map((s, index2) =>
-                          index2 === index
-                            ? {
-                                ...s,
-                                resultName: event.target.value.replace(
-                                  /[^a-zA-Z0-9_]/g,
-                                  '',
-                                ),
-                              }
-                            : s,
-                        ),
-                      }))
-                    }
-                    size="small"
-                    sx={{ width: 140 }}
-                  />
-                  <IconButton
-                    size="small"
-                    aria-label="remove step"
-                    onClick={() =>
-                      patch((previous) => ({
-                        ...previous,
-                        steps: previous.steps.filter(
-                          (_, index2) => index2 !== index,
-                        ),
-                      }))
-                    }
-                  >
-                    {'×'}
-                  </IconButton>
-                </Stack>
-                {(definition?.parameters ?? []).map(
-                  (parameter, parameterIndex) => (
-                    <TextField
-                      key={parameter.name}
-                      label={`${parameter.name} expression`}
-                      placeholder={
-                        parameterIndex === 0 && index > 0
-                          ? `step${index}`
-                          : 'a variable, number, or expression'
-                      }
-                      value={step.args?.[parameterIndex] ?? ''}
-                      onChange={(event) =>
-                        patch((previous) => ({
-                          ...previous,
-                          steps: previous.steps.map((s, index2) => {
-                            if (index2 !== index) return s
-                            const args = [...(s.args ?? [])]
-                            args[parameterIndex] = event.target.value
-                            return { ...s, args }
-                          }),
-                        }))
-                      }
-                      size="small"
-                    />
-                  ),
-                )}
-              </Stack>
+                      )}
+                    </Stack>
+                  ) : undefined
+                }
+              />
             )
           })}
           <Button
             size="small"
             sx={{ alignSelf: 'flex-start' }}
+            disabled={(draft?.steps.length ?? 0) >= WORKFLOW_MAX_STEPS}
             onClick={() =>
               patch((previous) => ({
                 ...previous,

@@ -252,7 +252,10 @@ describe('the existing attributes are untouched', () => {
     ])
   })
 
-  it('still carries the repeat attributes', () => {
+  it('leaves its repeat fields to the Repeat section every element gets (AGL-3111)', () => {
+    // The same four props, written by the panel's generic Repeat section, so
+    // a stored Stack repeat reads back into it unchanged. Declaring them here
+    // as well would put two fields on the form under one name.
     const names = schema.attributes.map((a: any) => a.name)
     for (const prop of [
       'repeatDataset',
@@ -260,7 +263,7 @@ describe('the existing attributes are untouched', () => {
       'repeatFilter',
       'repeatSort',
     ]) {
-      expect(names).toContain(prop)
+      expect(names).not.toContain(prop)
     }
   })
 

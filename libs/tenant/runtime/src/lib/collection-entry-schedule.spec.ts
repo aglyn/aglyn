@@ -416,8 +416,8 @@ describe('the plan gate on entry scheduling (AGL-471)', () => {
   })
 
   it('withholds — does not publish — when the host resolves to no org', async () => {
-    // Consistency with every other entitlement caller in this lib
-    // (`run-event-actions`, `run-event-workflows`, `apply-publish-schedule`):
+    // Consistency with every other entitlement caller on the tenant runtime
+    // (`apply-publish-schedule` and the automation engine's two runners):
     // they all hand a possibly-undefined org to `checkEntitlement`, which
     // resolves a missing plan as free and DENIES (AGL-247). A gate that opened
     // when it could not see would be the free-tier leak shape that

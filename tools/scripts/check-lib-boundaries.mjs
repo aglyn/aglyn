@@ -105,7 +105,8 @@ const verdict = compareToAllowlist(evaluateEdges(document, DEP_CONSTRAINTS), all
 for (const edge of verdict.regressions) {
   problems.push(
     `${edge.from} -> ${edge.to} breaks the map: ${edge.rule}.\n` +
-      `    Move what is shared down a layer or behind a core seam (docs/PACKAGES.md, "Rules"). ` +
+      `    Put what is shared behind a core seam (docs/PACKAGES.md, "Rules"). Down a layer only if it ` +
+      `carries no plugin's domain: libs/shared is generic, types included, so it is not a home for a model two plugins agree on. ` +
       `A new row in tools/scripts/lib-boundaries-allowlist.json is not the fix: the list only shrinks.`,
   )
 }

@@ -1,4 +1,9 @@
 /**
+ * @jest-environment node
+ *
+ * Must stay the FIRST block comment in the file — Jest reads the pragma only
+ * from there, and behind the license header the suite would run on jsdom.
+ *
  * @license
  * Copyright 2026 Aglyn LLC
  *
@@ -178,7 +183,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 // The lookup is not what is being tested; a fixture that failed to resolve the
 // dataset would make every "nothing was written" assertion below pass without
 // the cap ever running.
-jest.mock('./resolve-dataset', () => ({
+jest.mock('@aglyn/tenant-runtime/resolve-dataset', () => ({
   __esModule: true,
   resolveDatasetDoc: async () => datasetDoc,
 }))
