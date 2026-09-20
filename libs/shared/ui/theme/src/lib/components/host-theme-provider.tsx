@@ -48,6 +48,27 @@ export function useHostThemeDocument() {
   return useContext(HostThemeDocumentContext)
 }
 
+/**
+ * Which site an editor surface is rendering, for the layer BELOW the theme
+ * document: the base its overrides are layered onto (AGL-3068).
+ *
+ * The tenant reads the site from its route and needs no context. Every
+ * console surface that renders a site — the canvas, Preview, the element
+ * previews, the theme editor — is on a console route instead, so the site it
+ * is showing has to be said out loud, and said above them all: the components
+ * drawer sits OUTSIDE the besigner page, and a context provided inside the
+ * page cannot reach it.
+ *
+ * Undefined means "no site named", which `siteBaseOptions` reads as a
+ * customer site — the same answer the tenant gives a host it cannot match.
+ */
+export const HostSiteKeyContext = createContext<string | undefined>(undefined)
+
+/** The site key for the surface, for a theme base or a brand decision. */
+export function useHostSiteKey() {
+  return useContext(HostSiteKeyContext)
+}
+
 export type HostThemeProviderProps = {
   /** Host theme document; falls back to {@link HostThemeDocumentContext} when omitted. */
   theme?: HostTheme
