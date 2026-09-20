@@ -59,7 +59,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   CAMPAIGN_SEND_CONTAINER_FIELD,
@@ -722,12 +722,18 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
         </Stack>
       </CardDisplay>
 
+      {/*
+        Its own boundary: the table's code arrives after the report above it
+        has drawn, and must not send that report back to a loading state.
+       */}
       {RecipientsZone ? (
-        <RecipientsZone
-          slot={EMAIL_TEMPLATE_RECIPIENTS_ZONE.id}
-          hostId={hostId}
-          screenId={screenId}
-        />
+        <Suspense fallback={null}>
+          <RecipientsZone
+            slot={EMAIL_TEMPLATE_RECIPIENTS_ZONE.id}
+            hostId={hostId}
+            screenId={screenId}
+          />
+        </Suspense>
       ) : null}
 
       {/*

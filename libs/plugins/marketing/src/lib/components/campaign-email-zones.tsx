@@ -19,7 +19,7 @@
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { definePluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import type { SendingIdentityView } from '@aglyn/tenant-feature-instance/hooks/use-sending-identity-api'
-import type { ReactElement } from 'react'
+import { Suspense, type ReactElement } from 'react'
 
 /**
  * WHAT A CAMPAIGN EMAIL ASKS OF WHICHEVER PLUGIN KEEPS THE MAIL ITSELF.
@@ -124,11 +124,23 @@ export interface CampaignDesignPreviewZoneProps {
 export const CAMPAIGN_DESIGN_PREVIEW_ZONE =
   definePluginZone<CampaignDesignPreviewZoneProps>('campaignDesignPreview')
 
-/** Draws one of the zones above where the shell provides a renderer. */
+/**
+ * Draws one of the zones above where the shell provides a renderer.
+ *
+ * Under its own \`Suspense\`, with nothing as the fallback. A widget is a lazy
+ * chunk, and several of these mount in answer to a click — the sender editor,
+ * the topics behind an opening drawer. Without a boundary here the suspension
+ * would climb to the page's, and the form being filled in would be swapped
+ * for a loading state while one drawer's code arrives.
+ */
 function zoneHost<Props extends object>(zone: { id: string }, name: string) {
   function Host(props: Props): ReactElement | null {
     const Zone = useConsoleWidgetSlot()
-    return Zone ? <Zone slot={zone.id} {...props} /> : null
+    return Zone ? (
+      <Suspense fallback={null}>
+        <Zone slot={zone.id} {...props} />
+      </Suspense>
+    ) : null
   }
   Host.displayName = name
   return Host
