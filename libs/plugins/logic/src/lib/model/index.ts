@@ -20,4 +20,5 @@
  * Context-free — importable by client components, /server handlers, and
  * other plugins/apps via `@aglyn/plugins-logic/model`.
  */
+export * from './parameter-options'
 export * from './reference-audit'

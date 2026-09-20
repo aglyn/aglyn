@@ -20,9 +20,14 @@ import {
   type AglynOrgBilling,
   checkQuota,
   evaluateHostFunction,
+  FUNCTION_BUILTIN_NAMES,
   type FunctionComparator,
+  functionGlobals,
+  functionReferencedNames,
   type FunctionValueType,
   type HostFunction,
+  type HostFunctionParameter,
+  type HostVariable,
   pluginDocsHelp,
   VARIABLE_NAME_PATTERN,
 } from '@aglyn/aglyn'
@@ -56,7 +61,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, getCountFromServer, limit, query, setDoc, updateDoc } from 'firebase/firestore'
+import { collection, doc, getCountFromServer, getDocs, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
@@ -65,6 +70,10 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  formatParameterOptions,
+  parseParameterOptions,
+} from '../model/parameter-options'
 import WhereUsedDialog from './where-used-dialog.component'
 import {
   fetchWhereUsed,
@@ -113,6 +122,77 @@ function emptyDraft(): FunctionDraft {
     ],
     returnValue: '',
   }
+}
+
+/**
+ * What a VISITOR meets for one parameter (AGL-3202): the label above the
+ * input, what it starts with, and — for a question with fixed answers — the
+ * choices. Empty fields are dropped from the definition rather than stored
+ * as empty strings, so a function nobody has dressed for visitors saves
+ * exactly the shape it always did.
+ *
+ * The choices keep their own text while being typed. Parsing every keystroke
+ * back into the box would eat the space after a comma, and the colon after a
+ * value, the moment they were typed.
+ */
+function ParameterAudienceFields(props: {
+  parameter: HostFunctionParameter
+  onChange: (next: HostFunctionParameter) => void
+}) {
+  const { parameter, onChange } = props
+  const [choices, setChoices] = useState(() =>
+    formatParameterOptions(parameter.options),
+  )
+  const assign = (field: 'label' | 'defaultValue', value: string) => {
+    const next = { ...parameter }
+    if (value) next[field] = value
+    else delete next[field]
+    onChange(next)
+  }
+  return (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={{ width: 110, flexShrink: 0 }}
+        noWrap
+      >
+        {parameter.name || '—'}
+      </Typography>
+      <TextField
+        label="Label"
+        placeholder={parameter.name}
+        value={parameter.label ?? ''}
+        onChange={(event) => assign('label', event.target.value.slice(0, 80))}
+        size="small"
+        sx={{ flex: 2 }}
+      />
+      <TextField
+        label="Starts as"
+        value={parameter.defaultValue ?? ''}
+        onChange={(event) =>
+          assign('defaultValue', event.target.value.slice(0, 120))
+        }
+        size="small"
+        sx={{ flex: 1 }}
+      />
+      <TextField
+        label="Choices"
+        placeholder="value: Label, value: Label"
+        value={choices}
+        onChange={(event) => {
+          setChoices(event.target.value)
+          const options = parseParameterOptions(event.target.value)
+          const next = { ...parameter }
+          if (options.length) next.options = options
+          else delete next.options
+          onChange(next)
+        }}
+        size="small"
+        sx={{ flex: 3 }}
+      />
+    </Stack>
+  )
 }
 
 /** Small labelled row header matching the mockup's section styling. */
@@ -277,15 +357,40 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
       ),
   )
 
-  const handleTestRun = useCallback(() => {
+  /**
+   * A test run sees what a published page sees (AGL-3202): the site
+   * variables the draft names. Read on the click, and only when the draft
+   * names something outside itself, so opening this card still costs the one
+   * functions window and nothing else — a listener here would bill a hundred
+   * variable reads to every author who never presses Run.
+   */
+  const handleTestRun = useCallback(async () => {
     if (!draft) return
-    const result = evaluateHostFunction(draft, testArgs)
+    let globals: Record<string, number | string | boolean> = {}
+    if (functionReferencedNames(draft).length) {
+      try {
+        const snapshot = await getDocs(
+          query(collection(firestore, 'hosts', hostId, 'variables'), limit(100)),
+        )
+        const lookup: Record<string, HostVariable> = {}
+        snapshot.forEach((row) => {
+          const data = row.data() as HostVariable & { deletedAt?: unknown }
+          if (data?.name && !data.deletedAt) lookup[row.id] = data
+        })
+        globals = functionGlobals(draft, lookup)
+      } catch (error) {
+        // The run still happens: an unreadable variable list reads as the
+        // evaluator's own "Unknown name", which names what was missing.
+        console.error(error)
+      }
+    }
+    const result = evaluateHostFunction(draft, testArgs, { globals })
     setTestResult(
       result.ok === false
         ? `Error: ${result.error}`
         : `Result: ${String(result.value)}`,
     )
-  }, [draft, testArgs])
+  }, [draft, testArgs, firestore, hostId])
 
   const handleSave = useCallback(async () => {
     if (!draft || !draft.name.trim() || nameTaken) return
@@ -762,6 +867,32 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
             {'Add parameter'}
           </Button>
 
+          {(draft?.parameters ?? []).length ? (
+            <>
+              <SectionLabel>{'What visitors see'}</SectionLabel>
+              <Typography variant="caption" color="text.secondary">
+                {'Used by a Function Widget on a page. A parameter with ' +
+                  'choices is asked as a list, a number as a number box and ' +
+                  'a true/false as a switch.'}
+              </Typography>
+              {(draft?.parameters ?? []).map((parameter, index) => (
+                <ParameterAudienceFields
+                  // Keyed by position: the name is being edited one row up.
+                  key={index}
+                  parameter={parameter}
+                  onChange={(next) =>
+                    patch((previous) => ({
+                      ...previous,
+                      parameters: previous.parameters.map((p, index2) =>
+                        index2 === index ? next : p,
+                      ),
+                    }))
+                  }
+                />
+              ))}
+            </>
+          ) : null}
+
           <SectionLabel>{'Variables'}</SectionLabel>
           {(draft?.variables ?? []).map((variable, index) => (
             <Stack
@@ -849,6 +980,11 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
           </Button>
 
           <SectionLabel>{'Operations'}</SectionLabel>
+          <Typography variant="caption" color="text.secondary">
+            {'An expression can use + − × ÷ and parentheses, any site ' +
+              'variable by its name, and ' +
+              `${FUNCTION_BUILTIN_NAMES.map((name) => `${name}()`).join(', ')}.`}
+          </Typography>
           {(draft?.operations ?? []).map((operation, index) => (
             <Stack
               key={index}
