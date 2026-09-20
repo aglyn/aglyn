@@ -459,6 +459,18 @@ Every lib carries, today:
   `firebase-admin` and each `@mui/*` package the lib's shipped source imports,
   at the root's range. A consumer has one of each; a lib never carries its own.
 - `sideEffects`: `false`, or the list of modules that register on import.
+- `dependencies`: every package the lib's shipped source imports that is not
+  a peer (AGL-3201). Inside this repo an import resolves through a tsconfig
+  alias or the root `node_modules`, so a lib that declares nothing builds and
+  tests green and would install from the registry unable to find what it
+  imports. One of this repo's own libs is declared at the repo version, the
+  only number it is published beside, and `release:prepare` moves those with
+  the bump; anything else carries the root `package.json`'s range, and a
+  types-only package goes by its `@types/` name. `npm run
+  sync:lib-dependencies` writes them and `check:lib-boundaries` refuses a lib
+  whose source imports something it does not declare. A lib never imports a
+  transitive dependency of something else (`@popperjs/core` through MUI,
+  `@firebase/firestore` through `firebase`): it cannot declare it honestly.
 
 Build output is unchanged: the executors, entry files and `dist/` layout are
 what they were.
@@ -467,6 +479,11 @@ what they were.
 
 A follow-up project, not this document's commit:
 
+- **`sideEffects` names `.ts` files and the package ships `.js`** (AGL-3201).
+  The swc build copies the array as written, so a consumer's bundler would
+  read every listed module as side-effect free and drop its registration —
+  the AGL-3025 failure, in somebody else's build. It has to be rewritten to
+  the emitted extension at build or pack time before anything is published.
 - `nx release` with independent versioning and `publishConfig` per package.
 - A `publish-packages.yml` workflow on the `production` promotion tag that
   publishes every changed package with provenance, and a `CHANGELOG` per
