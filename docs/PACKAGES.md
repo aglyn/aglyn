@@ -34,14 +34,14 @@ hold and the new axis sits beside them.
 
 | scope | may import | what it is |
 | -- | -- | -- |
-| `scope:shared` | `shared` | Generic libraries with no knowledge of Aglyn's model. The floor everything stands on, so it stands on nothing. |
+| `scope:shared` | `shared` | Generic libraries with no knowledge of Aglyn's model. The floor everything stands on, so it stands on nothing — and no plugin's domain stands on it either, types included: a model, a route table or a field vocabulary two plugins agree on is still that domain's, and `shared` is not where it goes (Rule 4). |
 | `scope:core` | `core`, `shared` | `@aglyn/aglyn`: the platform model, its managers, its plugin-manager seams — no rendering, no designer, no tenancy, no plugin. |
 | `scope:renderer` | `renderer`, `core`, `shared` | A node tree to React. |
 | `scope:besigner` | `besigner`, `core`, `shared` | The designer's logic, publishable without its UI. |
 | `scope:besigner-ui` | `besigner-ui`, `besigner`, `renderer`, `core`, `shared` | The designer's React surface. |
 | `scope:tenant` | `tenant`, `renderer`, `core`, `shared` | The runtime that serves a published site, and the tenant app shell. Plugins reach it only through the loader manifests. |
 | `scope:console` | everything above, plugins only dynamically | The console app. |
-| `scope:plugin` | `tenant`, `renderer`, `besigner`, `core`, `shared` | A feature plugin. Never another plugin; never the designer UI. |
+| `scope:plugin` | `tenant`, `renderer`, `besigner`, `core`, `shared` | A feature plugin. Never another plugin; never the designer UI. Its domain lives here and nowhere else — what it imports from the layers below it is generic, never its own model wearing a lower layer's tag. |
 | `scope:cli` | `cli`, `core`, `shared` | The command-line client. |
 
 The `type:` axis is the same rule the `scope:data|ui|util|feature` tags
@@ -141,7 +141,9 @@ holds them to what each registrar registers.
 ### Shared
 
 Published as dependencies of the packages above, and usable on their own by
-anyone who wants a generic piece; none is a product surface.
+anyone who wants a generic piece; none is a product surface, and none holds a
+plugin's domain (Rule 4). One row below breaks that second half today and is
+marked where it sits.
 
 | project | npm name | root | tags | entry points |
 | -- | -- | -- | -- | -- |
@@ -152,7 +154,7 @@ anyone who wants a generic piece; none is a product surface.
 | `shared-data-types` | `@aglyn/shared-data-types` | `libs/shared/data/types` | `scope:shared` `type:data` | `.`, `./*` |
 | `shared-svg-icons-svg-icons` | `@aglyn/shared-svg-icons` | `libs/shared/svg-icons/svg-icons` | `scope:shared` `type:ui` | `.` (a Vite build with its own `exports`) |
 | `shared-ui-color-picker` | `@aglyn/shared-ui-color-picker` | `libs/shared/ui/color-picker` | `scope:shared` `type:ui` | `.`, `./*` |
-| `shared-ui-email-campaigns` | `@aglyn/shared-ui-email-campaigns` | `libs/shared/ui/email-campaigns` | `scope:shared` `type:ui` | `.`, `./*` |
+| `shared-ui-email-campaigns` | `@aglyn/shared-ui-email-campaigns` | `libs/shared/ui/email-campaigns` | `scope:shared` `type:ui` | `.`, `./*` — **a carried violation, not a shared library**: it holds the campaign domain model. See [Violations](#violations); the row goes when the lib is dissolved. |
 | `shared-ui-json-editor` | `@aglyn/shared-ui-json-editor` | `libs/shared/ui/json-editor` | `scope:shared` `type:ui` | `.`, `./*` |
 | `shared-ui-jsx` | `@aglyn/shared-ui-jsx` | `libs/shared/ui/jsx` | `scope:shared` `type:ui` | `.`, `./*` |
 | `shared-ui-jsx-forms` | `@aglyn/shared-ui-jsx-forms` | `libs/shared/ui/jsx-forms` | `scope:shared` `type:ui` | `.`, `./*` |
@@ -212,7 +214,9 @@ allowlist. Everything else already holds.
 
 The 19 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
-this section move together.
+this section move together. One violation at the end of the section is not an
+allowlist row at all — the map permits the edge that carries it, so the guard
+is silent and only this document holds it.
 
 **`shared-util-email` → `aglyn`** (1). A spec reads the shipped price table so
 its ceiling assertions check real numbers. It is inline-disabled at the one
@@ -220,26 +224,132 @@ import and no production file may repeat it; the fix is a fixture that reads
 the table from the core's server entry, or the spec moving to a project that
 may import the core.
 
-**Plugin → plugin** (17). What two plugins share moves down a layer or behind
-a core seam, never sideways:
+**Plugin → plugin** (17). What two plugins share goes behind a core seam. It
+does not go sideways, and it does not go down into `libs/shared`: a plugin's
+domain is not generic, so `shared` is not a home for it, types included
+(Rule 4). One row per allowlist edge, in the allowlist's order, because each is
+one lane's work and each lane reads its own row. "Crosses" is what the source
+files import today, not what the allowlist's `why` says — four of those
+sentences have drifted from the code, and the row says so where they have. A
+seam called **present** was verified by reading its export; a seam called
+**owed** does not exist yet and is AGL-3124's to build before the lane that
+needs it starts.
 
-- `plugins-marketplace` → `mui`: a spec imports the MUI block presets to prove
-  each one composes only publishable components. Fix: read them from the
-  plugin-manager registry the loader manifests already fill.
-- `plugins-forms` → `bookings`, `events-calendar`, `mui`: the placement menu
-  and the form controls import plugin entries and components. Fix: the same
-  registry, plus a form-control registration seam in the core.
-- `plugins-forms` → `crm`, `inbox`; `plugins-inbox` → `crm`, `marketing`;
-  `plugins-crm` → `bookings`, `email`, `marketing`; `plugins-marketing` →
-  `email`, `commerce`; `plugins-bookings` → `commerce`; `plugins-commerce` →
-  `data`; `plugins-workflows` → `logic`: route tables, model types, a card
-  embedded in another plugin's hub, a hook that sends through another
-  plugin's API. Fix: the model types and route tables move to `libs/shared`
-  or the core; a card another plugin embeds is registered as a widget through
-  the core's widget registry; a send path another plugin calls is a core
-  seam (an API dispatch entry) rather than an import.
-- `plugins-email` → `mui`: bundle constants. Fix: move them to the core's
-  bundle constants.
+1. **`plugins-bookings` → `plugins-commerce`.** Crosses: `resolveFlatTaxCents`
+   and `TaxSettings` (`src/lib/server.ts`), `storefrontTaxModeOf`
+   (`src/lib/server/billing-webhook.ts`). Not model reuse, as the allowlist's
+   `why` has it — it is tax: two plugins that take money need the same tenant
+   tax profile. Fix: a tax-profile service contract on
+   `definePluginServiceContract` / `registerPluginService` /
+   `resolvePluginServices` — commerce registers the profile, bookings resolves
+   it, neither imports the other. The machinery is **present**; the named
+   contract is **owed** (AGL-3124), beside the payment-provider contract the
+   same money path needs.
+2. **`plugins-commerce` → `plugins-data`.** Crosses: `parseCsv`
+   (`src/lib/model/commerce-io.ts`), imported from
+   `@aglyn/plugins-data/model/dataset-io` — which re-exports it from
+   `@aglyn/aglyn/app-utils/dataset-csv`. No plugin domain crosses at all:
+   commerce is reaching a core function through a plugin's barrel. Fix:
+   commerce imports `parseCsv` where it lives — core's `dataset-csv` today, and
+   the generic CSV half's `libs/shared/util/*` home once that file's split
+   lands. No seam needed; this row can be worked off first and on its own.
+3. **`plugins-crm` → `plugins-bookings`.** Crosses: `BOOKING_PATH_DEFAULT` and
+   `bookingLinkFor` (`src/lib/components/book-meeting-action.tsx`) — CRM
+   spelling a bookings address. Fix: the plugin-declared record route contract,
+   so bookings publishes its own addresses and CRM asks for one. **Owed**
+   (AGL-3124). A route table is the plugin's domain, so `libs/shared` is not an
+   answer for it.
+4. **`plugins-crm` → `plugins-email`.** Crosses: `useSendingApi`
+   (`src/lib/components/crm-send-email-dialog.tsx`) — CRM's one-to-one composer
+   calling email's send. Fix: the send control is a widget the email plugin
+   registers through `registerConsoleExtension` (`ConsoleExtension.widgets`)
+   into the `recordEmail` zone CRM already hosts and draws with
+   `useConsoleWidgetSlot()`. **Present**, and in use for other zones today.
+   Email's route stays behind its own `registerPluginApiRoute`; CRM never holds
+   the client hook.
+5. **`plugins-crm` → `plugins-marketing`.** Crosses: marketing's
+   `ConversionAttribution` component, embedded twice
+   (`contact-associations-card.tsx`, `lead-history-card.tsx`). Fix: marketing
+   registers it as a widget into CRM's `recordInsights` zone — same registry,
+   same renderer as row 4. **Present.**
+6. **`plugins-email` → `plugins-mui`.** Crosses: `sanitizeCustomHtml`
+   (`src/lib/components/email-blocks.tsx`) — not bundle constants, which is
+   what the allowlist's `why` and this section's old fix both named. Fix: HTML
+   sanitization is a platform trust-and-safety obligation, not MUI's domain; it
+   belongs in the core beside `author-html.ts` and `sanitize-svg.ts`, and both
+   plugins call it there. Into the core is right here for the one reason that
+   makes it right anywhere: nothing plugin-shaped moves. A sanitizer knows no
+   plugin's model.
+7. **`plugins-forms` → `plugins-bookings`.** Crosses: `BOOKINGS_BUNDLE` and
+   `BUNDLE_ID`, in `src/lib/plugin-id-backfill-table.spec.ts` only — no
+   production file, so the allowlist's "placement menu" `why` no longer matches
+   the graph. Fix: the spec reads bundle ids from the plugin-manager registry
+   the loader manifests already fill, which is row 16's fix. **Present.**
+8. **`plugins-forms` → `plugins-crm`.** Crosses two different things:
+   `useContactFieldDefinitions` (`form-contact-fields-card.tsx`) and `crmRoutes`
+   (`form-detail-card.tsx`). Fix, in two halves: contact field definitions come
+   through `registerCustomFieldType`, **present**; the route table comes through
+   the record route contract, **owed** (AGL-3124, which names this row). The
+   edge leaves the allowlist only when both halves have landed.
+9. **`plugins-forms` → `plugins-events-calendar`.** Crosses:
+   `EVENTS_CALENDAR_BUNDLE` and `BUNDLE_ID`, in
+   `src/lib/plugin-id-backfill-table.spec.ts` only. Fix: the registry read of
+   row 7. **Present.**
+10. **`plugins-forms` → `plugins-inbox`.** Crosses: inbox's `SubmissionsCard`
+    (`src/lib/components/form-submissions-card.component.tsx`). Fix: inbox
+    registers the card as a widget into the `hostForms` zone the forms plugin
+    already hosts and draws with `useConsoleWidgetSlot()`. **Present**, and this
+    is the shape a plugin's own hub is meant to take.
+11. **`plugins-forms` → `plugins-mui`.** Crosses: `BUNDLE_ID as MUI_BUNDLE_ID`
+    (`src/lib/components/form.tsx`), plus MUI's `Product` component and its
+    bundle id in two specs. Fix: a form never needs another plugin's bundle id
+    spelled out — the id comes off the node being read, through the loader
+    registry, and the specs read presets and ids from that same registry.
+    **Present.** The core carries a copy of the literal (`MUI_BUNDLE_ID` in
+    `plugin-manager/feature-plugins.ts`); that file is AGL-3116's and is not
+    this row's to change.
+12. **`plugins-inbox` → `plugins-crm`.** Crosses: `crmRoutes`, in three console
+    components (`contacts-card.component.tsx`,
+    `inbox-glance-card.component.tsx`, `submissions-card.component.tsx`). Fix:
+    the record route contract, **owed** (AGL-3124). Nothing else crosses, so
+    this row retires on that seam alone.
+13. **`plugins-inbox` → `plugins-marketing`.** Crosses: `ConversionAttribution`
+    (twice), `HostCampaignsCard` (`inbox-console-page.tsx`), and
+    `performCampaignSend` in one spec. Fix, in two parts: marketing registers
+    both cards as widgets into zones the inbox page declares for itself — a slot
+    id is an open string, so a plugin-hosted zone needs no core release, and the
+    registry is **present**; and the spec asserts the consent gate on the shared
+    mail rail (`@aglyn/shared-util-email`'s `marketing-send` injection seam),
+    which every send passes, instead of importing marketing's send path.
+14. **`plugins-marketing` → `plugins-commerce`.** Crosses: `productPriceRange`
+    (`src/lib/server/campaign-send.ts`) — marketing reading a fact about a
+    commerce record. Fix: `registerPluginRecordFactsReader` — commerce registers
+    product facts, marketing resolves them. **Present.**
+15. **`plugins-marketing` → `plugins-email`.** The widest row. Crosses:
+    `CampaignComposer`, `useCampaignManageApi` and `useOrgEmailTopics`
+    (`campaign-detail-card.tsx`, `campaigns-card.tsx`), and
+    `@aglyn/plugins-email/model` (`src/lib/server/campaign-send.ts`). Fix, in
+    three parts: the composer is a widget email registers into a
+    marketing-hosted zone (**present**); the send and manage calls go through
+    email's own `registerPluginApiRoute` doors rather than a borrowed client
+    hook (**present**); and the model import becomes a plugin-declared campaign
+    resource kind whose numbers resolve through `registerPluginFigureReader` —
+    the reader is **present**, while the resource kind and the
+    subscription-topic contract `useOrgEmailTopics` needs are **owed**
+    (AGL-3124). That resource kind is the one the finding below turns on.
+16. **`plugins-marketplace` → `plugins-mui`.** Crosses: `blockPresets`
+    (`src/lib/model/blocks-publishable.spec.ts`), a spec proving each preset
+    composes only publishable components. Fix: read the presets from the
+    plugin-manager registry the loader manifests already fill. **Present.**
+17. **`plugins-workflows` → `plugins-logic`.** Crosses: `WhereUsedDialog`, plus
+    `fetchWhereUsed`, `summarizeDependents` and `WhereUsedResult`
+    (`src/lib/components/host-workflows-card.component.tsx`) — a card and a
+    query, not the condition evaluation the allowlist's `why` describes. Fix, in
+    two parts: logic registers the dialog as a widget into the `hostAutomations`
+    and `automationEditor` zones workflows already hosts (**present**); and the
+    where-used query becomes a dependents service contract on
+    `definePluginServiceContract` — logic registers the answer, workflows
+    resolves it — which is **owed** (AGL-3124).
 
 **Plugin → designer UI** (1). `plugins-mui` renders nested children through
 the designer's node leaf and contexts. A plugin that needs the designer UI
@@ -247,6 +357,38 @@ cannot be used without it, which is exactly
 what the map forbids. Fix: the element-control seam moves into `@aglyn/besigner`
 (the logic package) and the designer UI supplies its implementation at
 registration time.
+
+**A plugin domain on the generic floor: `@aglyn/shared-ui-email-campaigns`** (a
+finding, not an allowlist row). `libs/shared/ui/email-campaigns` holds the
+campaign domain model — `model/campaign-container.ts`,
+`campaign-conversions.ts`, `campaign-report.ts`, `campaign-revenue.ts`,
+`campaign-send-time.ts`, `email-record.ts`,
+`components/campaign-picker.component.tsx`, `components/report-figures.tsx` —
+and `campaign-container.ts` opens by naming the Firestore path a send is stored
+at. Five plugins read it, plus both apps. The guard cannot see it: `plugin` →
+`shared` is a legal edge on the map, so there is no allowlist row and this
+document is the only place the finding can live.
+
+It was not a mistake. It is what this section used to prescribe — a shared model
+rather than a sideways import — and five plugins sharing one model is strictly
+better than the edges above. What changed is the rule, not the file: `shared` is
+generic only, plugin domains included, so the prescription that put it there is
+gone and what that prescription produced is now a finding.
+
+Fix: a campaign becomes a plugin-declared resource kind. `report-figures.tsx`
+and the numbers behind it resolve through `registerPluginFigureReader`
+(**present**); `campaign-picker.component.tsx` becomes a widget through the
+console widget registry (**present**); `email-record.ts`'s field names become
+part of the declared resource rather than a shared type. The resource-kind
+declaration itself is **owed** (AGL-3124) — the same contract row 15 needs.
+
+Whatever replaces it keeps the split the package has now: `src/index.ts` exports
+only the model, with `components/report-figures` reached by its own `./*`
+subpath, so a server handler reading a stored field name never pulls a component
+graph — and MUI — behind it. Firestore rules name `hosts/{hostId}/campaigns`;
+rules are the last step, not the first. Dissolving the lib is its own AGL-3080
+child and not this section's commit, so the package keeps its map row above
+until that child lands.
 
 ## Rules
 
@@ -257,13 +399,30 @@ registration time.
 2. **A plugin never imports another plugin.** Not its entry, not its model,
    not a component. It goes through a plugin-manager seam in the core
    (registries for widgets, providers, site runtimes, page hooks, API
-   dispatch) or down into `libs/shared`.
-3. **Core never imports a plugin.** The core is runnable with every plugin
-   absent. Nothing AI-, commerce- or CRM-shaped lives in `libs/aglyn`,
-   `libs/tenant/**` or `apps/**`; those get generic extension points only.
+   dispatch). Moving the shared piece down into `libs/shared` is not the
+   alternative: that only relocates the domain onto the generic floor, where
+   nothing refuses it and every plugin inherits it. Only code that carries no
+   plugin's domain goes down a layer, and then it goes because it is generic,
+   not because two plugins wanted it.
+3. **A plugin's code lives only in its own plugin.** The core is runnable with
+   every plugin absent, and so is every other tree. Nothing AI-, commerce- or
+   CRM-shaped lives in `libs/aglyn`, `libs/tenant/**`, `libs/besigner/**`,
+   `libs/shared/**`, `apps/**`, `tools/**` or `cloud/**` — nor in another
+   plugin. Those get generic extension points only. A plugin-specific type in
+   any of them is the same defect as a plugin-specific module: the seam has to
+   let the plugin declare its own shape. Nor is a layer below a plugin ever
+   bespoke in the other direction: a named vendor, a named provider or a switch
+   over plugin ids sits behind a contract any implementer can satisfy. A
+   binding that is genuinely the platform's own infrastructure is argued case
+   by case and written down where it is argued, never assumed from the fact
+   that it is already there.
 4. **`libs/shared` stays generic.** Widen a narrow shared utility rather than
    fork it — but never at a bundle cost. A shared lib that would need the
-   core to do its job belongs one layer up, not in `shared` with a copy.
+   core to do its job belongs one layer up, not in `shared` with a copy. And
+   no plugin's domain belongs there at all, types included: a model, a route
+   table, a field vocabulary or a stored field name is that plugin's, however
+   many plugins agree on it. Two plugins agreeing is what a core contract is
+   for; it is not evidence that the thing is generic.
 5. **A new lib gets its tags and its map row in the same commit.** `scope:`
    and `type:` in `project.json`, `name`/`version`/`exports`/
    `peerDependencies`/`sideEffects` in `package.json`, a row here. The guard
