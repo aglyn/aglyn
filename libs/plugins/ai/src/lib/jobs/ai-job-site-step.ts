@@ -33,6 +33,8 @@ import {
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
   aiSitePlanRefusal,
+  aiSiteSubmissions,
+  aiSiteWords,
   parseAiSiteJobInputs,
   type AiSiteJobInputs,
 } from '../model/ai-site-job'
@@ -351,7 +353,14 @@ function resolved(ref: string | null, built: BuiltRefs): string | null {
   )
 }
 
-/** The site's own words, as every unit's brief carries them. */
+/**
+ * The site's own words, as every unit's brief carries them.
+ *
+ * The audience is here rather than left to the brief's prose (AGL-2918). A
+ * guided start writes it into the brief itself, but an agency batch's brief
+ * is a member's own sentence and may never mention it, and a theme, a layout
+ * or a form asked to serve nobody in particular serves nobody in particular.
+ */
 export function aiSiteBriefLines(
   brief: string,
   inputs: AiSiteJobInputs,
@@ -360,10 +369,42 @@ export function aiSiteBriefLines(
   const site = [
     inputs.businessName ? `name: ${inputs.businessName}` : '',
     `business: ${inputs.businessType}`,
+    inputs.audience ? `for: ${inputs.audience}` : '',
     inputs.city ? `city: ${inputs.city}` : '',
     inputs.brand ? `brand: ${inputs.brand}` : '',
   ].filter(Boolean)
   lines.push(`Site — ${site.join('; ')}.`)
+  return lines
+}
+
+/**
+ * What the welcome email is told (AGL-2918), beyond that it is a welcome
+ * email.
+ *
+ * The scaffold's email unit used to carry one sentence, and a yes/no toggle
+ * decided whether it ran — so the draft was a welcome email for a business
+ * in general, to nobody in particular, about nothing that had happened. The
+ * two answers it is missing are who wrote in and what now becomes of what
+ * they wrote, and the second of those is the person's own routing answer, so
+ * the email and the form it acknowledges cannot say different things.
+ *
+ * ⛔ A DRAFT either way. Nothing here sends, schedules or enrolls anybody:
+ * the email step writes an unpublished email design and stops.
+ */
+export function aiSiteEmailBriefLines(
+  inputs: Readonly<Record<string, unknown>> | null | undefined,
+): string[] {
+  const lines = [
+    'Write the welcome email this site sends someone who gets in touch.',
+  ]
+  const { audience } = aiSiteWords(inputs)
+  if (audience) lines.push(`Write it to ${audience}.`)
+  const submissions = aiSiteSubmissions(inputs)
+  if (submissions === 'lead') {
+    lines.push('Their message is a sales lead, so say that somebody will be in touch about it.')
+  } else if (submissions === 'inbox') {
+    lines.push('Their message has been read, so say it arrived and that a reply is coming.')
+  }
   return lines
 }
 
@@ -462,9 +503,7 @@ export function aiSiteUnitJob(
     )
   }
   if (unit.kind === 'email') {
-    brief.push(
-      'Write the welcome email this site sends someone who gets in touch.',
-    )
+    brief.push(...aiSiteEmailBriefLines(job.inputs))
   }
   return {
     ...job,

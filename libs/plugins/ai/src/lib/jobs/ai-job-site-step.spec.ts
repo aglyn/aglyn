@@ -423,6 +423,25 @@ describe('the job each unit is built under', () => {
     )
   })
 
+  it('carries who the site is for into every unit’s brief (AGL-2918)', () => {
+    // A guided start writes the audience into its brief; an agency batch's
+    // brief is a member's own sentence and may never mention it, so the
+    // scalar is said on the site line every unit reads.
+    const job = siteJob({
+      plan,
+      brief: 'A site for a dog groomer',
+      inputs: { businessType: 'dog groomer', audience: 'local dog owners', pages: 4 },
+    })
+    for (const unit of units) {
+      expect([unit.kind, aiSiteUnitJob(job, unit, built).brief]).toEqual([
+        unit.kind,
+        expect.stringContaining('for: local dog owners'),
+      ])
+    }
+    const said = siteJob({ plan, inputs: { businessType: 'dog groomer', pages: 4 } })
+    expect(aiSiteUnitJob(said, units[0], built).brief).not.toContain('for:')
+  })
+
   it('shows a delegate none of the scaffold’s other steps or outputs', () => {
     const job = siteJob({
       plan,
@@ -591,6 +610,55 @@ describe('one unit a pass', () => {
     expect(emails.map((each) => each.$id)).toEqual(['drftWelcom'])
     expect(emails[0].brief).toContain('welcome email')
     expect(outcome.continue).toBeUndefined()
+  })
+})
+
+/*
+ * The welcome email's copy (AGL-2918). It was one sentence and a yes/no
+ * toggle: a welcome email for a business in general, to nobody in
+ * particular, about nothing that had happened.
+ *
+ * ⛔ A DRAFT throughout. The email step writes an unpublished email design;
+ * nothing here sends, schedules or enrolls anybody, and none of these tests
+ * would pass if it did — the fake runner is the only thing that runs.
+ */
+describe('what the welcome email is told', () => {
+  const emailUnit = () => aiSiteJobUnits(confirmedPlan(), { welcomeEmail: true }).at(-1)
+
+  const emailBrief = (inputs: Record<string, unknown>) => {
+    const unit = emailUnit()
+    if (!unit || unit.kind !== 'email') throw new Error('the last unit is not the email')
+    return aiSiteUnitJob(
+      siteJob({ inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, ...inputs } }),
+      unit,
+      new Map(),
+    ).brief
+  }
+
+  it('still says what it always said', () => {
+    expect(emailBrief({})).toContain(
+      'Write the welcome email this site sends someone who gets in touch.',
+    )
+  })
+
+  it('writes it to the people the site is for', () => {
+    expect(emailBrief({ audience: 'local dog owners' })).toContain(
+      'Write it to local dog owners.',
+    )
+    expect(emailBrief({})).not.toContain('Write it to')
+  })
+
+  it('says what became of the message, in the person’s own routing answer', () => {
+    // The email and the form it acknowledges cannot say different things:
+    // both read the one answer.
+    expect(emailBrief({ submissions: 'lead' })).toContain('somebody will be in touch about it')
+    expect(emailBrief({ submissions: 'inbox' })).toContain('a reply is coming')
+  })
+
+  it('says nothing about what became of it where nobody was asked', () => {
+    const brief = emailBrief({})
+    expect(brief).not.toContain('in touch about it')
+    expect(brief).not.toContain('a reply is coming')
   })
 })
 
