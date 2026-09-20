@@ -78,6 +78,7 @@ import AuthErrorAlertComponent from '../../../components/auth-error-alert.compon
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import AuthFormComponent from '../../../components/auth-form.component'
 import { AuthConsentCheckbox } from '../../../components/auth-legal-consent.component'
+import { AuthMarketingOptIn } from '../../../components/auth-marketing-opt-in.component'
 import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
 import useDelegateWorkspaceSignIn from '../../../hooks/use-delegate-workspace-signin'
 import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
@@ -92,6 +93,12 @@ import {
 } from '../../../utils/legal-consent'
 import hardNavigate from '../../../utils/hard-navigate'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
+import {
+  clearMarketingOptIn,
+  consumeMarketingOptIn,
+  markMarketingOptIn,
+  postMarketingConsent,
+} from '../../../utils/marketing-opt-in'
 import {
   createSignUpWorkspace,
   rememberPendingSignUpWorkspace,
@@ -346,6 +353,10 @@ function SignUp() {
   // Google) require affirmative agreement to the Terms and Privacy Policy.
   const [consented, setConsented] = useState(false)
   const [consentError, setConsentError] = useState(false)
+  // The optional product-updates opt-in (AGL-3185). Separate state from the
+  // terms acceptance above, because it is a separate act: never required,
+  // never pre-ticked, and an unticked box records nothing at all.
+  const [marketingOptIn, setMarketingOptIn] = useState(false)
   // The plan a visitor picked on the marketing pricing page (AGL-1117):
   // `/signup?plan=pro&interval=year`. Parsed once and defensively — the
   // contract is with a site we cannot deploy in lockstep with, so a bad
@@ -383,6 +394,9 @@ function SignUp() {
   // from consenting on behalf of some later attempt.
   const handleRedirectCredential = useCallback(
     async (credential: UserCredential) => {
+      // Read before the legal gate below, so a tick is never left lying in
+      // storage for a later attempt whatever that gate decides (AGL-3185).
+      const optedIn = consumeMarketingOptIn()
       if (!consumeLegalConsent()) {
         // Reached only if the redirect completed without this tab having
         // consented — the gate below makes that unreachable through the UI,
@@ -396,6 +410,12 @@ function SignUp() {
         LEGAL_DOCUMENT_VERSION,
         'signup-google-redirect',
       )
+      // The product-updates tick this redirect carried (AGL-3185). Recorded
+      // for a returning account too: the person ticked the box, and the
+      // record is about that act, not about whether the account is new.
+      if (optedIn) {
+        await postMarketingConsent(credential.user, 'granted', 'console-signup')
+      }
       // The mobile door provisions the workspace too (AGL-1942). It used to
       // record the acceptance and stop, so a phone sign-up — the majority of
       // them — reached the picker no matter what: not even the AGL-1117 plan
@@ -471,6 +491,10 @@ function SignUp() {
       // before the account exists (AGL-1497). Set here, after the gate above,
       // so the marker can only ever mean "this person consented".
       markLegalConsent()
+      // The product-updates tick rides the same way (AGL-3185) — and only
+      // when it was given: an unticked box sets nothing, so a stale marker
+      // cannot opt somebody in.
+      if (marketingOptIn) markMarketingOptIn()
       // A self-signup belongs in the PROJECT pool, and `auth.tenantId` is
       // sticky instance state that `/sso` sets and nothing clears (AGL-1993).
       // Worse here than on `/signin`: a refusal would at least be visible,
@@ -598,6 +622,16 @@ function SignUp() {
           // Google branches carry their name on the token, and the session
           // route seeds from that (AGL-1127).
           if (values) await persistSignUpProfile(firestore, credential, values)
+          // The product-updates opt-in, when it was given (AGL-3185). After
+          // the profile write, so the record can carry the name the form
+          // collected; before the provision below, which can end in a hard
+          // navigation. The marker is consumed so nothing is left in storage,
+          // and the state is read beside it: this page never unmounted, so
+          // the tick is still here even where storage refused the marker.
+          const carriedOptIn = consumeMarketingOptIn()
+          if (carriedOptIn || marketingOptIn) {
+            await postMarketingConsent(credential.user, 'granted', 'console-signup')
+          }
           // Settle the workspace — from EVERY door (AGL-1942), through the
           // one routine. A verified account (Google, SSO) gets it created and
           // lands in it; the password door's account cannot use one yet, so
@@ -632,8 +666,9 @@ function SignUp() {
         .catch((error) => {
           console.error(error)
           // A failed attempt must not leave a tick lying in sessionStorage
-          // for the next one to pick up (AGL-1497).
+          // for the next one to pick up (AGL-1497) — either tick (AGL-3185).
           clearLegalConsent()
+          clearMarketingOptIn()
           setError({
             ...error,
             credential: GoogleAuthProvider.credentialFromError(error),
@@ -650,6 +685,7 @@ function SignUp() {
       firebaseAuth,
       firestore,
       loading,
+      marketingOptIn,
       planIntent,
       queueLoading,
       searchParams,
@@ -786,6 +822,9 @@ function SignUp() {
         onChange={handleConsentChange}
         error={consentError}
       />
+      {/* Below the required acceptance and never part of it (AGL-3185): the
+          terms gate the sign-up, this gates nothing. */}
+      <AuthMarketingOptIn checked={marketingOptIn} onChange={setMarketingOptIn} />
       <Divider flexItem variant="middle" sx={{ my: 3 }}>
         {'Or sign up with'}
       </Divider>

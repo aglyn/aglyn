@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { realmPluginsInUse, requiredSitePlugins } from './required-site-plugins'
+import {
+  placedComponentIds,
+  realmPluginsInUse,
+  requiredSitePlugins,
+} from './required-site-plugins'
 
 const ENABLED = ['mui', 'bookings', 'commerce', 'marketing', 'events-calendar']
 
@@ -124,6 +128,42 @@ describe('requiredSitePlugins', () => {
     const enabled = [...ENABLED]
     requiredSitePlugins({ nodes: muiNodes, enabledPlugins: enabled })
     expect(enabled).toEqual(ENABLED)
+  })
+})
+
+describe('placedComponentIds (AGL-3141)', () => {
+  it('reads every component id the document places, once and sorted', () => {
+    expect(
+      placedComponentIds({
+        _root_: { componentId: 'div' },
+        a: { componentId: 'muiTypography', pluginId: 'mui' },
+        b: { componentId: 'muiTypography', pluginId: 'mui' },
+        c: { componentId: 'muiBox', pluginId: 'mui' },
+      }),
+    ).toEqual(['div', 'muiBox', 'muiTypography'])
+  })
+
+  it('reads a withheld lazy panel’s subtree, which is still this page', () => {
+    // The loader runs on the FULL composed document. Narrowing on the pruned
+    // one would leave the panel empty the moment a visitor opened it (AGL-52).
+    expect(
+      placedComponentIds({
+        panel: { componentId: 'muiTabPanel', pluginId: 'mui' },
+        inside: { componentId: 'dataTable', pluginId: 'mui' },
+      }),
+    ).toEqual(['dataTable', 'muiTabPanel'])
+  })
+
+  it('refuses for a page with no document, rather than narrowing to nothing', () => {
+    // A protected or members-only screen ships no nodes; its content arrives
+    // from an API later, and the plugins must be ready for all of it.
+    expect(placedComponentIds(null)).toBeNull()
+    expect(placedComponentIds(undefined)).toBeNull()
+  })
+
+  it('answers an empty list for a document that places nothing', () => {
+    // Different from `null`: this page HAS a document and it is empty.
+    expect(placedComponentIds({})).toEqual([])
   })
 })
 

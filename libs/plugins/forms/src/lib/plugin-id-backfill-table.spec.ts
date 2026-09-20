@@ -40,7 +40,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { BOOKINGS_BUNDLE } from '@aglyn/plugins-bookings'
 import { EVENTS_CALENDAR_BUNDLE } from '@aglyn/plugins-events-calendar'
-import { MUI_BUNDLE } from '@aglyn/plugins-mui'
+import { loadMuiBundle, type MuiBundleEntry } from '@aglyn/plugins-mui'
 import { BUNDLE_ID as BOOKINGS_ID } from '@aglyn/plugins-bookings/constants/bundle-common'
 import { BUNDLE_ID as EVENTS_ID } from '@aglyn/plugins-events-calendar/constants/bundle-common'
 import { BUNDLE_ID as MUI_ID } from '@aglyn/plugins-mui/constants/bundle-common'
@@ -67,17 +67,23 @@ function backfillTable(): Record<string, string> {
 
 /** Which bundle each registry actually registers each id under. */
 const REGISTERED: Record<string, string> = {}
-for (const [bundleId, bundle] of [
-  [FORMS_ID, FORMS_BUNDLE],
-  [BOOKINGS_ID, BOOKINGS_BUNDLE],
-  [EVENTS_ID, EVENTS_CALENDAR_BUNDLE],
-  [MUI_ID, MUI_BUNDLE],
-] as const) {
-  for (const entry of bundle) REGISTERED[String(entry.schema.$id)] = bundleId
-}
+/** The mui library, resolved once — that bundle loads on demand (AGL-3141). */
+let MUI_BUNDLE: MuiBundleEntry[] = []
 
 describe('the pluginId backfill names the bundles that exist', () => {
   const table = backfillTable()
+
+  beforeAll(async () => {
+    MUI_BUNDLE = await loadMuiBundle()
+    for (const [bundleId, bundle] of [
+      [FORMS_ID, FORMS_BUNDLE],
+      [BOOKINGS_ID, BOOKINGS_BUNDLE],
+      [EVENTS_ID, EVENTS_CALENDAR_BUNDLE],
+      [MUI_ID, MUI_BUNDLE],
+    ] as const) {
+      for (const entry of bundle) REGISTERED[String(entry.schema.$id)] = bundleId
+    }
+  })
 
   it('reads a table at all', () => {
     // The parser is the risk: a regex that matched nothing would make every

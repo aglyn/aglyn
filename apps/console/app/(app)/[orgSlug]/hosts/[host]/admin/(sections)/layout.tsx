@@ -71,6 +71,7 @@ export default function HostAdminSectionsLayout({
     section(Route.HOST_ADMIN_PLUGINS, 'Plugins'),
     section(Route.HOST_ADMIN_DOMAIN, 'Custom Domain'),
     section(Route.HOST_ADMIN_SECURITY, 'Security'),
+    section(Route.HOST_ADMIN_ERROR_PAGES, 'Error pages'),
     section(Route.HOST_ADMIN_ACTIVITY, 'Activity'),
     section(Route.HOST_ADMIN_BACKUP, 'Backup & template'),
     section(Route.HOST_ADMIN_DANGER, 'Danger zone'),

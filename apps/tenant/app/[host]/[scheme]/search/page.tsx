@@ -20,6 +20,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin'
 import { composeSearchPage } from '@aglyn/tenant-runtime/compose-search-page'
+import { placedComponentIds } from '@aglyn/tenant-runtime/required-site-plugins'
 import searchContent, {
   filterSearchResults,
   SEARCH_FACET_ALL,
@@ -155,6 +156,10 @@ export default async function SearchPage({
       <CatchAllClient
         data={{ host: hostRes.host as never }}
         nodes={composed.nodes as never}
+        // The elements this page places, so the site plugins register those
+        // and fetch nothing for the rest (AGL-3141). Nothing prunes this
+        // route's document, so what is handed to the canvas IS the full one.
+        placedComponents={placedComponentIds(composed.nodes) ?? undefined}
         enabledPlugins={enabledPlugins}
         showBranding={
           !Aglyn.resolveOrgEntitlements(orgRes.org).features.removeBranding

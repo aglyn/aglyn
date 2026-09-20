@@ -185,6 +185,10 @@ jest.mock('../hooks/use-org-permissions', () => ({
 jest.mock('../components/console-plugins-gate.component', () => ({
   __esModule: true,
   useEnabledPluginIds: () => ['demo'],
+  // No workspace to load plugins for (AGL-3142): this file's registry is a
+  // double, so a zone or a route here draws from it rather than fetching a
+  // plugin's code, and the loading hooks are settled at once.
+  usePluginLoadScope: () => ({ orgId: null, user: undefined }),
 }))
 jest.mock('../components/host-id-provider', () => ({
   __esModule: true,

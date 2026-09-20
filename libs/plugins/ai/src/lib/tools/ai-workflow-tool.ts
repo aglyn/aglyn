@@ -75,16 +75,29 @@ import { HOSTILE_TEXT } from '../runtime/ai-node-tree'
  * why one of its runs failed.
  *
  * Both schemas are strict: every object forbids extra keys and requires every
- * key it has. A step is one variant per step type that carries only that
- * step's own fields, so a field a step does not use is absent from its variant
- * rather than a `null`. A provider compiles only so many union-typed
- * parameters in one request (`AiToolSchemaLimits`), and a `null` union costs
- * one for every field it is written on. Where a step may go without something,
- * the absence is an empty list or an empty string instead: a step that always
- * runs has an empty `when`, and a notEmpty condition compares against nothing.
- * Bounds a strict schema cannot state are stated in the descriptions and held
- * by the readers below, whose refusals name the field so the one re-ask can
- * fix it.
+ * key it has, and nothing in either is a `null`. Where a step may go without
+ * something, the absence is an empty list or an empty string: a step that
+ * always runs has an empty `when`, a notEmpty condition compares against
+ * nothing, and an answer that builds an automation leaves `unsupported`
+ * empty. Bounds a strict schema cannot state are stated in the descriptions
+ * and held by the readers below, whose refusals name the field so the one
+ * re-ask can fix it.
+ *
+ * A provider that constrains decoding compiles every strict schema of a
+ * request into a grammar, and refuses one whose grammar grows past its size
+ * (`AiToolSchemaLimits`). So the steps' union carries as little repetition as
+ * a grammar can be made to hold:
+ *
+ *  - a step is its guard and its action, `{ when, action }`, so the condition
+ *    is compiled once for the whole union instead of once per variant;
+ *  - a variant serves every step type that carries the same fields, named for
+ *    what they hold: the six steps that name a record share `reference`, and
+ *    the three that carry one line share `text`;
+ *  - every field stays required and every vocabulary stays an enum, so the
+ *    model is still decoded into the Actions editor's words.
+ *
+ * Ten variants carry all seventeen step types, and the reader below maps the
+ * shared fields back onto the step's own key.
  */
 
 export const AI_AUTOMATION_TOOL_NAME = 'submit_automation'
@@ -125,13 +138,9 @@ type Severity = (typeof SEVERITIES)[number]
 
 type Schema = Record<string, unknown>
 
-const nullable = (schema: Schema): Schema => ({ anyOf: [schema, { type: 'null' }] })
-
 /**
  * What the schema defines once and refers to where it is used: a condition,
- * which the trigger and every step's `when` share, and the `when` itself,
- * which every step variant carries. Written out in every variant instead, the
- * two would be most of the tool.
+ * which the trigger and every step's guard share, and the guard itself.
  */
 const DEFINITIONS: Schema = {
   condition: {
@@ -150,6 +159,11 @@ const DEFINITIONS: Schema = {
       },
     },
   },
+  event: {
+    type: 'string',
+    enum: [...HOST_EVENT_TYPES],
+    description: 'One of the things that happen on a site.',
+  },
   // A list rather than a condition or `null`: a step goes without one by an
   // empty list, which costs no union.
   when: {
@@ -159,76 +173,117 @@ const DEFINITIONS: Schema = {
   },
 }
 
-/** A record a step names, in the description's words; the step finds the site's record by them. */
-const reference = (what: string): Schema => ({
-  type: 'string',
-  description: `The ${what}, in the words of the description, such as "newsletter". Never an id.`,
-})
+/** The steps that name one of the site's records, which they all name the same way. */
+const REFERENCE_STEPS = [
+  'enrollList',
+  'assignCampaign',
+  'runWorkflow',
+  'datasetAppend',
+  'updateDataset',
+  'webhookPost',
+] as const satisfies readonly AiAutomationStepType[]
+
+/** The steps whose only field is the one line they carry. */
+const TEXT_STEPS = [
+  'notifyAdmins',
+  'addContactTag',
+  'assignContactOwner',
+] as const satisfies readonly AiAutomationStepType[]
+
+/** The key each `reference` step fills in the answer the reader gives back. */
+const REFERENCE_KEY = {
+  enrollList: 'list',
+  assignCampaign: 'campaign',
+  runWorkflow: 'workflow',
+  datasetAppend: 'dataset',
+  updateDataset: 'dataset',
+  webhookPost: 'webhook',
+} as const satisfies Readonly<Record<(typeof REFERENCE_STEPS)[number], keyof AiAutomationAnswerStep>>
+
+/**
+ * The key each step's one line fills in the answer the reader gives back. Six
+ * step types carry one line between them, so the schema asks for all six
+ * under `text` and the reader puts each back where the automation keeps it.
+ */
+const TEXT_KEY = {
+  notifyAdmins: 'title',
+  addContactTag: 'tag',
+  assignContactOwner: 'owner',
+  siteAlert: 'message',
+  createCrmTask: 'title',
+  logCrmActivity: 'body',
+} as const satisfies Readonly<Partial<Record<AiAutomationStepType, keyof AiAutomationAnswerStep>>>
 
 const minutes = (what: string): Schema => ({
   type: 'integer',
   description: `${what}, in whole minutes from ${FLOW_WAIT_MIN_MINUTES} to ${FLOW_WAIT_MAX_MINUTES}; an hour is 60 and a day 1440.`,
 })
 
-/** The fields each step carries beside its type and its `when`, and only those. */
-const STEP_FIELDS: Readonly<Record<AiAutomationStepType, Readonly<Record<string, Schema>>>> = {
-  sendEmail: {
+/**
+ * One variant of the steps' union: the step types it serves, and the fields
+ * every one of them carries, each required and never nullable. A type belongs
+ * to exactly one variant, so the type a step names settles which fields it
+ * writes.
+ */
+function stepVariant(
+  types: readonly AiAutomationStepType[],
+  fields: Readonly<Record<string, Schema>>,
+): Schema {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', ...Object.keys(fields)],
+    properties: { type: { type: 'string', enum: [...types] }, ...fields },
+  }
+}
+
+/** Every step type an automation may carry, grouped by the fields it needs. */
+export const AI_AUTOMATION_STEP_VARIANTS: readonly Schema[] = [
+  stepVariant([...REFERENCE_STEPS], {
+    reference: {
+      type: 'string',
+      description:
+        'The record the step acts on — the email list, campaign, workflow, dataset or outbound webhook — in the words of the description, such as "newsletter". Never an id.',
+    },
+  }),
+  stepVariant([...TEXT_STEPS], {
+    text: {
+      type: 'string',
+      description: `The one line the step carries: for notifyAdmins what the admins read, for addContactTag the tag (at most ${CONTACT_TAG_MAX_LENGTH} characters), and for assignContactOwner "round robin" or the teammate’s email address the description gives.`,
+    },
+  }),
+  stepVariant(['sendEmail'], {
     subject: { type: 'string', description: 'The subject line.' },
     body: { type: 'string', description: 'The email, as plain text.' },
     toField: {
       type: 'string',
       description: 'The event field holding the address: "email" unless the description names another.',
     },
-  },
-  notifyAdmins: { title: { type: 'string', description: 'The notification.' } },
-  enrollList: { list: reference('email list') },
-  assignCampaign: { campaign: reference('campaign') },
-  runWorkflow: { workflow: reference('workflow') },
-  datasetAppend: { dataset: reference('dataset') },
-  updateDataset: { dataset: reference('dataset') },
-  webhookPost: { webhook: reference('outbound webhook') },
-  siteAlert: {
-    message: { type: 'string', description: 'What the visitor reads.' },
+  }),
+  stepVariant(['siteAlert'], {
+    text: { type: 'string', description: 'What the visitor reads.' },
     severity: { type: 'string', enum: [...SEVERITIES] },
-  },
-  wait: { minutes: minutes('How long to wait') },
-  waitForEvent: {
-    event: { type: 'string', enum: [...HOST_EVENT_TYPES], description: 'What the automation waits for.' },
+  }),
+  stepVariant(['wait'], { minutes: minutes('How long to wait') }),
+  stepVariant(['waitForEvent'], {
+    event: { $ref: '#/$defs/event' },
     minutes: minutes('When to give up'),
-  },
-  exitFlow: {},
-  setContactStage: { stage: { type: 'string', enum: [...CONTACT_LIFECYCLE_STAGES] } },
-  addContactTag: { tag: { type: 'string', description: `At most ${CONTACT_TAG_MAX_LENGTH} characters.` } },
-  assignContactOwner: {
-    owner: {
-      type: 'string',
-      description: '"round robin", or the teammate’s email address the description gives.',
-    },
-  },
-  createCrmTask: {
-    title: { type: 'string', description: 'The task.' },
+  }),
+  stepVariant(['exitFlow'], {}),
+  stepVariant(['setContactStage'], { stage: { type: 'string', enum: [...CONTACT_LIFECYCLE_STAGES] } }),
+  stepVariant(['createCrmTask'], {
+    text: { type: 'string', description: 'The task.' },
     taskKind: { type: 'string', enum: [...CRM_TASK_KINDS] },
     dueInDays: {
       type: 'integer',
       description: `Days from the run, 0 for today, at most ${CRM_TASK_MAX_DUE_DAYS}.`,
     },
-  },
-  logCrmActivity: {
+  }),
+  stepVariant(['logCrmActivity'], {
     activityKind: { type: 'string', enum: [...CRM_ACTIVITY_KINDS] },
-    body: { type: 'string', description: 'What happened.' },
-  },
-}
-
-/** One step type's variant: its type, its `when`, and its own fields, every one required. */
-function stepSchema(type: AiAutomationStepType): Schema {
-  const fields = STEP_FIELDS[type]
-  return {
-    type: 'object',
-    additionalProperties: false,
-    required: ['type', 'when', ...Object.keys(fields)],
-    properties: { type: { type: 'string', enum: [type] }, when: { $ref: '#/$defs/when' }, ...fields },
-  }
-}
+    text: { type: 'string', description: 'What happened.' },
+  }),
+]
 
 /** The automation tool. The same bytes on every request, so it sits inside the cached prefix. */
 export function aiAutomationTool(): AiTool {
@@ -250,7 +305,7 @@ export function aiAutomationTool(): AiTool {
           additionalProperties: false,
           required: ['event', 'conditions', 'combinator'],
           properties: {
-            event: { type: 'string', enum: [...HOST_EVENT_TYPES] },
+            event: { $ref: '#/$defs/event' },
             conditions: {
               type: 'array',
               description: `What the event must meet: at most ${ACTION_MAX_CONDITIONS} conditions, empty when it runs every time.`,
@@ -261,19 +316,27 @@ export function aiAutomationTool(): AiTool {
         },
         steps: {
           type: 'array',
-          description: `The steps in order, at most ${ACTION_MAX_STEPS}, each carrying only its own fields. Empty only with unsupported.`,
-          items: { anyOf: AI_AUTOMATION_STEP_TYPES.map(stepSchema) },
+          description: `The steps in order, at most ${ACTION_MAX_STEPS}. Each is when it runs and what it does, and the action carries only the fields its type takes. Empty only with unsupported.`,
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['when', 'action'],
+            properties: {
+              when: { $ref: '#/$defs/when' },
+              action: { anyOf: AI_AUTOMATION_STEP_VARIANTS },
+            },
+          },
         },
         notes: {
           type: 'array',
           description: `What the person must decide that the automation cannot hold; at most ${AI_AUTOMATION_NOTES_MAX} short sentences.`,
           items: { type: 'string' },
         },
-        unsupported: nullable({
+        unsupported: {
           type: 'string',
-          enum: [...AI_AUTOMATION_UNSUPPORTED],
-          description: 'Why no automation can be built from this description; null when one is built.',
-        }),
+          enum: ['', ...AI_AUTOMATION_UNSUPPORTED],
+          description: 'Why no automation can be built from this description; empty when one is built.',
+        },
       },
       $defs: DEFINITIONS,
     },
@@ -531,14 +594,19 @@ function readStep(
     refuse(reader, 'automation-shape', `Step ${index + 1} is not an object.`, path, raw)
     return null
   }
-  const type = raw['type']
+  // A step is its guard and its action: `{ when, action }`. An answer that
+  // writes the action's own fields beside `when` reads the same, so a model
+  // that flattens the step does not spend the one re-ask.
+  const action = raw['action']
+  const fields: Record<string, unknown> = isRecord(action) ? { ...action, when: raw['when'] } : raw
+  const type = fields['type']
   if (!(AI_AUTOMATION_STEP_TYPES as readonly unknown[]).includes(type)) {
     refuse(
       reader,
       'automation-step-type',
       `Step ${index + 1} is not one of the steps offered: ${AI_AUTOMATION_STEP_TYPES.join(', ')}.`,
       path,
-      raw,
+      fields,
     )
     return null
   }
@@ -551,7 +619,7 @@ function readStep(
       'automation-plan',
       `${what} needs ${AI_AUTOMATION_NEED_LABELS[need]}, which this workspace does not have. Leave it out, or answer with unsupported "needs-${need}".`,
       path,
-      raw,
+      fields,
     )
     return null
   }
@@ -581,71 +649,74 @@ function readStep(
   }
   // A step's `when` is a list of at most one condition; a lone condition, or
   // none, reads as the list it stands for.
-  const when = raw['when']
+  const when = fields['when']
   const guards = Array.isArray(when) ? when : when === null || when === undefined ? [] : [when]
   if (guards.length > 1) {
     refuse(reader, 'automation-condition', `${what}: when holds one condition at most.`, `${path}.when`, when)
   } else if (guards.length === 1) {
     step.when = readCondition(reader, guards[0], `${path}.when`, event, true)
   }
-  const reference = (key: 'list' | 'campaign' | 'workflow' | 'webhook' | 'dataset') => {
-    step[key] = requireText(reader, raw, key, AI_AUTOMATION_REFERENCE_MAX_CHARS, path, what)
-  }
+  // The six steps that name a record share `reference`, and the three that
+  // carry one line share `text`; an answer that writes the step's own key
+  // instead — `list`, `tag`, `owner` — reads the same.
+  const shared = (key: 'reference' | 'text', own: keyof AiAutomationAnswerStep): unknown =>
+    fields[key] ?? fields[own]
+  const own = TEXT_KEY[stepType as keyof typeof TEXT_KEY]
+  const text: Record<string, unknown> = own ? { text: shared('text', own) } : fields
   switch (stepType) {
     case 'sendEmail': {
-      step.subject = requireText(reader, raw, 'subject', AI_AUTOMATION_SUBJECT_MAX_CHARS, path, what)
-      step.body = requireText(reader, raw, 'body', AI_AUTOMATION_BODY_MAX_CHARS, path, what)
-      const toField = textOf(raw['toField'])
+      step.subject = requireText(reader, fields, 'subject', AI_AUTOMATION_SUBJECT_MAX_CHARS, path, what)
+      step.body = requireText(reader, fields, 'body', AI_AUTOMATION_BODY_MAX_CHARS, path, what)
+      const toField = textOf(fields['toField'])
       if (toField && !FIELD_NAME.test(toField)) {
-        refuse(reader, 'automation-step-field', `${what}: toField names the event field holding the address.`, path, raw)
+        refuse(reader, 'automation-step-field', `${what}: toField names the event field holding the address.`, path, fields)
       } else {
         step.toField = toField && toField !== DEFAULT_TO_FIELD ? toField : null
       }
       break
     }
     case 'notifyAdmins':
-      step.title = requireText(reader, raw, 'title', AI_AUTOMATION_SUBJECT_MAX_CHARS, path, what)
+      step.title = requireText(reader, text, 'text', AI_AUTOMATION_SUBJECT_MAX_CHARS, path, what)
       break
     case 'enrollList':
-      reference('list')
-      break
     case 'assignCampaign':
-      reference('campaign')
-      break
     case 'runWorkflow':
-      reference('workflow')
-      break
     case 'webhookPost':
-      reference('webhook')
-      break
     case 'datasetAppend':
     case 'updateDataset':
-      reference('dataset')
+      step[REFERENCE_KEY[stepType]] = requireText(
+        reader,
+        { reference: shared('reference', REFERENCE_KEY[stepType]) },
+        'reference',
+        AI_AUTOMATION_REFERENCE_MAX_CHARS,
+        path,
+        what,
+      )
       break
     case 'siteAlert': {
-      step.message = requireText(reader, raw, 'message', AI_AUTOMATION_TEXT_MAX_CHARS, path, what)
-      const severity = raw['severity']
+      step.message = requireText(reader, text, 'text', AI_AUTOMATION_TEXT_MAX_CHARS, path, what)
+      const severity = fields['severity']
       step.severity = (SEVERITIES as readonly unknown[]).includes(severity) ? (severity as Severity) : 'info'
       break
     }
     case 'wait':
     case 'waitForEvent': {
-      const minutes = wholeNumber(raw['minutes'])
+      const minutes = wholeNumber(fields['minutes'])
       if (minutes === null || minutes < FLOW_WAIT_MIN_MINUTES || minutes > FLOW_WAIT_MAX_MINUTES) {
         refuse(
           reader,
           'automation-step-field',
           `${what} needs minutes, a whole number from ${FLOW_WAIT_MIN_MINUTES} to ${FLOW_WAIT_MAX_MINUTES}.`,
           path,
-          raw,
+          fields,
         )
       } else {
         step.minutes = minutes
       }
       if (stepType === 'waitForEvent') {
-        const waited = raw['event']
+        const waited = fields['event']
         if (!(HOST_EVENT_TYPES as readonly unknown[]).includes(waited)) {
-          refuse(reader, 'automation-step-field', `${what} needs the event it waits for.`, path, raw)
+          refuse(reader, 'automation-step-field', `${what} needs the event it waits for.`, path, fields)
         } else {
           step.event = waited as HostEventType
         }
@@ -655,26 +726,26 @@ function readStep(
     case 'exitFlow':
       break
     case 'setContactStage': {
-      const stage = raw['stage']
+      const stage = fields['stage']
       if (!(CONTACT_LIFECYCLE_STAGES as readonly unknown[]).includes(stage)) {
-        refuse(reader, 'automation-step-field', `${what} needs the lifecycle stage to set.`, path, raw)
+        refuse(reader, 'automation-step-field', `${what} needs the lifecycle stage to set.`, path, fields)
       } else {
         step.stage = stage as ContactLifecycleStage
       }
       break
     }
     case 'addContactTag':
-      step.tag = requireText(reader, raw, 'tag', CONTACT_TAG_MAX_LENGTH, path, what)
+      step.tag = requireText(reader, text, 'text', CONTACT_TAG_MAX_LENGTH, path, what)
       break
     case 'assignContactOwner': {
-      const owner = textOf(raw['owner'])
+      const owner = textOf(text['text'])
       if (!owner || !(ROUND_ROBIN.test(owner) || EMAIL_ADDRESS.test(owner))) {
         refuse(
           reader,
           'automation-owner',
           `${what}: give the owner as "round robin", or as the teammate’s email address the description gives. A teammate named without one goes in notes, not in a step.`,
           path,
-          raw,
+          fields,
         )
       } else {
         step.owner = ROUND_ROBIN.test(owner) ? 'round robin' : owner
@@ -682,29 +753,29 @@ function readStep(
       break
     }
     case 'createCrmTask': {
-      step.title = requireText(reader, raw, 'title', AI_AUTOMATION_SUBJECT_MAX_CHARS, path, what)
-      const kind = raw['taskKind']
-      const due = wholeNumber(raw['dueInDays'])
+      step.title = requireText(reader, text, 'text', AI_AUTOMATION_SUBJECT_MAX_CHARS, path, what)
+      const kind = fields['taskKind']
+      const due = wholeNumber(fields['dueInDays'])
       if (!(CRM_TASK_KINDS as readonly unknown[]).includes(kind)) {
-        refuse(reader, 'automation-step-field', `${what} needs taskKind.`, path, raw)
+        refuse(reader, 'automation-step-field', `${what} needs taskKind.`, path, fields)
       } else {
         step.taskKind = kind as CrmTaskKind
       }
       if (due === null || due < 0 || due > CRM_TASK_MAX_DUE_DAYS) {
-        refuse(reader, 'automation-step-field', `${what} needs dueInDays, from 0 to ${CRM_TASK_MAX_DUE_DAYS}.`, path, raw)
+        refuse(reader, 'automation-step-field', `${what} needs dueInDays, from 0 to ${CRM_TASK_MAX_DUE_DAYS}.`, path, fields)
       } else {
         step.dueInDays = due
       }
       break
     }
     case 'logCrmActivity': {
-      const kind = raw['activityKind']
+      const kind = fields['activityKind']
       if (!(CRM_ACTIVITY_KINDS as readonly unknown[]).includes(kind)) {
-        refuse(reader, 'automation-step-field', `${what} needs activityKind.`, path, raw)
+        refuse(reader, 'automation-step-field', `${what} needs activityKind.`, path, fields)
       } else {
         step.activityKind = kind as CrmActivityKind
       }
-      step.body = requireText(reader, raw, 'body', AI_AUTOMATION_TEXT_MAX_CHARS, path, what)
+      step.body = requireText(reader, text, 'text', AI_AUTOMATION_TEXT_MAX_CHARS, path, what)
       break
     }
   }
@@ -744,10 +815,12 @@ export function readAiAutomationAnswer(
     return done(null)
   }
 
+  // An answer that builds an automation leaves `unsupported` empty, which the
+  // schema states as an empty string rather than a `null`.
   const unsupported = answer['unsupported']
-  if (unsupported !== null && unsupported !== undefined) {
+  if (unsupported !== null && unsupported !== undefined && unsupported !== '') {
     if (!(AI_AUTOMATION_UNSUPPORTED as readonly unknown[]).includes(unsupported)) {
-      refuse(reader, 'automation-shape', 'unsupported is null, or one of the reasons offered.', 'unsupported', unsupported)
+      refuse(reader, 'automation-shape', 'unsupported is empty, or one of the reasons offered.', 'unsupported', unsupported)
       return done(null)
     }
     const need = AI_AUTOMATION_UNSUPPORTED_NEED[unsupported as AiAutomationUnsupported]

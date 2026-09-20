@@ -17,7 +17,7 @@
 
 'use client'
 
-import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
 import { FIELD_SCHEMA_EMAIL } from '@aglyn/shared-data-forms'
 import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
 import { isSafeContinueUrl, useContinueHref } from '@aglyn/shared-util-next'
@@ -165,7 +165,7 @@ function SsoSignIn() {
           // different numbers with the same name. Not gated on `cancelled` —
           // that flag is about whether this component may still write state,
           // and the sign-in happened either way.
-          trackEvent('login', { method: 'sso' })
+          await trackEventBeforeNavigation('login', { method: 'sso' })
         }
         window.sessionStorage.removeItem(SSO_PENDING_KEY)
       } catch (err) {
@@ -261,7 +261,7 @@ function SsoSignIn() {
           // same funnel as self-serve signups would make "signup → paid
           // conversion" meaningless, since an SSO user arrives already sold.
           // Enterprise seat counts are a billing question, not a funnel one.
-          trackEvent('login', { method: 'sso' })
+          await trackEventBeforeNavigation('login', { method: 'sso' })
         }
       } catch (err) {
         console.error(err)

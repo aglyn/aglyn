@@ -40,6 +40,7 @@ import { AI_JOB_FORM_TOOL } from '../jobs/ai-job-form-step'
 import { AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
 import { AI_CRM_RECORD_KINDS } from '../model/ai-crm'
+import { AI_AUTOMATION_STEP_TYPES } from '../model/ai-workflow-job'
 import { ASSIST_EDIT_DOCUMENT_KINDS } from '../model/assist-edit'
 import { aiDoctrineTreeTool } from '../runtime/ai-doctrine'
 import { AI_EVAL_RUBRIC_TOOL } from '../runtime/ai-eval-live'
@@ -56,7 +57,7 @@ import { aiSeoFieldsTool, aiSeoFixesTool, aiSeoSiteTool } from '../tools/ai-seo-
 import { aiThemeTool } from '../tools/ai-theme-tool'
 import { aiAutomationTool, aiWorkflowExplanationTool } from '../tools/ai-workflow-tool'
 import { ANTHROPIC_TOOL_SCHEMA_LIMITS, anthropicProvider } from './anthropic'
-import { aiToolSchemaBreaches, aiToolSchemaCounts, type AiTool } from './contract'
+import { aiToolSchemaBreaches, aiToolSchemaCompiledBytes, aiToolSchemaCounts, type AiTool } from './contract'
 import { OPENAI_COMPATIBLE_TOOL_SCHEMA_LIMITS, openAiCompatibleProvider } from './openai-compatible'
 import { listAiProviders } from './registry'
 
@@ -71,6 +72,21 @@ import { listAiProviders } from './registry'
  * `null` union on every field an automation step did not use came to 23
  * union-typed parameters against a bound of 16.
  *
+ * Counting is not the whole of it. A schema that passes every published
+ * count can still be refused for the size of the GRAMMAR it compiles to —
+ * "The compiled grammar is too large… Simplify your tool schemas or reduce
+ * the number of strict tools" — and the provider publishes no size for that.
+ * The automation tool was refused that way while this spec was green: one
+ * strict tool, no optional parameter, two unions, all well inside the
+ * published bounds, and seventeen variants of a step under an `anyOf`.
+ *
+ * So `compiledSchemaBytes` bounds the schema a grammar is compiled from,
+ * measured the way a compiler reads it. Its number is not documented
+ * anywhere: it is the largest a live request has been watched to carry, and
+ * it moves only when another live request carries more. An offline
+ * measurement cannot raise it — an offline measurement is what missed the
+ * break.
+ *
  * So this spec holds three things:
  *
  *  1. the TOOL SETS: every tool set each door sends, one request at a time,
@@ -79,10 +95,12 @@ import { listAiProviders } from './registry'
  *  2. the GUARD: every one of those sets within every registered provider's
  *     declared `toolSchemaLimits` — any provider may serve any step, so a set
  *     has to fit all of them;
- *  3. the CONTROL: the automation tool with a `null` union on every field a
- *     step does not use, kept as a fixture, counts the 23 the provider
- *     reported and is red, so the guard is known to count the way the
- *     provider does and to fail when it should.
+ *  3. the CONTROLS: the two shapes of the automation tool the provider
+ *     refused, each kept as a fixture — the one with a `null` union on every
+ *     field a step does not use, which counts the 23 unions reported, and the
+ *     one with a variant per step type, which counts the bytes that compiled
+ *     to too large a grammar. Each is red, so the guard is known to measure
+ *     the way the provider does and to fail when it should.
  */
 
 const LIB_ROOT = join(__dirname, '..')
@@ -159,10 +177,27 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
   },
 }
 
-/** The automation tool with a `null` union on every field a step does not use: the shape the provider refused. */
-const NULL_UNION_AUTOMATION_TOOL = JSON.parse(
-  readFileSync(resolve(__dirname, 'fixtures', 'tool-submit-automation-null-unions.json'), 'utf8'),
-) as AiTool
+/** A refused shape of the automation tool, kept exactly as it was sent. */
+const refusedTool = (file: string): AiTool =>
+  JSON.parse(readFileSync(resolve(__dirname, 'fixtures', file), 'utf8')) as AiTool
+
+/** A `null` union on every field a step does not use: 23 union-typed parameters. */
+const NULL_UNION_AUTOMATION_TOOL = refusedTool('tool-submit-automation-null-unions.json')
+
+/** One variant per step type, each carrying its own `when`: too large a grammar. */
+const VARIANT_PER_STEP_AUTOMATION_TOOL = refusedTool('tool-submit-automation-variant-per-step.json')
+
+/** Every step type the automation tool's union names, in the order it names them. */
+function variantTypes(tool: AiTool): string[] {
+  const steps = (tool.inputSchema['properties'] as Record<string, Record<string, unknown>>)['steps']
+  const action = ((steps['items'] as Record<string, Record<string, unknown>>)['properties'] as Record<
+    string,
+    Record<string, unknown>
+  >)['action']
+  return (action['anyOf'] as Array<Record<string, Record<string, Record<string, string[]>>>>).flatMap(
+    (variant) => variant['properties']['type']['enum'],
+  )
+}
 
 /** A strict tool around a schema, for the counting cases. */
 const tool = (properties: Record<string, unknown>, required = Object.keys(properties)): AiTool => ({
@@ -179,12 +214,31 @@ beforeEach(() => {
 describe('what each adapter declares', () => {
   it('the Messages API adapter states the bounds its structured-outputs documentation gives', () => {
     expect(anthropicProvider.toolSchemaLimits).toBe(ANTHROPIC_TOOL_SCHEMA_LIMITS)
-    expect(ANTHROPIC_TOOL_SCHEMA_LIMITS).toEqual({ strictTools: 20, optionalParameters: 24, unionParameters: 16 })
+    expect(ANTHROPIC_TOOL_SCHEMA_LIMITS).toEqual({
+      strictTools: 20,
+      optionalParameters: 24,
+      unionParameters: 16,
+      compiledSchemaBytes: 3_807,
+    })
+  })
+
+  it('states the grammar size it has been proved to take, which no documentation gives', () => {
+    // The bound is the automation draft itself: the largest strict schema
+    // anything here sends, and the one a live request proved. A schema that
+    // grows past it is unknown, not safe, so the guard turns red and the next
+    // live request settles it.
+    const draft = [aiAutomationTool()]
+    expect(aiToolSchemaCompiledBytes(draft)).toBe(ANTHROPIC_TOOL_SCHEMA_LIMITS.compiledSchemaBytes)
+    expect(aiToolSchemaBreaches(draft, ANTHROPIC_TOOL_SCHEMA_LIMITS)).toEqual([])
   })
 
   it('the OpenAI-compatible adapter states only what its strict function shape requires: no optional parameter', () => {
     expect(openAiCompatibleProvider.toolSchemaLimits).toBe(OPENAI_COMPATIBLE_TOOL_SCHEMA_LIMITS)
     expect(OPENAI_COMPATIBLE_TOOL_SCHEMA_LIMITS).toEqual({ optionalParameters: 0 })
+    // Nothing here has watched an endpoint of the second kind refuse a
+    // grammar, so it states no size: a guessed bound would be red where the
+    // endpoint is fine, and green where it is not.
+    expect(OPENAI_COMPATIBLE_TOOL_SCHEMA_LIMITS.compiledSchemaBytes).toBeUndefined()
   })
 })
 
@@ -206,7 +260,7 @@ describe('counting one request’s strict schemas', () => {
       }),
     ])
     // `name`, the items' anyOf, and the `when` inside its first branch.
-    expect(counted).toEqual({ strictTools: 1, optionalParameters: 0, unionParameters: 3 })
+    expect(counted).toMatchObject({ strictTools: 1, optionalParameters: 0, unionParameters: 3 })
   })
 
   it('counts every property left out of its object’s required, inside branches too', () => {
@@ -220,7 +274,7 @@ describe('counting one request’s strict schemas', () => {
         ['kept', 'nested'],
       ),
     ])
-    expect(counted).toEqual({ strictTools: 1, optionalParameters: 2, unionParameters: 1 })
+    expect(counted).toMatchObject({ strictTools: 1, optionalParameters: 2, unionParameters: 1 })
   })
 
   it('counts a local $ref where it is used, once for every use, and a definition nothing uses not at all', () => {
@@ -232,13 +286,21 @@ describe('counting one request’s strict schemas', () => {
     recursive.inputSchema['$defs'] = {
       node: { type: 'object', properties: { next: { anyOf: [{ $ref: '#/$defs/node' }, { type: 'null' }] } } },
     }
-    expect(aiToolSchemaCounts([recursive])).toEqual({ strictTools: 1, optionalParameters: 1, unionParameters: 1 })
+    expect(aiToolSchemaCounts([recursive])).toMatchObject({
+      strictTools: 1,
+      optionalParameters: 1,
+      unionParameters: 1,
+    })
   })
 
   it('totals every tool of the request, because each bound is per request and not per tool', () => {
     const nine = tool(Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`f${i}`, { type: ['string', 'null'] }])))
     expect(aiToolSchemaBreaches([nine], ANTHROPIC_TOOL_SCHEMA_LIMITS)).toEqual([])
-    expect(aiToolSchemaCounts([nine, nine])).toEqual({ strictTools: 2, optionalParameters: 0, unionParameters: 18 })
+    expect(aiToolSchemaCounts([nine, nine])).toMatchObject({
+      strictTools: 2,
+      optionalParameters: 0,
+      unionParameters: 18,
+    })
     expect(aiToolSchemaBreaches([nine, nine], ANTHROPIC_TOOL_SCHEMA_LIMITS)).toEqual([
       '18 union-typed parameters in one request, over the 16 the provider compiles',
     ])
@@ -261,7 +323,7 @@ describe('counting one request’s strict schemas', () => {
 describe('the control: the automation tool with a null union on every unused field', () => {
   it('counts the 23 union-typed parameters the provider refused, and is red', () => {
     expect(NULL_UNION_AUTOMATION_TOOL.name).toBe('submit_automation')
-    expect(aiToolSchemaCounts([NULL_UNION_AUTOMATION_TOOL])).toEqual({
+    expect(aiToolSchemaCounts([NULL_UNION_AUTOMATION_TOOL])).toMatchObject({
       strictTools: 1,
       optionalParameters: 0,
       unionParameters: 23,
@@ -271,12 +333,46 @@ describe('the control: the automation tool with a null union on every unused fie
     ])
   })
 
-  it('while a variant per step type fits, by a wide margin, without an optional parameter', () => {
-    expect(aiToolSchemaCounts([aiAutomationTool()])).toEqual({
+})
+
+describe('the second control: the automation tool with a variant per step type', () => {
+  it('passes every published count and is still red, on the grammar it compiles to', () => {
+    expect(VARIANT_PER_STEP_AUTOMATION_TOOL.name).toBe('submit_automation')
+    // What the counts saw while the request was refused.
+    expect(aiToolSchemaCounts([VARIANT_PER_STEP_AUTOMATION_TOOL])).toMatchObject({
       strictTools: 1,
       optionalParameters: 0,
       unionParameters: 2,
     })
+    expect(aiToolSchemaBreaches([VARIANT_PER_STEP_AUTOMATION_TOOL], { strictTools: 20, optionalParameters: 24, unionParameters: 16 })).toEqual([])
+    // What the provider saw.
+    expect(aiToolSchemaCompiledBytes([VARIANT_PER_STEP_AUTOMATION_TOOL])).toBe(8_757)
+    expect(aiToolSchemaBreaches([VARIANT_PER_STEP_AUTOMATION_TOOL], anthropicProvider.toolSchemaLimits)).toEqual([
+      '8757 bytes of compiled schema in one request, over the 3807 a live request has proved',
+    ])
+  })
+
+  it('costs its grammar in repetition, which the shape it gave way to does not', () => {
+    const variants = (tool: AiTool) => {
+      const steps = (tool.inputSchema['properties'] as Record<string, Record<string, unknown>>)['steps']
+      const items = steps['items'] as Record<string, unknown>
+      const action = (items['properties'] as Record<string, Record<string, unknown>> | undefined)?.['action']
+      return ((action ?? items)['anyOf'] as Array<Record<string, unknown>>) ?? []
+    }
+    const keys = (tool: AiTool) =>
+      new Set(variants(tool).flatMap((variant) => Object.keys(variant['properties'] as object)))
+    // A guard on every variant, and a field name for every step type.
+    expect(variants(VARIANT_PER_STEP_AUTOMATION_TOOL)).toHaveLength(17)
+    expect(keys(VARIANT_PER_STEP_AUTOMATION_TOOL).size).toBe(21)
+    // The guard lifted out of the union, and one variant per set of fields.
+    expect(variants(aiAutomationTool())).toHaveLength(10)
+    expect(keys(aiAutomationTool()).size).toBe(13)
+  })
+
+  it('carries every step type the shape it gave way to carries, each in one variant only', () => {
+    const named = variantTypes(aiAutomationTool())
+    expect([...named].sort()).toEqual([...AI_AUTOMATION_STEP_TYPES].sort())
+    expect(named.length).toBe(new Set(named).size)
   })
 })
 

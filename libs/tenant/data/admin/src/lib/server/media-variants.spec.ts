@@ -127,6 +127,20 @@ describe('mediaVariantWidthsFor (AGL-1468)', () => {
       mediaVariantWidthsFor({ contentType: 'video/mp4', sourceWidth: 2000 }),
     ).toEqual([])
   })
+
+  it('excludes ICO under either of its two content types (AGL-3121)', () => {
+    // A 182 KB `image/vnd.microsoft.icon` was the one asset of 20 that the
+    // approved production backfill could not do: `sharp` has no ICO decoder,
+    // so it raised `Input buffer contains unsupported image format` and the
+    // media document took an ERROR. Both spellings are in real use, and an
+    // icon is wide enough to look eligible on width alone, so nothing else
+    // here would have caught it.
+    for (const contentType of ['image/x-icon', 'image/vnd.microsoft.icon']) {
+      expect(mediaVariantWidthsFor({ contentType, sourceWidth: 2000 })).toEqual(
+        [],
+      )
+    }
+  })
 })
 
 describe('generateMediaVariants with real sharp (AGL-1468)', () => {
@@ -183,6 +197,22 @@ describe('generateMediaVariants with real sharp (AGL-1468)', () => {
     // An empty array with NO error — if this reported a fault, the fault
     // signal would be noise on the majority of a real library.
     expect(outcome).toEqual({ variants: [] })
+  })
+
+  it('hands an icon to no decoder at all, so it reports no fault (AGL-3121)', async () => {
+    // The buffer is deliberately not a real ICO: reaching `sharp` with it at
+    // all would throw, so a clean outcome here is the proof that the skip
+    // happens BEFORE the decoder rather than around its error.
+    const outcome = await generateMediaVariants({
+      buffer: Buffer.from('\x00\x00\x01\x00not an icon', 'binary'),
+      contentType: 'image/vnd.microsoft.icon',
+      objectPath: 'hosts/site-a/media/favicon',
+      saveVariant: async () => {
+        throw new Error('must not be called')
+      },
+    })
+    expect(outcome).toEqual({ variants: [] })
+    expect(outcome.error).toBeUndefined()
   })
 })
 
@@ -261,7 +291,12 @@ describe('generateStoredMediaVariants fetches the bytes and generates (AGL-1476)
   it('never touches storage when there is nothing to generate', async () => {
     // The ordering guarantee. This route also carries 200 MB videos, and
     // discovering they have no variants must not cost a download.
-    for (const contentType of ['video/mp4', 'application/pdf', 'image/svg+xml']) {
+    for (const contentType of [
+      'video/mp4',
+      'application/pdf',
+      'image/svg+xml',
+      'image/vnd.microsoft.icon',
+    ]) {
       const outcome = await generateStoredMediaVariants({
         contentType,
         sizeBytes: 200 * 1024 * 1024,

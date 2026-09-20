@@ -63,6 +63,19 @@ export interface Props {
    */
   blockingPlugins?: string[]
   /**
+   * The canvas component ids this page places (AGL-3141), read from the FULL
+   * composed document — withheld lazy-panel subtrees included — before the
+   * AGL-1285 prune, because an element inside a panel the visitor opens later
+   * is still this page's element.
+   *
+   * The client hands it to the plugin loader, which hands it to each site
+   * plugin: a bundle that can register a part of itself registers only these
+   * elements. Absent means "this page cannot say", and every plugin then
+   * registers all of itself, because an element whose component never
+   * registered renders nothing at all (AGL-52).
+   */
+  placedComponents?: string[]
+  /**
    * Trusted-realm marketplace installs (AGL-420): sha-pinned, staff-signed
    * bundles the client loads into the app realm after hydration.
    */

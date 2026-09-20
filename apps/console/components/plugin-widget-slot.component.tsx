@@ -28,6 +28,7 @@ import type { ComponentType } from 'react'
 import { STAFF_PLUGIN_IDS } from '../constants/staff-plugins'
 import { useEnabledPluginIds } from './console-plugins-gate.component'
 import { useDashboardWidgetPrefs } from './dashboard-widget-prefs.context'
+import { useConsoleSlotPlugins } from '../hooks/use-console-plugins'
 import useCurrentOrg from '../hooks/use-current-org'
 import useOrgPermissions from '../hooks/use-org-permissions'
 import {
@@ -238,6 +239,22 @@ export function useSlotWidgets(slots: readonly string[]): {
   widgets: EntitledSlotWidget[]
   ready: boolean
 } {
+  /*
+   * The zones' own plugins, loaded here (AGL-3142).
+   *
+   * This is the one place every zone on every screen passes through, which is
+   * why the load belongs to it: a console page renders `PluginWidgetSlot` or
+   * reads this hook, and neither has to know — or could be trusted to
+   * remember — which plugins fill the zone it draws. The zone ids go in and
+   * the declarations decide; a plugin added to the catalog changes no screen.
+   *
+   * Registration is what puts a widget in `listConsoleWidgets`, so the list
+   * below is empty until this settles and the re-render it causes fills it
+   * in. That is why `ready` carries it: a surface that lists what the zone
+   * WOULD render — the dashboard's customize dialog — must not be told the
+   * list is final and then have it grow under the reader's cursor.
+   */
+  const pluginsLoaded = useConsoleSlotPlugins(slots)
   // Scoped to this workspace's plugins (AGL-758) — the registry is a
   // session-wide union across every org visited.
   const enabledPluginIds = useEnabledPluginIds()
@@ -315,6 +332,7 @@ export function useSlotWidgets(slots: readonly string[]): {
      * the page rendered.
      */
     ready:
+      pluginsLoaded &&
       (orgReady ||
         (slots.length > 0 && slots.every((slot) => isConsoleStaffWidgetSlot(slot)))) &&
       resolved.every((entry) => entry.staff || entry.permission !== 'pending'),

@@ -53,25 +53,31 @@
         },
         "steps": [
           {
-            "type": "enrollList",
             "when": [],
-            "list": "newsletter"
+            "action": {
+              "type": "enrollList",
+              "reference": "newsletter"
+            }
           },
           {
-            "type": "setContactStage",
             "when": [],
-            "stage": "lead"
+            "action": {
+              "type": "setContactStage",
+              "stage": "lead"
+            }
           },
           {
-            "type": "sendEmail",
             "when": [],
-            "subject": "Welcome, and thanks for signing up",
-            "body": "Hi,\n\nThanks for joining our newsletter. You will hear from us when there is something worth reading, and never more than that.\n\nIf you have a question in the meantime, reply to this email or call us on [your phone number].",
-            "toField": "email"
+            "action": {
+              "type": "sendEmail",
+              "subject": "Welcome, and thanks for signing up",
+              "body": "Hi,\n\nThanks for joining our newsletter. You will hear from us when there is something worth reading, and never more than that.\n\nIf you have a question in the meantime, reply to this email or call us on [your phone number].",
+              "toField": "email"
+            }
           }
         ],
         "notes": [],
-        "unsupported": null
+        "unsupported": ""
       },
       "usage": null,
       "rubric": {
@@ -94,25 +100,31 @@
         },
         "steps": [
           {
-            "type": "enrollList",
             "when": [],
-            "list": "newsletter"
+            "action": {
+              "type": "enrollList",
+              "reference": "newsletter"
+            }
           },
           {
-            "type": "setContactStage",
             "when": [],
-            "stage": "lead"
+            "action": {
+              "type": "setContactStage",
+              "stage": "lead"
+            }
           },
           {
-            "type": "sendEmail",
             "when": [],
-            "subject": "Welcome, and thanks for signing up",
-            "body": "Hi,\n\nThanks for joining our newsletter. You will hear from us when there is something worth reading, and never more than that.\n\nIf you have a question in the meantime, reply to this email or call us on [your phone number].",
-            "toField": "email"
+            "action": {
+              "type": "sendEmail",
+              "subject": "Welcome, and thanks for signing up",
+              "body": "Hi,\n\nThanks for joining our newsletter. You will hear from us when there is something worth reading, and never more than that.\n\nIf you have a question in the meantime, reply to this email or call us on [your phone number].",
+              "toField": "email"
+            }
           }
         ],
         "notes": [],
-        "unsupported": null
+        "unsupported": ""
       },
       "fails": [
         "readable"
@@ -129,30 +141,38 @@
         },
         "steps": [
           {
-            "type": "enrollList",
             "when": [],
-            "list": "newsletter"
+            "action": {
+              "type": "enrollList",
+              "reference": "newsletter"
+            }
           },
           {
-            "type": "setContactStage",
             "when": [],
-            "stage": "lead"
+            "action": {
+              "type": "setContactStage",
+              "stage": "lead"
+            }
           },
           {
-            "type": "sendEmail",
             "when": [],
-            "subject": "Welcome, and thanks for signing up",
-            "body": "Hi,\n\nThanks for joining our newsletter. You will hear from us when there is something worth reading, and never more than that.\n\nIf you have a question in the meantime, reply to this email or call us on [your phone number].",
-            "toField": "email"
+            "action": {
+              "type": "sendEmail",
+              "subject": "Welcome, and thanks for signing up",
+              "body": "Hi,\n\nThanks for joining our newsletter. You will hear from us when there is something worth reading, and never more than that.\n\nIf you have a question in the meantime, reply to this email or call us on [your phone number].",
+              "toField": "email"
+            }
           },
           {
-            "type": "webhookPost",
             "when": [],
-            "webhook": "zapier"
+            "action": {
+              "type": "webhookPost",
+              "reference": "zapier"
+            }
           }
         ],
         "notes": [],
-        "unsupported": null
+        "unsupported": ""
       },
       "fails": [
         "rules"
@@ -169,25 +189,31 @@
         },
         "steps": [
           {
-            "type": "enrollList",
             "when": [],
-            "list": "newsletter"
+            "action": {
+              "type": "enrollList",
+              "reference": "newsletter"
+            }
           },
           {
-            "type": "setContactStage",
             "when": [],
-            "stage": "lead"
+            "action": {
+              "type": "setContactStage",
+              "stage": "lead"
+            }
           },
           {
-            "type": "sendEmail",
             "when": [],
-            "subject": "Welcome, and thanks for signing up",
-            "body": "Hi,\n\nThanks for joining our newsletter. You will hear from us when there is something worth reading, and never more than that.\n\nIf you have a question in the meantime, reply to this email or call us on [your phone number].",
-            "toField": "email"
+            "action": {
+              "type": "sendEmail",
+              "subject": "Welcome, and thanks for signing up",
+              "body": "Hi,\n\nThanks for joining our newsletter. You will hear from us when there is something worth reading, and never more than that.\n\nIf you have a question in the meantime, reply to this email or call us on [your phone number].",
+              "toField": "email"
+            }
           }
         ],
         "notes": [],
-        "unsupported": null,
+        "unsupported": "",
         "publish": true
       },
       "fails": [
@@ -205,63 +231,85 @@
         },
         "steps": [
           {
-            "type": "addContactTag",
             "when": [],
-            "tag": "website"
+            "action": {
+              "type": "addContactTag",
+              "text": "website"
+            }
           },
           {
-            "type": "addContactTag",
             "when": [],
-            "tag": "website"
+            "action": {
+              "type": "addContactTag",
+              "text": "website"
+            }
           },
           {
-            "type": "addContactTag",
             "when": [],
-            "tag": "website"
+            "action": {
+              "type": "addContactTag",
+              "text": "website"
+            }
           },
           {
-            "type": "addContactTag",
             "when": [],
-            "tag": "website"
+            "action": {
+              "type": "addContactTag",
+              "text": "website"
+            }
           },
           {
-            "type": "addContactTag",
             "when": [],
-            "tag": "website"
+            "action": {
+              "type": "addContactTag",
+              "text": "website"
+            }
           },
           {
-            "type": "addContactTag",
             "when": [],
-            "tag": "website"
+            "action": {
+              "type": "addContactTag",
+              "text": "website"
+            }
           },
           {
-            "type": "addContactTag",
             "when": [],
-            "tag": "website"
+            "action": {
+              "type": "addContactTag",
+              "text": "website"
+            }
           },
           {
-            "type": "addContactTag",
             "when": [],
-            "tag": "website"
+            "action": {
+              "type": "addContactTag",
+              "text": "website"
+            }
           },
           {
-            "type": "addContactTag",
             "when": [],
-            "tag": "website"
+            "action": {
+              "type": "addContactTag",
+              "text": "website"
+            }
           },
           {
-            "type": "addContactTag",
             "when": [],
-            "tag": "website"
+            "action": {
+              "type": "addContactTag",
+              "text": "website"
+            }
           },
           {
-            "type": "addContactTag",
             "when": [],
-            "tag": "website"
+            "action": {
+              "type": "addContactTag",
+              "text": "website"
+            }
           }
         ],
         "notes": [],
-        "unsupported": null
+        "unsupported": ""
       },
       "fails": [
         "budget"

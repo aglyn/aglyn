@@ -69,6 +69,10 @@ jest.mock('../hooks/use-current-org', () => ({
 }))
 jest.mock('./console-plugins-gate.component', () => ({
   useEnabledPluginIds: () => ['probe', 'gated-probe'],
+  // No workspace to load plugins for (AGL-3142): this file's registry is a
+  // double, so a zone or a route here draws from it rather than fetching a
+  // plugin's code, and the loading hooks are settled at once.
+  usePluginLoadScope: () => ({ orgId: null, user: undefined }),
 }))
 
 import { OrgDashboardWidgets } from './org-dashboard-widgets.component'

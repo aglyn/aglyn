@@ -17,7 +17,14 @@
 
 import { render } from '@testing-library/react'
 import { dropClearedProps } from './utils/drop-cleared-props'
-import { MUI_BUNDLE } from './plugin'
+import { loadMuiBundle, type MuiBundleEntry } from './plugin'
+
+/** The whole library, resolved once — the bundle loads on demand (AGL-3141). */
+let MUI_BUNDLE: MuiBundleEntry[] = []
+
+beforeAll(async () => {
+  MUI_BUNDLE = await loadMuiBundle()
+})
 
 /**
  * The structural half of AGL-1451.
@@ -187,11 +194,15 @@ describe('every option value is persistable (AGL-1453)', () => {
    * every assertion here pass by having nothing to look at. Measured over the
    * bundle so the number tracks reality rather than a hand-written list.
    */
-  const optionBearing = MUI_BUNDLE.flatMap((entry) =>
-    (((entry.schema as any)?.attributes ?? []) as any[]).filter((attribute) =>
-      Array.isArray(attribute?.options),
-    ),
-  )
+  let optionBearing: any[] = []
+
+  beforeAll(() => {
+    optionBearing = MUI_BUNDLE.flatMap((entry) =>
+      (((entry.schema as any)?.attributes ?? []) as any[]).filter((attribute) =>
+        Array.isArray(attribute?.options),
+      ),
+    )
+  })
 
   it('is measured over a bundle that actually carries option lists', () => {
     expect(MUI_BUNDLE.length).toBeGreaterThan(20)

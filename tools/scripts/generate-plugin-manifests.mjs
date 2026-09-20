@@ -79,6 +79,28 @@ import type { PluginLoadManifest } from '@aglyn/aglyn${entryPoint === 'server' ?
  * ships with it, and a site surface loaded from the package root carried the
  * console registrar onto every published page that used the plugin.
  */
+/**
+ * The console half of a plugin's declaration, as the console manifest carries
+ * it (AGL-3142).
+ *
+ * Only the console manifest gets one. The console loads a plugin where a
+ * screen draws one of its contributions, so it has to read the declaration
+ * before it names any plugin; a published page decides presence from the
+ * nodes it places and would carry a block nothing there consults.
+ *
+ * Always written, `{}` included, so an absent declaration keeps meaning what
+ * `plugin-contributions.ts` says it means — a plugin published before the
+ * contract, which loads with the shell. A first-party plugin always declares
+ * (`checkContributions` refuses one that does not), so its silence about the
+ * console is a statement: it draws nothing on every screen.
+ */
+function consoleContributions(plugin, surfaces) {
+  if (!surfaces.includes('console')) return ''
+  const declared = plugin.contributes?.console
+  const block = declared ? { console: declared } : {}
+  return `    contributes: ${JSON.stringify(block)},\n`
+}
+
 function entry(plugin, entryPoint, surfaces) {
   const register = Object.fromEntries(
     Object.entries(plugin.register).filter(([key]) => surfaces.includes(key)),
@@ -103,6 +125,7 @@ function entry(plugin, entryPoint, surfaces) {
       ? `    apiPrefixes: ${JSON.stringify(plugin.apiPrefixes)},\n`
       : '') +
     `    register: ${JSON.stringify(register)},\n` +
+    consoleContributions(plugin, surfaces) +
     `    load: () => import('${shared ? specifiers[0] : root}'),\n` +
     (own.length
       ? `    loads: {\n` +

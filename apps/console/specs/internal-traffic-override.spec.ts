@@ -74,9 +74,20 @@ const stripComments = (source: string) =>
 
 const source = stripComments(readFileSync(LAYOUT, 'utf8'))
 
+/**
+ * How the layout reads the browser-pinned override.
+ *
+ * The domain-wide spelling since AGL-3175: the console is served on every
+ * `*.aglyn.com` origin, one per workspace and generated, so the opt-in is
+ * pinned to the domain rather than to whichever origin someone happened to
+ * visit. What this file asserts is unchanged — WHERE the read happens and
+ * that it happens once.
+ */
+const OVERRIDE_CALL = 'readInternalTrafficOverrideForDomain('
+
 /** The body of the effect that owns `traffic_type`, comments removed. */
 function trafficEffect(): string {
-  const start = source.indexOf('readInternalTrafficOverride()')
+  const start = source.indexOf(OVERRIDE_CALL)
   expect(start).toBeGreaterThan(-1)
   const end = source.indexOf('}, [user])', start)
   expect(end).toBeGreaterThan(start)
@@ -113,7 +124,7 @@ function argumentsOf(body: string, name: string): string[] {
 describe('the internal-traffic override (AGL-2065)', () => {
   it('reads the override once, at the top of the effect', () => {
     expect(trafficEffect()).toMatch(
-      /const\s+override\s*=\s*readInternalTrafficOverride\(\)/,
+      /const\s+override\s*=\s*readInternalTrafficOverrideForDomain\(/,
     )
   })
 
@@ -178,7 +189,7 @@ describe('the internal-traffic override (AGL-2065)', () => {
   it('is declared above the page_view effect, which is what makes that work', () => {
     // Failure mode 2. React runs effects in declaration order; below the
     // page_view effect the synchronous stamp would arrive one hit too late.
-    const traffic = source.indexOf('readInternalTrafficOverride()')
+    const traffic = source.indexOf(OVERRIDE_CALL)
     const pageView = source.indexOf("'page_view'")
     expect(traffic).toBeGreaterThan(-1)
     expect(pageView).toBeGreaterThan(-1)

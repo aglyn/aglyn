@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.134",
+  "version": "1.0.0-beta.135",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -98,6 +98,7 @@
     "test:tenant-page-weight": "node --test tools/scripts/lib/tenant-page-weight.test.mjs",
     "test:tenant-wire-weight": "node --test tools/scripts/lib/tenant-wire-weight.test.mjs",
     "test:plugins-load-where-used": "node --test tools/scripts/lib/plugins-load-where-used.test.mjs",
+    "test:console-plugins-load-where-used": "node --test tools/scripts/lib/console-plugins-load-where-used.test.mjs",
     "test:page-view-rate": "node --test tools/scripts/lib/page-view-rate-calibration.test.mjs",
     "test:disk-space": "node --test tools/scripts/lib/disk-space.test.mjs",
     "test:app-check-debug-tokens": "node --test tools/scripts/lib/app-check-debug-tokens.test.mjs",

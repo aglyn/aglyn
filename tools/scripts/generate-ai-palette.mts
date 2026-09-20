@@ -52,6 +52,8 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { pluginBundleEntries } from './lib/plugin-bundle-entries.mjs'
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const OUT = join(ROOT, 'libs/plugins/ai/src/lib/runtime/ai-palette.generated.ts')
 
@@ -567,9 +569,7 @@ async function main(): Promise<void> {
 
   for (const [pluginId, file] of BUNDLE_FILES) {
     const mod = await load(file)
-    const key = Object.keys(mod).find((name) => name.endsWith('_BUNDLE'))
-    if (!key) throw new Error(`${file} exports no *_BUNDLE`)
-    for (const entry of mod[key] as Dict[]) {
+    for (const entry of (await pluginBundleEntries(mod, file)) as Dict[]) {
       const schema = entry.schema as Dict
       const id = schema.$id as string
       if (!id) throw new Error(`${file}: a schema has no $id`)

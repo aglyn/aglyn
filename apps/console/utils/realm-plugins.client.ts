@@ -22,6 +22,7 @@
 // namespace as a value is the host ABI, which lives behind the relative
 // `import()` below; see `realm-plugin-host.client.ts`.
 import type * as Aglyn from '@aglyn/aglyn'
+import { isPluginUsedInConsole } from '@aglyn/aglyn/plugin-manager/plugin-contributions'
 import { capturePluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles'
 import { loadRealmPlugins } from '@aglyn/aglyn/plugin-manager/realm-plugins'
 import {
@@ -123,39 +124,104 @@ function warnMissingPluginOrigin(): void {
   )
 }
 
+/**
+ * The org's trusted-realm installs, fetched once per workspace per session.
+ *
+ * Every place in the console that loads plugins asks for this list — the
+ * shell, each zone, each plugin route — and they only need to know WHICH
+ * installs belong to them. The list is small, it does not change under a
+ * session, and one request for it is the difference between reading a
+ * declaration and hammering the endpoint on every navigation.
+ *
+ * The failures are the ones {@link loadOrgRealmPlugins} used to swallow, and
+ * they still resolve to an empty list rather than rejecting: realm plugins are
+ * additive, and a console that cannot reach the endpoint is a console without
+ * them, never a console that fails to render.
+ */
+const installsByOrg = new Map<string, Promise<Aglyn.RealmPluginInstall[]>>()
+
+function orgRealmInstalls(
+  orgId: string,
+  user: MaybeTokenSource,
+): Promise<Aglyn.RealmPluginInstall[]> {
+  let pending = installsByOrg.get(orgId)
+  if (!pending) {
+    pending = (async () => {
+      const response = await authorizedFetch(
+        user,
+        `/api/orgs/realm-plugins?orgId=${encodeURIComponent(orgId)}`,
+      )
+      if (!response.ok) {
+        // Was silent, and indistinguishable from "this org has none" (AGL-1184).
+        console.warn(
+          `realm plugins skipped: /api/orgs/realm-plugins returned ${response.status}`,
+        )
+        return []
+      }
+      const payload = (await response.json()) as {
+        installs?: Aglyn.RealmPluginInstall[]
+      }
+      return payload.installs ?? []
+    })().catch((error) => {
+      console.error('realm plugins skipped:', error)
+      return []
+    })
+    installsByOrg.set(orgId, pending)
+  }
+  return pending
+}
+
+/**
+ * Loads the org's realm installs that belong at `where` (AGL-3142), and only
+ * those.
+ *
+ * Installation is not use in the console either. This used to run once, on the
+ * shell, with the org's whole install list: a workspace that had installed a
+ * marketplace plugin for one zone composed the realm plugin host — which hands
+ * a remote bundle the entire core namespace — on the billing page, the
+ * besigner and every other screen, and then ran a `register()` whose widget
+ * none of them draw. The host import is now inside the "anything to load"
+ * branch, so a screen that draws no install pays for neither.
+ *
+ * An install whose pinned version declares nothing loads with the shell, the
+ * default `plugin-contributions.ts` documents: its console contribution is
+ * only discoverable by running `register()`, so narrowing it would take a
+ * widget away with nothing to show for it.
+ *
+ * Never throws: a missing artifacts origin, a failed fetch, or a bad bundle
+ * leaves the console exactly as it was — realm plugins are additive.
+ */
 export async function loadOrgRealmPlugins(
   orgId: string,
   user: MaybeTokenSource,
+  where: Aglyn.ConsoleLoadWhere,
 ): Promise<void> {
-  await loadDevRealmBundles()
+  // The dev loop's bundles carry no declaration, so they load where an
+  // undeclared install loads: with the shell, once.
+  if (where.at === 'shell') await loadDevRealmBundles()
   const artifactsBase = process.env.NEXT_PUBLIC_PLUGIN_ORIGIN ?? ''
   if (!artifactsBase) {
-    warnMissingPluginOrigin()
+    if (where.at === 'shell') warnMissingPluginOrigin()
     return
   }
   try {
-    const response = await authorizedFetch(
-      user,
-      `/api/orgs/realm-plugins?orgId=${encodeURIComponent(orgId)}`,
+    const installs = await orgRealmInstalls(orgId, user)
+    const inUse = installs.filter((install) =>
+      isPluginUsedInConsole(install.contributes, where),
     )
-    if (!response.ok) {
-      // Was silent, and indistinguishable from "this org has none" (AGL-1184).
-      console.warn(
-        `realm plugins skipped: /api/orgs/realm-plugins returned ${response.status}`,
-      )
-      return
-    }
-    const payload = (await response.json()) as {
-      installs?: Aglyn.RealmPluginInstall[]
-    }
-    if (!payload.installs?.length) return
+    if (!inUse.length) return
     const { composeRealmPluginHost } = await import('./realm-plugin-host.client')
     composeRealmPluginHost({ React, jsxRuntime })
-    await loadRealmPlugins(payload.installs, {
+    await loadRealmPlugins(inUse, {
       artifactsBase,
       publicKeyBase64: process.env.NEXT_PUBLIC_PLUGIN_TRUST_PUBLIC_KEY,
     })
   } catch (error) {
     console.error('realm plugins skipped:', error)
   }
+}
+
+/** Test seam: forget the workspaces whose install lists were fetched. */
+export function resetOrgRealmInstallsForTests(): void {
+  installsByOrg.clear()
 }

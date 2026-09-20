@@ -103,6 +103,30 @@ export function requiredSitePlugins({
 }
 
 /**
+ * The canvas component ids a published page places (AGL-3141).
+ *
+ * The loader carries this to each site plugin's register function, and a
+ * plugin that can register a part of itself — the MUI bundle, which owns
+ * sixty elements where a page renders about nineteen — registers only what
+ * is here.
+ *
+ * Read from the FULL composed document, like `requiredSitePlugins`: an
+ * element inside a withheld lazy panel is still this page's element, and the
+ * visitor who opens that panel would otherwise find nothing in it.
+ *
+ * `null` for a page with no document to read, because a narrowing that cannot
+ * see the page must not be made: an element whose component never registered
+ * renders NOTHING, silently (AGL-52). Sorted so the loader's cache key for a
+ * page is the same whatever order the document stored its nodes in.
+ */
+export function placedComponentIds(
+  nodes: Record<string, PresenceNode | null | undefined> | null | undefined,
+): string[] | null {
+  if (!nodes) return null
+  return [...pagePresence(nodes).componentIds].sort()
+}
+
+/**
  * The trusted-realm installs a published page uses (AGL-3116), and only
  * those: the page loads the realm-plugin host — which hands a bundle the
  * whole core namespace — and each bundle only when something on the page

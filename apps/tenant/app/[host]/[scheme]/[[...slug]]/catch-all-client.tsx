@@ -164,10 +164,20 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // until they have registered. Fetching the rest on link intent (AGL-2710)
   // loaded every enabled plugin on any visit that reached for a link, for
   // pages the visitor mostly never opened.
+  //
+  // `placedComponents` narrows it once more, WITHIN each plugin (AGL-3141):
+  // a bundle that can register a part of itself registers the elements this
+  // page places and fetches nothing for the rest. Absent — a page with no
+  // document to read — asks every plugin for all of itself, because an
+  // element whose component never registered renders nothing at all.
   const enabledPlugins = props.enabledPlugins ?? [
     ...DEFAULT_ENABLED_PLUGINS,
   ]
-  use(sitePluginLoader.ensure(props.blockingPlugins ?? enabledPlugins, ['site']))
+  const blocking = props.blockingPlugins ?? enabledPlugins
+  const pageUse = props.placedComponents
+    ? { componentIds: props.placedComponents }
+    : undefined
+  use(sitePluginLoader.ensure(blocking, ['site'], pageUse))
 
   const enabledKey = enabledPlugins.join(',')
   /**

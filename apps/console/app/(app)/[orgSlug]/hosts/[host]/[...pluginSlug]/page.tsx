@@ -57,6 +57,7 @@ import {
   resolveExtensionPermission,
 } from '../../../../../../utils/extension-permission'
 import { resolveHubSections } from '../../../../../../utils/plugin-hub-sections'
+import { useConsoleRoutePlugins } from '../../../../../../hooks/use-console-plugins'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useHostRole from '../../../../../../hooks/use-host-role'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
@@ -119,6 +120,19 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   // session-wide union, so an unscoped lookup would serve a page from a
   // plugin the current org has not enabled.
   const enabledPluginIds = useEnabledPluginIds()
+  /*
+   * The plugins that declare this route, loaded before it is resolved
+   * (AGL-3142).
+   *
+   * `resolveConsolePluginPage` reads a registry `register()` fills, so a
+   * plugin whose console code has not landed resolves to NOTHING here — and
+   * nothing is indistinguishable from "this workspace does not have that
+   * plugin", which is the notice below and, past one segment, a 404. The
+   * shell no longer loads every enabled plugin, so the route has to load its
+   * own: from the href against each plugin's declared routes, never from a
+   * list of plugin ids this page holds.
+   */
+  const routePluginsLoaded = useConsoleRoutePlugins(pluginHref, 'site')
   const resolved = useMemo(
     () =>
       pluginHref
@@ -141,8 +155,14 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
    * someone reports "it opened the wrong page"), and an unmatched path under a
    * NAMED route — `/setup/bogus` reaches this file now, where it used to be a
    * plain 404, and Setup is a core page that no plugin provides or could.
+   *
+   * Both answers wait for the route's own plugins: a 404 for a page whose
+   * chunk was still in flight is the same mistake as the notice, and harder
+   * to read, because the reader sees a URL they followed a second ago refuse
+   * to exist.
    */
-  const unresolvedIsNotFound = !resolved && segments.length > 1
+  const unresolvedIsNotFound =
+    routePluginsLoaded && !resolved && segments.length > 1
 
   // The release flag governing this surface, keyed by the nav item's tab id
   // (same gate the nav strip applies), so deep links leak nothing.
@@ -377,10 +397,13 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const activeSectionPath =
     activeSection && basePath ? `${basePath}/${activeSection.id}` : undefined
 
-  const body = sectionRedirect ? (
-    // Deliberately NOT the plugin page. Mounting it here would download its
-    // chunk and open its first section's listens for a URL that is already
-    // being replaced — the exact read this hub's meter exists to refuse.
+  const body = sectionRedirect || !routePluginsLoaded ? (
+    // On a redirect, deliberately NOT the plugin page: mounting it here would
+    // download its chunk and open its first section's listens for a URL that
+    // is already being replaced — the exact read this hub's meter exists to
+    // refuse. And while the route's own plugins are still loading there is no
+    // page to mount yet, where an absent one is exactly what the notice below
+    // claims is uninstalled (AGL-3142).
     <Box sx={{ p: 2 }}>
       <CircularProgress size={24} />
     </Box>

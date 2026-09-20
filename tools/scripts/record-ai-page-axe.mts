@@ -69,6 +69,8 @@ import { dirname, join, relative } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
+import { pluginBundleEntries } from './lib/plugin-bundle-entries.mjs'
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const PAGES_OUT = join(ROOT, 'libs/plugins/ai/src/lib/jobs/fixtures/ai-page-axe.generated.json')
 const CASES_DIR = join(ROOT, 'tools/ai-eval/cases')
@@ -548,12 +550,12 @@ async function main(): Promise<void> {
   const load = (file: string): Promise<Dict> => jiti.import(join(ROOT, file)) as Promise<Dict>
 
   const core = (await load('libs/aglyn/src/lib/aglyn.ts')) as Dict
-  for (const [file, name] of [
-    ['libs/plugins/mui/src/lib/plugin.ts', 'MUI_BUNDLE'],
-    ['libs/plugins/forms/src/lib/plugin.ts', 'FORMS_BUNDLE'],
+  for (const file of [
+    'libs/plugins/mui/src/lib/plugin.ts',
+    'libs/plugins/forms/src/lib/plugin.ts',
   ]) {
-    const bundle = await load(file)
-    for (const entry of bundle[name] as Dict[]) {
+    const mod = await load(file)
+    for (const entry of (await pluginBundleEntries(mod, file)) as Dict[]) {
       core.components.registerComponent(entry.component, entry.schema)
     }
   }

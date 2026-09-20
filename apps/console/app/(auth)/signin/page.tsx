@@ -22,7 +22,7 @@
 // breaks specs that mock firebase wholesale (AuthErrorCodes reads undefined).
 // One brand string is not worth that edge.
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
-import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
 import type { AuthResultError } from '@aglyn/shared-data-enums'
 import {
   FIELD_SCHEMA_EMAIL,
@@ -254,7 +254,9 @@ function SignIn() {
           // `method: null` for every email/password sign-in (AGL-1561).
           // Reaching this `.then` means desktop; mobile resolves through
           // `useGoogleRedirectResult` and reports `google_redirect`.
-          trackEvent('login', { method: values ? 'password' : 'google_popup' })
+          await trackEventBeforeNavigation('login', {
+            method: values ? 'password' : 'google_popup',
+          })
         })
         .catch((error) => {
           console.error(error)
@@ -290,7 +292,7 @@ function SignIn() {
     const dequeueLoading = queueLoading()
     try {
       await signInWithPasskey(firebaseAuth)
-      trackEvent('login', { method: 'passkey' })
+      await trackEventBeforeNavigation('login', { method: 'passkey' })
     } catch (caught) {
       // Every outcome speaks now (AGL-1417). This used to swallow
       // NotAllowedError and AbortError as "the user cancelled" — but WebAuthn

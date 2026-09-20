@@ -592,6 +592,25 @@ describe('the write is the server\'s (AGL-1383)', () => {
     expect(kindOf('s1')).toBe('page')
   })
 
+  /**
+   * An `author` — "edit content but not publish" — is refused too, which is
+   * what makes the card's move behind the host Admin area a boundary rather
+   * than a rearrangement (AGL-3178). Assigning a slot stamps `kind: 'error'`
+   * on the screen and takes it off the plan's allowance, so it is a billing
+   * act as well as a routing one, and neither is authoring.
+   *
+   * Stated as its own case rather than folded into the `viewer` one above: a
+   * viewer is refused every write on the site, so it proves only that the
+   * role check runs. `author` is the role that CAN write screen content, so
+   * it is the one that says this particular write is not content.
+   */
+  it('refuses an AUTHOR, who may write content but not assign a slot', async () => {
+    mockStore.host.memberRoles = { 'user-1': 'author' }
+    expect((await assign('notFound', 's1')).status).toBe(403)
+    expect(kindOf('s1')).toBe('page')
+    expect(slotOf('notFound')).toBeUndefined()
+  })
+
   it('refuses an unauthenticated caller', async () => {
     const response = await SCREENS_POST(
       new Request('https://app.aglyn.com/api/hosts/screens', {

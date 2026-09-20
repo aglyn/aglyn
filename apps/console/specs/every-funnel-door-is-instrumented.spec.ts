@@ -48,6 +48,21 @@
  * and a document navigation, and nothing downstream observes a fire-and-forget
  * event. Deleting any one of them produced zero reds before this file.
  *
+ * ## The sign-in doors await too (AGL-3162)
+ *
+ * The same teardown reaches them. Every door below renders under
+ * `AuthenticatingLayout`, which ends a delegated workspace return in
+ * `window.location.assign(continueUrl)` — so a bare `trackEvent` there is the
+ * `org_created` bug with a different event name on it, and
+ * `app/auth/handoff/page.tsx` deliberately counts nothing on the far side, so
+ * a lost hit is a sign-in nobody counts at all.
+ *
+ * Unlike `org_created`, this one was never caught arriving zero times: the
+ * property cannot show it, because GA4's internal-traffic filter went active
+ * on Aug 18 and AGL-2065 pins our own browser internal, which excludes most
+ * console sign-ins from reporting by design. It is held here on the mechanism
+ * and on the two measurements of it, not on a drought.
+ *
  * The stronger claim this file makes is about the doors that do NOT appear
  * below. A new sign-in door, or a fourth way to make an org, is exactly how
  * this gap opened; the completeness assertions at the bottom fail when one
@@ -129,8 +144,18 @@ describe('every sign-in door reports a login (AGL-2587)', () => {
       // Counted, not merely present: losing ONE branch of a two-door file is
       // the failure this is here for, and a bare presence check would stay
       // green through it.
-      const found = read(file).match(/trackEvent\(\s*'login'/g) ?? []
+      const found = read(file).match(/trackEvent\w*\(\s*'login'/g) ?? []
       expect(found).toHaveLength(emits)
+    })
+
+    it('awaits every emit, because the hand-off tears the document down', () => {
+      const source = read(file)
+      const calls = source.match(/trackEvent\w*\(\s*'login'/g) ?? []
+      // Awaited, not merely called. An un-awaited call to the navigation-safe
+      // helper is the fire-and-forget bug wearing the fix's name.
+      const awaited =
+        source.match(/await\s+trackEventBeforeNavigation\(\s*'login'/g) ?? []
+      expect(awaited).toHaveLength(calls.length)
     })
 
     it('names the method on every emit, so a per-door drought is visible', () => {
@@ -138,7 +163,8 @@ describe('every sign-in door reports a login (AGL-2587)', () => {
       // A `login` without `method` is the shape that produced 258 events of
       // `(not set)` in the property — present, and useless for telling which
       // door stopped working.
-      for (const emit of source.match(/trackEvent\(\s*'login',[^)]*\)/g) ?? []) {
+      const calls = source.match(/trackEvent\w*\(\s*'login',[^)]*\)/g) ?? []
+      for (const emit of calls) {
         expect(emit).toMatch(/method:/)
       }
       for (const method of methods) {
@@ -150,8 +176,8 @@ describe('every sign-in door reports a login (AGL-2587)', () => {
       // AGL-1561: `credential.providerId` is empty on the password response,
       // which is precisely the door that matters most.
       const source = read(file)
-      const emits = source.match(/trackEvent\(\s*'login',[\s\S]{0,200}?\)/g) ?? []
-      for (const emit of emits) expect(emit).not.toMatch(/providerId/)
+      const emits = source.match(/trackEvent\w*\(\s*'login',[\s\S]{0,200}?\)/g)
+      for (const emit of emits ?? []) expect(emit).not.toMatch(/providerId/)
     })
   })
 

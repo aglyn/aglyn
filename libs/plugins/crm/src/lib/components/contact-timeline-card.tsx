@@ -25,6 +25,7 @@ import type {
 } from '@aglyn/aglyn'
 import { CONTACT_SOURCE_LABELS, pluginDocsHelp } from '@aglyn/aglyn'
 import {
+  mdiAccountCircleOutline,
   mdiAccountEditOutline,
   mdiAccountPlusOutline,
   mdiApi,
@@ -66,6 +67,7 @@ const SOURCE_ICONS: Record<ContactSource, { path: string }> = {
   api: mdiApi,
   manual: mdiAccountEditOutline,
   import: mdiFileImportOutline,
+  account: mdiAccountCircleOutline,
 }
 
 /**

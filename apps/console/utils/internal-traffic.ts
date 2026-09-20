@@ -36,6 +36,7 @@ export {
   INTERNAL_TRAFFIC_STORAGE_KEY,
   INTERNAL_TRAFFIC_QUERY_PARAM,
   readInternalTrafficOverride,
+  readInternalTrafficOverrideForDomain,
 } from '@aglyn/aglyn/app-utils/internal-traffic'
 
 import { INTERNAL_TRAFFIC_VALUE } from '@aglyn/aglyn/app-utils/internal-traffic'

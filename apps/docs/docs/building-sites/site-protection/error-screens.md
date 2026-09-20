@@ -9,7 +9,7 @@ description: Replace generic 404/401/403/503 pages with branded screens you desi
 When something goes wrong, visitors should still see *your* site. Design custom **error
 screens** for each status.
 
-![The Error pages card in Setup: one picker per status code, each defaulting to Aglyn's built-in screen until you assign your own](/img/site-protection/setup-error-pages.png)
+![The Error pages card: one picker per status code, each defaulting to Aglyn's built-in screen until you assign your own](/img/site-protection/setup-error-pages.png)
 
 ## The error screens
 
@@ -25,10 +25,10 @@ screens** for each status.
 1. **Create a screen** for the status, in **Screens**, and design it in the
    [Besigner](../besigner/overview.md) like any other screen — add your header/layout, a
    helpful message, and a link home.
-2. **Assign it.** Go to **Setup** and scroll to the **Error pages** card. Each status has
-   its own picker — **404 · Not found**, **401 · Members only**, **403 · Forbidden**,
-   **503 · Maintenance** — listing every screen on the site. Choose your screen in the
-   matching picker.
+2. **Assign it.** Go to **Admin → Error pages**. Each status has its own picker —
+   **404 · Not found**, **401 · Members only**, **403 · Forbidden**, **503 · Maintenance**
+   — listing every screen on the site. Choose your screen in the matching picker. The
+   Admin area is limited to **site admins**, so that is who assigns these.
 
 Step 2 is the one that's easy to miss: designing a screen does **not** make it an error
 page on its own. Until it's picked in the **Error pages** card, the status renders the

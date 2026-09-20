@@ -1340,13 +1340,63 @@ reloads, client-side navigations, sign-outs and re-auth. `localStorage` is
 | Surface            | Where to do it                                                                |
 | ------------------ | ----------------------------------------------------------------------------- |
 | Console            | `https://app.aglyn.com/?aglyn_internal=1`                                     |
+| Console auth host  | `https://auth.aglyn.com/?aglyn_internal=1`                                    |
 | Marketing / tenant | `https://aglyn.com/?aglyn_internal=1`                                         |
 | Docs               | `https://docs.aglyn.com/?aglyn_internal=1`                                    |
 | Local dev          | once per `localhost:PORT` — though local builds now emit nothing at all (§8c) |
 
+⛔ **The auth host is a SECOND console origin, and it was missing from this
+table until AGL-3175.** `auth.aglyn.com` serves `/signin` and `/signup`, so it
+is where the sign-in doors are actually walked — and because both memories
+here are `localStorage`, pinning `app.aglyn.com` pins nothing on it. That
+leaves only the claims predicate, which cannot run before the token resolves,
+so a `/signin` page view — which fires at page load, before anyone has signed
+in — goes out unstamped on any browser that has not been pinned on THIS
+origin. The `login` that follows is stamped, and then excluded. Views inflated
+and conversions deleted, from one missing row.
+
+⛔⛔ **Per-origin pinning cannot cover the console, and this table cannot be
+completed.** The console is served on an OPEN-ENDED set of `*.aglyn.com`
+origins: `WORKSPACE_DOMAIN` is `aglyn.com`, so every org workspace is its own
+origin, including generated slugs. Fourteen distinct `*.aglyn.com` hostnames
+have sent events to the property — among them `aglyn-org`, `demo`,
+`workspace`, `signin`, `oauth`, `secure`, `tenant`, `status` and
+`34kwy7hnbr`. Nobody can visit `?aglyn_internal=1` on a hostname that does not
+exist yet, so the rows above are the fixed surfaces only.
+
+`rememberInternalActor` (§8d-pre) covers part of it: it writes
+`aglyn_internal_actor` on every staff or impersonation token read, per origin,
+so each console origin self-heals after ONE signed-in load. What it cannot
+reach is the FIRST pre-sign-in pageview on each origin — exactly the `/signin`
+view, which fires before any token exists.
+
+✅ **Closed by the domain-wide cookie (AGL-3175).** The console now pins the
+opt-in as a cookie scoped to `WORKSPACE_DOMAIN` as well as in `localStorage`,
+so **one visit to `?aglyn_internal=1` on any console origin covers every
+`*.aglyn.com` origin, including workspaces that do not exist yet.** Either
+source turning it on is enough.
+
+⚑ This reverses the reasoning above deliberately: the cookie does ride to the
+server and land in logs. It carries the constant `internal` and nothing about
+who is using the browser, and it rides beside `__session`, which this domain
+already carries. The trade was worth making because the origin set is
+open-ended and the storage half alone could never cover it.
+
+⛔ **The cookie is written only where a caller passes `cookieDomain`, and the
+console's helper passes it only while the current hostname is under that
+domain.** `readInternalTrafficOverride` is also called from `analytics-beacon`
+and `advertising-tags`, which run on customers' own domains; nothing there
+writes a cookie, and a test asserts that negative directly.
+`INTERNAL_TRAFFIC_GTAG_SNIPPET` is deliberately left on storage alone — it is
+a constant string inlined into ISR-cached customer HTML, it cannot be made
+hostname-aware, and every surface using it is a fixed origin listed above.
+
 Being per-origin is a feature as much as a cost: it is what makes it
 impossible for an opt-in on our console to leak a stamp into a CUSTOMER's
-property while we click through their published site.
+property while we click through their published site. That protection comes
+from the registrable-domain boundary, not from per-origin storage: published
+sites are on `aglyn.app` and custom domains, which no `.aglyn.com` cookie can
+reach either.
 
 ⚠️ **The flag now does two jobs, because the GA4 filter only does one.** A GA4
 data filter is **property-scoped**. It drops `traffic_type: internal` hits from
@@ -1366,9 +1416,28 @@ So `readInternalTrafficOverride()` is the **sixth condition** on
 `resolveAdvertisingTags` (`libs/aglyn/src/lib/app-utils/advertising-tags.ts`),
 alongside the five in that module's comment. A flagged browser mounts no
 advertising tag at all — structural, like every other clause there, because a
-resident tag fires on its own. One visit to `?aglyn_internal=1` therefore
-covers both products, and the two cannot drift into a browser that is internal
-for GA4 and external for Ads.
+resident tag fires on its own.
+
+⛔⛔ **That covered the MARKETING surface only, and this section claimed
+otherwise for three weeks (AGL-3188).** `resolveAdvertisingTags` returns early
+unless the host is the marketing site, so condition 6 never ran for
+`app.aglyn.com`, `auth.aglyn.com` or any workspace subdomain. Those go through
+`resolvePlatformAdvertisingTags` and `resolvePlatformGtmContainerId` in
+`platform-advertising-tags.ts`, and neither consulted the flag at all — on the
+surface we spend the day on, and the one where consent never intervenes
+because platform analytics load unconditionally (§8c).
+
+Measured on `auth.aglyn.com` 2026-09-20, in a pinned browser: `/g/collect`
+carried `tt=internal` while the **same document** sent an unmarked
+`ccm/collect` to `AW-18401436785` and a `rmkt/collect` `gtag.config`. Both
+platform resolvers now take the same two clauses — the flag and the
+non-production hatch — and the container takes them too, because what a
+container loads is decided in Google's UI and has to be assumed to reach an
+`AW-` destination.
+
+One visit to `?aglyn_internal=1` now genuinely covers both products on every
+surface, and the two cannot drift into a browser that is internal for GA4 and
+external for Ads.
 
 ⚑ **The tell to remember:** GA4 promotes `traffic_type` out of `ep.` into a
 top-level **`tt`** field on `/g/collect`. Grepping a collect URL for
