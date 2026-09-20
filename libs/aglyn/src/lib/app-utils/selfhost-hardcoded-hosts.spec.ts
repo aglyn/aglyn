@@ -440,7 +440,13 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "`stripComments` removes by design, so the prose recording a decision " +
       "cannot pass for the decision. Do not raise this to 2 to match a grep: " +
       "the comparison is exact and an inflated count fails exactly as a " +
-      "missing row does.",
+      "missing row does. If it ever legitimately measures 2, the cause is a " +
+      "COMMENT BOUNDARY, not a new hard-coding: `stripComments` pairs `/*` " +
+      "with the NEXT `*/`, so adding or removing a block comment anywhere " +
+      "above LIVE_ROUTES can re-pair the boundary and expose the sitemap URL " +
+      "to the scan — the mechanism that had lib/firewall-posture.mjs reading " +
+      "1 where five literals had never moved (AGL-2716). Read the boundary " +
+      "before you touch the number.",
   },
   {
     file: 'tools/plugin-loader/origin/api/load.mjs',
