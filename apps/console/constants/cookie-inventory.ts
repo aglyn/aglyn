@@ -152,7 +152,7 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
       'Pins the internal-traffic opt-in across every console origin ' +
       '(AGL-3175). `Domain`-scoped ON PURPOSE, which is the opposite call to ' +
       'the handoff verifier above and for the opposite reason: the console is ' +
-      'served on every `*.aglyn.com` hostname, one per org workspace and ' +
+      `served on every \`*.${WORKSPACE_DOMAIN}\` hostname, one per org workspace and ` +
       'generated, so a host-only cookie could never be set on an origin ' +
       'nobody has visited yet. It is written only where a caller passes ' +
       '`cookieDomain` — the console helper, and only while the hostname is ' +
