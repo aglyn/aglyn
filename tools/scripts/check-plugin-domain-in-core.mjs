@@ -25,8 +25,8 @@
 // names datasets or an app that names a video vendor is a package nobody can
 // take without the rest. `check:lib-boundaries` judges the import graph and
 // cannot see any of this, because a plugin's model parked in the core is a
-// legal edge. Six things erode the rule silently and this guard refuses each.
-// Rules 5 and 6 came from a CONTENT sweep (2026-09-20): judging names alone
+// legal edge. Seven things erode the rule silently and this guard refuses each.
+// Rules 5 to 7 came from a CONTENT sweep (2026-09-20): judging names alone
 // had missed every file with a neutral one.
 //
 //  1. DOMAIN NAME — a file or a route directory in a guarded tree named for a
@@ -53,6 +53,9 @@
 //
 //  6. DOMAIN EXPORTS — a file, whatever it is called, whose exports are mostly
 //     one plugin's vocabulary.
+//
+//  7. DOMAIN DECLARES — ANY declaration in a plugin's vocabulary inside a file:
+//     the platform file with a plugin's rows, keys or types mixed into it.
 //
 // ## The allowlist, and why it may only shrink
 //
@@ -181,7 +184,9 @@ export const DOMAIN_EXPORTS = {
   crm: /^(?:Crm|crm[A-Z]|CRM_|ContactFacet|contactFacet|ContactField|contactField|ContactImport|ContactSource|contactSource|HostContact|hostContact|HostLead|hostLead|LeadStatus|leadStatus|Deal[A-Z]|deal[A-Z]|DEAL_)/,
   data: /^(?:Dataset|dataset[A-Z]|DATASET_)/,
   email: /^(?:EmailTopic|emailTopic|EMAIL_TOPIC|DynamicList|dynamicList|ListMember|listMember)/,
-  forms: /^(?:FormField|formField|FormSubmission|formSubmission|FormContract|HostForm|hostForm)/,
+  // `FormField` is left out: it is generic form UI in `libs/shared/ui`, and the
+  // forms PLUGIN's own words are the submission, the contract and the entity.
+  forms: /^(?:FormFieldDecl|formFieldDecl|FormSubmission|formSubmission|FormContract|formContract|HostForm|hostForm)/,
   marketing: /^(?:Campaign|campaign[A-Z]|CAMPAIGN_|HostExperiment|hostExperiment|Experiment[A-Z]|experiment[A-Z]|MarketingConsent|marketingConsent|MARKETING_|AdvertisingTag|advertisingTag)/,
   marketplace: /^(?:Marketplace|marketplace[A-Z]|MARKETPLACE_|Publisher[A-Z]|publisher[A-Z]|PUBLISHER_)/,
   outreach: /^(?:Outreach|outreach[A-Z]|OUTREACH_)/,
@@ -198,6 +203,34 @@ export function domainOfExports(text) {
     if (hits >= 3 && hits * 2 >= names.length) return domain
   }
   return null
+}
+
+/**
+ * Rule 7. A DECLARATION in one plugin's vocabulary, anywhere in a file: a
+ * function, a constant, a type, an interface or a class — exported or not —
+ * and a member of an interface or an object literal. Rule 6 asks whether a
+ * file is mostly a plugin's; this asks whether ANY of it is, which is how a
+ * platform file comes to carry a plugin: `plan-entitlements.ts` declares
+ * thirty-three such names and is named for none of them, and
+ * `org-billing.types.ts` spells out seven plugins' keys.
+ *
+ * A declaration is code that lives here. A USE of another module's symbol is
+ * not judged — that is the import graph's — which is what keeps this from
+ * flagging every caller of a plugin's seam.
+ */
+const DECLARATION = /^\s*(?:export\s+)?(?:declare\s+)?(?:async\s+)?(?:default\s+)?(?:function\*?|const|let|type|interface|class|enum)\s+([A-Za-z_$][\w$]*)/
+const MEMBER = /^\s{2,}(?:readonly\s+)?([A-Za-z_$][\w$]*)\??\s*[:(]/
+
+/** The plugins whose vocabulary a file's code lines DECLARE. */
+export function domainsDeclared(text) {
+  const domains = new Set()
+  for (const line of text.split('\n')) {
+    if (COMMENT_LINE.test(line)) continue
+    const name = DECLARATION.exec(line)?.[1] ?? MEMBER.exec(line)?.[1]
+    if (!name) continue
+    for (const [domain, pattern] of Object.entries(DOMAIN_EXPORTS)) if (pattern.test(name)) domains.add(domain)
+  }
+  return [...domains].sort()
 }
 
 /** Rule 3. First-party ids that are also plain English are left out on purpose. */
@@ -236,6 +269,7 @@ export function findFindings(files, pluginIds) {
     }
     if (!guarded || tools) continue
     if (!NOT_STORAGE.test(path)) for (const owner of collectionOwnersAddressed(text)) add(path, `plugin-collection:${owner}`)
+    if (!NOT_STORAGE.test(path)) for (const domain of domainsDeclared(text)) add(path, `domain-declares:${domain}`)
     const exportsOf = domainOfExports(text)
     if (exportsOf) add(path, `domain-exports:${exportsOf}`)
     if (idPattern && codeLineMatches(text, idPattern)) add(path, 'plugin-id')
@@ -309,6 +343,8 @@ function selfTest() {
     { path: 'apps/console/constants/nav.ts', text: "const href = `${base}/contacts`\nimport { x } from './contacts'\nrow('orders', 'Orders')\n" },
     { path: 'libs/plugins/commerce/src/lib/server/read.ts', text: "db.collection('products')\n" },
     { path: 'libs/aglyn/src/lib/app-utils/neutral-name.ts', text: 'export const MARKETPLACE_A = 1\nexport function marketplaceB() {}\nexport type MarketplaceC = 1\nexport const other = 2\n' },
+    { path: 'libs/aglyn/src/lib/app-utils/plans.ts', text: 'export const seats = 1\nexport const sites = 2\nexport const pages = 3\nexport const members = 4\ninterface Limits {\n  crmEmailsPerDay: number\n}\n' },
+    { path: 'libs/aglyn/src/lib/app-utils/caller.ts', text: "import { crmRoutes } from './x'\nexport const href = crmRoutes(base).contact(id)\n" },
     { path: 'libs/aglyn/src/lib/app-utils/mentions-one.ts', text: 'export const MARKETPLACE_A = 1\nexport const a = 1\nexport const b = 2\nexport const c = 3\n' },
   ]
   const findings = findFindings(corpus, ids)
@@ -340,7 +376,9 @@ function selfTest() {
   ok('a URL, an import path and a bare quoted word address no storage', !findings.has('apps/console/constants/nav.ts'))
   ok('the owner reading its own collection is not reported', !findings.has('libs/plugins/commerce/src/lib/server/read.ts'))
   ok('a neutral filename exporting one plugin’s words is reported', has('libs/aglyn/src/lib/app-utils/neutral-name.ts', 'domain-exports:marketplace'))
-  ok('a file that merely mentions a plugin once is not', !findings.has('libs/aglyn/src/lib/app-utils/mentions-one.ts'))
+  ok('one export in a plugin’s words is a declaration, though not most of the file', has('libs/aglyn/src/lib/app-utils/mentions-one.ts', 'domain-declares:marketplace') && !has('libs/aglyn/src/lib/app-utils/mentions-one.ts', 'domain-exports:marketplace'))
+  ok('a plugin’s key mixed into a platform type is reported', has('libs/aglyn/src/lib/app-utils/plans.ts', 'domain-declares:crm'))
+  ok('USING a plugin’s symbol declares nothing', !findings.has('libs/aglyn/src/lib/app-utils/caller.ts'))
 
   const rows = [
     { path: 'libs/aglyn/src/lib/app-utils/crm-deals.ts', rules: ['domain-name', 'plugin-id'], lane: 'crm' },
