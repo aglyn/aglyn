@@ -314,7 +314,7 @@ describe('plan entitlements', () => {
       business: {
         basePriceMonthlyUsd: 139,
         basePriceAnnualMonthlyUsd: 99,
-        extraHostMonthlyUsd: 5,
+        extraHostMonthlyUsd: 8,
         extraSeatMonthlyUsd: 3,
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
@@ -1520,7 +1520,7 @@ describe('plan entitlements', () => {
           subscription: { status: 'active' },
           seatAddons: { hosts: 2, posRegisters: 1, eventCalendar: 1 },
         } as any),
-      ).toBe(139 + 2 * 5 + 89 + 9)
+      ).toBe(139 + 2 * 8 + 89 + 9)
     })
   })
 

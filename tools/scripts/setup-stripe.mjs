@@ -114,7 +114,7 @@ let dryRunMissing = 0
 const PLANS = [
   { plan: 'starter', name: 'Aglyn Starter', usd: 25, yearlyUsd: 16 * 12, extraHostUsd: 10, extraSeatUsd: 5, extraMemberUsd: 3, extraDatasetUsd: 2, aiAddonUsd: 9 },
   { plan: 'pro', name: 'Aglyn Pro', usd: 56, yearlyUsd: 39 * 12, extraHostUsd: 8, extraSeatUsd: 4, extraMemberUsd: 2, extraDatasetUsd: 2, aiAddonUsd: 19 },
-  { plan: 'business', name: 'Aglyn Business', usd: 139, yearlyUsd: 99 * 12, extraHostUsd: 5, extraSeatUsd: 3, extraMemberUsd: 1, extraDatasetUsd: 1, aiAddonUsd: 39 },
+  { plan: 'business', name: 'Aglyn Business', usd: 139, yearlyUsd: 99 * 12, extraHostUsd: 8, extraSeatUsd: 3, extraMemberUsd: 1, extraDatasetUsd: 1, aiAddonUsd: 39 },
   // Pricing v3 (2026-07): Scale fills the $139→$399 gap; Agency sits above
   // Advanced for high-volume multi-site orgs. Keep in sync with PLAN_PRICING.
   // The extra host is a flat $8 from Scale up rather than a ladder that keeps

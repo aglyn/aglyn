@@ -164,20 +164,10 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // until they have registered. Fetching the rest on link intent (AGL-2710)
   // loaded every enabled plugin on any visit that reached for a link, for
   // pages the visitor mostly never opened.
-  //
-  // `placedComponents` narrows it once more, WITHIN each plugin (AGL-3141):
-  // a bundle that can register a part of itself registers the elements this
-  // page places and fetches nothing for the rest. Absent — a page with no
-  // document to read — asks every plugin for all of itself, because an
-  // element whose component never registered renders nothing at all.
   const enabledPlugins = props.enabledPlugins ?? [
     ...DEFAULT_ENABLED_PLUGINS,
   ]
-  const blocking = props.blockingPlugins ?? enabledPlugins
-  const pageUse = props.placedComponents
-    ? { componentIds: props.placedComponents }
-    : undefined
-  use(sitePluginLoader.ensure(blocking, ['site'], pageUse))
+  use(sitePluginLoader.ensure(props.blockingPlugins ?? enabledPlugins, ['site']))
 
   const enabledKey = enabledPlugins.join(',')
   /**
@@ -467,9 +457,18 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   if (props.memberScreen && memberDenied && props.unauthorizedNodes) {
     canvas.setNodes(props.unauthorizedNodes)
     return (
-      <EnabledPluginsContext.Provider value={renderedPlugins}>
-        <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
-      </EnabledPluginsContext.Provider>
+      // The link map belongs here for the same reason it does on every other
+      // branch, and its absence was most costly on this one (AGL-3122): a
+      // designed 401 is the page that says "this is for members", so its
+      // "Sign in" or "See plans" link is the visitor's way out — and without
+      // the map EVERY reference kind (`screen:`, `collection:`, `entry:`,
+      // `feed:`) had nothing to resolve against, so every one of those links
+      // rendered dead. Only a typed external URL survived.
+      <ScreenLinkContext.Provider value={screenLinks}>
+        <EnabledPluginsContext.Provider value={renderedPlugins}>
+          <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+        </EnabledPluginsContext.Provider>
+      </ScreenLinkContext.Provider>
     )
   }
 

@@ -92,6 +92,28 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-20 — The Business extra site rises from $5 to $8: $10 on Starter, $8 on every tier above it
+
+- **Decided by:** the account owner, 2026-09-20, asked directly why Business charged $5 for an extra site while every tier above Starter charges $8; offered "keep $5 as a deliberate growth-tier price" as the alternative, chose $8.
+- **Scope:** pricing
+- **Evidence:** `PLAN_PRICING.business.extraHostMonthlyUsd` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; Stripe live prices `aglyn_business_extra_host` ($8/mo) and `aglyn_business_extra_host_yearly` ($96/yr), minted 2026-09-20 with the lookup keys transferred from the $5/$60 prices; `tools/scripts/setup-stripe.mjs`; AGL-3195.
+
+**One charged rate moves.** The 2026-09-07 entry below flattened the
+extra-site ladder to $8 above Starter on one principle — an extra host grants
+that tier's per-host storage and form bands, so a tier granting more per host
+must not charge less for one — and left Business at $5 as "the smallest bands
+of the four". That justified not charging more than $8; it never justified
+charging less than Pro. Business grants 20 GB and 8,000 submissions per host
+against Pro's 10 GB and 1,000 at $8, so it was the one rung still charging
+less for more, and at the Enterprise Pricing Guide's ~$3 per site infra
+assumption the $5 line sat at a 40% line margin against the guide's own 50%
+floor. Live Stripe held no Business subscription, so no stored price changes
+hands. The Drive Pricing Decision Log entry of the same date carries the
+arithmetic and the alternative; the `/pricing` republish and the parity
+literals follow in the same pass (`docs/PRICING_SURFACES.md`).
+
+---
+
 ## 2026-09-16 — The site admin bar is released to every site, on every plan
 
 - **Decided by:** the account owner, 2026-09-16, as recorded in AGL-3041: the admin bar's rollout was never finished, and it is to be fully released and on by default.

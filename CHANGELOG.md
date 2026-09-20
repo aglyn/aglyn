@@ -9,6 +9,20 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.137 — 2026-09-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.136...v1.0.0-beta.137)
+
+### Added
+
+- **pricing:** an extra site is $8 on every tier above Starter ([AGL-3195](https://linear.app/aglyn/issue/AGL-3195))
+
+### Fixed
+
+- **console:** a collection's list screen must be a page, not a template ([AGL-3107](https://linear.app/aglyn/issue/AGL-3107), [AGL-1387](https://linear.app/aglyn/issue/AGL-1387), [AGL-3102](https://linear.app/aglyn/issue/AGL-3102))
+- **ai:** a streamed tool call cut off at its ceiling keeps what it was written in ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+- **tenant:** a designed 401 screen resolves its link references ([AGL-3122](https://linear.app/aglyn/issue/AGL-3122), [AGL-3118](https://linear.app/aglyn/issue/AGL-3118))
+
 ## v1.0.0-beta.136 — 2026-09-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.135...v1.0.0-beta.136)

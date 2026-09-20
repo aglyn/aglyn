@@ -453,6 +453,22 @@ export type AiStreamEvent =
       usage: AiUsage
       estCostUsd: number
       stopReason: string | null
+      /**
+       * WHERE THE OUTPUT WENT, for a stream (AGL-3143): the bytes the
+       * stream's tool calls were written in, kept ONLY when the stream
+       * stopped at its ceiling and cut to `AI_RAW_OUTPUT_MAX_CHARS`. The
+       * streaming counterpart of `AiCompletion.rawOutput`.
+       *
+       * A `tool` event carries what `aiToolInputOf` could still parse, which
+       * for a call cut mid-answer is a prefix of the object or nothing at
+       * all; the fragments those events were assembled from are the only
+       * record of what the model actually emitted, and without them a
+       * runaway string and a decoding stall look identical from the
+       * outside. These are the model's own words, so they belong to the
+       * trace alone: never to a reader, and never to a log, which carries
+       * the figures that separate the two shapes.
+       */
+      rawOutput?: string
     }
 
 /** What a provider says about one of its models; the catalog carries both rates. */

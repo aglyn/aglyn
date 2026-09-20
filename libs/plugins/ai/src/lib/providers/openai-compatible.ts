@@ -331,7 +331,8 @@ async function* streamEvents(
     if (!drained) await reader.cancel().catch(() => undefined)
     reader.releaseLock()
   }
-  for (const [, tool] of [...tools.entries()].sort((a, b) => a[0] - b[0])) {
+  const called = [...tools.entries()].sort((a, b) => a[0] - b[0]).map(([, tool]) => tool)
+  for (const tool of called) {
     yield { type: 'tool', name: tool.name, input: aiToolInputOf(tool.json) }
   }
   yield {
@@ -339,6 +340,12 @@ async function* streamEvents(
     usage,
     estCostUsd: estimateAiBilledUsd(usage, model),
     stopReason,
+    // The `arguments` text the endpoint sent in fragments, for a stream its
+    // ceiling cut off (AGL-3143): the `tool` events above carry only what
+    // still parsed out of it, which for a cut call is a prefix or nothing.
+    ...(aiStoppedAtCeiling(stopReason)
+      ? { rawOutput: aiRawOutputOf(called.map((tool) => tool.json).join('')) }
+      : {}),
   }
 }
 
