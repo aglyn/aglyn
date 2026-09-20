@@ -216,7 +216,7 @@ const DIMENSIONS: Record<string, Dimension> = {
     ...quotaRow(
       'actionRunsPerMonth',
       0,
-      'libs/tenant/runtime/src/lib/run-event-actions.ts',
+      'libs/plugins/workflows/src/lib/engine/run-event-actions.ts',
     ),
     decider: 'resolveOrgEntitlements',
   },

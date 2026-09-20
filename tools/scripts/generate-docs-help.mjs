@@ -106,6 +106,9 @@ const BESIGNER_TOPICS = {
   // control, which is about LAYOUTS — so the topic is `layouts`, not the
   // combined page it used to point at (AGL-2486).
   layouts: '/building-sites/screens-and-layouts/layouts',
+  // The Attributes panel's Repeat section links here (AGL-3111) — the two
+  // scopes and the hundred-record ceiling are more than a field tooltip holds.
+  repeat: '/building-sites/besigner/repeat',
   responsiveStyling: '/building-sites/besigner/responsive-styling',
   reusableComponents: '/building-sites/besigner/reusable-components',
   seo: '/building-sites/seo/overview',

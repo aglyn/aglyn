@@ -440,9 +440,12 @@ inside functions, never at module scope.
 ### Shared server runtime (`@aglyn/tenant-runtime`)
 
 Some handlers need tenant runtime that no single plugin owns — the host-event
-fan-out (`emitHostEvent`, `runSingleAction`, `runEventWorkflows`) and the
-server-side screen-composition read-path (`getScreen`, `composeScreenNodes`,
-and the `get-*` loaders behind it). These live in `@aglyn/tenant-runtime`, a
+fan-out (`emitHostEvent`, `dispatchHostAutomation`, and the listener registry
+`registerHostEventListener` that a plugin joins from its `serverDeclarations`
+entry) and the server-side screen-composition read-path (`getScreen`,
+`composeScreenNodes`, and the `get-*` loaders behind it). The runtime raises
+events and runs none of what they trigger: the automation engine is the
+Workflows plugin's listener. These live in `@aglyn/tenant-runtime`, a
 server lib tagged `scope:lib`+`scope:aglyn` so both the tenant app's own API
 routes and any plugin `server.ts` can import it (and it, unlike the
 `scope:data` `tenant-data-admin`, may import `@aglyn/aglyn`). The host-event

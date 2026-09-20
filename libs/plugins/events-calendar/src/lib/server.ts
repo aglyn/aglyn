@@ -32,7 +32,7 @@ import {
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { runSingleAction } from '@aglyn/tenant-runtime'
+import { dispatchHostAutomation } from '@aglyn/tenant-runtime'
 
 /**
  * Public event listing (AGL-145): published events for the Event List canvas
@@ -157,7 +157,7 @@ const eventsDispatchHandler: PluginApiHandler = async (req, res) => {
       }
     }
   }
-  const alerts = await runSingleAction(hostId, actionId, event, payload)
+  const alerts = await dispatchHostAutomation(hostId, actionId, event, payload)
   return res.status(200).json({ ok: true, alerts })
 }
 

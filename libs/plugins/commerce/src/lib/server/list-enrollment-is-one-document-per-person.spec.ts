@@ -24,13 +24,14 @@
  * truncated to 20 hex in the workflow `enrollList` step. The same person
  * subscribing by both became two members of one list.
  *
- * WHAT THIS FILE HAS TO CATCH:
+ * WHAT THIS FILE HAS TO CATCH, for the newsletter route:
  *
- *  - BOTH REAL ROUTES, ONE STORE. The assertions drive `newsletterHandler` and
- *    `runSingleAction` themselves, not `enrollListMember` twice. The defect
- *    was never in a shared helper — there wasn't one — it was that two call
- *    sites each answered the question locally, so a test that calls the helper
- *    twice proves the helper is deterministic and nothing about whether either
+ *  - THE REAL ROUTE, THE SHARED ID. The assertions drive `newsletterHandler`
+ *    itself, not `enrollListMember`, and check the document it writes against
+ *    `listMemberDocIds` — the one derivation, owned by the data layer. The
+ *    defect was never in a shared helper — there wasn't one — it was that two
+ *    call sites each answered the question locally, so a test that calls the
+ *    helper proves the helper is deterministic and nothing about whether the
  *    route uses it.
  *  - CASING CANNOT FORK IT EITHER. Neither original derivation normalized;
  *    they agreed on lowercase only because both callers happened to lowercase
@@ -40,12 +41,14 @@
  *    needed two routes into one that needs only a second visit.
  *  - THE ENROLLMENT DATE SURVIVES a re-subscribe.
  *
- * WHY IT LIVES IN THE COMMERCE PLUGIN. Two routes in different projects have
- * no obviously-correct home, and the console — which owns neither — is the one
- * home it may NOT have: `scope:app` may not depend on `aglyn:addons`, because
- * the apps have to stay runnable with any plugin absent. Commerce already
- * imports `@aglyn/tenant-runtime`, so hosting it beside `newsletter.ts` adds
- * no graph edge that shipped code does not already carry.
+ * WHY THERE ARE TWO FILES. The two routes live in two plugins — this one and
+ * the automation engine's — and no project may import both: a plugin never
+ * imports another, and `scope:app` may not depend on `aglyn:addons`, because
+ * the apps have to stay runnable with any plugin absent. So each route's spec
+ * drives its own route and asserts the id against the same derivation; two
+ * routes that each write `listMemberDocIds(email)[0]` write one document. The
+ * automation's half is
+ * `libs/plugins/workflows/src/lib/engine/run-event-actions-enroll-list.spec.ts`.
  */
 
 const HOST_ID = 'site-1'
@@ -186,9 +189,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   /*
    * The double opt-in seam, answering OFF.
    *
-   * This file is about one thing — that both enrollment routes write one
+   * This file is about one thing — that the newsletter route writes the one
    * document per person — and a site that confirms subscriptions would put
-   * the newsletter route on a different branch of its own. Whether that
+   * the route on a different branch of its own. Whether that
    * branch is right belongs to `newsletter-double-opt-in.spec.ts`; what
    * matters here is that the setting is off, so the route enrolls.
    */
@@ -199,8 +202,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   }),
 }))
 
+import { listMemberDocIds } from '@aglyn/tenant-data-admin/server/list-members'
 import { newsletterHandler } from './newsletter'
-import { runSingleAction } from '@aglyn/tenant-runtime/run-event-actions'
 
 /** Drives the commerce newsletter route the footer form posts to. */
 const subscribeByNewsletterForm = async (email: string) => {
@@ -228,46 +231,40 @@ const subscribeByNewsletterForm = async (email: string) => {
   return res
 }
 
-/** Drives the workflow `enrollList` step the automation builder writes. */
-const subscribeByAutomation = (email: string) =>
-  runSingleAction(HOST_ID, 'action-1', 'formSubmit', { email })
+/** The document the shared derivation names for this address. */
+const sharedId = (email: string) => listMemberDocIds(email)[0]
 
 beforeEach(() => {
   store = {}
   seed(LIST_PATH, { name: 'Newsletter' })
-  seed(`hosts/${HOST_ID}/actions/action-1`, {
-    enabled: true,
-    trigger: { event: 'formSubmit' },
-    steps: [{ type: 'enrollList', listId: LIST_ID }],
-  })
 })
 
-describe('the two enrollment routes', () => {
-  it('write ONE member document for one address', async () => {
+describe('the newsletter enrollment route', () => {
+  it('writes ONE member document, under the shared id', async () => {
     await subscribeByNewsletterForm('bob@example.com')
-    await subscribeByAutomation('bob@example.com')
+    await subscribeByNewsletterForm('bob@example.com')
 
-    expect(memberIds()).toHaveLength(1)
+    expect(memberIds()).toEqual([sharedId('bob@example.com')])
     expect(store[`${MEMBERS_PATH}/${memberIds()[0]}`]).toMatchObject({
       email: 'bob@example.com',
     })
   })
 
-  it('write ONE member document when the address is cased differently', async () => {
+  it('writes the same document when the address is cased differently', async () => {
     // The premise: casing is what forks a derivation that hashes before it
     // normalizes, and each original call site normalized on its own.
     await subscribeByNewsletterForm('Bob@Example.COM')
-    await subscribeByAutomation('  bob@example.com  ')
+    await subscribeByNewsletterForm('bob@example.com')
 
-    expect(memberIds()).toHaveLength(1)
+    expect(memberIds()).toEqual([sharedId('bob@example.com')])
   })
 
-  it('keep the enrollment date of the first subscribe', async () => {
+  it('keeps the enrollment date of the first subscribe', async () => {
     await subscribeByNewsletterForm('bob@example.com')
     const id = memberIds()[0]
     store[`${MEMBERS_PATH}/${id}`].addedAt = 'first-subscribe'
 
-    await subscribeByAutomation('bob@example.com')
+    await subscribeByNewsletterForm('bob@example.com')
 
     expect(store[`${MEMBERS_PATH}/${id}`].addedAt).toBe('first-subscribe')
   })
@@ -289,30 +286,19 @@ describe('rows written under a legacy derivation', () => {
     .digest('hex')
     .slice(0, 20)
 
-  it('are adopted by the automation route, not duplicated', async () => {
+  it('are adopted by the newsletter route, not duplicated', async () => {
     seed(`${MEMBERS_PATH}/${legacyHmac20}`, {
       email: 'bob@example.com',
       addedAt: 'enrolled-last-year',
       source: 'action:old',
     })
 
-    await subscribeByAutomation('bob@example.com')
+    await subscribeByNewsletterForm('bob@example.com')
 
     expect(memberIds()).toEqual([legacyHmac20])
     expect(store[`${MEMBERS_PATH}/${legacyHmac20}`].addedAt).toBe(
       'enrolled-last-year',
     )
-  })
-
-  it('are adopted by the newsletter route, not duplicated', async () => {
-    seed(`${MEMBERS_PATH}/${legacyHmac20}`, {
-      email: 'bob@example.com',
-      addedAt: 'enrolled-last-year',
-    })
-
-    await subscribeByNewsletterForm('bob@example.com')
-
-    expect(memberIds()).toEqual([legacyHmac20])
   })
 
   it('stay reachable when BOTH legacy ids already exist', async () => {
@@ -323,7 +309,7 @@ describe('rows written under a legacy derivation', () => {
     seed(`${MEMBERS_PATH}/${legacySha256}`, { email: 'bob@example.com' })
     seed(`${MEMBERS_PATH}/${legacyHmac20}`, { email: 'bob@example.com' })
 
-    await subscribeByAutomation('bob@example.com')
+    await subscribeByNewsletterForm('bob@example.com')
 
     expect(memberIds().sort()).toEqual([legacySha256, legacyHmac20].sort())
   })
@@ -331,7 +317,7 @@ describe('rows written under a legacy derivation', () => {
 
 describe('an unusable address', () => {
   it('enrolls nobody rather than keying a document for it', async () => {
-    await subscribeByAutomation('not-an-email')
+    await subscribeByNewsletterForm('not-an-email')
     expect(memberIds()).toHaveLength(0)
   })
 })
@@ -350,7 +336,8 @@ describe('an unusable address', () => {
  * saying "subscribe me": the request IS the checkbox. An automation enrolling
  * somebody because a workflow fired is a decision the SITE made about a person
  * who was doing something else, and a basis stamped from it would be
- * manufactured.
+ * manufactured — which the automation's half of this pair asserts, beside
+ * the rule that its enrollment never erases a basis this route recorded.
  */
 describe('the consent a list membership records', () => {
   const memberDoc = () => store[`${MEMBERS_PATH}/${Object.keys(store)
@@ -369,22 +356,18 @@ describe('the consent a list membership records', () => {
     expect('marketingConsent' in (memberDoc() ?? {})).toBe(false)
   })
 
-  it('⛔ records NO basis for an automation enrollment', async () => {
-    await subscribeByAutomation('bob@example.com')
-    expect(memberDoc()).toBeDefined()
-    expect(memberDoc()?.['marketingConsentByHost']).toBeUndefined()
-  })
+  it('gives a basis to the row an automation enrolled without one', async () => {
+    // The row an automation's enrollment leaves: the shared id, no basis.
+    seed(`${MEMBERS_PATH}/${sharedId('bob@example.com')}`, {
+      email: 'bob@example.com',
+      source: 'action:action-1',
+      addedAt: 'enrolled-by-automation',
+    })
 
-  /**
-   * And an enrollment that carries no checkbox never ERASES one. A merge that
-   * stamped `false` on the omitted case would revoke a basis the person gave
-   * earlier, and a withdrawal is a different event from a re-enrollment that
-   * happened not to carry a box. Withdrawal has its own path — the
-   * unsubscribe link and the suppression list.
-   */
-  it('does not erase an existing basis when a later route carries none', async () => {
     await subscribeByNewsletterForm('bob@example.com')
-    await subscribeByAutomation('bob@example.com')
+
+    expect(memberIds()).toEqual([sharedId('bob@example.com')])
     expect(entry()).toMatchObject({ marketingConsent: true })
+    expect(memberDoc()?.['addedAt']).toBe('enrolled-by-automation')
   })
 })

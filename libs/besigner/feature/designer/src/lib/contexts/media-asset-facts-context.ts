@@ -22,6 +22,7 @@ import {
   mediaAssetFactsKey,
 } from '@aglyn/aglyn/app-utils/media-asset-facts'
 import { createContext } from 'react'
+import { createHeldAnswersStore } from '../utils/held-answers-store'
 
 /**
  * What each placed library asset's DAM document records NOW, for the canvas
@@ -79,63 +80,7 @@ export interface MediaAssetFactsStore extends MediaAssetFactsSource {
 
 /** An in-memory store. How each asset is read is the host app's business. */
 export function createMediaAssetFactsStore(): MediaAssetFactsStore {
-  const answers = new Map<string, MediaAssetFacts>()
-  const holds = new Map<string, { ref: MediaRef; count: number }>()
-  const listeners = new Set<() => void>()
-  const retainedListeners = new Set<() => void>()
-  let version = 0
-  let retained: readonly MediaRef[] = []
-  const notify = (targets: Set<() => void>) => {
-    for (const listener of [...targets]) listener()
-  }
-  const publishRetained = () => {
-    retained = [...holds.values()].map((hold) => hold.ref)
-    notify(retainedListeners)
-  }
-  return {
-    get: (key) => answers.get(key),
-    getVersion: () => version,
-    subscribe: (listener) => {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-    retain: (ref) => {
-      const key = mediaAssetFactsKey(ref)
-      const hold = holds.get(key)
-      if (hold) {
-        hold.count += 1
-      } else {
-        holds.set(key, { ref, count: 1 })
-        publishRetained()
-      }
-      let released = false
-      return () => {
-        if (released) return
-        released = true
-        const current = holds.get(key)
-        if (!current) return
-        current.count -= 1
-        if (current.count > 0) return
-        holds.delete(key)
-        publishRetained()
-      }
-    },
-    set: (key, facts) => {
-      if (facts) answers.set(key, facts)
-      else if (!answers.delete(key)) return
-      version += 1
-      notify(listeners)
-    },
-    getRetained: () => retained,
-    subscribeRetained: (listener) => {
-      retainedListeners.add(listener)
-      return () => {
-        retainedListeners.delete(listener)
-      }
-    },
-  }
+  return createHeldAnswersStore<MediaRef, MediaAssetFacts>(mediaAssetFactsKey)
 }
 
 export const MediaAssetFactsContext = createContext<

@@ -22,7 +22,7 @@ level.
 flowchart LR
   Model["Model<br/>(typed fields)"] --> Records[(Records)]
   Forms[Forms] --> Records
-  Records --> Repeat["Repeatable component<br/>on a screen"]
+  Records --> Repeat["Any element, repeated<br/>once per record"]
   Records --> Import["CSV / JSON<br/>import & export"]
 ```
 
@@ -55,8 +55,20 @@ available to design-time previews and the live site.
 
 ## Repeatable components
 
-Bind a component over a dataset to repeat it per record — a list, grid, or gallery driven
-by your data. The Besigner shows a **repeat badge** so you know a component is data-driven.
+Point **any** element at a dataset and it renders once per record — a list, a grid or a
+gallery driven by your data. A card, an image, a row, a whole placed component: each one
+is copied per record, and an element that holds a list can repeat its contents instead,
+so the element stays the frame the items fill.
+
+The Besigner draws the real copies on the canvas, from your real records and in the order
+the published page will render them, and a **repeat badge** names what an element repeats
+over and how many records it found. The copy you edit is the design; changing it changes
+all of them.
+
+A filter, a sort and a limit narrow what renders, and a repeat renders at most 100
+records however high the limit is set.
+
+See [Repeat over data](../../building-sites/besigner/repeat.md) for the full walkthrough.
 
 ## Who a dataset is shared with
 

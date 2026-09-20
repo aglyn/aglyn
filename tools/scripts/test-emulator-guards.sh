@@ -137,8 +137,10 @@ PROJECTS=(
   libs/tenant/runtime
   libs/tenant/feature/instance
   # Plugins own emulator specs too: Outreach proves its Google mailbox connect
-  # against the real emulator.
+  # against the real emulator, and the automation engine its `updateDataset`
+  # index check, beside the engine in the Workflows plugin.
   libs/plugins/outreach
+  libs/plugins/workflows
 )
 
 REPORT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/emulator-guard-reports.XXXXXX")"

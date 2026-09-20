@@ -16,6 +16,7 @@ let done: Promise<void> | undefined
 export function registerPluginServerDeclarations(): Promise<void> {
   done ??= (async () => {
     ;(await import('@aglyn/plugins-outreach/declarations.console-server')).registerOutreachConsoleServerDeclarations()
+    ;(await import('@aglyn/plugins-workflows/declarations.server')).registerWorkflowsServerDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations')).registerAiDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations.server')).registerAiServerDeclarations()
     ;(await import('@aglyn/plugins-video-delivery/declarations.server')).registerVideoDeliveryServerDeclarations()

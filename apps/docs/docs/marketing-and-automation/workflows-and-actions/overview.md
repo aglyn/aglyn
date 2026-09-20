@@ -7,18 +7,32 @@ description: Automate your site — run multi-step workflows on site events, and
 # Automation
 
 Automate what happens on your site. The section holds three tabs — **Workflows**,
-**Actions** and **Webhooks**. **Workflows** run multi-step logic when something
-happens; the **actions builder** maps an event to an action; **webhooks** connect Aglyn to
-outside systems.
+**Actions** and **Webhooks** — over **one engine**. A workflow step is either a call to
+one of your [functions](../../building-sites/bindings/overview.md) or any of the steps
+the actions builder offers, so "write to a dataset, send an email, update the contact"
+is a sequence of one workflow rather than two automations that have to find each other.
+**Webhooks** connect Aglyn to outside systems.
+
+The two tabs are two ways into the same steps, kept apart by what they run on:
+
+| | What starts it | What it can do |
+| --- | --- | --- |
+| **Workflows** | a server event — a form submission, an order, a new member, a CRM event | function calls and every server-side step |
+| **Actions** | the same server events, **and** what a visitor does on the page — a click, a hover, exit intent, a scroll depth | everything a workflow can do, plus the in-page effects |
+
+So an automation that touches the page is an **action**; one triggered by something that
+happened on the server is a **workflow**; and the steps in between are the same steps.
+Nothing you have already built moves or changes.
 
 ![The Automation page in the Aglyn console, with its Workflows, Actions, and Webhooks tabs](/img/workflows-and-actions/workflows-page.png)
 
 ```mermaid
 flowchart LR
   E["Site event<br/>(form submit, order, member)"] --> W["Workflow<br/>(ordered steps)"]
-  W --> S1[Step 1]
-  S1 --> S2[Step 2]
-  W --> WH["Outbound webhook<br/>→ external system"]
+  W --> S1["Call a function"]
+  S1 --> S2["Write to a dataset"]
+  S2 --> S3["Send an email"]
+  S3 --> WH["Outbound webhook<br/>→ external system"]
 ```
 
 :::info Plan availability
@@ -30,15 +44,20 @@ metered runs per tier. **Webhooks** are **Business**.
 
 ## Workflows
 
-- Build workflows on the **workflows page** with a pure step runner.
-- Trigger them from **site events**, and compose [functions and variables](../../building-sites/bindings/overview.md)
-  inside them.
-- Runs are **metered** per tier.
+- Build workflows on the **workflows page**: a trigger and an ordered list of steps.
+- Each step is a **call to a function** — composing your
+  [functions and variables](../../building-sites/bindings/overview.md) — or any of the
+  **server-side steps** the actions builder offers: write to a dataset, send an email,
+  enroll in a list, assign a campaign, post a webhook, the CRM steps, and **Wait**.
+- The in-page effects are not offered here. A workflow runs on a server event, where
+  there is no page to toggle a class on or redirect.
+- A run is **metered once**, however many steps it has and whatever they are.
 
 ## Actions builder
 
 The **actions builder** turns an event into an action — event → action automation without
-code. Basic in-page effects (menus, drawers, show/hide, navigation) run on every plan; the
+code, and the place to build anything that touches the page a visitor is looking at.
+Basic in-page effects (menus, drawers, show/hide, navigation) run on every plan; the
 server-side and advanced steps are **Pro+** with metered runs.
 
 ## Webhooks

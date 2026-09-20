@@ -33,7 +33,7 @@
 
 jest.mock('@aglyn/tenant-runtime', () => ({
   __esModule: true,
-  runSingleAction: jest.fn(),
+  dispatchHostAutomation: jest.fn(),
 }))
 
 const hostDoc: Record<string, unknown> = {
