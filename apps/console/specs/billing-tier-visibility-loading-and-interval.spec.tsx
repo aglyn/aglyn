@@ -658,6 +658,36 @@ describe('the quoted interval survives the jump (AGL-1864 · AGL-1989)', () => {
     await waitFor(() => expect(annualToggle().checked).toBe(true))
   })
 
+  it('an ENDED subscription does not hand over its interval (AGL-3155)', async () => {
+    // Found on production: `test-org` reads "This subscription ended
+    // 8/18/2026" and still carries `interval: 'month'` on the org document,
+    // so inheriting it put the annual default back to monthly for exactly the
+    // reader it is for — re-subscribing is choosing a plan again, not
+    // continuing one. Only a LIVE status hands the interval over.
+    mockOrg = {
+      $id: 'org-1',
+      plan: 'pro' as const,
+      subscription: { status: 'canceled', interval: 'month' },
+    }
+    mockSearch = ''
+    render(<BillingPage />)
+    await waitFor(() => expect(annualToggle().checked).toBe(true))
+  })
+
+  it('a PAST_DUE subscription still hands over its interval (AGL-1715)', async () => {
+    // `past_due` is live, so a customer mid-dunning keeps the interval they
+    // are being dunned for. Without this the fix above would quietly re-quote
+    // a lapsing annual customer at the monthly price.
+    mockOrg = {
+      $id: 'org-1',
+      plan: 'pro' as const,
+      subscription: { status: 'past_due', interval: 'month' },
+    }
+    mockSearch = ''
+    render(<BillingPage />)
+    await waitFor(() => expect(annualToggle().checked).toBe(false))
+  })
+
   it('a free org that states monthly is still honoured', async () => {
     // The default is a floor, not an override: it must not outrank the link.
     mockOrg = { $id: 'org-1', plan: 'free' as const }

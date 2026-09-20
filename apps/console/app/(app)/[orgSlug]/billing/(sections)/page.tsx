@@ -324,13 +324,24 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   // An incoming deep link outranks it: someone who clicked the annual price
   // on /pricing must see that price here, even on a month-to-month org —
   // otherwise the number they were sold changes between the two pages.
+  //
+  // Only a LIVE subscription hands over its interval. An ended one still
+  // carries the `interval` it was billed on, and inheriting that put a
+  // workspace whose subscription lapsed back on monthly — the very reader the
+  // annual default is for, since re-subscribing is choosing a plan again
+  // rather than continuing one. `past_due` IS live (AGL-1715), so a customer
+  // mid-dunning keeps the interval they are being dunned for.
   const subscriptionInterval = (org?.subscription as any)?.interval
+  const subscriptionIntervalIsLive = isLiveSubscriptionStatus(
+    org?.subscription?.status,
+  )
   useEffect(() => {
     if (planIntent && intervalStated) return void setInterval(planIntent.interval)
+    if (!subscriptionIntervalIsLive) return
     if (subscriptionInterval === 'year' || subscriptionInterval === 'month') {
       setInterval(subscriptionInterval)
     }
-  }, [planIntent, intervalStated, subscriptionInterval])
+  }, [planIntent, intervalStated, subscriptionInterval, subscriptionIntervalIsLive])
   // Self-serve add-on purchases (AGL-529), release-gated.
   const addonStore = useReleaseFlag('release_addon_store')
 
