@@ -923,13 +923,13 @@ function tablesWithoutFooters(): string[] {
 const NOT_A_LIST: Array<[string, string]> = [
   [
     'libs/plugins/ai/src/lib/components/ai-experiment-cards.component.tsx',
-    'The arms of ONE A/B test, in the card that explains its result (AGL-2914) — '
-      'the figures the explanation was written from, shown so a reader can check '
-      'the words against them. It is bounded by the experiment itself: an arm per '
-      'variant, and `AI_EXPERIMENT_MAX_VARIANTS` is 4. The rows are not a '
-      'collection anybody adds to; they are the test, and a reader compares them '
-      'against each other at a glance, which is the one thing a footer would take '
-      'away. Nothing here pages, filters or sorts, and the table cannot outgrow '
+    'The arms of ONE A/B test, in the card that explains its result (AGL-2914) — ' +
+      'the figures the explanation was written from, shown so a reader can check ' +
+      'the words against them. It is bounded by the experiment itself: an arm per ' +
+      'variant, and `AI_EXPERIMENT_MAX_VARIANTS` is 4. The rows are not a ' +
+      'collection anybody adds to; they are the test, and a reader compares them ' +
+      'against each other at a glance, which is the one thing a footer would take ' +
+      'away. Nothing here pages, filters or sorts, and the table cannot outgrow ' +
       'the test it belongs to.',
   ],
   [
@@ -1748,7 +1748,13 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // copy for at most `AI_PRODUCTS_BULK_MAX` products, a catalog of six to
     // twelve drafts, or a brief's categories and at most five discounts —
     // one answer, bounded by the job that wrote it.
-    expect(NOT_A_LIST).toHaveLength(60)
+    //
+    // 61 since A/B tests by AI (AGL-2914): the arms of one test, beside the
+    // explanation written from them, so a reader can check the words against
+    // the figures. An arm per variant and `AI_EXPERIMENT_MAX_VARIANTS` is 4,
+    // so it cannot outgrow the test it belongs to — and comparing the arms at
+    // a glance is the thing a footer would take away.
+    expect(NOT_A_LIST).toHaveLength(61)
   })
 })
 
