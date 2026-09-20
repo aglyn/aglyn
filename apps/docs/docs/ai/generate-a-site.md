@@ -26,8 +26,14 @@ the feature.
 
 A site you have just created opens on its **Setup** page, and **Start this site
 with AI** opens over it. It asks what kind of site you are creating, who it is
-for, and which of the starter examples you like — then writes the brief for you
-and plans the site from it.
+for, which of the starter examples you like, and where your contact form's
+submissions should go — then writes the brief for you and plans the site from it.
+
+Each answer changes what gets built. Who the site is for is who every page's
+search listing is written for, and who the contact form asks its questions of.
+Where submissions go is the form's routing: **the Inbox**, or the Inbox and a
+lead in CRM for every message that carries an email address. You can change that
+on the form itself afterwards.
 
 **Skip and start blank** is in the bar at the top, from the moment the questions
 appear, and it is the same offer whether you have answered them or not. So are
@@ -45,7 +51,13 @@ does not ask again.
 - **A contact form**, created on the Forms page and placed on the page that needs it.
 - **A palette suggestion** built from your theme's own colors, which you apply in the Theme
   section — or do not.
-- **A welcome email draft**, when you ask for one.
+- **A welcome email draft**, when you ask for one, written to the people the site
+  is for and saying what became of the message it answers.
+- **The site's own search title and description**, from what you said the site is
+  and who it is for. They are the fallback every page without its own publishes,
+  and they wait on the site's **SEO** section under *The listing your answers
+  describe* — **Put in the form** stages them there, and the form's Update saves
+  them.
 - **A navigation entry** per page, proposed for you to add. The live navigation is not
   touched.
 
