@@ -943,7 +943,7 @@ const NOT_A_LIST: Array<[string, string]> = [
       'is the read, not the page — past 200 the card would need a footer.',
   ],
   [
-    'libs/plugins/crm/src/lib/components/book-meeting-action.tsx',
+    'libs/plugins/bookings/src/lib/components/book-meeting-action.tsx',
     'The sending site’s bookable SERVICES (AGL-2660), inside the dialog that ' +
       'drops a booking link — a chooser, not a view of the collection. It is ' +
       'read under `limit(100)`, filtered for deleted rows and sorted by name ' +

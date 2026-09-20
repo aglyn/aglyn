@@ -273,7 +273,37 @@ jest.mock('@aglyn/shared-util-email', () => ({
 import { compress } from '@aglyn/aglyn/server'
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { OrgPlan } from '@aglyn/aglyn'
+import { registerPluginRecordCardReader } from '@aglyn/aglyn/plugin-manager/plugin-record-cards'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { CampaignSendError, performCampaignSend } from './campaign-send'
+
+/**
+ * A plugin that keeps products, standing in for the one that does. The sender
+ * asks the record-card registry for `product` and imports no catalog, so the
+ * spec stands one up over the same store the rest of the send reads. How a
+ * price is WORKED OUT is that plugin's rule and its own spec's to hold; what
+ * this file certifies is that the sender asks, and mails what it is told.
+ */
+function publishProductCards() {
+  resetPluginServicesForTests()
+  registerPluginRecordCardReader(
+    'product',
+    {
+      async read({ hostId, id }) {
+        const product = mockState.store[`hosts/${hostId}/products/${id}`] as
+          | { name: string; slug: string; variants: Array<{ priceUsd: number }> }
+          | undefined
+        if (!product) return null
+        return {
+          title: product.name,
+          caption: `$${product.variants[0]?.priceUsd}`,
+          path: `/products/${product.slug}`,
+        }
+      },
+    },
+    { pluginId: 'catalog' },
+  )
+}
 
 /** The id the besigner roots every stored node map at. */
 const ROOT = '_@_'
@@ -394,6 +424,7 @@ function mockFirestore(): any {
 
 /** Seeds a site, a lead, a designed email screen, and its product. */
 function seed(nodes: unknown) {
+  publishProductCards()
   mockState.store = {
     'hosts/host-1': { subdomain: 'acme', memberRoles: {} },
     // A `leads` audience so the merge tags have a real name to resolve, and a

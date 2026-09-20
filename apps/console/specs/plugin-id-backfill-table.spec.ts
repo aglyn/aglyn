@@ -38,14 +38,35 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { BOOKINGS_BUNDLE } from '@aglyn/plugins-bookings'
-import { EVENTS_CALENDAR_BUNDLE } from '@aglyn/plugins-events-calendar'
-import { loadMuiBundle, type MuiBundleEntry } from '@aglyn/plugins-mui'
-import { BUNDLE_ID as BOOKINGS_ID } from '@aglyn/plugins-bookings/constants/bundle-common'
-import { BUNDLE_ID as EVENTS_ID } from '@aglyn/plugins-events-calendar/constants/bundle-common'
-import { BUNDLE_ID as MUI_ID } from '@aglyn/plugins-mui/constants/bundle-common'
-import { BUNDLE_ID as FORMS_ID } from './constants/bundle-common'
-import { FORMS_BUNDLE } from './plugin'
+import { CONSOLE_PLUGIN_MANIFEST } from '../constants/plugins.client.generated'
+
+/** One component a bundle registers; every first-party bundle lists these. */
+type BundleEntry = { schema: { $id: unknown } }
+
+/**
+ * A plugin's root module, loaded through the generated manifest — the one
+ * door an app has onto a plugin. This spec is about four plugins at once, so
+ * it lives where all four can be reached without one importing another.
+ */
+async function pluginModule(id: string): Promise<Record<string, unknown>> {
+  const entry = CONSOLE_PLUGIN_MANIFEST.find((one) => one.id === id)
+  if (!entry) throw new Error(`no manifest entry for "${id}"`)
+  return (await entry.load()) as Record<string, unknown>
+}
+
+/** A named bundle off a plugin's module; absent is a failure, never empty. */
+async function bundleOf(id: string, exportName: string): Promise<BundleEntry[]> {
+  const bundle = (await pluginModule(id))[exportName]
+  if (!Array.isArray(bundle)) {
+    throw new Error(`"${id}" exports no ${exportName} bundle`)
+  }
+  return bundle as BundleEntry[]
+}
+
+const FORMS_ID = 'forms'
+const BOOKINGS_ID = 'bookings'
+const EVENTS_ID = 'events-calendar'
+const MUI_ID = 'mui'
 
 const SCRIPT = 'tools/scripts/backfill-node-plugin-ids.mjs'
 
@@ -68,17 +89,21 @@ function backfillTable(): Record<string, string> {
 /** Which bundle each registry actually registers each id under. */
 const REGISTERED: Record<string, string> = {}
 /** The mui library, resolved once — that bundle loads on demand (AGL-3141). */
-let MUI_BUNDLE: MuiBundleEntry[] = []
+let MUI_BUNDLE: BundleEntry[] = []
 
 describe('the pluginId backfill names the bundles that exist', () => {
   const table = backfillTable()
 
   beforeAll(async () => {
+    const loadMuiBundle = (await pluginModule(MUI_ID))['loadMuiBundle'] as
+      | (() => Promise<BundleEntry[]>)
+      | undefined
+    if (!loadMuiBundle) throw new Error('"mui" exports no loadMuiBundle')
     MUI_BUNDLE = await loadMuiBundle()
     for (const [bundleId, bundle] of [
-      [FORMS_ID, FORMS_BUNDLE],
-      [BOOKINGS_ID, BOOKINGS_BUNDLE],
-      [EVENTS_ID, EVENTS_CALENDAR_BUNDLE],
+      [FORMS_ID, await bundleOf(FORMS_ID, 'FORMS_BUNDLE')],
+      [BOOKINGS_ID, await bundleOf(BOOKINGS_ID, 'BOOKINGS_BUNDLE')],
+      [EVENTS_ID, await bundleOf(EVENTS_ID, 'EVENTS_CALENDAR_BUNDLE')],
       [MUI_ID, MUI_BUNDLE],
     ] as const) {
       for (const entry of bundle) REGISTERED[String(entry.schema.$id)] = bundleId

@@ -139,6 +139,35 @@ Build **functions** in the in-editor function builder with a safe evaluator — 
 code execution. Compose variables and other functions, and call them inline with
 `{{fn:name(args)}}`.
 
+A function is parameters in, numbered **if / then / otherwise** steps, and one value out.
+Inside a step, an expression can use:
+
+- `+` `-` `*` `/` and parentheses, on numbers; `+` also joins text.
+- **Any site variable, by its name.** A function that prices a plan can read
+  `extra_site_price` directly, so changing the variable changes every page and every
+  calculator that uses it. A function can read a variable and never set one, and a
+  parameter or local variable with the same name wins.
+- These built-ins: `min(a, b, …)`, `max(a, b, …)`, `round(value, places)`,
+  `floor(value)`, `ceil(value)`, `abs(value)`, and `format(value, places)`, which writes a
+  number with thousands separators — `'$' + format(1396)` is `$1,396`.
+
+There are no loops and no way to add a built-in, which is what keeps the evaluator safe
+to run on a page.
+
+### Parameters a visitor can answer
+
+When a function is placed on a page in a
+[Function Widget](../besigner/element-catalog.md), each parameter becomes an input. Under
+**What visitors see** in the function builder, give a parameter a **Label** (instead of
+its identifier), a value it **Starts as**, and **Choices** written as
+`value: Label, value: Label`. A parameter with choices is asked as a list, a number as a
+number box, and a true/false as a switch.
+
+A widget runs in the visitor's browser, so the function's definition is part of the page,
+along with the site variables that function names — and only those. Do not put anything in
+a function, or in a variable a widget's function reads, that a visitor should not be able
+to see.
+
 ## Where-used & safety
 
 Before you rename or delete a variable or function, run the **where-used scan** to see

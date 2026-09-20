@@ -269,7 +269,8 @@ registerConsoleExtension({ widgets: [{ slot: 'bottleDetail', Component: Suggesti
 | API | Semantics |
 | --- | --- |
 | `definePluginZone<Props>(id)` | The token. Pure — it registers nothing and reads nothing — so a plugin may define it at module scope and register it from its register fn. |
-| `registerPluginZone({ zone, label, surface, description? }, { pluginId? })` | Publishes it. Owner = the loader's marker inside a register fn, else `pluginId`; no owner throws, and a zone id another plugin declared throws naming both while the incumbent keeps its zone. The same plugin re-declaring replaces its own. |
+| `registerPluginZone({ zone, label, surface, description?, layout? }, { pluginId? })` | Publishes it. Owner = the loader's marker inside a register fn, else `pluginId`; no owner throws, and a zone id another plugin declared throws naming both while the incumbent keeps its zone. The same plugin re-declaring replaces its own. |
+| `layout` | `stack` (the default): the zone is one block of the page, its widgets are cards, and it takes no room when nothing drew. `bare`: the zone adds no element, because each widget is one item of a layout the HOST draws — a button in a row of actions, a control beside a form's fields, a dialog that portals out. The shell reads it for a plugin-hosted zone; the core catalog's zones keep the layouts the console gives them. |
 | `listPluginZones()` / `pluginZone(id)` / `pluginIdForZone(id)` | Every declared zone with its owner, one by id, and the owner alone. |
 | `PluginZoneProps<typeof ZONE>` | The props type, off the token. |
 
@@ -353,6 +354,90 @@ asks for the organization-level address. **Every answer can be `null`**: no
 plugin publishes the kind, or the owner has no address at that scope. Render
 text, which is what these surfaces already do while their route params settle.
 A link is not access: the page at the far end applies its own gates.
+
+## Record cards — `plugin-record-cards` (`/server`)
+
+What a plugin's record looks like in one line and one image, published by the
+plugin that owns it, for a surface that has to DRAW the record rather than link
+to it — a designed email that features a product, a picker over what another
+plugin keeps. Keyed by record kind, like the facts reader, the timeline and the
+route.
+
+```ts
+// the owner, from each of its server registrars
+registerPluginRecordCardReader('bottle', {
+  async read({ hostId, id }) {
+    const bottle = await readBottle(hostId, id)
+    return bottle
+      ? {
+          title: bottle.name,
+          caption: fromPrice(bottle), // the owner's rule, already worded
+          imageUrl: bottle.labelUrl,
+          path: `/cellar/${bottle.slug}`,
+        }
+      : null
+  },
+})
+
+// any other plugin's server code
+const card = await readPluginRecordCard('bottle', { hostId, id })
+if (card) draw(card)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginRecordCardReader(kind, reader, { pluginId? })` | A kind another plugin publishes throws naming both; the incumbent keeps serving, and the owner re-registering replaces its own. |
+| `readPluginRecordCard(kind, { hostId, id })` | `{ title, caption?, imageUrl?, path? }`, or **`null` when no plugin publishes the kind or the record is gone**. A caller treats both alike: there is nothing to draw. |
+| `pluginRecordCardReader(kind)` / `listPluginRecordCardKinds()` | The reader with its owner, and every published kind. |
+
+**A card carries nothing a caller could compute on.** The caption is a string
+the owner has already worded — a price, a date, a status — so the rule behind
+it lives in one place. A caller that read the owner's document and imported its
+model to agree is the coupling this replaces.
+
+**Server-side and unauthenticated, on purpose.** A reader runs with the Admin
+SDK for a caller that has already decided the read is the workspace's to make.
+`plugin-record-facts` answers one MEMBER and applies their permissions; the two
+are separate contracts so neither borrows the other's trust. Both apps load
+every plugin's server entry before a plugin handler runs, so a reader
+registered from a server registrar is there wherever a handler asks. Import it
+by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-cards`).
+
+## The tenant's tax rule — `plugin-tax-profile` (`/server`)
+
+More than one plugin takes money, and a merchant has one tax profile. The
+plugin that keeps it answers what a flat rate adds to a charge and which regime
+a settled payment was taxed under; any other plugin that charges asks here
+instead of importing the owner's model.
+
+```ts
+// the owner, from each of its server registrars
+registerPluginTaxProfile({
+  flatTax: (rate, chargeCents, fallbackLabel) => resolveFlatTax(rate, chargeCents, fallbackLabel),
+  taxModeOf: (settledPayment, manualTaxCents) => modeOf(settledPayment, manualTaxCents),
+})
+
+// a plugin that charges
+const tax = pluginTaxProfile().flatTax(settings.service, chargeCents, 'Service tax')
+const total = chargeCents + tax.taxCents
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginTaxProfile(profile, { pluginId? })` | A slot: a workspace has one tax profile, so a second plugin's is refused and the incumbent keeps serving. |
+| `pluginTaxProfile()` | The rule — and it **throws** when no plugin registered one. |
+| `flatTax(rate, chargeCents, fallbackLabel)` | `{ taxCents, label, pct }`, exclusive and rounded to the cent. `rate` is the merchant's stored setting passed as read; an absent, zero, negative or out-of-range one answers all-zero and never throws. |
+| `taxModeOf(settledPayment, manualTaxCents?)` | The regime as the owner records it. `manualTaxCents` is tax the caller added as a line of its own, which the processor reports as none. |
+| `pluginTaxProfileOwner()` | The owner's plugin id, or `null` — for a caller that only wants to know who it is. |
+
+**No profile is a refusal, never a zero.** Every other seam here answers `null`
+for "nobody home", and this one must not: a caller that read `null` as "no tax"
+would charge an untaxed total and record it as untaxed, and the merchant would
+owe the difference. A refused sale is seen the same day. It cannot happen in a
+working build — both apps load every plugin's server entry before a plugin
+handler, a cron or the billing webhook runs — and
+`tax-profile-is-registered.spec.ts` in each app runs the real registrars and
+holds the real rule, because a plugin's own spec may not import the owner.
 
 ## Contact capture — `plugin-contact-capture` (`/server`)
 

@@ -652,6 +652,102 @@ describe('the form step', () => {
       stopReason: null,
     })
   })
+
+  /**
+   * A COPY THAT KEPT THE SOURCE'S BINDING IS NOT AN OUTPUT (AGL-3024).
+   *
+   * The copy path reaches no model, so `extend` — where every generated form
+   * meets `checkFormContract` — never runs on it. Measured on production
+   * beta.139: the plan said "creates new-case-intake-form, from a copy of
+   * consultation-request-form", the copy kept the consultation form's id
+   * inside its design, the console's form page banners it, and the job
+   * reported Done. Every case detail a visitor typed would have been filed
+   * under the consultation form.
+   *
+   * The double seeds the copy the way the defect wrote it, so what is
+   * asserted is the STEP's reading of a stored document, not a stub's answer.
+   */
+  const copyPlan = (): AiJobPlan => {
+    const base = planFor(GOLDENS['roofingQuote'])
+    return { ...base, create: [{ ...base.create[0], duplicateOf: 'frm-contact' }] }
+  }
+  const copyDesign = (formId: string) => ({
+    [CANVAS_ROOT_ELEMENT_ID]: {
+      $id: CANVAS_ROOT_ELEMENT_ID,
+      componentId: 'div',
+      nodes: ['formNode'],
+    },
+    formNode: {
+      $id: 'formNode',
+      componentId: 'form',
+      parentId: CANVAS_ROOT_ELEMENT_ID,
+      nodes: ['emailField'],
+      props: { formId, formName: 'Contact' },
+    },
+    emailField: {
+      $id: 'emailField',
+      componentId: 'formField',
+      parentId: 'formNode',
+      props: { fieldName: 'email', fieldType: 'email', label: 'Email' },
+    },
+  })
+  const copyingStep = () =>
+    createAiJobFormStep({
+      duplicate: jest.fn().mockResolvedValue({
+        ok: true,
+        id: 'frm-copy',
+        versionId: 'v-copy',
+        name: 'Roof quote request',
+      }) as unknown as typeof duplicateResource,
+    })
+
+  it('fails rather than reporting Done when the copy still names the form it was copied from', async () => {
+    mockDocs.set('hosts/host-1/forms/frm-copy', {
+      displayName: 'Roof quote request',
+      rootId: CANVAS_ROOT_ELEMENT_ID,
+      nodes: encodeStoredNodes(copyDesign('frm-contact')),
+    })
+    const outcome = await copyingStep()(context({ plan: copyPlan() }))
+    expect(outcome.outputs).toEqual([])
+    // The sentence is the only thing a customer reads, so it says what the
+    // copy would have done and what to do about it, and it carries the
+    // contract's OWN diagnosis rather than a restatement of it.
+    expect(outcome.failure).toContain('delete it in Forms and try again')
+    expect(outcome.failure).toContain('frm-contact')
+    // Nothing was spent, so the credits go back: this step never reached a model.
+    expect(outcome).toMatchObject({ usage: AI_JOB_ZERO_USAGE, estCostUsd: 0 })
+  })
+
+  it('reports the copy once its design names the copy', async () => {
+    mockDocs.set('hosts/host-1/forms/frm-copy', {
+      displayName: 'Roof quote request',
+      rootId: CANVAS_ROOT_ELEMENT_ID,
+      nodes: encodeStoredNodes(copyDesign('frm-copy')),
+    })
+    const outcome = await copyingStep()(context({ plan: copyPlan() }))
+    expect(outcome.failure).toBeUndefined()
+    expect(outcome.outputs).toEqual([
+      {
+        resource: 'form',
+        id: 'frm-copy',
+        versionId: 'v-copy',
+        hostId: 'host-1',
+        hostSubdomain: 'acme',
+        label: 'Roof quote request',
+      },
+    ])
+  })
+
+  it('reports a copy of a form that has no published design, which duplication did not cause', async () => {
+    // `checkFormContract` reports `form-node-missing` for a form nobody has
+    // published yet, and the console banners it — but a copy inherited that
+    // from the form the member chose to copy. Refusing it would be refusing
+    // to copy a form they can already see.
+    mockDocs.set('hosts/host-1/forms/frm-copy', { displayName: 'Roof quote request' })
+    const outcome = await copyingStep()(context({ plan: copyPlan() }))
+    expect(outcome.failure).toBeUndefined()
+    expect(outcome.outputs).toHaveLength(1)
+  })
 })
 
 describe('what the form step sends', () => {

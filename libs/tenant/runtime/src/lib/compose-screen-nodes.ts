@@ -616,10 +616,13 @@ export async function composeNodesWithChrome(options: {
     bound as any,
     options.host,
   )
-  // Function widgets run client-side: embed their definitions (AGL-93).
+  // Function widgets run client-side: embed their definitions (AGL-93), and
+  // beside each the site variables that function reads and no others
+  // (AGL-3202).
   const withFunctions = Aglyn.attachFunctionDefinitions(
     withHostTokens,
     functions,
+    variables,
   )
   // Marketplace plugins (AGL-45): stamp each marketplacePlugin node with its
   // pinned install (version/sha256/capabilities) + kill-switch state.

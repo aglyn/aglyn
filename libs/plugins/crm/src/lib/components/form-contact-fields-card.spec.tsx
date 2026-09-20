@@ -33,24 +33,18 @@ import type { ContactFieldDefinition } from '@aglyn/aglyn'
 
 /** The org's definitions, as the hook would hand them over. */
 let mockDefinitions: (ContactFieldDefinition & { $id: string })[] = []
-/** Every `updateDoc` the card made: `[ref, payload]`. */
-let mockWrites: [unknown, Record<string, unknown>][] = []
-
-jest.mock('firebase/firestore', () => ({
-  __esModule: true,
-  doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
-  updateDoc: async (ref: unknown, payload: Record<string, unknown>) => {
-    mockWrites.push([ref, payload])
-  },
-}))
+/** Every declaration the card handed back to the page to write. */
+let mockWrites: Record<string, unknown>[][] = []
+const saveFields = async (fields: unknown) => {
+  mockWrites.push(fields as Record<string, unknown>[])
+}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
-  useFirestore: () => ({}),
   useOrgDataScope: () => ({ orgId: 'org1', ready: true, scope: ['orgs', 'org1'] }),
 }))
 
-jest.mock('@aglyn/plugins-crm/hooks/use-contact-field-definitions', () => ({
+jest.mock('../hooks/use-contact-field-definitions', () => ({
   __esModule: true,
   useContactFieldDefinitions: () => ({
     definitions: mockDefinitions,
@@ -73,11 +67,6 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   __esModule: true,
   useSnackbar: () => ({ enqueueSnackbar: () => undefined }),
-}))
-
-jest.mock('@aglyn/shared-util-timestamp', () => ({
-  __esModule: true,
-  Timestamp: { now: () => ({ __now: true }) },
 }))
 
 import FormContactFieldsCard from './form-contact-fields-card'
@@ -123,7 +112,7 @@ describe('FormContactFieldsCard', () => {
   })
 
   it('draws one choice per declared field, showing the stored mapping, with nothing to save', () => {
-    render(<FormContactFieldsCard hostId="h1" formId="f1" fields={FIELDS} />)
+    render(<FormContactFieldsCard hostId="h1" formId="f1" fields={FIELDS} saveFields={saveFields} />)
     expect(screen.getAllByRole('combobox')).toHaveLength(3)
     expect(shown(/Revenue \(revenue\)/)).toBe('Annual revenue · Number')
     expect(shown(/^email/)).toBe('Not saved to a contact field')
@@ -131,7 +120,7 @@ describe('FormContactFieldsCard', () => {
   })
 
   it('offers only the ACTIVE definitions as destinations', () => {
-    render(<FormContactFieldsCard hostId="h1" formId="f1" fields={FIELDS} />)
+    render(<FormContactFieldsCard hostId="h1" formId="f1" fields={FIELDS} saveFields={saveFields} />)
     fireEvent.mouseDown(screen.getByRole('combobox', { name: /Plan \(plan\)/ }))
     const options = screen.getAllByRole('option').map((option) => option.textContent)
     expect(options).toEqual([
@@ -142,27 +131,25 @@ describe('FormContactFieldsCard', () => {
   })
 
   it('saves the picked key onto that field and writes every other field back as it was', async () => {
-    render(<FormContactFieldsCard hostId="h1" formId="f1" fields={FIELDS} />)
+    render(<FormContactFieldsCard hostId="h1" formId="f1" fields={FIELDS} saveFields={saveFields} />)
     pick(/Plan \(plan\)/, /Tier · Choice/)
     expect(saveButton().disabled).toBe(false)
     fireEvent.click(saveButton())
     await waitFor(() => expect(mockWrites).toHaveLength(1))
-    const [ref, payload] = mockWrites[0]
-    expect(ref).toEqual({ path: 'hosts/h1/forms/f1' })
-    expect(payload.fields).toEqual([
+    // The page writes; the card decides what the array is.
+    expect(mockWrites[0]).toEqual([
       { fieldName: 'email', fieldType: 'email' },
       { fieldName: 'revenue', fieldType: 'text', label: 'Revenue', contactFieldKey: 'annual_revenue' },
       { fieldName: 'plan', fieldType: 'select', label: 'Plan', options: ['Gold', 'Silver'], contactFieldKey: 'tier' },
     ])
-    expect(payload.updatedAt).toEqual({ __now: true })
   })
 
   it('clearing a mapping removes the key from that field rather than writing undefined', async () => {
-    render(<FormContactFieldsCard hostId="h1" formId="f1" fields={FIELDS} />)
+    render(<FormContactFieldsCard hostId="h1" formId="f1" fields={FIELDS} saveFields={saveFields} />)
     pick(/Revenue \(revenue\)/, /Not saved to a contact field/)
     fireEvent.click(saveButton())
     await waitFor(() => expect(mockWrites).toHaveLength(1))
-    const written = mockWrites[0][1].fields as Record<string, unknown>[]
+    const written = mockWrites[0]
     expect(written[1]).toEqual({ fieldName: 'revenue', fieldType: 'text', label: 'Revenue' })
     expect(written[1]).not.toHaveProperty('contactFieldKey')
   })
@@ -173,6 +160,7 @@ describe('FormContactFieldsCard', () => {
         hostId="h1"
         formId="f1"
         fields={[{ fieldName: 'old', fieldType: 'text', contactFieldKey: 'legacy' }]}
+        saveFields={saveFields}
       />,
     )
     expect(shown(/^old/)).toBe('legacy — retired field')
@@ -189,6 +177,7 @@ describe('FormContactFieldsCard', () => {
           { fieldName: 'email', fieldType: 'email' },
           { fieldName: 'plan', fieldType: 'select', label: 'Plan' },
         ]}
+        saveFields={saveFields}
       />,
     )
     expect(screen.queryAllByRole('combobox')).toHaveLength(0)
@@ -197,7 +186,7 @@ describe('FormContactFieldsCard', () => {
 
   it('keeps showing a mapping onto a field that no longer exists, so it can be cleared', () => {
     mockDefinitions = []
-    render(<FormContactFieldsCard hostId="h1" formId="f1" fields={FIELDS} />)
+    render(<FormContactFieldsCard hostId="h1" formId="f1" fields={FIELDS} saveFields={saveFields} />)
     expect(shown(/Revenue \(revenue\)/)).toBe('annual_revenue — no such field')
     expect(screen.getByText(/This field no longer exists/)).toBeTruthy()
   })

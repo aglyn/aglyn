@@ -829,6 +829,94 @@ export function nodesPlaceForm(
 }
 
 /**
+ * The `form` node inside a form's OWN design.
+ *
+ * A form document's tree holds exactly one, because the document IS that
+ * form — but the tree is a flat map under a synthetic canvas root, so the
+ * node has to be found rather than assumed to be the root itself.
+ *
+ * Here rather than at each surface because every reader of a form's design
+ * needs it before it can ask anything else: the form's page to run
+ * `checkFormContract`, the promotion route to publish, the preview to draw,
+ * {@link formDesignReboundTo} to rewrite the binding. A caller that found
+ * the node its own way and one that found it this way must agree, or a
+ * design reads as "no form here" on one surface and as bound on the next.
+ */
+export function formNodeIdIn(
+  nodes: Record<NodeId, AglynNodeSchema | undefined> | undefined | null,
+): NodeId | undefined {
+  return Object.keys(nodes ?? {}).find(
+    (id) => nodes?.[id]?.componentId === FORM_COMPONENT_ID,
+  ) as NodeId | undefined
+}
+
+/**
+ * The same design, naming `identity` instead of whichever form it named
+ * before — or `null` when it already did.
+ *
+ * ## Why a copied design must be rewritten rather than carried
+ *
+ * A form's design names its own form in a prop (AGL-3024). That binding is
+ * what `/api/forms/submit` stamps a submission with and what the form's own
+ * submission list is an equality on, so a design that travels to a SECOND
+ * form — duplicated, imported, installed from a starter — arrives naming the
+ * first one, and every submission the second form collects is filed under the
+ * first. Nothing about that is visible: the copy renders, the visitor
+ * submits, the row lands, and the copy's own list simply never grows.
+ * `checkFormContract` calls it `form-id-unbound`, and it is the one violation
+ * a copy CAUSES rather than inherits.
+ *
+ * So every path that gives a stored design to a different form rebinds it
+ * here, with the same two props the Forms page's Create stamps on a new one:
+ * the id the submissions are keyed on, and the caption they are labelled
+ * with in the Inbox. Leaving the caption behind is the quieter half of the
+ * same bug — the copy's submissions arrive titled with the source's name.
+ *
+ * `null` for "nothing to write", so a caller holding a compressed tree can
+ * skip the decode-rewrite-encode round trip entirely in the common case.
+ * A design with no form node in it returns `null` too: there is no binding
+ * to move, and inventing one is not this function's decision.
+ *
+ * Pure — the input map and its nodes are not changed.
+ */
+export function formDesignReboundTo<N extends AglynNodeSchema = AglynNodeSchema>(
+  nodes: Record<NodeId, N> | undefined | null,
+  identity: { formId: string; formName?: string | null },
+): Record<NodeId, N> | null {
+  const formId = String(identity.formId ?? '').trim()
+  if (!formId || !nodes) return null
+  const requested = String(identity.formName ?? '').trim()
+  const formName = requested
+    ? requested.slice(0, FORM_DISPLAY_NAME_MAX_LENGTH)
+    : ''
+  const rebound: Record<NodeId, N> = {}
+  let changed = false
+  for (const entry of Object.entries(nodes)) {
+    const [id, node] = entry as [NodeId, N]
+    const props = (node?.props ?? {}) as Record<string, unknown>
+    if (node?.componentId !== FORM_COMPONENT_ID) {
+      rebound[id] = node
+      continue
+    }
+    const bound = String(props[FORM_ID_PROP] ?? '').trim()
+    if (bound === formId && (!formName || props['formName'] === formName)) {
+      rebound[id] = node
+      continue
+    }
+    changed = true
+    rebound[id] = {
+      ...node,
+      props: {
+        ...props,
+        [FORM_ID_PROP]: formId,
+        ...(formName ? { formName } : {}),
+      },
+    } as N
+  }
+  return changed ? rebound : null
+}
+
+/**
  * The placement kind that makes a placed form render its ENTITY'S design.
  *
  * Until this existed the entity's tree was written on every publish and read

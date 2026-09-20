@@ -40,6 +40,11 @@
  */
 
 import { CONSOLE_WIDGET_SLOTS } from '@aglyn/aglyn'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import {
+  definePluginZone,
+  registerPluginZone,
+} from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { ABSENT_WHEN_EMPTY_ATTRIBUTE } from '@aglyn/shared-ui-jsx/components/grid-items'
 import { Stack, ThemeProvider, createTheme } from '@mui/material'
 import { render, screen } from '@testing-library/react'
@@ -363,5 +368,29 @@ describe('every zone says how it places its widgets', () => {
 
   it('stacks a zone outside the catalog', () => {
     expect(widgetZoneLayout('pluginSiteSet')).toBe('stack')
+  })
+
+  it('places a zone a plugin hosts the way that plugin declared', () => {
+    // A plugin's page is its own to lay out: a button it draws in a row of
+    // actions needs no wrapper, and only the plugin knows that.
+    resetPluginServicesForTests()
+    registerPluginZone(
+      {
+        zone: definePluginZone('cellarRowAction'),
+        label: 'A bottle’s row actions',
+        surface: 'console',
+        layout: 'bare',
+      },
+      { pluginId: 'cellar' },
+    )
+    registerPluginZone(
+      { zone: definePluginZone('cellarNotes'), label: 'Tasting notes', surface: 'console' },
+      { pluginId: 'cellar' },
+    )
+    expect(widgetZoneLayout('cellarRowAction')).toBe('bare')
+    expect(widgetZoneLayout('cellarNotes')).toBe('stack')
+    // The catalog still wins for its own zones, whatever a plugin declares.
+    expect(widgetZoneLayout('recordInsights')).toBe('stack')
+    resetPluginServicesForTests()
   })
 })

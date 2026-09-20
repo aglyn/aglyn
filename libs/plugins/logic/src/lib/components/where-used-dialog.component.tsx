@@ -27,7 +27,7 @@ import {
 } from '@mui/material'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { useConsoleHostRoute } from '@aglyn/tenant-feature-instance'
-import type { WhereUsedResult } from '../utils/fetch-where-used'
+import type { WhereUsedResult } from '@aglyn/aglyn/app-utils/where-used'
 
 /**
  * Besigner deep-links for a scanned screen/layout version. The routes live

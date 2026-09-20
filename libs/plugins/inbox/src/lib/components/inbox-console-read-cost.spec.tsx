@@ -243,12 +243,19 @@ function summarize(
   )
 }
 
-/** Collections only ONE section's cards read, keyed by that section. */
-const SECTION_COLLECTIONS = {
+/**
+ * Collections only ONE section's cards read, keyed by that section.
+ *
+ * Campaigns lists none of its own: that section is a zone this page hosts,
+ * and what the card drawn in it reads is the owning plugin's to bound. What
+ * this file holds for it is the other half of the matrix — opening Campaigns
+ * reads nothing of the two sections beside it.
+ */
+const SECTION_COLLECTIONS: Record<string, readonly string[]> = {
   submissions: ['formSubmissions', 'forms'],
   contacts: ['siteMembers', 'leads'],
-  campaigns: ['campaigns'],
-} as const
+  campaigns: [],
+}
 
 function listenedCollections(): Set<string> {
   return new Set(mockListens.map((listen) => listen.path.split('/').pop() ?? ''))
@@ -340,9 +347,7 @@ describe('inbox console read cost (AGL-2501)', () => {
     await renderConsole(open)
     summarize(`${open} section`, mockListens)
     const seen = listenedCollections()
-    for (const collection of SECTION_COLLECTIONS[
-      open as keyof typeof SECTION_COLLECTIONS
-    ]) {
+    for (const collection of SECTION_COLLECTIONS[open] ?? []) {
       expect({ open, collection, listened: seen.has(collection) }).toEqual({
         open,
         collection,

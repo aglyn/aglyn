@@ -63,6 +63,8 @@ describe('the inbox plugin registers a dashboard glance', () => {
     )
     expect((extension?.widgets ?? []).map((widget) => widget.widgetId)).toEqual([
       INBOX_WIDGET,
+      // One form's submissions, drawn in the zone the forms plugin hosts.
+      'inbox-form-submissions',
     ])
     expect(extension?.navItems?.[0]?.href).toBe('/inbox')
   })

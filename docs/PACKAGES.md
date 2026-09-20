@@ -216,19 +216,21 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 18 edges the allowlist carries, and what removes each. An edge leaves the
+The 2 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
 is silent and only this document holds it.
 
-**`shared-util-email` → `aglyn`** (1). A spec reads the shipped price table so
-its ceiling assertions check real numbers. It is inline-disabled at the one
-import and no production file may repeat it; the fix is a fixture that reads
-the table from the core's server entry, or the spec moving to a project that
-may import the core.
+**`shared-util-email` → `aglyn`.** Gone (AGL-3080). One spec read the shipped
+price table so its ceiling assertions checked real numbers. The check needs
+both the table and the ceiling model, and only one direction between them is
+legal, so it lives beside the table as
+`libs/aglyn/src/lib/app-utils/plan-entitlements-deliverable.spec.ts` and
+imports the model from the email library. `shared` imports only `shared`
+again, with no inline disable anywhere.
 
-**Plugin → plugin** (16, numbered to 17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (2, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -239,92 +241,96 @@ seam called **present** was verified by reading its export; a seam called
 **owed** does not exist yet and is AGL-3124's to build before the lane that
 needs it starts.
 
-1. **`plugins-bookings` → `plugins-commerce`.** Crosses: `resolveFlatTaxCents`
-   and `TaxSettings` (`src/lib/server.ts`), `storefrontTaxModeOf`
-   (`src/lib/server/billing-webhook.ts`). Not model reuse, as the allowlist's
-   `why` has it — it is tax: two plugins that take money need the same tenant
-   tax profile. Fix: a tax-profile service contract on
-   `definePluginServiceContract` / `registerPluginService` /
-   `resolvePluginServices` — commerce registers the profile, bookings resolves
-   it, neither imports the other. The machinery is **present**; the named
-   contract is **owed** (AGL-3124), beside the payment-provider contract the
-   same money path needs.
+1. **`plugins-bookings` → `plugins-commerce`.** Gone (AGL-3080). Two plugins
+   that take money need one tax rule. Commerce registers it through
+   `registerPluginTaxProfile` from both of its server registrars, and a booking
+   is priced and confirmed by asking `pluginTaxProfile()`. That contract throws
+   rather than answer zero when no plugin owns the rule, and
+   `tax-profile-is-registered.spec.ts` in each app runs the real registrars
+   through the manifest to prove the owner is there. The number stays.
 2. **`plugins-commerce` → `plugins-data`.** Gone (AGL-3080). Commerce was
    reaching `parseCsv` through the data plugin's barrel, which only re-exports
    it; it now imports the function from the core's `dataset-csv`, where it
    lives. The number stays so the rows below keep theirs.
-3. **`plugins-crm` → `plugins-bookings`.** Crosses: `BOOKING_PATH_DEFAULT` and
-   `bookingLinkFor` (`src/lib/components/book-meeting-action.tsx`) — CRM
-   spelling a bookings address. Fix: the plugin-declared record route contract,
-   so bookings publishes its own addresses and CRM asks for one. **Owed**
-   (AGL-3124). A route table is the plugin's domain, so `libs/shared` is not an
-   answer for it.
-4. **`plugins-crm` → `plugins-email`.** Crosses: `useSendingApi`
-   (`src/lib/components/crm-send-email-dialog.tsx`) — CRM's one-to-one composer
-   calling email's send. Fix: the send control is a widget the email plugin
-   registers through `registerConsoleExtension` (`ConsoleExtension.widgets`)
-   into the `recordEmail` zone CRM already hosts and draws with
-   `useConsoleWidgetSlot()`. **Present**, and in use for other zones today.
-   Email's route stays behind its own `registerPluginApiRoute`; CRM never holds
-   the client hook.
-5. **`plugins-crm` → `plugins-marketing`.** Crosses: marketing's
-   `ConversionAttribution` component, embedded twice
-   (`contact-associations-card.tsx`, `lead-history-card.tsx`). Fix: marketing
-   registers it as a widget into CRM's `recordInsights` zone — same registry,
-   same renderer as row 4. **Present.**
-6. **`plugins-email` → `plugins-mui`.** Crosses: `sanitizeCustomHtml`
-   (`src/lib/components/email-blocks.tsx`) — not bundle constants, which is
-   what the allowlist's `why` and this section's old fix both named. Fix: HTML
-   sanitization is a platform trust-and-safety obligation, not MUI's domain; it
-   belongs in the core beside `author-html.ts` and `sanitize-svg.ts`, and both
-   plugins call it there. Into the core is right here for the one reason that
-   makes it right anywhere: nothing plugin-shaped moves. A sanitizer knows no
-   plugin's model.
-7. **`plugins-forms` → `plugins-bookings`.** Crosses: `BOOKINGS_BUNDLE` and
-   `BUNDLE_ID`, in `src/lib/plugin-id-backfill-table.spec.ts` only — no
-   production file, so the allowlist's "placement menu" `why` no longer matches
-   the graph. Fix: the spec reads bundle ids from the plugin-manager registry
-   the loader manifests already fill, which is row 16's fix. **Present.**
-8. **`plugins-forms` → `plugins-crm`.** Crosses two different things:
-   `useContactFieldDefinitions` (`form-contact-fields-card.tsx`) and `crmRoutes`
-   (`form-detail-card.tsx`). Fix, in two halves: contact field definitions come
-   through `registerCustomFieldType`, **present**; the route table comes through
-   the record route contract, **owed** (AGL-3124, which names this row). The
-   edge leaves the allowlist only when both halves have landed.
-9. **`plugins-forms` → `plugins-events-calendar`.** Crosses:
-   `EVENTS_CALENDAR_BUNDLE` and `BUNDLE_ID`, in
-   `src/lib/plugin-id-backfill-table.spec.ts` only. Fix: the registry read of
-   row 7. **Present.**
-10. **`plugins-forms` → `plugins-inbox`.** Crosses: inbox's `SubmissionsCard`
-    (`src/lib/components/form-submissions-card.component.tsx`). Fix: inbox
-    registers the card as a widget into the `hostForms` zone the forms plugin
-    already hosts and draws with `useConsoleWidgetSlot()`. **Present**, and this
-    is the shape a plugin's own hub is meant to take.
-11. **`plugins-forms` → `plugins-mui`.** Crosses: `BUNDLE_ID as MUI_BUNDLE_ID`
-    (`src/lib/components/form.tsx`), plus MUI's `Product` component and its
-    bundle id in two specs. Fix: a form never needs another plugin's bundle id
-    spelled out — the id comes off the node being read, through the loader
-    registry, and the specs read presets and ids from that same registry.
-    **Present.** The core carries a copy of the literal (`MUI_BUNDLE_ID` in
-    `plugin-manager/feature-plugins.ts`); that file is AGL-3116's and is not
-    this row's to change.
-12. **`plugins-inbox` → `plugins-crm`.** Crosses: `crmRoutes`, in three console
-    components (`contacts-card.component.tsx`,
-    `inbox-glance-card.component.tsx`, `submissions-card.component.tsx`). Fix:
-    the record route contract, **owed** (AGL-3124). Nothing else crosses, so
-    this row retires on that seam alone.
-13. **`plugins-inbox` → `plugins-marketing`.** Crosses: `ConversionAttribution`
-    (twice), `HostCampaignsCard` (`inbox-console-page.tsx`), and
-    `performCampaignSend` in one spec. Fix, in two parts: marketing registers
-    both cards as widgets into zones the inbox page declares for itself — a slot
-    id is an open string, so a plugin-hosted zone needs no core release, and the
-    registry is **present**; and the spec asserts the consent gate on the shared
-    mail rail (`@aglyn/shared-util-email`'s `marketing-send` injection seam),
-    which every send passes, instead of importing marketing's send path.
-14. **`plugins-marketing` → `plugins-commerce`.** Crosses: `productPriceRange`
-    (`src/lib/server/campaign-send.ts`) — marketing reading a fact about a
-    commerce record. Fix: `registerPluginRecordFactsReader` — commerce registers
-    product facts, marketing resolves them. **Present.**
+3. **`plugins-crm` → `plugins-bookings`.** Gone (AGL-3080). "Book a meeting"
+   read the bookings services collection, the booking plugin's per-site
+   setting and its link builder: a bookings feature living in the CRM. The
+   whole control moved to `libs/plugins/bookings`, and the CRM hosts a
+   `crmRecordBooking` zone for it in a record's header and beside the
+   composer. That zone is `bare` — `registerPluginZone` gained a `layout`, so
+   a plugin-hosted zone can be one control in a row rather than a block. The
+   composer's caret helper stayed with the CRM. The number stays.
+4. **`plugins-crm` → `plugins-email`.** Gone (AGL-3080). What crossed was
+   `useSendingApi`, the client of `/api/email/sending-identity` — a route the
+   console itself serves, because which address a site's mail leaves from is
+   the platform's mail rail and not the email plugin's. The hook lives in
+   `@aglyn/tenant-feature-instance/hooks/use-sending-identity-api`, beside the
+   other client hooks a plugin may import, and the CRM's one-to-one composer
+   reads the identity from the platform. The number stays.
+5. **`plugins-crm` → `plugins-marketing`.** Gone (AGL-3080). The CRM hosts a
+   `crmRecordAttribution` zone on a contact's page and in a lead's history and
+   hands it `{ hostId, recordKind, recordId }` in its own words; marketing
+   registers one widget there that reads the kind as the identify moment it
+   credits, and draws nothing for a kind it never credits. The number stays.
+6. **`plugins-email` → `plugins-mui`.** Gone (AGL-3080). `sanitizeCustomHtml`
+   had already become a one-line delegation to the core's `sanitizeAuthorHtml`
+   (AGL-1901), so the email blocks call the core's function themselves — the
+   same one the mailed copy is rendered under. The number stays.
+7. **`plugins-forms` → `plugins-bookings`.** Gone (AGL-3080). The only
+   crossing was `plugin-id-backfill-table.spec.ts`, which checks a tools
+   script against four plugins' bundles and so was never the forms plugin's
+   spec. It lives in `apps/console/specs` and reaches each plugin through the
+   generated manifest, the one door an app has. The number stays.
+8. **`plugins-forms` → `plugins-crm`.** Gone (AGL-3080), in two halves. The
+   link to a form's people asks `pluginRecordFilteredHref('contact', …,
+   'form', formId)`. The "Saves to contact fields" card moved to the CRM: what
+   a contact's fields are is the CRM's to know, so the card is its widget, in a
+   `formContactFields` zone the form's page hosts. The widget decides what the
+   declaration becomes and calls `saveFields`; the page writes the form
+   document, which is the forms plugin's. It is gated on the `crm` entitlement
+   like every CRM card, since a workspace without the suite has no fields to
+   map onto. The number stays.
+9. **`plugins-forms` → `plugins-events-calendar`.** Gone (AGL-3080), with
+   row 7: the same spec, the same move. The number stays.
+10. **`plugins-forms` → `plugins-inbox`.** Gone (AGL-3080). The forms plugin
+    declares a `formSubmissions` zone (`definePluginZone`, `registerPluginZone`)
+    and draws it on a form's page behind the reader's ask; the Inbox registers
+    its submissions table there as a widget, narrowed to that form. The page
+    says where submissions are read when no plugin registered a reader. The
+    number stays.
+11. **`plugins-forms` → `plugins-mui`.** Gone (AGL-3080). The form block's
+    preset places a mui heading and stack, and its nodes name the bundle that
+    registers them. It takes that id from the core's `MUI_BUNDLE_ID`, as
+    commerce, bookings and events-calendar already do, instead of importing the
+    mui plugin for one string. The spec that rendered mui's `Product` beside
+    the form was two plugins' claims in one file: `begin_checkout` is held by
+    `product-checkout-analytics.spec.tsx` in the mui plugin now. The core still
+    carries that literal (`plugin-manager/feature-plugins.ts`), which is this
+    document's to record and not a plugin-to-plugin edge. The number stays.
+12. **`plugins-inbox` → `plugins-crm`.** Gone (AGL-3080). The CRM publishes
+    where a contact, a lead, a company and a deal are read through
+    `registerPluginRecordRoute`, and the Inbox's three cards ask
+    `pluginRecordHref` and its siblings with the org and site already in the
+    URL. With no plugin publishing the kind they draw text, not a link to a
+    page the workspace cannot open. The number stays so the rows below keep
+    theirs.
+13. **`plugins-inbox` → `plugins-marketing`.** No shipped file crosses any
+    more (AGL-3080). The Inbox hosts two zones marketing fills: its Campaigns
+    section (`inboxCampaigns`) and the attribution under a lead or a submission
+    (`inboxRecordAttribution`, as in row 5). What still crosses is one spec,
+    `an-enrollment-is-not-a-license-to-send.spec.ts`, which drives the real
+    `performCampaignSend` against the real Inbox enrollment to prove the send
+    re-checks suppression. It is the consent proof, its header argues where it
+    lives, and the sender is not reachable through marketing's server entry, so
+    it keeps the row until it can assert the same thing on the shared mail
+    rail (`@aglyn/shared-util-email`'s `marketing-send` injection seam).
+14. **`plugins-marketing` → `plugins-commerce`.** Gone (AGL-3080). The campaign
+    sender read the products collection itself and imported `productPriceRange`
+    to price what it read. Commerce publishes a `product` card through
+    `registerPluginRecordCardReader` — a new core seam, since a send has no
+    member for the facts reader to answer — and the sender asks
+    `readPluginRecordCard`. The "from" price is worked out in one place. The
+    number stays.
 15. **`plugins-marketing` → `plugins-email`.** The widest row. Crosses:
     `CampaignComposer`, `useCampaignManageApi` and `useOrgEmailTopics`
     (`campaign-detail-card.tsx`, `campaigns-card.tsx`), and
@@ -337,26 +343,28 @@ needs it starts.
     the reader is **present**, while the resource kind and the
     subscription-topic contract `useOrgEmailTopics` needs are **owed**
     (AGL-3124). That resource kind is the one the finding below turns on.
-16. **`plugins-marketplace` → `plugins-mui`.** Crosses: `blockPresets`
-    (`src/lib/model/blocks-publishable.spec.ts`), a spec proving each preset
-    composes only publishable components. Fix: read the presets from the
-    plugin-manager registry the loader manifests already fill. **Present.**
-17. **`plugins-workflows` → `plugins-logic`.** Crosses: `WhereUsedDialog`, plus
-    `fetchWhereUsed`, `summarizeDependents` and `WhereUsedResult`
-    (`src/lib/components/host-workflows-card.component.tsx`) — a card and a
-    query, not the condition evaluation the allowlist's `why` describes. Fix, in
-    two parts: logic registers the dialog as a widget into the `hostAutomations`
-    and `automationEditor` zones workflows already hosts (**present**); and the
-    where-used query becomes a dependents service contract on
-    `definePluginServiceContract` — logic registers the answer, workflows
-    resolves it — which is **owed** (AGL-3124).
+16. **`plugins-marketplace` → `plugins-mui`.** Gone (AGL-3080). The only
+    crossing was the spec proving each block preset composes publishable
+    components. It is about the palette's owner and the allowlist's owner at
+    once, so that half lives in `apps/console/specs` and reaches both through
+    the generated manifest; the marketplace keeps the half that is its own.
+    The number stays.
+17. **`plugins-workflows` → `plugins-logic`.** Gone (AGL-3080). What crossed
+    was a client and a dialog. The client called a route the console itself
+    serves (`/api/hosts/where-used`), which scans variables, functions and
+    workflows alike, so it was never logic's: it lives in the core beside the
+    route, at `@aglyn/aglyn/app-utils/where-used`, and both plugins ask the
+    platform. The dialog is a widget logic registers in the `workflowUsage`
+    zone the Automation page hosts; with nothing registered the page gives the
+    answer in words. The number stays.
 
-**Plugin → designer UI** (1). `plugins-mui` renders nested children through
-the designer's node leaf and contexts. A plugin that needs the designer UI
-cannot be used without it, which is exactly
-what the map forbids. Fix: the element-control seam moves into `@aglyn/besigner`
-(the logic package) and the designer UI supplies its implementation at
-registration time.
+**Plugin → designer UI.** Gone (AGL-3080). No shipped file in `plugins-mui`
+imported the designer any more; two specs did, to draw the mui image and video
+elements inside the designer's own `NodeLeaf` and prove the canvas reserves a
+replaced asset's box. A suite about a plugin's element AND the designer's leaf
+lives where both are reached: `apps/console/specs/mui-image-canvas-facts` and
+`mui-video-canvas-facts`, which take the element from the generated manifest.
+A plugin can be used without the designer UI, which is what the map asks.
 
 **A plugin domain on the generic floor: `@aglyn/shared-ui-email-campaigns`** (a
 finding, not an allowlist row). `libs/shared/ui/email-campaigns` holds the

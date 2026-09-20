@@ -77,6 +77,62 @@ describe('runWorkflow', () => {
     expect((result as any).results).toEqual({ total: 10, step2: 20 })
   })
 
+  it('lets a function read a site variable by name, as it can on a page (AGL-3202)', () => {
+    const priced: HostFunction = {
+      name: 'Priced',
+      parameters: [{ name: 'sites', type: 'number', required: true }],
+      variables: [{ name: 'total', type: 'number' }],
+      operations: [
+        {
+          if: { left: '1', comparator: '==', right: '1' },
+          then: [{ set: 'total', expression: 'sites * extra_site_price' }],
+          otherwise: [],
+        },
+      ],
+      returnValue: 'total',
+    }
+    // Keyed by NAME, as every workflow caller hands them over.
+    const variables = {
+      extra_site_price: {
+        name: 'extra_site_price',
+        type: 'number' as const,
+        value: '20',
+      },
+    }
+    const workflow = {
+      name: 'Quote',
+      steps: [{ functionName: 'Priced', args: ['5'], resultName: 'quote' }],
+    }
+    expect(
+      runWorkflow(workflow, { Priced: priced }, variables),
+    ).toMatchObject({ ok: true, value: 100 })
+    // A STEP RESULT is not a site variable: a function reads what the site
+    // declares, not whatever an earlier step happened to be called.
+    const reads: HostFunction = {
+      ...priced,
+      operations: [
+        {
+          if: { left: '1', comparator: '==', right: '1' },
+          then: [{ set: 'total', expression: 'sites + quote' }],
+          otherwise: [],
+        },
+      ],
+    }
+    const chained = runWorkflow(
+      {
+        name: 'Chained',
+        steps: [
+          { functionName: 'Priced', args: ['5'], resultName: 'quote' },
+          { functionName: 'Reads', args: ['1'] },
+        ],
+      },
+      { Priced: priced, Reads: reads },
+      variables,
+    )
+    expect(chained).toMatchObject({ ok: false, step: 2 })
+    expect((chained as any).error).toContain('quote')
+  })
+
   it('defaults the return to the last step result', () => {
     const result = runWorkflow(
       { name: 'w', steps: [{ functionName: 'Double', args: ['4'] }] },

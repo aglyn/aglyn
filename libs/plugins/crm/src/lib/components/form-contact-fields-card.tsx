@@ -22,13 +22,11 @@ import {
   pluginDocsHelp,
   withContactFieldMapping,
 } from '@aglyn/aglyn'
-import { useContactFieldDefinitions } from '@aglyn/plugins-crm/hooks/use-contact-field-definitions'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { useFirestore, useOrgDataScope } from '@aglyn/tenant-feature-instance'
+import { useOrgDataScope } from '@aglyn/tenant-feature-instance'
 import { Button, MenuItem, Stack, TextField, Typography } from '@mui/material'
-import { doc, updateDoc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 
 export interface FormContactFieldsCardProps {
@@ -38,6 +36,11 @@ export interface FormContactFieldsCardProps {
   fields: readonly FormFieldDecl[]
   /** True while the form document is still being read. */
   loading?: boolean
+  /**
+   * Writes the declaration back. The form document is the forms plugin's, so
+   * its page does the write; this card decides what the array should be.
+   */
+  saveFields: (fields: FormFieldDecl[]) => Promise<void>
 }
 
 /** The choice that saves nowhere — a `MenuItem` value has to be a string. */
@@ -49,8 +52,9 @@ const NONE = ''
  * The declaration a submission is judged against comes off the DESIGN at
  * publish — names, types, options — and knows nothing about where a field
  * saves to, because that is a fact about the contact, not the canvas. So it
- * is edited here, on the form's own page beside routing and the consent
- * field, and written onto the stored declaration as `contactFieldKey`;
+ * is edited here — drawn by the CRM in the zone the form's own page hosts,
+ * beside routing and the consent field — and written onto the stored
+ * declaration as `contactFieldKey`;
  * `carryContactFieldMappings` keeps it across the next publish by field
  * name. The destinations are the org's custom field definitions, read
  * through the same hook every other surface uses, so a field retired under
@@ -63,14 +67,14 @@ const NONE = ''
  * nothing at the door today — a choice that writes it would be a choice
  * that does nothing.
  *
- * Save writes the whole `fields` array back — it is one array on the form
- * document, and Firestore has no per-element update — with the picked keys
+ * Save hands the whole `fields` array to the page, which writes it — it is
+ * one array on the form document, the document is the forms plugin's, and
+ * Firestore has no per-element update — with the picked keys
  * applied through `withContactFieldMapping`, which deletes an unmapped key
  * rather than leaving an `undefined` the array write would refuse.
  */
 export function FormContactFieldsCard(props: FormContactFieldsCardProps) {
-  const { hostId, formId, fields, loading } = props
-  const firestore = useFirestore()
+  const { hostId, fields, loading, saveFields } = props
   const { enqueueSnackbar } = useSnackbar()
   const { scope, ready: scopeReady } = useOrgDataScope({ hostId })
   const { active, definitions, ready } = useContactFieldDefinitions(scope?.[1] ?? null)
@@ -111,10 +115,7 @@ export function FormContactFieldsCard(props: FormContactFieldsCardProps) {
           withContactFieldMapping(decls, decl.fieldName, draft[decl.fieldName] || null),
         [...fields],
       )
-      await updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId), {
-        fields: next,
-        updatedAt: Timestamp.now(),
-      })
+      await saveFields(next)
       setDraft({})
       enqueueSnackbar('Form saved', { variant: 'success', persist: false })
     } catch (error) {
@@ -123,7 +124,7 @@ export function FormContactFieldsCard(props: FormContactFieldsCardProps) {
     } finally {
       setSaving(false)
     }
-  }, [changed, saving, fields, draft, firestore, hostId, formId, enqueueSnackbar])
+  }, [changed, saving, fields, draft, saveFields, enqueueSnackbar])
 
   /**
    * What the picked destination does with an answer — the type's rule, in a

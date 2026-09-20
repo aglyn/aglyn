@@ -27,7 +27,7 @@
 
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { BookMeetingButton, insertLinkAtCaret } from './book-meeting-action'
+import { BookMeetingButton } from './book-meeting-action'
 
 /** The site document the door reads: its naming and its per-site deny-list. */
 let hostDoc: Record<string, unknown> | undefined
@@ -168,29 +168,5 @@ describe('BookMeetingButton', () => {
     expect(onInsert).toHaveBeenCalledWith(
       'https://acme.aglyn.app/book?service=svc-1&crm=deal%3Adeal-3',
     )
-  })
-})
-
-describe('insertLinkAtCaret', () => {
-  const link = 'https://acme.aglyn.app/?service=s'
-
-  it('drops the link at the caret with a space on each side where the text runs into it', () => {
-    const out = insertLinkAtCaret('Book here please', link, 9, 9)
-    expect(out.text).toBe(`Book here ${link} please`)
-    expect(out.caret).toBe(`Book here ${link}`.length)
-  })
-
-  it('adds no space beside whitespace, a line end, or an edge of the draft', () => {
-    expect(insertLinkAtCaret('', link, 0, 0).text).toBe(link)
-    expect(insertLinkAtCaret('Hello\n', link, 6, 6).text).toBe(`Hello\n${link}`)
-    expect(insertLinkAtCaret('Hi ', link, 3, 3).text).toBe(`Hi ${link}`)
-    expect(insertLinkAtCaret('a\nb', link, 1, 1).text).toBe(`a ${link}\nb`)
-  })
-
-  it('replaces the selection and clamps a caret past the end', () => {
-    expect(insertLinkAtCaret('Book HERE now', link, 5, 9).text).toBe(`Book ${link} now`)
-    const out = insertLinkAtCaret('Hi', link, 50, 50)
-    expect(out.text).toBe(`Hi ${link}`)
-    expect(out.caret).toBe(out.text.length)
   })
 })

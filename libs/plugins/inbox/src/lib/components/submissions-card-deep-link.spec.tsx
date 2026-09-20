@@ -86,9 +86,8 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
     confirm: jest.fn().mockResolvedValue(undefined),
   }),
 }))
-jest.mock('@aglyn/plugins-marketing/components/conversion-attribution.component', () => ({
-  __esModule: true,
-  default: () => null,
+jest.mock('./inbox-attribution-zone', () => ({
+  InboxRecordAttributionZone: () => null,
 }))
 jest.mock('./submission-reply.component', () => ({
   __esModule: true,

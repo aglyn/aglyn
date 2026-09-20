@@ -108,10 +108,6 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 jest.mock('@aglyn/shared-ui-next', () => ({
   HubSections: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
-jest.mock('@aglyn/plugins-marketing/components/campaigns-card', () => ({
-  __esModule: true,
-  default: () => null,
-}))
 
 const BASE_PATH = '/acme/hosts/shop/inbox'
 

@@ -22,12 +22,21 @@ import { CRM_CONSOLE_SECTIONS } from './components/crm-console-sections'
 import { CrmGlanceCard } from './components/crm-glance-card'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { withCrmOrgMount } from './hooks/use-crm-org-mount'
+import { registerCrmRecordRoutes } from './model/crm-record-routes'
+import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
+import { CRM_RECORD_ATTRIBUTION_ZONE } from './components/crm-attribution-zone'
+import { CRM_RECORD_BOOKING_ZONE } from './components/crm-booking-zone'
 
 /** Code-split: the CRM hub only loads when opened. */
 const CrmConsolePage = lazy(
   () => import('./components/crm-console-page'),
 )
 /** The dashboard glance, split the same way: it loads where the slot mounts it. */
+/** Where a form's fields save on a contact, drawn on the form's own page. */
+const FormContactFieldsCard = lazy(
+  () => import('./components/form-contact-fields-card'),
+)
+
 const CrmTasksDueCard = lazy(
   () => import('./components/crm-tasks-due-card'),
 )
@@ -48,6 +57,30 @@ const CrmTasksDueCard = lazy(
  * address is a URL, not a stored id, and the nav item keeps redirecting it.
  */
 export function registerCrmConsole(): void {
+  registerCrmRecordRoutes()
+  registerPluginZone(
+    {
+      zone: CRM_RECORD_BOOKING_ZONE,
+      label: 'Book a meeting from a CRM record',
+      surface: 'console',
+      // One control in a record header's row of actions, and one beside the
+      // composer's fields: the page lays them out, so the zone adds nothing.
+      layout: 'bare',
+      description:
+        'In a record’s header and beside the one-to-one composer. A widget here offers the site’s bookable services and the link a visitor books one at; it is handed the site, the record and, from the composer, a way to insert the chosen link. It writes nothing.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: CRM_RECORD_ATTRIBUTION_ZONE,
+      label: 'Where a CRM record came from',
+      surface: 'console',
+      description:
+        'On a contact’s page and in a lead’s history. A widget here says which campaign or link brought the person; it is handed the site, what the record is and its id, and it writes nothing.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'CRM',
@@ -120,6 +153,19 @@ export function registerCrmConsole(): void {
      * provider around each card, since the sites page cannot import one.
      */
     widgets: [
+      // Which contact field each of a form's fields saves to, on the form's
+      // own page. The forms plugin hosts the zone and writes the form
+      // document; what a contact's fields ARE is this plugin's, so the card
+      // is too.
+      {
+        slot: 'formContactFields',
+        widgetId: 'crm-form-contact-fields',
+        title: 'Saves to contact fields',
+        // A contact's custom fields are part of the suite, so a workspace
+        // without it has none to map a form's field onto.
+        featureFlag: 'crm',
+        Component: FormContactFieldsCard,
+      },
       {
         slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
         widgetId: 'crm-tasks-due',

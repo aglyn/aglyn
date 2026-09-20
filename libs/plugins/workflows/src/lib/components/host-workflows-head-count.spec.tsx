@@ -144,8 +144,7 @@ jest.mock('./host-activity-card.component', () => ({
   __esModule: true,
   default: () => null,
 }))
-jest.mock('@aglyn/plugins-logic', () => ({
-  WhereUsedDialog: () => null,
+jest.mock('@aglyn/aglyn/app-utils/where-used', () => ({
   fetchWhereUsed: jest.fn().mockResolvedValue({}),
   summarizeDependents: () => '',
 }))

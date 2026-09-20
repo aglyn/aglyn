@@ -97,12 +97,13 @@ import {
   EDITOR_OPTION_CEILING,
   useAutomationStepPickers,
 } from './use-automation-step-pickers'
-import { WhereUsedDialog } from '@aglyn/plugins-logic'
+import { listConsoleWidgets } from '@aglyn/aglyn'
 import {
   fetchWhereUsed,
   summarizeDependents,
   type WhereUsedResult,
-} from '@aglyn/plugins-logic'
+} from '@aglyn/aglyn/app-utils/where-used'
+import { WORKFLOW_USAGE_ZONE } from './workflow-zones'
 
 /**
  * How many workflows the card reads.
@@ -575,9 +576,20 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
         name: workflow.name,
       })
       setUsageLoading(null)
+      // The rows and their deep links are drawn in a zone; with nothing
+      // registered there the answer is still given, in words.
+      if (listConsoleWidgets(WORKFLOW_USAGE_ZONE.id).length === 0) {
+        enqueueSnackbar(
+          result.total
+            ? `"${workflow.name}" computes ${summarizeDependents(result)}`
+            : `"${workflow.name}" is not referenced by anything published`,
+          { variant: 'info', persist: false },
+        )
+        return
+      }
       setUsage({ name: workflow.name, result })
     },
-    [user, hostId],
+    [user, hostId, enqueueSnackbar],
   )
 
   const handleDelete = useCallback(
@@ -1045,11 +1057,14 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
           </Button>
         </DialogActions>
       </Dialog>
-      <WhereUsedDialog
-        hostId={hostId}
-        usage={usage}
-        onClose={() => setUsage(null)}
-      />
+      {ExtensionZone ? (
+        <ExtensionZone
+          slot={WORKFLOW_USAGE_ZONE.id}
+          hostId={hostId}
+          usage={usage}
+          onClose={() => setUsage(null)}
+        />
+      ) : null}
       <Dialog
         open={Boolean(runsFor)}
         onClose={() => setRunsFor(null)}

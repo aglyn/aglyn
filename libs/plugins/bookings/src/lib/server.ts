@@ -31,9 +31,9 @@ import {
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import {
-  resolveFlatTaxCents,
-  type TaxSettings,
-} from '@aglyn/plugins-commerce/model'
+  pluginTaxProfile,
+  type PluginResolvedFlatTax,
+} from '@aglyn/aglyn/plugin-manager/plugin-tax-profile'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { BOOKINGS_CONFIG_SCHEMA } from './plugin-config'
 import { bookingsBillingWebhookHandler } from './server/billing-webhook'
@@ -365,7 +365,8 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
     // on a booking that could never be paid.
     let chargeAccountId = ''
     let feeCents = 0
-    let serviceTax = resolveFlatTaxCents(undefined, 0, 'Service tax')
+    // No tax until a paid booking asks the tenant's tax rule what is owed.
+    let serviceTax: PluginResolvedFlatTax = { taxCents: 0, label: '', pct: 0 }
     if (paid) {
       const ownerUid = (ownerOrg as { ownerUid?: unknown } | null)?.ownerUid
       const [ownerProfile, storeSnapshot] = await Promise.all([
@@ -458,10 +459,14 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       // DEFAULT OFF, and load-bearing: an absent, zero, negative or
       // out-of-range rate resolves to zero, so no existing merchant's charge
       // moves because this shipped.
-      const taxSettings = ((storeSnapshot?.data() as any)?.tax ??
-        {}) as TaxSettings
+      const taxSettings = ((storeSnapshot?.data() as any)?.tax ?? {}) as {
+        service?: unknown
+      }
       const chargeCents = Math.round(priceUsd * 100)
-      serviceTax = resolveFlatTaxCents(
+      // Asked of the plugin that owns the merchant's tax rule, which throws
+      // rather than answer zero if none is loaded: an untaxed charge recorded
+      // as untaxed is the failure nobody sees until the merchant owes it.
+      serviceTax = pluginTaxProfile().flatTax(
         taxSettings.service,
         chargeCents,
         'Service tax',

@@ -33,7 +33,7 @@ import {
 } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import type { ConsoleRecordEmailDraft } from '@aglyn/aglyn/plugin-manager/record-zone-props'
-import { useSendingApi } from '@aglyn/plugins-email/components/use-sending-identity-api'
+import { useSendingApi } from '@aglyn/tenant-feature-instance/hooks/use-sending-identity-api'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -56,7 +56,8 @@ import {
 import { collection, doc, getDoc, setDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
-import { BookMeetingButton, insertLinkAtCaret } from './book-meeting-action'
+import { CrmRecordBookingZone } from './crm-booking-zone'
+import { insertLinkAtCaret } from './insert-link-at-caret'
 import {
   CAPTURE_ADDRESS_HELPER,
   CopyCaptureAddressButton,
@@ -769,7 +770,7 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
           </Stack>
         ) : null}
         {bookingRef ? (
-          <BookMeetingButton
+          <CrmRecordBookingZone
             variant="chip"
             hostId={sendHostId}
             org={org}

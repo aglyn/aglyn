@@ -16,6 +16,7 @@
  */
 
 import { bookingsBillingWebhookHandler } from './billing-webhook'
+import { standInTaxProfile } from '../testing/stand-in-tax-profile'
 
 /**
  * The GA4 `purchase` a paid booking reports into AGLYN's property (AGL-2481).
@@ -213,6 +214,7 @@ async function deliver(object: any, type = 'checkout.session.completed') {
 }
 
 beforeEach(() => {
+  standInTaxProfile()
   docs.clear()
   ga4Purchases.length = 0
   ga4Rejects = false

@@ -74,7 +74,10 @@ jest.mock('./contact-timeline-card', () => ({
   default: (props: Record<string, unknown>) => double('timeline')(props),
 }))
 jest.mock('./add-to-list-button', () => ({ AddToListButton: () => null }))
-jest.mock('./book-meeting-action', () => ({ useBookingDoor: () => ({ open: false }) }))
+jest.mock('./crm-booking-zone', () => ({
+  useBookingDoor: () => ({ open: false }),
+  CrmRecordBookingZone: () => null,
+}))
 jest.mock('./crm-send-email-button', () => ({
   CrmSendEmailButton: (props: Record<string, unknown>) => double('send-email')(props),
 }))

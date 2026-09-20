@@ -106,7 +106,19 @@ export interface PluginZoneDeclaration<Props = unknown> {
    * zone owes its widgets the same statement.
    */
   description?: string
+  /**
+   * How the zone places its widgets. `stack`, the default, is one block of
+   * the page: its widgets are cards, spaced, and the block takes no room when
+   * nothing in it drew. `bare` adds no element of its own: every widget is one
+   * item of a layout the HOST draws — a button in a row of actions, a control
+   * beside a form's fields, a dialog that portals out of the page. A wrapper
+   * would put every button of a row into one column.
+   */
+  layout?: PluginZoneLayout
 }
+
+/** See {@link PluginZoneDeclaration.layout}. */
+export type PluginZoneLayout = 'stack' | 'bare'
 
 /** A declaration with the plugin that made it. */
 export type ResolvedPluginZone = PluginZoneDeclaration<unknown> & {

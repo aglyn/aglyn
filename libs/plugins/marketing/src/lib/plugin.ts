@@ -36,6 +36,14 @@ const CampaignGlanceCard = lazy(
   () => import('./components/campaign-glance-card.component'),
 )
 
+/** The site's campaigns, drawn in the Inbox's Campaigns section. */
+const HostCampaignsCard = lazy(() => import('./components/campaigns-card'))
+
+/** Loaded where a record page draws one of the attribution zones. */
+const RecordAttributionWidget = lazy(
+  () => import('./components/record-attribution-widget'),
+)
+
 /**
  * Marketing feature plugin (AGL-395). Console-only — overlays and popups
  * render on published sites through the tenant runtime, not a canvas
@@ -95,6 +103,28 @@ export function registerMarketingConsole(): void {
         widgetId: 'email-campaign-glance',
         title: 'Last campaign',
         Component: CampaignGlanceCard,
+      },
+      // Which campaign or link brought a person, drawn where the plugins that
+      // keep and list people host a zone for it. They hand over what the
+      // record is and its id; neither imports this plugin.
+      {
+        slot: 'crmRecordAttribution',
+        widgetId: 'marketing-crm-record-attribution',
+        title: 'Campaign attribution',
+        Component: RecordAttributionWidget,
+      },
+      // The Inbox's Campaigns tab is a zone; this is the card that fills it.
+      {
+        slot: 'inboxCampaigns',
+        widgetId: 'marketing-inbox-campaigns',
+        title: 'Campaigns',
+        Component: HostCampaignsCard,
+      },
+      {
+        slot: 'inboxRecordAttribution',
+        widgetId: 'marketing-inbox-record-attribution',
+        title: 'Campaign attribution',
+        Component: RecordAttributionWidget,
       },
     ],
     navItems: [

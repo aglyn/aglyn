@@ -249,10 +249,23 @@ function variableScope(
   variables: Record<string, HostVariable>,
 ): Record<string, number | string | boolean> {
   const scope: Record<string, number | string | boolean> = {}
-  for (const [name, variable] of Object.entries(variables)) {
-    if (variable.type === 'number') scope[name] = Number(variable.value ?? 0)
-    else if (variable.type === 'boolean') scope[name] = variable.value === 'true'
-    else scope[name] = variable.value ?? ''
+  for (const [key, variable] of Object.entries(variables)) {
+    const value =
+      variable.type === 'number'
+        ? Number(variable.value ?? 0)
+        : variable.type === 'boolean'
+          ? variable.value === 'true'
+          : (variable.value ?? '')
+    scope[key] = value
+    // Under its NAME as well (AGL-3202). Callers key this map by name, by
+    // id, or by both; an expression only ever says the name, so a map keyed
+    // by id alone used to give it nothing to find.
+    if (
+      variable.name &&
+      !Object.prototype.hasOwnProperty.call(scope, variable.name)
+    ) {
+      scope[variable.name] = value
+    }
   }
   return scope
 }
@@ -298,7 +311,10 @@ export function runWorkflow(
     if (run.ok === false) throw new Error(run.error)
     return run.value
   }
-  const scope = { ...variableScope(variables), ...extraScope }
+  // The site's variables, apart from the step results layered over them:
+  // they are what a function may read by name (AGL-3202), wherever it runs.
+  const siteVariables = variableScope(variables)
+  const scope = { ...siteVariables, ...extraScope }
   const results: Record<string, number | string | boolean> = {}
 
   for (const [index, step] of steps.entries()) {
@@ -328,11 +344,12 @@ export function runWorkflow(
         step: index + 1,
       }
     }
-    const run = evaluateHostFunction(
-      definition,
-      args,
-      context.workflows ? { invokeWorkflow } : undefined,
-    )
+    const run = evaluateHostFunction(definition, args, {
+      ...(context.workflows ? { invokeWorkflow } : {}),
+      // A function that prices from `extra_site_price` on a page must not
+      // fail with "Unknown name" the day a workflow calls it.
+      globals: siteVariables,
+    })
     // `=== false` (not `!run.ok`): the union fails to narrow under the
     // stricter lib build tsconfig otherwise (same quirk as publish.ts).
     if (run.ok === false) {

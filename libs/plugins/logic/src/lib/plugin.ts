@@ -25,13 +25,18 @@ import { BUNDLE_ID } from './constants/bundle-common'
 /** Code-split: the Logic console page only loads when opened. */
 const LogicConsolePage = lazy(() => import('./components/logic-console-page'))
 
+/** The dependents dialog, loaded where the Automation page draws its zone. */
+const WhereUsedDialog = lazy(
+  () => import('./components/where-used-dialog.component'),
+)
+
 /**
  * Logic feature plugin (AGL-395). Console-only — variables and no-code
  * functions resolve at render through the tenant compose pipeline, not a
  * canvas element of their own, so there is no UI bundle. The console half
  * declares the Logic nav + page through the ConsoleExtension registry
- * (always-on; the surface is not release-flagged). Also exports the shared
- * "where used" reference tooling, consumed by the workflows surface.
+ * (always-on; the surface is not release-flagged). Its dependents dialog is
+ * also drawn in the zone the Automation page hosts for a workflow's usage.
  */
 export function registerLogicConsole(): void {
   Aglyn.registerConsoleExtension({
@@ -47,6 +52,14 @@ export function registerLogicConsole(): void {
         slot: 'besignerFunctions',
         widgetId: 'logic-functions',
         Component: HostFunctionsCard,
+      },
+      // Where a WORKFLOW is used: the Automation page runs the scan and hosts
+      // the zone; the dialog that lays a scan out is the one a variable and a
+      // function open here, so it is drawn by this plugin.
+      {
+        slot: 'workflowUsage',
+        widgetId: 'logic-where-used',
+        Component: WhereUsedDialog,
       },
     ],
     pluginId: BUNDLE_ID,
@@ -75,7 +88,3 @@ export type { HostVariablesCardProps } from './components/host-variables-card.co
 export { default as HostFunctionsCard } from './components/host-functions-card.component'
 export type { HostFunctionsCardProps } from './components/host-functions-card.component'
 
-// Reference tooling shared with the workflows surface (AGL-187/193/395).
-export { default as WhereUsedDialog } from './components/where-used-dialog.component'
-export type { WhereUsedDialogProps } from './components/where-used-dialog.component'
-export * from './utils/fetch-where-used'

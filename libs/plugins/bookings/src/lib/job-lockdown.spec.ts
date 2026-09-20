@@ -86,8 +86,12 @@ jest.mock('@aglyn/aglyn/server', () => ({
   resolveTransactionFeeCents: () => 0,
 }))
 
-jest.mock('@aglyn/plugins-commerce/model', () => ({
-  resolveFlatTaxCents: () => 0,
+// This file is about the lockdown, so whatever owns the tax rule adds nothing.
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-tax-profile', () => ({
+  pluginTaxProfile: () => ({
+    flatTax: () => ({ taxCents: 0, label: '', pct: 0 }),
+    taxModeOf: () => 'none',
+  }),
 }))
 
 jest.mock('@aglyn/tenant-runtime', () => ({

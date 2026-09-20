@@ -255,6 +255,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 })
 
 import { bookHandler } from './server'
+import { standInTaxProfile } from './testing/stand-in-tax-profile'
 import { computeOpenSlots } from './model'
 import {
   resolveTransactionFeePct,
@@ -356,6 +357,7 @@ afterAll(() => {
 })
 
 beforeEach(() => {
+  standInTaxProfile()
   stripePosts.length = 0
   mockAdmin.__state.bookings.clear()
   mockAdmin.__state.service['priceUsd'] = 75

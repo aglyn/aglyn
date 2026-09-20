@@ -92,8 +92,7 @@ jest.mock('./host-run-history-card.component', () => ({
     return null
   },
 }))
-jest.mock('@aglyn/plugins-logic', () => ({
-  WhereUsedDialog: () => null,
+jest.mock('@aglyn/aglyn/app-utils/where-used', () => ({
   fetchWhereUsed: jest.fn().mockResolvedValue({}),
   summarizeDependents: () => '',
 }))

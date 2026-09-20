@@ -56,6 +56,13 @@
  * owed for a first version — with its stored node bytes carried across
  * untouched: they are msgpack at rest, and re-encoding them is the
  * double-encode `encodeStoredNodes` exists to avoid.
+ *
+ * THE ONE TREE THAT IS REWRITTEN is a form's (AGL-3024). A form's design
+ * names its own form inside itself, so carrying those bytes across hands the
+ * copy a design that files every submission under the SOURCE — silently,
+ * because the copy still renders and the row still lands. That binding is
+ * moved onto the copy below. No other kind embeds its own id in its design,
+ * so no other kind is decoded.
  */
 
 import {
@@ -64,6 +71,7 @@ import {
   checkQuota,
   claimAttempt,
   createResourceUid,
+  decodeStoredNodes,
   encodeStoredNodes,
   nameSearchKey,
   NON_PAGE_SCREEN_MAX_PER_HOST,
@@ -84,6 +92,7 @@ import {
   uniqueDuplicateSlug,
   type DuplicableHostResourceKind,
 } from '@aglyn/aglyn/app-utils/duplicate-resource'
+import { formDesignReboundTo } from '@aglyn/aglyn/app-utils/forms'
 import { Timestamp } from 'firebase-admin/firestore'
 import { logResourceDuplicated } from './duplicate-activity'
 import firebaseAdmin from './firebase-admin'
@@ -493,10 +502,37 @@ async function copy(
       if (slug) doc['slug'] = slug
       else delete doc['slug']
     }
+    /*
+     * THE FORM'S BINDING, moved onto the copy (AGL-3024).
+     *
+     * A form's design names its own form in a prop, and that name is what
+     * `/api/forms/submit` files a submission under. Copied verbatim it still
+     * names the SOURCE, so the copy renders, collects, and files everything
+     * it collects under the form it was copied from — while its own list
+     * stays empty and nothing anywhere reports an error. `checkFormContract`
+     * is what the console's form page banners it with; `formDesignReboundTo`
+     * is the write side of the same fact.
+     *
+     * This is the one place a copied tree is not carried across untouched,
+     * and the exception is narrow on purpose: no other kind here embeds its
+     * own id in its design. `formDesignReboundTo` answers `null` when there
+     * is nothing to move, so every other kind — and a form whose design is
+     * already correct — pays nothing for this.
+     */
+    const rebound = (raw: unknown): unknown => {
+      if (kind !== 'form') return raw
+      return (
+        formDesignReboundTo(decodeStoredNodes(raw), {
+          formId: id,
+          formName: name,
+        }) ?? raw
+      )
+    }
     // The stored tree is msgpack at rest; `encodeStoredNodes` passes encoded
     // bytes through and packs a plain map, so a legacy plain source lands
-    // compressed like every create does.
-    const packed = encodeStoredNodes(doc['nodes'])
+    // compressed like every create does — and so does a rebound one, which
+    // comes back decoded.
+    const packed = encodeStoredNodes(rebound(doc['nodes']))
     if (packed) doc['nodes'] = Buffer.from(packed)
     tx.create(collectionRef.doc(id), {
       ...doc,
@@ -508,7 +544,7 @@ async function copy(
       createdBy: uid,
     })
     if (versionData && versionId && recipe.versionParentField) {
-      const versionNodes = encodeStoredNodes(versionData['nodes'])
+      const versionNodes = encodeStoredNodes(rebound(versionData['nodes']))
       tx.create(collectionRef.doc(id).collection('versions').doc(versionId), {
         ...versionData,
         ...(versionNodes ? { nodes: Buffer.from(versionNodes) } : {}),

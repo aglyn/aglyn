@@ -18,8 +18,11 @@
 import { PLAN_ENTITLEMENTS } from './plan-entitlements'
 import {
   collectFormFieldNodeIds,
+  FORM_DISPLAY_NAME_MAX_LENGTH,
   FORMS_MAX_PER_HOST,
+  formDesignReboundTo,
   formFieldDeclsFromNodes,
+  formNodeIdIn,
   formPeriodKey,
   formPeriodSeries,
   isFormArchived,
@@ -32,6 +35,7 @@ import {
   normalizeSubmissionFormName,
   readFormDeclaredConsent,
 } from './forms'
+import { checkFormContract } from './form-contract'
 
 /** A node map in the stored shape: flat, children as ordered id arrays. */
 const tree = (
@@ -725,5 +729,136 @@ describe('isFormArchived', () => {
     for (const archivedAt of [1, 1_757_000_000_000, 'x', { seconds: 1 }, null, 0, undefined]) {
       expect(isFormArchived({ archivedAt })).toBe(Boolean(archivedAt))
     }
+  })
+})
+
+/**
+ * A DESIGN THAT TRAVELS TO A SECOND FORM (AGL-3024).
+ *
+ * A form's design names its own form inside itself, so a design given to a
+ * different form — duplicated, imported, installed — arrives naming the
+ * first one. Nothing about that is visible: the second form renders, the
+ * visitor submits, the row lands, and every one of them is filed under the
+ * form it was copied from while the copy's own list stays empty.
+ *
+ * The assertions below are paired with `checkFormContract` on purpose. The
+ * rewrite is only correct if it satisfies the very predicate the console's
+ * form page banners a copy with, so each one asks the contract rather than
+ * re-describing what the contract wants.
+ */
+describe('a copied design is rebound to the form it was copied TO', () => {
+  const design = (formId: string, formName = 'Consultation request') =>
+    tree([
+      ['canvas', { componentId: 'div', nodes: ['formNode'] }],
+      [
+        'formNode',
+        {
+          componentId: 'form',
+          parentId: 'canvas',
+          nodes: ['emailField'],
+          props: { formId, formName, submitLabel: 'Send' },
+        },
+      ],
+      [
+        'emailField',
+        {
+          componentId: 'formField',
+          parentId: 'formNode',
+          props: { fieldName: 'email', fieldType: 'email', label: 'Email' },
+        },
+      ],
+    ])
+
+  const unboundCodes = (nodes: Record<string, any>, formId: string) =>
+    checkFormContract({
+      form: null,
+      formId,
+      nodes: nodes as never,
+      formNodeId: formNodeIdIn(nodes as never),
+    }).map((violation) => violation.code)
+
+  it('is what the contract refuses before the rewrite and accepts after it', () => {
+    const copied = design('frm-source')
+    // The defect, stated as the console states it.
+    expect(unboundCodes(copied, 'frm-copy')).toEqual(['form-id-unbound'])
+
+    const rebound = formDesignReboundTo(copied, {
+      formId: 'frm-copy',
+      formName: 'New case intake',
+    })
+    expect(rebound).not.toBeNull()
+    expect(unboundCodes(rebound as Record<string, any>, 'frm-copy')).toEqual([])
+    expect((rebound as Record<string, any>)['formNode'].props).toMatchObject({
+      formId: 'frm-copy',
+      formName: 'New case intake',
+      // Everything else the author drew rides across untouched.
+      submitLabel: 'Send',
+    })
+  })
+
+  it('leaves the source design alone, so a copy cannot rewrite what it copied', () => {
+    const source = design('frm-source')
+    formDesignReboundTo(source, { formId: 'frm-copy', formName: 'Copy' })
+    expect(source['formNode'].props).toMatchObject({
+      formId: 'frm-source',
+      formName: 'Consultation request',
+    })
+  })
+
+  it('answers null when there is nothing to move, so a stored tree is not re-encoded for nothing', () => {
+    // Already bound to this form, with the caption it should carry.
+    expect(formDesignReboundTo(design('frm-copy', 'Copy'), { formId: 'frm-copy', formName: 'Copy' })).toBeNull()
+    // No form node: there is no binding to move, and inventing one is not this function's call.
+    expect(
+      formDesignReboundTo(tree([['canvas', { componentId: 'div', nodes: [] }]]), { formId: 'frm-copy' }),
+    ).toBeNull()
+    expect(formDesignReboundTo(null, { formId: 'frm-copy' })).toBeNull()
+    expect(formDesignReboundTo(undefined, { formId: 'frm-copy' })).toBeNull()
+    // No id to bind TO is not a licence to clear the one that is there.
+    expect(formDesignReboundTo(design('frm-source'), { formId: '  ' })).toBeNull()
+  })
+
+  it('moves the binding of a design that never had one, which the contract refuses just as loudly', () => {
+    const drawn = design('')
+    expect(unboundCodes(drawn, 'frm-copy')).toEqual(['form-id-unbound'])
+    const rebound = formDesignReboundTo(drawn, { formId: 'frm-copy' })
+    expect(unboundCodes(rebound as Record<string, any>, 'frm-copy')).toEqual([])
+  })
+
+  it('carries the caption only when one is given, and never past the stored length', () => {
+    // The caption is what the Inbox labels a submission with, so a copy that
+    // kept the source's is the quieter half of the same bug.
+    const named = formDesignReboundTo(design('frm-source'), { formId: 'frm-copy' })
+    expect((named as Record<string, any>)['formNode'].props['formName']).toBe('Consultation request')
+
+    const long = formDesignReboundTo(design('frm-source'), {
+      formId: 'frm-copy',
+      formName: 'x'.repeat(FORM_DISPLAY_NAME_MAX_LENGTH + 40),
+    })
+    expect((long as Record<string, any>)['formNode'].props['formName']).toHaveLength(
+      FORM_DISPLAY_NAME_MAX_LENGTH,
+    )
+  })
+})
+
+/**
+ * `formNodeIdIn` is the reader three surfaces had a copy of — the form's
+ * page, the design preview and the promotion route. They have to agree, or a
+ * design reads as "no form here" on one and as bound on the next.
+ */
+describe('the form node inside a form’s own design', () => {
+  it('is found under a synthetic canvas root rather than assumed to be it', () => {
+    const nodes = tree([
+      ['canvas', { componentId: 'div', nodes: ['wrapper'] }],
+      ['wrapper', { componentId: 'div', parentId: 'canvas', nodes: ['theForm'] }],
+      ['theForm', { componentId: 'form', parentId: 'wrapper', props: { formId: 'f1' } }],
+    ])
+    expect(formNodeIdIn(nodes as never)).toBe('theForm')
+  })
+
+  it('is undefined for a design with no form in it, which is what the contract reports', () => {
+    expect(formNodeIdIn(tree([['canvas', { componentId: 'div', nodes: [] }]]) as never)).toBeUndefined()
+    expect(formNodeIdIn(null)).toBeUndefined()
+    expect(formNodeIdIn(undefined)).toBeUndefined()
   })
 })

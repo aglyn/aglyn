@@ -262,6 +262,7 @@ import {
   storefrontProcessingCostCents,
 } from '@aglyn/aglyn'
 import { bookHandler } from './server'
+import { standInTaxProfile } from './testing/stand-in-tax-profile'
 
 /**
  * The mocked admin module's own state, so a write can be asserted rather than
@@ -404,6 +405,7 @@ afterAll(() => {
 })
 
 beforeEach(() => {
+  standInTaxProfile()
   stripePosts.length = 0
   // Per test. A merchant's tax settings leaking from one test into the next
   // is exactly how a "charges no tax by default" assertion goes green for the

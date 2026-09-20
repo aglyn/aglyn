@@ -24,14 +24,8 @@ import {
   type CrmBookingRefKind,
   isHostPluginEnabled,
 } from '@aglyn/aglyn'
-/*
- * The Bookings MODEL by its leaf path, never the plugin's barrel: the barrel
- * registers the plugin's console page and canvas block, and a record page
- * that imported it would carry both into a bundle that only wants the URL
- * builder. Plugin-to-plugin is legal here (both are add-ons), and the link
- * is the Bookings plugin's own to define.
- */
-import { BOOKING_PATH_DEFAULT, bookingLinkFor } from '@aglyn/plugins-bookings/model/bookings'
+import { BOOKING_PATH_DEFAULT, bookingLinkFor } from '../model/bookings'
+import { BUNDLE_ID } from '../constants/bundle-common'
 import { mdiCalendarClock, mdiContentCopy } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -58,32 +52,6 @@ import { collection, doc, limit, query } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useCallback, useState } from 'react'
 
-/** The Bookings plugin's id, as `enabledPlugins` and `disabledPlugins` name it. */
-const BOOKINGS_PLUGIN_ID = 'bookings'
-
-/**
- * A link dropped into a plain-text draft at the caret, replacing whatever
- * was selected. A space is put on either side where the text would
- * otherwise run into the URL — a mail client reads `word https://…` as a
- * link and `wordhttps://…` as a typo — and none where the caret already
- * sits on whitespace, a line end, or an edge of the draft. The caret lands
- * after the inserted run, where typing continues.
- */
-export function insertLinkAtCaret(
-  text: string,
-  link: string,
-  start: number,
-  end: number,
-): { text: string; caret: number } {
-  const from = Math.max(0, Math.min(start, text.length))
-  const to = Math.max(from, Math.min(end, text.length))
-  const before = text.slice(0, from)
-  const after = text.slice(to)
-  const lead = before && !/\s$/.test(before) ? ' ' : ''
-  const trail = after && !/^\s/.test(after) ? ' ' : ''
-  const inserted = `${lead}${link}${trail}`
-  return { text: `${before}${inserted}${after}`, caret: before.length + inserted.length }
-}
 
 /**
  * WHETHER THIS SITE HAS A BOOKING DOOR (AGL-2660).
@@ -113,7 +81,7 @@ export function useBookingDoor(
     Boolean(hostId) &&
     status === 'success' &&
     Boolean(host) &&
-    isHostPluginEnabled(org ?? null, host as never, BOOKINGS_PLUGIN_ID) &&
+    isHostPluginEnabled(org ?? null, host as never, BUNDLE_ID) &&
     checkEntitlement(org ?? null, 'bookings')
   return { open, host: host ?? null }
 }
@@ -211,7 +179,7 @@ export function BookMeetingDialog(props: BookMeetingDialogProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { orgId } = useOrgDataScope({ hostId, orgId: org?.$id })
-  const { config, ready: configReady } = useSitePluginConfig(orgId, hostId, BOOKINGS_PLUGIN_ID)
+  const { config, ready: configReady } = useSitePluginConfig(orgId, hostId, BUNDLE_ID)
   const { data: serviceDocs, status } = useFirestoreCollection<Record<string, unknown>>(
     () => query(collection(firestore, 'hosts', hostId, 'services'), limit(100)),
     [firestore, hostId],

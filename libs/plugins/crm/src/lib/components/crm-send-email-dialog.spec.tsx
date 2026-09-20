@@ -46,7 +46,7 @@ const firestoreHandle = {}
 /** What the templates listener answers — the rows as stored, with ids (AGL-2658). */
 let templateRows: Array<Record<string, unknown>> = []
 
-jest.mock('@aglyn/plugins-email/components/use-sending-identity-api', () => ({
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-sending-identity-api', () => ({
   useSendingApi: () => sendingApi,
 }))
 // The hub path and the API door, each recording the site they were asked
@@ -100,9 +100,9 @@ jest.mock('firebase/firestore', () => ({
  * no interest in.
  */
 let bookingDoorProps: Record<string, unknown> | null = null
-jest.mock('./book-meeting-action', () => ({
-  ...jest.requireActual('./book-meeting-action'),
-  BookMeetingButton: (props: Record<string, unknown> & { onInsert: (link: string) => void }) => {
+jest.mock('./crm-booking-zone', () => ({
+  ...jest.requireActual('./crm-booking-zone'),
+  CrmRecordBookingZone: (props: Record<string, unknown> & { onInsert: (link: string) => void }) => {
     bookingDoorProps = props
     return (
       <button type="button" onClick={() => props.onInsert('https://acme.aglyn.app/?service=s')}>

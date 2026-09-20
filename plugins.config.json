@@ -156,6 +156,9 @@
           "shell": true,
           "routes": [
             "/bookings"
+          ],
+          "slots": [
+            "crmRecordBooking"
           ]
         }
       }
@@ -287,6 +290,7 @@
             "/crm"
           ],
           "slots": [
+            "formContactFields",
             "hostDashboard",
             "orgDashboard"
           ]
@@ -456,6 +460,7 @@
             "/inbox"
           ],
           "slots": [
+            "formSubmissions",
             "hostDashboard"
           ]
         }
@@ -481,7 +486,8 @@
             "/logic"
           ],
           "slots": [
-            "besignerFunctions"
+            "besignerFunctions",
+            "workflowUsage"
           ]
         }
       }
@@ -521,7 +527,10 @@
             "/marketing"
           ],
           "slots": [
-            "hostDashboard"
+            "crmRecordAttribution",
+            "hostDashboard",
+            "inboxCampaigns",
+            "inboxRecordAttribution"
           ]
         }
       }

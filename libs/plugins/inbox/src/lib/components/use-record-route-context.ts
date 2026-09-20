@@ -16,25 +16,27 @@
  */
 'use client'
 
-import { buildRoute, Route } from '@aglyn/aglyn'
+import type { PluginRecordRouteContext } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { useParams } from 'next/navigation'
 
 /**
- * The CRM hub's address for the site this console is on, or `null` until the
- * route params settle (AGL-2608).
+ * Where this console is — the organization and the site — for asking the
+ * record-route registry for a link, or `null` until the route params settle
+ * (AGL-2608).
  *
- * The same shape the email plugin uses to reach the marketing hub: the org
- * slug and the site are already in the URL, so no document is read to build
- * a link, and `Route.HOST_PLUGIN` with the CRM's nav slug is the address the
- * shell resolves. From it, `crmRoutes(path).lead(id)` names one lead — the
- * Inbox lists leads, and the CRM is where one is worked.
+ * Both are already in the URL, so no document is read to build a link. What
+ * the Inbox does NOT know is the address itself: the plugin that keeps people
+ * publishes where a lead or a contact is read, and the Inbox asks
+ * `pluginRecordHref('lead', context, id)`. It lists leads; wherever they are
+ * worked is that plugin's to say, and a workspace without one gets text
+ * instead of a link.
  */
-export function useCrmHubPath(): string | null {
+export function useRecordRouteContext(): PluginRecordRouteContext | null {
   const params = useParams<{ orgSlug: string; host: string }>()
   const orgSlug = params?.orgSlug
   const host = params?.host
   if (!orgSlug || !host) return null
-  return buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'crm' })
+  return { orgSlug, host }
 }
 
-export default useCrmHubPath
+export default useRecordRouteContext

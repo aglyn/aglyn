@@ -16,16 +16,12 @@
  */
 'use client'
 
-import { pluginDocsHelp } from '@aglyn/aglyn'
+import { listConsoleWidgets, pluginDocsHelp } from '@aglyn/aglyn'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Button, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
-// A deep import, NOT the plugin barrel: the barrel is the entry point a
-// loader imports to activate the inbox plugin, and naming it here would drag
-// that activation into the forms plugin's own graph. The component path
-// reaches the same module without crossing it — the same route the inbox's
-// own card takes into the marketing plugin.
-import { default as SubmissionsCard } from '@aglyn/plugins-inbox/components/submissions-card.component'
+import { FORM_SUBMISSIONS_ZONE } from './form-zones'
 
 export interface FormSubmissionsCardProps {
   hostId: string
@@ -50,20 +46,33 @@ export interface FormSubmissionsCardProps {
  * ask is one click and it buys a live, paged reader; not asking would buy the
  * same reader for every visit that did not want it.
  *
- * ## Why it is the Inbox's own card behind that ask
+ * ## Why the reader is a zone, not a table written here
  *
- * `SubmissionsCard` scoped to this form, not a table written here. It already
- * walks the collection with `orderBy('createdAt')` and a page window, already
- * opens the reader, marks read, deletes, replies and shows attribution — and
- * a second implementation would be a second place for the unordered `limit()`
- * defect to come back, in a file whose tests were written by whoever needed a
- * table that afternoon.
+ * The reader this page wants already exists: it walks the collection with
+ * `orderBy('createdAt')` and a page window, opens a submission, marks it read,
+ * deletes, replies and shows attribution. A second implementation would be a
+ * second place for the unordered `limit()` defect to come back. It belongs to
+ * the plugin that reads submissions, so this card hosts the
+ * `formSubmissions` zone and that plugin draws its reader there, scoped to
+ * this form. Neither plugin imports the other.
+ *
+ * A workspace with no such plugin loaded has nothing to read them with, and
+ * the card says so rather than offering a button that opens an empty space.
  */
 export function FormSubmissionsCard(props: FormSubmissionsCardProps) {
   const { hostId, formId } = props
   const [asked, setAsked] = useState(false)
+  const Zone = useConsoleWidgetSlot()
+  // Read at render, after the shell has loaded its plugins: whether anything
+  // in this workspace registered a reader for one form's submissions.
+  const hasReader =
+    Zone !== null && listConsoleWidgets(FORM_SUBMISSIONS_ZONE.id).length > 0
 
-  if (asked) return <SubmissionsCard hostId={hostId} formId={formId} />
+  if (asked && Zone) {
+    return (
+      <Zone slot={FORM_SUBMISSIONS_ZONE.id} hostId={hostId} formId={formId} />
+    )
+  }
 
   return (
     <CardDisplay
@@ -83,9 +92,16 @@ export function FormSubmissionsCard(props: FormSubmissionsCardProps) {
             'a query over the submissions collection, so it runs when you ' +
             'ask rather than on every visit to this page.'}
         </Typography>
-        <Button variant="outlined" size="small" onClick={() => setAsked(true)}>
-          {'Show submissions'}
-        </Button>
+        {hasReader ? (
+          <Button variant="outlined" size="small" onClick={() => setAsked(true)}>
+            {'Show submissions'}
+          </Button>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            {'Submissions are read in the Inbox, which is switched off for ' +
+              'this workspace or this site. They are still being collected.'}
+          </Typography>
+        )}
       </Stack>
     </CardDisplay>
   )

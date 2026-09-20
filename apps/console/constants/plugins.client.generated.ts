@@ -31,7 +31,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'bookings',
     apiPrefixes: ["bookings"],
     register: {"site":"registerBookingsPlugin","console":"registerBookingsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/bookings"]}},
+    contributes: {"console":{"shell":true,"routes":["/bookings"],"slots":["crmRecordBooking"]}},
     load: () => import('@aglyn/plugins-bookings'),
     loads: {
       site: () => import('@aglyn/plugins-bookings/site'),
@@ -58,7 +58,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'crm',
     apiPrefixes: ["crm"],
     register: {"console":"registerCrmConsole"},
-    contributes: {"console":{"shell":true,"routes":["/crm"],"slots":["hostDashboard","orgDashboard"]}},
+    contributes: {"console":{"shell":true,"routes":["/crm"],"slots":["formContactFields","hostDashboard","orgDashboard"]}},
     load: () => import('@aglyn/plugins-crm'),
   },
   {
@@ -98,20 +98,20 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'inbox',
     apiPrefixes: ["inbox"],
     register: {"console":"registerInboxConsole"},
-    contributes: {"console":{"shell":true,"routes":["/inbox"],"slots":["hostDashboard"]}},
+    contributes: {"console":{"shell":true,"routes":["/inbox"],"slots":["formSubmissions","hostDashboard"]}},
     load: () => import('@aglyn/plugins-inbox'),
   },
   {
     id: 'logic',
     register: {"console":"registerLogicConsole"},
-    contributes: {"console":{"shell":true,"routes":["/logic"],"slots":["besignerFunctions"]}},
+    contributes: {"console":{"shell":true,"routes":["/logic"],"slots":["besignerFunctions","workflowUsage"]}},
     load: () => import('@aglyn/plugins-logic'),
   },
   {
     id: 'marketing',
     apiPrefixes: ["campaigns","experiments"],
     register: {"console":"registerMarketingConsole","site":"registerMarketingPlugin"},
-    contributes: {"console":{"shell":true,"routes":["/marketing"],"slots":["hostDashboard"]}},
+    contributes: {"console":{"shell":true,"routes":["/marketing"],"slots":["crmRecordAttribution","hostDashboard","inboxCampaigns","inboxRecordAttribution"]}},
     load: () => import('@aglyn/plugins-marketing'),
     loads: {
       site: () => import('@aglyn/plugins-marketing/site'),

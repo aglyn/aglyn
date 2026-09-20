@@ -21,7 +21,10 @@ import { CAPTURED_BY_HOST_FIELD, CONTACT_SOURCE_LABELS, pluginDocsHelp } from '@
 // and the contacts list give: the barrel is the tenant loader's entry point
 // for the plugin's SITE half, and a console card named there ships to every
 // published page.
-import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
+import {
+  CrmRecordAttributionZone,
+  useHasCrmRecordAttribution,
+} from './crm-attribution-zone'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Chip, Stack, Typography } from '@mui/material'
 
@@ -90,6 +93,9 @@ export interface LeadHistoryCardProps {
  */
 export function LeadHistoryCard(props: LeadHistoryCardProps) {
   const { hostId, leadId, lead } = props
+  // The caption introduces what another plugin draws; with none loaded it
+  // would introduce nothing.
+  const hasAttribution = useHasCrmRecordAttribution()
   const sources = leadSources(lead)
   const capturedBy = lead[CAPTURED_BY_HOST_FIELD]
   const count = Number(lead['submissionCount'] ?? 0) || (sources.length ? 1 : 0)
@@ -126,12 +132,18 @@ export function LeadHistoryCard(props: LeadHistoryCardProps) {
             '—'
           )}
         </Fact>
-        <Stack spacing={1}>
-          <Typography variant="caption" color="text.secondary">
-            {'Where this lead came from'}
-          </Typography>
-          <ConversionAttribution hostId={hostId} kind="lead" refId={leadId} />
-        </Stack>
+        {hasAttribution ? (
+          <Stack spacing={1}>
+            <Typography variant="caption" color="text.secondary">
+              {'Where this lead came from'}
+            </Typography>
+            <CrmRecordAttributionZone
+              hostId={hostId}
+              recordKind="lead"
+              recordId={leadId}
+            />
+          </Stack>
+        ) : null}
       </Stack>
     </CardDisplay>
   )

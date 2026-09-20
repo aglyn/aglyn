@@ -27,7 +27,7 @@ import {
   mdiGestureTapButton,
   mdiCodeTags,
 } from '@aglyn/shared-data-mdi'
-import { sanitizeCustomHtml } from '@aglyn/plugins-mui'
+import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import Box from '@mui/material/Box'
 import type { SxProps, Theme } from '@mui/material/styles'
@@ -274,7 +274,7 @@ export const EmailRichtext = forwardRef<HTMLDivElement, EmailRichtextProps>(
         // policy was DOMPurify, which needs a DOM; it is now a pure function
         // (AGL-1901), so the body survives a server render instead of being
         // blanked — which for an email is the render that gets SENT.
-        dangerouslySetInnerHTML={{ __html: sanitizeCustomHtml(html) }}
+        dangerouslySetInnerHTML={{ __html: sanitizeAuthorHtml(html) }}
       />
     )
   },
@@ -693,7 +693,7 @@ export const EmailHtml = forwardRef<HTMLDivElement, EmailHtmlProps>(
         // No `typeof window` guard any more (AGL-1901): the sanitizer needs
         // no DOM, so a server-rendered email keeps its custom HTML.
         dangerouslySetInnerHTML={{
-          __html: html ? sanitizeCustomHtml(html) : '',
+          __html: html ? sanitizeAuthorHtml(html) : '',
         }}
       />
     )
