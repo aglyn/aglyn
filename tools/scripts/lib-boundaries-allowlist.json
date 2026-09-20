@@ -8,7 +8,6 @@
       "enforcedInline": true
     },
     { "from": "plugins-bookings", "to": "plugins-commerce", "why": "The booking model reuses the commerce model types." },
-    { "from": "plugins-crm", "to": "plugins-bookings", "why": "A contact record shows its bookings through the bookings model." },
     { "from": "plugins-forms", "to": "plugins-crm", "why": "Form submissions route to CRM through the CRM route table and contact field definitions." },
     { "from": "plugins-forms", "to": "plugins-mui", "why": "Form controls are the MUI plugin's components." },
     { "from": "plugins-inbox", "to": "plugins-marketing", "why": "One spec only: the end-to-end proof that an enrollment is not a license to send drives the real campaign sender. No shipped file crosses." },

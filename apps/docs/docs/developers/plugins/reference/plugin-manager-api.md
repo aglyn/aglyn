@@ -269,7 +269,8 @@ registerConsoleExtension({ widgets: [{ slot: 'bottleDetail', Component: Suggesti
 | API | Semantics |
 | --- | --- |
 | `definePluginZone<Props>(id)` | The token. Pure — it registers nothing and reads nothing — so a plugin may define it at module scope and register it from its register fn. |
-| `registerPluginZone({ zone, label, surface, description? }, { pluginId? })` | Publishes it. Owner = the loader's marker inside a register fn, else `pluginId`; no owner throws, and a zone id another plugin declared throws naming both while the incumbent keeps its zone. The same plugin re-declaring replaces its own. |
+| `registerPluginZone({ zone, label, surface, description?, layout? }, { pluginId? })` | Publishes it. Owner = the loader's marker inside a register fn, else `pluginId`; no owner throws, and a zone id another plugin declared throws naming both while the incumbent keeps its zone. The same plugin re-declaring replaces its own. |
+| `layout` | `stack` (the default): the zone is one block of the page, its widgets are cards, and it takes no room when nothing drew. `bare`: the zone adds no element, because each widget is one item of a layout the HOST draws — a button in a row of actions, a control beside a form's fields, a dialog that portals out. The shell reads it for a plugin-hosted zone; the core catalog's zones keep the layouts the console gives them. |
 | `listPluginZones()` / `pluginZone(id)` / `pluginIdForZone(id)` | Every declared zone with its owner, one by id, and the owner alone. |
 | `PluginZoneProps<typeof ZONE>` | The props type, off the token. |
 

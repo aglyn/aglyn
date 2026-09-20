@@ -31,7 +31,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'bookings',
     apiPrefixes: ["bookings"],
     register: {"site":"registerBookingsPlugin","console":"registerBookingsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/bookings"]}},
+    contributes: {"console":{"shell":true,"routes":["/bookings"],"slots":["crmRecordBooking"]}},
     load: () => import('@aglyn/plugins-bookings'),
     loads: {
       site: () => import('@aglyn/plugins-bookings/site'),

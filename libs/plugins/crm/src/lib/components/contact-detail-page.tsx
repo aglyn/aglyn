@@ -46,7 +46,7 @@ import ContactMergeDialog, { useContactMergeDialog } from './contact-merge-dialo
 import ContactPropertiesCard from './contact-properties-card'
 import ContactTimelineCard from './contact-timeline-card'
 import { AddToListButton } from './add-to-list-button'
-import { useBookingDoor } from './book-meeting-action'
+import { useBookingDoor } from './crm-booking-zone'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { CrmCallButton } from './crm-call-actions'

@@ -56,7 +56,8 @@ import {
 import { collection, doc, getDoc, setDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
-import { BookMeetingButton, insertLinkAtCaret } from './book-meeting-action'
+import { CrmRecordBookingZone } from './crm-booking-zone'
+import { insertLinkAtCaret } from './insert-link-at-caret'
 import {
   CAPTURE_ADDRESS_HELPER,
   CopyCaptureAddressButton,
@@ -769,7 +770,7 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
           </Stack>
         ) : null}
         {bookingRef ? (
-          <BookMeetingButton
+          <CrmRecordBookingZone
             variant="chip"
             hostId={sendHostId}
             org={org}

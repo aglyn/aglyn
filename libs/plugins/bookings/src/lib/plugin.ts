@@ -26,6 +26,9 @@ const BookingsConsolePage = lazy(
   () => import('./components/bookings-console-page'),
 )
 
+/** "Book a meeting", loaded where a record page draws the zone for it. */
+const BookMeetingButton = lazy(() => import('./components/book-meeting-action'))
+
 /**
  * Console half only: registers the Bookings nav item + page. Safe to call
  * at console app load — the page is lazy (no besigner/canvas code).
@@ -38,6 +41,18 @@ export function registerBookingsConsole(): void {
     pluginId: BUNDLE_ID,
     displayName: 'Bookings',
     featureFlag: 'bookings',
+    // The control a CRM record carries for booking a meeting with the person.
+    // The CRM hosts the zone and hands it the record; the services, the page
+    // they are booked on and the link are this plugin's, so the control is
+    // too. It draws nothing where this site takes no bookings.
+    widgets: [
+      {
+        slot: 'crmRecordBooking',
+        widgetId: 'bookings-book-meeting',
+        title: 'Book a meeting',
+        Component: BookMeetingButton,
+      },
+    ],
     navItems: [
       {
         label: 'Bookings',

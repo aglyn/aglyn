@@ -100,9 +100,9 @@ jest.mock('firebase/firestore', () => ({
  * no interest in.
  */
 let bookingDoorProps: Record<string, unknown> | null = null
-jest.mock('./book-meeting-action', () => ({
-  ...jest.requireActual('./book-meeting-action'),
-  BookMeetingButton: (props: Record<string, unknown> & { onInsert: (link: string) => void }) => {
+jest.mock('./crm-booking-zone', () => ({
+  ...jest.requireActual('./crm-booking-zone'),
+  CrmRecordBookingZone: (props: Record<string, unknown> & { onInsert: (link: string) => void }) => {
     bookingDoorProps = props
     return (
       <button type="button" onClick={() => props.onInsert('https://acme.aglyn.app/?service=s')}>

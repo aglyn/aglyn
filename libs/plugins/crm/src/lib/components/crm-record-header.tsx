@@ -23,7 +23,10 @@ import RowActionsMenu, {
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { Button, Chip, type ChipProps, Stack, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
-import { BookMeetingButton, type BookMeetingButtonProps } from './book-meeting-action'
+import {
+  CrmRecordBookingZone,
+  type CrmRecordBookingZoneProps,
+} from './crm-booking-zone'
 
 export interface CrmRecordHeaderProps {
   /** What the record is — the lead card's heading: Contact, Company, Deal, Lead. */
@@ -55,7 +58,7 @@ export interface CrmRecordHeaderProps {
    * offered. Drawn beside the primary controls, and only where the site has
    * a booking door — the action renders nothing otherwise.
    */
-  booking?: BookMeetingButtonProps
+  booking?: CrmRecordBookingZoneProps
 }
 
 /**
@@ -136,7 +139,7 @@ export function CrmRecordHeader(props: CrmRecordHeaderProps) {
                 {backLabel}
               </Button>
               {actions}
-              {booking ? <BookMeetingButton {...booking} /> : null}
+              {booking ? <CrmRecordBookingZone {...booking} /> : null}
               {menuItems?.length ? (
                 <RowActionsMenu label={title || kind} items={menuItems} />
               ) : null}

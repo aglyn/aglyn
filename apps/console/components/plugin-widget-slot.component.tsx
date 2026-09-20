@@ -22,6 +22,7 @@ import {
   type ConsoleWidgetColumn,
   type ConsoleWidgetSlot,
 } from '@aglyn/aglyn'
+import { pluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { ABSENT_WHEN_EMPTY } from '@aglyn/shared-ui-jsx/components/grid-items'
 import { Stack } from '@mui/material'
 import type { ComponentType } from 'react'
@@ -69,7 +70,8 @@ export type WidgetZoneLayout = 'stack' | 'bare'
  * Every zone in the catalog, and how it places its widgets.
  *
  * Typed against the catalog, so a zone added to `CONSOLE_WIDGET_SLOTS` does
- * not compile until it is given a layout here. A zone outside the catalog
+ * not compile until it is given a layout here. A zone a plugin hosts declares
+ * its own (`registerPluginZone`'s `layout`), and any other zone outside the catalog
  * (`slot` is an open string) is a `stack`, the shape most zones have.
  */
 export const WIDGET_ZONE_LAYOUTS: Readonly<
@@ -150,6 +152,9 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
 export function widgetZoneLayout(slot: string): WidgetZoneLayout {
   return (
     (WIDGET_ZONE_LAYOUTS as Readonly<Record<string, WidgetZoneLayout>>)[slot] ??
+    // A zone a plugin hosts says how it places its own widgets; the page it
+    // sits on is that plugin's, so only it knows whether a wrapper belongs.
+    pluginZone(slot)?.layout ??
     'stack'
   )
 }

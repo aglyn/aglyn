@@ -25,6 +25,7 @@ import { withCrmOrgMount } from './hooks/use-crm-org-mount'
 import { registerCrmRecordRoutes } from './model/crm-record-routes'
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { CRM_RECORD_ATTRIBUTION_ZONE } from './components/crm-attribution-zone'
+import { CRM_RECORD_BOOKING_ZONE } from './components/crm-booking-zone'
 
 /** Code-split: the CRM hub only loads when opened. */
 const CrmConsolePage = lazy(
@@ -52,6 +53,19 @@ const CrmTasksDueCard = lazy(
  */
 export function registerCrmConsole(): void {
   registerCrmRecordRoutes()
+  registerPluginZone(
+    {
+      zone: CRM_RECORD_BOOKING_ZONE,
+      label: 'Book a meeting from a CRM record',
+      surface: 'console',
+      // One control in a record header's row of actions, and one beside the
+      // composer's fields: the page lays them out, so the zone adds nothing.
+      layout: 'bare',
+      description:
+        'In a record’s header and beside the one-to-one composer. A widget here offers the site’s bookable services and the link a visitor books one at; it is handed the site, the record and, from the composer, a way to insert the chosen link. It writes nothing.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
   registerPluginZone(
     {
       zone: CRM_RECORD_ATTRIBUTION_ZONE,

@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 8 edges the allowlist carries, and what removes each. An edge leaves the
+The 7 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -228,7 +228,7 @@ import and no production file may repeat it; the fix is a fixture that reads
 the table from the core's server entry, or the spec moving to a project that
 may import the core.
 
-**Plugin → plugin** (6, numbered to 17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (5, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -253,12 +253,14 @@ needs it starts.
    reaching `parseCsv` through the data plugin's barrel, which only re-exports
    it; it now imports the function from the core's `dataset-csv`, where it
    lives. The number stays so the rows below keep theirs.
-3. **`plugins-crm` → `plugins-bookings`.** Crosses: `BOOKING_PATH_DEFAULT` and
-   `bookingLinkFor` (`src/lib/components/book-meeting-action.tsx`) — CRM
-   spelling a bookings address. Fix: the plugin-declared record route contract,
-   so bookings publishes its own addresses and CRM asks for one. **Owed**
-   (AGL-3124). A route table is the plugin's domain, so `libs/shared` is not an
-   answer for it.
+3. **`plugins-crm` → `plugins-bookings`.** Gone (AGL-3080). "Book a meeting"
+   read the bookings services collection, the booking plugin's per-site
+   setting and its link builder: a bookings feature living in the CRM. The
+   whole control moved to `libs/plugins/bookings`, and the CRM hosts a
+   `crmRecordBooking` zone for it in a record's header and beside the
+   composer. That zone is `bare` — `registerPluginZone` gained a `layout`, so
+   a plugin-hosted zone can be one control in a row rather than a block. The
+   composer's caret helper stayed with the CRM. The number stays.
 4. **`plugins-crm` → `plugins-email`.** Gone (AGL-3080). What crossed was
    `useSendingApi`, the client of `/api/email/sending-identity` — a route the
    console itself serves, because which address a site's mail leaves from is
