@@ -59,6 +59,7 @@ import {
 import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.component'
 import AiSeoAuditCard from './components/ai-seo-audit-card.component'
 import AiSiteBatchCard from './components/ai-site-batch-card.component'
+import AiSiteSeoStartCard from './components/ai-site-seo-start-card.component'
 import AiSiteStartCard from './components/ai-site-start-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
 import AiDescribeAutomationButton from './components/ai-describe-automation.component'
@@ -457,6 +458,20 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiSiteStartCard,
+      },
+      // The listing those answers describe (AGL-2918), on the site's SEO
+      // section: the site-wide search title and description the guided start
+      // implies, offered where they are edited. The same gates as every
+      // generative widget, and it stages into the SEO form rather than
+      // writing it — a person's Update is the write, as it is for the audit
+      // card beside it.
+      {
+        slot: 'hostSeo',
+        widgetId: 'ai-site-seo-start',
+        title: 'The listing your answers describe',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiSiteSeoStartCard,
       },
       // The agency batch (AGL-2911): one brief across many of the org's
       // sites, from the page that lists them. The card asks the jobs route

@@ -36,6 +36,10 @@ import {
   parseAiSiteJobInputs,
   type AiSiteJobInputs,
 } from '../model/ai-site-job'
+import {
+  AI_SITE_SEO_OUTPUT_ID,
+  aiSiteSeoProposalForInputs,
+} from '../model/ai-site-start-seo'
 import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiRecordedJobDraftId } from './ai-job-draft-ids'
@@ -250,6 +254,35 @@ export function aiSitePendingUnits(
     done.set(unit.resource, left - 1)
     return false
   })
+}
+
+/**
+ * The site's own search listing as the scaffold reports it (AGL-2918), or
+ * nothing when the job already reported one or its inputs describe no site.
+ *
+ * It costs nothing and asks no model: the values are arithmetic on the
+ * answers (`aiSiteSeoProposal`), so they ride out on the first pass that
+ * builds anything rather than waiting for a pass of their own. Its resource
+ * is `seo`, which no unit reports, so it cannot be mistaken for a unit's
+ * output by `aiSitePendingUnits` and cannot move where the scaffold thinks
+ * it is.
+ */
+export function aiSiteSeoOutputs(job: AiJob): AiJobOutput[] {
+  const outputs = job.outputs ?? []
+  if (outputs.some((output) => output.resource === 'seo' && output.id === AI_SITE_SEO_OUTPUT_ID)) {
+    return []
+  }
+  const proposal = aiSiteSeoProposalForInputs(job.inputs)
+  if (!proposal) return []
+  return [
+    {
+      resource: 'seo',
+      id: AI_SITE_SEO_OUTPUT_ID,
+      hostId: job.hostId ?? null,
+      label: 'The site’s search title and description',
+      proposal: proposal as unknown as Record<string, unknown>,
+    },
+  ]
 }
 
 /** A record an earlier unit created, as a later one references it. */
@@ -564,10 +597,15 @@ export function createAiJobSiteStep(
       runner,
       emptyCopy: AI_SITE_UNIT_EMPTY_COPY,
     })
+    // The site's own listing rides out beside the first unit's output, once
+    // (AGL-2918): it is derived from the answers rather than generated, so it
+    // is ready before anything is built and costs the pass nothing.
+    const outcome: AiJobStepOutcome = {
+      ...pass.outcome,
+      outputs: [...aiSiteSeoOutputs(job), ...pass.outcome.outputs],
+    }
     // A built unit continues the scaffold while units remain after it.
-    return pass.built && pending.length > 1
-      ? { ...pass.outcome, continue: true }
-      : pass.outcome
+    return pass.built && pending.length > 1 ? { ...outcome, continue: true } : outcome
   }
 }
 

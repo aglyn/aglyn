@@ -185,6 +185,45 @@ export function parseAiSiteJobInputs(
 }
 
 /**
+ * What the site itself is, as a step that is NOT the scaffold reads it off a
+ * job's inputs (AGL-2918).
+ *
+ * A scaffold delegates unit by unit under a job derived from its own — a page
+ * job, a form job — and the derived job carries the scaffold's inputs. So the
+ * two answers that describe the site rather than one record of it are
+ * readable by every delegated step, and a step that wants them does not have
+ * to know it was delegated to.
+ *
+ * Lenient where {@link parseAiSiteJobInputs} is strict, because it reads the
+ * inputs of jobs that are not scaffolds: a page job started from the Screens
+ * page has no `businessType` and no `pages`, and that is not an error here —
+ * it is a site nobody described, and the answer is two empty strings.
+ */
+export interface AiSiteWords {
+  /** What kind of site it is; empty when the job's inputs do not say. */
+  about: string
+  /** Who it is for; empty when the job's inputs do not say. */
+  audience: string
+}
+
+/** Whether either half of {@link AiSiteWords} says anything. */
+export function aiSiteWordsSaidAnything(words: AiSiteWords): boolean {
+  return Boolean(words.about || words.audience)
+}
+
+/** What a job's inputs say the site is, read defensively and trimmed to the input ceiling. */
+export function aiSiteWords(
+  inputs: Readonly<Record<string, unknown>> | null | undefined,
+): AiSiteWords {
+  const read = (key: string): string => {
+    const value = inputs?.[key]
+    if (typeof value !== 'string') return ''
+    return value.replace(/\s+/g, ' ').trim().slice(0, AI_SITE_INPUT_MAX_CHARS).trim()
+  }
+  return { about: read('businessType'), audience: read('audience') }
+}
+
+/**
  * What a scaffold builds for itself: the layout its pages render inside, the
  * form they place, and the palette suggestion a member applies in the Theme
  * section. Anything else a plan asks to create is a job of its own.

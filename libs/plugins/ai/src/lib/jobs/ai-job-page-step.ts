@@ -29,6 +29,7 @@ import {
   parseAiPageJobInputs,
 } from '../model/ai-page-job'
 import { aiPlanCapabilitiesForJob, aiPlanUncreatable } from '../model/ai-plan-capabilities'
+import { aiSiteWords } from '../model/ai-site-job'
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import { aiModelForStep } from '../providers/routing'
 import { aiDoctrineNeedsInputMessage, runValidatedGeneration } from '../runtime/ai-doctrine'
@@ -518,6 +519,12 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           const result = await seoFields({
             subject: { kind: 'screen', name, path: `/${slug}` },
             brand: siteNameOf(host),
+            // What the site is and who it is for (AGL-2918). The page's own
+            // Markdown says what the page is about and cannot say who it was
+            // written for, so the listing borrows the two answers the job was
+            // started from — the scaffold's derived page job carries them,
+            // and a page job started from the Screens page carries neither.
+            site: aiSiteWords(job.inputs),
             text: buildPageMarkdown({ nodes: page as never, rootId: CANVAS_ROOT_ELEMENT_ID }),
             fields: ['title', 'description'],
             // Other screens by name only: their own listings are their content.

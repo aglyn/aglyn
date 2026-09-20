@@ -563,6 +563,65 @@ describe('the passes', () => {
     })
   })
 
+  /*
+   * The guided start's two answers (AGL-2918). A scaffold builds each page
+   * through a page job derived from its own, which carries the scaffold's
+   * inputs, so the listing is written knowing what the site is and who it is
+   * for — which the page's own Markdown cannot say. A page job started from
+   * the Screens page carries neither, and is asked for the same listing it
+   * was always asked for.
+   */
+  it('writes the listing knowing what the site is and who it is for', async () => {
+    await buildSections()
+    mockRunAiRequest.mockReset()
+    seoFields.mockResolvedValueOnce({
+      status: 'ok',
+      value: { title: 'Spring Roof Inspections', description: 'A licensed roofer checks your roof.' },
+      attempts: 1,
+      usage: USAGE,
+      effort: null,
+      estCostUsd: 0.001,
+      model: 'claude-haiku-4-5',
+      stopReason: 'tool_use',
+    })
+    await step()(
+      context({
+        inputs: {
+          pageType: FIXTURE.pageType,
+          businessType: 'a roofing company',
+          audience: 'homeowners with a roof over fifteen years old',
+        },
+      }),
+    )
+    expect(seoFields).toHaveBeenCalledWith(
+      expect.objectContaining({
+        site: { about: 'a roofing company', audience: 'homeowners with a roof over fifteen years old' },
+      }),
+    )
+  })
+
+  it('asks for the same listing as ever on a page job that describes no site', async () => {
+    await buildSections()
+    mockRunAiRequest.mockReset()
+    seoFields.mockResolvedValueOnce({
+      status: 'ok',
+      value: { title: 'Spring Roof Inspections', description: 'A licensed roofer checks your roof.' },
+      attempts: 1,
+      usage: USAGE,
+      effort: null,
+      estCostUsd: 0.001,
+      model: 'claude-haiku-4-5',
+      stopReason: 'tool_use',
+    })
+    await step()(context())
+    // Present and empty rather than absent: the generator decides what to say
+    // from the value, and a spec that accepted either would not notice the
+    // day a page job started carrying somebody else's audience.
+    expect(seoFields).toHaveBeenCalledWith(
+      expect.objectContaining({ site: { about: '', audience: '' } }),
+    )
+  })
+
   it('stops the last pass for review naming the draft’s own nodes, with their outline, when the stored page breaks a rule (AGL-3078)', async () => {
     await buildSections()
     mockRunAiRequest.mockReset()

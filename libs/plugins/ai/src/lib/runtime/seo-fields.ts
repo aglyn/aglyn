@@ -153,10 +153,32 @@ export const AI_SEO_FIELDS_INSTRUCTIONS: AiSystemBlock[] = aiSeoFieldsInstructio
   otherTitles: false,
 })
 
+/**
+ * What the site itself is, in the words of whoever set it up (AGL-2918).
+ *
+ * A page's own text says what the page is; it does not say who the page is
+ * written for. On a site whose pages have just been generated that gap is at
+ * its widest — every page reads like the same competent stranger wrote it —
+ * so the words the owner used are carried into the listing rather than
+ * inferred back out of the copy they produced.
+ *
+ * It rides in the user turn and nowhere else: it is one site's own words, so
+ * putting it in a rules block would key the platform's cache entry on a
+ * tenant's sentence, and the rules already say to write from what is given.
+ */
+export interface AiSeoSiteWords {
+  /** What kind of site it is: "a neighborhood dog groomer". */
+  about?: string | null
+  /** Who it is for: "local dog owners who want a regular groom booked online". */
+  audience?: string | null
+}
+
 export interface AiSeoFieldsPromptInput {
   subject: { kind: 'screen' | 'product'; name: string; path?: string | null }
   /** The site's name, as its visitors see it. */
   brand: string
+  /** What the site is and who it is for, where the caller knows (AGL-2918). */
+  site?: AiSeoSiteWords | null
   /** What the page or the product says: a page's Markdown, a product's description. */
   text: string
   fields: readonly SeoListingFieldKey[]
@@ -171,16 +193,29 @@ export interface AiSeoFieldsPromptInput {
   otherTitles?: readonly string[]
 }
 
+/** The longest a site's own words run in a prompt; they are a phrase, not copy. */
+const SITE_WORDS_MAX_CHARS = 160
+
+/** One of the site's own words as its line reads, or nothing when it says nothing. */
+function siteWordsLine(label: string, value: string | null | undefined): string {
+  const text = (value ?? '').replace(/\s+/g, ' ').trim().slice(0, SITE_WORDS_MAX_CHARS).trim()
+  return text ? `${label}: ${text}` : ''
+}
+
 /** The user turn: the subject, what it says now, and the page's own text. */
 export function aiSeoFieldsPrompt(input: AiSeoFieldsPromptInput): string {
   const fields = orderedSeoListingFields(input.fields)
   const lines = [
     `Site: ${input.brand || 'untitled site'}`,
+    siteWordsLine('What the site is', input.site?.about),
+    siteWordsLine('Who the site is for', input.site?.audience),
     input.subject.kind === 'product'
       ? `Product: ${input.subject.name || 'untitled product'}`
       : `Page: ${input.subject.name || 'untitled page'}${input.subject.path ? ` (${input.subject.path})` : ''}`,
     `Fields to write: ${fields.join(', ')}`,
-  ]
+    // Only the two site lines can be empty here, and an empty one is a
+    // question nobody answered rather than a blank line to send.
+  ].filter(Boolean)
   const current = fields
     .map((key) => [key, input.current?.[key]?.trim()] as const)
     .filter(([, value]) => Boolean(value))
