@@ -353,3 +353,49 @@ export function consoleLoadPoints(
 export function routeServes(route: string, href: string): boolean {
   return href === route || href.startsWith(`${route}/`)
 }
+
+/**
+ * A place in the console that loads plugins, as the surface drawing it names
+ * itself (AGL-3142).
+ *
+ * - `shell`: the workspace chrome every screen has. It draws whatever a
+ *   plugin adds to every screen — a nav tab, an organization tab, a staff
+ *   tab, a provider — so a plugin that declares any of those loads here, and
+ *   so does one that declares nothing at all.
+ * - `slots`: the zones a screen renders. The zones it names, not the plugins
+ *   it expects in them: a screen must never hold a plugin id.
+ * - `route`: the path the reader has open, plugin-relative (`/products`,
+ *   `/products/orders`), on the level its route tree serves — `site` beneath
+ *   `/hosts/[host]`, `org` beneath the organization.
+ */
+export type ConsoleLoadWhere =
+  | { at: 'shell' }
+  | { at: 'slots'; slots: readonly string[] }
+  | { at: 'route'; href: string; level: 'site' | 'org' }
+
+/**
+ * Whether a console surface uses a plugin, so it must load it.
+ *
+ * The console twin of {@link isPluginUsedOnPage}, and the same rule: a
+ * declaration says where a plugin's code belongs, and the surface that draws
+ * that place is the one that fetches it. A screen asks about the zones it
+ * renders and the path it serves; it never asks about a plugin by name.
+ *
+ * A plugin that declares nothing loads with the shell — the default in the
+ * module note, and the reason the shell branch reads
+ * {@link consoleLoadPoints} rather than the raw block. Its nav tab or its
+ * provider is only discoverable by running `register()`, so narrowing it
+ * anywhere else would take a tab away with no way to notice.
+ */
+export function isPluginUsedInConsole(
+  contributes: PluginContributions | undefined,
+  where: ConsoleLoadWhere,
+): boolean {
+  const points = consoleLoadPoints(contributes)
+  if (where.at === 'shell') return points.shell
+  if (where.at === 'slots') {
+    return points.slots.some((slot) => where.slots.includes(slot))
+  }
+  const routes = where.level === 'org' ? points.orgRoutes : points.routes
+  return routes.some((route) => routeServes(route, where.href))
+}

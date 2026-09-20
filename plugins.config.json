@@ -190,6 +190,7 @@
       ],
       "contributes": {
         "console": {
+          "shell": true,
           "slots": [
             "marketplaceListing",
             "orgAddons",

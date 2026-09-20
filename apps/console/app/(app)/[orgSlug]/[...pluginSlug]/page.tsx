@@ -36,6 +36,7 @@ import PluginHubRail from '../../../../components/plugin-hub-rail.component'
 import { resolveDocsHelpTopic } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import { useConsoleRoutePlugins } from '../../../../hooks/use-console-plugins'
 import useCurrentOrg from '../../../../hooks/use-current-org'
 import useOrgHosts from '../../../../hooks/use-org-hosts'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
@@ -125,6 +126,16 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   // session-wide union, and an org that has not enabled a plugin must not be
   // served its page.
   const enabledPluginIds = useEnabledPluginIds()
+  /*
+   * The plugins that declare this organization route, loaded before it is
+   * resolved (AGL-3142) — the org twin of the site route's own load, and for
+   * the same reason: `resolveConsoleOrgPluginPage` reads a registry
+   * `register()` fills, so a plugin whose code has not landed is
+   * indistinguishable from one this workspace does not have. Read from the
+   * href against each plugin's declared `orgRoutes`, never from a list of
+   * plugin ids this page holds.
+   */
+  const routePluginsLoaded = useConsoleRoutePlugins(pluginHref, 'org')
   const resolved = useMemo(
     () =>
       pluginHref
@@ -132,7 +143,8 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
         : undefined,
     [pluginHref, enabledPluginIds],
   )
-  const unresolvedIsNotFound = !resolved && segments.length > 1
+  const unresolvedIsNotFound =
+    routePluginsLoaded && !resolved && segments.length > 1
 
   const releaseFlag = releaseFlagForNavTab(resolved?.navItem.navTabId)
   const sectionReleaseFlag = releaseFlagForNavTab(resolved?.section?.navTabId)
@@ -246,9 +258,12 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const activeSectionPath =
     activeSection && basePath ? `${basePath}/${activeSection.id}` : undefined
 
-  const body = sectionRedirect ? (
-    // Not the plugin page: it would open a section's listens for a URL that
-    // is already being replaced.
+  const body = sectionRedirect || !routePluginsLoaded ? (
+    // On a redirect, not the plugin page: it would open a section's listens
+    // for a URL that is already being replaced. And while the route's own
+    // plugins are still loading there is no page to mount yet, where an
+    // absent one is exactly what the notice below claims is uninstalled
+    // (AGL-3142).
     <Box sx={{ p: 2 }}>
       <CircularProgress size={24} />
     </Box>

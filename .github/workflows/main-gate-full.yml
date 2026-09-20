@@ -180,7 +180,10 @@ jobs:
       # above (AGL-3082): the bytes the page-view rate is priced on. ~1s.
       - run: node tools/scripts/check-tenant-wire-weight.mjs
       # Whose bytes they are (AGL-3116): no plugin surface a published page
-      # cannot render may be in its before-settle load.
+      # cannot render may be in its before-settle load — and, for the
+      # console build above, no plugin the workspace shell draws nothing
+      # of may be in the shell's (AGL-3142). Both builds are made, so
+      # both halves read one.
       - run: node tools/scripts/check-plugins-load-where-used.mjs
       - run: npx nx run docs:build
 

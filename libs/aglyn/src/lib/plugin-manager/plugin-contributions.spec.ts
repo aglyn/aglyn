@@ -17,6 +17,7 @@
 
 import {
   consoleLoadPoints,
+  isPluginUsedInConsole,
   isPluginUsedOnPage,
   pagePresence,
   PLUGIN_MAX_CONTRIBUTIONS,
@@ -171,5 +172,71 @@ describe('routeServes', () => {
     expect(routeServes('/products', '/products/orders')).toBe(true)
     expect(routeServes('/products', '/products-archive')).toBe(false)
     expect(routeServes('/products/orders', '/products')).toBe(false)
+  })
+})
+
+describe('isPluginUsedInConsole (AGL-3142)', () => {
+  const commerce = {
+    console: {
+      shell: true,
+      slots: ['commerceGlance', 'hostDashboard'],
+      routes: ['/pos', '/products'],
+    },
+  }
+  const zonesOnly = { console: { slots: ['orgMarketplace'] } }
+  const orgOnly = { console: { orgRoutes: ['/outreach'] } }
+
+  it('puts a plugin on the shell only when it declares the shell', () => {
+    expect(isPluginUsedInConsole(commerce, { at: 'shell' })).toBe(true)
+    expect(isPluginUsedInConsole(zonesOnly, { at: 'shell' })).toBe(false)
+    expect(isPluginUsedInConsole({}, { at: 'shell' })).toBe(false)
+  })
+
+  it('loads an undeclared plugin with the shell, and nowhere else', () => {
+    expect(isPluginUsedInConsole(undefined, { at: 'shell' })).toBe(true)
+    expect(
+      isPluginUsedInConsole(undefined, { at: 'slots', slots: ['orgMarketplace'] }),
+    ).toBe(false)
+    expect(
+      isPluginUsedInConsole(undefined, {
+        at: 'route',
+        href: '/outreach',
+        level: 'org',
+      }),
+    ).toBe(false)
+  })
+
+  it('loads a plugin at a zone it declares, and at no other', () => {
+    const at = (slots: string[]) =>
+      isPluginUsedInConsole(zonesOnly, { at: 'slots', slots })
+    expect(at(['orgMarketplace'])).toBe(true)
+    // A screen rendering several zones, one of which is the plugin's.
+    expect(at(['hostDashboard', 'orgMarketplace'])).toBe(true)
+    expect(at(['hostDashboard'])).toBe(false)
+    expect(at([])).toBe(false)
+  })
+
+  it('serves a declared route and what lies beneath it, never a neighbor', () => {
+    const at = (href: string) =>
+      isPluginUsedInConsole(commerce, { at: 'route', href, level: 'site' })
+    expect(at('/products')).toBe(true)
+    expect(at('/products/orders')).toBe(true)
+    expect(at('/products-archive')).toBe(false)
+    expect(at('/forms')).toBe(false)
+  })
+
+  it('never crosses a site route with an organization one', () => {
+    const site = { at: 'route' as const, href: '/outreach', level: 'site' as const }
+    const org = { at: 'route' as const, href: '/outreach', level: 'org' as const }
+    expect(isPluginUsedInConsole(orgOnly, org)).toBe(true)
+    expect(isPluginUsedInConsole(orgOnly, site)).toBe(false)
+    // And the other way: a site route is not served at the organization level.
+    expect(
+      isPluginUsedInConsole(commerce, {
+        at: 'route',
+        href: '/products',
+        level: 'org',
+      }),
+    ).toBe(false)
   })
 })

@@ -199,19 +199,24 @@ test('a chunk names its modules through its own source map, and one without is r
   assert.deepEqual(read.unmapped, ['static/chunks/b.js'])
 })
 
-test('the CLI refuses a missing build, and skips only when told the tenant was not built', () => {
+test('the CLI refuses a missing build, and skips only when told it was not built', () => {
   const empty = mkdtempSync(join(tmpdir(), 'aglyn-no-build-'))
+  // Both halves are pointed at the empty directory, so this case is about the
+  // CLI's own behavior rather than about whichever builds happen to be in
+  // `dist/` on the machine running it (AGL-3142).
+  const noBuilds = ['--next', empty, '--console-next', empty]
   try {
     assert.throws(
-      () => execFileSync(process.execPath, [CLI, '--next', empty], { encoding: 'utf8' }),
+      () => execFileSync(process.execPath, [CLI, ...noBuilds], { encoding: 'utf8' }),
       (error) => error.status === 2,
     )
     const skipped = execFileSync(
       process.execPath,
-      [CLI, '--next', empty, '--if-built'],
+      [CLI, ...noBuilds, '--if-built'],
       { encoding: 'utf8' },
     )
-    assert.match(skipped, /Skipped/)
+    assert.match(skipped, /Published half skipped/)
+    assert.match(skipped, /Console half skipped/)
   } finally {
     rmSync(empty, { recursive: true, force: true })
   }

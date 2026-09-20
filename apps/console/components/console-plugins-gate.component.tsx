@@ -28,6 +28,7 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import type React from 'react'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import BootSplash from './boot-splash.component'
+import { consolePluginsAt } from '../constants/console-plugin-load-points'
 import {
   consolePluginLoader,
   pluginDeclarationsReady,
@@ -158,6 +159,41 @@ export function useWorkspacePluginIds(): string[] {
 }
 
 /**
+ * What a screen needs to load plugins: the workspace it may load for — `null`
+ * while it may not — and the account the realm fetch authorizes as
+ * (AGL-3142).
+ *
+ * The conditions the gate below applies before it loads anything, in one
+ * answer, because every other place that loads a plugin owes the same ones
+ * and none of them is obvious:
+ *
+ * - the URL must NAME a workspace (AGL-1937). `useCurrentOrg` falls back to a
+ *   remembered selection, so a staff page or the workspace picker would
+ *   otherwise fetch the realm installs of an organization it is not about;
+ * - the org must have resolved, or there is no workspace to load for;
+ * - Remote Config must have activated (AGL-422), or a release-flagged-off
+ *   plugin loads on the registry defaults and sticks, because a loaded chunk
+ *   cannot unload.
+ *
+ * Here rather than in the loading hooks so a zone and a plugin route reach
+ * all of it through the module they already read their plugin set from — one
+ * seam to hold, and one to stand in for when a surface is put under test.
+ */
+export function usePluginLoadScope(): {
+  orgId: string | null
+  user: ReturnType<typeof useUser>['data']
+} {
+  const { orgId } = useCurrentOrg()
+  const { data: user } = useUser()
+  const namesOrg = useUrlNamesOrg()
+  const { ready: flagsReady } = useReleaseFlags()
+  return {
+    orgId: namesOrg && flagsReady ? (orgId ?? null) : null,
+    user,
+  }
+}
+
+/**
  * Dynamic console-plugin activation (AGL-417), replacing the static
  * register-console-plugins composition root: once the org workspace
  * resolves, load + register its enabled plugins' ConsoleExtensions, THEN
@@ -237,12 +273,23 @@ export default function ConsolePluginsGate({
     if (!namesOrg || !orgId || !flagsReady) return undefined
     let active = true
     void (async () => {
-      await consolePluginLoader.ensure(enabledKey.split(','), ['console'])
+      // Only what the shell itself draws (AGL-3142): a nav tab, an
+      // organization tab, a staff tab, a provider. A plugin whose
+      // contributions are a zone or a route loads where that zone is
+      // rendered or that route is served — `useConsoleSlotPlugins` and
+      // `useConsoleRoutePlugins` — and a plugin that declares nothing keeps
+      // loading here, because a nav tab is only discoverable by running
+      // `register()`.
+      await consolePluginLoader.ensure(
+        consolePluginsAt(enabledKey.split(','), { at: 'shell' }),
+        ['console'],
+      )
       // Trusted-realm marketplace plugins (AGL-420): loaded after the
       // first-party set so their registrations land before the shell
-      // renders. Failures inside are logged and skipped — a broken remote
-      // bundle never blocks the console.
-      await loadOrgRealmPlugins(orgId, user)
+      // renders, and by the same rule — the installs that draw something on
+      // every screen, never the whole install list. Failures inside are
+      // logged and skipped; a broken remote bundle never blocks the console.
+      await loadOrgRealmPlugins(orgId, user, { at: 'shell' })
       if (active) setReadyForOrg(orgId)
     })()
     return () => {

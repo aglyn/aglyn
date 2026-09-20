@@ -186,9 +186,13 @@ describe('ConsolePluginsGate on an org-less route (AGL-1937)', () => {
     // The ACCOUNT, not a token the gate awaited first: the loader
     // authorizes its own request under a deadline, so a token endpoint that
     // never answers cannot hold the whole console shell behind the splash.
+    //
+    // For the SHELL, and only the shell (AGL-3142): an install whose zone or
+    // route this screen does not draw loads where it is drawn.
     expect(mockLoadOrgRealmPlugins).toHaveBeenCalledWith(
       'org-fallback',
       expect.objectContaining({ getIdToken: mockGetIdToken }),
+      { at: 'shell' },
     )
   })
 
@@ -204,6 +208,7 @@ describe('ConsolePluginsGate on an org-less route (AGL-1937)', () => {
     expect(mockLoadOrgRealmPlugins).toHaveBeenCalledWith(
       'org-fallback',
       expect.objectContaining({ getIdToken: mockGetIdToken }),
+      { at: 'shell' },
     )
   })
 })

@@ -46,6 +46,20 @@ export interface PluginLoadEntry {
    * with a module of its own carries only what that module exports.
    */
   loads?: Partial<Record<string, () => Promise<Record<string, unknown>>>>
+  /**
+   * What this plugin declares it contributes, and where (AGL-3142).
+   *
+   * The loader never reads it: `ensure` is told which plugins to activate and
+   * activates them. It rides on the entry because the manifest is the one list
+   * of plugins an app holds, and an app that loads by presence has to answer
+   * "which of these belongs on this screen" before it names any ids — from
+   * data, not by running a plugin, which is the cost being avoided.
+   *
+   * Written into a manifest whose app reads it and left off the others: the
+   * published page decides presence from the nodes it places, so the tenant
+   * manifest would carry a declaration nothing there consults.
+   */
+  contributes?: PluginContributions
 }
 
 export type PluginLoadManifest = readonly PluginLoadEntry[]
@@ -95,7 +109,7 @@ interface RegisteredFor {
 // From the leaf module, not the API route registry that re-exports it: this
 // loader is on every published page, and the registry is server-only.
 import { setRegisteringPluginId } from '../app-utils/registering-plugin'
-import type { PluginUse } from './plugin-contributions'
+import type { PluginContributions, PluginUse } from './plugin-contributions'
 import { plugins } from '../aglyn'
 
 /** Whether an earlier registration already covers this use context. */
