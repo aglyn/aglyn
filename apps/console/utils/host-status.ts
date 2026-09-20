@@ -24,15 +24,38 @@ export interface HostStatus {
 }
 
 /**
+ * How many pages this site publishes.
+ *
+ * Read off `host.screens` — the map publishing writes into the host document
+ * (`hosts/{hostId}.screens[screenId] = slug`, see `template-screens.ts`) and
+ * the tenant reads to route a request. So a site with an entry has at least
+ * one page a visitor can reach, and one without has none. That makes this a
+ * fact already sitting in a document its readers hold: **no extra read**, on
+ * a page that can list a hundred sites.
+ *
+ * ⚠️ It counts PUBLISHED ROUTES, not authored work. A site with five
+ * unpublished drafts counts 0 — the map is written by publishing and by
+ * nothing else. Every caller is asking "what can a visitor reach?"; a caller
+ * that means "has anyone worked on this?" is asking a different question and
+ * this is the wrong number for it.
+ *
+ * One function rather than the same `Object.keys` in each caller: the two
+ * that exist read the same map for two different decisions — the Live/Draft
+ * pill and the first-run offer (AGL-2918) — and a map whose meaning is
+ * spelled out twice is a map that comes to mean two things.
+ */
+export function publishedScreenCount(
+  host: { screens?: Record<string, unknown> } | null | undefined,
+): number {
+  return Object.keys(host?.screens ?? {}).length
+}
+
+/**
  * The `Live` / `Draft` pill the console Sites mockup puts on every card
  * (AGL-2166).
  *
- * Read off `host.screens` — the map publishing writes into the host
- * document (`hosts/{hostId}.screens[screenId] = slug`, see
- * `template-screens.ts`) and the tenant reads to route a request. So a site
- * with an entry has at least one page a visitor can reach, and one without
- * has none. That makes this a fact already sitting in the document the list
- * loads: **no extra read**, on a page that can list a hundred sites.
+ * Derived from {@link publishedScreenCount}, so what the pill claims and what
+ * the rest of the console calls a blank site are the same reading.
  *
  * The staff admin host page has rendered a `published` / `draft` chip since
  * AGL-390 off `host.published`, which is not a field on `AglynHost` and is
@@ -69,7 +92,7 @@ export function describeHostStatus(host: {
       detail: 'Every path serves the maintenance screen.',
     }
   }
-  const published = Object.keys(host?.screens ?? {}).length
+  const published = publishedScreenCount(host)
   if (published > 0) {
     return {
       label: 'Live',

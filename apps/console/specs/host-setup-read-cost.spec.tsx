@@ -102,12 +102,44 @@ jest.mock('firebase/firestore', () => {
     documentId: () => '__name__',
     onSnapshot: (
       ref: { __path?: string; __limit?: number; __doc?: boolean },
-      ..._rest: unknown[]
+      ...rest: unknown[]
     ) => {
       mockListens.push({
         path: ref?.__path ?? '(unknown)',
         limit: ref?.__doc ? 1 : (ref?.__limit ?? 0),
       })
+      /*
+       * A DOCUMENT listener emits once, with an empty document that exists.
+       *
+       * A listener that never called back left every consumer of this page on
+       * "I have never had data", and a section that draws nothing costs
+       * nothing — so the meter read a page in a state no reader is ever in,
+       * and the sections whose cards wait for their document were measured
+       * empty. The `hostFirstRun` zone is the case that made it matter: it
+       * waits for the host document before deciding whether the site is
+       * blank (AGL-2918), so without an emission it never mounted and the
+       * five listens it accounts for below stopped being metered at all —
+       * green, and blind to the zone it was extended to watch.
+       *
+       * Empty rather than furnished on purpose: `{}` is the cheapest document
+       * that can exist, so anything a section reads off it is absent and the
+       * number stays a floor. Collections still never emit — a listener's
+       * COST is its `limit()`, which is charged when it opens, and feeding
+       * rows in would only invite assertions about rendered output on a spec
+       * that deliberately measures at the Firestore boundary.
+       */
+      const onNext = rest.find(
+        (arg): arg is (snapshot: unknown) => void => typeof arg === 'function',
+      )
+      if (ref?.__doc && onNext) {
+        onNext({
+          id: (ref.__path ?? '').split('/').pop(),
+          exists: () => true,
+          data: () => ({}),
+          get: () => undefined,
+          metadata: { fromCache: false, hasPendingWrites: false },
+        })
+      }
       return () => undefined
     },
     getDocs: async () => ({ docs: [], empty: true, size: 0 }),
@@ -333,6 +365,28 @@ describe('host Setup read cost, per section (AGL-2501)', () => {
     expect(listenedPaths()).toContain(SECTION_ONLY.details)
   })
 
+  /**
+   * The CONTROL for the Details budget specifically: the `hostFirstRun` zone
+   * is INSIDE the measurement (AGL-2918).
+   *
+   * The zone is conditional — only a site with nothing published draws it —
+   * so "Details is under budget" can now be satisfied two ways: by the zone
+   * costing what it always did, or by the zone not being there at all. The
+   * second is how this meter goes quietly blind, and a budget stated with
+   * `<=` cannot tell them apart, because the blind reading is the CHEAPER
+   * one.
+   *
+   * `orgs/{orgId}` is where it shows: the page reads it once for the org id
+   * it hands down, and the slot's own gates read it five more times. So more
+   * than one listen on that document is the zone being mounted, and exactly
+   * one is a measurement that has stopped including it.
+   */
+  it('CONTROL: the first-run zone is part of what Details is measured at', () => {
+    renderSetup('details')
+    const org = mockListens.filter((listen) => listen.path === 'orgs/org-1')
+    expect(org.length).toBeGreaterThan(1)
+  })
+
   /*
    * The two collection reads on this page, each confined to the one section
    * that shows it. `layouts` is a `limit(50)`; `emailTemplates` is unbounded.
@@ -398,6 +452,19 @@ describe('host Setup read cost, per section (AGL-2501)', () => {
    * down, exactly as the SEO section reads it for `hostSeo`. No new
    * collection, no new document, and no read that scales with the site. A
    * sixth path appearing here is a real card to argue about.
+   *
+   * Those five are CONDITIONAL now (AGL-2918): the zone is drawn only for a
+   * site with nothing published, so Details measures 65 because the document
+   * this meter emits is empty, which is a blank site. That is the expensive
+   * case and the right one to budget against — an established site draws no
+   * zone and reads 60.
+   *
+   * Theme measures 10 rather than the 6 it used to, and nothing on that
+   * section changed: its editor blanks while the host document has never
+   * emitted (AGL-1066), so a meter whose listeners never called back was
+   * pricing a section that had drawn nothing. The 6 was an undercount of a
+   * state no reader is in. The ceiling stays 20 — it was cut for the real
+   * editor and the real editor now renders.
    */
   it('holds each section under its document budget', () => {
     renderSetup('details')

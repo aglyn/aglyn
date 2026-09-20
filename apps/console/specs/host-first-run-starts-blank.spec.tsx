@@ -30,7 +30,9 @@
  *   nothing and gains no empty band;
  * - the zone is handed a `startBlank`, and taking it puts the person on that
  *   ordinary page with nothing created;
- * - the choice is remembered, so a reload does not ask again.
+ * - the choice is remembered, so a reload does not ask again;
+ * - and it is offered to a NEW site only, which is the condition that was
+ *   missing (see `an established site` below).
  *
  * Reverting the skip — dropping `startBlank` from the zone's props, or
  * leaving the card up after it is taken — must turn this file red.
@@ -93,9 +95,30 @@ jest.mock('../components/host-id-provider', () => ({
   useHostId: () => 'host-1',
   useHostSubdomain: () => 'shop',
 }))
+/**
+ * The site the page is looking at, as the settings layout hands it down.
+ *
+ * `screens` is the routing map publishing writes, and it is what says whether
+ * this site is still blank — so it is a fixture here rather than a constant.
+ * `hostHasEmitted` rides with it because "the document has not arrived" and
+ * "the document says nothing is published" are the same shape and must not be
+ * the same answer.
+ */
+let mockHost: Record<string, unknown> = {}
+let mockHostHasEmitted = true
+
+/** A site with pages a visitor can reach — what `aglyn-marketing` is. */
+const ESTABLISHED_SITE = {
+  screens: { 's1': 'home', 's2': 'about', 's3': 'contact' },
+}
+
 jest.mock('../app/(app)/[orgSlug]/hosts/[host]/host-settings-scope', () => ({
   __esModule: true,
-  useHostSettingsScope: () => ({ hostId: 'host-1' }),
+  useHostSettingsScope: () => ({
+    hostId: 'host-1',
+    data: mockHost,
+    hostHasEmitted: mockHostHasEmitted,
+  }),
 }))
 
 // The page's own cards, which read the host document and are not what this
@@ -136,6 +159,11 @@ const expectOrdinaryPage = () => {
 beforeEach(() => {
   window.localStorage.clear()
   lastZoneProps = undefined
+  // A site created a minute ago: its document has arrived and publishes
+  // nothing. `/api/hosts/create` writes exactly `screens: {}` and seeds no
+  // starter (AGL-687), so this is what a new site really looks like.
+  mockHost = {}
+  mockHostHasEmitted = true
   mockWidgets = [
     { slot: 'hostFirstRun', widgetId: 'demo-start', Component: MockFirstRunWidget },
   ]
@@ -167,6 +195,77 @@ describe('the page a new site lands on', () => {
         startBlank: expect.any(Function),
       }),
     )
+  })
+})
+
+/**
+ * The condition that was missing (AGL-2918).
+ *
+ * Setup → Basic details is where a new site lands, and the zone was drawn on
+ * it for that reason — but it is also the setup page of every site that has
+ * ever existed, and the only thing gating the zone was `hostStartedBlank`,
+ * which asks whether THIS BROWSER dismissed the offer. An established site
+ * opened in a browser that had never dismissed anything got the guided start
+ * over the top of it: reported on `aglyn-marketing`, 26 screens, where the
+ * full screen dialog opened on a site years into its life.
+ *
+ * Each test here fails on the code that shipped, because on that code the
+ * site's own state was not consulted at all. The blast radius was staff-only
+ * while `release_ai_generative` was off — the widget is absent without it —
+ * so these are written against the ZONE rather than against any widget: the
+ * console's job is not to offer, and it must not be offering when the flag
+ * moves.
+ */
+describe('an established site', () => {
+  it('is not offered a start it is years past', async () => {
+    mockHost = ESTABLISHED_SITE
+    render(<HostSetupDetailsSection />)
+    expectOrdinaryPage()
+    expect(screen.queryByText('guided start')).toBeNull()
+  })
+
+  /**
+   * The dismissal is not what is doing the work here.
+   *
+   * Every other path out of the offer runs through `hostStartedBlank`, so a
+   * fix that only ever tightened THAT would pass a test written on a fresh
+   * browser by accident. This one states the property on its own: nothing has
+   * been dismissed, the browser is clean, and the site is still not asked.
+   */
+  it('is not offered one in a browser that has dismissed nothing', async () => {
+    mockHost = ESTABLISHED_SITE
+    expect(hostStartedBlank('host-1')).toBe(false)
+    render(<HostSetupDetailsSection />)
+    expect(screen.queryByText('guided start')).toBeNull()
+  })
+
+  /**
+   * One published page is enough, because the question is whether a visitor
+   * can reach anything — not how much there is. A site with a single live
+   * page is a site somebody has started.
+   */
+  it('is past the offer from its first published page', async () => {
+    mockHost = { screens: { 's1': 'home' } }
+    render(<HostSetupDetailsSection />)
+    expect(screen.queryByText('guided start')).toBeNull()
+  })
+})
+
+/**
+ * An unread document is not a blank site.
+ *
+ * `screens` is absent both before the host document arrives and on a site
+ * that publishes nothing, so a gate that read the map without waiting would
+ * mount the zone for every site for as long as the snapshot took — and the
+ * widget on this zone takes the WHOLE SCREEN, so that is not a flicker in a
+ * card, it is a dialog over somebody's settings page that then vanishes.
+ */
+describe('before the site has been read', () => {
+  it('offers nothing until the document has arrived', async () => {
+    mockHostHasEmitted = false
+    render(<HostSetupDetailsSection />)
+    expectOrdinaryPage()
+    expect(screen.queryByText('guided start')).toBeNull()
   })
 })
 
