@@ -17,8 +17,8 @@
 
 import { _isObj, _isStrT } from '@aglyn/shared-util-tools'
 import { arraySafe } from '@aglyn/shared-util-tools'
-import cloneDeep from 'lodash-es/cloneDeep'
-import isEqual from 'lodash-es/isEqual'
+import cloneDeep from 'lodash-es/cloneDeep.js'
+import isEqual from 'lodash-es/isEqual.js'
 import {
   action,
   computed,

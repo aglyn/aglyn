@@ -22,7 +22,7 @@ import {
   STYLE_OVERRIDES_ROOT_KEY,
 } from '@aglyn/aglyn'
 import { expandSxAliases } from '@aglyn/shared-data-enums'
-import isEqual from 'lodash-es/isEqual'
+import isEqual from 'lodash-es/isEqual.js'
 import { action, toJS } from 'mobx'
 
 /**

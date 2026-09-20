@@ -134,7 +134,9 @@ Drafting an automation from a description is **not** part of this release — se
   list of **choices**, and the
   [Function Widget](building-sites/besigner/element-catalog.md) asks each one as what it
   is — a number box, a switch, a list — shows several named results instead of one, and
-  can update as the visitor types.
+  can update as the visitor types. For a design of your own, the
+  [Calculator elements](building-sites/bindings/overview.md#a-calculator-you-lay-out) bind
+  inputs, results and conditional rows to one function anywhere on the canvas.
 
 ## August 2026 — the canvas, up close
 

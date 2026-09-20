@@ -556,12 +556,12 @@ describe('a two-person introduction fits a pass on the balanced tier (AGL-3042)'
     const screen = FIXTURE.plan.screens[0]
     const sectionIds = screen.sections.map((_, index) => aiPageSectionNodeId('job-two-person', index))
     const context = aiPageCheckContext(FIXTURE.inventory)
-    const hero = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, uses: screen.sections[0].uses, inventory: FIXTURE.inventory })({
+    const hero = aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context, section: screen.sections[0], inventory: FIXTURE.inventory })({
       tree: JSON.stringify(FIXTURE.answers[0]),
     })
     const page = aiPageWithSection(aiEmptyPage(), hero.value as AiPageSection, sectionIds)
     // A section the page's rules keep, and not one its ceiling holds.
-    const roomier = aiPageSectionCheck({ page, sectionIds, index: 1, context, uses: [], inventory: FIXTURE.inventory })({
+    const roomier = aiPageSectionCheck({ page, sectionIds, index: 1, context, section: { name: 'x', uses: [], items: 0 }, inventory: FIXTURE.inventory })({
       tree: JSON.stringify(FIXTURE.roomier),
     })
     expect([roomier.value !== null, roomier.violations]).toEqual([true, []])
@@ -731,7 +731,7 @@ describe('a repeated item written once fits a Free section pass (AGL-3053)', () 
           expect([label, shapeOf(tree.nodes, tree.rootId)]).toEqual([label, shapeOf(written.nodes, written.rootId)])
         }
         const check = (page: typeof once, tree: AiGoldenSection) =>
-          aiPageSectionCheck({ page, sectionIds, index, context, uses: screen.sections[index].uses, inventory: fixture.inventory })({
+          aiPageSectionCheck({ page, sectionIds, index, context, section: screen.sections[index], inventory: fixture.inventory })({
             tree: JSON.stringify(tree),
           })
         const fromOnce = check(once, answer)

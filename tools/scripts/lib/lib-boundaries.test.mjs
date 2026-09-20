@@ -32,13 +32,17 @@ import {
   INDEPENDENTLY_VERSIONED,
   OVERRIDES_CALL,
   compareToAllowlist,
+  declarationsOwed,
   evaluateEdges,
   lintOverridesFor,
   missingMapRows,
   overrideWiring,
   packageFindings,
+  packageOfSpecifier,
+  packagesImported,
   peerFamiliesImported,
   readPackageMap,
+  typesPackageOf,
   versionedLibPackages,
 } from './lib-boundaries.mjs'
 
@@ -227,6 +231,142 @@ describe('peerFamiliesImported', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('what a lib must declare (AGL-3201)', () => {
+  it('folds a specifier into its package, and knows what is not one', () => {
+    assert.equal(packageOfSpecifier('@aglyn/aglyn/app-utils/crm'), '@aglyn/aglyn')
+    assert.equal(packageOfSpecifier('lodash-es/debounce'), 'lodash-es')
+    assert.equal(packageOfSpecifier('mobx'), 'mobx')
+    for (const specifier of ['./sibling', '../up', '/abs', 'node:fs', '']) {
+      assert.equal(packageOfSpecifier(specifier), null, specifier)
+    }
+    assert.equal(typesPackageOf('unist'), '@types/unist')
+    assert.equal(typesPackageOf('@scope/name'), '@types/scope__name')
+  })
+
+  it('reads real import statements in shipped source, and nothing else', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aglyn-deps-'))
+    try {
+      mkdirSync(join(dir, 'src', 'lib'), { recursive: true })
+      writeFileSync(
+        join(dir, 'src', 'lib', 'a.ts'),
+        [
+          "import { observable } from 'mobx'",
+          "import type { Node } from 'unist'",
+          "import {",
+          "  a,",
+          "  b,",
+          "} from '@aglyn/aglyn/app-utils/thing'",
+          "export * from '@aglyn/shared-util-tools'",
+          "export { x } from 'rxjs/operators'",
+          "import 'side-effect-pkg'",
+          "const lazy = () => import('lazy-pkg/sub')",
+          "const old = require('cjs-pkg')",
+          "import { self } from '@aglyn/own/inner'",
+          "import { readFileSync } from 'node:fs'",
+          "import { join } from 'path'",
+          "import { local } from './local'",
+          "// import { ghost } from 'commented-out'",
+          " * measured against `@firebase/firestore` 4.17.1: from 'prose-pkg'",
+          "const text = \"a sentence that says from 'a-quoted-word' in a string\"",
+        ].join('\n'),
+      )
+      writeFileSync(join(dir, 'src', 'lib', 'a.spec.ts'), "import { it } from 'spec-only-pkg'\n")
+      writeFileSync(join(dir, 'src', 'lib', 'a.stories.tsx'), "import { Meta } from '@storybook/react'\n")
+      assert.deepEqual(packagesImported(dir, '@aglyn/own'), [
+        '@aglyn/aglyn',
+        '@aglyn/shared-util-tools',
+        'cjs-pkg',
+        'lazy-pkg',
+        'mobx',
+        'rxjs',
+        'side-effect-pkg',
+        'unist',
+      ])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('splits the framework families from the rest', () => {
+    assert.deepEqual(declarationsOwed(['@mui/material', 'mobx', 'next', 'react', 'rxjs']), {
+      peers: ['@mui/material', 'next', 'react'],
+      dependencies: ['mobx', 'rxjs'],
+    })
+  })
+
+  it('refuses an undeclared import and a sibling at the wrong version, and accepts a types package', () => {
+    const project = { name: 'besigner-core', root: 'libs/besigner/core', alias: '@aglyn/besigner', deepAlias: true }
+    const pkg = {
+      name: '@aglyn/besigner',
+      version: '2.0.0',
+      exports: { '.': {}, './*': {} },
+      sideEffects: false,
+      peerDependencies: { react: '^19' },
+      dependencies: { '@aglyn/aglyn': '1.9.0', '@types/unist': '^3', rxjs: '^7' },
+    }
+    const findings = packageFindings({
+      project,
+      pkg,
+      rootVersion: '2.0.0',
+      peers: ['react'],
+      hasServerEntry: false,
+      dependencies: ['@aglyn/aglyn', 'mobx', 'rxjs', 'unist'],
+      workspacePackages: new Set(['@aglyn/aglyn', '@aglyn/besigner']),
+    })
+    assert.deepEqual(findings, [
+      'dependencies lacks mobx, which the shipped source imports (sync:lib-dependencies writes it)',
+      'dependencies["@aglyn/aglyn"] is "1.9.0" but the repo version is "2.0.0" (release:prepare writes it)',
+    ])
+  })
+
+  it('refuses a third-party range the workspace does not run', () => {
+    const project = { name: 'besigner-core', root: 'libs/besigner/core', alias: '@aglyn/besigner', deepAlias: true }
+    const pkg = {
+      name: '@aglyn/besigner',
+      version: '2.0.0',
+      exports: { '.': {}, './*': {} },
+      sideEffects: false,
+      dependencies: { '@swc/helpers': '~0.3.3', mobx: '^6' },
+    }
+    const findings = packageFindings({
+      project,
+      pkg,
+      rootVersion: '2.0.0',
+      peers: [],
+      hasServerEntry: false,
+      rootRanges: { '@swc/helpers': '0.5.23', mobx: '^6' },
+    })
+    assert.deepEqual(findings, [
+      'dependencies["@swc/helpers"] is "~0.3.3" but the workspace runs "0.5.23" (sync:lib-dependencies writes it)',
+    ])
+  })
+
+  it('THE CONTROL: the same package, declared, has nothing to report', () => {
+    // Otherwise the refusal above passes on a check that always finds something.
+    const project = { name: 'besigner-core', root: 'libs/besigner/core', alias: '@aglyn/besigner', deepAlias: true }
+    const pkg = {
+      name: '@aglyn/besigner',
+      version: '2.0.0',
+      exports: { '.': {}, './*': {} },
+      sideEffects: false,
+      peerDependencies: { react: '^19' },
+      dependencies: { '@aglyn/aglyn': '2.0.0', mobx: '^6' },
+    }
+    assert.deepEqual(
+      packageFindings({
+        project,
+        pkg,
+        rootVersion: '2.0.0',
+        peers: ['react'],
+        hasServerEntry: false,
+        dependencies: ['@aglyn/aglyn', 'mobx'],
+        workspacePackages: new Set(['@aglyn/aglyn']),
+      }),
+      [],
+    )
   })
 })
 

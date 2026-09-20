@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-util-rest-api",
-  "version": "1.0.0-beta.141",
+  "version": "1.0.0-beta.142",
   "type": "module",
   "exports": {
     ".": {
@@ -14,7 +14,13 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@swc/helpers": "~0.3.3"
+    "@aglyn/shared-data-enums": "1.0.0-beta.142",
+    "@aglyn/shared-util-errors": "1.0.0-beta.142",
+    "@aglyn/shared-util-http": "1.0.0-beta.142",
+    "@swc/helpers": "0.5.23",
+    "cookie": "^2.0.1",
+    "js-cookie": "^3.0.8",
+    "next-api-middleware": "^3.0.0"
   },
   "peerDependencies": {
     "next": "16.3.3"

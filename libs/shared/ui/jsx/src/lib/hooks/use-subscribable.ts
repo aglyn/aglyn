@@ -16,7 +16,7 @@
  */
 
 import { _isFnT } from '@aglyn/shared-util-tools'
-import isEqual from 'lodash-es/isEqual'
+import isEqual from 'lodash-es/isEqual.js'
 import { type DependencyList, useCallback, useEffect, useState } from 'react'
 import type {
   Observable as RxJsObservable,

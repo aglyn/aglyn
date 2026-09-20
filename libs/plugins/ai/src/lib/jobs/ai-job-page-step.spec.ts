@@ -967,14 +967,59 @@ describe('when a pass stops', () => {
     expect(mockRunAiRequest).not.toHaveBeenCalled()
   })
 
-  it('starts from a copy of the screen the plan names, generating nothing', async () => {
+  /**
+   * A copy of a page with `count` cards in it, stored where the step reads it
+   * back. The plan's longest section promises three (AGL-3024).
+   */
+  const copiedScreen = (count: number) => {
+    const nodes: Record<string, unknown> = {
+      [CANVAS_ROOT_ELEMENT_ID]: { componentId: 'div', nodes: ['grid'] },
+      grid: {
+        componentId: 'muiGrid',
+        props: { container: true },
+        nodes: Array.from({ length: count }, (_, index) => `card-${index}`),
+      },
+    }
+    for (let index = 0; index < count; index += 1) {
+      nodes[`card-${index}`] = { componentId: 'muiCard', props: { variant: 'outlined' } }
+    }
+    mockDocs.set('hosts/host-1/screens/scr-copy', { displayName: 'Home copy', versionId: 'v-copy' })
+    mockDocs.set('hosts/host-1/screens/scr-copy/versions/v-copy', { nodes })
     duplicate.mockResolvedValueOnce({ ok: true, id: 'scr-copy', versionId: 'v-copy', name: 'Home copy' })
-    const outcome = await step()(context({ plan: { ...PLAN, screens: [{ ...SCREEN, duplicateOf: 'scr-home' }] } }))
+    return context({ plan: { ...PLAN, screens: [{ ...SCREEN, duplicateOf: 'scr-home' }] } })
+  }
+
+  it('starts from a copy of the screen the plan names, generating nothing', async () => {
+    const outcome = await step()(copiedScreen(3))
     expect(duplicate).toHaveBeenCalledWith('screen', expect.objectContaining({ hostId: 'host-1', sourceId: 'scr-home', uid: 'uid-1' }))
     expect(mockRunAiRequest).not.toHaveBeenCalled()
     expect(outcome.outputs).toEqual([
       { resource: 'screen', id: 'scr-copy', versionId: 'v-copy', hostId: 'host-1', hostSubdomain: 'acme', label: 'Home copy' },
     ])
+  })
+
+  // The layout copy grew this check first; the page copy is the same branch on
+  // the kind the defect was measured on. It generates nothing, so no model is
+  // left to answer for the plan and the copy itself has to (AGL-3024).
+  it('stops for a person rather than reporting a copy that shows less than the plan promised', async () => {
+    const outcome = await step()(copiedScreen(2))
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(outcome.outputs).toEqual([])
+    expect(outcome.review?.reason).toBe('doctrine')
+    expect(outcome.review?.findings.map((finding) => finding.code)).toEqual(['plan-items-short'])
+    expect(outcome.review?.message).toContain('"what the inspection covers"')
+  })
+
+  it('stops for a person when the copy cannot be read back at all', async () => {
+    duplicate.mockResolvedValueOnce({ ok: true, id: 'scr-gone', versionId: 'v-copy', name: 'Home copy' })
+    const outcome = await step()(context({ plan: { ...PLAN, screens: [{ ...SCREEN, duplicateOf: 'scr-home' }] } }))
+    expect(outcome.outputs).toEqual([])
+    expect(outcome.review).toEqual({
+      reason: 'doctrine',
+      message:
+        '"Spring roof inspections" was copied from the page the plan names, and this job could not read the copy back to check it shows what the plan says it shows. Open the page and check it before you put it in front of anyone.',
+      findings: [],
+    })
   })
 
   it('builds the page rather than copying a collection entry template the plan names', async () => {

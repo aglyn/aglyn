@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-ui-json-editor",
-  "version": "1.0.0-beta.141",
+  "version": "1.0.0-beta.142",
   "exports": {
     ".": {
       "types": "./src/index.d.ts",
@@ -11,6 +11,16 @@
       "default": "./src/lib/*.js"
     },
     "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@aglyn/shared-data-enums": "1.0.0-beta.142",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.142",
+    "@codemirror/lang-json": "^6.0.1",
+    "@monaco-editor/react": "^4.7.0",
+    "@uiw/codemirror-theme-github": "^4.25.11",
+    "@uiw/react-codemirror": "^4.25.11",
+    "mobx-react-lite": "^4.1.1",
+    "react-if": "^4.1.6"
   },
   "peerDependencies": {
     "@mui/material": "^9.3.1",

@@ -459,14 +459,77 @@ Every lib carries, today:
   `firebase-admin` and each `@mui/*` package the lib's shipped source imports,
   at the root's range. A consumer has one of each; a lib never carries its own.
 - `sideEffects`: `false`, or the list of modules that register on import.
+- `dependencies`: every package the lib's shipped source imports that is not
+  a peer (AGL-3201). Inside this repo an import resolves through a tsconfig
+  alias or the root `node_modules`, so a lib that declares nothing builds and
+  tests green and would install from the registry unable to find what it
+  imports. One of this repo's own libs is declared at the repo version, the
+  only number it is published beside, and `release:prepare` moves those with
+  the bump; anything else carries the root `package.json`'s range, and a
+  types-only package goes by its `@types/` name. `npm run
+  sync:lib-dependencies` writes them and `check:lib-boundaries` refuses a lib
+  whose source imports something it does not declare. A lib never imports a
+  transitive dependency of something else (`@popperjs/core` through MUI,
+  `@firebase/firestore` through `firebase`): it cannot declare it honestly.
 
 Build output is unchanged: the executors, entry files and `dist/` layout are
 what they were.
+
+## Proving a package installs
+
+Nothing inside this repo can see whether a lib is installable: an import
+resolves through a tsconfig alias or the root `node_modules`, and the apps
+consume a lib's source, never what `nx build` emits. So the map is proved from
+outside (AGL-3201):
+
+```sh
+npm run proof:consumer -- logic-only      # minutes; builds, installs from the registry, bundles
+```
+
+A story names what a consumer asks for, the peers they are told to bring, and
+the peers they must be able to do without. It builds the closure of `@aglyn/*`
+packages read off each `package.json`, packs them as they would be published,
+installs the tarballs into an empty project outside the workspace, bundles an
+entry that imports them, and runs it.
+
+| story | asks for | brings | must not need | holds |
+| -- | -- | -- | -- | -- |
+| `logic-only` | `@aglyn/aglyn`, `@aglyn/besigner` | `react` | `next`, `firebase`, `firebase-admin`, `@mui/material`, `@aglyn/besigner-ui` | yes — ten packages in the closure, none of them a UI library |
+| `besigner-ui` | `@aglyn/besigner-ui`, `@aglyn/aglyn-node-renderer` | `react`, `react-dom`, `next`, `firebase`, `@mui/*`, `@emotion/*` | `firebase-admin`, any `@aglyn/tenant-*`, any `@aglyn/plugins-*` | **not yet.** All 21 packages build, pack and install, and no console, tenant runtime or plugin is in the closure — the separation holds. The bundle fails on `@aglyn/shared-data-mdi`, whose entry imports `../../generated/6.5.95/mdi-icons`, 29 MB of generated source outside `src/` that the build never emits. |
+
+What a build must do for this to hold, all of it invisible from inside: the
+swc output is ESM with `"type": "module"`, so `.swcrc` sets `resolveFully` and
+every emitted relative import names its file; a deep import of a package with
+no `exports` map names the file too (`lodash-es/isEqual.js`); and a lib's
+third-party ranges are the ones the workspace runs. Plain Node still cannot
+load `mobx-utils/lib/*`, whose own files import each other without extensions
+— that is `mobx-utils`' packaging, a bundler resolves it, and every consumer of
+a React library has one.
+
+What stands between `besigner-ui` and holding, in the order a consumer meets
+them:
+
+1. **`@aglyn/shared-data-mdi` does not ship its icons.** Decide whether the
+   package carries the generated set (and at what size) or depends on the
+   upstream icon package; either way the entry must not reach outside `src/`.
+2. **`next` is a peer for two `next/dynamic` calls** in the designer
+   (`viewport-canvas`, `workspace-editor`). They carry SSR semantics the
+   console's editor route relies on, so replacing them wants a signed-in editor
+   to verify against.
+3. **`firebase` is a peer because the working-draft store writes Firestore
+   itself** (`drafts/besigner-server-draft.ts`). An embeddable editor takes a
+   draft store from whoever embeds it; the contract belongs in
+   `@aglyn/besigner` and the Firestore implementation beside the console.
 
 ## Later
 
 A follow-up project, not this document's commit:
 
+- **`sideEffects` names `.ts` files and the package ships `.js`** (AGL-3201).
+  The swc build copies the array as written, so a consumer's bundler would
+  read every listed module as side-effect free and drop its registration —
+  the AGL-3025 failure, in somebody else's build. It has to be rewritten to
+  the emitted extension at build or pack time before anything is published.
 - `nx release` with independent versioning and `publishConfig` per package.
 - A `publish-packages.yml` workflow on the `production` promotion tag that
   publishes every changed package with provenance, and a `CHANGELOG` per

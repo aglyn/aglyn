@@ -29,7 +29,7 @@ import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
 import { Box, Button, IconButton, Paper } from '@mui/material'
 import type { Theme } from '@mui/material/styles'
 import type { SystemStyleObject } from '@mui/system'
-import isEqual from 'lodash-es/isEqual'
+import isEqual from 'lodash-es/isEqual.js'
 import { toJS } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import {

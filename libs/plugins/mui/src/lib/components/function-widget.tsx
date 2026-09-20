@@ -20,14 +20,16 @@ import { mdiFunctionVariant } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
 import Divider from '@mui/material/Divider'
-import FormControlLabel from '@mui/material/FormControlLabel'
 import Stack from '@mui/material/Stack'
-import Switch from '@mui/material/Switch'
-import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { forwardRef, useCallback, useContext, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import {
+  FunctionParameterControl,
+  displayFunctionValue as displayValue,
+  initialFunctionArguments as initialArguments,
+} from './function-controls'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'functionWidget'
@@ -82,28 +84,6 @@ export function parseFunctionWidgetOutputs(
     rows.push({ name, label: rest.join('|').trim() || name })
   }
   return rows
-}
-
-/** What each input starts with: the parameter's own default, or nothing. */
-function initialArguments(
-  definition: Aglyn.HostFunction | undefined,
-): Record<string, string> {
-  const args: Record<string, string> = {}
-  for (const parameter of definition?.parameters ?? []) {
-    if (parameter.defaultValue != null && parameter.defaultValue !== '') {
-      args[parameter.name] = String(parameter.defaultValue)
-    } else if (parameter.options?.length) {
-      // A select always shows a choice, so the function has to receive the
-      // one on screen — not an empty string the visitor never saw.
-      args[parameter.name] = String(parameter.options[0].value)
-    }
-  }
-  return args
-}
-
-function displayValue(value: number | string | boolean | undefined): string {
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
-  return value == null ? '' : String(value)
 }
 
 /**
@@ -192,74 +172,18 @@ const FunctionWidget = forwardRef<HTMLDivElement, FunctionWidgetProps>(
               spacing={1}
               sx={{ flexWrap: 'wrap', rowGap: 1.5, alignItems: 'center' }}
             >
-              {parameters.map((parameter) => {
-                const label = parameter.label?.trim() || parameter.name
-                const value = args[parameter.name] ?? ''
-                if (parameter.options?.length) {
-                  return (
-                    <TextField
-                      key={parameter.name}
-                      select
-                      label={label}
-                      required={Boolean(parameter.required)}
-                      value={value}
-                      onChange={(event) =>
-                        setArgument(parameter.name, event.target.value)
-                      }
-                      size="small"
-                      // Native: a portal-mounted menu is one more thing a
-                      // sandboxed or transformed ancestor can misplace, and
-                      // on a phone the platform picker is the better control.
-                      slotProps={{ select: { native: true } }}
-                      sx={{ minWidth: 200 }}
-                    >
-                      {parameter.options.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label?.trim() || option.value}
-                        </option>
-                      ))}
-                    </TextField>
-                  )
-                }
-                if (parameter.type === 'boolean') {
-                  return (
-                    <FormControlLabel
-                      key={parameter.name}
-                      label={label}
-                      control={
-                        <Switch
-                          checked={value === 'true'}
-                          onChange={(event) =>
-                            setArgument(
-                              parameter.name,
-                              event.target.checked ? 'true' : 'false',
-                            )
-                          }
-                        />
-                      }
-                    />
-                  )
-                }
-                return (
-                  <TextField
-                    key={parameter.name}
-                    label={label}
-                    required={Boolean(parameter.required)}
-                    value={value}
-                    onChange={(event) =>
-                      setArgument(parameter.name, event.target.value)
-                    }
-                    size="small"
-                    {...(parameter.type === 'number'
-                      ? {
-                          type: 'number',
-                          slotProps: { htmlInput: { inputMode: 'decimal' } },
-                        }
-                      : {})}
-                    sx={{ width: parameter.label ? 200 : 140 }}
-                  />
-                )
-              })}
+              {parameters.map((parameter) => (
+                <FunctionParameterControl
+                  key={parameter.name}
+                  name={parameter.name}
+                  type={parameter.type}
+                  required={parameter.required}
+                  label={parameter.label}
+                  options={parameter.options}
+                  value={args[parameter.name] ?? ''}
+                  onChange={(value) => setArgument(parameter.name, value)}
+                />
+              ))}
             </Stack>
             {live ? null : (
               <Button

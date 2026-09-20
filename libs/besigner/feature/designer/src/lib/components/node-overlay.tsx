@@ -26,12 +26,22 @@ import {
   Popper as MuiPopper,
   type PopperProps as MuiPopperProps,
 } from '@mui/material'
-import { VirtualElement } from '@popperjs/core'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, useMemo, useState } from 'react'
 import NodeOutline from './node-outline'
 import { isInlineEditWithin } from '../utils/inline-text-edit.store'
 import NodeQuickActions from './node-quick-actions'
+
+/**
+ * What a Popper anchors to when it is not an element. It is popper's own
+ * `VirtualElement`, stated structurally: popper is a dependency of MUI's and
+ * not of this package, so importing its type would make the published package
+ * name a module it never declares.
+ */
+interface VirtualElement {
+  getBoundingClientRect: () => DOMRect
+  contextElement?: Element
+}
 
 const outerModifiers = [
   {

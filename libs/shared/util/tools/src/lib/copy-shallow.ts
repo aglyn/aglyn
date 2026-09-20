@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import copyShallow from 'lodash-es/clone'
+import copyShallow from 'lodash-es/clone.js'
 
 
 export {copyShallow}

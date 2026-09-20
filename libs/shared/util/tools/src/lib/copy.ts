@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import cloneDeep from 'lodash-es/cloneDeep'
+import cloneDeep from 'lodash-es/cloneDeep.js'
 
 export { cloneDeep }
 export default cloneDeep

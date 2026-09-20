@@ -21,7 +21,7 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import { compress, decompress } from '@aglyn/aglyn'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { DocumentReference } from '@firebase/firestore'
+import type { DocumentReference } from 'firebase/firestore'
 import { Bytes, doc } from 'firebase/firestore'
 import { useFirestore, type FirestoreDocOptions } from './firebase/firebase-services'
 import useDoc from './helpers/use-doc'

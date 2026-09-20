@@ -20,7 +20,7 @@
 // console shell that renders these hooks. `import type` erases instead.
 import type * as Aglyn from '@aglyn/aglyn'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { DocumentReference } from '@firebase/firestore'
+import type { DocumentReference } from 'firebase/firestore'
 import { doc } from 'firebase/firestore'
 import {
   useFirestore,

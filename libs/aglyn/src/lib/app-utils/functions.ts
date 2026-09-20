@@ -51,6 +51,51 @@ export interface HostFunctionParameterOption {
   label?: string
 }
 
+/**
+ * A choice list as ONE line of text (AGL-3202):
+ * `cms: A CMS and room to grow, entry: The entry plan only`. A bare entry is
+ * both the value and what the visitor reads.
+ *
+ * One line, not a nested editor, because every surface that asks for choices
+ * already asks for several other things in the same row. The cost is that a
+ * value cannot itself contain a comma, and a label cannot either; a choice
+ * that needs one is a sign the question wants rewording.
+ *
+ * In core because two plugins read it — the function builder that stores a
+ * parameter's choices and the canvas element that offers its own — and a
+ * plugin may not import another.
+ */
+export function parseFunctionParameterOptions(
+  text: string | null | undefined,
+): HostFunctionParameterOption[] {
+  const options: HostFunctionParameterOption[] = []
+  const seen = new Set<string>()
+  for (const part of String(text ?? '').split(',')) {
+    const colon = part.indexOf(':')
+    const value = (colon < 0 ? part : part.slice(0, colon)).trim()
+    // The second copy of a value is a typo, not a second choice: a select
+    // with two identical values cannot tell the function which was picked.
+    if (!value || seen.has(value)) continue
+    seen.add(value)
+    const label = colon < 0 ? '' : part.slice(colon + 1).trim()
+    options.push(label && label !== value ? { value, label } : { value })
+  }
+  return options
+}
+
+/** The inverse, for showing a stored list in that one line. */
+export function formatFunctionParameterOptions(
+  options: HostFunctionParameterOption[] | null | undefined,
+): string {
+  return (options ?? [])
+    .map((option) =>
+      option.label && option.label !== option.value
+        ? `${option.value}: ${option.label}`
+        : option.value,
+    )
+    .join(', ')
+}
+
 export interface HostFunctionParameter {
   name: string
   type: FunctionValueType

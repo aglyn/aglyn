@@ -237,7 +237,7 @@ function assemblePage(loaded: Dict, fixture: Dict, reusableComponents: boolean):
       sectionIds,
       index,
       context,
-      uses: screen.sections[index].uses ?? [],
+      section: screen.sections[index],
       inventory: fixture.inventory,
     })
     const result = check({ tree: JSON.stringify(answer) })

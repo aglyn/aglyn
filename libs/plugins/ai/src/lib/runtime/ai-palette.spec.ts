@@ -50,6 +50,10 @@ const REGISTRY = new Set(Object.keys(AI_PALETTE))
 const NEVER_OFFERED = [
   'custom-html',
   'functionWidget',
+  'functionScope',
+  'functionInput',
+  'functionOutput',
+  'functionShow',
   'div',
   'reusableInstance',
   'marketplacePlugin',

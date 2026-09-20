@@ -635,7 +635,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
     // prompt moves one of them DOWN and says so in its commit, and a prompt
     // that grows without anyone meaning it to moves one UP and is red here.
     expect(measured()).toEqual({
-      plan: { prefixTokens: 2_945, minimum: 1_024, caches: true, toolsStable: true },
+      // 2,945 before AGL-3024 told the planner what a layout's fields are:
+      // the regions it has, which is what the build is then held to.
+      plan: { prefixTokens: 2_980, minimum: 1_024, caches: true, toolsStable: true },
       layout: { prefixTokens: 4_414, minimum: 1_024, caches: true, toolsStable: true },
       template: { prefixTokens: 4_956, minimum: 1_024, caches: true, toolsStable: true },
       component: { prefixTokens: 5_022, minimum: 1_024, caches: true, toolsStable: true },

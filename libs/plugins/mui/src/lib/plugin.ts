@@ -55,6 +55,7 @@ const linkBox = () => import('./components/link-box')
 const navMenu = () => import('./components/nav-menu')
 const drawer = () => import('./components/drawer')
 const functionWidget = () => import('./components/function-widget')
+const functionScope = () => import('./components/function-scope')
 const product = () => import('./components/product')
 const plugin = () => import('./components/plugin')
 const customHtml = () => import('./components/custom-html')
@@ -328,6 +329,30 @@ export const MUI_COMPONENT_SOURCES: Readonly<
     component: 'default',
     schema: 'schema',
     presets: 'presets',
+  },
+  functionScope: {
+    module: functionScope,
+    component: 'default',
+    schema: 'schema',
+    presets: 'presets',
+  },
+  functionInput: {
+    module: functionScope,
+    component: 'FunctionInput',
+    schema: 'functionInputSchema',
+    presets: 'functionInputPresets',
+  },
+  functionOutput: {
+    module: functionScope,
+    component: 'FunctionOutput',
+    schema: 'functionOutputSchema',
+    presets: 'functionOutputPresets',
+  },
+  functionShow: {
+    module: functionScope,
+    component: 'FunctionShow',
+    schema: 'functionShowSchema',
+    presets: 'functionShowPresets',
   },
   product: {
     module: product,

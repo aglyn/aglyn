@@ -9,6 +9,40 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.142 — 2026-09-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.141...v1.0.0-beta.142)
+
+### Added
+
+- **mui:** four elements that lay a calculator out on the canvas, bound to one function ([AGL-3202](https://linear.app/aglyn/issue/AGL-3202))
+- **aglyn:** compose binds a Calculator container; the choice-list grammar moves to core ([AGL-3202](https://linear.app/aglyn/issue/AGL-3202))
+- **packages:** the besigner-ui consumer story, and the three things it still fails on ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **packages:** the logic-only consumer story is proved from outside the repo ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **packages:** every lib declares what its shipped source imports ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **ai:** a build is held to the plan it was confirmed from ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+
+### Fixed
+
+- **docs:** one word in the Function Widget entry made a docs question ambiguous ([AGL-3202](https://linear.app/aglyn/issue/AGL-3202))
+- **ai:** a copied page answers for its plan, and the plan rule is held wired ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+- **ai:** the axe recorder gives the section check its plan line ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+
+### Documentation
+
+- **bindings:** a calculator you lay out, and its four elements in the catalog ([AGL-3202](https://linear.app/aglyn/issue/AGL-3202))
+- **agents:** a lib declares its imports, and where a two-plugin spec lives ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **packages:** a lib declares what it imports, and what still stops a publish ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **ai:** the site, theme and copy pages are named for what people search ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922), [AGL-2923](https://linear.app/aglyn/issue/AGL-2923))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **release:** every lib's pins on its sibling libs follow the back-merged version ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089), [AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **docs:** an anchor resolves, and no AI page is reachable only from the sidebar ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922))
+
+</details>
+
 ## v1.0.0-beta.141 — 2026-09-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.140...v1.0.0-beta.141)

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import arrayCopyShallow from 'lodash-es/clone'
+import arrayCopyShallow from 'lodash-es/clone.js'
 
 export { arrayCopyShallow }
 export default arrayCopyShallow

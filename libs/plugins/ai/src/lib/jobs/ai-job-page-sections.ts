@@ -46,6 +46,7 @@ import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import { AI_REPEAT_KEY, expandAiRepeatedItems } from '../runtime/ai-repeated-items'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiJobBriefLine, aiPlanReferenceLines } from './ai-job-generation'
+import { aiPlanItemCountViolations } from './ai-job-plan-conformance'
 
 /**
  * A page built one section at a time (AGL-2907): what one section pass asks
@@ -289,8 +290,11 @@ export interface AiPageSectionCheckInput {
   sectionIds: readonly string[]
   index: number
   context: AiDoctrineTreeContext
-  /** What the plan line says the section places: inventory ids. */
-  uses: readonly string[]
+  /**
+   * The plan line this pass answers for: what it places by inventory id, and
+   * how many items it promised, which the answer is held to (AGL-3024).
+   */
+  section: Pick<AiBuildPlanSection, 'name' | 'uses' | 'items'>
   inventory: AiSiteInventory | null
 }
 
@@ -314,7 +318,8 @@ function offendingOf(raw: unknown, violations: readonly AiDoctrineViolation[]): 
  * into its copies (AGL-3053), then the palette validator on the section, with
  * any line it cut at its ceiling refused (AGL-3076), the doctrine's page check
  * on the page with the section added, and the plan line — every component it
- * names placed as an instance, every form bound by its id (rule 7). Violations
+ * names placed as an instance, every form bound by its id (rule 7), and as
+ * many items as it promised (AGL-3024). Violations
  * name the section's own nodes by the ids the MODEL wrote, and a copy's nodes
  * by the item's; one that names only nodes an earlier pass stored belongs to
  * the page rather than to this answer, and is left to the last pass (AGL-3078).
@@ -460,7 +465,7 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
       }
       if (node['componentId'] === 'form' && typeof props['formId'] === 'string') bound.add(props['formId'])
     }
-    const missing = input.uses.filter(
+    const missing = input.section.uses.filter(
       (ref) => (components.has(ref) && !placed.has(ref)) || (forms.has(ref) && !bound.has(ref)),
     )
     if (missing.length) {
@@ -470,6 +475,14 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
         message: `The confirmed plan places ${missing.join(', ')} in this section, and the section does not. Place each one by its id.`,
       })
     }
+    // The count the plan promised, against the section as the page stores it
+    // (AGL-3024): the prompt states it, and until now nothing read it back.
+    violations.push(
+      ...aiPlanItemCountViolations(input.section, {
+        rootId: sectionId,
+        nodes: sectionNodes as unknown as Record<string, AiDoctrineNode>,
+      }),
+    )
 
     return {
       value: { ...section, load: report.load },

@@ -17,7 +17,7 @@
 
 import { mergeNodeSx, mergeSchemeValue } from '@aglyn/aglyn'
 import type { BesignerStateFlag } from '@aglyn/besigner'
-import isEqual from 'lodash-es/isEqual'
+import isEqual from 'lodash-es/isEqual.js'
 
 /**
  * Interaction-state style slices for the Styles panel (AGL-2486 item 39).

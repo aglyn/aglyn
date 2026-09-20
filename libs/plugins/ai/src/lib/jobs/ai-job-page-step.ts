@@ -30,7 +30,7 @@ import {
 } from '../model/ai-page-job'
 import { aiPlanCapabilitiesForJob, aiPlanUncreatable } from '../model/ai-plan-capabilities'
 import { aiSiteWords } from '../model/ai-site-job'
-import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
+import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
 import { aiModelForStep } from '../providers/routing'
 import { aiDoctrineNeedsInputMessage, runValidatedGeneration } from '../runtime/ai-doctrine'
 import { validateAiDoctrineTree, type AiDoctrineTree } from '../runtime/ai-doctrine-validators'
@@ -80,6 +80,7 @@ import {
   aiPageWithSection,
   type AiPageSection,
 } from './ai-job-page-sections'
+import { AI_PLAN_ITEMS_MIN, aiPlanCopiedPageViolations } from './ai-job-plan-conformance'
 import {
   aiCreationUnit,
   aiRunJobUnit,
@@ -285,6 +286,43 @@ function siteNameOf(host: FirebaseFirestore.DocumentSnapshot): string {
 }
 
 /**
+ * The counts the confirmed plan's sections promised, against the page a COPY
+ * actually produced (AGL-3024); `null` when the copy keeps the plan, or when
+ * the plan promised no count to keep.
+ *
+ * The same hole the layout copy had (`aiCopiedLayoutReview`), on the kind the
+ * defect was measured on. This branch generates nothing, so no model ever
+ * answers for the plan: a plan reading "start from the Services page, one
+ * card per practice area" gets the Services page and whatever IT had, and
+ * until now reported `Done` — the one report that tells a customer there is
+ * no reason to re-read the page.
+ *
+ * A copy that cannot be read back settles nothing, and a promise this step
+ * cannot settle is reviewed by a person rather than reported as kept.
+ */
+export async function aiCopiedPageReview(
+  firestore: FirebaseFirestore.Firestore,
+  input: { hostId: string; id: string; name: string; screen: Pick<AiBuildPlanScreen, 'sections'> },
+): Promise<AiJobReview | null> {
+  if (!input.screen.sections.some((section) => section.items >= AI_PLAN_ITEMS_MIN)) return null
+  const stored = await readAiDraftNodes(firestore, { kind: 'screen', hostId: input.hostId, id: input.id })
+  const nodes = (stored?.nodes ?? {}) as unknown as AiDoctrineTree['nodes']
+  if (!nodes[CANVAS_ROOT_ELEMENT_ID]) {
+    return {
+      reason: 'doctrine',
+      message: `"${input.name}" was copied from the page the plan names, and this job could not read the copy back to check it shows what the plan says it shows. Open the page and check it before you put it in front of anyone.`,
+      findings: [],
+    }
+  }
+  const violations = aiPlanCopiedPageViolations(input.screen, { rootId: CANVAS_ROOT_ELEMENT_ID, nodes })
+  if (!violations.length) return null
+  return aiDoctrineReview({
+    message: `"${input.name}" is a copy of the page the plan names, and a copy is all it is: ${violations[0].message}`,
+    violations,
+  })
+}
+
+/**
  * A page job is admitted with inputs that read, for a site of the job's own
  * org with a screen to spare; and confirmed only for a plan it can build —
  * one screen, whose creations are ones a page job builds, this deployment has
@@ -437,6 +475,12 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         org: org as Record<string, unknown> | null,
       })
       if (copy.ok) {
+        // A copy is not a build (AGL-3024). Nothing is generated here, so
+        // whatever the plan promised BEYOND the source is in the draft only
+        // if the source already had it, and no model is left to answer for
+        // the difference — the copy itself has to.
+        const review = await aiCopiedPageReview(firestore, { hostId, id: copy.id, name, screen })
+        if (review) return aiUnspentOutcome(model, { review })
         const hostSubdomain = await aiSiteSubdomain(firestore, hostId)
         return aiUnspentOutcome(model, {
           outputs: [output({ id: copy.id, versionId: copy.versionId, name: copy.name, hostSubdomain })],
@@ -574,7 +618,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         sectionIds,
         index,
         context,
-        uses: screen.sections[index].uses,
+        section: screen.sections[index],
         inventory,
       }),
       ...(signal ? { signal } : {}),
