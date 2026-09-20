@@ -10,6 +10,7 @@ on Aglyn**). These are authoring inputs for the besigner, not application code
 | `apply-page-copy.js` | Pours one `product-copy/copy-<page>.json` into a freshly-pasted copy of that skeleton, in the besigner's page context. Verifies every section's slot count and writes **nothing** on a mismatch. |
 | `verify-applier.mjs` | `node tools/marketing/verify-applier.mjs` — drives the applier over all eight pages against a stub canvas that models the REAL write semantics. |
 | `product-copy/copy-<page>.json` | Copy and structure extracted verbatim from the Figma frames, one file per product page, plus a `claimsToVerify` list per page. |
+| `shared-copy/band-<name>.json` | A block placed on **many** pages, worded once. `band-ai.json` is the first (AGL-2921) — see "One band on twenty-five pages" below. |
 | `extract-solutions-copy.mjs` | Extracts one `solutions-copy/copy-<page>.json` per solutions/use-case frame from a `get_metadata` dump of canvas `163:89`. Unit is a **card in a grid**. |
 | `extract-pricing-copy.mjs` | Extracts `pricing-copy/copy-<variant>.json` from the four Pricing frame dumps. Unit is a **row in a table**. See below — it is deliberately not the solutions extractor. |
 | `build-pricing-tables.mts` | Builds `pricing-copy/tables.json` FROM `plan-entitlements.ts` and reconciles all six tables it emits — `compare` (rows and plan columns), `tiers`, `usage`, `metered`, `fees`, `addons` — against the extractions, cell by cell. `npm run check:pricing-tables` runs it without writing. Deliberate divergences are declared with the frame's exact stale value, and a declaration the frame has caught up on fails until it is deleted. The tables that read every breakpoint print a compared-cell count; zero is a failure, because a reader that matches nothing reports clean. A rate the code charges but no row publishes is a failure too: `RATE_KEYS` enumerates every `extra*` field off `PLAN_PRICING` itself, so a new overage rate fails on the commit that adds it rather than after somebody reads an invoice line with no published price. A row we publish that the frame carries nowhere is declared in `USAGE_EXPECTED_ABSENT` and resolves — failing until the entry is deleted — once every breakpoint carries it. |
@@ -257,6 +258,34 @@ the *layout's* — a screen document contains neither — so the applier filters
 them out before matching. Analytics and Marketing looked like 10-section pages
 purely because of that; all **eight detail pages are the same 8-section
 skeleton**, and all eight pour cleanly (73–74 writes each).
+
+## One band on twenty-five pages (AGL-2921)
+
+The format had **no way to say a block is shared**. `product-copy/` and
+`solutions-copy/` each hold one page's own sections, and `apply-page-copy.js`
+pours one file into one canvas — so "the same band on every product, segment
+and solutions page" could only be expressed by pasting the same six strings
+into twenty-five files, where the second edit forks them and nothing notices.
+
+`shared-copy/band-ai.json` is the smallest thing that says it instead: the
+band's copy **once**, a `slotContract` in the same shape as the section
+contracts in the applier, and a `targets` list of the pages it rides on with
+each one's copy file. `verify-applier.mjs` asserts the heading appears in no
+page file, that the flatten arity matches the declared slot count, that the
+rolling-out line is the last slot, and that every named target file exists.
+
+Two things about it are load-bearing:
+
+- **Pour the page copy FIRST, then place the band.** The applier asserts the
+  canvas holds exactly as many root sections as the 8-section contract, so a
+  page already carrying the band is a page it will refuse forever after. To
+  re-pour, remove the band, pour, place it again. The harness carries this as
+  a negative control — a nine-section canvas must be refused — so the ordering
+  is checked rather than remembered.
+- **On the canvas it is one reusable component, instanced per page.** Not
+  twenty-five copies of a section. It is what the platform's own building
+  rules tell a customer to do with a block that repeats, and it makes the
+  rolling-out line's eventual deletion one edit instead of twenty-five.
 
 ## `copy-ai.json` is authored, not extracted (AGL-2920)
 

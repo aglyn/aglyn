@@ -1,0 +1,85 @@
+{
+  "band": "ai",
+  "title": "Have AI do it, then edit anything",
+  "route": "/product/ai",
+  "notes": "ONE band, worded once, placed on every product, segment and solutions page (AGL-2921). It is in its own file and its own directory because the copy format had no way to say 'this block is shared': `product-copy/copy-<page>.json` and `solutions-copy/copy-<page>.json` are each one page's own sections, and `apply-page-copy.js` pours one file into one canvas. The alternative was the same six strings pasted into twenty-five files, where the second edit forks them silently — the failure this directory exists to prevent. Nothing imports this file yet; it is the authoring source the besigner pass reads, the same way `product-copy/` is.",
+  "sharedBy": "Every page in `targets`. The wording is page-neutral on purpose: a band that says something different per page is not one band, and the moment it takes a per-page variable it becomes twenty-five files again.",
+  "slotContract": {
+    "slots": 5,
+    "order": ["eyebrow", "heading", "body", "actions[0].label", "disclosure.body"],
+    "slotsAfterFlip": 4,
+    "notes": "The flatten a band-aware applier would use, in document order, in the same shape as the section contracts in `apply-page-copy.js`. The disclosure is the LAST slot so that removing it at flip time is a trailing node deletion and a slot count of 4 — nothing else moves."
+  },
+  "eyebrow": "AGLYN AI",
+  "heading": "Have AI do it, then edit anything.",
+  "body": [
+    "Describe what you want and Aglyn AI builds a draft from your own theme, layout and components. It never publishes, never changes a live page and never sends anything — you do, through the buttons you already use."
+  ],
+  "actions": [{ "label": "See Aglyn AI", "variant": "text", "href": "/product/ai" }],
+  "disclosure": {
+    "id": "ai-rolling-out-band",
+    "body": "Rolling out — Aglyn AI is a release-flagged feature and does not appear in every workspace yet.",
+    "removeAtFlip": true,
+    "notes": "Required while `release_ai_generative` is off in production, where every generative route answers 404: a band saying 'have AI do it' on twenty-five live pages, with no qualifier, is twenty-five misrepresentations rather than one. Same wording family as the docs' `:::caution Rolling out` admonitions and as the notice band on /product/ai, so all three come off together — see `project_release_ai_generative_flip_sequence`. It is its own text node, its own slot, and the last one, so the flip deletes it rather than rewriting the band."
+  },
+  "placement": {
+    "position": "Directly above the page's Explore band (section 5 on a product page), below How it works.",
+    "rationale": "Late enough that the page has said what the product is before it offers to build it for you, and adjacent to the other cross-sell band so the two read as one hand-off rather than two interruptions.",
+    "besigner": "Build it ONCE as a reusable component and place an instance on each target, rather than twenty-five copies of the same section. That is what this file is for on the canvas side, it is what the platform's own building rules tell a customer to do with a block that repeats, and it makes the flip-time deletion one edit to one component instead of twenty-five.",
+    "ordering": "⛔ POUR THE PAGE COPY FIRST, THEN PLACE THE BAND. `apply-page-copy.js` asserts the canvas has exactly as many root sections as the 8-section contract and refuses to write anything otherwise, so a page carrying the band is a page the applier will no longer pour. To re-pour a page later, remove the band, pour, place it again. `verify-applier.mjs` carries this as a negative control so the constraint is checked rather than remembered."
+  },
+  "targets": [
+    { "page": "Product overview", "route": "/product", "copyFile": "product-copy/copy-product-overview.json" },
+    { "page": "Besigner", "route": "/product/besigner", "copyFile": null },
+    { "page": "Console", "route": "/product/console", "copyFile": "product-copy/copy-console.json" },
+    { "page": "Commerce", "route": "/product/commerce", "copyFile": "product-copy/copy-commerce.json" },
+    { "page": "Forms & Inbox", "route": "/product/forms", "copyFile": "product-copy/copy-forms.json" },
+    { "page": "CRM", "route": "/product/crm", "copyFile": null },
+    { "page": "Media", "route": "/product/media", "copyFile": "product-copy/copy-media.json" },
+    { "page": "Workflows", "route": "/product/workflows", "copyFile": "product-copy/copy-workflows.json" },
+    { "page": "Plugins", "route": "/product/plugins", "copyFile": "product-copy/copy-plugins.json" },
+    { "page": "Analytics", "route": "/product/analytics", "copyFile": "product-copy/copy-analytics.json" },
+    { "page": "Marketing", "route": "/product/marketing", "copyFile": "product-copy/copy-marketing.json" },
+    { "page": "Datasets", "route": "/product/datasets", "copyFile": "product-copy/copy-datasets.json" },
+    { "page": "Solutions listing", "route": "/solutions", "copyFile": "solutions-copy/copy-solutions-listing.json" },
+    { "page": "Agencies", "route": "/solutions/agencies", "copyFile": "solutions-copy/copy-agencies.json" },
+    { "page": "Creators", "route": "/solutions/creators", "copyFile": "solutions-copy/copy-creators.json" },
+    { "page": "Developers", "route": "/solutions/developers", "copyFile": "solutions-copy/copy-developers.json" },
+    { "page": "Enterprise", "route": "/solutions/enterprise", "copyFile": "solutions-copy/copy-enterprise.json" },
+    { "page": "Small business", "route": "/solutions/small-business", "copyFile": "solutions-copy/copy-small-business.json" },
+    { "page": "Startups", "route": "/solutions/startups", "copyFile": "solutions-copy/copy-startups.json" },
+    { "page": "Blogs", "route": "/use-cases/blogs", "copyFile": "solutions-copy/copy-blogs.json" },
+    { "page": "Documentation", "route": "/use-cases/documentation", "copyFile": "solutions-copy/copy-documentation.json" },
+    { "page": "Membership sites", "route": "/use-cases/membership-sites", "copyFile": "solutions-copy/copy-membership-sites.json" },
+    { "page": "Online stores", "route": "/use-cases/online-stores", "copyFile": "solutions-copy/copy-online-stores.json" },
+    { "page": "Portfolios", "route": "/use-cases/portfolios", "copyFile": "solutions-copy/copy-portfolios.json" },
+    { "page": "SaaS websites", "route": "/use-cases/saas-websites", "copyFile": "solutions-copy/copy-saas-websites.json" }
+  ],
+  "notTargeted": [
+    { "route": "/product/ai", "why": "This band's destination. A band linking a page to itself is a dead link, and the hub says all of this at length." },
+    { "route": "/pricing", "why": "Has its own AI add-on row and its own guards; a band that names a capability beside a price table invites a figure into a surface `docs/PRICING_SURFACES.md` already counts nine of." },
+    { "route": "/alternatives/*", "why": "Comparison pages concede only code-verified gaps, so an AI claim there is an `/alternatives` row with a dated competitor fact beside it, not this band." }
+  ],
+  "claimsToVerify": [
+    {
+      "phrase": "Aglyn AI builds a draft from your own theme, layout and components",
+      "source": "apps/docs/docs/ai/how-aglyn-ai-builds.md — building rules 5, 7 and 15",
+      "concern": "RESOLVED. 'From what you already have' is the rule the generator is actually held to: a plan that creates something the site already has is refused, and a color the theme lacks is proposed as a theme change rather than authored as a literal."
+    },
+    {
+      "phrase": "It never publishes, never changes a live page and never sends anything",
+      "source": "apps/docs/docs/ai/overview.md#drafts-only and building rule 13",
+      "concern": "RESOLVED, and this clause is the reason the band can carry an imperative headline at all. 'Have AI do it' without it reads as an agent acting on a live site. It is three of the four nevers from the hub page; the fourth (never registers an address, never touches navigation) is dropped for length, not because it is untrue, and the three kept are the ones a reader of a product page would worry about."
+    },
+    {
+      "phrase": "Have AI do it, then edit anything",
+      "source": "AGL-2921 title; keyword plan §2 — the `/alternatives/*` AI row reads 'Describe it, get a draft, edit anything'",
+      "concern": "RESOLVED as wording, with one thing to hold: 'do it' must never grow an object that is not released. It is deliberately intransitive. A per-page variant — 'Have AI write your workflow' on /product/workflows — would claim a door that is shut (`apps/docs/docs/ai/automations-with-ai.md#draft`), and it would also stop this being one band."
+    },
+    {
+      "phrase": "the disclosure line",
+      "source": "release flags: `release_ai_generative` off in production",
+      "concern": "OPEN UNTIL THE FLIP, on every page carrying the band. The flip is a four-part change and the flag is the last part; a band published without this line before then is wrong on twenty-five pages at once, which is the whole argument for one component and one instance per page."
+    }
+  ]
+}
