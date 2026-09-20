@@ -12,15 +12,12 @@
     { "from": "plugins-crm", "to": "plugins-email", "why": "The contact record composes email through the email plugin's hooks." },
     { "from": "plugins-crm", "to": "plugins-marketing", "why": "Conversion attribution and the campaign-send server path are imported from marketing." },
     { "from": "plugins-email", "to": "plugins-mui", "why": "The email bundle reuses the MUI plugin's bundle-common constants." },
-    { "from": "plugins-forms", "to": "plugins-bookings", "why": "The form placement menu reads the bookings plugin entry." },
     { "from": "plugins-forms", "to": "plugins-crm", "why": "Form submissions route to CRM through the CRM route table and contact field definitions." },
-    { "from": "plugins-forms", "to": "plugins-events-calendar", "why": "The form placement menu reads the events plugin entry." },
     { "from": "plugins-forms", "to": "plugins-inbox", "why": "The forms hub embeds the inbox submissions card." },
     { "from": "plugins-forms", "to": "plugins-mui", "why": "Form controls are the MUI plugin's components." },
     { "from": "plugins-inbox", "to": "plugins-marketing", "why": "Inbox embeds marketing's conversion attribution and campaigns card." },
     { "from": "plugins-marketing", "to": "plugins-commerce", "why": "Revenue attribution reads the commerce model." },
     { "from": "plugins-marketing", "to": "plugins-email", "why": "Campaign composition reuses the email plugin's send and topic hooks." },
-    { "from": "plugins-marketplace", "to": "plugins-mui", "why": "A spec imports the MUI block presets to prove each one composes only publishable components." },
     { "from": "plugins-mui", "to": "besigner-feature-designer", "why": "MUI elements render nested children through the designer's node leaf and contexts." },
     { "from": "plugins-workflows", "to": "plugins-logic", "why": "Workflow steps evaluate conditions with the logic plugin." }
   ]

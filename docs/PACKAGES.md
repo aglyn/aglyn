@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 17 edges the allowlist carries, and what removes each. An edge leaves the
+The 14 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -228,7 +228,7 @@ import and no production file may repeat it; the fix is a fixture that reads
 the table from the core's server entry, or the spec moving to a project that
 may import the core.
 
-**Plugin → plugin** (15, numbered to 17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (12, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -280,11 +280,11 @@ needs it starts.
    plugins call it there. Into the core is right here for the one reason that
    makes it right anywhere: nothing plugin-shaped moves. A sanitizer knows no
    plugin's model.
-7. **`plugins-forms` → `plugins-bookings`.** Crosses: `BOOKINGS_BUNDLE` and
-   `BUNDLE_ID`, in `src/lib/plugin-id-backfill-table.spec.ts` only — no
-   production file, so the allowlist's "placement menu" `why` no longer matches
-   the graph. Fix: the spec reads bundle ids from the plugin-manager registry
-   the loader manifests already fill, which is row 16's fix. **Present.**
+7. **`plugins-forms` → `plugins-bookings`.** Gone (AGL-3080). The only
+   crossing was `plugin-id-backfill-table.spec.ts`, which checks a tools
+   script against four plugins' bundles and so was never the forms plugin's
+   spec. It lives in `apps/console/specs` and reaches each plugin through the
+   generated manifest, the one door an app has. The number stays.
 8. **`plugins-forms` → `plugins-crm`.** Crosses two different things:
    `useContactFieldDefinitions` (`form-contact-fields-card.tsx`) and `crmRoutes`
    (`form-detail-card.tsx`). Fix, in two halves: contact field definitions come
@@ -292,10 +292,8 @@ needs it starts.
    the record route contract, and that half has landed: `form-detail-card.tsx`
    asks `pluginRecordFilteredHref('contact', …, 'form', formId)`. The edge
    leaves the allowlist when the field-definitions half lands too.
-9. **`plugins-forms` → `plugins-events-calendar`.** Crosses:
-   `EVENTS_CALENDAR_BUNDLE` and `BUNDLE_ID`, in
-   `src/lib/plugin-id-backfill-table.spec.ts` only. Fix: the registry read of
-   row 7. **Present.**
+9. **`plugins-forms` → `plugins-events-calendar`.** Gone (AGL-3080), with
+   row 7: the same spec, the same move. The number stays.
 10. **`plugins-forms` → `plugins-inbox`.** Crosses: inbox's `SubmissionsCard`
     (`src/lib/components/form-submissions-card.component.tsx`). Fix: inbox
     registers the card as a widget into the `hostForms` zone the forms plugin
@@ -340,10 +338,12 @@ needs it starts.
     the reader is **present**, while the resource kind and the
     subscription-topic contract `useOrgEmailTopics` needs are **owed**
     (AGL-3124). That resource kind is the one the finding below turns on.
-16. **`plugins-marketplace` → `plugins-mui`.** Crosses: `blockPresets`
-    (`src/lib/model/blocks-publishable.spec.ts`), a spec proving each preset
-    composes only publishable components. Fix: read the presets from the
-    plugin-manager registry the loader manifests already fill. **Present.**
+16. **`plugins-marketplace` → `plugins-mui`.** Gone (AGL-3080). The only
+    crossing was the spec proving each block preset composes publishable
+    components. It is about the palette's owner and the allowlist's owner at
+    once, so that half lives in `apps/console/specs` and reaches both through
+    the generated manifest; the marketplace keeps the half that is its own.
+    The number stays.
 17. **`plugins-workflows` → `plugins-logic`.** Crosses: `WhereUsedDialog`, plus
     `fetchWhereUsed`, `summarizeDependents` and `WhereUsedResult`
     (`src/lib/components/host-workflows-card.component.tsx`) — a card and a
