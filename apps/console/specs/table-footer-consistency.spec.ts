@@ -1419,11 +1419,12 @@ const OWES_A_FOOTER: Array<[string, string]> = [
   [
     'apps/console/app/(app)/[orgSlug]/hosts/[host]/components/[componentId]/page.tsx',
     'Version history, `limit(100)` unordered and sorted by `createdAt` in the ' +
-      'browser. Blocked on the ordering trap: `IMPORTABLE_FIELDS.versions` ' +
-      'carries no `createdAt`, so a version restored from a site bundle has ' +
-      'none — `orderBy(\'createdAt\')` would hide restored versions rather ' +
-      'than mis-order them. Needs an audit of `updatedAt`’s writers, or a ' +
-      'backfill, before it can be paged.',
+      'browser. The ORDERING TRAP that blocked this is now closed: the ' +
+      'importer stamps `createdAt` on every restored document (AGL-3196), so ' +
+      '`orderBy(\'createdAt\')` no longer hides a version restored from a ' +
+      'bundle — measured at the time as 0 of 248 screen versions in the ' +
+      'estate missing the field. The screen view page was paged on that ' +
+      'basis and came off this list. What is left here is the work itself.',
   ],
   [
     'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/[layoutId]/page.tsx',
@@ -1433,10 +1434,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
     'libs/plugins/forms/src/lib/components/form-detail-card.tsx',
     'The same version history, the same block — a form versions exactly as a ' +
       'component does and reads its versions the same unordered way.',
-  ],
-  [
-    'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view/page.tsx',
-    'The same version history, the same block.',
   ],
   [
     'apps/console/components/besigner-versions.component.tsx',
@@ -1625,7 +1622,16 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // page their filtered window in memory the way the workspace pickers
     // page theirs — the window cannot be re-keyed by a status the capture
     // door never writes, but a slice of it can be turned.
-    expect(OWES_A_FOOTER).toHaveLength(15)
+    //
+    // 14 since a screen's version history paid (AGL-3196). It was blocked on
+    // the same `createdAt` audit as the other four version histories, and that
+    // audit is what happened: the importer never stamped `createdAt`, which is
+    // the whole reason `orderBy('createdAt')` could drop a restored version.
+    // It stamps one now, so the query is ordered and the cap is a cap on that
+    // order rather than on document-id order. The other four are unblocked by
+    // the same change and remain listed, because being able to do the work is
+    // not doing it.
+    expect(OWES_A_FOOTER).toHaveLength(14)
     // 37 since a site's senders became a list the composer picks from: the
     // drawer that edits one carries a picker of teammates, and a picker's
     // option list is a lookup rather than a window a reader pages through.

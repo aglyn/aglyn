@@ -1667,12 +1667,22 @@ describe('an unexpected key in a bundle is not stored (AGL-1382)', () => {
       expect({ path, key: 'staff' in data }).toEqual({ path, key: false })
       expect({ path, key: 'role' in data }).toEqual({ path, key: false })
       expect({ path, key: 'memberRoles' in data }).toEqual({ path, key: false })
-      expect({ path, key: 'createdAt' in data }).toEqual({ path, key: false })
-      // Stamped, never taken from the bundle — a file's clock is not a fact
-      // about the document it restores into.
+      // BOTH timestamps are stamped, never taken from the bundle — a file's
+      // clock is not a fact about the document it restores into.
+      //
+      // `createdAt` used to be asserted ABSENT, which is a weaker form of the
+      // same rule and is why nothing noticed that restored documents had no
+      // `createdAt` at all: five version histories could not be ordered by it
+      // without dropping the rows a restore had created (AGL-3196). It is
+      // stamped now, and the property that matters is unchanged and asserted
+      // more directly — whatever the bundle said, the stored value is ours.
       expect({ path, updatedAt: data['updatedAt'] }).toEqual({
         path,
         updatedAt: mockServerTimestamp,
+      })
+      expect({ path, createdAt: data['createdAt'] }).toEqual({
+        path,
+        createdAt: mockServerTimestamp,
       })
     }
   })

@@ -33,6 +33,7 @@
  * rather than as a conversation: this list is one-sided by construction.
  */
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -183,6 +184,15 @@ export function SubmissionReply(props: SubmissionReplyProps) {
      */
     <CardDisplay
       header={'Reply'}
+      // A headered card carries help (AGL-2213), and the guard that says so
+      // reads `libs/plugins` — which is how a card with the wrong prop, and
+      // therefore no header at all, went un-flagged here for so long.
+      help={pluginDocsHelp('forms', {
+        anchor: '#replying-to-a-submission',
+        excerpt:
+          'Answer a submission by email. Replies are transactional — they ' +
+          'add nobody to a list and never touch your campaign allowance.',
+      })}
       variant="outlined"
       contentGutterX
       contentGutterY

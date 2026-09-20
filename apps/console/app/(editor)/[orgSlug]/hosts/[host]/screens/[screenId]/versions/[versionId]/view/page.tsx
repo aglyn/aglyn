@@ -44,6 +44,11 @@ import {
   type ScreenSeoCardTextField,
 } from '@aglyn/aglyn/app-utils/seo-listing-fields'
 import {
+  hasSeoTitleVariables,
+  resolveSeoTitleVariables,
+  SEO_TITLE_VARIABLES,
+} from '@aglyn/aglyn/app-utils/seo-title-variables'
+import {
   ICON_VARIANT_BESIGNER,
   ICON_VARIANT_DATE_TIME,
   ICON_VARIANT_PAGES,
@@ -63,6 +68,7 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { VariableTextField } from '@aglyn/shared-ui-jsx/components/variable-text-field.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -94,6 +100,7 @@ import {
   deleteField,
   doc,
   limit,
+  orderBy,
   query,
   updateDoc,
 } from 'firebase/firestore'
@@ -294,6 +301,23 @@ function ScreenDetails() {
     () =>
       query(
         collection(firestore, 'hosts', hostId, 'screens', screenId, 'versions'),
+        /*
+         * ORDERED, and the `limit` is a cap on that order (AGL-2501's rule,
+         * the eighth time this shape has come up).
+         *
+         * `limit(50)` alone is not "the fifty newest": Firestore answers it in
+         * document-id order and a version id is generated, so the window was a
+         * pseudo-random fifty of the collection which the `useMemo` below then
+         * sorted. The rows looked right — a believable descending list — and
+         * were simply the wrong rows, with the missing ones leaving no gap to
+         * notice. Paging the card is what would have made that visible, on a
+         * screen with more than fifty versions.
+         *
+         * Safe to add: every one of the 248 screen version documents in the
+         * estate carries `createdAt`, and a document missing an `orderBy`
+         * field is one Firestore drops from the answer entirely.
+         */
+        orderBy('createdAt', 'desc'),
         limit(50),
       ),
     [firestore, hostId, screenId],
@@ -1030,9 +1054,30 @@ function ScreenDetails() {
     description: seoDraft?.description ?? screen?.seo?.description ?? '',
     breadcrumb: seoDraft?.breadcrumb ?? screen?.seo?.breadcrumb ?? '',
   }
+  const setSeoValue = (field: ScreenSeoCardTextField, value: string) =>
+    setSeoDraft({ ...seoValue, [field]: value })
   const setSeoField = (field: ScreenSeoCardTextField) =>
-    (event: { target: { value: string } }) =>
-      setSeoDraft({ ...seoValue, [field]: event.target.value })
+    (event: { target: { value: string } }) => setSeoValue(field, event.target.value)
+
+  /**
+   * The title as the live page will render it (AGL-3197).
+   *
+   * A written title may name variables, so what the author typed and what a
+   * search result shows are two different strings — and the one worth counting
+   * against sixty characters is the second. Resolved against THIS host's own
+   * site title and separator, which is the whole reason the variables are
+   * worth having: the preview is where an author sees that `{{site.name}}` is
+   * forty-nine characters on this site before they publish a title that runs
+   * off the end of a search result.
+   */
+  const resolvedSeoTitle = resolveSeoTitleVariables(seoValue.title, {
+    'page.name': screen?.displayName ?? '',
+    'site.name': hostData?.seo?.title ?? hostData?.displayName ?? '',
+    'site.separator': hostData?.seo?.separator ?? '',
+  })
+  const titleHelperText = hasSeoTitleVariables(seoValue.title)
+    ? `${seoListingFieldCount('title', resolvedSeoTitle)} — renders as “${resolvedSeoTitle}”`
+    : `${seoListingFieldCount('title', seoValue.title)} — published verbatim; the site title is not appended. Add a variable to keep it in step with Host setup → SEO.`
   /**
    * Staged social image (AGL-1368); `null` = untouched, `''` = cleared. Kept
    * separate from `seoDraft` so picking an image does not stage the title and
@@ -1745,25 +1790,49 @@ function ScreenDetails() {
                       {/* The inputs and their lengths come from the one SEO
                           field catalog (AGL-2910), which the besigner's panel
                           and every proposer read too. */}
-                      {SCREEN_SEO_CARD_TEXT_FIELDS.map((field) => (
-                        <TextField
-                          key={field}
-                          size="small"
-                          label={SEO_LISTING_FIELDS[field].label}
-                          value={seoValue[field]}
-                          onChange={setSeoField(field)}
-                          multiline={SEO_LISTING_FIELDS[field].multiline}
-                          minRows={SEO_LISTING_FIELDS[field].multiline ? 2 : undefined}
-                          helperText={
-                            field === 'title'
-                              ? `${seoListingFieldCount(field, seoValue[field])} — published verbatim; the site title is not appended`
-                              : field === 'breadcrumb'
+                      {SCREEN_SEO_CARD_TEXT_FIELDS.map((field) =>
+                        /*
+                         * The title takes variables (AGL-3197), so it is the
+                         * one field with an insert control and a preview. The
+                         * rest are plain: a description is prose, and a
+                         * breadcrumb label is a word.
+                         */
+                        field === 'title' ? (
+                          <VariableTextField
+                            key={field}
+                            size="small"
+                            label={SEO_LISTING_FIELDS[field].label}
+                            value={seoValue[field]}
+                            onChange={(next) => setSeoValue(field, next)}
+                            variables={SEO_TITLE_VARIABLES}
+                            insertLabel="Insert a variable"
+                            helperText={titleHelperText}
+                            // The RESOLVED length, because that is what a
+                            // search result truncates. `{{site.name}}` is
+                            // thirteen characters of written title and however
+                            // many the site is called; counting the written
+                            // form would flag a title that fits and pass one
+                            // that does not.
+                            error={seoListingFieldTooLong(field, resolvedSeoTitle)}
+                          />
+                        ) : (
+                          <TextField
+                            key={field}
+                            size="small"
+                            label={SEO_LISTING_FIELDS[field].label}
+                            value={seoValue[field]}
+                            onChange={setSeoField(field)}
+                            multiline={SEO_LISTING_FIELDS[field].multiline}
+                            minRows={SEO_LISTING_FIELDS[field].multiline ? 2 : undefined}
+                            helperText={
+                              field === 'breadcrumb'
                                 ? `${seoListingFieldCount(field, seoValue[field])} — the page’s name in a breadcrumb trail`
                                 : seoListingFieldCount(field, seoValue[field])
-                          }
-                          error={seoListingFieldTooLong(field, seoValue[field])}
-                        />
-                      ))}
+                            }
+                            error={seoListingFieldTooLong(field, seoValue[field])}
+                          />
+                        ),
+                      )}
                       {/* The same field the besigner's Screen Properties ▸
                           SEO panel uses (AGL-1368), not a second one: the
                           docs have always sent people here for all three
