@@ -61,7 +61,7 @@ import {
   emailSendTimeMs,
   emailSentAs,
 } from '@aglyn/shared-ui-email-campaigns/model/email-record'
-import { campaignPlainTextState } from '../model'
+import { emailPlainTextState } from '@aglyn/aglyn/app-utils/recipient-email-render'
 import { useMarketingHubPath } from './use-marketing-hub-path'
 import EmailDesignPreview from './email-design-preview'
 import EmailEditDrawer from './email-edit-drawer'
@@ -194,7 +194,7 @@ export function EmailDetail(props: EmailDetailProps) {
    * is history; the design moving afterwards is expected and is what the
    * preview's own note already says.
    */
-  const plainTextState = campaignPlainTextState(
+  const plainTextState = emailPlainTextState(
     {
       plainText: String(email?.plainText ?? ''),
       plainTextVersionId: String(email?.plainTextVersionId ?? ''),

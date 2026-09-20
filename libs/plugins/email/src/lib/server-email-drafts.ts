@@ -38,9 +38,9 @@ import {
 import { hasSafeLinkScheme } from '@aglyn/shared-util-http/safe-url-scheme'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
-  campaignPlainTextState,
-  renderCampaignEmail,
-} from './model/campaign-email-render'
+  emailPlainTextState,
+  renderRecipientEmail,
+} from '@aglyn/aglyn/app-utils/recipient-email-render'
 import { emailDesignDocuments } from './model/email-design-document'
 
 /**
@@ -62,7 +62,7 @@ import { emailDesignDocuments } from './model/email-design-document'
  *    module use, and refused in their words.
  *  - THE ROLE is the resources route's: a member who may write the site's
  *    content.
- *  - THE CHECK renders the design through `renderCampaignEmail`, the function
+ *  - THE CHECK renders the design through `renderRecipientEmail`, the function
  *    the send path and the composer's preview both call, so content that
  *    passes is content that would render in both.
  *
@@ -250,7 +250,7 @@ export function checkEmailDesignContent(
       if (problem) problems.push(problem)
     }
   }
-  const rendered = renderCampaignEmail({
+  const rendered = renderRecipientEmail({
     subject: value.subject,
     preheader: value.preheader,
     content: {
@@ -272,7 +272,7 @@ export function checkEmailDesignContent(
       messageText: rendered.messageText,
       blocks: reachable.size,
       // No part is written by hand, so the text a campaign sends is the design's own.
-      plainText: campaignPlainTextState({}),
+      plainText: emailPlainTextState({}),
     },
   }
 }

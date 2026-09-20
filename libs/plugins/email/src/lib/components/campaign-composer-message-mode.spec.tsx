@@ -19,7 +19,7 @@
  * HOW THIS EMAIL IS WRITTEN — and the message that used to vanish.
  *
  * The form showed an "Email design" select and a "Message" box at once and
- * named neither as the one that wins. It was the design: `renderCampaignEmail`
+ * named neither as the one that wins. It was the design: `renderRecipientEmail`
  * read the typed body only when no template was given, and both gates in front
  * of it — the composer's `!templateScreenId && !body.trim()` and the route's
  * `!templateScreenId && (!subject || !body)` — passed on EITHER input. So a

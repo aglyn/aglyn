@@ -31,10 +31,8 @@ import {
   visibleToHost,
 } from '@aglyn/aglyn/server'
 import type { PluginRevocation } from '@aglyn/aglyn/server'
-import {
-  renderCampaignEmail,
-  type EmailRenderProduct,
-} from '@aglyn/plugins-email/model'
+import { renderRecipientEmail } from '@aglyn/aglyn/app-utils/recipient-email-render'
+import type { EmailRenderProduct } from '@aglyn/shared-util-email'
 import { assignExperimentVariant, type HostExperiment } from '../model'
 import { readPluginRecordCard } from '@aglyn/aglyn/plugin-manager/plugin-record-cards'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
@@ -2196,7 +2194,7 @@ export async function performCampaignSend(
         : null
       /*
        * THIS RECIPIENT'S MESSAGE, through the renderer the composer previews
-       * with (`@aglyn/plugins-email/model`).
+       * with (`@aglyn/aglyn/app-utils/recipient-email-render`).
        *
        * Merge tags resolve after the variant override so variant copy can use
        * tags too, a designed template renders per recipient, and a plain-text
@@ -2207,7 +2205,7 @@ export async function performCampaignSend(
        * merge tags resolving to empty strings for a whole audience, are both
        * invisible to a preview that does not run this exact code.
        */
-      const message = renderCampaignEmail({
+      const message = renderRecipientEmail({
         subject: variant?.subject?.trim() || subject,
         preheader: options.preheader,
         /*
@@ -2248,7 +2246,7 @@ export async function performCampaignSend(
         // a text-only reader learns that leaving one stream is an option at
         // all, and the word "unsubscribe" stays in the line because that is
         // what a recipient scans the footer for. It is written by
-        // `renderCampaignEmail`, so the composer's preview shows the footer
+        // `renderRecipientEmail`, so the composer's preview shows the footer
         // that is actually mailed.
         text: message.text,
         // RFC 8058 one-click (AGL-2408). `List-Unsubscribe` alone does NOT
@@ -2703,7 +2701,7 @@ export async function performCampaignSend(
        * `resume` map below is what makes the row honest — "reached 500 of
        * 3,000, sending" rather than a scheduled email that has in fact
        * already delivered five hundred messages. `campaignSendProgress` in
-       * `@aglyn/plugins-email/model` derives that sentence from these fields
+       * the recipient-email renderer derives that sentence from these fields
        * and is the one place it is composed.
        */
       status: plan.resuming ? 'scheduled' : 'sent',
@@ -3366,7 +3364,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
    * text, two different jobs, and each belongs to exactly one mode.
    *
    * A `body` arriving beside a template used to be accepted, computed for
-   * merge tags and then dropped: `renderCampaignEmail` read it only when no
+   * merge tags and then dropped: `renderRecipientEmail` read it only when no
    * template was given, and both gates — this one and the composer's — passed
    * on EITHER input, so a merchant who picked a design and also wrote a
    * message lost the message with nothing said.
@@ -3611,7 +3609,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
        * Folding the render into `preview` would page the merchant's whole
        * contact list once per debounce tick, for a number that had not moved.
        *
-       * Rendered through `renderCampaignEmail`, which is what the per-recipient
+       * Rendered through `renderRecipientEmail`, which is what the per-recipient
        * send loop calls, so this is the HTML that will be mailed and not a
        * likeness of it.
        */
@@ -3631,7 +3629,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
        * will read, and inventing a fictional contact would make a merge tag
        * that resolves to nothing look like one that works.
        */
-      const rendered = renderCampaignEmail({
+      const rendered = renderRecipientEmail({
         subject,
         preheader,
         content: template
@@ -3845,7 +3843,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
            * THE TEMPLATE IS CLEARED WHEN THERE IS NONE, not merely omitted.
            *
            * `templateScreenId` is the field that decides which of the two ways
-           * this email is written — see `campaignMessageMode` — so leaving it
+           * this email is written — see `emailMessageMode` — so leaving it
            * standing under `merge: true` is not a stale pointer, it is the
            * wrong mode. A draft moved from a design to a typed message would
            * be stored carrying BOTH, reopen as designed, and mail the design

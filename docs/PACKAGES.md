@@ -331,7 +331,20 @@ needs it starts.
     member for the facts reader to answer — and the sender asks
     `readPluginRecordCard`. The "from" price is worked out in one place. The
     number stays.
-15. **`plugins-marketing` → `plugins-email`.** The widest row. Crosses:
+15. **`plugins-marketing` → `plugins-email`.** The widest row, and the two
+    plugins are coupled in BOTH directions: marketing serves
+    `/api/campaigns/send` and `/manage` while their client hook, the composer
+    that drives them and four other callers live in the email plugin. The owner
+    decided (2026-09-20) that **marketing owns campaigns end to end**, so it is
+    worked off in stages, each with a seam so the move does not swap this edge
+    for its reverse. *Stage 1, done:* the sender no longer imports email's
+    model — rendering one message for one recipient was never a campaign's or
+    an email design's alone, since email checks a design through the same call,
+    so it sits on the core's mail rail as
+    `@aglyn/aglyn/app-utils/recipient-email-render`. *Left:* the composer, the
+    test-send drawer and the campaign hooks move to marketing and are drawn in
+    zones email hosts; the topic picker and the sender editor are drawn in
+    zones the composer hosts. What follows is the row as first written. Crosses:
     `CampaignComposer`, `useCampaignManageApi` and `useOrgEmailTopics`
     (`campaign-detail-card.tsx`, `campaigns-card.tsx`), and
     `@aglyn/plugins-email/model` (`src/lib/server/campaign-send.ts`). Fix, in
@@ -494,7 +507,7 @@ entry that imports them, and runs it.
 
 | story | asks for | brings | must not need | holds |
 | -- | -- | -- | -- | -- |
-| `logic-only` | `@aglyn/aglyn`, `@aglyn/besigner` | `react` | `next`, `firebase`, `firebase-admin`, `@mui/material`, `@aglyn/besigner-ui` | yes — ten packages in the closure, none of them a UI library |
+| `logic-only` | `@aglyn/aglyn`, `@aglyn/besigner` | `react` | `next`, `firebase`, `firebase-admin`, `@mui/material`, `@aglyn/besigner-ui` | yes — eleven packages in the closure, none of them a UI library |
 | `besigner-ui` | `@aglyn/besigner-ui`, `@aglyn/aglyn-node-renderer` | `react`, `react-dom`, `next`, `firebase`, `@mui/*`, `@emotion/*` | `firebase-admin`, any `@aglyn/tenant-*`, any `@aglyn/plugins-*` | **not yet.** All 21 packages build, pack and install, and no console, tenant runtime or plugin is in the closure — the separation holds. The bundle fails on `@aglyn/shared-data-mdi`, whose entry imports `../../generated/6.5.95/mdi-icons`, 29 MB of generated source outside `src/` that the build never emits. |
 
 What a build must do for this to hold, all of it invisible from inside: the

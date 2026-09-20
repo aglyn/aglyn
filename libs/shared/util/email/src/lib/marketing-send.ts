@@ -672,7 +672,7 @@ export function unsubscribeHeaders(
  * said. The word "unsubscribe" stays in the line because that is what a
  * recipient scans a footer for.
  *
- * Named once and shared with `renderCampaignEmail`, which writes this same
+ * Named once and shared with `renderRecipientEmail`, which writes this same
  * line into a campaign's text part: two spellings of one sentence is how the
  * idempotency checks below come to append a second footer to a message that
  * already had one.

@@ -82,7 +82,6 @@ export * from './template-provenance'
  * mailed — a preview that renders the message a second way previews
  * something else.
  */
-export * from './campaign-email-render'
 
 /**
  * The campaign CONTAINER — its window, its lists, and the arithmetic that

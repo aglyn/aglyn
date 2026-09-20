@@ -18,11 +18,11 @@
 
 import { buildRoute, checkQuota, Route } from '@aglyn/aglyn'
 import {
-  CAMPAIGN_MERGE_TAGS,
-  campaignMessageMode,
-  campaignPlainTextState,
-  type CampaignMessageMode,
-} from '../model'
+  EMAIL_MERGE_TAGS,
+  emailMessageMode,
+  emailPlainTextState,
+  type EmailMessageMode,
+} from '@aglyn/aglyn/app-utils/recipient-email-render'
 import CampaignTopicSelect from './campaign-topic-select'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
@@ -479,8 +479,8 @@ export function CampaignComposer(props: CampaignComposerProps) {
    * a draft reopens in the mode it was saved in rather than in whichever the
    * form happens to default to.
    */
-  const [mode, setMode] = useState<CampaignMessageMode>(() =>
-    campaignMessageMode({ templateScreenId: initial?.templateScreenId }),
+  const [mode, setMode] = useState<EmailMessageMode>(() =>
+    emailMessageMode({ templateScreenId: initial?.templateScreenId }),
   )
   /**
    * WHERE A DESIGNED EMAIL'S PLAIN-TEXT HALF COMES FROM.
@@ -497,7 +497,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
    */
   const [plainTextSource, setPlainTextSource] = useState<
     'generated' | 'authored'
-  >(() => campaignPlainTextState({ plainText: initial?.plainText }).source)
+  >(() => emailPlainTextState({ plainText: initial?.plainText }).source)
   const [plainText, setPlainText] = useState(initial?.plainText ?? '')
   /**
    * Which design version the text part above was written against.
@@ -1049,7 +1049,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
    * screen and the state stored cannot disagree about what is authored and
    * what has gone stale.
    */
-  const plainTextState = campaignPlainTextState(
+  const plainTextState = emailPlainTextState(
     {
       plainText: plainTextSource === 'authored' ? plainText : '',
       plainTextVersionId,
@@ -1745,7 +1745,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
         select
         label="How this email is written"
         value={mode}
-        onChange={(event) => setMode(event.target.value as CampaignMessageMode)}
+        onChange={(event) => setMode(event.target.value as EmailMessageMode)}
         size="small"
         sx={{ maxWidth: 360 }}
         helperText={
@@ -1966,7 +1966,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
           <Typography variant="caption" color="text.secondary">
             {'Personalize:'}
           </Typography>
-          {CAMPAIGN_MERGE_TAGS.map((tag) => (
+          {EMAIL_MERGE_TAGS.map((tag) => (
             <Chip
               key={tag.token}
               size="small"
