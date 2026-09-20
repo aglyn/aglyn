@@ -1355,9 +1355,32 @@ in — goes out unstamped on any browser that has not been pinned on THIS
 origin. The `login` that follows is stamped, and then excluded. Views inflated
 and conversions deleted, from one missing row.
 
+⛔⛔ **Per-origin pinning cannot cover the console, and this table cannot be
+completed.** The console is served on an OPEN-ENDED set of `*.aglyn.com`
+origins: `WORKSPACE_DOMAIN` is `aglyn.com`, so every org workspace is its own
+origin, including generated slugs. Fourteen distinct `*.aglyn.com` hostnames
+have sent events to the property — among them `aglyn-org`, `demo`,
+`workspace`, `signin`, `oauth`, `secure`, `tenant`, `status` and
+`34kwy7hnbr`. Nobody can visit `?aglyn_internal=1` on a hostname that does not
+exist yet, so the rows above are the fixed surfaces only.
+
+What holds the rest is `rememberInternalActor` (§8d-pre): it writes
+`aglyn_internal_actor` on every staff or impersonation token read, per origin,
+so each console origin self-heals after ONE signed-in load. The residual leak
+is therefore narrow but real — the FIRST pre-sign-in pageview on each origin,
+per browser, which is exactly the `/signin` view that fires before any token
+exists. AGL-3175 carries whether the opt-in should move to a
+`Domain=.aglyn.com` cookie, which is the only mechanism that can cover an
+origin nobody has visited yet. ⚑ That would reverse the reasoning recorded
+above — a cookie rides to the server on every request and lands in logs — so
+it is a decision, not a cleanup.
+
 Being per-origin is a feature as much as a cost: it is what makes it
 impossible for an opt-in on our console to leak a stamp into a CUSTOMER's
-property while we click through their published site.
+property while we click through their published site. That protection comes
+from the registrable-domain boundary, not from per-origin storage: published
+sites are on `aglyn.app` and custom domains, which no `.aglyn.com` cookie can
+reach either.
 
 ⚠️ **The flag now does two jobs, because the GA4 filter only does one.** A GA4
 data filter is **property-scoped**. It drops `traffic_type: internal` hits from
