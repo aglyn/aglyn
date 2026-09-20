@@ -217,6 +217,19 @@ interface PropDeclaration {
   required: boolean
 }
 
+/**
+ * Every attribute field kind `declareProp` turned away, whether it came from a
+ * component schema or a node capability (AGL-3156, AGL-3164).
+ *
+ * Emitted so a spec can hold the one rule that covers both gaps this palette
+ * has had: a kind the palette declares SOMEWHERE must never be dropped
+ * somewhere else. A picker that chooses a record the site holds is dropped
+ * everywhere and never declared, which is the rule holding; Tabs' "Opens on"
+ * was a `select` dropped for having no static options while selects were
+ * declared all over, which is the rule being broken and nothing noticing.
+ */
+const undeclaredFieldKinds = new Set<string>()
+
 function firstSentence(text: unknown, max = 110): string {
   if (typeof text !== 'string') return ''
   const flat = text.replace(/\s+/g, ' ').trim()
@@ -465,6 +478,7 @@ function declareCapability(capability: Dict, textLimits: Dict): Dict {
     const declared = declareProp(String(capability.id), attribute, textLimits)
     if (!declared) {
       omittedProps.push(attribute.name)
+      undeclaredFieldKinds.add(String(attribute.component))
       continue
     }
     propsSchema.properties[attribute.name] = declared.schema
@@ -572,7 +586,10 @@ async function main(): Promise<void> {
       const textLimits: Dict = {}
       for (const attribute of flattenAttributes(schema.attributes)) {
         const declared = declareProp(id, attribute, AI_TEXT_LIMITS)
-        if (!declared) continue
+        if (!declared) {
+          undeclaredFieldKinds.add(String(attribute.component))
+          continue
+        }
         propsSchema.properties[attribute.name] = declared.schema
         if (declared.required) propsSchema.required.push(attribute.name)
         if (declared.role) propRoles[attribute.name] = declared.role
@@ -711,6 +728,8 @@ async function main(): Promise<void> {
     `export const AI_PALETTE: Record<string, AiPaletteEntry> = ${JSON.stringify(sorted, null, 2)}\n\n` +
     `/** What every node can do, whatever its componentId. */\n` +
     `export const AI_NODE_CAPABILITIES: Record<string, AiNodeCapability> = ${JSON.stringify(capabilities, null, 2)}\n\n` +
+    `/** Attribute field kinds this palette declares nowhere, and so turned away. */\n` +
+    `export const AI_UNDECLARED_FIELD_KINDS: readonly string[] = ${JSON.stringify([...undeclaredFieldKinds].sort(), null, 2)}\n\n` +
     `/** The root and the allowed component ids of each surface. */\n` +
     `export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = ${JSON.stringify(surfaces, null, 2)}\n\n` +
     `/** Theme vocabulary an \`sx\` value may name. */\n` +

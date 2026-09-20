@@ -29,6 +29,7 @@ import {
   AI_PALETTE_CATALOG,
   AI_SURFACES,
   AI_SX_TOKENS,
+  AI_UNDECLARED_FIELD_KINDS,
 } from './ai-palette.generated'
 import { NODE_CAPABILITIES } from '@aglyn/aglyn/app-utils/node-capabilities'
 import {
@@ -127,13 +128,59 @@ describe('AI_PALETTE agrees with the runtime registry (AGL-2905)', () => {
 
 /**
  * Every field kind the palette carries SOMEWHERE, derived from the generated
- * entries rather than restated: a capability attribute drawn with one of these
- * is a prop the generator knows how to declare, so omitting it is a loss and
- * not a choice.
+ * entries rather than restated: an attribute drawn with one of these is a prop
+ * the generator knows how to declare, so dropping it is a loss and not a
+ * choice.
  */
-const OFFERED_FIELD_KINDS = new Set(
-  Object.values(AI_PALETTE).flatMap((entry) => Object.values(entry.propFields)),
-)
+const OFFERED_FIELD_KINDS = new Set([
+  ...Object.values(AI_PALETTE).flatMap((entry) =>
+    Object.values(entry.propFields),
+  ),
+  ...Object.values(AI_NODE_CAPABILITIES).flatMap((capability) =>
+    Object.values(capability.propFields),
+  ),
+])
+
+/**
+ * The one rule covering both gaps this palette has had (AGL-3156, AGL-3164).
+ *
+ * Two different holes, one generator. Repeat was a capability that belonged to
+ * no component, so reading component schemas found nothing to declare. Tabs'
+ * "Opens on" was a `select` whose answers are resolved when the field is
+ * drawn, so the branch that needs a static option list turned it away — while
+ * selects were being declared all over the same palette. Both left the model
+ * unable to set something the besigner offers, and in both cases every guard
+ * stayed green.
+ *
+ * What they share is the shape: a field kind the palette CAN express, dropped
+ * somewhere it could have been declared. A kind that is genuinely off the
+ * palette — a picker choosing a record the site holds — is dropped everywhere
+ * and declared nowhere, so the two sets never meet unless something is wrong.
+ */
+describe('no field kind is both declared and dropped (AGL-3156, AGL-3164)', () => {
+  it('turns away only kinds it declares nowhere', () => {
+    expect(
+      AI_UNDECLARED_FIELD_KINDS.filter((kind) => OFFERED_FIELD_KINDS.has(kind)),
+    ).toEqual([])
+  })
+
+  it('still turns away the pickers that choose a record the site holds', () => {
+    // The rule is disjointness, not emptiness: these are off the palette on
+    // purpose, because their value names a form, a dataset, a product or a
+    // node that a model cannot know from a description.
+    expect(AI_UNDECLARED_FIELD_KINDS).toEqual(
+      expect.arrayContaining([
+        'dataset-select',
+        'form-select',
+        'node-select',
+        'product-select',
+      ]),
+    )
+    expect([...AI_UNDECLARED_FIELD_KINDS]).toEqual(
+      [...AI_UNDECLARED_FIELD_KINDS].sort(),
+    )
+  })
+})
 
 /**
  * The regression AGL-3156 records: AGL-3111 made repeat a node capability and

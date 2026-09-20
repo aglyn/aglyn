@@ -4401,6 +4401,20 @@ export const AI_NODE_CAPABILITIES: Record<string, AiNodeCapability> = {
   },
 }
 
+/** Attribute field kinds this palette declares nowhere, and so turned away. */
+export const AI_UNDECLARED_FIELD_KINDS: readonly string[] = [
+  'category-select',
+  'collection-select',
+  'data-table',
+  'dataset-field-select',
+  'dataset-select',
+  'form-select',
+  'node-select',
+  'plugin-select',
+  'plugin-settings',
+  'product-select',
+]
+
 /** The root and the allowed component ids of each surface. */
 export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = {
   screen: {
