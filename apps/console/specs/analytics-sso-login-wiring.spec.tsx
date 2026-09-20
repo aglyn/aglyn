@@ -54,6 +54,13 @@ jest.mock('firebase/auth', () => ({
 // would not intercept it.
 jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+  // Both spellings reach the same spy: this spec asserts WHICH event each
+  // door reports, not which helper carried it. That the SSO doors must use
+  // the awaiting one is asserted at source level in
+  // `every-funnel-door-is-instrumented.spec.ts`, where the hand-off that
+  // makes it necessary is visible (AGL-3162).
+  trackEventBeforeNavigation: async (...args: unknown[]) =>
+    mockTrackEvent(...args),
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useAuth: () => ({ tenantId: null }),

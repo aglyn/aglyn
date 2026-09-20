@@ -16,7 +16,10 @@
  */
 'use client'
 
-import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import {
+  trackEvent,
+  trackEventBeforeNavigation,
+} from '@aglyn/aglyn/app-utils/analytics-events'
 import type { AuthResultError } from '@aglyn/shared-data-enums'
 import {
   getRedirectResult,
@@ -107,7 +110,9 @@ export function useGoogleRedirectResult(
         }
         const bounced = await onCredential?.(credential)
         if (bounced === true) return
-        trackEvent('login', { method: 'google_redirect' })
+        await trackEventBeforeNavigation('login', {
+          method: 'google_redirect',
+        })
       })
       .catch((error) => {
         console.error(error)
