@@ -29,6 +29,10 @@ import {
   resolvePlatformGtmContainerId,
 } from '@aglyn/aglyn/app-utils/platform-advertising-tags'
 import { VISITOR_CONSENT_CHANGED_EVENT } from '@aglyn/aglyn/app-utils/visitor-consent'
+import {
+  readInternalTrafficOverride,
+  readRememberedInternalActor,
+} from '../utils/internal-traffic'
 import Script from 'next/script'
 import { useCallback, useEffect, useState, type ReactElement } from 'react'
 
@@ -112,14 +116,50 @@ export default function PlatformAdvertisingTags({
   // Read FRESH, for the teardown listener inside the shared mount: it fires in
   // the same tick as the record is written, and the verdict computed for the
   // current render is by definition the state before it.
-  const resolve = useCallback(
-    () => resolvePlatformAdvertisingTags(platformAdvertisingAllowed()),
+  // Whether this browser is OURS, by either route (AGL-3191).
+  //
+  // The override alone was not enough, and the reason the module comment gives
+  // for it — "it is the BROWSER, not the account: there is no account to
+  // consult here" — is true of the marketing site and false of this one. The
+  // console is exactly where an account exists, and a staff member signing in
+  // is the commonest way for a session to be ours. Before this, they were
+  // stamped internal in GA4 by their claims (AGL-1582) and still loaded the
+  // Google Ads tags, because those read only the opt-in flag.
+  //
+  // `readRememberedInternalActor` is the claims verdict in the form this can
+  // use: written per origin on every staff or impersonation token read, and
+  // synchronous, so it does not have to wait for a token that resolves after
+  // the tags would otherwise have mounted. It is CLEARED on a customer token,
+  // which is what stops it becoming the sticky flag the override deliberately
+  // is — a customer signing in on the same browser is not ours.
+  //
+  // ⚑ Self-healing rather than immediate: on the very first staff load of a
+  // new origin the memory is not written yet, so that one pageview still
+  // mounts. Every load after it does not.
+  const internalBrowser = useCallback(
+    () => readInternalTrafficOverride() || readRememberedInternalActor(),
     [],
+  )
+
+  const resolve = useCallback(
+    () =>
+      resolvePlatformAdvertisingTags(
+        platformAdvertisingAllowed(),
+        undefined,
+        undefined,
+        internalBrowser(),
+      ),
+    [internalBrowser],
   )
 
   const tags = ready ? resolve() : []
   const containerId = ready
-    ? resolvePlatformGtmContainerId(platformAnalyticsAllowed())
+    ? resolvePlatformGtmContainerId(
+        platformAnalyticsAllowed(),
+        undefined,
+        undefined,
+        internalBrowser(),
+      )
     : null
 
   return (

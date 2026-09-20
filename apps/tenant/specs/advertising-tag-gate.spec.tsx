@@ -1303,6 +1303,47 @@ describe('(i) the two advertising gates cannot drift apart (AGL-3188)', () => {
     })
   })
 
+  it('the console gate consults the ACCOUNT as well as the browser (AGL-3191)', () => {
+    /*
+     * Internal traffic reaches the console by two routes, and AGL-3188 wired
+     * only one. `advertising-tags.ts` justifies reading the browser rather
+     * than the account — "there is no account to consult here" — which is
+     * true of the marketing site and false of this one. Carried over
+     * unexamined, it left a staff member stamped `traffic_type: internal` in
+     * GA4 by their claims while still loading the Google Ads tags.
+     *
+     * `readRememberedInternalActor` is that claims verdict in the form a
+     * synchronous gate can use, so the console must pass BOTH.
+     */
+    const component = readFileSync(
+      resolve(GATE_ROOT, 'apps/console/components/advertising-tags.component.tsx'),
+      'utf8',
+    )
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '')
+    // From the component onward, so the IMPORT of a reader cannot satisfy an
+    // assertion about USING it — which is exactly how this test first passed
+    // with the fix reverted.
+    const body = component.slice(
+      component.indexOf('export default function PlatformAdvertisingTags'),
+    )
+    expect(body.length).toBeGreaterThan(0)
+    expect(body).toContain('readInternalTrafficOverride')
+    expect(body).toContain('readRememberedInternalActor')
+    // Both resolvers, not just the vendor one: a container's tags reach an
+    // `AW-` destination too.
+    for (const resolver of [
+      'resolvePlatformAdvertisingTags',
+      'resolvePlatformGtmContainerId',
+    ]) {
+      const call = body.indexOf(`${resolver}(`)
+      expect(call).toBeGreaterThan(-1)
+      // The verdict is threaded in rather than left to the library default,
+      // which cannot see the console's account.
+      expect(body.slice(call, call + 220)).toMatch(/internalBrowser\(\)/)
+    }
+  })
+
   it('the shared list is not empty, so neither assertion can pass vacuously', () => {
     expect(SHARED_REFUSALS.length).toBeGreaterThan(0)
     // And the reader is real: a typo in a function name would make every
