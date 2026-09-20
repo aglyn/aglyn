@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 19 edges the allowlist carries, and what removes each. An edge leaves the
+The 18 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -228,7 +228,7 @@ import and no production file may repeat it; the fix is a fixture that reads
 the table from the core's server entry, or the spec moving to a project that
 may import the core.
 
-**Plugin → plugin** (17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (16, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -249,14 +249,10 @@ needs it starts.
    it, neither imports the other. The machinery is **present**; the named
    contract is **owed** (AGL-3124), beside the payment-provider contract the
    same money path needs.
-2. **`plugins-commerce` → `plugins-data`.** Crosses: `parseCsv`
-   (`src/lib/model/commerce-io.ts`), imported from
-   `@aglyn/plugins-data/model/dataset-io` — which re-exports it from
-   `@aglyn/aglyn/app-utils/dataset-csv`. No plugin domain crosses at all:
-   commerce is reaching a core function through a plugin's barrel. Fix:
-   commerce imports `parseCsv` where it lives — core's `dataset-csv` today, and
-   the generic CSV half's `libs/shared/util/*` home once that file's split
-   lands. No seam needed; this row can be worked off first and on its own.
+2. **`plugins-commerce` → `plugins-data`.** Gone (AGL-3080). Commerce was
+   reaching `parseCsv` through the data plugin's barrel, which only re-exports
+   it; it now imports the function from the core's `dataset-csv`, where it
+   lives. The number stays so the rows below keep theirs.
 3. **`plugins-crm` → `plugins-bookings`.** Crosses: `BOOKING_PATH_DEFAULT` and
    `bookingLinkFor` (`src/lib/components/book-meeting-action.tsx`) — CRM
    spelling a bookings address. Fix: the plugin-declared record route contract,
