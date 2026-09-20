@@ -154,7 +154,11 @@ jest.mock('../hooks/use-branding', () => ({
  * card: most purchases are made from the plan grid with no card on screen.
  */
 jest.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams('plan=starter'),
+  // The interval is STATED, so these assertions pin the monthly confirm copy
+  // deliberately rather than inheriting whatever the toggle defaults to
+  // (AGL-3155 made that default annual). The subject here is the wording of
+  // a cadence, not which cadence a new org is offered first.
+  useSearchParams: () => new URLSearchParams('plan=starter&interval=month'),
   usePathname: () => '/acme/billing',
   useRouter: () => ({ push: () => undefined, replace: () => undefined }),
 }))

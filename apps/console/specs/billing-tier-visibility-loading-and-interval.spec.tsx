@@ -643,6 +643,32 @@ describe('the quoted interval survives the jump (AGL-1864 · AGL-1989)', () => {
     )
   })
 
+  it('an org with NO subscription opens on annual (AGL-3155)', async () => {
+    // The third and last rung of the precedence: no stated interval in the
+    // link, and no subscription of the org's own to inherit. That is someone
+    // choosing a plan for the first time, and annual is the offer they are
+    // shown — the only case the initial state of the toggle decides.
+    //
+    // Pinned because nothing else pins it: every other case in this file
+    // reaches the toggle through a link or through a live subscription, so
+    // the initial value could be flipped back with the suite still green.
+    mockOrg = { $id: 'org-1', plan: 'free' as const }
+    mockSearch = ''
+    render(<BillingPage />)
+    await waitFor(() => expect(annualToggle().checked).toBe(true))
+  })
+
+  it('a free org that states monthly is still honoured', async () => {
+    // The default is a floor, not an override: it must not outrank the link.
+    mockOrg = { $id: 'org-1', plan: 'free' as const }
+    mockSearch = 'plan=scale&interval=month'
+    render(<BillingPage />)
+    await waitFor(() => expect(annualToggle().checked).toBe(false))
+    expect(headline(PLAN_LABELS.scale)).toBe(
+      `$${PLAN_PRICING.scale.basePriceMonthlyUsd}`,
+    )
+  })
+
   it('NEGATIVE CONTROL: the two headline prices are actually different', () => {
     // And without THIS, every price assertion above would hold even if the
     // interval never reached the cards.
