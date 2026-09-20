@@ -60,7 +60,7 @@ export const PLUGIN_DOCS = {
   aiProducts: {
     path: '/ai/products-with-ai',
     title: 'Product copy and catalogs with AI',
-    excerpt: 'An AI product description generator for your catalog: have Aglyn AI write copy for one product or a whole import, propose a first catalog, and propose categories and discounts — as proposals you review before anything changes.',
+    excerpt: 'An AI product description generator for your catalog: write copy for one product or a whole import, propose a first catalog, and propose categories and discounts — all as proposals you review.',
   },
   aiSeo: {
     path: '/building-sites/seo/seo-by-ai',
