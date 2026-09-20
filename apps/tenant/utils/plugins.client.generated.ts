@@ -20,36 +20,36 @@ export const TENANT_PLUGIN_MANIFEST: PluginLoadManifest = [
   {
     id: 'forms',
     register: {"site":"registerFormsPlugin"},
-    load: () => import('@aglyn/plugins-forms'),
+    load: () => import('@aglyn/plugins-forms/site'),
   },
   {
     id: 'bookings',
     apiPrefixes: ["bookings"],
     register: {"site":"registerBookingsPlugin"},
-    load: () => import('@aglyn/plugins-bookings'),
+    load: () => import('@aglyn/plugins-bookings/site'),
   },
   {
     id: 'commerce',
     apiPrefixes: ["commerce","membership"],
     register: {"site":"registerCommercePlugin"},
-    load: () => import('@aglyn/plugins-commerce'),
+    load: () => import('@aglyn/plugins-commerce/site'),
   },
   {
     id: 'email',
     apiPrefixes: ["email"],
     register: {"site":"registerEmailPlugin"},
-    load: () => import('@aglyn/plugins-email'),
+    load: () => import('@aglyn/plugins-email/site'),
   },
   {
     id: 'events-calendar',
     apiPrefixes: ["events"],
     register: {"site":"registerEventsCalendarPlugin"},
-    load: () => import('@aglyn/plugins-events-calendar'),
+    load: () => import('@aglyn/plugins-events-calendar/site'),
   },
   {
     id: 'marketing',
     apiPrefixes: ["campaigns","experiments"],
     register: {"site":"registerMarketingPlugin"},
-    load: () => import('@aglyn/plugins-marketing'),
+    load: () => import('@aglyn/plugins-marketing/site'),
   },
 ]

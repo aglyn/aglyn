@@ -44,7 +44,10 @@ import getTemplateScreenIds, {
 } from '@aglyn/tenant-runtime/template-screens'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import getVariables from '@aglyn/tenant-runtime/get-variables'
-import { requiredSitePlugins } from '@aglyn/tenant-runtime/required-site-plugins'
+import {
+  realmPluginsInUse,
+  requiredSitePlugins,
+} from '@aglyn/tenant-runtime/required-site-plugins'
 import { cache } from 'react'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import getHost, { CNAME_HOST_PREFIX } from '../../../../utils/get-host'
@@ -1344,7 +1347,12 @@ const loadPageDataCached = cache(
     // loads them post-hydration. Fail-open to none — a lookup error can't
     // take the page down. Issued before composition (AGL-1225); by here it
     // has almost always already resolved, so this phase now reads ~0.
-    const realmPlugins = await realmPluginsPromise
+    //
+    // Only the installs THIS page uses reach the client (AGL-3116), read from
+    // the full composed document: the realm host and each bundle load where
+    // an element or a site feature uses them, never because a workspace
+    // installed them.
+    const realmPlugins = realmPluginsInUse(await realmPluginsPromise, denormalized)
     timer.mark('getRealmPluginInstalls')
 
     // Plugin release gate (AGL-422): flagged-off plugins vanish from the

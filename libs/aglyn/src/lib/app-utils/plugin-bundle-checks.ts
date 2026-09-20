@@ -37,6 +37,7 @@
  */
 
 import { parse, type Node, type Options } from 'acorn'
+import type { PluginContributions } from '../plugin-manager/plugin-contributions'
 
 /** The areas the verifier reports on, in the order a reviewer reads them. */
 export type BundleCheckId =
@@ -50,6 +51,7 @@ export type BundleCheckId =
   | 'dynamic-import'
   | 'network'
   | 'obfuscation'
+  | 'contributions'
 
 export interface BundleCheckProblem {
   level: 'error' | 'warning'
@@ -86,6 +88,22 @@ export interface BundleCheckResult {
   checks: BundleCheckSummary[]
   /** Which entry exports the source declares. */
   exports: { register: boolean; registerApi: boolean }
+  /** What `register()` visibly registers (AGL-3116). */
+  contributions: DetectedContributions
+}
+
+/**
+ * What a bundle's `register()` visibly registers (AGL-3116): the declaration
+ * its registration calls imply, read from the tree.
+ */
+export interface DetectedContributions {
+  contributes: PluginContributions
+  /**
+   * Registrations the checker saw and could not read — an argument built at
+   * runtime. What they contribute is unknown, so a declaration cannot be
+   * checked against them and a reviewer has to read them.
+   */
+  unresolved: string[]
 }
 
 const CHECK_LABELS: Record<BundleCheckId, string> = {
@@ -99,6 +117,7 @@ const CHECK_LABELS: Record<BundleCheckId, string> = {
   'dynamic-import': 'No dynamic import of unknown code',
   network: 'Network calls match the manifest',
   obfuscation: 'No obfuscation shapes',
+  contributions: 'Registrations match the declared contributions',
 }
 
 /** Check order as displayed — findings first would reorder on every bundle. */
@@ -113,6 +132,7 @@ const CHECK_ORDER: BundleCheckId[] = [
   'dynamic-import',
   'network',
   'obfuscation',
+  'contributions',
 ]
 
 export const MAX_PLUGIN_BUNDLE_BYTES = 1_000_000
@@ -132,8 +152,9 @@ export const MAX_PLUGIN_BUNDLE_BYTES = 1_000_000
  * 3 — per-check summary added to the verdict (AGL-1087).
  * 4 — calls through an alias are resolved (AGL-1090).
  * 5 — URLs held in a constant are resolved (AGL-1093).
+ * 6 — registrations are compared with the declared contributions (AGL-3116).
  */
-export const PLUGIN_VERIFIER_VERSION = 5
+export const PLUGIN_VERIFIER_VERSION = 6
 
 /** A verdict as stored on a `pluginVersions` doc (AGL-962). */
 export interface StoredBundleVerdict {
@@ -390,6 +411,343 @@ interface CheckOptions {
    * never told what was declared cannot claim anything was undeclared.
    */
   declaredNetwork?: string[]
+  /**
+   * The manifest's `contributes` block (AGL-3116): `null` when the manifest
+   * declares none, `undefined` when no manifest was supplied — which leaves
+   * the comparison `unknown`, as the network diff is without its manifest.
+   */
+  declaredContributions?: PluginContributions | null
+  /**
+   * Refuse a bundle that registers something while its manifest declares no
+   * contributions at all. Set where a NEW version is judged — the publish
+   * pipeline and the local verifier that mirrors it. The review page and the
+   * re-verification sweep judge versions published before the contract,
+   * which load under its default, and a rule they were never held to must
+   * not turn them red after the fact.
+   */
+  requireContributions?: boolean
+}
+
+/** The detection result of a bundle no pass could read. */
+const NOTHING_DETECTED: DetectedContributions = { contributes: {}, unresolved: [] }
+
+/**
+ * Registration calls whose argument says what a bundle contributes, by the
+ * name they are reached through: `h.aglyn.registerConsoleExtension(...)`,
+ * `registerConsoleExtension(...)` after the realm template's host mapping,
+ * `aglyn.components.registerComponent(...)`.
+ */
+const REGISTRATION_CALLS = new Set([
+  'registerConsoleExtension',
+  'registerSiteRuntime',
+  'registerComponent',
+  'addDependency',
+  'defineUiFeatureBundle',
+])
+
+/**
+ * Console extension fields the shell draws on every screen of a workspace:
+ * nav tabs, organization tabs, providers, staff pages and the dashboard and
+ * settings entries. A plugin registering any of them loads with the shell.
+ */
+const SHELL_EXTENSION_FIELDS = [
+  'navItems',
+  'orgNavItems',
+  'providers',
+  'staffPages',
+  'dashboardCards',
+  'settingsSections',
+]
+
+/**
+ * What `register()` visibly registers (AGL-3116), read from the tree.
+ *
+ * A heuristic like every check here: it reads registration calls whose
+ * arguments are written out — an object literal, a string or a named slot —
+ * and reports every call it cannot read as `unresolved` rather than guessing.
+ * The declaration stays the contract; this is how a publisher learns theirs
+ * is incomplete before a published page fails to load the plugin.
+ */
+function detectRegistrations(
+  program: AnyNode,
+  constants: ReadonlyMap<string, string>,
+): DetectedContributions {
+  const slots = new Set<string>()
+  const routes = new Set<string>()
+  const orgRoutes = new Set<string>()
+  const components = new Set<string>()
+  const features = new Set<string>()
+  const unresolved = new Set<string>()
+  let shell = false
+
+  const objectProperty = (
+    object: AnyNode | undefined,
+    name: string,
+  ): AnyNode | undefined => {
+    if (object?.type !== 'ObjectExpression') return undefined
+    for (const property of (object['properties'] ?? []) as AnyNode[]) {
+      if (property.type !== 'Property') continue
+      const key = property['key'] as AnyNode
+      const keyName =
+        !property['computed'] && key?.type === 'Identifier'
+          ? (key['name'] as string)
+          : staticString(key, constants)
+      if (keyName === name) return property['value'] as AnyNode
+    }
+    return undefined
+  }
+  const listOf = (node: AnyNode | undefined): AnyNode[] | null =>
+    node?.type === 'ArrayExpression' ? ((node['elements'] ?? []) as AnyNode[]) : null
+  // A slot as a widget names it: a string, or a catalog entry
+  // (`CONSOLE_WIDGET_SLOTS.hostActivity`), whose property IS the slot id.
+  const slotName = (node: AnyNode | undefined): string | null => {
+    const literal = staticString(node, constants)
+    if (literal !== null) return literal
+    return node?.type === 'MemberExpression' ? propertyName(node, constants) : null
+  }
+
+  walk(program, (node) => {
+    if (node.type !== 'CallExpression') return
+    const callee = node['callee'] as AnyNode
+    const name =
+      callee?.type === 'Identifier'
+        ? (callee['name'] as string)
+        : callee?.type === 'MemberExpression'
+          ? propertyName(callee, constants)
+          : null
+    if (!name || !REGISTRATION_CALLS.has(name)) return
+    const args = (node['arguments'] ?? []) as AnyNode[]
+    if (name === 'registerConsoleExtension') {
+      const extension = args[0]
+      if (extension?.type !== 'ObjectExpression') {
+        unresolved.add('a console extension built at runtime')
+        return
+      }
+      const widgets = objectProperty(extension, 'widgets')
+      if (widgets) {
+        const list = listOf(widgets)
+        if (!list) unresolved.add('a console widget list built at runtime')
+        for (const widget of list ?? []) {
+          const slot = slotName(objectProperty(widget, 'slot'))
+          if (slot) slots.add(slot)
+          else unresolved.add('a console widget whose slot is built at runtime')
+        }
+      }
+      for (const field of SHELL_EXTENSION_FIELDS) {
+        const value = objectProperty(extension, field)
+        if (!value) continue
+        shell = true
+        if (field !== 'navItems' && field !== 'orgNavItems') continue
+        const into = field === 'navItems' ? routes : orgRoutes
+        const list = listOf(value)
+        if (!list) unresolved.add(`console ${field} built at runtime`)
+        for (const item of list ?? []) {
+          const href = staticString(objectProperty(item, 'href'), constants)
+          if (href) into.add(href)
+          else unresolved.add(`a console ${field} entry whose href is built at runtime`)
+        }
+      }
+      return
+    }
+    if (name === 'registerSiteRuntime') {
+      const id = staticString(objectProperty(args[0], 'runtimeId'), constants)
+      if (id) features.add(id)
+      else unresolved.add('a site runtime whose runtimeId is built at runtime')
+      return
+    }
+    if (name === 'registerComponent') {
+      const id = staticString(objectProperty(args[1], '$id'), constants)
+      if (id) components.add(id)
+      else unresolved.add('a canvas component whose $id is built at runtime')
+      return
+    }
+    // `addDependency` / `defineUiFeatureBundle`: a component bundle whose
+    // entries register later, from a list this pass does not follow.
+    unresolved.add('a canvas component bundle')
+  })
+
+  const contributes: PluginContributions = {}
+  if (components.size || features.size) {
+    contributes.site = {
+      ...(components.size ? { components: [...components].sort() } : {}),
+      ...(features.size ? { features: [...features].sort() } : {}),
+    }
+  }
+  if (slots.size || routes.size || orgRoutes.size || shell) {
+    contributes.console = {
+      ...(slots.size ? { slots: [...slots].sort() } : {}),
+      ...(routes.size ? { routes: [...routes].sort() } : {}),
+      ...(orgRoutes.size ? { orgRoutes: [...orgRoutes].sort() } : {}),
+      ...(shell ? { shell: true } : {}),
+    }
+  }
+  return { contributes, unresolved: [...unresolved].sort() }
+}
+
+/** A declaration in the words a reviewer reads: `console slots hostActivity`. */
+function describeContributions(contributes: PluginContributions): string {
+  const parts: string[] = []
+  const site = contributes.site ?? {}
+  const shell = contributes.console ?? {}
+  if (site.components?.length) parts.push(`site components ${site.components.join(', ')}`)
+  if (site.features?.length) parts.push(`site features ${site.features.join(', ')}`)
+  if (shell.slots?.length) parts.push(`console slots ${shell.slots.join(', ')}`)
+  if (shell.routes?.length) parts.push(`console routes ${shell.routes.join(', ')}`)
+  if (shell.orgRoutes?.length) {
+    parts.push(`console organization routes ${shell.orgRoutes.join(', ')}`)
+  }
+  if (shell.shell) parts.push('the console shell')
+  return parts.join(' · ') || 'nothing'
+}
+
+/**
+ * The `contributions` area (AGL-3116): what the bundle registers against what
+ * its manifest declares.
+ *
+ * Every registration the tree shows must be declared, because the loaders
+ * read ONLY the declaration: a slot the manifest omits is a slot whose
+ * screens never load the plugin, and a component it omits is an element that
+ * renders empty on every published page that places it. A declared entry the
+ * bundle never registers is a warning — the plugin loads there for nothing.
+ */
+function compareContributions(
+  detected: DetectedContributions,
+  options: CheckOptions | undefined,
+  add: (
+    level: BundleCheckProblem['level'],
+    check: BundleCheckId,
+    message: string,
+  ) => void,
+  details: Map<BundleCheckId, string>,
+  markUnknown: (check: BundleCheckId) => void,
+): void {
+  const found = detected.contributes
+  const registers = describeContributions(found)
+  const registersSomething =
+    Boolean(found.site || found.console) || detected.unresolved.length > 0
+  const unreadable = detected.unresolved.length
+    ? ` It also makes registrations the checker could not read: ${detected.unresolved.join('; ')}.`
+    : ''
+  const declared = options?.declaredContributions
+  if (declared === undefined) {
+    // Nothing to compare against is `unknown`, never a pass — the same
+    // reading the network row gives a bundle checked without its manifest.
+    if (!registersSomething) {
+      details.set('contributions', 'registers nothing')
+      return
+    }
+    markUnknown('contributions')
+    details.set(
+      'contributions',
+      `registers ${registers} — no manifest was supplied, so nothing was compared`,
+    )
+    return
+  }
+  if (declared === null) {
+    details.set(
+      'contributions',
+      registersSomething ? `undeclared · registers ${registers}` : 'declares and registers nothing',
+    )
+    if (!registersSomething) return
+    add(
+      options?.requireContributions ? 'error' : 'warning',
+      'contributions',
+      `the manifest declares no "contributes", and register() registers ` +
+        `${registers}.${unreadable} Declare it — ` +
+        `"contributes": ${JSON.stringify(found)} — because the loaders place ` +
+        'a plugin by its declaration alone. Undeclared, a published page ' +
+        'loads it only where its element is placed and the console loads it ' +
+        'with the shell.',
+    )
+    return
+  }
+
+  details.set('contributions', `declares ${describeContributions(declared)}`)
+  const missing = (
+    label: string,
+    registered: readonly string[] | undefined,
+    listed: readonly string[] | undefined,
+    consequence: string,
+  ) => {
+    for (const id of registered ?? []) {
+      if ((listed ?? []).includes(id)) continue
+      add(
+        'error',
+        'contributions',
+        `register() registers ${label} "${id}", which the manifest does not ` +
+          `declare — ${consequence}`,
+      )
+    }
+  }
+  missing(
+    'the site component',
+    found.site?.components,
+    declared.site?.components,
+    'a published page that places it would never load the plugin',
+  )
+  missing(
+    'the site feature',
+    found.site?.features,
+    declared.site?.features,
+    'no published page would ever load the plugin to run it',
+  )
+  missing(
+    'a widget in the console slot',
+    found.console?.slots,
+    declared.console?.slots,
+    'a screen that renders the slot would never load the plugin',
+  )
+  missing(
+    'the console route',
+    found.console?.routes,
+    declared.console?.routes,
+    'the route would not find the plugin that serves it',
+  )
+  missing(
+    'the console organization route',
+    found.console?.orgRoutes,
+    declared.console?.orgRoutes,
+    'the route would not find the plugin that serves it',
+  )
+  if (found.console?.shell && !declared.console?.shell) {
+    add(
+      'error',
+      'contributions',
+      'register() adds a nav tab, a provider or another entry the console ' +
+        'shell draws on every screen, and the manifest does not declare ' +
+        '"console": { "shell": true } — the shell would draw it only on ' +
+        'screens that happened to load the plugin for something else',
+    )
+  }
+  if (detected.unresolved.length) {
+    add(
+      'warning',
+      'contributions',
+      `the checker could not read ${detected.unresolved.join('; ')} — ` +
+        'confirm the declaration covers what it registers',
+    )
+  }
+  const unused = (
+    label: string,
+    listed: readonly string[] | undefined,
+    registered: readonly string[] | undefined,
+  ) => {
+    // Only when every registration of that kind was readable: an unreadable
+    // one may be exactly the entry that is declared.
+    if (detected.unresolved.length) return
+    for (const id of listed ?? []) {
+      if ((registered ?? []).includes(id)) continue
+      add(
+        'warning',
+        'contributions',
+        `the manifest declares ${label} "${id}", and register() never ` +
+          'registers it — the plugin would load there for nothing',
+      )
+    }
+  }
+  unused('the site component', declared.site?.components, found.site?.components)
+  unused('the site feature', declared.site?.features, found.site?.features)
+  unused('the console slot', declared.console?.slots, found.console?.slots)
 }
 
 function analyseBundle(
@@ -442,12 +800,14 @@ function analyseBundle(
       'dynamic-import',
       'network',
       'obfuscation',
+      'contributions',
     )
     return {
       ok: false,
       problems,
       checks: summarise(),
       exports: { register: false, registerApi: false },
+      contributions: NOTHING_DETECTED,
     }
   }
   if (bytes > maxBytes) {
@@ -483,12 +843,14 @@ function analyseBundle(
       'dynamic-import',
       'network',
       'obfuscation',
+      'contributions',
     )
     return {
       ok: false,
       problems,
       checks: summarise(),
       exports: { register: false, registerApi: false },
+      contributions: NOTHING_DETECTED,
     }
   }
 
@@ -1042,11 +1404,17 @@ function analyseBundle(
     )
   }
 
+  const detected = detectRegistrations(program, constants)
+  compareContributions(detected, options, add, details, (check) =>
+    status.set(check, 'unknown'),
+  )
+
   return {
     ok: !problems.some((problem) => problem.level === 'error'),
     problems,
     checks: summarise(),
     exports: { register: exportsRegister, registerApi: exportsRegisterApi },
+    contributions: detected,
   }
 }
 
@@ -1085,6 +1453,7 @@ export function checkPluginBundle(
         status: id === 'parse' ? 'fail' : 'unknown',
       })),
       exports: { register: false, registerApi: false },
+      contributions: NOTHING_DETECTED,
     }
   }
 }

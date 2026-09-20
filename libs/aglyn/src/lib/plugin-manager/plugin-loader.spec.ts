@@ -143,3 +143,35 @@ describe('plugin loader lifecycle (AGL-417/429)', () => {
     expect(calls).toContain('register:broken')
   })
 })
+
+describe('a surface with a module of its own (AGL-3116)', () => {
+  it('loads each surface from its own module, once', async () => {
+    const loaded: string[] = []
+    const calls: string[] = []
+    const manifest: PluginLoadManifest = [
+      {
+        id: 'split',
+        register: { site: 'registerSite', console: 'registerConsole' },
+        load: async () => {
+          loaded.push('root')
+          return { registerConsole: () => calls.push('console') }
+        },
+        loads: {
+          site: async () => {
+            loaded.push('site')
+            return { registerSite: () => calls.push('site') }
+          },
+        },
+      },
+    ]
+    const loader = createPluginLoader(manifest)
+    // A published page asks for the site surface alone, and gets only the
+    // site module: the console registrar is never fetched.
+    await loader.ensure(['split'], ['site'])
+    expect(loaded).toEqual(['site'])
+    expect(calls).toEqual(['site'])
+    await loader.ensure(['split'], ['site', 'console'])
+    expect(loaded).toEqual(['site', 'root'])
+    expect(calls).toEqual(['site', 'console'])
+  })
+})

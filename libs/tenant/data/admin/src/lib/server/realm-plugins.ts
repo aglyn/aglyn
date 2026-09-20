@@ -19,7 +19,9 @@ import {
   getPluginConfigSchema,
   isPluginRevoked,
   mergePluginConfig,
+  readPluginContributions,
   resolvePluginConfig,
+  type PluginContributions,
   type PluginRevocation,
   type RealmPluginInstall,
 } from '@aglyn/aglyn/server'
@@ -146,6 +148,8 @@ export async function resolveMarketplacePluginVersion(
   signature?: string
   trust?: string
   hostAbi?: number
+  pluginId?: string
+  contributes?: PluginContributions
 } | null> {
   const firestore = firebaseAdmin.app().firestore()
   const listingRef = firestore.collection('marketplaceListings').doc(listingId)
@@ -193,11 +197,21 @@ export async function resolveMarketplacePluginVersion(
   const revocation = revocationSnapshot.data() as PluginRevocation | undefined
   if (isPluginRevoked(revocation, version)) return null
   const hostAbi = Number(data.manifest?.hostAbi)
+  // Where the loaders may run this version (AGL-3116), from the manifest it
+  // was published and reviewed with. A block that does not read is treated
+  // as absent, so the documented default applies rather than "nowhere".
+  const contributes = readPluginContributions(data.manifest?.contributes)
+  const pluginId =
+    typeof data.manifest?.id === 'string' && data.manifest.id
+      ? String(data.manifest.id)
+      : undefined
   return {
     sha256: String(data.sha256),
     ...(data.signature ? { signature: String(data.signature) } : {}),
     ...(data.trust ? { trust: String(data.trust) } : {}),
     ...(Number.isInteger(hostAbi) && hostAbi > 0 ? { hostAbi } : {}),
+    ...(pluginId ? { pluginId } : {}),
+    ...(contributes ? { contributes } : {}),
   }
 }
 
@@ -298,6 +312,8 @@ async function resolveRealmPluginInstalls(options: {
         trust: 'realm',
         signature: pinned.signature,
         ...(pinned.hostAbi !== undefined ? { hostAbi: pinned.hostAbi } : {}),
+        ...(pinned.pluginId ? { pluginId: pinned.pluginId } : {}),
+        ...(pinned.contributes ? { contributes: pinned.contributes } : {}),
       }
     }),
   )

@@ -16,24 +16,20 @@
  */
 
 /**
- * AGL-2710 — the non-blocking plugins wait for the visitor to reach for a link.
- *
- * AGL-1289 narrowed what a page BLOCKS on; the rest were then fetched straight
- * after hydration, which moved the wait off first render and left every byte
- * on the wire. Measured against a local production server, those bundles were
- * 208.9 KB across 23 requests on a page that used none of them — more than a
- * quarter of everything the page transferred, on a surface billed per view.
+ * A published page loads the site plugins it uses, and no others (AGL-3116).
  *
  * `blockingPlugins` is computed from the full composed document, withheld
- * lazy-panel subtrees included, so what is held back is needed by a LATER
- * page. Link intent is when a later page stops being hypothetical, and it
- * still precedes the click.
+ * lazy-panel subtrees included, so it is every plugin this page uses. The rest
+ * used to be fetched as soon as the visitor reached for a link (AGL-2710), for
+ * a later page that mostly never opened — every enabled plugin on any visit
+ * that hovered a link. A later page names its own plugins in its props, and
+ * `ensure` holds that navigation until they have registered.
  *
- * Both halves are asserted: a page that never fetched them would be cheap and
- * broken.
+ * Both halves are asserted: a page that never fetched what it uses would be
+ * cheap and broken.
  */
 
-import { act, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, fireEvent, render } from '@testing-library/react'
 import CatchAllClient from '../app/[host]/[scheme]/[[...slug]]/catch-all-client'
 import { sitePluginLoader } from '../utils/site-plugin-loader'
 
@@ -98,7 +94,7 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-describe('non-blocking site plugins', () => {
+describe('site plugins a page does not use', () => {
   it('blocks on the narrowed set and fetches nothing else on arrival', async () => {
     await renderPage(BLOCKING)
     // A suspended tree re-renders, so the blocking set may be asked for more
@@ -106,25 +102,17 @@ describe('non-blocking site plugins', () => {
     expect(new Set(ensuredSets(ensure))).toEqual(new Set([BLOCKING.join(',')]))
   })
 
-  it('loads the full enabled list once the visitor reaches for a link', async () => {
+  it('are not fetched when the visitor reaches for a link', async () => {
     await renderPage(BLOCKING)
     const link = anchorInDocument()
     fireEvent.pointerOver(link)
-    await waitFor(() =>
-      expect(ensuredSets(ensure)).toContain(ENABLED.join(',')),
-    )
-  })
-
-  it('asks once however many links the visitor crosses', async () => {
-    await renderPage(BLOCKING)
-    const link = anchorInDocument()
-    for (let i = 0; i < 4; i++) fireEvent.pointerOver(link)
-    await waitFor(() =>
-      expect(ensuredSets(ensure)).toContain(ENABLED.join(',')),
-    )
-    expect(
-      ensuredSets(ensure).filter((ids) => ids === ENABLED.join(',')),
-    ).toHaveLength(1)
+    fireEvent.pointerDown(link)
+    fireEvent.focus(link)
+    // Give any listener that would fetch them the turn it needs to run.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(new Set(ensuredSets(ensure))).toEqual(new Set([BLOCKING.join(',')]))
   })
 
   it('does not defer when the server narrowed nothing', async () => {

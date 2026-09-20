@@ -17,7 +17,11 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { BUNDLE_ID } from './constants/bundle-common'
-import { BOOKINGS_BUNDLE, registerBookingsPlugin } from './plugin'
+import {
+  BOOKINGS_BUNDLE,
+  registerBookingsConsole,
+  registerBookingsPlugin,
+} from './plugin'
 
 describe('bookings plugin', () => {
   it('keeps the persisted booking component id', () => {
@@ -42,15 +46,24 @@ describe('bookings plugin', () => {
     ).toEqual([])
   })
 
-  it('registers a mui-dependent bundle + console extension once', () => {
+  it('registers a mui-dependent bundle once, and no console surface', () => {
     registerBookingsPlugin()
     const bundle = Aglyn.plugins.getDependency(BUNDLE_ID)
     expect(bundle?.dependencies).toMatchObject({ [Aglyn.MUI_BUNDLE_ID]: true })
+    // The site registrar runs on published pages, where console code must
+    // never load (AGL-3116).
+    expect(
+      Aglyn.listConsoleExtensions().find((entry) => entry.pluginId === BUNDLE_ID),
+    ).toBeUndefined()
+    registerBookingsPlugin()
+    expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBe(bundle)
+  })
+
+  it('registers the console extension from the console registrar', () => {
+    registerBookingsConsole()
     const extension = Aglyn.listConsoleExtensions().find(
       (entry) => entry.pluginId === BUNDLE_ID,
     )
     expect(extension?.featureFlag).toBe('bookings')
-    registerBookingsPlugin()
-    expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBe(bundle)
   })
 })

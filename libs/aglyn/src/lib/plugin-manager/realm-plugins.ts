@@ -16,6 +16,7 @@
  */
 
 import { pluginArtifactPath } from '../app-utils/plugin-artifact-path'
+import type { PluginContributions } from './plugin-contributions'
 import { capturePluginStyles } from './plugin-styles'
 
 /**
@@ -56,6 +57,17 @@ export interface RealmPluginInstall {
   signature?: string
   /** Host ABI the bundle targets (AGL-429); mismatches never load. */
   hostAbi?: number
+  /**
+   * The pinned version's manifest id (AGL-3116): the `pluginId` its own
+   * elements carry, which is how a page shows it uses an undeclared plugin.
+   */
+  pluginId?: string
+  /**
+   * What the pinned version declares it contributes (AGL-3116); absent when
+   * it declares nothing, and then the default in `plugin-contributions.ts`
+   * decides where it loads.
+   */
+  contributes?: PluginContributions
 }
 
 /**

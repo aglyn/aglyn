@@ -16,37 +16,13 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiEmailEditOutline, mdiEmailOutline } from '@aglyn/shared-data-mdi'
+import { mdiEmailOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
-import * as Blocks from './components/email-blocks'
 import { EMAILS_CONSOLE_SECTIONS } from './components/emails-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /** Code-split: the Emails console page only loads when opened. */
 const EmailsConsolePage = lazy(() => import('./components/emails-console-page'))
-
-/**
- * Email designer feature plugin (AGL-346): email-safe blocks designed in
- * besigner like any screen — no separate editor. The render pipeline
- * (`renderEmailHtml` in @aglyn/aglyn app-utils) converts the same node
- * tree to inline-styled table HTML + plain text at send time. Follows
- * the AGL-277 bundle pattern (depends on the mui core bundle).
- */
-export const EMAIL_BUNDLE: Aglyn.FeatureBundleEntry[] = [
-  { component: Blocks.EmailSection, schema: Blocks.emailSectionSchema },
-  { component: Blocks.EmailText, schema: Blocks.emailTextSchema },
-  { component: Blocks.EmailRichtext, schema: Blocks.emailRichtextSchema },
-  { component: Blocks.EmailImage, schema: Blocks.emailImageSchema },
-  { component: Blocks.EmailButton, schema: Blocks.emailButtonSchema },
-  { component: Blocks.EmailDivider, schema: Blocks.emailDividerSchema },
-  { component: Blocks.EmailSpacer, schema: Blocks.emailSpacerSchema },
-  { component: Blocks.EmailProduct, schema: Blocks.emailProductSchema },
-  {
-    component: Blocks.EmailHtml,
-    schema: Blocks.emailHtmlSchema,
-    presets: Blocks.emailPresets,
-  },
-]
 
 /**
  * Console half (AGL-395): registers the Emails nav item + page in the
@@ -115,20 +91,4 @@ export function registerEmailConsole(): void {
   })
 }
 
-export function registerEmailPlugin(): void {
-  registerEmailConsole()
-  if (Aglyn.plugins.getDependency(BUNDLE_ID)) return
-  Aglyn.plugins.addDependency(
-    Aglyn.defineUiFeatureBundle(
-      {
-        bundleId: BUNDLE_ID,
-        displayName: 'Email Designer',
-        description:
-          'Email-safe blocks for designing campaign emails in the besigner',
-        icon: { path: mdiEmailEditOutline.path },
-        components: EMAIL_BUNDLE,
-      },
-      Aglyn.components,
-    ),
-  )
-}
+export * from './site'

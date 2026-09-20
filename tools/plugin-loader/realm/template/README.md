@@ -41,7 +41,11 @@ npm run watch      # rebuild on save
   the host ABI (`__AGLYN_PLUGIN_HOST__`); the emitted bundle must have no
   other imports.
 - Keep `manifest.json` in step: `id` (stable, kebab-case), `version`
-  (bump every publish — artifacts are immutable), `capabilities`.
+  (bump every publish — artifacts are immutable), `capabilities`, and
+  `contributes` — every slot, route, component and site runtime
+  `register(host)` registers. The platform loads the plugin only where one of
+  them is used, and publishing refuses a bundle that registers something the
+  manifest does not declare.
 - Publish through the Aglyn console: **Marketplace → Publish → "A plugin
   (upload a bundle)"** — upload `dist/plugin.bundle.mjs` + this
   `manifest.json`. The platform content-addresses your bundle (sha256)

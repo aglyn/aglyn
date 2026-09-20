@@ -495,6 +495,9 @@ jobs:
       # itself reads a production build and runs in `build`; its forced reds
       # read a synthetic one and run here. ~1s.
       - run: npm run test:tenant-wire-weight
+      # Whose bytes a published page downloads (AGL-3116). The gate reads a
+      # production build and runs in `build`; its forced reds are here.
+      - run: npm run test:plugins-load-where-used
 
   # ~2m15s. Affected-scoped, so its cost tracks the range.
   lint:
@@ -816,6 +819,11 @@ jobs:
       # through tree shaking and `import()`. Affected-scoped like the build,
       # so when the tenant was not built it skips and says so. ~1s.
       - run: node tools/scripts/check-tenant-wire-weight.mjs --if-built
+      # WHOSE bytes those are (AGL-3116): a plugin loads only where
+      # something uses it, so a published page's before-settle load holds
+      # a plugin's site surface and nothing else of it. Same build, same
+      # chunk set as the gate above, affected-scoped the same way. ~2s.
+      - run: node tools/scripts/check-plugins-load-where-used.mjs --if-built
 
   # ONE CHECK NAME FOR BRANCH PROTECTION TO REQUIRE (AGL-1777, AGL-2505).
   #

@@ -59,6 +59,15 @@ by subpath on purpose (AGL-2706) so a page pays for what it uses, and a
 consumer gets the same choice. **Consumer** marks the pieces someone takes on
 their own; the rest are published because those depend on them.
 
+A plugin with both a site half and a console half publishes `./site`
+(`src/lib/site.ts`) and names it in its `plugins.config.json` `modules`
+(AGL-3116). The loader reads a register function off the module it loaded, so
+a bundler keeps everything that module exports: loading the site surface from
+`.` carried the console registrar, its nav entries and its lazy pages onto
+every published page that used the plugin. `./site` is how a published page
+gets the canvas half alone, and it rides the `./*` alias the table already
+lists.
+
 ### Core
 
 | project | npm name | root | tags | consumer | entry points |
@@ -109,6 +118,18 @@ changes, because every rule is by tag.
 | `plugins-redirects` | `@aglyn/plugins-redirects` | `libs/plugins/redirects` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-video-delivery` | `@aglyn/plugins-video-delivery` | `libs/plugins/video-delivery` | `scope:plugin` `type:feature` | yes — library video served from Cloudflare R2 through a Worker, behind core's `core.media-delivery` contract | `.`, `./*` |
 | `plugins-workflows` | `@aglyn/plugins-workflows` | `libs/plugins/workflows` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
+
+**What a plugin contributes, and where (AGL-3116).** Every plugin declares
+`contributes` — its `plugins.config.json` entry for the packages above, its
+published manifest for a marketplace plugin — and the loaders place it by that
+declaration alone. A published page loads a plugin only where it places one of
+the plugin's components or the site runs one of its features; a console screen
+only where it renders one of its slots or routes, or where the shell draws its
+nav tab or provider. Installing a plugin loads nothing. The contract, and the
+default for a marketplace version published before it, live in core
+(`plugin-manager/plugin-contributions.ts`); the generator validates the
+catalog's entries and `apps/console/specs/plugin-contributions-declared.spec.ts`
+holds them to what each registrar registers.
 
 ### Shared
 

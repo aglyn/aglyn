@@ -1,5 +1,5 @@
 {
-  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests — the only files allowed to reference @aglyn/plugins-* outside libs/plugins. Ids must match FIRST_PARTY_PLUGINS in libs/aglyn plugin-manager/enabled-plugins.ts. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry), declarations = the light registrations core reads before any surface loads (`/declarations`, both apps, client and server), serverDeclarations = the same for the server alone (`/declarations.server`, platform-event subscriptions), consoleServerDeclarations = the same for the CONSOLE's server alone (`/declarations.console-server`, never loaded or bundled by the tenant runtime: for registrations that open what only the console holds), subprocessors = the third-party recipients the plugin's code sends data to, and its other hosts and its uses of hosts declared elsewhere (`/subprocessors`, called by the generator rather than at runtime, and written into the console's subprocessors manifest as data for the subprocessor inventory). activityMutationPaths = the plugin's modules that create, transfer or destroy a durable customer object, which `tools/scripts/check-activity-coverage.mjs` holds to logging an activity entry like the platform's own. `alwaysOn` here is the LOADER's meaning — the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead.",
+  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests — the only files allowed to reference @aglyn/plugins-* outside libs/plugins. Ids must match FIRST_PARTY_PLUGINS in libs/aglyn plugin-manager/enabled-plugins.ts. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry), declarations = the light registrations core reads before any surface loads (`/declarations`, both apps, client and server), serverDeclarations = the same for the server alone (`/declarations.server`, platform-event subscriptions), consoleServerDeclarations = the same for the CONSOLE's server alone (`/declarations.console-server`, never loaded or bundled by the tenant runtime: for registrations that open what only the console holds), subprocessors = the third-party recipients the plugin's code sends data to, and its other hosts and its uses of hosts declared elsewhere (`/subprocessors`, called by the generator rather than at runtime, and written into the console's subprocessors manifest as data for the subprocessor inventory). activityMutationPaths = the plugin's modules that create, transfer or destroy a durable customer object, which `tools/scripts/check-activity-coverage.mjs` holds to logging an activity entry like the platform's own. `alwaysOn` here is the LOADER's meaning — the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead. `modules` (AGL-3116) names the subpath a surface registers from when that surface's code must not ride with the package root's — each site surface has its own module, so a published page never loads a console registrar. `contributes` (AGL-3116, required) declares what the plugin adds and where, in the shape a marketplace manifest uses (core `plugin-contributions.ts`): `site.components` = the canvas component ids it registers, `site.features` = the site runtimes it mounts on every page of a site that switched it on, `console.slots` = the widget slots and panels it fills, `console.routes` / `console.orgRoutes` = the console routes it serves, `console.shell` = it draws a nav tab, a provider or a staff tab the shell renders on every screen. The loaders place a plugin by this declaration alone, so `apps/console/specs/plugin-contributions-declared.spec.ts` holds it to what the registrars actually register.",
   "plugins": [
     {
       "id": "mui",
@@ -7,6 +7,72 @@
       "alwaysOn": true,
       "register": {
         "site": "registerMuiPlugin"
+      },
+      "contributes": {
+        "site": {
+          "components": [
+            "muiAppBar",
+            "muiToolbar",
+            "muiTypography",
+            "muiInlineText",
+            "muiButton",
+            "muiContainer",
+            "layoutSlot",
+            "muiList",
+            "muiListItem",
+            "muiListItemText",
+            "videoEmbed",
+            "socialLinks",
+            "dataTable",
+            "collectionEntries",
+            "collectionEntryBody",
+            "collectionRelated",
+            "collectionShare",
+            "collectionEntryMeta",
+            "collectionEntryAuthor",
+            "contentAuthorProfile",
+            "collectionCategories",
+            "collectionSearch",
+            "image",
+            "video",
+            "icon",
+            "languageSwitcher",
+            "reusableInstance",
+            "muiScreenLink",
+            "muiLinkBox",
+            "muiNavMenu",
+            "muiMegaMenu",
+            "muiDrawer",
+            "muiDrawerToggle",
+            "functionWidget",
+            "product",
+            "marketplacePlugin",
+            "custom-html",
+            "searchBox",
+            "markdown",
+            "tableOfContents",
+            "section",
+            "muiStack",
+            "muiBox",
+            "div",
+            "muiGrid",
+            "muiPaper",
+            "muiCard",
+            "muiCardHeader",
+            "muiCardContent",
+            "muiCardActions",
+            "muiAccordion",
+            "muiAccordionSummary",
+            "muiAccordionDetails",
+            "muiTabs",
+            "muiTabPanel",
+            "muiImageList",
+            "muiImageListItem",
+            "muiPagination",
+            "muiBreadcrumbs",
+            "themeModeSwitcher"
+          ]
+        }
       }
     },
     {
@@ -15,6 +81,23 @@
       "register": {
         "site": "registerFormsPlugin",
         "console": "registerFormsConsole"
+      },
+      "modules": {
+        "site": "site"
+      },
+      "contributes": {
+        "site": {
+          "components": [
+            "form",
+            "formField"
+          ]
+        },
+        "console": {
+          "shell": true,
+          "routes": [
+            "/forms"
+          ]
+        }
       }
     },
     {
@@ -26,9 +109,25 @@
         "tenantApi": "registerBookingsApi",
         "consoleApi": "registerBookingsConsoleApi"
       },
+      "modules": {
+        "site": "site"
+      },
       "apiPrefixes": [
         "bookings"
-      ]
+      ],
+      "contributes": {
+        "site": {
+          "components": [
+            "booking"
+          ]
+        },
+        "console": {
+          "shell": true,
+          "routes": [
+            "/bookings"
+          ]
+        }
+      }
     },
     {
       "id": "commerce",
@@ -39,10 +138,45 @@
         "tenantApi": "registerCommerceApi",
         "consoleApi": "registerCommerceConsoleApi"
       },
+      "modules": {
+        "site": "site"
+      },
       "apiPrefixes": [
         "commerce",
         "membership"
-      ]
+      ],
+      "contributes": {
+        "site": {
+          "components": [
+            "product-grid",
+            "product-detail",
+            "cart",
+            "customer-account",
+            "wishlist",
+            "newsletter-signup",
+            "gate",
+            "gated-video",
+            "member-feed",
+            "member-recovery",
+            "member-signin",
+            "member-signup",
+            "reservation-widget",
+            "product-reviews",
+            "related-products"
+          ]
+        },
+        "console": {
+          "shell": true,
+          "routes": [
+            "/pos",
+            "/products"
+          ],
+          "slots": [
+            "commerceGlance",
+            "hostDashboard"
+          ]
+        }
+      }
     },
     {
       "id": "marketplace",
@@ -53,7 +187,17 @@
       },
       "apiPrefixes": [
         "marketplace"
-      ]
+      ],
+      "contributes": {
+        "console": {
+          "slots": [
+            "marketplaceListing",
+            "orgAddons",
+            "orgMarketplace",
+            "pluginSiteSet"
+          ]
+        }
+      }
     },
     {
       "id": "crm",
@@ -64,7 +208,19 @@
       },
       "apiPrefixes": [
         "crm"
-      ]
+      ],
+      "contributes": {
+        "console": {
+          "shell": true,
+          "routes": [
+            "/crm"
+          ],
+          "slots": [
+            "hostDashboard",
+            "orgDashboard"
+          ]
+        }
+      }
     },
     {
       "id": "outreach",
@@ -83,13 +239,32 @@
         "libs/plugins/outreach/src/lib/routes/sequence-routes.ts",
         "libs/plugins/outreach/src/lib/routes/enroll-routes.ts",
         "libs/plugins/outreach/src/lib/runtime/mailbox-health-store.ts"
-      ]
+      ],
+      "contributes": {
+        "console": {
+          "shell": true,
+          "orgRoutes": [
+            "/outreach"
+          ]
+        }
+      }
     },
     {
       "id": "data",
       "package": "@aglyn/plugins-data",
       "register": {
         "console": "registerDataConsole"
+      },
+      "contributes": {
+        "console": {
+          "shell": true,
+          "routes": [
+            "/data"
+          ],
+          "slots": [
+            "orgData"
+          ]
+        }
       }
     },
     {
@@ -101,9 +276,33 @@
         "tenantApi": "registerEmailApi",
         "consoleApi": "registerEmailConsoleApi"
       },
+      "modules": {
+        "site": "site"
+      },
       "apiPrefixes": [
         "email"
-      ]
+      ],
+      "contributes": {
+        "site": {
+          "components": [
+            "emailSection",
+            "emailText",
+            "emailRichtext",
+            "emailImage",
+            "emailButton",
+            "emailDivider",
+            "emailSpacer",
+            "emailProduct",
+            "emailHtml"
+          ]
+        },
+        "console": {
+          "shell": true,
+          "routes": [
+            "/emails"
+          ]
+        }
+      }
     },
     {
       "id": "events-calendar",
@@ -113,9 +312,25 @@
         "console": "registerEventsCalendarConsole",
         "tenantApi": "registerEventsCalendarApi"
       },
+      "modules": {
+        "site": "site"
+      },
       "apiPrefixes": [
         "events"
-      ]
+      ],
+      "contributes": {
+        "site": {
+          "components": [
+            "eventList"
+          ]
+        },
+        "console": {
+          "shell": true,
+          "routes": [
+            "/events"
+          ]
+        }
+      }
     },
     {
       "id": "inbox",
@@ -126,13 +341,35 @@
       },
       "apiPrefixes": [
         "inbox"
-      ]
+      ],
+      "contributes": {
+        "console": {
+          "shell": true,
+          "routes": [
+            "/inbox"
+          ],
+          "slots": [
+            "hostDashboard"
+          ]
+        }
+      }
     },
     {
       "id": "logic",
       "package": "@aglyn/plugins-logic",
       "register": {
         "console": "registerLogicConsole"
+      },
+      "contributes": {
+        "console": {
+          "shell": true,
+          "routes": [
+            "/logic"
+          ],
+          "slots": [
+            "besignerFunctions"
+          ]
+        }
       }
     },
     {
@@ -144,10 +381,29 @@
         "consoleApi": "registerMarketingConsoleApi",
         "site": "registerMarketingPlugin"
       },
+      "modules": {
+        "site": "site"
+      },
       "apiPrefixes": [
         "campaigns",
         "experiments"
-      ]
+      ],
+      "contributes": {
+        "site": {
+          "features": [
+            "marketing-site-runtime"
+          ]
+        },
+        "console": {
+          "shell": true,
+          "routes": [
+            "/marketing"
+          ],
+          "slots": [
+            "hostDashboard"
+          ]
+        }
+      }
     },
     {
       "id": "redirects",
@@ -155,6 +411,14 @@
       "register": {
         "console": "registerRedirectsConsole",
         "tenantApi": "registerRedirectsApi"
+      },
+      "contributes": {
+        "console": {
+          "shell": true,
+          "routes": [
+            "/redirects"
+          ]
+        }
       }
     },
     {
@@ -167,7 +431,18 @@
       },
       "apiPrefixes": [
         "hooks"
-      ]
+      ],
+      "contributes": {
+        "console": {
+          "shell": true,
+          "routes": [
+            "/automation"
+          ],
+          "slots": [
+            "hostActivity"
+          ]
+        }
+      }
     },
     {
       "id": "ai",
@@ -183,14 +458,51 @@
       "apiPrefixes": [
         "ai",
         "assist"
-      ]
+      ],
+      "contributes": {
+        "console": {
+          "shell": true,
+          "slots": [
+            "assistPanel",
+            "automationEditor",
+            "automationRun",
+            "besignerInspector",
+            "besignerToolbar",
+            "hostAutomations",
+            "hostComponents",
+            "hostForms",
+            "hostLayouts",
+            "hostMembers",
+            "hostScreens",
+            "hostSeo",
+            "hostTemplates",
+            "hostTheme",
+            "importMapping",
+            "orgBillingUsage",
+            "orgMember",
+            "orgMembersListColumn",
+            "orgSites",
+            "productEditor",
+            "productImport",
+            "productsHub",
+            "recordEmail",
+            "recordInsights",
+            "seoFields",
+            "staffOrg",
+            "staffOrgUsageColumn",
+            "staffOrgsListColumn",
+            "staffUser"
+          ]
+        }
+      }
     },
     {
       "id": "video-delivery",
       "package": "@aglyn/plugins-video-delivery",
       "register": {
         "serverDeclarations": "registerVideoDeliveryServerDeclarations"
-      }
+      },
+      "contributes": {}
     }
   ]
 }

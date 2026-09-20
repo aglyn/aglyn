@@ -16,6 +16,10 @@
  */
 
 import type { PluginConfigField } from '../plugin-manager/plugin-config'
+import {
+  sanitizePluginContributions,
+  type PluginContributions,
+} from '../plugin-manager/plugin-contributions'
 
 /**
  * Executable-plugin manifest, artifact-path, CSP, and revocation helpers
@@ -190,6 +194,18 @@ export interface PluginManifest {
     fields: PluginConfigField[]
     defaults?: Record<string, unknown>
   }
+  /**
+   * What `register(host)` contributes, and where (AGL-3116): the elements and
+   * features a published page loads the plugin for, and the console slots,
+   * routes and shell entries a console screen loads it for. See
+   * `plugin-contributions.ts`.
+   *
+   * Absent on every version published before the contract, and those load
+   * under its documented default. A version that declares it is held to it:
+   * the verifier compares it with what the bundle registers, and a published
+   * page never loads the plugin anywhere the declaration does not place it.
+   */
+  contributes?: PluginContributions
 }
 
 /** A published, content-addressed version of a plugin listing. */
@@ -574,6 +590,18 @@ export function validatePluginManifest(
     }
   }
 
+  /**
+   * Declared contributions (AGL-3116). Refused whole when malformed rather
+   * than trimmed: a loader places the plugin by this block, and an entry
+   * dropped on the way in would stop it loading where it is used.
+   */
+  let contributes: PluginContributions | undefined
+  if (raw['contributes'] !== undefined) {
+    const verdict = sanitizePluginContributions(raw['contributes'])
+    if (verdict.ok === false) return { ok: false, error: verdict.error }
+    contributes = verdict.contributions
+  }
+
   return {
     ok: true,
     manifest: {
@@ -582,6 +610,7 @@ export function validatePluginManifest(
       version,
       entry,
       ...(hostAbi !== undefined ? { hostAbi } : {}),
+      ...(contributes ? { contributes } : {}),
       ...(Object.keys(capabilities).length ? { capabilities } : {}),
       ...(elements.length ? { elements } : {}),
       ...(restrict(raw['restrictParent'])
