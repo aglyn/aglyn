@@ -421,6 +421,28 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'A lint rule\'s first-party host list. Build-time only, never shipped, and additive.',
   },
   {
+    file: 'tools/marketing/verify-applier.mjs',
+    count: 1,
+    reason:
+      "AGL-2922. The blog-copy link checker, and the literal is the SUBJECT of " +
+      "the check rather than a destination. `DOCS_ORIGIN` is the prefix that " +
+      "tells an Aglyn docs link apart from a marketing route; the only thing " +
+      "done with it is `href.slice()` and then `existsSync` against " +
+      "`apps/docs/docs/<page>.md` in this repo. The file opens no socket and " +
+      "spawns nothing, so no deployment resolves anything through it. Same " +
+      "shape as check-external-facts.mjs above: a build harness, never shipped " +
+      "and never imported by an app, whose whole job is verifying Aglyn's own " +
+      "published surfaces. Parameterizing the host would empty it of meaning, " +
+      "because the pages these decks link to are ours by construction — a " +
+      "self-hoster has no `tools/marketing/blog-copy` and never runs it. " +
+      "⚠️ A grep of this file finds TWO `aglyn.com`; this guard measures ONE. " +
+      "The second is the sitemap URL in the docblock above LIVE_ROUTES, which " +
+      "`stripComments` removes by design, so the prose recording a decision " +
+      "cannot pass for the decision. Do not raise this to 2 to match a grep: " +
+      "the comparison is exact and an inflated count fails exactly as a " +
+      "missing row does.",
+  },
+  {
     file: 'tools/plugin-loader/origin/api/load.mjs',
     count: 3,
     reason:
