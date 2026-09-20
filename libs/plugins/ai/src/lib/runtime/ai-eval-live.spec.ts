@@ -731,7 +731,15 @@ describe('the automation and products recorders (AGL-3074)', () => {
       return answers(request)
     })
     const report = await recordAiEvalLive([text], LIVE)
-    expect(report.recorded).toEqual([])
+    // THE ANSWER SURVIVES ITS GRADER (AGL-3143). It was bought before the
+    // grade was asked for, so a grader that throws costs its own request and
+    // nothing else: the answer is recorded with no grade rather than with an
+    // invented one, which would read as a bad answer and pull the kind's
+    // floor down for something the model never did.
+    expect(report.recorded).toHaveLength(1)
+    expect(report.recorded[0].caseId).toBe(text.id)
+    expect(report.recorded[0].candidate.answer).toEqual(String(text.candidates[0].answer))
+    expect(report.recorded[0].candidate.rubric).toBeNull()
     expect(report.failed).toEqual([
       {
         caseId: text.id,
@@ -741,6 +749,24 @@ describe('the automation and products recorders (AGL-3074)', () => {
         requestId: null,
       },
     ])
+  })
+
+  it('scores an ungraded answer as passing nothing, rather than as a grade of one (AGL-3143)', () => {
+    // The difference the record has to keep: a grade of 1/1 says the model
+    // answered badly, and a missing grade says nobody looked. Both fail, and
+    // only one of them is true.
+    const ungraded = scoreAiEvalCandidate(text, {
+      source: 'recorded',
+      step: null,
+      model: null,
+      effort: null,
+      plan: null,
+      answer: text.candidates[0].answer,
+      usage: null,
+      rubric: null,
+    })
+    expect(ungraded.checks.rubric).toBe(false)
+    expect(ungraded.pass).toBe(false)
   })
 })
 

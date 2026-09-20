@@ -1290,6 +1290,9 @@ function messageOfThrown(error: unknown): string {
  * request id and which half of its run threw, and the briefs behind it are
  * still recorded. The caller writes what came back and decides what a
  * non-empty `failed` means for its exit status.
+ *
+ * A brief whose GRADE threw is in both halves: recorded, with its grade
+ * marked missing, and failed, naming what the grader threw.
  */
 export async function recordAiEvalLive(
   cases: readonly AiEvalCase[],
@@ -1309,13 +1312,7 @@ export async function recordAiEvalLive(
       report.skipped.push({ caseId: evalCase.id, kind: evalCase.kind, why: aiEvalSkipReason(evalCase.kind) })
       continue
     }
-    let step: AiEvalLiveStep = 'record'
-    try {
-      const answer = await recorder(evalCase, options)
-      step = 'grade'
-      const rubric = await gradeAiEvalCandidate(evalCase, answer, options)
-      report.recorded.push({ caseId: evalCase.id, kind: evalCase.kind, candidate: { ...answer, rubric } })
-    } catch (error) {
+    const failure = (step: AiEvalLiveStep, error: unknown): void => {
       report.failed.push({
         caseId: evalCase.id,
         kind: evalCase.kind,
@@ -1323,6 +1320,26 @@ export async function recordAiEvalLive(
         error: messageOfThrown(error),
         requestId: requestIdOfThrown(error),
       })
+    }
+    let answer: AiEvalRecordedAnswer
+    try {
+      answer = await recorder(evalCase, options)
+    } catch (error) {
+      failure('record', error)
+      continue
+    }
+    // A GRADER THAT THROWS DOES NOT TAKE THE ANSWER WITH IT (AGL-3143). The
+    // brief is already paid for by here, and grading is a second request that
+    // can fail on its own — a rate limit, a tool the provider will not
+    // compile. The answer is recorded with its grade marked missing, and the
+    // throw is still reported, so the run exits non-zero without the next
+    // one having to buy this answer again.
+    try {
+      const rubric = await gradeAiEvalCandidate(evalCase, answer, options)
+      report.recorded.push({ caseId: evalCase.id, kind: evalCase.kind, candidate: { ...answer, rubric } })
+    } catch (error) {
+      report.recorded.push({ caseId: evalCase.id, kind: evalCase.kind, candidate: { ...answer, rubric: null } })
+      failure('grade', error)
     }
   }
   return report

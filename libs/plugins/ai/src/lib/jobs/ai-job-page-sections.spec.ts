@@ -161,6 +161,82 @@ describe('a section that breaks the page’s rules', () => {
     expect(Object.keys(result.offending ?? {})).toEqual(['a1'])
   })
 
+  // THE TWO PASSES A LIVE FREE PAGE DIED ON (AGL-3143). Its practice-areas
+  // section was written with its repeated card and no place for it, and the
+  // answer to that was to name four children and write one; the build stopped
+  // there, three sections in, and the page's form was never reached.
+  const practiceAreas = (grid: string[] | null, extra: Record<string, unknown> = {}) => ({
+    rootId: 'root_div',
+    nodes: {
+      root_div: { componentId: 'div', props: {}, nodes: ['sec_practice'] },
+      sec_practice: {
+        componentId: 'section',
+        props: { element: 'section', ariaLabel: 'Practice Areas' },
+        nodes: ['practice_stack'],
+      },
+      practice_stack: { componentId: 'muiStack', props: { direction: 'column' }, nodes: ['practice_heading', 'practice_grid'] },
+      practice_heading: {
+        componentId: 'muiTypography',
+        props: { children: 'Our Practice Areas', variant: 'h2', component: 'h2' },
+      },
+      practice_grid: { componentId: 'muiGrid', props: { container: true, spacing: 3 }, ...(grid ? { nodes: grid } : {}) },
+      practice_item: {
+        componentId: 'muiGrid',
+        props: { size: 'xs:12 md:6' },
+        repeat: [['Estate Planning', 'Wills and trusts, drafted plainly.'], ['Family Law', 'Steady counsel through custody and support.']],
+        nodes: ['practice_card'],
+      },
+      practice_card: { componentId: 'muiCard', props: { variant: 'outlined' }, nodes: ['practice_card_text'] },
+      practice_card_text: { componentId: 'muiTypography', props: { children: '{{1}} — {{2}}', variant: 'body1' } },
+      ...extra,
+    },
+  })
+
+  it('is refused for the repeated item it wrote and never placed, by the item’s own id (AGL-3143)', () => {
+    // Read as an empty grid, the answer was "an element meant to hold content
+    // is empty — remove it, or fill it", of a container whose content was
+    // already written one line away.
+    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, uses: [], inventory: fixture.inventory })({
+      tree: JSON.stringify(practiceAreas(null)),
+    })
+    expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
+      { rule: 16, code: 'orphan-node', nodeIds: ['practice_item', 'practice_card', 'practice_card_text'] },
+    ])
+    const reask = aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)
+    expect(reask).toContain('List it under the element it belongs in, or take it out. (nodes practice_item')
+    expect(Object.keys(result.offending ?? {})).toContain('practice_item')
+  })
+
+  it('is refused for the children it named and never wrote, naming what is missing (AGL-3143)', () => {
+    // The pass that ended the build: four cells listed, one written. The
+    // sanitizer under the palette validator refuses this as `Missing node
+    // "card2"`, which reached the model as "the answer could not be used as a
+    // section" — no rule, no node, and nothing to change.
+    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, uses: [], inventory: fixture.inventory })({
+      tree: JSON.stringify(practiceAreas(['practice_item', 'card2', 'card3'])),
+    })
+    expect(result.violations.map(({ rule, code, nodeIds }) => ({ rule, code, nodeIds }))).toEqual([
+      { rule: null, code: 'missing-child', nodeIds: ['practice_grid'] },
+    ])
+    expect(result.violations[0].detail).toBe('Listed under "nodes" and missing from the answer: "card2", "card3".')
+    expect(aiReaskMessage('page-section', 'submit_section', result.violations, result.offending)).toContain(
+      'Write each one, or take its name out of the list of what this holds.',
+    )
+  })
+
+  it('keeps the section once the item it wrote is placed', () => {
+    // This workspace keeps components, so the item is placed rather than
+    // repeated; what is pinned is that placing it is all that was missing.
+    const answer = practiceAreas(['practice_item'])
+    delete (answer.nodes.practice_item as { repeat?: unknown }).repeat
+    answer.nodes.practice_card_text.props.children = 'Estate Planning — wills and trusts, drafted plainly.'
+    const result = aiPageSectionCheck({ page: firstPage(), sectionIds, index: 1, context, uses: [], inventory: fixture.inventory })({
+      tree: JSON.stringify(answer),
+    })
+    expect(result.violations).toEqual([])
+    expect(result.value).not.toBeNull()
+  })
+
   it('is refused when it leaves out a component its plan line places (rule 7)', () => {
     const result = aiPageSectionCheck({
       page: firstPage(),

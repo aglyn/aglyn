@@ -58,11 +58,6 @@ jest.mock('../hooks/use-url-names-org', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'user-1' } }),
 }))
-jest.mock('../components/host-id-provider', () => ({
-  useHostDisabledPlugins: () => mockHostDisabled,
-  useHostEnabledPlugins: () => [] as string[],
-  useHostId: () => mockHostId,
-}))
 jest.mock('../hooks/use-permissions-on-host', () => {
   const held = { loaded: false, granted: {} }
   const usePermissionsOnHost = () => held
@@ -87,6 +82,38 @@ import ConsolePluginsGate, {
   useEnabledPluginIds,
   useWorkspacePluginIds,
 } from '../components/console-plugins-gate.component'
+import {
+  HostDisabledPluginsContext,
+  HostEnabledPluginsContext,
+  HostIdContext,
+} from '../components/host-id-provider'
+
+const NO_OPT_IN: readonly string[] = []
+
+/**
+ * The site seam, supplied through the REAL host contexts rather than by
+ * mocking `host-id-provider` (AGL-3145).
+ *
+ * A `jest.mock` of that module is a fork in the module registry: the spec
+ * holds the factory's object and the component under test holds whichever
+ * of the two the runtime handed it. Measured inside a loaded full-suite run,
+ * those came apart — `useHostDisabledPlugins` was the mock for the spec and
+ * the real `useContext` reader for `ConsolePluginsGate`, which then read the
+ * context DEFAULT `[]` and answered with the un-narrowed set. There is no
+ * fork to land on the wrong side of when nothing is mocked, and the real
+ * readers are exercised instead of a stand-in for them.
+ */
+function SiteSeam({ children }: { children?: ReactNode }) {
+  return (
+    <HostIdContext.Provider value={mockHostId as string}>
+      <HostDisabledPluginsContext.Provider value={mockHostDisabled}>
+        <HostEnabledPluginsContext.Provider value={NO_OPT_IN}>
+          {children}
+        </HostEnabledPluginsContext.Provider>
+      </HostDisabledPluginsContext.Provider>
+    </HostIdContext.Provider>
+  )
+}
 
 /** Every mount of the AI provider, and the site set it was last handed. */
 const providerMounts: string[] = []
@@ -125,21 +152,27 @@ beforeEach(() => {
 describe('what a site draws is narrowed by the site', () => {
   it('drops AI on a site that switched it off', () => {
     mockHostDisabled = ['ai']
-    const { result } = renderHook(() => useEnabledPluginIds())
+    const { result } = renderHook(() => useEnabledPluginIds(), {
+      wrapper: SiteSeam,
+    })
     expect(result.current).not.toContain('ai')
     expect(result.current).toContain('commerce')
   })
 
   it('keeps AI on a site whose document predates the switch', () => {
     mockHostDisabled = ['commerce']
-    const { result } = renderHook(() => useEnabledPluginIds())
+    const { result } = renderHook(() => useEnabledPluginIds(), {
+      wrapper: SiteSeam,
+    })
     expect(result.current).toContain('ai')
   })
 
   it('keeps AI off any site, where the workspace set is the answer', () => {
     mockHostId = null
     mockHostDisabled = []
-    const { result } = renderHook(() => useEnabledPluginIds())
+    const { result } = renderHook(() => useEnabledPluginIds(), {
+      wrapper: SiteSeam,
+    })
     expect(result.current).toContain('ai')
   })
 })
@@ -147,15 +180,19 @@ describe('what a site draws is narrowed by the site', () => {
 describe('what wraps every page is the workspace’s', () => {
   it('keeps AI in the workspace set on a site that switched it off', () => {
     mockHostDisabled = ['ai']
-    const { result } = renderHook(() => useWorkspacePluginIds())
+    const { result } = renderHook(() => useWorkspacePluginIds(), {
+      wrapper: SiteSeam,
+    })
     expect(result.current).toContain('ai')
   })
 
   it('keeps the AI provider mounted across the switch, and hands it the site’s set', async () => {
     const view = render(
-      <ConsolePluginsGate>
-        <ChildProbe />
-      </ConsolePluginsGate>,
+      <SiteSeam>
+        <ConsolePluginsGate>
+          <ChildProbe />
+        </ConsolePluginsGate>
+      </SiteSeam>,
     )
     await waitFor(() => expect(screen.queryByTestId('page')).toBeTruthy())
     expect(providerSiteSet).toContain('ai')
@@ -163,9 +200,11 @@ describe('what wraps every page is the workspace’s', () => {
     // The host document lands saying AI is off for this site.
     mockHostDisabled = ['ai']
     view.rerender(
-      <ConsolePluginsGate>
-        <ChildProbe />
-      </ConsolePluginsGate>,
+      <SiteSeam>
+        <ConsolePluginsGate>
+          <ChildProbe />
+        </ConsolePluginsGate>
+      </SiteSeam>,
     )
     await waitFor(() => expect(providerSiteSet).not.toContain('ai'))
     // One mount of each: nothing beneath the providers was torn down.

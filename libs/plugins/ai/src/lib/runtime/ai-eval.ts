@@ -269,7 +269,21 @@ export interface AiEvalCandidate {
    * on an authored answer, and on a recording made before it was kept.
    */
   screen?: AiEvalRecordedScreen
-  rubric: AiEvalRubric
+  /**
+   * The grade, or `null` where the grader itself failed and there is none
+   * (AGL-3143). An authored candidate always carries one.
+   *
+   * A brief's answer is bought before it is graded, so a grader that throws
+   * would otherwise take the answer down with it and the run would pay
+   * again for what it already had. The answer is kept and the grade is
+   * marked missing instead of being invented: a fabricated 1/1 would read
+   * as "the model answered badly" and pull the kind's floor down for
+   * something the model never did, and the floors are the whole reason the
+   * harness exists. An ungraded recording passes nothing — `rubric` is what
+   * a score is taken from — so a missing grade can only read low, never
+   * high, and the run that wrote it exits non-zero naming the throw.
+   */
+  rubric: AiEvalRubric | null
   note?: string
   /**
    * What the provider wrote when the answer ran out of ceiling (AGL-3143):
@@ -1103,8 +1117,11 @@ export function readAiEvalRecording(raw: unknown, file: string): AiEvalRecording
     throw new Error(`${file}: a recording holds a caseId and a candidate`)
   }
   const candidate = raw['candidate'] as Record<string, unknown>
-  if (candidate['source'] !== 'recorded' || !isRecord(candidate['rubric'])) {
-    throw new Error(`${file}: a recording's candidate is recorded and graded`)
+  // `null` says the grader failed and this answer was kept ungraded
+  // (AGL-3143); a missing key is a recording written by something that does
+  // not know what a grade is.
+  if (candidate['source'] !== 'recorded' || !(isRecord(candidate['rubric']) || candidate['rubric'] === null)) {
+    throw new Error(`${file}: a recording's candidate is recorded, and graded or explicitly ungraded`)
   }
   return raw as unknown as AiEvalRecording
 }

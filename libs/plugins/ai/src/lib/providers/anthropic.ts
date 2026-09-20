@@ -113,11 +113,19 @@ export function anthropicFailureIsRetryable(
 /** Anthropic's `usage` object, in the meter's shape. Missing fields read 0. */
 export function anthropicUsageFrom(usage: unknown): AiUsage {
   const record = (usage ?? {}) as Record<string, unknown>
+  // Part of `output_tokens`, and carried only where the response breaks them
+  // down, so an answer that reports none says nothing rather than zero.
+  const details = record['output_tokens_details']
+  const thinking =
+    details && typeof details === 'object'
+      ? (details as Record<string, unknown>)['thinking_tokens']
+      : undefined
   return {
     inputTokens: aiTokenCount(record['input_tokens']),
     outputTokens: aiTokenCount(record['output_tokens']),
     cacheReadTokens: aiTokenCount(record['cache_read_input_tokens']),
     cacheWriteTokens: aiTokenCount(record['cache_creation_input_tokens']),
+    ...(thinking === undefined ? {} : { thinkingTokens: aiTokenCount(thinking) }),
   }
 }
 
