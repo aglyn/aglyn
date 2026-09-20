@@ -338,3 +338,150 @@ describe('where an asset is read from, and what the read answers', () => {
     ).toEqual(REPLACED)
   })
 })
+
+/**
+ * An image inside authored PROSE (AGL-3149).
+ *
+ * A body image is not a node, so it cannot carry `intrinsicWidth` and
+ * `intrinsicHeight` the way a placement does. Its pair travels on the element
+ * holding the document instead, keyed by the target the body wrote, and the
+ * renderer looks it up by the parsed block's `src`.
+ *
+ * The property the whole feature rests on is that an image the read cannot
+ * answer for gets NO entry: `srcSet` without the pair makes `sizes` the
+ * rendered width and upscales anything narrower than the column, so a partial
+ * answer is a worse render than none.
+ */
+describe('a library image named by a markdown body (AGL-3149)', () => {
+  const DIAGRAM = 'media:site1/diagram'
+  const BODY = `Intro.\n\n![A pipeline](${DIAGRAM})\n\nMore.`
+  const diagramFacts = (facts: MediaAssetFacts) =>
+    new Map([[mediaAssetFactsKey({ scope: 'site1', mediaId: 'diagram' }), facts]])
+
+  /** One markdown-bearing node, under whichever prop that element uses. */
+  const body = (componentId: 'markdown' | 'collectionEntryBody', text: string) => ({
+    [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['b1'] },
+    b1: {
+      $id: 'b1',
+      componentId,
+      parentId: ROOT,
+      props: { [componentId === 'markdown' ? 'content' : 'markdown']: text },
+    },
+  })
+
+  const stamped = (nodes: Record<string, unknown>, facts: MediaAssetFacts) =>
+    (applyMediaAssetFacts(nodes, diagramFacts(facts)).b1 as {
+      props: Record<string, unknown>
+    }).props
+
+  describe('collecting the references', () => {
+    it('finds them in both elements, under each one’s own prop name', () => {
+      expect(mediaAssetRefs(body('markdown', BODY))).toEqual([
+        { scope: 'site1', mediaId: 'diagram' },
+      ])
+      expect(mediaAssetRefs(body('collectionEntryBody', BODY))).toEqual([
+        { scope: 'site1', mediaId: 'diagram' },
+      ])
+    })
+
+    it('puts every placement ahead of every body image', () => {
+      // The cap spends on placements first: a placement that misses out
+      // renders at its pick-time pair and a film at the wrong shape, while a
+      // body image that misses out renders exactly as it does today.
+      const mixed = {
+        [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['prose', 'shot', 'reel'] },
+        prose: { $id: 'prose', componentId: 'markdown', props: { content: BODY } },
+        shot: { $id: 'shot', componentId: 'image', props: { src: 'media:site1/shot' } },
+        reel: { $id: 'reel', componentId: 'video', props: { src: 'media:site1/reel' } },
+      }
+      expect(mediaAssetRefs(mixed).map((ref) => ref.mediaId)).toEqual([
+        'reel',
+        'shot',
+        'diagram',
+      ])
+    })
+
+    it('counts an asset once when a body and a placement both name it', () => {
+      const both = {
+        [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['prose', 'shot'] },
+        prose: { $id: 'prose', componentId: 'markdown', props: { content: BODY } },
+        shot: { $id: 'shot', componentId: 'image', props: { src: DIAGRAM } },
+      }
+      expect(mediaAssetRefs(both)).toEqual([{ scope: 'site1', mediaId: 'diagram' }])
+    })
+
+    it('reads nothing for a body that is still an unresolved token', () => {
+      // An entry template renders `{{entry.body}}` on every editing surface.
+      // It is not a document, and walking it would buy reads for nothing.
+      expect(mediaAssetRefs(body('collectionEntryBody', '{{entry.body}}'))).toEqual([])
+    })
+
+    it('ignores targets that are not library references', () => {
+      const text = [
+        '![hotlink](https://images.example.com/x.png)',
+        '![path](/legacy/media/y.png)',
+        '![token]({{var:hero}})',
+        '[a link, not an image](media:site1/notanimage)',
+        `![real](${DIAGRAM})`,
+      ].join('\n\n')
+      expect(mediaAssetRefs(body('markdown', text))).toEqual([
+        { scope: 'site1', mediaId: 'diagram' },
+      ])
+    })
+
+    it('is not asked about bodies when a caller wants one element', () => {
+      // `only` asks for one ELEMENT's placements, and a body image is not a
+      // placement of the Image element — the video reader would otherwise
+      // read image documents it has no use for.
+      expect(mediaAssetRefs(body('markdown', BODY), { only: 'image' })).toEqual([])
+      expect(mediaAssetRefs(body('markdown', BODY), { only: 'video' })).toEqual([])
+    })
+  })
+
+  describe('stamping the pairs', () => {
+    it('keys the pair by the target exactly as the body wrote it', () => {
+      expect(stamped(body('markdown', BODY), { width: 1200, height: 630 })).toEqual({
+        content: BODY,
+        intrinsicSizes: { [DIAGRAM]: { width: 1200, height: 630 } },
+      })
+    })
+
+    it('leaves the body untouched when the document records no usable pair', () => {
+      // An SVG the upload could not measure, or a partial capture. No pair
+      // means no srcSet either, which is today's markup exactly.
+      const nodes = body('markdown', BODY)
+      expect(stamped(nodes, { width: 1200 })).toEqual({ content: BODY })
+      expect(stamped(nodes, { width: 0, height: 0 })).toEqual({ content: BODY })
+    })
+
+    it('stamps nothing on a body whose images are all unanswerable', () => {
+      const hotlinked = body('markdown', '![x](https://images.example.com/x.png)')
+      expect(applyMediaAssetFacts(hotlinked, diagramFacts({ width: 1200, height: 630 })))
+        .toBe(hotlinked)
+    })
+
+    it('stamps the resolved copy, and not the token the template still holds', () => {
+      // A bound entry body is `{{entry.body}}` in `props` and the entry's real
+      // text in `resolvedProps`. Pairs on the token copy are bytes in the tree
+      // that nothing can ever look up.
+      const bound = {
+        [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['b1'] },
+        b1: {
+          $id: 'b1',
+          componentId: 'collectionEntryBody',
+          parentId: ROOT,
+          props: { markdown: '{{entry.body}}' },
+          resolvedProps: { markdown: BODY },
+        },
+      }
+      const applied = applyMediaAssetFacts(
+        bound,
+        diagramFacts({ width: 1200, height: 630 }),
+      ).b1 as { props: Record<string, unknown>; resolvedProps: Record<string, unknown> }
+      expect(applied.props).toEqual({ markdown: '{{entry.body}}' })
+      expect(applied.resolvedProps['intrinsicSizes']).toEqual({
+        [DIAGRAM]: { width: 1200, height: 630 },
+      })
+    })
+  })
+})
