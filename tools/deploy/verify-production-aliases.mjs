@@ -65,9 +65,19 @@
 //   DEPLOY_REMOTE    git remote that Vercel builds from (else auto-detect aglyn/aglyn)
 //   DEPLOY_BRANCH    production branch name (default: production)
 //
-// Exit codes: 0 = all domains current AND on HEAD; 1 = a domain is stale, or an
-// always-build project's deployment lags HEAD (a missed build); 2 = operational
-// error (vercel missing/not authenticated, unparseable CLI output).
+// Exit codes: 0 = all domains current AND serving HEAD — the only run you may
+// tag from; 1 = a domain is stale, or an always-build project's deployment lags
+// HEAD (a missed build); 2 = operational error (vercel missing/not
+// authenticated, unparseable CLI output); 3 = nothing is broken, but production
+// is NOT YET serving HEAD — re-run, do not tag, do not --fix (AGL-3177).
+//
+// 3 exists because 0 used to cover it, and the summary line then said CLEAN
+// while console and tenant were both still serving the previous release
+// (2026-09-20, promoting beta.134). The alias check grades a domain against the
+// newest READY deployment; a deployment that is still BUILDING is not READY, so
+// the alias legitimately still points at the old release and the check
+// legitimately calls that fine. "Nothing is wrong" and "production serves what
+// you merged" are different questions, and a tag asks the second one.
 //
 // CLI quirks handled here: `vercel inspect` prints to STDERR (we capture
 // both streams); piped `vercel ls` emits bare deployment URLs with no status
@@ -587,6 +597,32 @@ async function checkDomain(project, domain, newestReady) {
   }
 }
 
+/**
+ * Is this project serving the release being promoted? (AGL-3177)
+ *
+ * Deliberately NOT the same question as "is its alias current". The alias is
+ * graded against the newest READY deployment, and while HEAD is still building
+ * the newest READY deployment is the PREVIOUS release — so the alias is
+ * correctly current, the check is correctly not failing, and production is
+ * nonetheless not serving what was just merged. On 2026-09-20 that combination
+ * printed CLEAN while console and tenant both still served beta.133.
+ *
+ * A path-scoped project is serving HEAD whenever nothing since its deployment
+ * touched the paths it builds from: that is what `behind === false` means for
+ * it, and demanding `onHead` there would call every one of them late forever.
+ *
+ * A commit that could not be read answers `false`, never `true`. This gates
+ * both the tag decision and `--fix`, and neither may proceed on an unknown.
+ */
+function servesHead(project, commit) {
+  if (commit?.onHead === true) return true
+  return (
+    Boolean(project.buildsOnPaths) &&
+    commit?.behind === false &&
+    Boolean(commit?.sha)
+  )
+}
+
 async function verifyProject(project, { token, head }) {
   const newestReady = await findNewestReady(project)
   // There used to be a fallback here for `alwaysBuilds: false` projects: when
@@ -692,9 +728,7 @@ async function verifyProject(project, { token, head }) {
    * live", which `commit.behind` already answers for both shapes: false means
    * nothing since has changed anything this project builds from.
    */
-  const fixTargetsHead =
-    commit?.onHead === true ||
-    (Boolean(project.buildsOnPaths) && commit?.behind === false && Boolean(commit?.sha))
+  const fixTargetsHead = servesHead(project, commit)
   if (FIX && domains.some((d) => d.verdict === 'STALE') && !fixTargetsHead) {
     const why = !commit?.sha
       ? 'its commit could not be read, so it cannot be shown to be the right build'
@@ -734,7 +768,14 @@ async function verifyProject(project, { token, head }) {
     }
   }
 
-  return { project: project.name, newestReady, domains, promoted, commit }
+  return {
+    project: project.name,
+    newestReady,
+    domains,
+    promoted,
+    commit,
+    servesHead: fixTargetsHead,
+  }
 }
 
 const commitCell = (c) => {
@@ -743,7 +784,19 @@ const commitCell = (c) => {
   if (c.onHead) return `${short(c.sha)}=HEAD`
   if (c.behind) return `${short(c.sha)} MISSING`
   if (c.pathScope?.status === 'unknown') return `${short(c.sha)} scope?`
-  return `${short(c.sha)} ${c.pathScope ? 'path-current' : 'trails(ok)'}`
+  if (c.pathScope) return `${short(c.sha)} path-current`
+  /*
+   * An always-builds project CANNOT legitimately trail HEAD, and this cell
+   * used to say `trails(ok)` when it did (AGL-3177).
+   *
+   * `trails(ok)` is true and reassuring for a path-scoped project, which
+   * rebuilds only when its own directory changes. Reaching here without a
+   * `pathScope` means the project rebuilds on every production push and is
+   * nonetheless not on HEAD — so it is serving the PREVIOUS release. Nothing
+   * is broken (HEAD is building, or its state could not be read), but a cell
+   * that reads `ok` invites a tag, and a tag asserts what production serves.
+   */
+  return `${short(c.sha)} ${c.headBuild === 'in-flight' ? 'BUILDING HEAD' : 'behind HEAD?'}`
 }
 
 function printTable(results) {
@@ -757,11 +810,16 @@ function printTable(results) {
       if (d.error) {
         rows.push([r.project, hostOf(d.domain), hostOf(r.newestReady.url), '—', commitCell(r.commit), `ERROR: ${d.error}`])
       } else {
+        // "current" grades the alias against the newest READY deployment. When
+        // that deployment is not the release being promoted, saying only
+        // "current" is what let a tag be cut on the previous one (AGL-3177).
         const verdict =
           d.verdict === 'current'
-            ? d.promoted
-              ? 'current (fixed)'
-              : 'current'
+            ? r.servesHead === false
+              ? 'current — PREVIOUS RELEASE'
+              : d.promoted
+                ? 'current (fixed)'
+                : 'current'
             : `STALE${d.promoted ? ' (still stale after promote)' : ''}${d.note ? ` — ${d.note}` : ''}`
         rows.push([r.project, hostOf(d.domain), hostOf(r.newestReady.url), hostOf(d.serving.url) ?? d.serving.id ?? '?', commitCell(r.commit), verdict])
       }
@@ -811,12 +869,51 @@ async function main() {
   const anyError = results.some((r) => r.error || r.domains?.some((d) => d.error))
   const anyStale = results.some((r) => r.domains?.some((d) => d.verdict === 'STALE'))
   const anyBuildMissing = results.some((r) => r.commit?.behind)
-  const exitCode = anyError ? 2 : anyStale || anyBuildMissing ? 1 : 0
+  // Nothing wrong, but production is not yet serving the release being
+  // promoted. Its own exit code because the two callers want opposite things
+  // from it: "is anything broken" says no, "may I tag" says not yet (AGL-3177).
+  const awaiting = results.filter((r) => !r.error && r.servesHead === false)
+  const exitCode = anyError
+    ? 2
+    : anyStale || anyBuildMissing
+      ? 1
+      : awaiting.length
+        ? 3
+        : 0
 
   if (JSON_OUT) {
-    console.log(JSON.stringify({ ok: exitCode === 0, exitCode, fix: FIX, head, results }, null, 2))
+    console.log(
+      JSON.stringify(
+        {
+          ok: exitCode === 0,
+          exitCode,
+          // The question a tag actually asks. `ok` alone was read as this and
+          // is not the same thing when a build is in flight (AGL-3177).
+          servingHead: exitCode === 0,
+          awaitingHead: awaiting.map((r) => r.project),
+          fix: FIX,
+          head,
+          results,
+        },
+        null,
+        2,
+      ),
+    )
   } else {
     printTable(results)
+    if (awaiting.length) {
+      console.log(
+        `NOT YET ON HEAD: ${awaiting.map((r) => r.project).join(', ')} — ` +
+          `${awaiting.length === 1 ? 'this project is' : 'these projects are'} still serving the ` +
+          'PREVIOUS release. Nothing is broken and there is nothing to fix; the aliases are ' +
+          'correctly pointing at the newest READY deployment, which is not yet the one you ' +
+          'merged.\n' +
+          '⛔ Do NOT tag from this run, and do NOT --fix: a tag asserts what production ' +
+          'serves. Re-run until every project reads =HEAD, then prove the new build by its ' +
+          'OUTPUT — behavior only the new code can produce — rather than by this summary ' +
+          '(AGL-3177).',
+      )
+    }
     if (anyStale && !FIX) {
       console.log(
         'Stale alias detected — re-run with --fix. It promotes the deployment ' +
