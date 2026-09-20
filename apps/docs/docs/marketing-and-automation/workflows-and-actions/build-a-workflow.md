@@ -29,17 +29,56 @@ field's helper text names the keys the chosen event puts in scope.
 
 ## 3. Add steps
 
-Add steps in order. Steps run through a **pure step runner**, so each step is predictable
-and repeatable. You can:
+Add steps in order. Each one's **Do** picker offers two kinds of step.
 
-- Reference [variables and functions](../../building-sites/bindings/overview.md) inside steps.
-- Compose an existing workflow **inside** a function or variable, and vice versa — workflows
-  are composable.
+**Call a function** is what a workflow has always been, and what a new step starts as.
+It runs one of your [functions](../../building-sites/bindings/overview.md) and binds the
+answer under a **Result name** — `step1` when you leave it blank — so every step after it
+can use the value in an expression. You can compose an existing workflow **inside** a
+function or variable, and vice versa; workflows are composable.
+
+**Everything else in the picker is a step from the
+[actions builder](actions-builder.md#steps)** — write to or update a dataset, send an
+email, notify site admins, enroll the contact in a list, assign a campaign, send a
+webhook, the [CRM steps](actions-builder.md#crm-steps), and the flow steps below. They
+take the same fields, the same **Only if** condition, and the same plan tiers they take
+in the actions builder: server-side steps are **Pro+**, a webhook and custom JS are
+**Business**, and the CRM steps need the CRM.
+
+The in-page effects — menus, drawers, class toggles, redirects, analytics events — are
+**not** offered. A workflow runs on a server event, and there is no page open to perform
+them on. If you need one, build it as an action instead.
+
+### Wait, and ending early {#waiting}
+
+The three flow steps make a workflow a sequence rather than a single burst, and they
+behave exactly as they do in an action:
+
+- **Wait** holds for anything from a minute to 90 days. Everything before it runs at
+  once; the rest picks up later, with the results your function calls had already bound
+  still in scope.
+- **Wait for something to happen** continues as soon as the event you pick happens for
+  that person, or when the timeout you set runs out. Set an **Only if** condition of
+  `_waitTimedOut` **is not empty** on the next step to tell the clock from the event.
+- **End the flow here** stops the rest. With an **Only if** condition it is a branch.
+
+A waiting workflow needs to know **who** it is waiting for, so the trigger's information
+has to include an email address; without one the wait step reports an error. Editing a
+workflow does not change it for people already waiting inside it — they finish the
+version they started. Deleting it stops them. See
+[Sequences](actions-builder.md#sequences) for the rest, including what a wait means for
+the emails sent after it.
 
 ## 4. Save and test
 
-Save the workflow. When the trigger fires, the workflow runs and each run counts toward your
-tier's metered allowance.
+Save the workflow. When the trigger fires, the workflow runs and each run counts **once**
+toward your tier's metered allowance — however many steps it has, and whatever they are.
+Its steps take their own plan gates one at a time, and none of them is counted as an
+action run on top.
+
+**Test run** evaluates the **function calls** and nothing else. A step that sends, writes
+or charges is not something to rehearse, so it is left to the run itself; what comes back
+is each call's result and the workflow's return value.
 
 At the top of the **Workflows** tab, `12 workflow runs this month · 5,000 included`
 reports the metered allowance you're spending. When the month's runs reach the limit,
@@ -50,8 +89,9 @@ Each workflow row has a **Runs** button. It opens the run-history table describe
 [Run history](actions-builder.md#run-history) — **Time**, **Trigger**, **Result**,
 **What happened**.
 
-A workflow row reads **Ran** under *What happened*, or the error when it failed, with
-the time it took beneath.
+*What happened* reads what each step did, joined — `saved to Leads · sent email · tagged
+website` — or the error when a step failed. A workflow of function calls alone reads
+**Ran**, with the time it took beneath.
 
 :::note Runs recorded before this shipped are not in the table
 Workflow executions were written in a shape the table did not recognize, so anything
