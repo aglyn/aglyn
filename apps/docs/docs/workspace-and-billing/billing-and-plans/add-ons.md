@@ -112,7 +112,13 @@ add-ons.
 pages, components, emails, campaigns, products and more — rather than only answering
 questions about them. It is bought once for the workspace, on any paid plan, and
 applies to every member who has the permission to generate. On Starter it also
-unlocks the guided AI assist that Pro and up already include.
+unlocks the guided AI assist that Pro and up already include. What each door does is
+under [Aglyn AI](../../ai/overview.md).
+
+- **Everything it builds is a draft.** The add-on cannot publish a page, change a live
+  one or send an email. It writes drafts and unpublished versions, which a person
+  reviews and publishes through the buttons that already exist — see
+  [the draft rule](../../ai/overview.md#drafts-only).
 
 - **One pool, one meter.** The add-on adds a band of **AI credits** to the band your
   plan already includes, every month. There is no second meter: the AI credits meter

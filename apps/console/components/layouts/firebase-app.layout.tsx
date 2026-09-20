@@ -70,8 +70,10 @@ import {
   INTERNAL_TRAFFIC_PARAM,
   INTERNAL_TRAFFIC_VALUE,
   isInternalTrafficSession,
+  beginInternalActorRead,
   readInternalTrafficOverrideForDomain,
   readRememberedInternalActor,
+  settleInternalActorVerdict,
   rememberInternalActor,
 } from '../../utils/internal-traffic'
 import { WORKSPACE_DOMAIN } from '../../constants/workspace-domain'
@@ -431,6 +433,12 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
       | undefined
     if (!account?.getIdTokenResult) return
 
+    // Announce the read (AGL-3194). Only from here — past the guard above —
+    // so a signed-out visitor never marks a verdict pending, and the
+    // advertising tags that deliberately sit outside the auth gate keep
+    // mounting for them exactly as before.
+    beginInternalActorRead()
+
     let active = true
     void Promise.resolve(account.getIdTokenResult())
       .then((result) => {
@@ -441,11 +449,16 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
         // signed-out or rejected paths, which say nothing about who is here.
         rememberInternalActor(isInternalTrafficSession(result?.claims))
         stamp(override || isInternalTrafficSession(result?.claims))
+        // Settled for THIS pageview, so a gate holding for it can proceed.
+        settleInternalActorVerdict(isInternalTrafficSession(result?.claims))
       })
       .catch(() => {
         // Unreadable claims are treated as NOT internal, but the override is
         // knowledge we already have and never loses it.
         if (active) stamp(override)
+        // Settled either way: a gate must not hold on a read that failed, or
+        // a token error would cost us every advertising tag on the page.
+        if (active) settleInternalActorVerdict(false)
       })
     return () => {
       active = false

@@ -29,6 +29,12 @@ import {
   resolvePlatformGtmContainerId,
 } from '@aglyn/aglyn/app-utils/platform-advertising-tags'
 import { VISITOR_CONSENT_CHANGED_EVENT } from '@aglyn/aglyn/app-utils/visitor-consent'
+import {
+  INTERNAL_ACTOR_VERDICT_EVENT,
+  readInternalActorVerdict,
+  readInternalTrafficOverride,
+  readRememberedInternalActor,
+} from '../utils/internal-traffic'
 import Script from 'next/script'
 import { useCallback, useEffect, useState, type ReactElement } from 'react'
 
@@ -106,20 +112,78 @@ export default function PlatformAdvertisingTags({
     setReady(true)
     const sync = () => setRevision((previous) => previous + 1)
     window.addEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
-    return () => window.removeEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
+    // The claims verdict arrives after this has already rendered once
+    // (AGL-3194), and it is the answer that decides whether these tags may
+    // exist at all — so it gets a re-resolve exactly like a consent change.
+    window.addEventListener(INTERNAL_ACTOR_VERDICT_EVENT, sync)
+    return () => {
+      window.removeEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
+      window.removeEventListener(INTERNAL_ACTOR_VERDICT_EVENT, sync)
+    }
   }, [])
 
   // Read FRESH, for the teardown listener inside the shared mount: it fires in
   // the same tick as the record is written, and the verdict computed for the
   // current render is by definition the state before it.
-  const resolve = useCallback(
-    () => resolvePlatformAdvertisingTags(platformAdvertisingAllowed()),
+  // Whether this browser is OURS, by either route (AGL-3191).
+  //
+  // The override alone was not enough, and the reason the module comment gives
+  // for it — "it is the BROWSER, not the account: there is no account to
+  // consult here" — is true of the marketing site and false of this one. The
+  // console is exactly where an account exists, and a staff member signing in
+  // is the commonest way for a session to be ours. Before this, they were
+  // stamped internal in GA4 by their claims (AGL-1582) and still loaded the
+  // Google Ads tags, because those read only the opt-in flag.
+  //
+  // `readRememberedInternalActor` is the claims verdict in the form this can
+  // use: written per origin on every staff or impersonation token read, and
+  // synchronous, so it does not have to wait for a token that resolves after
+  // the tags would otherwise have mounted. It is CLEARED on a customer token,
+  // which is what stops it becoming the sticky flag the override deliberately
+  // is — a customer signing in on the same browser is not ours.
+  //
+  // ⚑ Self-healing rather than immediate: on the very first staff load of a
+  // new origin the memory is not written yet, so that one pageview still
+  // mounts. Every load after it does not.
+  const internalBrowser = useCallback(
+    () =>
+      readInternalTrafficOverride() ||
+      readRememberedInternalActor() ||
+      readInternalActorVerdict().internal,
     [],
   )
 
-  const tags = ready ? resolve() : []
-  const containerId = ready
-    ? resolvePlatformGtmContainerId(platformAnalyticsAllowed())
+  const resolve = useCallback(
+    () =>
+      resolvePlatformAdvertisingTags(
+        platformAdvertisingAllowed(),
+        undefined,
+        undefined,
+        internalBrowser(),
+      ),
+    [internalBrowser],
+  )
+
+  // Held while a token read is in flight (AGL-3194). The memory and the
+  // override can both be empty on the first staff load of an origin, and a
+  // tag mounted before the verdict lands has already sent its hit — sweeping
+  // it afterwards does not un-send it. `pending` is true ONLY when there is a
+  // real read to wait for, so a signed-out visitor is never held and the
+  // `/signin` mount this component is deliberately placed outside the auth
+  // gate for is unchanged.
+  //
+  // Expressed as an empty tag list rather than a suppressed mount, which is
+  // the same structural state an ungranted visitor is in: no `<Script>`, so
+  // no request reaches a vendor.
+  const settled = ready && !readInternalActorVerdict().pending
+  const tags = settled ? resolve() : []
+  const containerId = settled
+    ? resolvePlatformGtmContainerId(
+        platformAnalyticsAllowed(),
+        undefined,
+        undefined,
+        internalBrowser(),
+      )
     : null
 
   return (

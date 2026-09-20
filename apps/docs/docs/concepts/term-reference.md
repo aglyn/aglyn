@@ -36,6 +36,23 @@ The platform these docs cover — the console you build in and the sites you
 publish. Pronounced **AG-lin** — "ag" as in *agriculture*, with the stress on
 the first syllable (IPA `/ˈæɡlɪn/`).
 
+### Aglyn AI
+
+The generative side of the assistant: the doors that build a page, layout,
+page template, reusable component, form, email, campaign, product copy, SEO
+text or theme change from a description. An add-on on any paid plan, carried
+by agreement on Enterprise, and metered in credits. Everything it makes is a
+draft — it never publishes, changes a live page in place or sends anything.
+Currently rolling out. → [Aglyn AI](../ai/overview.md),
+[Add-ons](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai)
+
+### Aglyn Assist
+
+The chat helper in the console, which answers questions about the product
+from this documentation and cites the sections it drew on. Aglyn AI is the
+same assistant when it builds rather than explains.
+→ [Aglyn Assist](../getting-started/aglyn-assist.md)
+
 ### Organization (org)
 
 The account entity: one subscription, one team roster, one plugin
@@ -574,3 +591,21 @@ up to a per-plan maximum. → [Teams & roles](../workspace-and-billing/teams-and
 Consumption billed monthly in arrears (storage, delivery) with a live
 estimate shown before it lands on an invoice.
 → [Billing & plans](../workspace-and-billing/billing-and-plans/overview.md)
+
+### Credit (AI credit)
+
+The unit every AI request is measured in — an assistant answer, a rewrite, a
+generated section, a whole site — drawn from one monthly pool per workspace
+rather than a meter per feature. What a request costs varies with how much
+work it is, and a job estimates itself before you confirm. A plan includes a
+band each month, the Aglyn AI add-on widens it, and a workspace can stop at
+the band or set a ceiling on what it will pay past it.
+→ [Credits and caps](../ai/overview.md#credits-and-caps),
+[AI assist overage](../workspace-and-billing/billing-and-plans/overview.md#assist-overage)
+
+### Allotment
+
+One member's, one site collaborator's or one whole site's monthly share of
+the workspace's AI credits. **Hard** stops AI there; **soft** keeps working
+and notifies. A share of the pool, never an addition to it.
+→ [AI allotments](../ai/ai-allotments.md)

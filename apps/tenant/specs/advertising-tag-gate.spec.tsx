@@ -1194,6 +1194,165 @@ describe('the advertising-tag gate', () => {
  * stub; these cases put a real `<script src=…>` in the document and count what
  * the component adds beside it.
  */
+/**
+ * (i) THE TWO RESOLVERS REFUSE FOR THE SAME REASONS (AGL-3188).
+ *
+ * This file's (h) block asserts the behaviour. This one asserts that the two
+ * implementations of it cannot drift apart again, which is the failure that
+ * actually happened.
+ *
+ * Condition 6 was added to `resolveAdvertisingTags` by AGL-2064 and to nothing
+ * else. `resolveAdvertisingTags` returns early unless the host is the
+ * marketing site, so the console — `app.aglyn.com`, `auth.aglyn.com`, every
+ * workspace subdomain — went through `resolvePlatformAdvertisingTags` and
+ * `resolvePlatformGtmContainerId` and took no internal gate at all for three
+ * weeks, while `docs/ANALYTICS.md` said one opt-in covered both products.
+ *
+ * A behavioural test cannot catch that shape on its own: the clause was
+ * correct everywhere it was asserted, and absent where nobody thought to look.
+ * So this reads the guard clauses out of the SOURCE of all three functions and
+ * requires the shared ones to appear in each, with every difference declared.
+ * A clause added to one surface now fails until it is either added to the
+ * others or written down here as surface-specific, which is the decision
+ * nobody was forced to make in AGL-2064.
+ */
+const GATE_ROOT = resolve(__dirname, '../../..')
+
+/** Guard predicates every advertising gate must refuse on, whatever surface. */
+const SHARED_REFUSALS = [
+  'analyticsMayEmit',
+  'internal',
+  'analyticsEnvironmentForcesInternal',
+] as const
+
+/**
+ * Every function that decides whether an advertising tag may mount, and the
+ * predicates that are legitimately ITS OWN. A reason per entry, because a
+ * bare allowance is how the last one went stale.
+ */
+const ADVERTISING_GATES = [
+  {
+    name: 'resolveAdvertisingTags',
+    file: 'libs/aglyn/src/lib/app-utils/advertising-tags.ts',
+    surfaceOnly: {
+      isPlatformMarketingHost:
+        'the tenant runtime serves customer sites too, and only ours may mount our tags',
+      hostConsentRequired:
+        'a host running its own CMP has no answer of ours to act on',
+      advertisingGrantedByRecord:
+        'a marketing visitor consents per host, and the record is where that lives',
+    },
+  },
+  {
+    name: 'resolvePlatformAdvertisingTags',
+    file: 'libs/aglyn/src/lib/app-utils/platform-advertising-tags.ts',
+    surfaceOnly: {
+      advertisingGranted:
+        'the console has no per-host consent record; the grant arrives as a boolean',
+    },
+  },
+  {
+    name: 'resolvePlatformGtmContainerId',
+    file: 'libs/aglyn/src/lib/app-utils/platform-advertising-tags.ts',
+    surfaceOnly: {
+      analyticsGranted:
+        'a container rides the analytics grant, not the advertising one',
+    },
+  },
+] as const
+
+/** The predicates a function refuses on, read from its guard clauses. */
+function refusalPredicates(file: string, name: string): string[] {
+  const source = readFileSync(resolve(GATE_ROOT, file), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '')
+  const start = source.indexOf(`export function ${name}(`)
+  expect(start).toBeGreaterThan(-1)
+  // Functions in these modules end at a brace in column one.
+  const end = source.indexOf('\n}', start)
+  expect(end).toBeGreaterThan(start)
+  const body = source.slice(start, end)
+  const found = new Set<string>()
+  for (const [, condition] of body.matchAll(/if \(([^)]*(?:\)[^)]*)*?)\)\s*return/g)) {
+    const identifier = condition.trim().match(/^[A-Za-z_$][\w$]*/)
+    if (identifier) found.add(identifier[0])
+  }
+  return [...found]
+}
+
+describe('(i) the two advertising gates cannot drift apart (AGL-3188)', () => {
+  describe.each(ADVERTISING_GATES)('$name', ({ file, name, surfaceOnly }) => {
+    it('refuses on every shared predicate', () => {
+      // The AGL-3188 assertion. `internal` here is the clause the console
+      // lacked while the marketing site had it.
+      const predicates = refusalPredicates(file, name)
+      for (const shared of SHARED_REFUSALS) {
+        expect(predicates).toContain(shared)
+      }
+    })
+
+    it('declares every predicate that is only its own', () => {
+      // The completeness half. A NEW clause on one surface lands here as an
+      // undeclared difference and forces the question AGL-2064 never asked:
+      // does the other gate need it too?
+      const predicates = refusalPredicates(file, name)
+      const extra = predicates
+        .filter((p) => !SHARED_REFUSALS.includes(p as never))
+        .filter((p) => !(p in surfaceOnly))
+      expect(extra).toEqual([])
+    })
+  })
+
+  it('the console gate consults the ACCOUNT as well as the browser (AGL-3191)', () => {
+    /*
+     * Internal traffic reaches the console by two routes, and AGL-3188 wired
+     * only one. `advertising-tags.ts` justifies reading the browser rather
+     * than the account — "there is no account to consult here" — which is
+     * true of the marketing site and false of this one. Carried over
+     * unexamined, it left a staff member stamped `traffic_type: internal` in
+     * GA4 by their claims while still loading the Google Ads tags.
+     *
+     * `readRememberedInternalActor` is that claims verdict in the form a
+     * synchronous gate can use, so the console must pass BOTH.
+     */
+    const component = readFileSync(
+      resolve(GATE_ROOT, 'apps/console/components/advertising-tags.component.tsx'),
+      'utf8',
+    )
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '')
+    // From the component onward, so the IMPORT of a reader cannot satisfy an
+    // assertion about USING it — which is exactly how this test first passed
+    // with the fix reverted.
+    const body = component.slice(
+      component.indexOf('export default function PlatformAdvertisingTags'),
+    )
+    expect(body.length).toBeGreaterThan(0)
+    expect(body).toContain('readInternalTrafficOverride')
+    expect(body).toContain('readRememberedInternalActor')
+    // Both resolvers, not just the vendor one: a container's tags reach an
+    // `AW-` destination too.
+    for (const resolver of [
+      'resolvePlatformAdvertisingTags',
+      'resolvePlatformGtmContainerId',
+    ]) {
+      const call = body.indexOf(`${resolver}(`)
+      expect(call).toBeGreaterThan(-1)
+      // The verdict is threaded in rather than left to the library default,
+      // which cannot see the console's account.
+      expect(body.slice(call, call + 220)).toMatch(/internalBrowser\(\)/)
+    }
+  })
+
+  it('the shared list is not empty, so neither assertion can pass vacuously', () => {
+    expect(SHARED_REFUSALS.length).toBeGreaterThan(0)
+    // And the reader is real: a typo in a function name would make every
+    // `toContain` above fail, not silently skip.
+    expect(refusalPredicates(ADVERTISING_GATES[0].file, ADVERTISING_GATES[0].name).length)
+      .toBeGreaterThan(SHARED_REFUSALS.length)
+  })
+})
+
 describe('a shared library is fetched once, not once per product', () => {
   const ADS_ID = 'AW-18401436785'
   const withAds = {

@@ -112,7 +112,7 @@ that site each month, hard or soft — and a **Site AI allotment** card beneath 
 everyone on the site together. Members with **Manage billing** set both; a collaborator
 who is the site's **Admin** can set the other collaborators' allotments on that site,
 never their own. See
-[AI allotments, usage and model choice](../../marketing-and-automation/ai-assist/ai-allotments.md).
+[AI allotments, usage and model choice](../../ai/ai-allotments.md).
 
 ### What a site collaborator sees
 

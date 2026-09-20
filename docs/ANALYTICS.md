@@ -1439,6 +1439,34 @@ One visit to `?aglyn_internal=1` now genuinely covers both products on every
 surface, and the two cannot drift into a browser that is internal for GA4 and
 external for Ads.
 
+⚑ **And no visit is needed on the console at all (AGL-3191/AGL-3194).** The
+opt-in is the BROWSER route; a staff sign-in is the ACCOUNT route, and the ad
+gate consulted only the first. It now takes either, so signing in is enough —
+the console threads `readInternalTrafficOverride() ||
+readRememberedInternalActor() || readInternalActorVerdict().internal` into
+both platform resolvers.
+
+The third of those is what closes the first-load window. The remembered actor
+can only answer for a browser that already completed a signed-in load on THIS
+origin, so on the first staff load of a new one the tags used to mount before
+the token that would have stopped them resolved — and a tag swept afterwards
+has already sent its hit. The token read now announces itself, and the gate
+holds while a verdict is in flight.
+
+⛔ `pending` is true ONLY while there is a real read to wait for. A signed-out
+visitor never sets it, because `providers.tsx` places these tags outside the
+auth gate deliberately: the advertising grant belongs to a visitor who may
+never sign in, and `/signin` is this surface's most-collected page. Holding
+every mount until auth settled would regress exactly that.
+
+⚠️ The trade, stated: if a token read never settles, the tags never mount.
+That is a lost remarketing signal rather than a leak, which is the right way
+round, but it is real.
+
+Pinning a browser therefore still matters for **logged-out** browsing —
+`aglyn.com`, `/pricing`, the docs — where there is no account to consult at
+all. On the console it is belt-and-braces.
+
 ⚑ **The tell to remember:** GA4 promotes `traffic_type` out of `ep.` into a
 top-level **`tt`** field on `/g/collect`. Grepping a collect URL for
 `ep.traffic_type` finds nothing and reads as a missing stamp. Look for `tt=`.

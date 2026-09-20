@@ -40,6 +40,11 @@ import {
 import { visitorConsentStorageKey } from '@aglyn/aglyn/app-utils/visitor-consent'
 import { act, render } from '@testing-library/react'
 import PlatformAdvertisingTags from '../components/advertising-tags.component'
+import {
+  beginInternalActorRead,
+  resetInternalActorVerdict,
+  settleInternalActorVerdict,
+} from '../utils/internal-traffic'
 
 /**
  * `next/script` is inert in jsdom, so it is replaced — and the replacement has
@@ -470,6 +475,85 @@ describe("the console's advertising-tag gate", () => {
         visitorConsentStorageKey(PLATFORM_CONSENT_SUBJECT),
       )
       expect(JSON.parse(raw ?? 'null')?.advertising).toBe(true)
+    })
+  })
+
+  /*
+   * AGL-3194 — the tags wait for a verdict that is still in flight.
+   *
+   * `readRememberedInternalActor` can only answer for a browser that already
+   * completed a signed-in load on THIS origin. On the first staff load of a
+   * new one it is empty, the override may be too, and the tags used to mount
+   * before the token that would have stopped them resolved. A tag swept
+   * afterwards has already sent its hit.
+   *
+   * The state is module-level, so it is reset on both sides of every case
+   * here: a leaked `pending` would silently empty the tag list of every test
+   * declared after it and read as a passing negative.
+   *
+   * Planted reds, verified: dropping `!readInternalActorVerdict().pending`
+   * from the component reds the held case; dropping the verdict from
+   * `internalBrowser` reds the settled-internal case.
+   */
+  describe('a verdict still in flight holds the tags (AGL-3194)', () => {
+    beforeEach(() => resetInternalActorVerdict())
+    afterEach(() => resetInternalActorVerdict())
+
+    const granted = () =>
+      storePlatformConsent({
+        status: 'accepted',
+        country: 'US',
+        advertising: true,
+      })
+
+    it('mounts nothing while a token read is pending', async () => {
+      granted()
+      beginInternalActorRead()
+      await renderGate()
+      // Not "mounted and suppressed" — no script exists to have fired.
+      expect(vendorScripts('google-ads')).toHaveLength(0)
+      expect(vendorScripts('gtm')).toHaveLength(0)
+    })
+
+    it('still mounts nothing once the verdict says the actor is ours', async () => {
+      granted()
+      beginInternalActorRead()
+      settleInternalActorVerdict(true)
+      await renderGate()
+      expect(vendorScripts('google-ads')).toHaveLength(0)
+      expect(vendorScripts('gtm')).toHaveLength(0)
+    })
+
+    it('mounts once the verdict says the actor is a customer', async () => {
+      granted()
+      beginInternalActorRead()
+      settleInternalActorVerdict(false)
+      await renderGate()
+      // The positive direction off the same fixture, so the two cases above
+      // cannot be passing because the harness mounts nothing at all.
+      expect(vendorScripts('google-ads')).toHaveLength(2)
+      expect(vendorScripts('gtm')).toHaveLength(2)
+    })
+
+    it('never holds a signed-out visitor, whose tags are the point of the mount', async () => {
+      // `providers.tsx` puts this component outside the auth gate on purpose:
+      // `/signin` is the surface's most-collected page and its visitor may
+      // never sign in. Nothing calls `beginInternalActorRead` for them.
+      granted()
+      await renderGate()
+      expect(vendorScripts('google-ads')).toHaveLength(2)
+      expect(vendorScripts('gtm')).toHaveLength(2)
+    })
+
+    it('releases the hold when the verdict lands mid-pageview', async () => {
+      granted()
+      beginInternalActorRead()
+      await renderGate()
+      expect(vendorScripts('google-ads')).toHaveLength(0)
+      await act(async () => {
+        settleInternalActorVerdict(false)
+      })
+      expect(vendorScripts('google-ads')).toHaveLength(2)
     })
   })
 })

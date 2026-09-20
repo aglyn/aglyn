@@ -300,6 +300,10 @@ beforeEach(() => {
   seedStore()
 })
 
+afterEach(() => {
+  jest.restoreAllMocks()
+})
+
 // ---------------------------------------------------------------------------
 // The gate: BOTH the flag and the key
 // ---------------------------------------------------------------------------
@@ -367,6 +371,12 @@ describe('the native gate needs the flag AND the publishable key', () => {
 
 describe('tax, shipping, fee and metadata are identical on both paths', () => {
   it('differs in EXACTLY the four routing keys and nothing else', async () => {
+    // Both paths read the clock for `expires_at`, so two runs that straddle a
+    // second boundary differ by one there and nowhere else. A pinned clock
+    // keeps the comparison below EXACT rather than tolerant: a path that
+    // changed the session TTL still fails it.
+    jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+
     await post()
     const hosted = sessionCall().params
 

@@ -37,6 +37,23 @@ every change.
 
 ![The Aglyn Assist panel header with its help tooltip open, linking to the documentation](/img/getting-started/assist-panel-help-tip.png)
 
+## When it builds instead of answering {#aglyn-ai}
+
+Everything above is the assistant explaining. With AI generation on your plan —
+the [Aglyn AI add-on](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai),
+or the AI credits a Free workspace gets — the same assistant also **builds**:
+whole pages, layouts, page templates, reusable components, forms, designed
+emails, campaigns, product copy, your search titles and descriptions, a change
+to your theme, and a small site from one brief. **AI jobs** in the panel is
+where you watch one work and open what it made.
+
+Everything it builds arrives as a **draft**. It never publishes, never changes a
+live page in place and never sends anything, so a generated page has no address
+on your live site until you publish it yourself.
+
+What each door does, what it costs in credits and who can use it is in
+**[Aglyn AI](../ai/overview.md)**.
+
 ## Answers for beginners and developers
 
 Every answer is written twice over, in one message.

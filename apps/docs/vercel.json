@@ -103,6 +103,36 @@
       "source": "/content-and-data/contacts/automations",
       "destination": "/content-and-data/crm/automations",
       "permanent": true
+    },
+    {
+      "source": "/marketing-and-automation/ai-assist",
+      "destination": "/ai/overview",
+      "permanent": true
+    },
+    {
+      "source": "/marketing-and-automation/ai-assist/overview",
+      "destination": "/ai/overview",
+      "permanent": true
+    },
+    {
+      "source": "/marketing-and-automation/ai-assist/copy-assist",
+      "destination": "/ai/copy-assist",
+      "permanent": true
+    },
+    {
+      "source": "/marketing-and-automation/ai-assist/generate-section",
+      "destination": "/ai/generate-section",
+      "permanent": true
+    },
+    {
+      "source": "/marketing-and-automation/ai-assist/theme-assist",
+      "destination": "/ai/theme-assist",
+      "permanent": true
+    },
+    {
+      "source": "/marketing-and-automation/ai-assist/ai-allotments",
+      "destination": "/ai/ai-allotments",
+      "permanent": true
     }
   ],
   "headers": [

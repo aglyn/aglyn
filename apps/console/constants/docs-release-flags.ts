@@ -214,9 +214,61 @@ export const FLAG_DOC_PAGES: Partial<
   // FLAGS_WITHOUT_DOCS. The AI section's page is ABOUT the feature, so it
   // takes the admonition, whole-file; the theme editor's page names the
   // assistant beside its own controls and discloses the rollout there.
+  //
+  // AGL-2923 gave the feature a whole section, `docs/ai/`, and every page in
+  // it is ABOUT a door this same flag closes — so each one is declared here on
+  // the same terms rather than left to be spotted by a reader, which is how
+  // AGL-1601 was found. `ai-allotments.md` is deliberately NOT here: an
+  // allotment is a share of the AI credit pool, and that pool is spent by the
+  // released assistant whether or not generation is open.
   release_ai_generative: [
     {
-      path: 'docs/marketing-and-automation/ai-assist/theme-assist.md',
+      path: 'docs/ai/overview.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/how-aglyn-ai-builds.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/generate-a-site.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/generate-a-form.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/generate-section.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/copy-assist.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/products-with-ai.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/crm-by-ai.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/automations-with-ai.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/ai/theme-assist.md',
       disclosure: 'admonition',
       checkNoPriceClaim: true,
     },

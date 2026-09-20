@@ -18,6 +18,8 @@
 import { aiModelIdsForProvider, estimateAiBilledUsd, aiCatalogEntry } from './catalog'
 import {
   AiUpstreamError,
+  aiRawOutputOf,
+  aiStoppedAtCeiling,
   aiTokenCount,
   aiToolInputOf,
   type AiMessage,
@@ -253,7 +255,17 @@ async function complete(input: AiProviderRequest): Promise<AiResult> {
   if (stopReason === 'refusal') {
     return { kind: 'refusal', text, usage, estCostUsd, stopReason }
   }
-  return { kind: 'completion', text, toolUse, usage, estCostUsd, stopReason }
+  return {
+    kind: 'completion',
+    text,
+    toolUse,
+    usage,
+    estCostUsd,
+    stopReason,
+    // The blocks as the provider answered them, for a call its ceiling cut
+    // off (AGL-3143): `toolUse` holds only what still parsed out of them.
+    ...(aiStoppedAtCeiling(stopReason) ? { rawOutput: aiRawOutputOf(blocks) } : {}),
+  }
 }
 
 async function stream(input: AiProviderRequest): Promise<AsyncIterable<AiStreamEvent>> {

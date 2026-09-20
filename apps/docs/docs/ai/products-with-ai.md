@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 8
 title: Products with AI
 description: Have Aglyn AI write product copy, write copy for many products or an import, propose a first catalog, and propose categories and discounts, as proposals you review before anything is saved.
 ---
@@ -10,9 +10,10 @@ Aglyn AI can write the copy for your products and help you set up a store. Every
 does is a **proposal**: you review it, and nothing is saved to your catalog until you
 apply it. It never sets a price, and it never publishes a product.
 
-:::info Availability
-Aglyn AI for products is released gradually. This page applies as it reaches your
-workspace.
+:::caution Rolling out
+Aglyn AI is a **release-flagged feature, currently being rolled out** — it is not
+available in every workspace yet. This page says what it does for a catalog, and grows
+with the feature.
 :::
 
 ## Write a product's copy
@@ -119,7 +120,7 @@ all. No price, stock count, order or customer is ever sent.
 
 Products with AI needs the **Generate with AI** permission, a plan that includes commerce,
 and Commerce switched on for the site. Each request uses AI credits. See
-[who can use AI assist](../marketing-and-automation/ai-assist/overview.md#who-can-use-it).
+[who can use AI assist](overview.md#who-can-use-it).
 
 ## Related
 

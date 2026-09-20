@@ -88,7 +88,24 @@ const live = aiEvalLiveAllowed(process.env)
           .map((entry) => `${entry.caseId} (${entry.why})`)
           .join('; ')}`,
       )
+      // The recordings are already on disk by here (AGL-3143), so a brief the
+      // provider refused costs this run only its own answer. What it threw is
+      // named beside the case, so the failure can be read without the console
+      // scrollback, and the suite fails so the run exits non-zero.
+      if (report.failed.length) {
+        console.error(
+          `failed ${report.failed.length}:\n${report.failed
+            .map(
+              (entry) =>
+                `  ${entry.caseId} (${entry.kind}) at ${entry.step}${
+                  entry.requestId ? ` [request ${entry.requestId}]` : ''
+                }: ${entry.error}`,
+            )
+            .join('\n')}`,
+        )
+      }
       expect(report.recorded.length).toBeGreaterThan(0)
+      expect(report.failed).toEqual([])
     },
     30 * 60_000,
   )

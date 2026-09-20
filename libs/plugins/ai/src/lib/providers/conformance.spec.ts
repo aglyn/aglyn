@@ -38,8 +38,11 @@ import { resetPluginServicesForTests } from '@aglyn/aglyn'
 import { anthropicProvider, buildAnthropicRequestBody } from './anthropic'
 import { estimateAiBilledUsd } from './catalog'
 import {
+  AI_RAW_OUTPUT_MAX_CHARS,
   AI_UPSTREAM_FAILURE_COPY,
   AiUpstreamError,
+  aiRawOutputOf,
+  aiStoppedAtCeiling,
   type AiProvider,
   type AiProviderRequest,
   type AiStreamEvent,
@@ -105,6 +108,8 @@ interface Subject {
   assertShape: (body: Record<string, unknown>, stream: boolean) => void
   /** The user turn of a request that carries a picture, as the vendor takes it. */
   pictureTurn: unknown
+  /** That same answer with the vendor's own "stopped at the ceiling" word on it. */
+  atCeiling: (body: unknown) => unknown
 }
 
 /** Four bytes of a JPEG's start, base64: a picture's shape, not a picture. */
@@ -138,6 +143,7 @@ const SUBJECTS: Subject[] = [
       if (stream) expect(body['stream']).toBe(true)
       else expect(body).not.toHaveProperty('stream')
     },
+    atCeiling: (body) => ({ ...(body as Record<string, unknown>), stop_reason: 'max_tokens' }),
   },
   {
     provider: openAiCompatibleProvider,
@@ -175,6 +181,11 @@ const SUBJECTS: Subject[] = [
         expect(body['stream']).toBe(true)
         expect(body['stream_options']).toEqual({ include_usage: true })
       } else expect(body).not.toHaveProperty('stream')
+    },
+    // The endpoint's own word, which the adapter maps onto `max_tokens`.
+    atCeiling: (body) => {
+      const payload = body as { choices: Array<Record<string, unknown>> }
+      return { ...payload, choices: [{ ...payload.choices[0], finish_reason: 'length' }] }
     },
   },
 ]
@@ -295,6 +306,21 @@ describe.each(SUBJECTS)('$prefix adapter conforms to the provider contract', (su
     expect(result.estCostUsd).toBeGreaterThan(0)
   })
 
+  it('keeps what it wrote when the ceiling cut the call off, and keeps nothing when it did not (AGL-3143)', async () => {
+    const served = fixture(`${subject.prefix}-completion`)
+    armFetch(served)
+    expect(await subject.provider.complete(request(subject))).not.toHaveProperty('rawOutput')
+
+    armFetch({ ...served, body: subject.atCeiling(served.body) })
+    const cut = await subject.provider.complete(request(subject))
+    if (cut.kind !== 'completion') throw new Error('unreachable')
+    expect(cut.stopReason).toBe('max_tokens')
+    // The bytes the parsed `toolUse` input is only as much of as still read:
+    // without them a runaway string and a decoding stall look the same.
+    expect(cut.rawOutput).toContain('emit_section')
+    expect(cut.rawOutput).toContain('muiStack')
+  })
+
   it('types a decline as a refusal result, never as an exception, with the tokens it cost', async () => {
     armFetch(fixture(`${subject.prefix}-refusal`))
     const result = await subject.provider.complete(request(subject))
@@ -384,6 +410,28 @@ describe.each(SUBJECTS)('$prefix adapter conforms to the provider contract', (su
     expect(error).toBeInstanceOf(AiUpstreamError)
     expect(error).toMatchObject({ status: 400, retryable: false })
     expect(error.message).not.toMatch(/credit balance|API key|Anthropic|sk-/)
+  })
+})
+
+describe('a call cut off at its ceiling (AGL-3143)', () => {
+  it('reads the contract’s word and a provider’s own for the same stop', () => {
+    expect([aiStoppedAtCeiling('max_tokens'), aiStoppedAtCeiling('length')]).toEqual([true, true])
+    expect([aiStoppedAtCeiling('tool_use'), aiStoppedAtCeiling('end_turn'), aiStoppedAtCeiling(null)]).toEqual([
+      false,
+      false,
+      false,
+    ])
+  })
+
+  it('keeps text as text, serializes anything else, and cuts a runaway one at the bound', () => {
+    expect(aiRawOutputOf('{"steps":[')).toBe('{"steps":[')
+    expect(aiRawOutputOf([{ type: 'tool_use', input: {} }])).toBe('[{"type":"tool_use","input":{}}]')
+    expect(aiRawOutputOf(undefined)).toBe('')
+    // A trace of a runaway string would otherwise be as long as the output
+    // that ran away; the ellipsis says a reader is seeing part of it.
+    const cut = aiRawOutputOf('x'.repeat(AI_RAW_OUTPUT_MAX_CHARS + 500))
+    expect(cut).toHaveLength(AI_RAW_OUTPUT_MAX_CHARS + 1)
+    expect(cut.endsWith('…')).toBe(true)
   })
 })
 

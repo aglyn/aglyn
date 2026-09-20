@@ -48,7 +48,7 @@ automatically when you adjust the theme — or when the visitor's scheme flips. 
 controls from a description — "warmer", "match our brand", "bigger headings on mobile" —
 with a before and after preview. A proposal goes into the editor as unsaved changes, and
 nothing is saved until you save it. See
-[Themes with AI](../../marketing-and-automation/ai-assist/theme-assist.md).
+[Themes with AI](../../ai/theme-assist.md).
 
 ## Tips
 

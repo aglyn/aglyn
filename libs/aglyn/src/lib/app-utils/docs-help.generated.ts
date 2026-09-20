@@ -44,8 +44,8 @@ export const PLUGIN_DOCS = {
   },
   aiAutomations: {
     path: '/ai/automations-with-ai',
-    title: 'Draft and explain automations with AI',
-    excerpt: 'Describe an automation and Aglyn AI drafts it switched off, from only the triggers and steps your plan includes. It can also explain an automation, and why one of its runs failed.',
+    title: 'Explain automations with AI',
+    excerpt: 'Aglyn AI can explain an automation you already have and tell you why one of its runs failed. Drafting an automation from a description is not available yet.',
   },
   aiCrm: {
     path: '/ai/crm-by-ai',
@@ -68,7 +68,7 @@ export const PLUGIN_DOCS = {
     excerpt: 'Have AI write a page\'s or a product\'s search listing, audit every published page with a proposed fix for each finding, and draft your structured data and /llms.txt guidance — as drafts you review and save.',
   },
   aiThemes: {
-    path: '/marketing-and-automation/ai-assist/theme-assist',
+    path: '/ai/theme-assist',
     title: 'Themes with AI',
     excerpt: 'Describe a change to your site\'s theme and get a proposal for the theme editor\'s own controls, previewed before and after, that you save in the editor. Rolling out.',
   },
@@ -258,8 +258,8 @@ export type PluginDocsKey = keyof typeof PLUGIN_DOCS
 
 export const PLUGIN_DOCS_ANCHORS = {
   actionsBuilder: ['#create-an-action', '#recipes', '#describe-it', '#triggers', '#crm-events', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#crm-steps', '#step-conditions', '#sequences', '#run-history', '#what-is-and-isnt-recorded', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
-  aglynAssist: ['#what-it-can-do', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#edits-in-the-besigner', '#where-an-answer-came-from', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
-  aiAutomations: ['#draft', '#what-a-draft-uses', '#placeholders', '#explain', '#why-a-run-failed', '#what-is-sent', '#who-can-use-it', '#related'],
+  aglynAssist: ['#what-it-can-do', '#aglyn-ai', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#edits-in-the-besigner', '#where-an-answer-came-from', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
+  aiAutomations: ['#draft', '#explain', '#why-a-run-failed', '#what-is-sent', '#who-can-use-it', '#related'],
   aiCrm: ['#summarize-a-record', '#summaries-are-reused-until-the-record-changes', '#draft-an-email', '#match-columns', '#what-is-sent', '#who-can-use-it', '#related'],
   aiMonitoring: ['#the-ai-card', '#where-else', '#one-account', '#the-spend-leaderboard', '#alerts', '#related'],
   aiProducts: ['#write-a-products-copy', '#write-copy-for-many-products', '#when-you-import-products', '#propose-a-first-catalog', '#propose-categories-and-discounts', '#what-the-copy-never-says', '#what-is-sent-to-the-ai-provider', '#who-can-use-it', '#related'],

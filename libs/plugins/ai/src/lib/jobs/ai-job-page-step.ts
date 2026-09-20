@@ -214,6 +214,14 @@ export const AI_JOB_PAGE_CREATION_EMPTY_COPY =
   'Part of this page could not be built. Describe the page again.'
 
 /**
+ * What a page refused on its last pass tells the member beside the rules it
+ * broke (AGL-3143). The draft is reported with the review, and mending what
+ * the findings name in it is what lets the next pass finish the job.
+ */
+export const AI_JOB_PAGE_REFUSED_DRAFT_COPY =
+  'The draft is yours to open: mend what these name in it, then try again.'
+
+/**
  * The most passes a page job may take (AGL-3031): every creation the plan
  * limits admit, every section they admit, and the last pass that reports the
  * draft. A creation's step builds it in one pass, and a page one section a
@@ -456,15 +464,35 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         ...context,
         scrollTargetIds: sectionIds,
       })
+      // The facts the brief did not give, on the page or in the defaults its components show (AGL-3056).
+      const note = aiBracketedFactsNote({
+        tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] },
+        inventory,
+      })
+      // The page's own draft, reported once however many times the last pass
+      // runs (AGL-3143): a refused pass reports it and a later one that
+      // passes does not report it twice.
+      const reported = outputs.some((entry) => entry.resource === 'screen' && entry.id === draftId)
+      const reports = reported ? [] : [output(written, report.load, note)]
       if (report.violations.length) {
         // The check mints its own ids; the review names the nodes by the ids the draft stores them under.
         const storedIds = report.tree?.sourceIds ?? {}
         const violations = report.violations.map((violation) =>
           violation.nodeIds ? { ...violation, nodeIds: aiModelNodeIds(violation.nodeIds, storedIds) } : violation,
         )
+        // THE DRAFT TRAVELS WITH THE REFUSAL (AGL-3143). Every other review
+        // parks on a model's answer, so trying again asks the model again and
+        // can come back different. This one reads the STORED page and spends
+        // nothing, so trying again refuses the same page for the same reasons
+        // forever — and a job parked here having reported no output names no
+        // draft at all, which leaves the member nowhere to mend the nodes the
+        // findings name and no way to finish the job from the console. The
+        // draft is reported now instead, and the job still parks: what the
+        // review names is mended in the draft, and the next pass then passes.
         return aiUnspentOutcome(model, {
+          outputs: reports,
           review: aiDoctrineReview({
-            message: aiDoctrineNeedsInputMessage(violations),
+            message: `${aiDoctrineNeedsInputMessage(violations)} ${AI_JOB_PAGE_REFUSED_DRAFT_COPY}`,
             violations,
             answer: { tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page } },
           }),
@@ -507,12 +535,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         }
         await writeAiDraftScreenSeo(firestore, { hostId, id: draftId, seo: values, now })
       }
-      // The facts the brief did not give, on the page or in the defaults its components show (AGL-3056).
-      const note = aiBracketedFactsNote({
-        tree: { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] },
-        inventory,
-      })
-      return { ...spent, outputs: [output(written, report.load, note)] }
+      return { ...spent, outputs: reports }
     }
 
     // ── A section pass ──

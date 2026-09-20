@@ -134,7 +134,7 @@ const PLUGIN_TOPICS = {
   aiProducts: '/ai/products-with-ai',
   aiSeo: '/building-sites/seo/seo-by-ai',
   aiMonitoring: '/staff-console/ai-monitoring',
-  aiThemes: '/marketing-and-automation/ai-assist/theme-assist',
+  aiThemes: '/ai/theme-assist',
   assistSignals: '/staff-console/assist-signals',
   billing: '/workspace-and-billing/billing-and-plans/overview',
   bindings: '/building-sites/bindings/overview',
