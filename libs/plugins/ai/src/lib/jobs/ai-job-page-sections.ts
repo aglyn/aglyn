@@ -315,7 +315,8 @@ function offendingOf(raw: unknown, violations: readonly AiDoctrineViolation[]): 
  * on the page with the section added, and the plan line — every component it
  * names placed as an instance, every form bound by its id (rule 7). Violations
  * name the section's own nodes by the ids the MODEL wrote, and a copy's nodes
- * by the item's.
+ * by the item's; one that names only nodes an earlier pass stored belongs to
+ * the page rather than to this answer, and is left to the last pass (AGL-3078).
  */
 export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGenerationCheck<AiPageSection> {
   const sectionId = input.sectionIds[input.index]
@@ -422,16 +423,24 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
     // palette validator cut is already cut, so the cut is read from the
     // section's own validation, first (AGL-3076). Copies of one item name one
     // node the model wrote, once.
+    //
+    // A PASS ANSWERS ONLY FOR THE SECTION IT WROTE (AGL-3078). The page check
+    // reads the whole page, so it also names nodes an earlier pass stored; the
+    // model is not shown those and cannot mend them, so a finding that names
+    // none of this section's nodes is not held against this answer. Dropping
+    // it neither hides nor forgives it: the last pass runs the same check on
+    // the finished page, where every node is the page's and the review names
+    // each one and outlines it. Kept, such a finding would re-ask the model
+    // for a node it never saw, refuse the same answer twice, and stop the page
+    // with findings whose ids all filtered away — no node ids, and so no
+    // outline either.
     const violations: AiDoctrineViolation[] = [
       ...detectCutLines(validated.repairs, drawnNodes, written),
-      ...report.violations.map((violation) =>
-        violation.nodeIds
-          ? {
-              ...violation,
-              nodeIds: [...new Set(violation.nodeIds.map(toModel).filter((id): id is string => id !== null))],
-            }
-          : violation,
-      ),
+      ...report.violations.flatMap((violation) => {
+        if (!violation.nodeIds?.length) return [violation]
+        const named = [...new Set(violation.nodeIds.map(toModel).filter((id): id is string => id !== null))]
+        return named.length ? [{ ...violation, nodeIds: named }] : []
+      }),
     ]
 
     const placed = new Set<string>()
