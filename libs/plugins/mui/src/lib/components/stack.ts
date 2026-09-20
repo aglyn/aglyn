@@ -56,10 +56,13 @@ type StackWithFlexProps = Omit<StackProps, 'divider'> & {
   flexWrap?: CSSProperties['flexWrap']
   /** Divider STYLE name, not a node — see {@link DIVIDER_STYLES}. */
   divider?: StackDivider | string
-  /** Repeatable marker (AGL-103); consumed at compose time, not by MUI. */
+  /**
+   * A repeat's directives (AGL-103, AGL-181). The published page's
+   * composition consumes them before anything renders; a surface that renders
+   * the stored node as written, like a component editor, still hands them over.
+   */
   repeatDataset?: string
   repeatLimit?: number | string
-  /** Query config (AGL-181); compose-time, not rendered. */
   repeatFilter?: string
   repeatSort?: string
 }
@@ -235,38 +238,8 @@ export const schema: Aglyn.ComponentSchema = {
         { value: 'dashed', label: 'Dashed' },
       ],
     },
-    {
-      name: 'repeatDataset',
-      label: 'Repeat over dataset',
-      description:
-        'The children act as an item template rendered once per record ' +
-        'on the published site; use {{item.field}} inside them for record ' +
-        'values. Stored by dataset id — renames never break the repeat.',
-      component: Aglyn.FieldComponentType.DATASET_SELECT,
-    },
-    {
-      name: 'repeatLimit',
-      label: 'Repeat limit',
-      description: 'Maximum records rendered (blank = all, capped at 100).',
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
-      type: 'number',
-    },
-    {
-      name: 'repeatFilter',
-      label: 'Repeat filter',
-      description:
-        'Optional "field op value" filter, e.g. "price <= 20", ' +
-        '"tier == plus", or "tags contains red". Ops: == != > >= < <= ' +
-        'contains. Applies to the first 100 records.',
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
-    },
-    {
-      name: 'repeatSort',
-      label: 'Repeat sort',
-      description:
-        'Optional "field" or "field desc" ordering, e.g. "price desc".',
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
-    },
+    // No Repeat fields: every element's Attributes panel draws the same Repeat
+    // section (AGL-3111), writing the props a Stack has always stored.
   ],
 }
 

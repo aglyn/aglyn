@@ -23,6 +23,7 @@ import { doc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 import BesignerMediaAssetFactsProvider from './besigner-media-asset-facts-provider.component'
+import BesignerRepeatRowsProvider from './besigner-repeat-rows-provider.component'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface BesignerMediaPickerProviderProps {
@@ -96,7 +97,13 @@ export function BesignerMediaPickerProvider(
           mounts this provider with its site, and the designer's media reads
           already come from it. */}
       <BesignerMediaAssetFactsProvider hostId={hostId}>
-        {children}
+        {/* A repeating element draws its copies from the real rows
+            (AGL-3111). Mounted beside the DAM reader, for the same reason:
+            every besigner surface mounts this provider with its site, and
+            the designer must not read Firestore itself. */}
+        <BesignerRepeatRowsProvider hostId={hostId}>
+          {children}
+        </BesignerRepeatRowsProvider>
       </BesignerMediaAssetFactsProvider>
       <MediaPickerDialog
         hostId={hostId}

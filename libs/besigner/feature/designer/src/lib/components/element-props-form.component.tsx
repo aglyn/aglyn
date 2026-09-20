@@ -74,6 +74,18 @@ import {
   subscribeKnownPluginInstalls,
   unresolvedScreenOption,
 } from '@aglyn/aglyn'
+// By path, not the `@aglyn/aglyn` barrel: a repeat's bounds and the sources
+// an editor offers are editor business, and a published page must not pull
+// either in behind them.
+import {
+  REPEAT_MAX_RECORDS,
+  REPEAT_SELF_PROP,
+  repeatScope,
+} from '@aglyn/aglyn/app-utils/expand-repeatables'
+import {
+  type RepeatSource,
+  repeatSourceOf,
+} from '@aglyn/aglyn/app-utils/repeat-sources'
 import { useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
 import {
   FormRenderer,
@@ -153,6 +165,7 @@ import { buildStyleThemeScales } from '../utils/theme-scale-options'
 import { numericTextValue } from '../utils/numeric-text-value'
 import ElementInfoDetails from './element-info-details.component'
 import useInsertTokenOptions from '../hooks/use-insert-token-options'
+import useRepeatSources from '../hooks/use-repeat-sources'
 import {
   InteractionsContext,
   nodeElementSelector,
@@ -1475,6 +1488,140 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
 }
 
 /**
+ * The Repeat fields every element gets (AGL-3111).
+ *
+ * Repeating used to be one component's feature: only the MUI Stack declared
+ * `repeatDataset`, so a card, an image or a placed component could not be
+ * data-driven at all. It is a node capability now, offered here the way
+ * visibility and animation are — and on a component instance too, which is the
+ * shape most authors reach for first.
+ *
+ * WHAT an element repeats over is not decided here. Each registered
+ * {@link RepeatSource} contributes its own key field under its own prop name,
+ * and the plugin that owns the rows registers it; this list names no kind of
+ * data. With nothing registered there is no Repeat section at all, which is
+ * correct rather than degraded: an editor with no source has nothing to repeat
+ * over.
+ *
+ * The bounds below are shared by every source, because they are properties of
+ * the REPEAT and not of the rows: the composition applies the same filter,
+ * sort and limit whatever answered with the records.
+ *
+ * `hasChildren` decides whether the scope field is offered at all. An element
+ * with nothing inside it has only one possible reading — it repeats itself —
+ * and a control whose two options do the same thing is worse than no control.
+ */
+export function buildRepeatFields(options: {
+  sources: readonly RepeatSource[]
+  /** Whether the edited node holds a child list, which the scope field needs. */
+  hasChildren: boolean
+  /** Finishes a key field that names an entity picker, as an attribute is. */
+  resolveKeyField: (
+    field: Record<string, unknown>,
+  ) => Record<string, unknown>
+}): Array<Record<string, unknown>> {
+  const { sources, hasChildren, resolveKeyField } = options
+  if (!sources.length) return []
+  const help = (label: string, description: string, anchor?: string) => ({
+    label,
+    description,
+    // Same tooltip treatment the schema attributes get (AGL-600); these
+    // fields never reach the `withAttributeHelp` map above. The docs link is
+    // the one thing a tooltip cannot carry: which scope to pick and what the
+    // hundred-record ceiling means are a page, not a sentence.
+    help: {
+      title: label,
+      excerpt: description,
+      href: besignerDocsUrl('repeat', anchor as never),
+    },
+  })
+  /**
+   * True while the element repeats over ANYTHING. One rule per source, ORed,
+   * so a second source added later widens it without touching the fields the
+   * bounds are on.
+   */
+  const repeating =
+    sources.length === 1
+      ? { when: sources[0].keyProp, isNotEmpty: true }
+      : {
+          or: sources.map((source) => ({
+            when: source.keyProp,
+            isNotEmpty: true,
+          })),
+        }
+  return [
+    ...sources.map((source) =>
+      resolveKeyField({
+        ...source.keyAttribute,
+        name: source.keyProp,
+        help: {
+          title: source.keyAttribute.label ?? source.label,
+          excerpt: source.keyAttribute.description ?? '',
+          href: besignerDocsUrl('repeat'),
+        },
+      } as Record<string, unknown>),
+    ),
+    ...(hasChildren
+      ? [
+          {
+            name: REPEAT_SELF_PROP,
+            ...help(
+              'Repeat',
+              'Whether each record gets a copy of this element, or a copy ' +
+                'of what is inside it. A row of cards repeats the card; a ' +
+                'list that IS the row repeats its contents.',
+              '#what-repeats-the-element-or-whats-inside-it',
+            ),
+            component: FieldComponentType.SELECT,
+            condition: repeating,
+            // A real value on the default option, never `''` (AGL-1451):
+            // an empty value cannot persist, so an author who switched to
+            // "This element" could never switch back.
+            initialValue: 'false',
+            options: [
+              { value: 'false', label: 'What is inside this element' },
+              { value: 'true', label: 'This element' },
+            ],
+          },
+        ]
+      : []),
+    {
+      name: 'repeatLimit',
+      ...help(
+        'Repeat limit',
+        `Most records to render (blank = all, capped at ${REPEAT_MAX_RECORDS}).`,
+        '#the-hundred-record-ceiling',
+      ),
+      component: FieldComponentType.TEXT_FIELD,
+      type: 'number',
+      condition: repeating,
+    },
+    {
+      name: 'repeatFilter',
+      ...help(
+        'Repeat filter',
+        'Optional "field op value" filter, e.g. "price <= 20", ' +
+          '"tier == plus", or "tags contains red". Ops: == != > >= < <= ' +
+          `contains. Applies to the first ${REPEAT_MAX_RECORDS} records.`,
+        '#bound-what-renders',
+      ),
+      component: FieldComponentType.TEXT_FIELD,
+      condition: repeating,
+    },
+    {
+      name: 'repeatSort',
+      ...help(
+        'Repeat sort',
+        'Optional "field" or "field desc" ordering, e.g. "price desc".',
+        '#bound-what-renders',
+      ),
+      component: FieldComponentType.TEXT_FIELD,
+      condition: repeating,
+    },
+  ]
+}
+
+/**
  * The list each entity picker DISPLAYS, keyed by the attribute type a
  * component schema declares.
  *
@@ -1685,9 +1832,27 @@ export function buildEntityPickerField<
   const selected = entitySelectionOption(context, kind, value)
   const notice = entityPickerBrowseNotice(kind, context)
   const search = context?.search
+  const request = context?.request
   return {
     ...field,
     component: FieldComponentType.SELECT,
+    /*
+     * Opening the dropdown asks for the list (AGL-703, AGL-3111).
+     *
+     * The demand used to come only from the selected node's SCHEMA, which
+     * worked while a picker was something a component declared. Repeat is
+     * offered on every element now, so a schema-driven demand would read the
+     * dataset list the moment any element was selected — the read AGL-703
+     * removed, back again under a different name.
+     *
+     * Asking here instead is the same signal at its narrowest: an author who
+     * opens the picker is the author who wants the list. `request` is
+     * idempotent, so an already-demanded kind costs nothing, and the schema
+     * demand below still runs for the pickers a component declares — a field
+     * an author expects to arrive populated should not have to be opened
+     * twice.
+     */
+    ...(request ? { onOpen: () => request(kind) } : {}),
     // The dropdown's input is read-only without this, so a list of any size
     // could only be scrolled. Narrowing 25 rows by typing is the cheapest
     // half of reaching past them.
@@ -1850,6 +2015,25 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         if (id) resolveEntity(kind, id)
       }
     }, [demandAttributes, nodeProps, entityOptions, resolveEntity])
+    /**
+     * The same keyed read for the entity a REPEAT already names (AGL-3111).
+     *
+     * Its picker is not in `demandAttributes` — Repeat is offered on every
+     * element, so a schema-shaped demand there would read a whole list for
+     * every selection. This asks for the one document instead, and only for a
+     * node that already repeats, so an existing repeat opens showing its
+     * dataset's name rather than a bare id.
+     */
+    const repeatSources = useRepeatSources()
+    useEffect(() => {
+      if (!resolveEntity) return
+      const repeat = repeatSourceOf({ props: nodeProps })
+      const kind = repeat && ENTITY_PICKER_KINDS[repeat.source.keyAttribute
+        .component as Aglyn.FieldComponentType]
+      if (!kind) return
+      const id = entityValueNeedsResolution(entityOptions, kind, repeat?.key)
+      if (id) resolveEntity(kind, id)
+    }, [repeatSources, nodeProps, entityOptions, resolveEntity])
 
     // Canvas-node options for NODE_SELECT attributes (AGL-557): every
     // other element on the canvas, labeled by component name + a text
@@ -2116,6 +2300,55 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     // per render; unlike the visibility directives it is offered everywhere.
     const animationFields = useMemo(() => buildAnimationFields(), [])
 
+    /**
+     * Repeat (AGL-3111), offered on every element and every instance — the
+     * whole point of the capability — from whatever sources the loaded plugins
+     * registered. Nothing registered, no section.
+     *
+     * The key field is finished by the same resolver the schema attributes go
+     * through, so a source that names an entity picker gets the real picker
+     * with its options, its search and its stored value resolved.
+     */
+    const repeatFields = useMemo(
+      () =>
+        buildRepeatFields({
+          sources: repeatSources,
+          hasChildren: Boolean((node?.nodes as unknown[] | undefined)?.length),
+          resolveKeyField: (field) =>
+            resolveAttributeField(field as never, resolveContext),
+        }),
+      [repeatSources, node?.nodes, resolveContext],
+    )
+
+    /**
+     * What this element's repeat does, in words, or nothing when it does not
+     * repeat (AGL-168, AGL-3111).
+     *
+     * Named through {@link repeatSourceOf} rather than by reading a prop, so
+     * the sentence follows whatever source the author picked and core stays
+     * free of the word "dataset".
+     */
+    const repeatNotice = useMemo(() => {
+      const repeat = repeatSourceOf({ props: nodeProps })
+      if (!repeat) return ''
+      // The key as an author knows it, when the source's control is a picker
+      // that can name it. A source drawn with anything else — and a picker
+      // whose list has not answered — is named by the stored key itself.
+      const kind =
+        ENTITY_PICKER_KINDS[
+          repeat.source.keyAttribute.component as Aglyn.FieldComponentType
+        ]
+      const label =
+        (kind
+          ? entitySelectionOption(entityOptions, kind, repeat.key)?.label
+          : undefined) ?? repeat.key
+      return repeatScope({ props: nodeProps, nodes: node?.nodes }) === 'self'
+        ? `This element renders once per record of ${repeat.source.label.toLowerCase()} "${label}" on the live site.`
+        : `What is inside this element renders once per record of ${repeat.source.label.toLowerCase()} "${label}" on the live site.`
+      // `repeatSources` keys it: a source registering later changes the answer.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [nodeProps, node?.nodes, entityOptions, repeatSources])
+
     const formFieldSchema = useMemo(
       () =>
         [
@@ -2123,8 +2356,15 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           ...instancePropFields,
           ...visibilityFields,
           ...animationFields,
+          ...repeatFields,
         ].map(withNumericValueParse),
-      [attributes, instancePropFields, visibilityFields, animationFields],
+      [
+        attributes,
+        instancePropFields,
+        visibilityFields,
+        animationFields,
+        repeatFields,
+      ],
     )
 
     // Image-typed declared props get the same library browse button the
@@ -2680,14 +2920,14 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     declared attribute put them under the fold on anything
                     with more than a handful. See
                     `element-interactions-form.component.tsx`. */}
-                {(node?.props as any)?.repeatDataset ? (
+                {repeatNotice ? (
                   <FormControl margin="none" fullWidth>
-                    {/* Repeat badge (AGL-168): make dataset-driven
-                        duplication visible where props are edited. */}
+                    {/* What this element's repeat DOES, in the panel where it
+                        was set (AGL-168, AGL-3111). The canvas carries the
+                        badge; this says which of the two scopes applies,
+                        which the canvas cannot show without naming it. */}
                     <Alert severity="info" sx={{ mt: 2 }}>
-                      {'Repeats over dataset "' +
-                        String((node?.props as any).repeatDataset) +
-                        '" — children render once per record on the live site.'}
+                      {repeatNotice}
                     </Alert>
                   </FormControl>
                 ) : null}
