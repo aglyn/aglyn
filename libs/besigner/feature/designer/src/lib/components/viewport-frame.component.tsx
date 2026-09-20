@@ -123,12 +123,36 @@ const FramePaper = styled('div', {
 })
 FramePaper.displayName = 'FramePaper'
 
+/**
+ * What `CssBaseline` gives a published page and a closed shadow root never
+ * inherits (AGL-3146).
+ *
+ * `:host { all: initial }` cuts inheritance at the artboard, so the canvas
+ * carries the document baseline itself — `FramePaper` takes the body's
+ * typography, color and background, and the structural half belongs here,
+ * because `box-sizing` is inherited from the root element rather than set on
+ * each one. Without it every element on the canvas is `content-box` while the
+ * same element on the site is `border-box`, so a band that sets a height AND
+ * padding measures the padding twice in the editor and once on the page.
+ *
+ * The same pair CssBaseline emits, for the same reason: declared on the host
+ * and inherited by everything under it, so an author's own `box-sizing` still
+ * wins wherever they set one.
+ */
+export const VIEWPORT_BASELINE_STYLES = {
+  ':host': {
+    all: 'initial',
+    boxSizing: 'border-box',
+  },
+  '*, *::before, *::after': {
+    boxSizing: 'inherit',
+  },
+} as const
+
 const ViewportGlobalStyles = (
   <GlobalStyles
     styles={{
-      ':host': {
-        all: 'initial',
-      },
+      ...VIEWPORT_BASELINE_STYLES,
       // Canvas-sense for aglyn-hidden elements (AGL-592): start closed
       // like the live site, and stay closed unless the leaf itself is
       // flagged as revealed. `node-leaf` decides that from the reveal
