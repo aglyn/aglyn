@@ -393,9 +393,17 @@ describe('the block the model reads for the reported document', () => {
     // meaning to moves it UP and is red here. For this document the outline
     // before AGL-3114 was 2,412 characters with the link selected and 796
     // with nothing selected; describing the whole cap in full was 9,768.
+    //
+    // Up 155 characters at AGL-3156, meant: the node capabilities are named
+    // here, once for every element, because this is the only door an author
+    // can use them from — a repeat's bounds need a node that already repeats.
+    // This block is the volatile turn rather than a cached prefix, so the 39
+    // tokens are paid on an edit the author asked for and on nothing else;
+    // the surface catalogs, which every pass of every generation job carries,
+    // are deliberately unchanged.
     expect({ selected: measure(LINK), nothingSelected: measure(null) }).toEqual({
-      selected: { chars: 3_870, tokens: 968 },
-      nothingSelected: { chars: 1_533, tokens: 383 },
+      selected: { chars: 4_025, tokens: 1_006 },
+      nothingSelected: { chars: 1_688, tokens: 422 },
     })
   })
 })

@@ -18,11 +18,13 @@
 import {
   AI_TEXT_LIMITS,
   isHeadlineVariant,
+  nodeCapabilityProps,
   type AiPaletteEntry,
   type AiPropSchema,
   type AiSurface,
 } from './ai-palette'
 import {
+  AI_NODE_CAPABILITIES,
   AI_PALETTE,
   AI_SURFACES,
   AI_SX_TOKENS,
@@ -552,15 +554,51 @@ function sanitizeString(
   return value
 }
 
+/**
+ * The element's own declarations plus the node capabilities every element
+ * carries (AGL-3156) — repeating, today. Two shapes only, so they are built
+ * once each rather than per node: a capability prop is the same on every
+ * element with the same child contract.
+ *
+ * The element wins a name collision. A component that declared a prop of its
+ * own under a capability's name would be describing its own attribute, and the
+ * validator has to hold it to that.
+ */
+const CAPABLE_ENTRIES = new WeakMap<AiPaletteEntry, AiPaletteEntry>()
+
+function withNodeCapabilities(entry: AiPaletteEntry): AiPaletteEntry {
+  const cached = CAPABLE_ENTRIES.get(entry)
+  if (cached) return cached
+  const capability = nodeCapabilityProps(
+    AI_NODE_CAPABILITIES,
+    entry.acceptsChildren,
+  )
+  const merged: AiPaletteEntry = {
+    ...entry,
+    propsSchema: {
+      ...entry.propsSchema,
+      properties: {
+        ...capability.properties,
+        ...entry.propsSchema.properties,
+      },
+    },
+    propRoles: { ...capability.propRoles, ...entry.propRoles },
+    textLimits: { ...capability.textLimits, ...entry.textLimits },
+  }
+  CAPABLE_ENTRIES.set(entry, merged)
+  return merged
+}
+
 function sanitizeProps(
   nodeId: string,
-  entry: AiPaletteEntry,
+  paletteEntry: AiPaletteEntry,
   raw: unknown,
   screenIds: Set<string> | null,
   assetIds: Set<string> | null,
   repairs: string[],
   bindingTokens: ReadonlySet<string> | null = null,
 ): { props: Record<string, unknown> } | { missing: string } {
+  const entry = withNodeCapabilities(paletteEntry)
   const source = isRecord(raw) ? raw : {}
   const props: Record<string, unknown> = {}
   const declared = entry.propsSchema.properties

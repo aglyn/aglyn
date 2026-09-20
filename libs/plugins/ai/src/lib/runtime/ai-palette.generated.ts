@@ -21,6 +21,7 @@
  * `npm run check:ai-palette` fails CI when this file is stale.
  */
 import type {
+  AiNodeCapability,
   AiPaletteEntry,
   AiSurface,
   AiSurfaceDefinition,
@@ -4347,6 +4348,56 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
       emptyText: 200,
     },
     presets: ['Wishlist'],
+  },
+}
+
+/** What every node can do, whatever its componentId. */
+export const AI_NODE_CAPABILITIES: Record<string, AiNodeCapability> = {
+  repeat: {
+    id: 'repeat',
+    displayName: 'Repeat',
+    summary: 'Renders an element once per record of the data it repeats over.',
+    propsSchema: {
+      type: 'object',
+      properties: {
+        repeatSelf: {
+          type: 'string',
+          enum: ['false', 'true'],
+        },
+        repeatLimit: {
+          type: 'string',
+          maxLength: 200,
+        },
+        repeatFilter: {
+          type: 'string',
+          maxLength: 200,
+        },
+        repeatSort: {
+          type: 'string',
+          maxLength: 200,
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    propRoles: {
+      repeatLimit: 'text',
+      repeatFilter: 'text',
+      repeatSort: 'text',
+    },
+    propFields: {
+      repeatSelf: 'select',
+      repeatLimit: 'text-field',
+      repeatFilter: 'text-field',
+      repeatSort: 'text-field',
+    },
+    textLimits: {
+      repeatLimit: 200,
+      repeatFilter: 200,
+      repeatSort: 200,
+    },
+    childrenOnlyProps: ['repeatSelf'],
+    omittedProps: [],
   },
 }
 

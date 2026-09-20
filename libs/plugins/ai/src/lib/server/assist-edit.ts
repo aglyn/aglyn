@@ -53,8 +53,12 @@ import {
   validateAiNodePatch,
   validateAiNodeTree,
 } from '../runtime/ai-node-tree'
-import type { AiPaletteEntry } from '../runtime/ai-palette'
-import { AI_PALETTE, AI_SX_TOKENS } from '../runtime/ai-palette.generated'
+import type { AiNodeCapability, AiPaletteEntry } from '../runtime/ai-palette'
+import {
+  AI_NODE_CAPABILITIES,
+  AI_PALETTE,
+  AI_SX_TOKENS,
+} from '../runtime/ai-palette.generated'
 
 /**
  * The chat door's edit rung, server half (AGL-2906): what the model is told
@@ -547,8 +551,53 @@ export function editSelectionBlock(context: AssistEditCanvasContext): string {
   if (shapes.length) {
     lines.push('Settings each of these elements accepts:')
     lines.push(...shapes)
+    lines.push(...capabilityShapes(context.nodes))
   }
   return lines.join('\n')
+}
+
+/**
+ * The node capabilities, named once for every element rather than repeated
+ * under each (AGL-3156).
+ *
+ * This is where they are worth their tokens. A repeat's bounds only mean
+ * something on a node that already repeats, and what it repeats over is picked
+ * from the datasets the site holds — no model writes that key — so a generator
+ * composing a page from nothing could never use them. An author editing an
+ * element that already repeats can: "show only the first six", "sort these by
+ * price" are edits to a node in front of them, and without this the model has
+ * no name for the setting they are asking about.
+ *
+ * Listed only while a described element could carry one, so a canvas of plain
+ * leaves pays nothing for the scope prop it cannot use.
+ */
+function capabilityShapes(nodes: readonly AssistEditCanvasNode[]): string[] {
+  const holdsChildren = nodes.some(
+    (node) => AI_PALETTE[node.componentId]?.acceptsChildren === true,
+  )
+  const named: string[] = []
+  for (const capability of Object.values(AI_NODE_CAPABILITIES)) {
+    const shapes = Object.keys(capability.propsSchema.properties)
+      .filter(
+        (name) => holdsChildren || !capability.childrenOnlyProps.includes(name),
+      )
+      .map((name) => `${name} (${describeCapabilityShape(capability, name)})`)
+    if (shapes.length) named.push(`- ${capability.id}: ${shapes.join(', ')}`)
+  }
+  return named.length
+    ? ['Settings ANY element accepts, whatever it is:', ...named]
+    : []
+}
+
+function describeCapabilityShape(
+  capability: AiNodeCapability,
+  name: string,
+): string {
+  const schema = capability.propsSchema.properties[name]
+  if (schema.enum?.length) return schema.enum.join('|')
+  if (capability.propRoles[name] === 'text')
+    return `text ≤${capability.textLimits[name] ?? schema.maxLength ?? ''}`
+  return schema.type ?? 'text'
 }
 
 /* ------------------------------------------------------------------ *

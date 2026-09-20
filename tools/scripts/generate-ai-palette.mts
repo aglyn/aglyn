@@ -16,9 +16,9 @@
  */
 
 /**
- * Generates the element palette a model composes from (AGL-2905). Source of
- * truth: the component bundles every plugin registers. Emits one GENERATED
- * file:
+ * Generates the element palette a model composes from (AGL-2905). Sources of
+ * truth: the component bundles every plugin registers, and the node-level
+ * capabilities core declares. Emits one GENERATED file:
  *
  *   libs/plugins/ai/src/lib/runtime/ai-palette.generated.ts
  *
@@ -28,7 +28,15 @@
  * one leaves it. From each schema it derives a JSON-Schema-shaped prop
  * declaration (the attribute fields, their option lists and validators), the
  * child and parent restrictions the besigner enforces, and a compact catalog
- * line for the system prompt. Re-run after editing a plugin bundle:
+ * line for the system prompt.
+ *
+ * Component schemas are not the whole palette (AGL-3156). What every NODE can
+ * do belongs to no component, so `NODE_CAPABILITIES` is read beside them and
+ * merged in — once for the whole palette rather than onto each element. A
+ * capability read only out of component schemas is a capability that vanishes
+ * the moment it stops being one component's feature, which is exactly how
+ * repeat left the palette without reddening a thing. Re-run after editing a
+ * plugin bundle or a node capability:
  *
  *   node tools/scripts/generate-ai-palette.mts          (write the file)
  *   node tools/scripts/generate-ai-palette.mts --check  (fail if stale; CI)
@@ -432,6 +440,62 @@ function catalogProps(entry: Dict, max = 5): string {
     .join(', ')
 }
 
+/**
+ * A capability every node has, as the palette carries it: the props a model
+ * may write on ANY element, declared once.
+ *
+ * `omitted` names the declared attributes the palette does not offer — a
+ * picker that chooses a record the site holds, which a model cannot name from
+ * a description. Recorded rather than dropped silently, so a reader can tell a
+ * field left off on purpose from one that went missing.
+ */
+function declareCapability(capability: Dict, textLimits: Dict): Dict {
+  const propsSchema: Dict = {
+    type: 'object',
+    properties: {},
+    required: [],
+    additionalProperties: false,
+  }
+  const propRoles: Dict = {}
+  const propFields: Dict = {}
+  const capabilityTextLimits: Dict = {}
+  const childrenOnlyProps: string[] = []
+  const omittedProps: string[] = []
+  for (const attribute of flattenAttributes(capability.attributes)) {
+    const declared = declareProp(String(capability.id), attribute, textLimits)
+    if (!declared) {
+      omittedProps.push(attribute.name)
+      continue
+    }
+    propsSchema.properties[attribute.name] = declared.schema
+    if (declared.required) propsSchema.required.push(attribute.name)
+    if (declared.role) propRoles[attribute.name] = declared.role
+    propFields[attribute.name] = String(attribute.component)
+    if (declared.textLimit !== undefined)
+      capabilityTextLimits[attribute.name] = declared.textLimit
+    if (attribute.requiresChildren === true)
+      childrenOnlyProps.push(attribute.name)
+  }
+  if (!Object.keys(propsSchema.properties).length) {
+    throw new Error(
+      `Node capability "${capability.id}" reaches the palette with no prop a ` +
+        'model can write. A capability the palette advertises on nothing is ' +
+        'the regression AGL-3156 is about: fix the declaration, or delete it.',
+    )
+  }
+  return {
+    id: String(capability.id),
+    displayName: String(capability.label ?? capability.id),
+    summary: firstSentence(capability.summary),
+    propsSchema,
+    propRoles,
+    propFields,
+    textLimits: capabilityTextLimits,
+    childrenOnlyProps,
+    omittedProps,
+  }
+}
+
 function buildCatalog(
   surface: string,
   definition: { root: string; allow: readonly string[] },
@@ -465,6 +529,9 @@ async function main(): Promise<void> {
   )
   const { AI_TEXT_LIMITS } = await load(
     'libs/plugins/ai/src/lib/runtime/ai-palette.ts',
+  )
+  const { NODE_CAPABILITIES } = await load(
+    'libs/aglyn/src/lib/app-utils/node-capabilities.ts',
   )
   const {
     MARKETPLACE_COMPONENT_ID_ALLOWLIST,
@@ -588,6 +655,32 @@ async function main(): Promise<void> {
     ),
   }
 
+  /**
+   * What any node can do, read from core rather than from a schema (AGL-3156).
+   * Declared once for the whole palette: a capability is not one element's
+   * prop, and copying it onto every entry would be the shape that lost it.
+   */
+  const capabilities: Record<string, Dict> = {}
+  for (const capability of NODE_CAPABILITIES as Dict[]) {
+    const id = String(capability.id)
+    if (capabilities[id])
+      throw new Error(`Node capability "${id}" is declared twice`)
+    capabilities[id] = declareCapability(capability, AI_TEXT_LIMITS)
+  }
+
+  /**
+   * The surface catalogs stay what they were: every element a model may place,
+   * and the props it may set while placing one. Node capabilities are NOT
+   * listed here, and the omission is measured rather than an oversight. A
+   * repeat's bounds only mean anything on a node that already repeats, and
+   * what it repeats over is chosen with a picker no model can write — so a
+   * generator composing a document from nothing could never use them, while a
+   * line naming them would ride in the cached prefix of every pass of every
+   * job. Priced: 72 tokens a pass, which is two credits on the Free page the
+   * wall is proven with, and that wall keeps two. The place they ARE named is
+   * the assist editor's canvas context, where the element already exists and
+   * the author is asking about it.
+   */
   const catalog: Record<string, string> = {}
   for (const [surface, definition] of Object.entries(surfaces)) {
     catalog[surface] = buildCatalog(surface, definition, palette, blocks)
@@ -608,6 +701,7 @@ async function main(): Promise<void> {
     ` * \`npm run check:ai-palette\` fails CI when this file is stale.\n` +
     ` */\n` +
     `import type {\n` +
+    `  AiNodeCapability,\n` +
     `  AiPaletteEntry,\n` +
     `  AiSurface,\n` +
     `  AiSurfaceDefinition,\n` +
@@ -615,6 +709,8 @@ async function main(): Promise<void> {
     `} from './ai-palette'\n\n` +
     `/** Every registered component, by id. */\n` +
     `export const AI_PALETTE: Record<string, AiPaletteEntry> = ${JSON.stringify(sorted, null, 2)}\n\n` +
+    `/** What every node can do, whatever its componentId. */\n` +
+    `export const AI_NODE_CAPABILITIES: Record<string, AiNodeCapability> = ${JSON.stringify(capabilities, null, 2)}\n\n` +
     `/** The root and the allowed component ids of each surface. */\n` +
     `export const AI_SURFACES: Record<AiSurface, AiSurfaceDefinition> = ${JSON.stringify(surfaces, null, 2)}\n\n` +
     `/** Theme vocabulary an \`sx\` value may name. */\n` +

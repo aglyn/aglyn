@@ -104,6 +104,130 @@ export interface AiPaletteEntry {
   presets: readonly string[]
 }
 
+/**
+ * What every NODE can do, as against what one component declares (AGL-3156).
+ *
+ * Generated from the node capabilities core declares, beside the per-component
+ * schemas rather than out of them: repeating is not a Stack's feature, so no
+ * component schema names it and a palette built from schemas alone advertises
+ * it on nothing. Declared ONCE for the whole palette — a model may write these
+ * props on any element the surface allows.
+ */
+export interface AiNodeCapability {
+  /** Stable id, as core declares it. */
+  id: string
+  displayName: string
+  /** One sentence, for the prompt catalog. */
+  summary: string
+  propsSchema: AiPropsSchema
+  propRoles: Record<string, AiPropRole>
+  propFields: Record<string, string>
+  textLimits: Record<string, number>
+  /** Props offered only on a node that holds a child list. */
+  childrenOnlyProps: readonly string[]
+  /**
+   * Declared attributes the palette deliberately does not offer: a picker
+   * that chooses a record the site holds, which a model cannot name from a
+   * description. Recorded so a field left off on purpose reads differently
+   * from one that went missing.
+   */
+  omittedProps: readonly string[]
+}
+
+/**
+ * The capability props a node with this child contract may carry, merged into
+ * one map the prop sanitizer can read beside the element's own declarations.
+ */
+export function nodeCapabilityProps(
+  capabilities: Readonly<Record<string, AiNodeCapability>>,
+  acceptsChildren: boolean,
+): {
+  properties: Record<string, AiPropSchema>
+  propRoles: Record<string, AiPropRole>
+  textLimits: Record<string, number>
+} {
+  const properties: Record<string, AiPropSchema> = {}
+  const propRoles: Record<string, AiPropRole> = {}
+  const textLimits: Record<string, number> = {}
+  for (const capability of Object.values(capabilities)) {
+    for (const [name, schema] of Object.entries(
+      capability.propsSchema.properties,
+    )) {
+      if (!acceptsChildren && capability.childrenOnlyProps.includes(name))
+        continue
+      properties[name] = schema
+      const role = capability.propRoles[name]
+      if (role) propRoles[name] = role
+      const limit = capability.textLimits[name]
+      if (limit !== undefined) textLimits[name] = limit
+    }
+  }
+  return { properties, propRoles, textLimits }
+}
+
+/**
+ * What a node capability declared in core and one carried by the palette
+ * disagree about (AGL-3156).
+ *
+ * `check:ai-palette` pins the generated file to the generator's output for its
+ * inputs, which cannot notice a capability leaving those inputs: when repeat
+ * stopped being a component's attribute, the generator regenerated cleanly and
+ * the palette simply stopped mentioning it. This reads the core declarations
+ * instead and asks whether the palette still accounts for each one, so the
+ * next generic capability cannot vanish the same way.
+ *
+ * `offeredFieldKinds` is every field kind the palette DOES carry somewhere,
+ * derived from the generated entries rather than restated here: a capability
+ * attribute drawn with one of those kinds has no excuse for being omitted.
+ */
+export function auditNodeCapabilities(
+  declared: ReadonlyArray<{
+    id: string
+    label: string
+    attributes: ReadonlyArray<{ name: string; component: string }>
+  }>,
+  carried: Readonly<Record<string, AiNodeCapability>>,
+  offeredFieldKinds: ReadonlySet<string>,
+): string[] {
+  const problems: string[] = []
+  for (const capability of declared) {
+    const entry = carried[capability.id]
+    if (!entry) {
+      problems.push(
+        `the palette carries no node capability "${capability.id}": a model cannot use it at all`,
+      )
+      continue
+    }
+    if (!Object.keys(entry.propsSchema.properties).length) {
+      problems.push(
+        `node capability "${capability.id}" is carried with no prop a model can write`,
+      )
+    }
+    for (const attribute of capability.attributes) {
+      if (entry.propsSchema.properties[attribute.name]) continue
+      if (!entry.omittedProps.includes(attribute.name)) {
+        problems.push(
+          `node capability "${capability.id}" declares "${attribute.name}", which the palette neither offers nor records as omitted`,
+        )
+        continue
+      }
+      if (offeredFieldKinds.has(attribute.component)) {
+        problems.push(
+          `node capability "${capability.id}" omits "${attribute.name}", whose "${attribute.component}" field the palette offers elsewhere`,
+        )
+      }
+    }
+  }
+  for (const id of Object.keys(carried)) {
+    if (!declared.some((capability) => capability.id === id)) {
+      problems.push(
+        `the palette carries node capability "${id}", which core no longer declares`,
+      )
+    }
+  }
+  return problems
+}
+
 export interface AiSurfaceDefinition {
   /** The component id at the top of a tree for this surface. */
   root: string
