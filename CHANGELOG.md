@@ -9,6 +9,31 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.136 — 2026-09-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.135...v1.0.0-beta.136)
+
+### Fixed
+
+- **analytics:** the ad gate waits for a verdict that is still in flight ([AGL-3194](https://linear.app/aglyn/issue/AGL-3194), [AGL-3191](https://linear.app/aglyn/issue/AGL-3191))
+- **ai:** the four offline defects of the generation punch list ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143), [AGL-3042](https://linear.app/aglyn/issue/AGL-3042))
+- **analytics:** a staff sign-in alone suppresses the console's ad tags ([AGL-3191](https://linear.app/aglyn/issue/AGL-3191), [AGL-3188](https://linear.app/aglyn/issue/AGL-3188), [AGL-1582](https://linear.app/aglyn/issue/AGL-1582))
+
+### Documentation
+
+- **ai:** the automations page is named by what it still does ([AGL-2923](https://linear.app/aglyn/issue/AGL-2923))
+- **ai:** one Aglyn AI section, an overview, and a rollout every page discloses ([AGL-2923](https://linear.app/aglyn/issue/AGL-2923), [AGL-1601](https://linear.app/aglyn/issue/AGL-1601), [AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+
+<details>
+<summary>Also in this release: 2 test, 2 chore</summary>
+
+- **tools:** the Linear ceiling is 3194, read from the workspace ([AGL-3194](https://linear.app/aglyn/issue/AGL-3194))
+- **commerce:** the checkout parity comparison reads one clock, not two ([AGL-3145](https://linear.app/aglyn/issue/AGL-3145))
+- **tools:** the Linear ceiling is 3191, read from the workspace ([AGL-3191](https://linear.app/aglyn/issue/AGL-3191))
+- **analytics:** the two advertising gates cannot drift apart again ([AGL-3188](https://linear.app/aglyn/issue/AGL-3188), [AGL-2064](https://linear.app/aglyn/issue/AGL-2064))
+
+</details>
+
 ## v1.0.0-beta.135 — 2026-09-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.134...v1.0.0-beta.135)
