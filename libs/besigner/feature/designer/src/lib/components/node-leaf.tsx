@@ -188,6 +188,9 @@ const SlotMarker = ({ caption }: { caption?: string }) => (
  */
 const REPEAT_ACCENT = '#7C4DFF'
 
+/** The chip's own ink, for the same reason and read against that accent. */
+const REPEAT_INK = '#FFFFFF'
+
 const RepeatBadge = ({ label, count }: { label: string; count: number }) => (
   <Box
     aria-hidden
@@ -209,7 +212,7 @@ const RepeatBadge = ({ label, count }: { label: string; count: number }) => (
       whiteSpace: 'nowrap',
       borderBottomLeftRadius: 3,
       backgroundColor: REPEAT_ACCENT,
-      color: '#FFF',
+      color: REPEAT_INK,
       fontSize: 11,
       fontWeight: 700,
       lineHeight: 1.6,
