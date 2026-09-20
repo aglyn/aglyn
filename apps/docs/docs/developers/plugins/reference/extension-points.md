@@ -15,6 +15,7 @@ The surface matrix: what a plugin can extend, from which entry
 | Console nav + pages (`ConsoleExtension.navItems`) | barrel (`console`) | Console host area | After the org resolves, before the shell paints |
 | Widgets (`ConsoleExtension.widgets`) | barrel (`console`) | Named console zones (dashboard, org, billing, team, staff, besigner, the assistant dock) — a widget with a `column` is a column of a shell-owned table | With their host page |
 | Providers (`ConsoleExtension.providers`) | barrel (`console`) | Around every console page | Once the registry is populated |
+| Zones a plugin HOSTS (`definePluginZone` / `registerPluginZone`) | barrel (`console`) | A position on a page the plugin owns, with the props it hands each widget carried on the token — so another plugin writes a widget for it without importing the owner | With the page that draws `useConsoleWidgetSlot()`; the token itself is type-only and ships nothing |
 | Staff pages (`ConsoleExtension.staffPages`) | barrel (`staff`) | The staff area — a tab in the staff strip and a page at `/admin/{id}` | Once the staff area has loaded its plugins, behind the staff guard |
 | Site runtimes (`registerSiteRuntime`) | barrel (`site`) | Every published page | Client render, reading enricher props |
 | Redirect resolvers / page resolvers / enrichers | `/server` | Tenant page pipeline | Per request, in that order; enricher errors isolated |
@@ -28,6 +29,10 @@ The surface matrix: what a plugin can extend, from which entry
 | Custom field types (`registerCustomFieldType`) | both | Dataset schema/record editors + validation | Declared at module scope |
 | Permissions (`registerPluginPermissions`) | both | Every resolved role set | Declared at module scope |
 | Service contracts (`definePluginServiceContract` / `registerPluginService`) | both | Another plugin's seam — an AI provider, a tool, a generator kind | Resolved lazily by the plugin that declared the contract |
+| Record addresses (`registerPluginRecordRoute`) | both | Where the plugin's own records are read, by record KIND — every other surface, the console app included, asks instead of spelling the URL | Resolved when a card draws a link; `null` where the owner has no address at that scope |
+| Host subcollections (`registerPluginHostCollections`) | both | The media-usage scan, a reference row's deep link, and the site's artifact counters | Declared at module scope; read by each of the three when it runs |
+| Contact capture (`registerPluginContactCaptureWriter`, `registerPluginContactSource`) | `/server` (`serverDeclarations`) | The person a capture silo met — the owner keys, merges, bands and stages them; the silo reports what it saw | Per capture; a refusal is RETURNED, so the silo keeps the submission or the order it already took |
+| Typed entitlement keys (`PluginEntitlementQuotas` / `PluginEntitlementFeatures` + `registerPluginEntitlementKeys`) | both | `OrgEntitlements` and `OrgFeatureFlags` themselves — the plugin's key type-checks everywhere they are read | The type composes at compile time; the registration is declared at module scope |
 | Activity actions (`registerPluginActivityActions`) | both | The org feed's chips, the actor table's filter, the staff audit facet, the action label every renderer shows | Declared at module scope |
 | Billing and access keys (`registerPluginEntitlements`) | both | `resolveOrgEntitlements` (a seat add-on's quota and features), the plan tables' feature defaults, the staff lockdown checklist, the visitor notice, the dispatcher's path→lever map, the permission registry, the org permission catalog and a collaborator's per-site keys | Declared at module scope |
 | Usage alert rules (`registerUsageAlertContributor`) | `/server` (`serverDeclarations`) | The usage-alerts sweep: staff alerts on a cost or ceiling core does not meter, through the sweep's own senders and guards | Once per org per sweep, after core's budget alert; a throw is isolated to the contributor |
@@ -59,3 +64,11 @@ and the lockdown levers a plugin declares. Core itself is extended only through
 these registries — plugins never edit core code, and a capability core
 lacks is added as a generic seam every plugin can use, never as a hook for
 one.
+
+**And a plugin's own surfaces are declared, not listed in core.** The zones it
+hosts, the addresses its records are read at, the `hosts/{hostId}` collections
+it writes and the entitlement keys it sells are each declared by the plugin
+that owns them, with one owner per id and a second claimant refused naming
+both. A core file that listed any of them would be the platform holding a map
+of its plugins — a map that falls out of step the day a plugin ships something
+nobody remembered to add to it.

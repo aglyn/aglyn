@@ -143,7 +143,7 @@ describe('plugin record routes', () => {
     expect(pluginRecordByEmailHref('tasting', SITE, 'a@b.test')).toBeNull()
 
     registerPluginRecordRoute('bottle', CELLAR_BOTTLES, { pluginId: 'cellar' })
-    expect(pluginRecordFilteredHref('bottle', SITE, 'colour', 'red')).toBeNull()
+    expect(pluginRecordFilteredHref('bottle', SITE, 'crate', 'oak')).toBeNull()
   })
 
   it('stops answering once the owner unloads', () => {

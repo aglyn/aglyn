@@ -229,7 +229,7 @@ export function pluginHostArtifactCollections(): string[] {
 /**
  * What to call one of a collection's documents in a reference row: the
  * declared label, else derived from the name — `productCategories` reads as
- * "Product category". Singularised with the two rules English spells
+ * "Product category". Singularized with the two rules English spells
  * consistently enough to automate; anything else keeps its name, which is a
  * cosmetic miss rather than a coverage one.
  */
