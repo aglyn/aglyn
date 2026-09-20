@@ -48,6 +48,7 @@ import {
   OUTREACH_PLUGIN_ID,
 } from './constants/bundle-common'
 import { registerOutreachMailboxRoutes } from './mailboxes/register-mailbox-routes'
+import { registerOutreachRoutes } from './routes/register-routes'
 
 /**
  * No auth, no org, no data: it answers whether this server bundle was loaded
@@ -73,6 +74,9 @@ export function registerOutreachConsoleApi(): void {
   // Connect a Google mailbox, its settings, pause, test and disconnect
   // (AGL-2978).
   registerOutreachMailboxRoutes()
+  // Compliance settings, sequences, enrollment and enrollment actions
+  // (AGL-2980).
+  registerOutreachRoutes()
 }
 
 // The transport the sending runtime reaches a connected mailbox through
@@ -109,3 +113,25 @@ export {
   type OutreachSentMessage,
   type SendOutreachMessageOptions,
 } from './transport/send-message'
+
+// The organization's compliance settings and do-not-contact list
+// (AGL-2980), for the sending runtime: the footer is read before every send,
+// the list is checked before every send, and a reply that opts out, an
+// unsubscribe and a hard bounce each put the address on it.
+export {
+  outreachComplianceSettingsRef,
+  readOutreachComplianceSettingsDoc,
+  writeOutreachComplianceSettings,
+  type WriteOutreachComplianceSettingsInput,
+  type WriteOutreachComplianceSettingsResult,
+} from './storage/compliance-settings-store'
+export {
+  addOutreachDoNotContact,
+  getOutreachDoNotContactEntry,
+  isOutreachDoNotContact,
+  lookupOutreachDoNotContact,
+  outreachDoNotContactCollection,
+  readOutreachDoNotContactEntry,
+  type AddOutreachDoNotContactInput,
+  type AddOutreachDoNotContactResult,
+} from './storage/do-not-contact-store'

@@ -270,14 +270,28 @@ describe('the question carries the canvas it is about', () => {
     render(<AssistPanelComponent {...dockProps()} />)
     await ask()
     await waitFor(() => expect(posts).toHaveLength(1))
-    const outline = posts[0][1]['canvas'] as { selectedId: string; nodes: Array<Record<string, unknown>> }
+    const outline = posts[0][1]['canvas'] as {
+      selectedId: string
+      total: number
+      nodes: Array<Record<string, unknown>>
+    }
     expect(outline.selectedId).toBe('hero')
     expect(outline.nodes.map((node) => node['id'])).toEqual([ROOT, 'hero', 'footer', 'headline'])
+    expect(outline.total).toBe(4)
     expect(outline.nodes.find((node) => node['id'] === 'headline')).toMatchObject({
       componentId: 'muiTypography',
       parentId: 'hero',
       props: { children: 'Build faster', variant: 'h1', component: 'h1' },
     })
+  })
+
+  it('sends no canvas while the open editor is on a version other than the one the route names', async () => {
+    openEditor({ versionId: 'v-1' })
+    armChat('Answer only.', null)
+    render(<AssistPanelComponent {...dockProps()} />)
+    await ask()
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0][1]['canvas']).toBeUndefined()
   })
 
   it('sends no canvas for a reader who may not generate, or with no editor open', async () => {

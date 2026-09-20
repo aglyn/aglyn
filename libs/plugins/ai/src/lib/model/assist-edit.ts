@@ -127,11 +127,27 @@ export interface AssistEditCanvasNode {
   props?: Record<string, string | number | boolean>
   /** The element's own styles — carried for the selected element only. */
   sx?: Record<string, unknown>
+  /**
+   * Described by its place alone, without props: an element around the
+   * selection, there so the model knows it exists and can ask for it.
+   */
+  brief?: boolean
+  /**
+   * An element described earlier whose contents this one's are built like,
+   * the way the cards of a row are. Its own contents are left out.
+   */
+  like?: string
 }
 
 export interface AssistEditCanvasContext {
   /** The element the author has selected, or null. */
   selectedId: string | null
+  /**
+   * Elements in the whole document, the root included, so the prompt can say
+   * how much of it `nodes` leaves out. Absent from an outline sent by a panel
+   * that predates it.
+   */
+  total?: number
   nodes: AssistEditCanvasNode[]
 }
 

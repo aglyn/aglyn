@@ -50,4 +50,22 @@ export const OUTREACH_API_ROUTES = {
   mailboxesTest: 'outreach/mailboxes/test',
   /** `POST` — revoke the grant at Google and delete the mailbox. */
   mailboxesDisconnect: 'outreach/mailboxes/disconnect',
+  // Settings, sequences and enrollments (AGL-2980). Every one names its org
+  // (`orgId`, query or body); the contract is `model/outreach-api.ts`.
+  /** `GET ?orgId` — the compliance settings; `POST` — save them. */
+  settings: 'outreach/settings',
+  /** `POST` — create a sequence, or save an edit to one. */
+  sequencesSave: 'outreach/sequences/save',
+  /** `POST` — activate, pause or archive a sequence. */
+  sequencesStatus: 'outreach/sequences/status',
+  /** `POST` — delete a draft nobody was enrolled in. */
+  sequencesDelete: 'outreach/sequences/delete',
+  /** `POST` — who a saved view or a search would enroll, and where each stands. */
+  enrollPreview: 'outreach/enroll/preview',
+  /** `POST` — enroll them, every gate checked again. */
+  enroll: 'outreach/enroll',
+  /** `POST` — pause, resume, stop, or mark do-not-contact. */
+  enrollmentsAction: 'outreach/enrollments/action',
+  /** `POST` — one email of a saved sequence, for a contact or a sample person. */
+  preview: 'outreach/preview',
 } as const
