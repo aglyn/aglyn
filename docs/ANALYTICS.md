@@ -1340,9 +1340,20 @@ reloads, client-side navigations, sign-outs and re-auth. `localStorage` is
 | Surface            | Where to do it                                                                |
 | ------------------ | ----------------------------------------------------------------------------- |
 | Console            | `https://app.aglyn.com/?aglyn_internal=1`                                     |
+| Console auth host  | `https://auth.aglyn.com/?aglyn_internal=1`                                    |
 | Marketing / tenant | `https://aglyn.com/?aglyn_internal=1`                                         |
 | Docs               | `https://docs.aglyn.com/?aglyn_internal=1`                                    |
 | Local dev          | once per `localhost:PORT` — though local builds now emit nothing at all (§8c) |
+
+⛔ **The auth host is a SECOND console origin, and it was missing from this
+table until AGL-3175.** `auth.aglyn.com` serves `/signin` and `/signup`, so it
+is where the sign-in doors are actually walked — and because both memories
+here are `localStorage`, pinning `app.aglyn.com` pins nothing on it. That
+leaves only the claims predicate, which cannot run before the token resolves,
+so a `/signin` page view — which fires at page load, before anyone has signed
+in — goes out unstamped on any browser that has not been pinned on THIS
+origin. The `login` that follows is stamped, and then excluded. Views inflated
+and conversions deleted, from one missing row.
 
 Being per-origin is a feature as much as a cost: it is what makes it
 impossible for an opt-in on our console to leak a stamp into a CUSTOMER's
