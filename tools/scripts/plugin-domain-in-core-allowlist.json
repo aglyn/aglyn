@@ -780,13 +780,6 @@
       "lane": "data"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/dataset-record-view.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/datasets.ts",
       "rules": [
         "domain-name"

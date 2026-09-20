@@ -296,8 +296,6 @@ export * from './author-css'
 // The isomorphic HTML rule (AGL-1901), after the CSS one it depends on.
 export * from './author-html'
 export * from './dataset-models'
-// The record-view descriptors, after the model and formatter they build on.
-export * from './dataset-record-view'
 export * from './dataset-csv'
 export * from './marketplace-provenance'
 export * from './marketplace-update-state'
