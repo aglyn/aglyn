@@ -44,7 +44,35 @@ describe('outreach plugin (AGL-2974)', () => {
     const [navItem] = extension?.orgNavItems ?? []
     expect(navItem.href).toBe('/outreach')
     expect(navItem.Component).toBeDefined()
-    expect(navItem.header?.docsTopic).toBe('outreach')
+    expect(navItem.header?.docsTopic).toBe('sequences')
+  })
+
+  /**
+   * The rename (AGL-3199), from both sides at once. OUTREACH is another
+   * company's registered mark in this plugin's own field, so nothing a
+   * customer reads may carry it; the id, the flag, the entitlement, the
+   * permission key and the URL slug are stored vocabulary and a live API
+   * prefix, so none of them moved. A half-applied rename is the failure this
+   * catches: a label that says Outreach again, or an id quietly renamed under
+   * data that still says `outreach`.
+   */
+  it('reads Sequences and is keyed outreach', () => {
+    registerOutreachConsole()
+    const extension = registered()
+    const [navItem] = extension?.orgNavItems ?? []
+    expect([
+      extension?.displayName,
+      navItem.label,
+      navItem.header?.title,
+    ]).toEqual(['Sequences', 'Sequences', 'Sequences'])
+    expect(extension?.upgradeNotice?.message).not.toMatch(/outreach/i)
+
+    expect([
+      extension?.pluginId,
+      extension?.featureFlag,
+      extension?.permission,
+      navItem.href,
+    ]).toEqual(['outreach', 'outreach', 'outreach.use', '/outreach'])
   })
 
   it('declares All sequences, Mailboxes and Compliance, from the one list the page switches on', () => {
