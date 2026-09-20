@@ -34,16 +34,29 @@
 /**
  * The language a page is in when nothing on the site says otherwise.
  *
- * NOT a guess: it is the language the document actually declares. Every
- * tenant page ships `<html lang="en">` from the root layout, so this constant
- * restates what the served markup already claims rather than asserting
- * anything new about the site. That is what makes it safe to emit
- * unconditionally — `og:locale` derived from it can only ever repeat the
- * document's own answer.
+ * NOT a guess: it is the language the document actually declares. The
+ * `lang` attribute is no longer the literal `"en"` it was when this constant
+ * was written — `apps/tenant/app/[host]/layout.tsx` resolves it through
+ * `resolvePageLocale` and the two host-agnostic boundaries beside the root
+ * layout emit THIS value (AGL-3153) — so the coupling now runs the honest
+ * way round: the markup takes its answer from here rather than this constant
+ * restating a literal somewhere else.
  *
- * ⚠️ It is therefore PINNED to that `lang` attribute. Whoever makes the root
- * layout emit a per-site language must make this resolver the source of the
- * value it emits, not leave a second default behind.
+ * That is what keeps `og:locale` safe to emit unconditionally. A page derived
+ * from this chain can only ever repeat what the same chain put in the
+ * document's own `lang`.
+ *
+ * ⚠️ Still PINNED to that attribute, in the direction that is now true: this
+ * resolver is its SOURCE. A surface that needs a fallback language reads this
+ * constant; it never writes a second default of its own, and changing this
+ * value changes what every untranslated site declares.
+ *
+ * ⚠️ `<html lang>` is the SITE's language, not the screen's. A layout is the
+ * deepest thing that can render `<html>`, and no layout has the slug the
+ * screen is resolved from, so a locale variant's own language reaches the
+ * metadata surfaces below — which call this resolver WITH a screen — and not
+ * the document element. `apps/tenant/app/[host]/layout.tsx` records why
+ * closing that gap would cost the catch-all's ISR window.
  */
 export const PLATFORM_DEFAULT_LOCALE = 'en'
 
