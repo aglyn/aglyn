@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 4 edges the allowlist carries, and what removes each. An edge leaves the
+The 3 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -230,7 +230,7 @@ legal, so it lives beside the table as
 imports the model from the email library. `shared` imports only `shared`
 again, with no inline disable anywhere.
 
-**Plugin → plugin** (3, numbered to 17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (2, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -241,16 +241,13 @@ seam called **present** was verified by reading its export; a seam called
 **owed** does not exist yet and is AGL-3124's to build before the lane that
 needs it starts.
 
-1. **`plugins-bookings` → `plugins-commerce`.** Crosses: `resolveFlatTaxCents`
-   and `TaxSettings` (`src/lib/server.ts`), `storefrontTaxModeOf`
-   (`src/lib/server/billing-webhook.ts`). Not model reuse, as the allowlist's
-   `why` has it — it is tax: two plugins that take money need the same tenant
-   tax profile. Fix: a tax-profile service contract on
-   `definePluginServiceContract` / `registerPluginService` /
-   `resolvePluginServices` — commerce registers the profile, bookings resolves
-   it, neither imports the other. The machinery is **present**; the named
-   contract is **owed** (AGL-3124), beside the payment-provider contract the
-   same money path needs.
+1. **`plugins-bookings` → `plugins-commerce`.** Gone (AGL-3080). Two plugins
+   that take money need one tax rule. Commerce registers it through
+   `registerPluginTaxProfile` from both of its server registrars, and a booking
+   is priced and confirmed by asking `pluginTaxProfile()`. That contract throws
+   rather than answer zero when no plugin owns the rule, and
+   `tax-profile-is-registered.spec.ts` in each app runs the real registrars
+   through the manifest to prove the owner is there. The number stays.
 2. **`plugins-commerce` → `plugins-data`.** Gone (AGL-3080). Commerce was
    reaching `parseCsv` through the data plugin's barrel, which only re-exports
    it; it now imports the function from the core's `dataset-csv`, where it

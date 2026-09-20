@@ -16,6 +16,7 @@
  */
 
 import { bookingsBillingWebhookHandler } from './billing-webhook'
+import { standInTaxProfile } from '../testing/stand-in-tax-profile'
 
 /**
  * The paid-booking branch and its customer (AGL-1755).
@@ -218,6 +219,7 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
+  standInTaxProfile()
   docs.clear()
   contactUpserts.length = 0
   sentEmails.length = 0
@@ -484,7 +486,7 @@ describe('the refund handles (AGL-2315)', () => {
  * money door stamps `taxMode` on exactly that (AGL-2451). Three things follow
  * and all three were absent before:
  *
- *  1. **`taxMode`**, from the shared `storefrontTaxModeOf` derivation in its
+ *  1. **`taxMode`**, asked of the plugin that owns the tax rule, in its
  *     two-argument form — never a constant, so the day a rate is set the
  *     record follows it rather than needing a second change here.
  *  2. **`taxCents`** beside it, absent rather than a defaulted zero: "no tax

@@ -403,6 +403,42 @@ every plugin's server entry before a plugin handler runs, so a reader
 registered from a server registrar is there wherever a handler asks. Import it
 by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-cards`).
 
+## The tenant's tax rule — `plugin-tax-profile` (`/server`)
+
+More than one plugin takes money, and a merchant has one tax profile. The
+plugin that keeps it answers what a flat rate adds to a charge and which regime
+a settled payment was taxed under; any other plugin that charges asks here
+instead of importing the owner's model.
+
+```ts
+// the owner, from each of its server registrars
+registerPluginTaxProfile({
+  flatTax: (rate, chargeCents, fallbackLabel) => resolveFlatTax(rate, chargeCents, fallbackLabel),
+  taxModeOf: (settledPayment, manualTaxCents) => modeOf(settledPayment, manualTaxCents),
+})
+
+// a plugin that charges
+const tax = pluginTaxProfile().flatTax(settings.service, chargeCents, 'Service tax')
+const total = chargeCents + tax.taxCents
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginTaxProfile(profile, { pluginId? })` | A slot: a workspace has one tax profile, so a second plugin's is refused and the incumbent keeps serving. |
+| `pluginTaxProfile()` | The rule — and it **throws** when no plugin registered one. |
+| `flatTax(rate, chargeCents, fallbackLabel)` | `{ taxCents, label, pct }`, exclusive and rounded to the cent. `rate` is the merchant's stored setting passed as read; an absent, zero, negative or out-of-range one answers all-zero and never throws. |
+| `taxModeOf(settledPayment, manualTaxCents?)` | The regime as the owner records it. `manualTaxCents` is tax the caller added as a line of its own, which the processor reports as none. |
+| `pluginTaxProfileOwner()` | The owner's plugin id, or `null` — for a caller that only wants to know who it is. |
+
+**No profile is a refusal, never a zero.** Every other seam here answers `null`
+for "nobody home", and this one must not: a caller that read `null` as "no tax"
+would charge an untaxed total and record it as untaxed, and the merchant would
+owe the difference. A refused sale is seen the same day. It cannot happen in a
+working build — both apps load every plugin's server entry before a plugin
+handler, a cron or the billing webhook runs — and
+`tax-profile-is-registered.spec.ts` in each app runs the real registrars and
+holds the real rule, because a plugin's own spec may not import the owner.
+
 ## Contact capture — `plugin-contact-capture` (`/server`)
 
 A silo that meets a person — a form submission, a member sign-up, an order, a

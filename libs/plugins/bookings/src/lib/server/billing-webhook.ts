@@ -37,7 +37,7 @@ import {
   shouldSendBookingPlatformPurchase,
 } from '../model/booking-purchase-analytics'
 import { sendEmail } from '@aglyn/shared-util-email'
-import { storefrontTaxModeOf } from '@aglyn/plugins-commerce/server/storefront-tax'
+import { pluginTaxProfile } from '@aglyn/aglyn/plugin-manager/plugin-tax-profile'
 import { fileBookingOnCrm } from './booking-crm'
 
 /**
@@ -174,7 +174,7 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
                 // charge the client tax; the one-argument form would stamp
                 // `none` on precisely those. `absent` remains a fourth state
                 // meaning "recorded before this shipped".
-                taxMode: storefrontTaxModeOf(object, taxCents),
+                taxMode: pluginTaxProfile().taxModeOf(object, taxCents),
                 // The figure itself. Absent rather than a defaulted `0` — a
                 // zero written through `merge` is the AGL-1758 shape, and
                 // this handler can re-enter (see the widened guard above).

@@ -39,6 +39,7 @@ import { isEmailConfigured } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerProductCardReader } from './server/product-card'
+import { registerCommerceTaxProfile } from './server/tax-profile'
 import { commerceBillingWebhookHandler } from './server/billing-webhook'
 import { registerOrderFigureReaders } from './server/order-figures'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
@@ -227,6 +228,8 @@ registerPluginJob({
 /** Registers the commerce plugin's storefront API routes. */
 export function registerCommerceApi(): void {
   registerProductCardReader()
+  // The merchant's tax rule, for every plugin that prices a charge here.
+  registerCommerceTaxProfile()
   registerPluginPermissions(COMMERCE_PERMISSIONS)
   // Merchant-settable register discount ceiling (AGL-2161). Registered on
   // BOTH surfaces, like the permissions above: the POS route reads it
@@ -289,6 +292,8 @@ export function registerCommerceConsoleApi(): void {
   // What a product looks like to a surface that is not this plugin's — a
   // campaign email that features one asks here rather than importing the model.
   registerProductCardReader()
+  // …and the tax rule, for the webhook that confirms what they charged.
+  registerCommerceTaxProfile()
   // Stripe webhook sections (AGL-418): orders/carts/drafts/reservations/
   // subscriptions ride the platform webhook via the hook registry.
   registerBillingWebhookHandler(commerceBillingWebhookHandler)
