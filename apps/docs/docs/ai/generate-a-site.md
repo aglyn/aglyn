@@ -16,12 +16,6 @@ piece is built by the same job that builds it on its own: the pages by the page 
 layout by the layout job, the form by the [form job](./generate-a-form.md). A scaffold is
 those jobs run in order, not a different way of building.
 
-:::caution Rolling out
-Aglyn AI is a **release-flagged feature, currently being rolled out** — it is not
-available in every workspace yet. This page says what a site job does, and grows with
-the feature.
-:::
-
 ## What a scaffold builds
 
 - **Four to eight pages**, each with its sections, its address and its search title and

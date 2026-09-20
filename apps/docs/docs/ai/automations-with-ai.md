@@ -9,12 +9,6 @@ description: Aglyn AI can explain an automation you already have and tell you wh
 On **Automation → Actions**, Aglyn AI can explain an automation you already have, and tell
 you why one of its runs failed. Neither of them changes or runs an automation.
 
-:::caution Rolling out
-Aglyn AI is a **release-flagged feature, currently being rolled out** — it is not
-available in every workspace yet. This page says what it does with automations, and
-grows with the feature.
-:::
-
 ## Drafting an automation is not available yet {#draft}
 
 Describing an automation and having Aglyn AI build it — *"when someone submits the

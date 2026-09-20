@@ -70,7 +70,7 @@ export const PLUGIN_DOCS = {
   aiThemes: {
     path: '/ai/theme-assist',
     title: 'Themes with AI',
-    excerpt: 'Describe a change to your site\'s theme and get a proposal for the theme editor\'s own controls, previewed before and after, that you save in the editor. Rolling out.',
+    excerpt: 'Describe a change to your site\'s theme and get a proposal for the theme editor\'s own controls, previewed before and after, that you save in the editor.',
   },
   assistSignals: {
     path: '/staff-console/assist-signals',

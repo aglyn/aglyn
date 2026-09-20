@@ -44,7 +44,7 @@ automatically when you adjust the theme — or when the visitor's scheme flips. 
 
 ## Change it with AI
 
-**Rolling out.** The **Theme assistant** above the editor proposes changes to these same
+The **Theme assistant** above the editor proposes changes to these same
 controls from a description — "warmer", "match our brand", "bigger headings on mobile" —
 with a before and after preview. A proposal goes into the editor as unsaved changes, and
 nothing is saved until you save it. See

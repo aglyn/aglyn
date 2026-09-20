@@ -186,7 +186,7 @@ export const DOCS_HELP_EXCERPTS = {
   templatesLibrary: 'Save pages, components and layouts as reusable templates — and the safe landing place for anything you install from the marketplace.',
   termReference: 'Every term Aglyn uses, in one place — brief definitions with links to the full documentation for each.',
   textEditing: 'Edit text directly on the canvas, on the element itself, with basic rich text on opt-in elements.',
-  themeAssist: 'Describe a change to your site\'s theme and get a proposal for the theme editor\'s own controls, previewed before and after, that you save in the editor. Rolling out.',
+  themeAssist: 'Describe a change to your site\'s theme and get a proposal for the theme editor\'s own controls, previewed before and after, that you save in the editor.',
   themeBuilder: 'Set your site\'s colors, fonts, and light/dark schemes with a live preview.',
   themeStyles: 'Style from your site\'s theme instead of typing pixels, so a brand change moves every page at once.',
   troubleshooting: 'Fix the common reasons a custom domain won\'t verify or attach.',

@@ -10,18 +10,7 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-<!-- Aglyn AI (AGL-2923). Written ahead of the release so the entry is not what holds
-     it up. It stays under "Not released yet" until release_ai_generative is published
-     ON: whoever flips it replaces this heading with the release month, moves "(newest)"
-     onto it from the CRM heading below, and takes the rolling-out admonitions off the
-     pages FLAG_DOC_PAGES lists for that flag. -->
-
-## Not released yet — Aglyn AI
-
-:::caution Rolling out
-Aglyn AI is a **release-flagged feature, currently being rolled out**. The entry below
-describes what it does; it is not open in every workspace yet.
-:::
+## September 2026 — Aglyn AI (newest)
 
 - **[Aglyn AI](ai/overview.md)** — the assistant builds as well as answers. Describe what
   you want and it plans the work, builds it from what your site already has, and hands
@@ -68,7 +57,7 @@ describes what it does; it is not open in every workspace yet.
 Drafting an automation from a description is **not** part of this release — see
 [Explain automations with AI](ai/automations-with-ai.md#draft).
 
-## September 2026 — the CRM (newest)
+## September 2026 — the CRM
 
 - **[The CRM is included from Starter](content-and-data/crm/overview.md#what-each-plan-includes)** —
   every part of it, from leads and contacts to companies, deals, tasks, reports, fields

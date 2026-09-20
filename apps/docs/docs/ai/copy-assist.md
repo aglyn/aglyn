@@ -10,12 +10,6 @@ description: Rewrite any text on the canvas, or write it from nothing, without l
 any text an element carries — a headline, body copy, a button label, a caption — and on
 a blog entry.
 
-:::caution Rolling out
-Writing copy with AI is part of **Aglyn AI**, a release-flagged feature currently being
-rolled out — it is not available in every workspace yet. This page says what it does,
-and grows with the feature.
-:::
-
 ## Use it
 
 1. Select a text-capable element on the canvas.

@@ -343,6 +343,16 @@ export const PUBLISHED_ON_IN_PRODUCTION: Partial<
     precondition:
       'AGL-1909: Anthropic has to be a published subprocessor before Assist sends it customer content. The published subprocessors page (/legal/subprocessors) lists Anthropic for the Assist helper.',
   },
+
+  release_ai_generative: {
+    templateVersion: 0, // ⛔ HOLD: the real production template version, read after publishing
+    publishedAt: 'TBD', // ⛔ HOLD: the date that version was published
+    publishedValue: '{"enabled":true,"rolloutPercent":100}',
+    defaultStaysOff:
+      'release-flags.ts keeps defaultEnabled false so every generative route answers 404 where Remote Config cannot be reached. The flag is released by publishing the template, never by a code default.',
+    precondition:
+      'AGL-3024: no AI-generated page, layout, template, component or form had ever been produced by a real model call and looked at. The five document kinds run live on the test-org and report at or above AI_EVAL_FLOORS (passRate 1, meanScore 0.9) before this entry exists.',
+  },
 }
 
 /** Every flag whose in-repo default (and seeded Remote Config value) is OFF. */
