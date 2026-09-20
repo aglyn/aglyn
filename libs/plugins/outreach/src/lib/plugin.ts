@@ -34,12 +34,17 @@ const OutreachConsolePage = lazy(
 )
 
 /**
- * Outreach's console half (AGL-2974), named in `plugins.config.json` as
- * `console`. Console and console API only, like the CRM: a sequence has no
+ * The console half of this plugin (AGL-2974), named in `plugins.config.json`
+ * as `console`. Console and console API only, like the CRM: a sequence has no
  * canvas element, so there is no site bundle and no tenant half.
  *
- * ONE ORGANIZATION-LEVEL SURFACE. Outreach is a rep's work across every site
- * the organization sells for, sent from that rep's own mailbox, so it lives
+ * THE NAME PEOPLE READ IS "SEQUENCES" (AGL-3199); the plugin id, the lib, the
+ * package, the flag, the entitlement, the permission, the collections and the
+ * API prefix all stay `outreach`. Renaming those would move stored data and
+ * break the unsubscribe links already sent, and no reader sees them.
+ *
+ * ONE ORGANIZATION-LEVEL SURFACE. Sequences are a rep's work across every site
+ * the organization sells for, sent from that rep's own mailbox, so they live
  * beside the organization's other tabs rather than under a site. It is
  * declared in `orgNavItems`, which the console serves at
  * `/[orgSlug]/outreach/<section>` through its generic org route.
@@ -55,21 +60,23 @@ const OutreachConsolePage = lazy(
  * The org tab strip hides the tab unless all three hold. A deep link is
  * answered by the route with the refusal that applies, and the words for the
  * entitlement one are this extension's own: the shell's derived sentence
- * calls a feature no plan carries "a paid add-on", which Outreach is not.
+ * calls a feature no plan carries "a paid add-on", which this is not.
  */
 export function registerOutreachConsole(): void {
   registerPluginPermissions(OUTREACH_PERMISSIONS)
   registerConsoleExtension({
     pluginId: OUTREACH_PLUGIN_ID,
-    displayName: 'Outreach',
+    displayName: 'Sequences',
     permission: OUTREACH_USE_PERMISSION,
     featureFlag: 'outreach',
     upgradeNotice: {
-      message: "Outreach isn't available to this workspace yet.",
+      message: "Sequences isn't available to this workspace yet.",
     },
     orgNavItems: [
       {
-        label: 'Outreach',
+        label: 'Sequences',
+        // The URL slug stays `outreach`: it is the plugin id the console
+        // resolves the surface by, and `PLUGIN_TITLES` carries the name.
         href: '/outreach',
         sections: OUTREACH_CONSOLE_SECTIONS,
         // The release flag's tab id: `release_outreach` names it, and the org
@@ -77,7 +84,7 @@ export function registerOutreachConsole(): void {
         navTabId: 'nav-tab-org-outreach',
         icon: { path: mdiEmailFastOutline.path },
         header: {
-          title: 'Outreach',
+          title: 'Sequences',
           icon: { path: mdiEmailFastOutline.path },
           docsTopic: 'outreach',
         },

@@ -496,7 +496,7 @@ export function validateOutreachOrgSettings(
       error(
         `${path}.legalName`,
         'legal_name_required',
-        "Add your organization's legal name in Outreach settings. It goes in every email's footer.",
+        "Add your organization's legal name in Sequences settings. It goes in every email's footer.",
       ),
     )
   }
@@ -505,7 +505,7 @@ export function validateOutreachOrgSettings(
       error(
         `${path}.postalAddress`,
         'postal_address_required',
-        "Add your organization's postal address in Outreach settings. The law requires one in every sales email.",
+        "Add your organization's postal address in Sequences settings. The law requires one in every sales email.",
       ),
     )
   }

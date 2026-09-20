@@ -27,7 +27,7 @@ import {
  * The organization strip's plugin tabs and the org route's reach gate
  * (AGL-2974), pinned without mounting either.
  *
- * The Outreach-shaped fixture is the case the rules exist for: an
+ * The Sequences-shaped fixture is the case the rules exist for: an
  * entitlement no plan carries, and a permission only owners and admins hold
  * by default. The CONTROLS beside each refusal are the entitled, permitted
  * reader, so a function that dropped every tab cannot pass.
@@ -38,13 +38,13 @@ const Page = (): null => null
 const outreach: ConsoleOrgNavEntry = {
   extension: {
     pluginId: 'outreach',
-    displayName: 'Outreach',
+    displayName: 'Sequences',
     featureFlag: 'outreach',
     permission: 'outreach.use',
-    upgradeNotice: { message: "Outreach isn't available to this workspace yet." },
+    upgradeNotice: { message: "Sequences isn't available to this workspace yet." },
   },
   navItem: {
-    label: 'Outreach',
+    label: 'Sequences',
     href: '/outreach',
     navTabId: 'nav-tab-org-outreach',
     sections: [
@@ -116,7 +116,7 @@ describe('orgPluginNavTabItems', () => {
     expect(orgPluginNavTabItems('acme', [outreach], answers())).toEqual([
       {
         id: 'nav-tab-org-outreach',
-        label: 'Outreach',
+        label: 'Sequences',
         href: '/acme/outreach/sequences',
       },
     ])

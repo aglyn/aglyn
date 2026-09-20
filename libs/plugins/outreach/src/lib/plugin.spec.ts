@@ -96,7 +96,7 @@ describe('outreach plugin (AGL-2974)', () => {
     expect(
       listPluginPermissions().find((entry) => entry.key === OUTREACH_USE_PERMISSION)
         ?.label,
-    ).toBe('Use Outreach')
+    ).toBe('Use Sequences')
     // Through the tier the console and the server both resolve a role onto,
     // which is where `owner` becomes the admin tier.
     const holds = (role: string) =>

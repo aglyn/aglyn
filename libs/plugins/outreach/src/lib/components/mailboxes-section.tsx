@@ -174,7 +174,7 @@ export function OutreachMailboxesSection(props: OutreachMailboxesSectionProps) {
       >
         <Stack spacing={1.5}>
           <Typography variant="body2" color="text.secondary">
-            {'Outreach sends from your own Google mailbox, so a message sits in your Sent mail ' +
+            {'A sequence sends from your own Google mailbox, so a message sits in your Sent mail ' +
               'and a reply comes back to your inbox. Each member connects their own.'}
           </Typography>
           {availability.status === 'ready' && !availability.configured ? (

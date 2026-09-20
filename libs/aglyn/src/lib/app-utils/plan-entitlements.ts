@@ -443,7 +443,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       // with the suite included is the competitive entry, and gating a
       // tier higher hands the small-business buyer to a free CRM elsewhere.
       crm: false,
-      // Outreach (AGL-2974) is on NO plan, this one through Enterprise: which
+      // Sequences (AGL-2974) is on NO plan, this one through Enterprise: which
       // tiers carry sequences and connected mailboxes, and at what caps, is
       // an owner decision still to be made. Until then an organization gets
       // it only through the per-org `entitlements.features.outreach`

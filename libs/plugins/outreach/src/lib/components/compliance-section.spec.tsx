@@ -84,7 +84,7 @@ beforeEach(() => {
   mockLoad = ready()
 })
 
-describe('Outreach → Compliance: what it shows (AGL-2980)', () => {
+describe('Sequences → Compliance: what it shows (AGL-2980)', () => {
   it('shows progress while the settings load', () => {
     mockLoad = {
       status: 'loading',
@@ -102,12 +102,12 @@ describe('Outreach → Compliance: what it shows (AGL-2980)', () => {
     mockLoad = {
       status: 'error',
       settings: null,
-      message: 'Outreach could not be reached. Try again.',
+      message: 'Sequences could not be reached. Try again.',
       reload: mockReload,
     }
     render(<OutreachComplianceSection orgId="org-1" />)
     expect(
-      screen.getByText('Outreach could not be reached. Try again.'),
+      screen.getByText('Sequences could not be reached. Try again.'),
     ).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(mockReload).toHaveBeenCalled()
@@ -117,12 +117,12 @@ describe('Outreach → Compliance: what it shows (AGL-2980)', () => {
     mockLoad = {
       status: 'refused',
       settings: null,
-      message: 'Your role does not include Use Outreach.',
+      message: 'Your role does not include Use Sequences.',
       reload: mockReload,
     }
     render(<OutreachComplianceSection orgId="org-1" />)
     expect(
-      screen.getByText('Your role does not include Use Outreach.'),
+      screen.getByText('Your role does not include Use Sequences.'),
     ).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
   })
@@ -151,7 +151,7 @@ describe('Outreach → Compliance: what it shows (AGL-2980)', () => {
   })
 })
 
-describe('Outreach → Compliance: saving (AGL-2980)', () => {
+describe('Sequences → Compliance: saving (AGL-2980)', () => {
   it('saves only once something changed, settled the way the route stores it', async () => {
     mockApi.saveSettings.mockResolvedValue({
       ok: true,
@@ -223,7 +223,7 @@ describe('Outreach → Compliance: saving (AGL-2980)', () => {
     fireEvent.focus(input)
     fireEvent.keyDown(input, { key: 'Backspace' })
     expect(
-      screen.getByText('Choose at least one country Outreach may send to.'),
+      screen.getByText('Choose at least one country a sequence may send to.'),
     ).toBeTruthy()
     expect(
       (screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement)

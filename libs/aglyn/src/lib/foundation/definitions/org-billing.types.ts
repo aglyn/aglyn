@@ -203,15 +203,16 @@ export interface CoreOrgFeatureFlags {
    */
   crm?: boolean
   /**
-   * OUTREACH (AGL-2974): one-to-one, multi-step email sequences a rep sends
-   * from their own connected mailbox, logged on the CRM's records.
+   * SEQUENCES (AGL-2974): one-to-one, multi-step email sequences a rep sends
+   * from their own connected mailbox, logged on the CRM's records. The KEY
+   * stays `outreach` — it is stored on the org (AGL-3199).
    *
    * False on EVERY plan, Enterprise included. Which tiers carry sequences
    * and connected mailboxes, and at what caps, is a packaging decision that
    * has not been made, so no plan may claim it. An organization reaches it
    * only through the per-org override on `entitlements.features.outreach`.
    *
-   * Read by the console shell through the Outreach extension's
+   * Read by the console shell through the Sequences extension's
    * `featureFlag`, by the plugin's routes, and, restated, by the Firestore
    * rules in front of the `outreach*` collections. The rules carry no plan
    * list for it because no plan grants it; when packaging lands, the plan

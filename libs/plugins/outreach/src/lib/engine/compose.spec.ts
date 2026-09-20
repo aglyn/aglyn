@@ -115,7 +115,7 @@ describe('the footer', () => {
         footer: null,
         error: {
           code: 'missing_postal_address',
-          message: "This email can't be sent without your organization's postal address. Add it in Outreach settings.",
+          message: "This email can't be sent without your organization's postal address. Add it in Sequences settings.",
         },
       })
     }

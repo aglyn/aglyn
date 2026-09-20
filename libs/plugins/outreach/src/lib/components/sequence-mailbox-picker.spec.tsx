@@ -148,7 +148,7 @@ describe('the mailbox picker: what a member is offered (AGL-2980)', () => {
   })
 
   it('offers a member their own when the routes cannot say whether they may choose more', async () => {
-    mockAvailability.mockRejectedValue(new Error('Outreach could not be reached. Try again.'))
+    mockAvailability.mockRejectedValue(new Error('Sequences could not be reached. Try again.'))
     renderPicker()
     await waitFor(() => expect(mockAvailability).toHaveBeenCalled())
     expect(optionNames()).toHaveLength(2)

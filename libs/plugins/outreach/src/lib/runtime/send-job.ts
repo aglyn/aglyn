@@ -541,7 +541,7 @@ async function runTaskStep(
       contactId: enrollment.contactId,
       dedupeKey: `step:${enrollment.id}:${step.id}`,
       title: step.title,
-      notes: `From the Outreach sequence step ${enrollment.stepIndex + 1}.`,
+      notes: `From sequence step ${enrollment.stepIndex + 1}.`,
       kind: OUTREACH_TASK_KIND_TO_RECORD[step.taskKind] ?? 'todo',
       dueAtMs: nowMs,
       assigneeUid: run.mailbox.connectedByUid,

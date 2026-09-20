@@ -381,7 +381,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
       return refusal(
         422,
         'scopes-missing',
-        'Outreach needs permission to send and to read your mail. Connect again and allow both.',
+        'Sequences needs permission to send and to read your mail. Connect again and allow both.',
       )
     }
     const identity = readGoogleIdToken(grant.idToken, {
@@ -416,7 +416,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
         return refusal(
           422,
           'scopes-missing',
-          'Outreach needs permission to send and to read your mail. Connect again and allow both.',
+          'Sequences needs permission to send and to read your mail. Connect again and allow both.',
         )
       }
       return googleUnavailable(error)
@@ -538,7 +538,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     await deps.logOrgActivity(
       gate.orgId,
       { uid: gate.uid, email: gate.email },
-      current ? 'Reconnected an Outreach mailbox' : 'Connected an Outreach mailbox',
+      current ? 'Reconnected a mailbox in Sequences' : 'Connected a mailbox in Sequences',
       { type: OUTREACH_MAILBOX_ACTIVITY_TARGET, id: mailboxId, name: activityName(mailbox) },
     )
     return ok({
@@ -613,7 +613,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     await deps.logOrgActivity(
       gate.orgId,
       { uid: gate.uid, email: gate.email },
-      next === 'paused' ? 'Paused an Outreach mailbox' : 'Resumed an Outreach mailbox',
+      next === 'paused' ? 'Paused a mailbox in Sequences' : 'Resumed a mailbox in Sequences',
       { type: OUTREACH_MAILBOX_ACTIVITY_TARGET, id: mailbox.id, name: activityName(mailbox) },
     )
     return ok({ ok: true, mailbox: { ...mailbox, status: next, autoPause: null, updatedAtMs: nowMs } })
@@ -657,9 +657,9 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
       const sent = await sendOutreachMessage(opened.client, {
         from: { address: mailbox.sendAs, name: mailbox.displayName },
         to: mailbox.email,
-        subject: 'Outreach test message',
+        subject: 'Sequences test message',
         text: [
-          'This is a test message from Outreach.',
+          'This is a test message from Sequences.',
           '',
           `It was sent through your connected mailbox as ${mailbox.sendAs}. ` +
             'If it reached your inbox, this mailbox can send.',
@@ -703,7 +703,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     await deps.logOrgActivity(
       gate.orgId,
       { uid: gate.uid, email: gate.email },
-      'Disconnected an Outreach mailbox',
+      'Disconnected a mailbox in Sequences',
       { type: OUTREACH_MAILBOX_ACTIVITY_TARGET, id: mailbox.id, name: activityName(mailbox) },
     )
     return ok({ ok: true, revocation } satisfies OutreachMailboxDisconnectResponse)

@@ -89,7 +89,7 @@ describe('validateOutreachComplianceSettings (AGL-2980)', () => {
     for (const allowedCountries of [[], undefined, 'US']) {
       const { issues } = validateOutreachComplianceSettings({ ...valid, allowedCountries })
       expect(issues).toEqual([
-        { field: 'allowedCountries', message: 'Choose at least one country Outreach may send to.' },
+        { field: 'allowedCountries', message: 'Choose at least one country a sequence may send to.' },
       ])
     }
   })

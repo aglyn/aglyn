@@ -87,7 +87,7 @@ export function autoPauseSentence(mailbox: Pick<OutreachMailbox, 'autoPause' | '
     }
   }
   const until = typeof pause.untilMs === 'number' ? ` Wait until ${day(pause.untilMs)} before resuming it.` : ''
-  return `Outreach paused this mailbox on ${day(pause.atMs)}. ${pause.message}${until} Nothing sends from it until it is resumed.`
+  return `Sequences paused this mailbox on ${day(pause.atMs)}. ${pause.message}${until} Nothing sends from it until it is resumed.`
 }
 
 /** Accessible names of the card's actions, spelled once for the specs. */
@@ -238,7 +238,7 @@ export function MailboxCard(props: MailboxCardProps) {
     const confirmed = await confirm({
       title: 'Disconnect this mailbox?',
       description:
-        'Outreach deletes the access it stored for this mailbox and asks Google to revoke it. ' +
+        'Disconnecting deletes the access stored for this mailbox and asks Google to revoke it. ' +
         'Nothing is sent from it again unless it is connected again.',
       confirmationText: MAILBOX_ACTION_LABELS.disconnect,
       confirmationButtonProps: { color: 'error' },
