@@ -13,6 +13,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * @jest-environment node
  */
 
 /**
@@ -29,13 +31,13 @@ process.env['TOKEN_SIGNING_SECRET'] = 'paid-media-spec-secret'
 
 // `serve-media-cdn` is imported for its scope rules only; nothing here may
 // reach a real Firestore or bucket.
-jest.mock('./firebase-admin', () => ({ firebaseAdmin: {} }))
+jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({ firebaseAdmin: {} }))
 
 import {
   GATED_VIDEO_SESSION_TTL_MS,
   MEDIA_SIGNATURE_MAX_TTL_MS,
   verifyMediaAccess,
-} from './media-signing'
+} from '@aglyn/tenant-data-admin/server/media-signing'
 import {
   createPaidMediaDeliveryIo,
   type PaidMediaDeliveryIo,

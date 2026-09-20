@@ -65,8 +65,8 @@
  */
 
 import { EMAIL_MAX_AUDIENCE_PER_SEND } from '@aglyn/shared-util-email'
-import firebaseAdmin from './firebase-admin'
-import { emailSuppressionKey } from './email-suppression'
+import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { emailSuppressionKey } from '@aglyn/tenant-data-admin/server/email-suppression'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
 

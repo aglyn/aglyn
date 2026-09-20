@@ -59,8 +59,6 @@ export * from './screen-link-value'
 export * from './link-references'
 export * from './analytics-path-key'
 export * from './contacts'
-// The client-safe twin of `person-key` (server barrel only, for `node:crypto`).
-export * from './person-key-web'
 // The records that sit beside a contact — companies, pipelines, deals, tasks,
 // activities, field definitions (AGL-2595). Pure like `contacts`, and beside
 // it because `ContactFacet` names its lifecycle stage and custom-value types;

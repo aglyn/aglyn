@@ -128,8 +128,8 @@ const selectSendingDomain = (domain: string, localPart: string) => {
   })
 }
 
-jest.mock('@aglyn/tenant-data-admin/server/email-campaign-reach', () => ({
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/email-campaign-reach'),
+jest.mock('./email-campaign-reach', () => ({
+  ...jest.requireActual('./email-campaign-reach'),
   readCampaignReach: async () => new Set<string>(),
   readCampaignSettled: async () => ({
     reached: new Set<string>(),
