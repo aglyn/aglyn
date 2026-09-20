@@ -21,9 +21,11 @@ import {
   aiRepeatedItemCount,
   aiTreeLayoutRegions,
   detectPlanUnreadableRegions,
+  validateAiBuildPlan,
   type AiDoctrineTree,
 } from '../runtime/ai-doctrine-validators'
 import {
+  aiPlanCopiedPageViolations,
   aiPlanItemCountViolations,
   aiPlanRegionViolations,
   aiPlannedLayoutRegions,
@@ -223,5 +225,79 @@ describe('a region the plan promised (AGL-3024)', () => {
       [2, 'plan-layout-region-unknown', ['create[0].fields[1]']],
     ])
     expect(detectPlanUnreadableRegions(planWithLayoutFields(['header', 'sidebar']))).toEqual([])
+  })
+
+  // The rule above is only reached through the plan doctrine, and the plan
+  // step runs THAT, never the detector. Asserting the detector alone leaves
+  // the one line that wires it in uncovered: drop it from `validateAiBuildPlan`
+  // and every other assertion here still passes, while an unreadable region
+  // reaches the build as a promise no check can settle.
+  it('runs that rule as part of the plan doctrine, not only on its own', () => {
+    expect(
+      validateAiBuildPlan(planWithLayoutFields(['header', 'breadcrumbs']), null).map(
+        (violation) => violation.code,
+      ),
+    ).toContain('plan-layout-region-unknown')
+    expect(
+      validateAiBuildPlan(planWithLayoutFields(['header', 'sidebar']), null).map(
+        (violation) => violation.code,
+      ),
+    ).not.toContain('plan-layout-region-unknown')
+  })
+})
+
+/**
+ * The page kind's copy branch (AGL-3024): the same hole the layout copy had.
+ * It generates nothing, so no model answers for the plan and the copy itself
+ * has to — over the whole page, because a copy carries the SOURCE's nodes and
+ * nothing maps the plan's sections onto them.
+ */
+describe('a count the plan promised, against a page a copy produced (AGL-3024)', () => {
+  const sections = (items: number) => ({
+    sections: [
+      { name: 'hero', uses: [], items: 0 },
+      { name: 'practice areas', uses: [], items },
+    ],
+  })
+  /** A copied page: a hero, then `count` cards. A screen carries no app bar and no footer. */
+  const copiedPage = (count: number): AiDoctrineTree => ({
+    rootId: '_@_',
+    nodes: {
+      '_@_': { componentId: 'div', nodes: ['hero', 'sec'] },
+      hero: { componentId: 'section', props: { element: 'section' }, nodes: ['lede'] },
+      lede: { componentId: 'muiTypography', props: { variant: 'h1', children: 'Harborline Law' } },
+      ...cardsSection(count).nodes,
+    },
+  })
+
+  it('refuses a copy that shows fewer of anything than the plan promised', () => {
+    expect(aiPlanCopiedPageViolations(sections(4), copiedPage(3))).toEqual([
+      {
+        rule: null,
+        code: 'plan-items-short',
+        message:
+          'The confirmed plan says the "practice areas" section shows 4 items, and this page is a copy that shows at most 3 of anything. Build the 4.',
+      },
+    ])
+  })
+
+  it('keeps a copy that already shows every item the plan promised', () => {
+    expect(aiPlanCopiedPageViolations(sections(4), copiedPage(4))).toEqual([])
+  })
+
+  it('promises nothing where no section of the plan promises a repeat', () => {
+    expect(aiPlanCopiedPageViolations(sections(1), copiedPage(3))).toEqual([])
+    expect(aiPlanCopiedPageViolations({ sections: [] }, copiedPage(3))).toEqual([])
+  })
+
+  it('does not count a copy whose items a collection fills at render', () => {
+    const bound: AiDoctrineTree = {
+      rootId: '_@_',
+      nodes: {
+        '_@_': { componentId: 'div', nodes: ['list'] },
+        list: { componentId: 'collectionEntries', props: { collectionId: 'col-1' }, nodes: [] },
+      },
+    }
+    expect(aiPlanCopiedPageViolations(sections(4), bound)).toEqual([])
   })
 })

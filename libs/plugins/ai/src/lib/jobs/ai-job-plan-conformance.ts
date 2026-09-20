@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AiBuildPlanSection } from '../model/ai-build-plan'
+import type { AiBuildPlanScreen, AiBuildPlanSection } from '../model/ai-build-plan'
 import type { AiJobPlan } from '../model/ai-jobs.types'
 import {
   AI_LAYOUT_REGION_NAMES,
@@ -156,6 +156,43 @@ export function aiPlanItemCountViolations(
       rule: null,
       code: 'plan-items-short',
       message: `The confirmed plan says the "${section.name}" section shows ${section.items} items, and this section shows ${shown}. Build all ${section.items}.`,
+    },
+  ]
+}
+
+/**
+ * The counts the plan's sections promised against a page a COPY produced
+ * (AGL-3024), read over the whole page because a copy has no section of the
+ * plan's in it to read one at a time.
+ *
+ * A copied screen carries the SOURCE's nodes under the source's ids: nothing
+ * maps "the practice areas section" onto a subtree of it, so the per-section
+ * reading `aiPlanItemCountViolations` does at a generation pass has nothing
+ * to stand on here. What can still be settled is the weaker claim, and it is
+ * the one that catches the measured shape: a plan promising a section of four
+ * against a copy in which NO group of four repeated things exists anywhere is
+ * a promise the copy did not keep, whichever section was meant to keep it.
+ *
+ * Weaker on purpose, and so quieter: a copy holding six of something else
+ * reads as six and is let through. A screen carries no app bar and no footer
+ * — those are its layout's — so what is counted is the page's own content.
+ */
+export function aiPlanCopiedPageViolations(
+  screen: Pick<AiBuildPlanScreen, 'sections'>,
+  tree: AiDoctrineTree,
+): AiDoctrineViolation[] {
+  const promised = screen.sections
+    .filter((section) => section.items >= AI_PLAN_ITEMS_MIN)
+    .sort((a, b) => b.items - a.items)[0]
+  if (!promised) return []
+  if (aiBindsRepeatedItems(tree)) return []
+  const shown = aiRepeatedItemCount(tree)
+  if (shown >= promised.items) return []
+  return [
+    {
+      rule: null,
+      code: 'plan-items-short',
+      message: `The confirmed plan says the "${promised.name}" section shows ${promised.items} items, and this page is a copy that shows at most ${shown} of anything. Build the ${promised.items}.`,
     },
   ]
 }

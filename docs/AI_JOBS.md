@@ -627,9 +627,14 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   A region word the vocabulary cannot read is refused on the PLAN
   (`detectPlanUnreadableRegions`, rule 2), where a re-ask costs a sentence rather than a
   build. The duplicate branch is where this matters most: it generates nothing, so the
-  copy itself answers for the plan (`aiCopiedLayoutReview` reads the copy back), and a
-  copy that cannot be read settles nothing and stops for a person rather than reporting
-  `Done`.
+  copy itself answers for the plan (`aiCopiedLayoutReview` for a layout,
+  `aiCopiedPageReview` for a page), and a copy that cannot be read settles nothing and
+  stops for a person rather than reporting `Done`. A copied PAGE is read over the whole
+  document rather than section by section: it carries the source's nodes under the
+  source's ids, so nothing maps the plan's sections onto it, and the weaker claim — no
+  group of four repeated things anywhere in a page whose plan promised a section of four
+  — is what can still be settled. A screen holds no app bar and no footer, which are its
+  layout's, so what is counted is the page's own content.
 - **Refused before a Confirm.** A plan that passes is asked the kind's admission with
   the plan, as the resume door asks it. A refusal fails the job with the door's
   sentence before any member is shown a Confirm: its plan is not kept, and it holds
@@ -939,9 +944,10 @@ confirmed `job.plan` and builds exactly one draft.
   host document names the draft until a member assigns it. A plan that starts
   from a copy (`duplicateOf`) gets that copy through the platform's
   `duplicateResource` and generates nothing — so a layout's copy is read back
-  and held to the regions its plan names before it is reported (AGL-3024),
-  because a branch that generates nothing has no model to answer for what the
-  plan promised beyond the source.
+  and held to the regions its plan names, and a page's copy to the counts its
+  plan's sections name, before either is reported (AGL-3024), because a branch
+  that generates nothing has no model to answer for what the plan promised
+  beyond the source.
 - **Admission.** A kind registers one check with `registerAiJobAdmission`
   (`src/lib/jobs/ai-job-admission.ts`). The create door asks it after the gate
   ladder and before the job exists, and the resume door asks it again before
