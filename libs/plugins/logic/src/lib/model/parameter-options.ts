@@ -15,45 +15,27 @@
  * limitations under the License.
  */
 
-import type { HostFunctionParameterOption } from '@aglyn/aglyn'
+import {
+  formatFunctionParameterOptions,
+  type HostFunctionParameterOption,
+  parseFunctionParameterOptions,
+} from '@aglyn/aglyn'
 
 /**
- * A parameter's choice list as ONE line of text (AGL-3202):
- * `cms: A CMS and room to grow, entry: The entry plan only`. A bare entry is
- * both the value and what the visitor reads.
- *
- * One line, not a nested editor, because the Edit Function dialog already
- * asks for a name, a type and a required switch per parameter. The cost is
- * that a value cannot itself contain a comma, and a label cannot either; a
- * choice that needs one is a sign the question wants rewording.
+ * A parameter's choice list as one line of text (AGL-3202). The grammar lives
+ * in core — `parseFunctionParameterOptions` — because the canvas's Function
+ * Input element reads the same line and a plugin may not import another. These
+ * are the names the function builder has always called it by.
  */
 export function parseParameterOptions(
   text: string,
 ): HostFunctionParameterOption[] {
-  const options: HostFunctionParameterOption[] = []
-  const seen = new Set<string>()
-  for (const part of String(text ?? '').split(',')) {
-    const colon = part.indexOf(':')
-    const value = (colon < 0 ? part : part.slice(0, colon)).trim()
-    // The second copy of a value is a typo, not a second choice: a select
-    // with two identical values cannot tell the function which was picked.
-    if (!value || seen.has(value)) continue
-    seen.add(value)
-    const label = colon < 0 ? '' : part.slice(colon + 1).trim()
-    options.push(label && label !== value ? { value, label } : { value })
-  }
-  return options
+  return parseFunctionParameterOptions(text)
 }
 
 /** The inverse, for showing a stored list in that one line. */
 export function formatParameterOptions(
   options: HostFunctionParameterOption[] | undefined,
 ): string {
-  return (options ?? [])
-    .map((option) =>
-      option.label && option.label !== option.value
-        ? `${option.value}: ${option.label}`
-        : option.value,
-    )
-    .join(', ')
+  return formatFunctionParameterOptions(options)
 }

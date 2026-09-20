@@ -218,6 +218,18 @@ export function hasBindings(text: string): boolean {
 export const FUNCTION_WIDGET_COMPONENT_ID = 'functionWidget'
 
 /**
+ * Component id of the Calculator container (plugins-mui, AGL-3202): the
+ * other element that runs a function in the visitor's browser, and so the
+ * other one compose hands a definition to.
+ */
+export const FUNCTION_SCOPE_COMPONENT_ID = 'functionScope'
+
+const FUNCTION_RUNNING_COMPONENT_IDS: ReadonlySet<string> = new Set([
+  FUNCTION_WIDGET_COMPONENT_ID,
+  FUNCTION_SCOPE_COMPONENT_ID,
+])
+
+/**
  * The site variables ONE function reads, by name (AGL-3202).
  *
  * A widget runs in the visitor's browser, so whatever it may read has to be
@@ -260,10 +272,9 @@ export function attachFunctionDefinitions<T extends Record<string, any>>(
   if (!Object.keys(functions).length) return nodes
   const next: Record<string, any> = {}
   for (const [id, node] of Object.entries(nodes)) {
-    const name =
-      node?.componentId === FUNCTION_WIDGET_COMPONENT_ID
-        ? node?.props?.functionName
-        : undefined
+    const name = FUNCTION_RUNNING_COMPONENT_IDS.has(node?.componentId)
+      ? node?.props?.functionName
+      : undefined
     const definition = name ? functions[String(name).trim()] : undefined
     if (!definition) {
       next[id] = node

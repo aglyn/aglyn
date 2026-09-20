@@ -20,7 +20,9 @@ import {
   evaluateExpression,
   evaluateHostFunction,
   expressionIdentifiers,
+  formatFunctionParameterOptions,
   functionReferencedNames,
+  parseFunctionParameterOptions,
   type HostFunction,
 } from './functions'
 
@@ -298,3 +300,17 @@ describe('parameter defaults (AGL-3202)', () => {
     ).toMatchObject({ ok: true, value: '7 without' })
   })
 })
+
+describe('a choice list as one line of text (AGL-3202)', () => {
+  it('reads pairs, bare entries and numbers, and round-trips', () => {
+    expect(parseFunctionParameterOptions('cms: A CMS, entry: Entry only, 10, 25')).toEqual([
+      { value: 'cms', label: 'A CMS' },
+      { value: 'entry', label: 'Entry only' },
+      { value: '10' },
+      { value: '25' },
+    ])
+    expect(formatFunctionParameterOptions(parseFunctionParameterOptions('a: One, b'))).toBe('a: One, b')
+    expect(parseFunctionParameterOptions(undefined)).toEqual([])
+  })
+})
+

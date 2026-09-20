@@ -210,6 +210,19 @@ describe('site variables reach a function (AGL-3202)', () => {
     expect(JSON.stringify(result.widget.props)).not.toContain('999')
   })
 
+  it('hands the same to a Calculator container, the other element that runs one', () => {
+    const nodes = {
+      scope: { $id: 'scope', componentId: 'functionScope', nodes: ['input'], props: { functionName: 'cost' } },
+      input: { $id: 'input', componentId: 'functionInput', props: { parameter: 'sites' } },
+    }
+    const result = attachFunctionDefinitions(nodes, { cost }, prices)
+    expect(result.scope.props.definition).toEqual(cost)
+    expect(result.scope.props.globals).toEqual({ webflow_site: 25 })
+    expect(result.scope.nodes).toEqual(['input'])
+    // The pieces inside read the container; nothing is attached to them.
+    expect(result.input).toBe(nodes.input)
+  })
+
   it('adds no key at all for a function that reads none', () => {
     const plain = { ...cost, operations: [] as unknown[] }
     const nodes = {
