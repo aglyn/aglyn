@@ -49,7 +49,7 @@ Each capability has its own page, next to the thing it builds:
 | A reusable component | **Components → Describe it** | [Generate a component](../building-sites/components/generate-a-component-with-aglyn-ai.md) |
 | A form | **Forms → Describe it** | [Generate a form](generate-a-form.md) |
 | A section on the canvas | The Besigner | [Generate a section](generate-section.md) |
-| Copy, rewritten or fresh | Any text in the Besigner | [Copy assist](copy-assist.md) |
+| Copy, rewritten or fresh | Any text in the Besigner | [Rewrite and write copy](copy-assist.md) |
 | A change to your theme | **Setup → Theme** | [Themes with AI](theme-assist.md) |
 | Search titles and descriptions | **SEO** | [SEO by AI](../building-sites/seo/seo-by-ai.md) |
 | Product copy, catalog and discount ideas | **Commerce** | [Products with AI](products-with-ai.md) |
@@ -69,7 +69,7 @@ document is checked against them before you see it.
 
 - **Drafting an automation from a description.** The door exists on
   **Automation → Actions**, and what it is meant to do is on
-  [Draft and explain automations with AI](automations-with-ai.md) — but a draft is
+  [Explain automations with AI](automations-with-ai.md) — but a draft is
   currently cut short at its size ceiling and can arrive with one step where the
   description asked for several, so it is not open. **Explain an automation** and
   **Why did this fail?** on the same pages are unaffected.
