@@ -33,9 +33,15 @@ import {
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
   aiSitePlanRefusal,
+  aiSiteSubmissions,
+  aiSiteWords,
   parseAiSiteJobInputs,
   type AiSiteJobInputs,
 } from '../model/ai-site-job'
+import {
+  AI_SITE_SEO_OUTPUT_ID,
+  aiSiteSeoProposalForInputs,
+} from '../model/ai-site-start-seo'
 import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiRecordedJobDraftId } from './ai-job-draft-ids'
@@ -252,6 +258,35 @@ export function aiSitePendingUnits(
   })
 }
 
+/**
+ * The site's own search listing as the scaffold reports it (AGL-2918), or
+ * nothing when the job already reported one or its inputs describe no site.
+ *
+ * It costs nothing and asks no model: the values are arithmetic on the
+ * answers (`aiSiteSeoProposal`), so they ride out on the first pass that
+ * builds anything rather than waiting for a pass of their own. Its resource
+ * is `seo`, which no unit reports, so it cannot be mistaken for a unit's
+ * output by `aiSitePendingUnits` and cannot move where the scaffold thinks
+ * it is.
+ */
+export function aiSiteSeoOutputs(job: AiJob): AiJobOutput[] {
+  const outputs = job.outputs ?? []
+  if (outputs.some((output) => output.resource === 'seo' && output.id === AI_SITE_SEO_OUTPUT_ID)) {
+    return []
+  }
+  const proposal = aiSiteSeoProposalForInputs(job.inputs)
+  if (!proposal) return []
+  return [
+    {
+      resource: 'seo',
+      id: AI_SITE_SEO_OUTPUT_ID,
+      hostId: job.hostId ?? null,
+      label: 'The site’s search title and description',
+      proposal: proposal as unknown as Record<string, unknown>,
+    },
+  ]
+}
+
 /** A record an earlier unit created, as a later one references it. */
 export interface AiSiteBuiltRef {
   id: string
@@ -318,7 +353,14 @@ function resolved(ref: string | null, built: BuiltRefs): string | null {
   )
 }
 
-/** The site's own words, as every unit's brief carries them. */
+/**
+ * The site's own words, as every unit's brief carries them.
+ *
+ * The audience is here rather than left to the brief's prose (AGL-2918). A
+ * guided start writes it into the brief itself, but an agency batch's brief
+ * is a member's own sentence and may never mention it, and a theme, a layout
+ * or a form asked to serve nobody in particular serves nobody in particular.
+ */
 export function aiSiteBriefLines(
   brief: string,
   inputs: AiSiteJobInputs,
@@ -327,10 +369,42 @@ export function aiSiteBriefLines(
   const site = [
     inputs.businessName ? `name: ${inputs.businessName}` : '',
     `business: ${inputs.businessType}`,
+    inputs.audience ? `for: ${inputs.audience}` : '',
     inputs.city ? `city: ${inputs.city}` : '',
     inputs.brand ? `brand: ${inputs.brand}` : '',
   ].filter(Boolean)
   lines.push(`Site — ${site.join('; ')}.`)
+  return lines
+}
+
+/**
+ * What the welcome email is told (AGL-2918), beyond that it is a welcome
+ * email.
+ *
+ * The scaffold's email unit used to carry one sentence, and a yes/no toggle
+ * decided whether it ran — so the draft was a welcome email for a business
+ * in general, to nobody in particular, about nothing that had happened. The
+ * two answers it is missing are who wrote in and what now becomes of what
+ * they wrote, and the second of those is the person's own routing answer, so
+ * the email and the form it acknowledges cannot say different things.
+ *
+ * ⛔ A DRAFT either way. Nothing here sends, schedules or enrolls anybody:
+ * the email step writes an unpublished email design and stops.
+ */
+export function aiSiteEmailBriefLines(
+  inputs: Readonly<Record<string, unknown>> | null | undefined,
+): string[] {
+  const lines = [
+    'Write the welcome email this site sends someone who gets in touch.',
+  ]
+  const { audience } = aiSiteWords(inputs)
+  if (audience) lines.push(`Write it to ${audience}.`)
+  const submissions = aiSiteSubmissions(inputs)
+  if (submissions === 'lead') {
+    lines.push('Their message is a sales lead, so say that somebody will be in touch about it.')
+  } else if (submissions === 'inbox') {
+    lines.push('Their message has been read, so say it arrived and that a reply is coming.')
+  }
   return lines
 }
 
@@ -429,9 +503,7 @@ export function aiSiteUnitJob(
     )
   }
   if (unit.kind === 'email') {
-    brief.push(
-      'Write the welcome email this site sends someone who gets in touch.',
-    )
+    brief.push(...aiSiteEmailBriefLines(job.inputs))
   }
   return {
     ...job,
@@ -564,10 +636,15 @@ export function createAiJobSiteStep(
       runner,
       emptyCopy: AI_SITE_UNIT_EMPTY_COPY,
     })
+    // The site's own listing rides out beside the first unit's output, once
+    // (AGL-2918): it is derived from the answers rather than generated, so it
+    // is ready before anything is built and costs the pass nothing.
+    const outcome: AiJobStepOutcome = {
+      ...pass.outcome,
+      outputs: [...aiSiteSeoOutputs(job), ...pass.outcome.outputs],
+    }
     // A built unit continues the scaffold while units remain after it.
-    return pass.built && pending.length > 1
-      ? { ...pass.outcome, continue: true }
-      : pass.outcome
+    return pass.built && pending.length > 1 ? { ...outcome, continue: true } : outcome
   }
 }
 

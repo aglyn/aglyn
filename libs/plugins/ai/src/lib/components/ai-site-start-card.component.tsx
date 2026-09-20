@@ -42,10 +42,15 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AI_SITE_PAGES, aiSiteCreditEstimate } from '../model/ai-site-job'
+import {
+  AI_SITE_PAGES,
+  aiSiteCreditEstimate,
+  type AiSiteSubmissions,
+} from '../model/ai-site-job'
 import {
   AI_SITE_START_ANSWERS,
   AI_SITE_START_EXAMPLES,
+  AI_SITE_START_SUBMISSIONS,
   AI_SITE_START_TYPES,
   aiSiteStartBrief,
   aiSiteStartInputs,
@@ -296,6 +301,27 @@ export function AiSiteStartCard({
                     ))}
                   </Stack>
                 </Box>
+                {/*
+                  The one setting a new site owner has to make, asked where
+                  they are already answering: a contact form nobody routed
+                  files its messages somewhere the person has not looked.
+                */}
+                <TextField
+                  select
+                  fullWidth
+                  label="Where do form submissions go?"
+                  value={answers.submissions}
+                  onChange={(event) =>
+                    answer({ submissions: event.target.value as AiSiteSubmissions })
+                  }
+                  helperText="You can change this on the form itself afterwards."
+                >
+                  {AI_SITE_START_SUBMISSIONS.map((option) => (
+                    <MenuItem key={option.id} value={option.id}>
+                      {`${option.label} — ${option.blurb}`}
+                    </MenuItem>
+                  ))}
+                </TextField>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                   <TextField
                     select

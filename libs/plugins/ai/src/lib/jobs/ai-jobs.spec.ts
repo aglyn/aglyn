@@ -492,7 +492,10 @@ describe('a step run again after its draft was written finds that draft and writ
     expect(writes).toEqual([recorded])
     expect(layoutDocs()).toEqual([`hosts/host-1/layouts/${recorded}`])
     const done = await getAiJob(firestore, ORG, job.$id)
-    expect(done).toMatchObject({ status: 'done', outputs: [expect.objectContaining({ resource: 'layout', id: recorded })] })
+    expect(done).toMatchObject({
+      status: 'done',
+      outputs: [expect.objectContaining({ resource: 'layout', id: recorded })],
+    })
     // Every claim and record kept the id the job was created with.
     expect(done?.steps[0].draftIds).toEqual({ layout: recorded })
   })
@@ -553,7 +556,15 @@ describe('a step run again after its draft was written finds that draft and writ
     expect(writes).toEqual([recorded])
     expect(layoutDocs()).toEqual([`hosts/host-1/layouts/${recorded}`])
     const done = await getAiJob(firestore, ORG, job.$id)
-    expect(done).toMatchObject({ status: 'done', outputs: [expect.objectContaining({ resource: 'layout', id: recorded })] })
+    expect(done).toMatchObject({
+      status: 'done',
+      outputs: [
+        // The site's own listing, which every scaffold reports once and which
+        // no unit builds (AGL-2918).
+        expect.objectContaining({ resource: 'seo', id: 'site:listing' }),
+        expect.objectContaining({ resource: 'layout', id: recorded }),
+      ],
+    })
     // The plan, kept, confirmed and read again on every pass, still names the draft by the id it was kept with.
     expect(done?.plan?.create[0].id).toBe(recorded)
   })

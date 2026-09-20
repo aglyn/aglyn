@@ -23,10 +23,16 @@
  */
 
 import { STARTER_TEMPLATES } from '@aglyn/aglyn/app-utils/starter-templates'
-import { AI_SITE_INPUT_MAX_CHARS, AI_SITE_PAGES, parseAiSiteJobInputs } from './ai-site-job'
+import {
+  AI_SITE_INPUT_MAX_CHARS,
+  AI_SITE_PAGES,
+  AI_SITE_SUBMISSIONS,
+  parseAiSiteJobInputs,
+} from './ai-site-job'
 import {
   AI_SITE_START_ANSWERS,
   AI_SITE_START_EXAMPLES,
+  AI_SITE_START_SUBMISSIONS,
   AI_SITE_START_TYPES,
   aiSiteStartBrief,
   aiSiteStartExample,
@@ -114,6 +120,7 @@ describe('the answers are a site job the door already admits', () => {
       businessName: '',
       city: '',
       brand: '',
+      submissions: 'inbox',
       welcomeEmail: true,
       batchId: null,
     })
@@ -145,5 +152,49 @@ describe('the answers are a site job the door already admits', () => {
     expect(brief).toContain('a neighborhood dog groomer')
     expect(brief).not.toContain('It is for')
     expect(brief).not.toContain('starter')
+  })
+
+  /*
+   * Who fills the contact form in (AGL-2918). The audience used to be said
+   * once, in a sentence about who the PAGES are written for, which left the
+   * form to pick its fields off a brief that never mentioned it.
+   */
+  it('asks the contact form for what the audience would be asked for', () => {
+    expect(aiSiteStartBrief(answered({ audience: 'local dog owners' }))).toContain(
+      'Ask the contact form for what local dog owners would be asked for.',
+    )
+  })
+
+  it('says nothing about the form’s fields when nobody said who it is for', () => {
+    expect(aiSiteStartBrief(answered())).not.toContain('Ask the contact form')
+  })
+})
+
+describe('where the contact form’s submissions go', () => {
+  it('offers exactly the answers the form step can bind, and no third', () => {
+    // The form step's own vocabulary has a mailing list, which it can only
+    // answer with a note: offering it would be asking for an outcome the
+    // stored routing has no place for.
+    expect(AI_SITE_START_SUBMISSIONS.map((option) => option.id)).toEqual([...AI_SITE_SUBMISSIONS])
+    for (const option of AI_SITE_START_SUBMISSIONS) {
+      expect(aiSiteStartRefusal(answered({ submissions: option.id }))).toBeNull()
+    }
+  })
+
+  it('starts on the Inbox, and carries whatever was answered onto the job', () => {
+    expect(AI_SITE_START_ANSWERS.submissions).toBe('inbox')
+    expect(aiSiteStartInputs(answered()).submissions).toBe('inbox')
+    expect(aiSiteStartInputs(answered({ submissions: 'lead' })).submissions).toBe('lead')
+  })
+
+  it('refuses an answer the form step could not bind', () => {
+    expect(
+      aiSiteStartRefusal(answered({ submissions: 'carrier pigeon' as never })),
+    ).toMatch(/submissions go/)
+  })
+
+  it('reaches the door as an input it admits', () => {
+    const parsed = parseAiSiteJobInputs(aiSiteStartInputs(answered({ submissions: 'lead' })))
+    expect(typeof parsed === 'string' ? parsed : parsed.submissions).toBe('lead')
   })
 })

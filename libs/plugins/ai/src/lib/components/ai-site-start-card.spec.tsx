@@ -56,7 +56,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 import { AI_PLUGIN_ID } from '../constants'
 import { registerAiConsole } from '../plugin'
-import { AI_SITE_START_EXAMPLES } from '../model/ai-site-start'
+import { AI_SITE_START_EXAMPLES, AI_SITE_START_SUBMISSIONS } from '../model/ai-site-start'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -376,6 +376,44 @@ describe('the questions become a site scaffold', () => {
         starter: AI_SITE_START_EXAMPLES[0].id,
       }),
     )
+  })
+
+  /*
+   * Where submissions go (AGL-2918): the one setting a new site owner has to
+   * make, and the one a model cannot make for them. Asked here, carried on
+   * the job, and binding on the form the scaffold builds.
+   */
+  it('asks where form submissions go, offering every answer the form step can bind', async () => {
+    await openCard()
+    const field = screen.getByLabelText(/Where do form submissions go\?/)
+    expect(field).toBeTruthy()
+    fireEvent.mouseDown(field)
+    expect(
+      screen.getAllByRole('option').map((option) => option.getAttribute('data-value')),
+    ).toEqual(AI_SITE_START_SUBMISSIONS.map((option) => option.id))
+  })
+
+  it('carries the answer about submissions on the job', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    fireEvent.mouseDown(screen.getByLabelText(/Where do form submissions go\?/))
+    fireEvent.click(screen.getByRole('option', { name: /CRM as a lead/ }))
+    mockFetch.mockResolvedValueOnce(json({ job: { id: 'job-1', kind: 'site', status: 'queued' } }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await screen.findByText(/Your site is being planned/)
+    const [, init] = mockFetch.mock.calls[mockFetch.mock.calls.length - 1]
+    expect(JSON.parse(init.body).inputs.submissions).toBe('lead')
+  })
+
+  it('starts on the Inbox, which is what an unanswered question has to mean', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ job: { id: 'job-1', kind: 'site', status: 'queued' } }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await screen.findByText(/Your site is being planned/)
+    const [, init] = mockFetch.mock.calls[mockFetch.mock.calls.length - 1]
+    // Filing leads is the ADDITION, and an addition is what a person chooses.
+    expect(JSON.parse(init.body).inputs.submissions).toBe('inbox')
   })
 
   it('promises a plan to confirm, never a built or a published site', async () => {

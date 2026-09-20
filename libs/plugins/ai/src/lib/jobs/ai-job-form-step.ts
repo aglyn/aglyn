@@ -35,6 +35,7 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
 import { NodeType, type NodesMap } from '@aglyn/aglyn/types/nodes'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
+import { aiSiteSubmissions, aiSiteWords, type AiSiteSubmissions } from '../model/ai-site-job'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
@@ -216,6 +217,22 @@ export interface AiFormAnswer {
   cannotCollect: string[]
 }
 
+/**
+ * What the person already decided about this form, where they were asked
+ * (AGL-2918).
+ *
+ * Only the guided start asks, so only a scaffold's form unit carries one.
+ * Whether a submission is a note to read or a lead to chase is a fact about
+ * how a business runs, not something readable off a brief, so an answer here
+ * BINDS the routing instead of joining the evidence the model weighs: a
+ * person who said "the Inbox" and got a form filing leads would have been
+ * asked a question for nothing.
+ */
+export interface AiFormDecisions {
+  /** Where submissions go; `null` where nobody was asked. */
+  submissions: AiSiteSubmissions | null
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -224,12 +241,21 @@ function oneLine(value: string, max: number): string {
   return value.replace(/\s+/g, ' ').trim().slice(0, max).trim()
 }
 
-/** An answer's routing and gaps: an unknown kind is the Inbox, and the rest is trimmed and capped. */
-export function parseAiFormAnswer(answer: Record<string, unknown>): AiFormAnswer {
+/**
+ * An answer's routing and gaps: an unknown kind is the Inbox, and the rest is
+ * trimmed and capped. Where the person was asked where submissions go, their
+ * answer replaces the model's proposal — the whole of the difference a
+ * question makes.
+ */
+export function parseAiFormAnswer(
+  answer: Record<string, unknown>,
+  decisions: AiFormDecisions = { submissions: null },
+): AiFormAnswer {
   const routing = isRecord(answer['routing']) ? answer['routing'] : {}
-  const kind = (AI_FORM_ROUTING_KINDS as readonly unknown[]).includes(routing['kind'])
+  const proposed = (AI_FORM_ROUTING_KINDS as readonly unknown[]).includes(routing['kind'])
     ? (routing['kind'] as AiFormRoutingKind)
     : 'inbox'
+  const kind: AiFormRoutingKind = decisions.submissions ?? proposed
   const list = typeof routing['list'] === 'string' ? oneLine(routing['list'], LIST_NAME_MAX_CHARS) : ''
   const seen = new Set<string>()
   const cannotCollect: string[] = []
@@ -266,9 +292,9 @@ export interface AiFormDraft {
 export function aiFormDraft(
   tree: Pick<AiValidatedTree, 'rootId' | 'nodes'>,
   answer: Record<string, unknown>,
-  identity: { formId: string; name: string },
+  identity: { formId: string; name: string; decisions?: AiFormDecisions },
 ): AiFormDraft {
-  const parsed = parseAiFormAnswer(answer)
+  const parsed = parseAiFormAnswer(answer, identity.decisions ?? { submissions: null })
   const formNodeId = tree.rootId
   const nodes: NodesMap = {}
   for (const [id, node] of Object.entries(tree.nodes)) {
@@ -380,7 +406,11 @@ export function aiFormDraftViolations(
  * tree a generation returns is the object its last check saw, so the step
  * writes exactly the draft the contract passed.
  */
-export function aiFormDraftCheck(identity: { formId: string; name: string }): {
+export function aiFormDraftCheck(identity: {
+  formId: string
+  name: string
+  decisions?: AiFormDecisions
+}): {
   extend: (tree: AiValidatedTree, answer: Record<string, unknown>) => AiDoctrineViolation[]
   draftFor: (tree: AiValidatedTree) => AiFormDraft | undefined
 } {
@@ -429,13 +459,44 @@ export function aiFormOutputNote(answer: AiFormAnswer): string | null {
   return sentences.length ? sentences.join(' ') : null
 }
 
-/** The form job as the generation's user turn: the name, the brief, the confirmed plan. */
+/**
+ * The form job as the generation's user turn: the name, who fills the form
+ * in, the brief, and the confirmed plan.
+ *
+ * Who the form is for (AGL-2918) is the answer a contact form's FIELDS turn
+ * on — a trades business asks where the work is, a practice asks what the
+ * appointment is about — and it is not something a brief about a whole site
+ * says in a place the form can find. It rides here, in the turn, because it
+ * is one site's own words.
+ *
+ * Where submissions go rides here too, and it is NOT a hint: the step binds
+ * the routing to it whatever the model answers. It is stated so the model
+ * does not spend its answer proposing something that will be replaced, and
+ * so a form told its submissions are leads asks for the address that makes
+ * one.
+ */
 export function aiJobFormPrompt(
   job: Pick<AiJob, 'brief'>,
   plan: AiJobPlan | null,
   name: string,
+  context: { audience?: string; submissions?: AiSiteSubmissions | null } = {},
 ): string {
-  return [`Form name: ${name}`, aiJobBriefLine(job), ...aiPlanReferenceLines(plan)].join('\n')
+  const audience = (context.audience ?? '').trim()
+  return [
+    `Form name: ${name}`,
+    audience ? `The people who fill it in: ${audience}` : '',
+    context.submissions ? `Where its submissions go: ${SUBMISSION_WORDS[context.submissions]}` : '',
+    aiJobBriefLine(job),
+    ...aiPlanReferenceLines(plan),
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** What each decided routing is, said to the model the way the tool says it. */
+const SUBMISSION_WORDS: Record<AiSiteSubmissions, string> = {
+  inbox: 'the Inbox, to be read — routing.kind is inbox',
+  lead: 'the Inbox, and each one with an email address is a sales lead — routing.kind is lead',
 }
 
 /** A form job is admitted for a site of the job's own org whose plan has forms, with a form to spare. */
@@ -516,13 +577,25 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
     const allowance = await aiDraftAllowanceRefusal(firestore, { kind: 'form', hostId, org })
     if (allowance) return aiUnspentOutcome(model, { review: aiLimitReview(allowance) })
 
-    const check = aiFormDraftCheck({ formId: draftId, name })
+    // What the person answered about this form, where they were asked
+    // (AGL-2918): a scaffold's form unit carries the guided start's inputs.
+    const decisions: AiFormDecisions = { submissions: aiSiteSubmissions(job.inputs) }
+    const { audience } = aiSiteWords(job.inputs)
+    const check = aiFormDraftCheck({ formId: draftId, name, decisions })
     const result = await runValidatedGeneration('form', {
       step: 'job.form',
       model,
       instructions: AI_JOB_FORM_INSTRUCTIONS,
       inventory,
-      messages: [{ role: 'user', content: aiJobFormPrompt(job, plan, name) }],
+      messages: [
+        {
+          role: 'user',
+          content: aiJobFormPrompt(job, plan, name, {
+            audience,
+            submissions: decisions.submissions,
+          }),
+        },
+      ],
       tool: AI_JOB_FORM_TOOL,
       maxTokens: AI_JOB_FORM_STEP_BUDGET.maxTokens(model),
       thinking: 'off',

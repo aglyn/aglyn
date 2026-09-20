@@ -793,4 +793,106 @@ describe('aiJobFormPrompt', () => {
       `Form name: New form\nBrief: ${GOLDENS['roofingQuote'].brief}`,
     )
   })
+
+  it('names who fills it in and where its submissions go, where the person was asked (AGL-2918)', () => {
+    expect(
+      aiJobFormPrompt(job(), null, 'New form', {
+        audience: 'homeowners with a roof over fifteen years old',
+        submissions: 'lead',
+      }),
+    ).toBe(
+      [
+        'Form name: New form',
+        'The people who fill it in: homeowners with a roof over fifteen years old',
+        'Where its submissions go: the Inbox, and each one with an email address is a sales lead — routing.kind is lead',
+        `Brief: ${GOLDENS['roofingQuote'].brief}`,
+      ].join('\n'),
+    )
+  })
+
+  it('says neither for a form job nobody asked, and adds no blank line saying so', () => {
+    const asked = aiJobFormPrompt(job(), null, 'New form', { audience: '  ', submissions: null })
+    expect(asked).toBe(aiJobFormPrompt(job(), null, 'New form'))
+    expect(asked).not.toContain('\n\n')
+  })
+})
+
+/*
+ * Where submissions go (AGL-2918). The guided start asks; whether a message
+ * is a note to read or a lead to chase is a fact about a business, so the
+ * answer BINDS the routing the form is written with instead of joining the
+ * evidence the model weighs.
+ */
+describe('the person’s answer about where submissions go', () => {
+  it('replaces the routing the model proposed, in both directions', () => {
+    const proposed = { routing: { kind: 'lead', list: null } }
+    expect(parseAiFormAnswer(proposed, { submissions: 'inbox' }).routing).toEqual({
+      kind: 'inbox',
+      list: null,
+    })
+    expect(parseAiFormAnswer({ routing: { kind: 'inbox', list: null } }, { submissions: 'lead' }).routing).toEqual({
+      kind: 'lead',
+      list: null,
+    })
+  })
+
+  it('leaves the model’s proposal standing where nobody was asked', () => {
+    // Every job created before the question existed, and the agency batch,
+    // which does not ask it.
+    for (const decisions of [undefined, { submissions: null }] as const) {
+      expect(parseAiFormAnswer({ routing: { kind: 'lead', list: null } }, decisions).routing).toEqual({
+        kind: 'lead',
+        list: null,
+      })
+    }
+  })
+
+  it('writes the stored routing from the answer, not from what the model said', async () => {
+    // The golden routes to leads. The person said the Inbox, so the stored
+    // form has no lead routing and says nothing about CRM.
+    mockRunAiRequest.mockResolvedValueOnce(completion(GOLDENS['roofingQuote'].answer))
+    const outcome = await createAiJobFormStep()(
+      context({ ...goldenJob('roofingQuote'), inputs: { submissions: 'inbox' } }),
+    )
+    expect(mockDocs.get(`hosts/host-1/forms/${FORM_ID}`)?.['routing']).toBeUndefined()
+    expect(outcome.outputs[0]?.note ?? '').not.toContain('CRM')
+  })
+
+  it('files leads where the person asked for them, on a golden that proposed none', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(completion(GOLDENS['newsletterSignup'].answer))
+    const outcome = await createAiJobFormStep()(
+      context({ ...goldenJob('newsletterSignup'), inputs: { submissions: 'lead' } }),
+    )
+    expect(outcome.review).toBeUndefined()
+    expect(mockDocs.get(`hosts/host-1/forms/${FORM_ID}`)?.['routing']).toEqual({ lead: true })
+    expect(outcome.outputs[0]?.note ?? '').toContain('files a lead in CRM → Leads')
+  })
+
+  it('tells the model where they go, so it does not spend its answer on a routing that will be replaced', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(completion(GOLDENS['roofingQuote'].answer))
+    await createAiJobFormStep()(
+      context({
+        ...goldenJob('roofingQuote'),
+        inputs: { submissions: 'inbox', audience: 'homeowners with an older roof' },
+      }),
+    )
+    const turn = mockRunAiRequest.mock.calls[0][0].messages[0].content as string
+    expect(turn).toContain('Where its submissions go: the Inbox, to be read')
+    expect(turn).toContain('The people who fill it in: homeowners with an older roof')
+  })
+
+  it('asks again with the contract named when the person’s lead meets a form with no email field', async () => {
+    // The clinic survey asks for no address. The person chose leads, so the
+    // contract's own rule is what tells the model to add one — the decision
+    // reaches the design through the check, not around it.
+    const survey = completion(GOLDENS['clinicSurvey'].answer)
+    mockRunAiRequest.mockResolvedValueOnce(survey).mockResolvedValueOnce(survey)
+    const outcome = await createAiJobFormStep()(
+      context({ ...goldenJob('clinicSurvey'), inputs: { submissions: 'lead' } }),
+    )
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    expect(mockRunAiRequest.mock.calls[1][0].messages[2].content).toContain('no email field')
+    expect(outcome.review?.reason).toBe('doctrine')
+    expect(commits).toEqual([])
+  })
 })
