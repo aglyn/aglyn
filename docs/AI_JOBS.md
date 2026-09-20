@@ -728,6 +728,14 @@ shape it should allow.
   `screens[0].layout`: at most 24 node ids or plan paths a finding, each cut at 64
   characters, and `?` for one that is no identifier, such as a sentence or an address.
   The page's last pass names the nodes by the ids its draft stores them under.
+- **A section pass answers only for its own section.** Its check runs the page check on
+  the whole page, so a finding can name a node an earlier pass stored. The model is not
+  shown those nodes and cannot mend them, so a finding naming none of this section's
+  nodes is left to the last pass, which runs the same check on the finished page and
+  names every node by the id the draft stores it under. Held against the section
+  instead, it would re-ask for a node the model never saw, refuse the same answer twice,
+  and stop the page with findings whose ids all filtered away — and so with no outline
+  either, which is how a live About page pass came to stop with two bare findings.
 - **An outline of those parts.** `review.outline[]` holds the nodes the findings name,
   in the order they name them and each once, each with the nodes below it in document
   order, to 2 levels below each node a finding names, at most 40 nodes and 4,096 bytes as
@@ -757,9 +765,10 @@ shape it should allow.
 even a sentence written into a Grid's layout props or its children;
 `ai-job-page-step.spec.ts` stops the page's last pass naming the draft's own nodes, with
 their outline, and a section refused twice for rule 12 with its node ids and the
-outline of the refused section; and `ai-jobs.spec.ts` parks a job for the live About
-page's shape through the real section check and machine and reads the review back from
-the stored job.
+outline of the refused section, and builds a section whose page is broken only outside
+it, leaving both breaks to the last pass that names them; and `ai-jobs.spec.ts` parks a
+job for the live About page's shape through the real section check and machine and reads
+the review back from the stored job.
 
 ### The inventory, and "more on request"
 

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { requiredSitePlugins } from './required-site-plugins'
+import { realmPluginsInUse, requiredSitePlugins } from './required-site-plugins'
 
 const ENABLED = ['mui', 'bookings', 'commerce', 'marketing', 'events-calendar']
 
@@ -124,5 +124,61 @@ describe('requiredSitePlugins', () => {
     const enabled = [...ENABLED]
     requiredSitePlugins({ nodes: muiNodes, enabledPlugins: enabled })
     expect(enabled).toEqual(ENABLED)
+  })
+})
+
+describe('realmPluginsInUse (AGL-3116)', () => {
+  const install = (overrides: Record<string, unknown> = {}) => ({
+    listingId: 'Tfnrb4wJzF',
+    version: '1.0.0',
+    sha256: 'a'.repeat(64),
+    trust: 'realm',
+    signature: 'sig',
+    pluginId: 'promo-countdown',
+    ...overrides,
+  })
+  const page = {
+    _root_: { componentId: 'div', pluginId: 'mui' },
+    a: { componentId: 'muiTypography', pluginId: 'mui' },
+  }
+
+  it('drops an install whose only contribution is a console widget', () => {
+    // aglyn.com's case: pinned org-wide for a hostActivity widget, placed on
+    // no page — the realm host must not load for it.
+    expect(
+      realmPluginsInUse(
+        [install({ contributes: { console: { slots: ['hostActivity'] } } })],
+        page,
+      ),
+    ).toEqual([])
+  })
+
+  it('drops an UNDECLARED install when no node is stamped with its id', () => {
+    expect(realmPluginsInUse([install()], page)).toEqual([])
+  })
+
+  it('keeps an undeclared install where a node carries its id', () => {
+    const placed = { ...page, b: { componentId: 'promoBanner', pluginId: 'promo-countdown' } }
+    expect(realmPluginsInUse([install()], placed)).toHaveLength(1)
+    // A node stamped with the listing id counts the same.
+    const byListing = { ...page, b: { componentId: 'promoBanner', pluginId: 'Tfnrb4wJzF' } }
+    expect(realmPluginsInUse([install()], byListing)).toHaveLength(1)
+  })
+
+  it('keeps a declared install where the page places one of its components', () => {
+    const declared = install({ contributes: { site: { components: ['promoBanner'] } } })
+    expect(realmPluginsInUse([declared], page)).toEqual([])
+    expect(
+      realmPluginsInUse([declared], { ...page, b: { componentId: 'promoBanner' } }),
+    ).toEqual([declared])
+  })
+
+  it('keeps an install with a site feature on every page', () => {
+    const feature = install({ contributes: { site: { features: ['promo-bar'] } } })
+    expect(realmPluginsInUse([feature], page)).toEqual([feature])
+  })
+
+  it('loads nothing for a page with no nodes', () => {
+    expect(realmPluginsInUse([install()], null)).toEqual([])
   })
 })

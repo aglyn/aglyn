@@ -134,6 +134,20 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {},
 }))
 
+/**
+ * The plugins' declarations, which is where a plugin declares a console job
+ * (AGL-2981). No plugin by default, so the board is exactly the platform's
+ * inventory; a test that wants a plugin's rows sets this to declare them,
+ * against the registry the freshly imported route reads.
+ */
+let mockDeclarePluginJobs: (() => void) | null = null
+jest.mock('../constants/plugins.declarations.server.generated', () => ({
+  __esModule: true,
+  registerPluginServerDeclarations: async () => {
+    mockDeclarePluginJobs?.()
+  },
+}))
+
 type RouteModule = typeof import('../app/api/health/crons/route')
 
 async function freshRoute(): Promise<RouteModule> {
@@ -185,6 +199,7 @@ function summaryBeats(): Record<string, number> {
 let errorLog: jest.SpyInstance
 
 beforeEach(() => {
+  mockDeclarePluginJobs = null
   mockStore = {}
   mockWrites = []
   mockReads = []
@@ -300,6 +315,83 @@ describe('/api/health/crons', () => {
       .filter(([, check]) => !(check as { ok: boolean }).ok)
       .map(([id]) => id)
     expect(red).toEqual(['campaigns-process-scheduled'])
+  })
+
+  /*==========================================
+   * THE PLUGINS' JOBS (AGL-2981). Each console job a plugin declares is a
+   * row of its own, judged beside the platform's.
+   *=========================================*/
+  function declareAcmeJobs() {
+    mockDeclarePluginJobs = () => {
+      // The registry as the route sees it after `jest.resetModules`.
+      const seam = jest.requireActual(
+        '@aglyn/aglyn/plugin-manager/plugin-console-crons',
+      ) as typeof import('@aglyn/aglyn/plugin-manager/plugin-console-crons')
+      seam.resetPluginConsoleCronsForTests()
+      seam.registerPluginConsoleCron(
+        {
+          id: 'acme-mail-sync',
+          label: 'Acme mail sync',
+          drives: 'Reads replies into the CRM; if it stops, replies are never filed.',
+          run: async () => ({}),
+        },
+        { pluginId: 'acme-mail' },
+      )
+    }
+  }
+
+  it("adds a row for each plugin's declared job, beside every platform row", async () => {
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    markJob('acme-mail-sync', now - 60_000)
+    declareAcmeJobs()
+
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(Object.keys(body.checks).sort()).toEqual(
+      [...SCHEDULED_JOBS.map((job) => job.id), 'acme-mail-sync'].sort(),
+    )
+    expect(body.checks['acme-mail-sync']).toMatchObject({
+      ok: true,
+      schedule: '*/15 * * * *',
+      runner: 'cloud-scheduler',
+      graceMinutes: 45,
+    })
+  })
+
+  it("503s and names a plugin's job when it stops reporting, and only that row", async () => {
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    // Past the ceiling of a 45-minute grace on a 15-minute tick at any phase.
+    markJob('acme-mail-sync', now - 75 * 60_000)
+    declareAcmeJobs()
+
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body.checks['acme-mail-sync']).toMatchObject({ ok: false, code: 'job-silent' })
+    const red = Object.entries(body.checks)
+      .filter(([, check]) => !(check as { ok: boolean }).ok)
+      .map(([id]) => id)
+    expect(red).toEqual(['acme-mail-sync'])
+  })
+
+  it('judges the platform rows alone when the plugins\' declarations fail to load', async () => {
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    mockDeclarePluginJobs = () => {
+      throw new Error('a declarations module failed')
+    }
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+    expect(response.status).toBe(200)
+    expect(Object.keys(body.checks).sort()).toEqual(SCHEDULED_JOBS.map((job) => job.id).sort())
   })
 
   it('is degraded — not green — when the marks cannot be read at all', async () => {

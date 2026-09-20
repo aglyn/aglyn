@@ -51,7 +51,11 @@ revoke; a hard-kill still needs a revocation doc. Signing requires
 
 - **Console**: before the shell renders, from the org's trusted installs.
 - **Published sites**: post-hydration (additive — first paint never waits
-  on a marketplace CDN).
+  on a marketplace CDN), and only on a page that uses the plugin: one that
+  places a component its manifest declares under `contributes.site`, or on
+  every page when it declares a site feature. A plugin that only adds console
+  widgets never loads on a published page, and neither does the host that
+  runs it. See [`contributes`](../reference/manifest-and-envs.md#contributes--where-the-plugin-loads).
 - **Server** (rare): only on deployments with `PLUGIN_REMOTE_SERVER=enabled`
   plus a per-deploy `listingId@version` allowlist; every load is audited.
 

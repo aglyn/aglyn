@@ -463,7 +463,7 @@ describe('per-check summary (AGL-1087)', () => {
 
   it('reports every area, not only the ones that found something', () => {
     const result = checkPluginBundle(GOOD_BUNDLE, { declaredNetwork: [] })
-    expect(result.checks).toHaveLength(10)
+    expect(result.checks).toHaveLength(11)
     expect(result.checks.every((check) => check.status === 'pass')).toBe(true)
   })
 
@@ -524,6 +524,162 @@ describe('per-check summary (AGL-1087)', () => {
       { declaredNetwork: [] },
     )
     expect(result.problems[0].check).toBe('code-execution')
+  })
+})
+
+describe('contributions (AGL-3116)', () => {
+  const statusOf = (result: ReturnType<typeof checkPluginBundle>) =>
+    result.checks.find((check) => check.id === 'contributions')?.status
+  const messages = (result: ReturnType<typeof checkPluginBundle>) =>
+    result.problems
+      .filter((problem) => problem.check === 'contributions')
+      .map((problem) => `${problem.level}: ${problem.message}`)
+
+  /** A realm bundle the way the rollup template emits one. */
+  const WIDGET_BUNDLE = `const host = globalThis.__AGLYN_PLUGIN_HOST__;
+var aglyn = host["aglyn"];
+export function register(h) {
+  aglyn.registerConsoleExtension({
+    pluginId: 'w',
+    widgets: [
+      { slot: 'hostActivity', widgetId: 'a', Component: () => null },
+      { slot: aglyn.CONSOLE_WIDGET_SLOTS.orgDashboard, widgetId: 'b', Component: () => null },
+    ],
+  });
+}
+`
+
+  it('reads what register() registers, by slot, route, feature and component', () => {
+    const result = checkPluginBundle(
+      `export function register(h) {
+  const a = h.aglyn;
+  a.registerConsoleExtension({
+    pluginId: 'p',
+    navItems: [{ label: 'P', href: '/p', Component: () => null }],
+    orgNavItems: [{ label: 'O', href: '/o', Component: () => null }],
+    widgets: [{ slot: 'hostActivity', widgetId: 'w', Component: () => null }],
+  });
+  a.registerSiteRuntime({ pluginId: 'p', runtimeId: 'p-bar', Component: () => null });
+  a.components.registerComponent(() => null, { $id: 'pBanner', pluginId: 'p' });
+}
+`,
+      { declaredContributions: null },
+    )
+    expect(result.contributions).toEqual({
+      contributes: {
+        site: { components: ['pBanner'], features: ['p-bar'] },
+        console: {
+          slots: ['hostActivity'],
+          routes: ['/p'],
+          orgRoutes: ['/o'],
+          shell: true,
+        },
+      },
+      unresolved: [],
+    })
+  })
+
+  it('reads a slot named through the catalog as the slot it names', () => {
+    const result = checkPluginBundle(WIDGET_BUNDLE, {
+      declaredContributions: { console: { slots: ['hostActivity', 'orgDashboard'] } },
+    })
+    expect(result.contributions.contributes.console?.slots).toEqual([
+      'hostActivity',
+      'orgDashboard',
+    ])
+    expect(statusOf(result)).toBe('pass')
+    expect(result.ok).toBe(true)
+  })
+
+  it('warns an undeclared legacy bundle, and names the declaration to add', () => {
+    const result = checkPluginBundle(WIDGET_BUNDLE, { declaredContributions: null })
+    expect(result.ok).toBe(true)
+    expect(statusOf(result)).toBe('question')
+    expect(messages(result)).toHaveLength(1)
+    expect(messages(result)[0]).toContain(
+      '"contributes": {"console":{"slots":["hostActivity","orgDashboard"]}}',
+    )
+  })
+
+  it('refuses an undeclared NEW bundle that registers something', () => {
+    const result = checkPluginBundle(WIDGET_BUNDLE, {
+      declaredContributions: null,
+      requireContributions: true,
+    })
+    expect(result.ok).toBe(false)
+    expect(statusOf(result)).toBe('fail')
+  })
+
+  it('passes an undeclared bundle that registers nothing, even when required', () => {
+    const result = checkPluginBundle(
+      'export function register() {}\nexport default function render() {}\n',
+      { declaredContributions: null, requireContributions: true },
+    )
+    expect(result.ok).toBe(true)
+    expect(statusOf(result)).toBe('pass')
+  })
+
+  it('refuses a declaration that omits a registered slot', () => {
+    const result = checkPluginBundle(WIDGET_BUNDLE, {
+      declaredContributions: { console: { slots: ['hostActivity'] } },
+    })
+    expect(result.ok).toBe(false)
+    expect(messages(result)).toEqual([
+      expect.stringContaining('error: register() registers a widget in the console slot "orgDashboard"'),
+    ])
+  })
+
+  it('refuses a nav tab or provider without the shell', () => {
+    const result = checkPluginBundle(
+      `export function register(h) {
+  h.aglyn.registerConsoleExtension({ pluginId: 'p', providers: [function P() {}] });
+}
+`,
+      { declaredContributions: { console: { slots: ['hostActivity'] } } },
+    )
+    expect(result.ok).toBe(false)
+    expect(messages(result).join('\n')).toContain('"console": { "shell": true }')
+  })
+
+  it('refuses a site runtime or a component the declaration omits', () => {
+    const result = checkPluginBundle(
+      `export function register(h) {
+  h.aglyn.registerSiteRuntime({ runtimeId: 'bar', Component: () => null });
+  h.aglyn.components.registerComponent(() => null, { $id: 'banner' });
+}
+`,
+      { declaredContributions: { site: { components: ['other'] } } },
+    )
+    expect(result.ok).toBe(false)
+    const text = messages(result).join('\n')
+    expect(text).toContain('the site feature "bar"')
+    expect(text).toContain('the site component "banner"')
+    expect(text).toContain('declares the site component "other"')
+  })
+
+  it('warns, and never guesses, when a registration cannot be read', () => {
+    const result = checkPluginBundle(
+      `export function register(h) {
+  const extension = { pluginId: 'p', widgets: [] };
+  h.aglyn.registerConsoleExtension(extension);
+}
+`,
+      { declaredContributions: { console: { slots: ['hostActivity'] } } },
+    )
+    expect(result.ok).toBe(true)
+    expect(result.contributions.unresolved).toEqual([
+      'a console extension built at runtime',
+    ])
+    expect(statusOf(result)).toBe('question')
+  })
+
+  it('is unknown, with no finding, when no manifest was supplied', () => {
+    const result = checkPluginBundle(WIDGET_BUNDLE)
+    expect(statusOf(result)).toBe('unknown')
+    expect(messages(result)).toEqual([])
+    expect(
+      result.checks.find((check) => check.id === 'contributions')?.detail,
+    ).toContain('no manifest was supplied')
   })
 })
 

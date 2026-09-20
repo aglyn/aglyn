@@ -72,13 +72,29 @@ import type { PluginLoadManifest } from '@aglyn/aglyn${entryPoint === 'server' ?
 
 `
 
+/**
+ * The module each surface registers from (AGL-3116). A plugin's `modules`
+ * names a subpath for a surface whose code must not ride with the rest: the
+ * loader reads a loaded module by name, so everything a package entry exports
+ * ships with it, and a site surface loaded from the package root carried the
+ * console registrar onto every published page that used the plugin.
+ */
 function entry(plugin, entryPoint, surfaces) {
   const register = Object.fromEntries(
     Object.entries(plugin.register).filter(([key]) => surfaces.includes(key)),
   )
   if (!Object.keys(register).length) return null
-  const specifier =
+  const root =
     entryPoint === 'server' ? `${plugin.package}/server` : plugin.package
+  const moduleOf = (surface) =>
+    plugin.modules?.[surface] ? `${plugin.package}/${plugin.modules[surface]}` : root
+  const specifiers = Object.keys(register).map(moduleOf)
+  // One module for every surface this app loads: that module is `load`.
+  // Otherwise `load` is the root and each surface with its own module gets it.
+  const shared = specifiers.every((specifier) => specifier === specifiers[0])
+  const own = shared
+    ? []
+    : Object.keys(register).filter((surface) => moduleOf(surface) !== root)
   return (
     `  {\n` +
     `    id: '${plugin.id}',\n` +
@@ -87,7 +103,14 @@ function entry(plugin, entryPoint, surfaces) {
       ? `    apiPrefixes: ${JSON.stringify(plugin.apiPrefixes)},\n`
       : '') +
     `    register: ${JSON.stringify(register)},\n` +
-    `    load: () => import('${specifier}'),\n` +
+    `    load: () => import('${shared ? specifiers[0] : root}'),\n` +
+    (own.length
+      ? `    loads: {\n` +
+        own
+          .map((surface) => `      ${surface}: () => import('${moduleOf(surface)}'),\n`)
+          .join('') +
+        `    },\n`
+      : '') +
     `  },`
   )
 }
@@ -291,18 +314,56 @@ function requireStringFields(list, fields, where) {
   return list
 }
 
+/** One jiti instance with the workspace aliases, for reading TypeScript sources. */
+let workspaceJiti
+function jitiForWorkspace() {
+  if (!workspaceJiti) {
+    const { createJiti } = createRequire(join(ROOT, 'package.json'))('jiti')
+    workspaceJiti = createJiti(join(ROOT, 'package.json'), {
+      alias: workspaceAliases(),
+      interopDefault: true,
+      moduleCache: true,
+      fsCache: false,
+      sourceMaps: false,
+    })
+  }
+  return workspaceJiti
+}
+
+/**
+ * Every plugin declares what it contributes, and where (AGL-3116).
+ *
+ * Required of a first-party plugin: the loaders place a plugin by its
+ * declaration alone, and the default a marketplace plugin gets for declaring
+ * nothing exists for versions published before the contract, not for code in
+ * this repository. Validated by core's own sanitizer, so the catalog and a
+ * marketplace manifest cannot disagree about what a valid declaration is.
+ */
+async function checkContributions() {
+  const { sanitizePluginContributions } = await jitiForWorkspace().import(
+    '@aglyn/aglyn/plugin-manager/plugin-contributions',
+  )
+  const problems = []
+  for (const plugin of config.plugins) {
+    if (!('contributes' in plugin)) {
+      problems.push(`${plugin.id}: declares no "contributes"`)
+      continue
+    }
+    const verdict = sanitizePluginContributions(plugin.contributes)
+    if (!verdict.ok) problems.push(`${plugin.id}: ${verdict.error}`)
+  }
+  if (problems.length) {
+    throw new Error(
+      `plugins.config.json has plugins whose contributions the loaders cannot read:\n  ${problems.join('\n  ')}`,
+    )
+  }
+}
+
 /** Each plugin with a `subprocessors` entry, and what that entry returns. */
 async function pluginSubprocessors() {
   const declaring = config.plugins.filter((plugin) => plugin.register?.subprocessors)
   if (!declaring.length) return []
-  const { createJiti } = createRequire(join(ROOT, 'package.json'))('jiti')
-  const jiti = createJiti(join(ROOT, 'package.json'), {
-    alias: workspaceAliases(),
-    interopDefault: true,
-    moduleCache: true,
-    fsCache: false,
-    sourceMaps: false,
-  })
+  const jiti = jitiForWorkspace()
   const entries = []
   for (const plugin of declaring) {
     const specifier = `${plugin.package}/subprocessors`
@@ -433,6 +494,8 @@ const MANIFESTS = [
 
 const check = process.argv.includes('--check')
 const drifted = []
+
+await checkContributions()
 
 const ALL = [
   ...MANIFESTS.map((manifest) => ({

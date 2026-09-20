@@ -47,6 +47,11 @@ export interface SendOutreachMessageOptions {
   date?: Date
   /** The Message-ID's domain. The From address's domain when omitted. */
   messageIdDomain?: string
+  /**
+   * The Message-ID's local part, minted by the caller so it knows the id
+   * before the send answers (AGL-2981). A random one when omitted.
+   */
+  messageIdLocalPart?: string
 }
 
 /**
@@ -62,6 +67,7 @@ export async function sendOutreachMessage(
   const built = buildRfc5322Message(message, {
     date: options.date,
     messageIdDomain: options.messageIdDomain,
+    messageIdLocalPart: options.messageIdLocalPart,
   })
   const sent = await client.sendMessage({
     raw: encodeGmailRawMessage(built.raw),

@@ -729,6 +729,21 @@ describe('settings and status (AGL-2978)', () => {
     docs.set(mailboxPath(mailbox.id), { ...docs.get(mailboxPath(mailbox.id)), status: 'reconnect_required' })
     expect((await status(true)).body.reason).toBe('reconnect-required')
   })
+
+  it('clears the reason a mailbox paused itself when a member resumes it (AGL-2981)', async () => {
+    const mailbox = await connectMailbox()
+    docs.set(mailboxPath(mailbox.id), {
+      ...docs.get(mailboxPath(mailbox.id)),
+      status: 'paused',
+      autoPause: { reason: 'bounces_today', message: 'Paused after 2 hard bounces today.', atMs: NOW, untilMs: null },
+    })
+    const resumed = await run(
+      'status',
+      post('outreach/mailboxes/status', { orgId: ORG, mailboxId: mailbox.id, paused: false }, 'token-rep'),
+    )
+    expect(resumed.body.mailbox).toMatchObject({ status: 'connected', autoPause: null })
+    expect(docs.get(mailboxPath(mailbox.id))).toMatchObject({ status: 'connected', autoPause: null })
+  })
 })
 
 describe('send a test to myself (AGL-2978)', () => {

@@ -32,6 +32,9 @@ import {
   visitorWriteRateLimitRefusal,
   visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
+// The leaf, not the barrel: the dispatcher's specs substitute the barrel,
+// and a route's own registration must still be read where it was made.
+import { isPluginRecipientLinkRoute } from '@aglyn/aglyn/app-utils/api-plugins'
 import { ensureRemoteServerBundles } from '../../../utils/remote-server-bundles'
 import { serverPluginLoader as loader } from '../../../utils/server-plugin-loader'
 
@@ -95,53 +98,60 @@ async function dispatch(
         // Non-JSON body — fall through to handler self-gating.
       }
     }
-    let orgId: string | null
-    let subjectUid: string | null = null
-    if (hostId) {
-      // Per-site enablement (AGL-1014): the org set minus the host's
-      // deny-list — a plugin disabled for THIS site has no API surface for
-      // it, exactly like an org-disabled one.
-      const [resolved, disabledPlugins] = await Promise.all([
-        getOrgForHost(hostId),
-        getHostDisabledPlugins(hostId),
-      ])
-      orgId = resolved?.orgId ?? null
-      if (
-        resolved &&
-        !resolveHostEnabledPlugins(resolved.org, { disabledPlugins }).includes(
-          pluginId,
-        )
-      ) {
+    // A link mailed to a recipient — an unsubscribe — answers whether or not
+    // its plugin is on or released for the workspace now (AGL-2981): an
+    // opt-out outlives a rollout. It skips the gates below and nothing else;
+    // it verifies its own signature, and the site it names still scopes the
+    // lockdown and the rate limit further down.
+    if (!isPluginRecipientLinkRoute(path)) {
+      let orgId: string | null
+      let subjectUid: string | null = null
+      if (hostId) {
+        // Per-site enablement (AGL-1014): the org set minus the host's
+        // deny-list — a plugin disabled for THIS site has no API surface for
+        // it, exactly like an org-disabled one.
+        const [resolved, disabledPlugins] = await Promise.all([
+          getOrgForHost(hostId),
+          getHostDisabledPlugins(hostId),
+        ])
+        orgId = resolved?.orgId ?? null
+        if (
+          resolved &&
+          !resolveHostEnabledPlugins(resolved.org, { disabledPlugins }).includes(
+            pluginId,
+          )
+        ) {
+          return Response.json({ error: 'Not found' }, { status: 404 })
+        }
+      } else {
+        // The registry is shared with the console dispatcher, so a route's
+        // declared subject (AGL-2978) is honored here on the same terms: only
+        // when no site is named, and a null answer is the anonymous reading.
+        const subject = await resolvePluginApiRequestSubject(path, request)
+        orgId = subject?.orgId ?? null
+        subjectUid = subject?.uid ?? null
+      }
+      // Plugin release gate (AGL-422), UNCONDITIONAL since AGL-1689: a
+      // flagged-off plugin's API surface does not exist — except for staff
+      // bearer tokens (preview). See the console dispatcher for the full
+      // argument; in one line, nesting this inside `if (hostId)` let any caller
+      // skip the platform-wide kill switch by declining to name a site, and a
+      // release flag — unlike per-site enablement — never needed one.
+      //
+      // This dispatcher is the visitor-facing half, so the hostId-less case is
+      // the more reachable of the two: a public form or cart POST is authored by
+      // whoever is on the page.
+      const releaseFiltered = await filterEnabledPluginsByReleaseFlags(
+        [pluginId],
+        {
+          orgId,
+          authorization: request.headers.get('authorization'),
+          subjectUid,
+        },
+      )
+      if (!releaseFiltered.length) {
         return Response.json({ error: 'Not found' }, { status: 404 })
       }
-    } else {
-      // The registry is shared with the console dispatcher, so a route's
-      // declared subject (AGL-2978) is honored here on the same terms: only
-      // when no site is named, and a null answer is the anonymous reading.
-      const subject = await resolvePluginApiRequestSubject(path, request)
-      orgId = subject?.orgId ?? null
-      subjectUid = subject?.uid ?? null
-    }
-    // Plugin release gate (AGL-422), UNCONDITIONAL since AGL-1689: a
-    // flagged-off plugin's API surface does not exist — except for staff
-    // bearer tokens (preview). See the console dispatcher for the full
-    // argument; in one line, nesting this inside `if (hostId)` let any caller
-    // skip the platform-wide kill switch by declining to name a site, and a
-    // release flag — unlike per-site enablement — never needed one.
-    //
-    // This dispatcher is the visitor-facing half, so the hostId-less case is
-    // the more reachable of the two: a public form or cart POST is authored by
-    // whoever is on the page.
-    const releaseFiltered = await filterEnabledPluginsByReleaseFlags(
-      [pluginId],
-      {
-        orgId,
-        authorization: request.headers.get('authorization'),
-        subjectUid,
-      },
-    )
-    if (!releaseFiltered.length) {
-      return Response.json({ error: 'Not found' }, { status: 404 })
     }
   }
 

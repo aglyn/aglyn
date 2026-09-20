@@ -316,9 +316,16 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     // origin the manifest omits is refused at publish rather than silently
     // blocked by the CSP at runtime, where the publisher would meet it as a
     // mystery in production.
+    //
+    // And what register() registers is compared with the manifest's
+    // `contributes` (AGL-3116), which a new version must carry whenever it
+    // registers anything: the loaders place a plugin by that declaration
+    // alone, so a registration it omits is a surface that never loads.
     const verification = checkPluginBundle(bundle.toString('utf8'), {
       maxBytes: MAX_PLUGIN_BUNDLE_BYTES,
       declaredNetwork: manifest.capabilities?.network ?? [],
+      declaredContributions: manifest.contributes ?? null,
+      requireContributions: true,
     })
     if (!verification.ok) {
       return res.status(422).json({

@@ -14,6 +14,7 @@ The full sandbox bundle contract, without a build step:
 | --- | --- |
 | `default render({ mount, props, scheme, emit, hostFetch })` | the tenant sandbox entry — vanilla DOM, returns a cleanup fn |
 | `register(host)` | console/realm entry — registers a preview widget via the host ABI |
+| `contributes` | the manifest's declaration of that widget's slot (`hostActivity`), so only a screen that renders the slot loads the plugin, and no published page does |
 | `props` | `title`, `targetIso`, `expiredText`, `accent`, `ctaLabel`, `ctaEvent` |
 | `scheme` | light/dark theming from the host |
 | `emit(name, payload)` | fires `expired` (once, at zero) and a CTA event on click |
@@ -28,7 +29,7 @@ only touched through the host ABI).
 
 ```
 promo-countdown/
-├── manifest.json              # id / version / entry / capabilities
+├── manifest.json              # id / version / entry / capabilities / contributes
 ├── src/index.js               # authored source
 └── dist/plugin.bundle.mjs     # the bundle you upload (copy of src/index.js)
 ```

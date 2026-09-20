@@ -77,6 +77,17 @@ export function registerOutreachConsoleApi(): void {
   // Compliance settings, sequences, enrollment and enrollment actions
   // (AGL-2980).
   registerOutreachRoutes()
+  // The one-click unsubscribe every email carries (AGL-2981): a recipient
+  // link, so it answers whether or not Outreach is released to the
+  // organization now. Its module loads on the first request.
+  registerPluginApiRoute(
+    OUTREACH_API_ROUTES.unsubscribe,
+    {
+      web: async (request, context) =>
+        (await import('./runtime/platform-runtime-deps')).platformOutreachUnsubscribeRoute()(request, context),
+    },
+    { recipientLink: true },
+  )
 }
 
 // The transport the sending runtime reaches a connected mailbox through

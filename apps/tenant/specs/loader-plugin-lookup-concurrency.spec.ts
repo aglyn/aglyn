@@ -198,7 +198,10 @@ beforeEach(() => {
         resolve()
       }
     })
-    return { root: {} }
+    // The page places the realm plugin's element, so the install it resolves
+    // is one this page uses (AGL-3116) and its value still reaches props —
+    // which is what makes the concurrency property readable here.
+    return { root: {}, placed: { pluginId: 'plugin-a' } }
   })
   mockRealm.mockImplementation(async () => {
     events.push('realm:start')

@@ -672,6 +672,63 @@ describe('the passes', () => {
 })
 
 describe('when a pass stops', () => {
+  /**
+   * The live shape of job `NgTrXThfumrllOWbULWZ` (AGL-3078): sections an
+   * earlier pass wrote carry a button with no destination and a row of sized
+   * cards whose Grid is not a container, and the next section pass answers
+   * cleanly. The page check reads the whole page, so it finds both; neither is
+   * in the answer, so neither is this pass's to mend.
+   */
+  async function pageBreakingOutsideThisSection(): Promise<{ button: string; row: string }> {
+    for (const answer of FIXTURE.answers.slice(0, 2)) {
+      mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(answer))
+      expect(await step()(context())).toMatchObject({ continue: true })
+    }
+    mockRunAiRequest.mockReset()
+    const versionPath = `${DRAFT}/versions/${mockDocs.get(DRAFT)?.['versionId']}`
+    const nodes = storedPage() as Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }>
+    const [button] = Object.entries(nodes).find(([, node]) => node.componentId === 'muiButton') ?? []
+    const [row] = Object.entries(nodes).find(([, node]) => node.props?.['container'] === true) ?? []
+    delete nodes[button as string].props?.['screenId']
+    nodes[row as string].props = { ariaLabel: 'What the inspection covers' }
+    mockDocs.set(versionPath, { ...mockDocs.get(versionPath), nodes: encodeStoredNodes(nodes) })
+    return { button: button as string, row: row as string }
+  }
+
+  it('builds a section the page’s stored rules are broken outside of, and leaves those breaks to the last pass, which names them (AGL-3078)', async () => {
+    const { button, row } = await pageBreakingOutsideThisSection()
+    // The pass answers its own section, whole and within the rules; a re-ask
+    // would be served the same answer, since there is nothing in it to mend.
+    mockRunAiRequest.mockResolvedValue(sectionAnswer(FIXTURE.answers[2]))
+    const outcome = await step()(context())
+    // It is not re-asked to mend nodes it did not write, and it is not stopped for them.
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect([outcome.review, outcome.continue]).toEqual([undefined, true])
+    expect(Object.keys(storedPage())).toContain(SECTION_IDS[2])
+
+    // The last pass reads the whole page, and names both breaks by the ids the
+    // draft stores them under, with the outline of what it refused.
+    mockRunAiRequest.mockReset()
+    mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(FIXTURE.answers[3]))
+    expect(await step()(context())).toMatchObject({ continue: true })
+    mockRunAiRequest.mockReset()
+    const last = await step()(context())
+    expect(mockRunAiRequest).not.toHaveBeenCalled()
+    expect(last.outputs).toEqual([])
+    expect(last.review).toEqual({
+      reason: 'doctrine',
+      message: expect.stringContaining('(1 more rule was also broken.)'),
+      findings: [
+        expect.objectContaining({ rule: 10, code: 'link-without-destination', nodeIds: [button] }),
+        expect.objectContaining({ rule: 12, code: 'grid-not-container', nodeIds: [row] }),
+      ],
+      outline: expect.arrayContaining([
+        expect.objectContaining({ id: button, componentId: 'muiButton' }),
+        expect.objectContaining({ id: row, componentId: 'muiGrid' }),
+      ]),
+    })
+  })
+
   it('asks once more, then stops for review, when a section still breaks the page’s rules, and writes nothing', async () => {
     const noHeading = { rootId: 'root', nodes: { root: { componentId: 'div', nodes: ['s'] }, s: { componentId: 'section', props: { element: 'section' }, nodes: ['p'] }, p: { componentId: 'muiTypography', props: { variant: 'body1', children: 'No heading at all.' } } } }
     mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(noHeading)).mockResolvedValueOnce(sectionAnswer(noHeading))

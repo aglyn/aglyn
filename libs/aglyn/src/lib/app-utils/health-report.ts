@@ -2510,6 +2510,22 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Fires the cache-drop announce for publishes whose tab closed before it landed (AGL-2575). Publishing is a client Firestore write, so the announce is a fetch from the browser and a closed tab strands it; this is the only thing that finishes one. If it stops, a stranded publish is invisible on the live site for the full hour-long document TTL, and the pending entry that records it is never read by anything.',
   },
   {
+    id: 'plugin-console-crons',
+    label: 'Plugin console jobs',
+    // The sixth route on the `consoleFastCrons` job (AGL-2981). One route for
+    // every job a plugin declares on `plugin-console-crons`, so a plugin's
+    // job needs no route of its own in this list; each declared job has its
+    // own row beside this one, added by `/api/health/crons` from the
+    // declarations. This row answers the question under all of them: is the
+    // route being posted at all.
+    cron: '*/15 * * * *',
+    runner: 'cloud-scheduler',
+    target: 'consoleFastCrons → console /api/admin/plugin-crons',
+    graceMinutes: 45,
+    drives:
+      'Runs every console job a plugin declares, each with its own row on this board. If it stops, every one of those jobs stops with it — a plugin’s scheduled sends and syncs among them — and each of their rows goes silent too.',
+  },
+  {
     id: 'ai-jobs-beat',
     label: 'AI jobs beat',
     // Its own Cloud Scheduler job, every minute (AGL-3026): the console route

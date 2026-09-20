@@ -31,6 +31,7 @@ import {
   PLUGIN_VERIFIER_VERSION,
   pluginArtifactPath,
   pluginRequestFromWeb,
+  readPluginContributions,
   type PluginRevocation,
   type StoredBundleVerdict,
 } from '@aglyn/aglyn/server'
@@ -140,6 +141,9 @@ async function listingDetail(
       sha256: String(doc.get('sha256') ?? ''),
       hostAbi: Number(doc.get('manifest.hostAbi')) || null,
       capabilities: doc.get('manifest.capabilities') ?? {},
+      // What these bytes declare they contribute (AGL-3116); `null` when the
+      // version predates the contract and loads under its default.
+      contributes: readPluginContributions(doc.get('manifest.contributes')) ?? null,
       // Declared canvas elements (AGL-1031), for THESE bytes. Publisher copy
       // that renders in the customer's element picker and nowhere on the
       // listing page — so without it here, the `element-metadata` criterion
@@ -243,6 +247,10 @@ async function listingDetail(
               String(origin),
             )
           : [],
+        // Compared, never required: a version published before the contract
+        // loads under its default, and review must not refuse it for a rule
+        // it was never held to.
+        declaredContributions: reviewEntry?.contributes ?? null,
       })
       verifier = result
       // Write it back so this sha is verified at most once platform-wide —

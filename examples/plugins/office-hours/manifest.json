@@ -1,7 +1,7 @@
 {
   "id": "office-hours",
   "name": "Office Hours",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "entry": "plugin.bundle.mjs",
   "hostAbi": 1,
   "description": "Shows whether you are open right now and when you next open or close, from a weekly schedule. No network access.",
@@ -21,5 +21,8 @@
     ],
     "events": ["opened", "closed"],
     "size": { "height": 260 }
+  },
+  "contributes": {
+    "console": { "slots": ["hostActivity"] }
   }
 }

@@ -21,6 +21,7 @@ import {
   PLUGIN_VERIFIER_VERSION,
   pluginArtifactPath,
   pluginRequestFromWeb,
+  readPluginContributions,
   type StoredBundleVerdict,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin, notifyStaff } from '@aglyn/tenant-data-admin'
@@ -220,6 +221,12 @@ async function handler(request: Request): Promise<Response> {
           declaredNetwork: Array.isArray(declaredNetwork)
             ? declaredNetwork.map((origin: unknown) => String(origin))
             : [],
+          // Compared, never required (AGL-3116): the sweep judges versions
+          // published before the contract, which load under its default, so a
+          // version that declares nothing is a warning here and never a
+          // regression.
+          declaredContributions:
+            readPluginContributions(doc.get('manifest.contributes')) ?? null,
         })
         downloadFailure = ''
       } catch (error) {

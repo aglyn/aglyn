@@ -37,6 +37,7 @@ export * from './plugin-metered-lines'
 export * from './plugin-user-erasure'
 // `plugin-org-erasure` is server-only too: import it by its own path.
 export * from './plugin-styles'
+export * from './plugin-contributions'
 export * from './plugin-loader'
 export * from './realm-plugins'
 export * from './site-page-hooks'

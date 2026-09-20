@@ -99,6 +99,7 @@ batch, so read registries lazily rather than snapshotting.
 | --- | --- |
 | `registerPluginApiRoute(path, handler, options?)` | Registers a path under the `[...pluginApi]` dispatchers. Ownership is recorded at registration time for the per-request org gate — a disabled plugin's paths 404 for that workspace. `path` may carry `:name` segments (`ai/jobs/:jobId/cancel`); an exact registration wins over a pattern. `options.subject` names the organization (and, for a signed tokenless redirect, the account) a request is for when it names no site — see [Naming the subject](../guides/server-apis.md#route-subject). |
 | `resolvePluginApiRequestSubject(path, request)` | What a dispatcher asks before its release gate when no `hostId` was named: the declared resolver's answer, read from a clone, or `null` for an undeclared route, a resolver that threw, or ids that are not plain path segments. |
+| `options.recipientLink` / `isPluginRecipientLinkRoute(path)` | A route that answers a link the platform mailed to somebody — an unsubscribe in a `List-Unsubscribe` header. Both dispatchers skip their per-site enablement and release gates for it and nothing else: lockdown and the rate limit still apply. An opt-out has to keep working after its plugin is paused for the workspace (CAN-SPAM holds it open for thirty days after the send), so the route authenticates the link itself, by a signature it verifies. |
 | `handler` as `(req, res)` or `{ web }` | The node shape takes `PluginApiRequest` / `PluginApiResponse`. The Web shape, `{ web: (request, { params }) => Response }`, takes the dispatcher's own `Request` and answers a `Response` — the form for a door that streams (server-sent events, a chat answer) or reads the raw body itself; `params` carries the path segments and every `:name` filled. |
 | `PluginApiRequest` | `{ method, query, body, headers, rawBody? }` — `rawBody` carries the unparsed payload for Stripe/Svix signature verification. |
 | `resolvePluginApiMatch(path)` / `runPluginApiMatch(match, request, params, runLegacy)` | What a dispatcher does: the route and its filled `:name` params for a path, then either shape run — the host app supplies `runLegacy` for the node shape. `resolvePluginApiRoute(path)` answers the node handler alone, for the specs that drive one directly. |
@@ -223,6 +224,36 @@ registerPluginService(AI_PROVIDERS, ollamaProvider, { pluginId: 'acme-llm', prio
 // back in the AI plugin, at call time
 const providers = resolvePluginServices(AI_PROVIDERS) // acme-llm first, then ai
 ```
+
+## Record timeline — `plugin-record-timeline` (`/server`)
+
+A plugin that sends mail or books meetings files what happened on the
+contact, company or deal it happened with — an email sent, a reply read, a
+task for a person — without writing the record system's documents or
+importing its plugin. The record system registers one writer (a slot), and a
+caller asks for it:
+
+```ts
+const records = pluginRecordTimelineWriter()
+await records?.writer.logActivity({
+  orgId, hostId, link: { contactId }, sourcePluginId: 'acme-mail',
+  kind: 'email', atMs, body: excerpt, byUid: '',
+  email: { direction: 'inbound', subject, from, to: null, messageId },
+})
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginRecordTimelineWriter(writer, { pluginId? })` | The record system's writer. A single-implementation contract: a second plugin's writer throws naming both, and the incumbent keeps serving. The CRM registers it from its console API surface. |
+| `pluginRecordTimelineWriter()` | The writer with its owner, or `null` when no plugin keeps records — a caller then files nothing. |
+| `writer.logActivity(request)` | An activity on a record, scoped like one a member made on `hostId`. An `email` is filed ONCE per `Message-ID`, under the id the capture address files a copy of the same message by; any other kind once per the caller's `dedupeKey`. |
+| `writer.createTask(request)` | A task for `assigneeUid`, due at `dueAtMs`, filed once per `dedupeKey`. |
+
+Both answer `{ ok: true, id, created }` — `created: false` for an entry a
+previous call, or a copy through another door, already filed — or a refusal
+(`{ ok: false, status, error }`: no record system on the plan, a record at its
+activity ceiling), and never throw for a refusal. The registry authenticates
+nobody: the caller has already decided the entry is the workspace's to write.
 
 ## Media delivery — `media-delivery-provider` (`/server`)
 
@@ -349,6 +380,64 @@ to every eraser, which then touches no provider and writes nothing: it
 counts, and a figure it did not measure is `null`. An eraser that opens a
 credential only the console holds registers from `consoleServerDeclarations`,
 which the tenant runtime never loads.
+
+## Person erasure — `plugin-person-erasure` (`/server`)
+
+The person erasure removes one person from one workspace: the contact, what
+the CRM files beside it, and the leads, list memberships and delivery log
+under the address. A plugin that keeps records about such a person under the
+organization — keyed by the contact or by the address — registers an eraser
+from its declarations:
+
+```ts
+registerPluginPersonEraser(
+  async ({ orgId, email, key, contactIds, dryRun }) => {
+    const { eraseEnrollmentsFor } = await import('./server/enrollments')
+    return eraseEnrollmentsFor({ orgId, email, contactIds, dryRun })
+  },
+  { pluginId: 'acme-mail' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginPersonEraser(eraser, { pluginId? })` | One eraser per plugin; registering again replaces it in place. |
+| `runPluginPersonErasers({ orgId, email, key, contactIds, dryRun })` | What the erasure calls after every site's suppression row is written and before the contacts are deleted. Every eraser in registration order; each plugin's report by plugin id, or `null` for an eraser that threw — logged, and never the erasure's failure. |
+
+`key` is `personKey(email)`: how every suppression list names the person
+without the address. A record that the person asked not to be contacted,
+keyed that way, is kept — the promise outlives the data — with anything that
+could identify the person removed from it. A dry run counts and writes
+nothing. Reports land under `plugins` on the erasure's counts and audit row.
+
+## Console jobs — `plugin-console-crons` (`/server`)
+
+A plugin whose scheduled work needs what only the console holds — a provider
+key, a sealed grant to a person's mailbox — declares a job from its
+`consoleServerDeclarations`, with the body imported when it first runs:
+
+```ts
+registerPluginConsoleCron(
+  {
+    id: 'acme-mail-sync',
+    label: 'Acme mail sync',
+    drives: 'Reads replies into the CRM. If it stops, replies are never filed.',
+    run: async ({ nowMs, deadlineMs }) => (await import('./server/sync')).runSync({ nowMs, deadlineMs }),
+  },
+  { pluginId: 'acme-mail' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginConsoleCron(job, { pluginId? })` | Declares a job. Its id starts with the plugin's own (`acme-mail-…`); a platform job's id, another plugin's, a job with no label or no `drives` sentence is refused. The same plugin declaring the id again replaces it. |
+| `runPluginConsoleCrons({ nowMs, deadlineMs, jobIds?, beat })` | What `POST /api/admin/plugin-crons` calls every fifteen minutes (the console's `consoleFastCrons` tick, on the console's `CRON_SECRET`): every job — or the one a manual run names — concurrently, each after its own `platformCronBeats` mark. A job that throws is `null` in the answer and the route answers 207. |
+| `pluginConsoleCronScheduledJobs()` | Each job as a row of `/api/health/crons`, judged against the fifteen-minute tick with a 45-minute grace, beside the runner's own `plugin-console-crons` row. |
+
+A job reports counts and flags, never content, and starts no new unit of work
+after `deadlineMs`. A job that needs a slower cadence keeps its own last-run
+mark and returns at once. Adding a job needs no route, no scheduler change
+and no function deploy.
 
 ## Usage alerts — `plugin-manager/usage-alert-contributors`
 

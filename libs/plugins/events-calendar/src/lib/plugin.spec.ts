@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { BUNDLE_ID } from './constants/bundle-common'
 import {
   EVENTS_CALENDAR_BUNDLE,
+  registerEventsCalendarConsole,
   registerEventsCalendarPlugin,
 } from './plugin'
 
@@ -46,16 +47,25 @@ describe('events-calendar plugin', () => {
     ).toEqual([])
   })
 
-  it('registers a mui-dependent bundle + console extension once', () => {
+  it('registers a mui-dependent bundle once, and no console surface', () => {
     registerEventsCalendarPlugin()
     const bundle = Aglyn.plugins.getDependency(BUNDLE_ID)
     expect(bundle?.dependencies).toMatchObject({ [Aglyn.MUI_BUNDLE_ID]: true })
+    // The site registrar runs on published pages, where console code must
+    // never load (AGL-3116).
+    expect(
+      Aglyn.listConsoleExtensions().find((entry) => entry.pluginId === BUNDLE_ID),
+    ).toBeUndefined()
+    registerEventsCalendarPlugin()
+    expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBe(bundle)
+  })
+
+  it('registers the console extension from the console registrar', () => {
+    registerEventsCalendarConsole()
     const extension = Aglyn.listConsoleExtensions().find(
       (entry) => entry.pluginId === BUNDLE_ID,
     )
     expect(extension?.featureFlag).toBe('eventCalendar')
-    registerEventsCalendarPlugin()
-    expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBe(bundle)
   })
 
   /**
@@ -69,7 +79,7 @@ describe('events-calendar plugin', () => {
    * beside it.
    */
   it('quotes the add-on price the billing code charges', () => {
-    registerEventsCalendarPlugin()
+    registerEventsCalendarConsole()
     const notice = Aglyn.listConsoleExtensions().find(
       (entry) => entry.pluginId === BUNDLE_ID,
     )?.upgradeNotice

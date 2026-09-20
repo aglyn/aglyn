@@ -18,7 +18,10 @@ by the nx boundary rule (`scope:app` may not depend on `aglyn:addons`,
    `node tools/scripts/generate-plugin-manifests.mjs` emits the four
    `plugins.{client,server}.generated.ts` files under
    `apps/{console,tenant}` — the ONLY sanctioned plugin references
-   (file-scoped eslint-disable). **Re-run it after every edit to
+   (file-scoped eslint-disable). An entry's `modules` names the subpath a
+   surface loads from (AGL-3116): every plugin with a site surface and a
+   console one registers the site half from `/site`, so a published page
+   never downloads a console registrar. **Re-run it after every edit to
    `plugins.config.json` and commit the result.** `--check` (AGL-1728,
    `npm run generate:plugin-manifests:check`) fails if you didn't; it runs
    in CI and as a `npm run typecheck` preflight, because a stale manifest
@@ -59,8 +62,10 @@ Surfaces follow the switches:
   additionally gate on the `site` surfaces (`withSitePlugins`).
 - **Published sites**: `load-page-data` resolves the host org's enabled
   set into page props; the catch-all client suspends (SSR included) until
-  those `site` surfaces register — the canvas never renders against an
-  empty registry.
+  the `site` surfaces THIS page uses register — the canvas never renders
+  against an empty registry, and a plugin the page does not use is never
+  fetched, not even ahead of a navigation (AGL-3116). `requiredSitePlugins`
+  narrows the set from the full composed document.
 - **APIs**: the `[...pluginApi]` dispatchers lazy-load every first-party
   `/server` entry once, then gate per request — a disabled plugin's paths
   404 for that workspace.
@@ -141,9 +146,14 @@ Every link must hold before a byte executes:
   `loadRealmPlugins` executes each verified bundle via a blob-URL import,
   calling its exported `register(host)`. Loaded before the shell renders.
 - **Sites**: `load-page-data` ships `props.realmPlugins` (same join,
-  admin SDK); the catch-all client loads them in a post-hydration effect —
-  realm site runtimes are additive, so first paint never waits on a
-  marketplace CDN.
+  admin SDK), narrowed to the installs THIS page uses (AGL-3116,
+  `realmPluginsInUse`): a pinned version is used where the page places a
+  component its manifest's `contributes.site` declares, or everywhere when it
+  declares a site feature; a version that declares nothing, only where a node
+  carries its plugin id. The catch-all client loads them in a post-hydration
+  effect — realm site runtimes are additive, so first paint never waits on a
+  marketplace CDN — and a page that uses none never loads the realm-plugin
+  host that hands a bundle the core namespace.
 - **Switchboard integration** (AGL-424): installs append the listing id to
   `org.enabledPlugins` and uninstalls remove it once no pin remains, but
   only for workspaces that explicitly configured the field — absent means
@@ -213,6 +223,15 @@ Generate the key pair with
 - **Realm artifacts** are immutable content-addressed objects published
   with `public, max-age=31536000, immutable`; front them with a CDN and
   cache hits are free forever (a new version is a new URL).
+- **Whose bytes a published page downloads** (AGL-3116):
+  `npm run check:plugins-load-where-used` reads a tenant production build
+  and refuses a plugin surface a published page cannot render. Four rules:
+  a plugin with both a site and a console surface names `modules.site`; a
+  plugin with no site surface contributes nothing before settle; a site
+  plugin contributes only what its site module reaches statically; and the
+  module a `register.console` names is never there, whatever imports it. It
+  reads the same before-settle chunk set `check:tenant-wire-weight` budgets
+  — that gate asks how many bytes, this one asks whose.
 
 ## Artifact retention (AGL-942)
 

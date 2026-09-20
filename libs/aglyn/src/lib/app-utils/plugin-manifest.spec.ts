@@ -105,6 +105,50 @@ describe('validatePluginManifest', () => {
       }).ok,
     ).toBe(false)
   })
+
+  // AGL-3116: the loaders place a plugin by this block alone.
+  it('keeps a declared contributes block, normalized', () => {
+    const result = validatePluginManifest({
+      ...base,
+      contributes: {
+        site: { components: ['weatherCard', 'weatherCard'] },
+        console: { slots: ['hostActivity'], shell: false },
+      },
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.manifest.contributes).toEqual({
+        site: { components: ['weatherCard'] },
+        console: { slots: ['hostActivity'] },
+      })
+    }
+  })
+
+  it('keeps an explicit empty declaration apart from an absent one', () => {
+    const empty = validatePluginManifest({ ...base, contributes: {} })
+    const absent = validatePluginManifest(base)
+    expect(empty.ok && empty.manifest.contributes).toEqual({})
+    expect(absent.ok && 'contributes' in absent.manifest).toBe(false)
+  })
+
+  it('refuses a malformed contributes block rather than trimming it', () => {
+    const malformed: unknown[] = [
+      [],
+      { page: {} },
+      { site: { components: 'weatherCard' } },
+      { site: { widgets: ['x'] } },
+      { console: { routes: ['https://evil.example/x'] } },
+      { console: { routes: ['/../admin'] } },
+      { console: { shell: 'yes' } },
+      { console: { slots: ['has space'] } },
+    ]
+    for (const contributes of malformed) {
+      expect([contributes, validatePluginManifest({ ...base, contributes }).ok]).toEqual([
+        contributes,
+        false,
+      ])
+    }
+  })
 })
 
 describe('pluginArtifactPath', () => {

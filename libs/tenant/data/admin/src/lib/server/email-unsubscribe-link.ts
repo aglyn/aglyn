@@ -321,3 +321,58 @@ export function buildUnsubscribeUrl(input: {
     (input.topicId ? `&tid=${encodeURIComponent(input.topicId)}` : '')
   )
 }
+
+/*==========================================
+ * A SIGNED LINK OF A SENDER'S OWN (AGL-2981).
+ *
+ * The forms above are the platform's own unsubscribe and confirmation
+ * links, each a subject over a site and an address. A sender that mails
+ * from somewhere else — a plugin sending from a person's own mailbox, whose
+ * link carries its own facts — signs its link here instead, over a payload
+ * of its own and under a PURPOSE of its own.
+ *
+ * The purpose is not a prefix of the subject, which is how the confirmation
+ * form had to guard a collision by hand. It selects the KEY: every purpose's
+ * links are signed with an HMAC key derived from the shared secret and the
+ * purpose, so a signature minted for one purpose verifies for no other and
+ * for none of the platform's own forms above, whatever the payloads spell.
+ * The secret, the digest and the constant-time comparison are the same.
+ *==========================================*/
+
+/** The key one purpose's links are signed with: derived from the secret, bound to the purpose. */
+function signedLinkKey(purpose: string, secret: string): Buffer {
+  return createHmac('sha256', secret).update(`aglyn-signed-link:${purpose}`).digest()
+}
+
+/**
+ * The signature of a payload for one purpose, base64url — or `''` when there
+ * is no secret, no purpose or no payload to sign, so a caller can tell it has
+ * no link rather than one that verifies for anybody.
+ */
+export function signedLinkSignature(
+  purpose: string,
+  payload: string,
+  secret: string = unsubscribeLinkSecret(),
+): string {
+  const name = String(purpose ?? '').trim()
+  const body = String(payload ?? '')
+  if (!secret || !name || !body) return ''
+  return createHmac('sha256', signedLinkKey(name, secret)).update(body).digest('base64url')
+}
+
+/** Whether a signature is this payload's, for this purpose, in constant time. */
+export function signedLinkSignatureMatches(args: {
+  purpose: string
+  payload: string
+  signature: string
+  /** Defaults to {@link unsubscribeLinkSecret}. */
+  secret?: string
+}): boolean {
+  const expected = signedLinkSignature(args.purpose, args.payload, args.secret ?? unsubscribeLinkSecret())
+  const presented = String(args.signature ?? '')
+  return (
+    expected.length > 0 &&
+    expected.length === presented.length &&
+    timingSafeEqual(new Uint8Array(Buffer.from(expected)), new Uint8Array(Buffer.from(presented)))
+  )
+}

@@ -109,6 +109,7 @@ const okSweep = async () => ({
   orders: 0,
   bookings: 0,
   emailDeliveries: 2,
+  plugins: {},
 })
 
 beforeEach(() => {

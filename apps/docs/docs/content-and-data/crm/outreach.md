@@ -99,12 +99,27 @@ below that.
 | Status | What it means |
 | --- | --- |
 | **Active** | The mailbox can send. |
-| **Paused** | Somebody paused it. Nothing sends from it until it is resumed. |
+| **Paused** | Somebody paused it, or it paused itself — see below. Nothing sends from it until it is resumed. |
 | **Reconnect required** | Google stopped accepting the connection — the password changed, access was removed from the Google account, or an administrator revoked it. Nothing sends until you connect the mailbox again. |
 | **Disconnected** | The mailbox was disconnected. Nothing sends from it until it is connected again. |
 
 **Health** shows the last seven days: messages sent, bounces and replies. A
 mailbox that has never sent shows zeros and **No sends yet**.
+
+### When a mailbox pauses itself {#auto-pause}
+
+Bounces are the first sign that a list has bad addresses in it, and mailbox
+providers judge a sender by them. So a mailbox pauses itself when:
+
+- **two** of its emails hard-bounce in one of its days;
+- more than **3%** of its last **50** emails hard-bounced; or
+- a reply called one of its emails spam. That pause is meant to last a week,
+  and the card says when the week is out.
+
+The card says why, with the date, and a line is written to your
+organization's activity. Re-check the addresses in the mailbox's sequences,
+then select **Resume**. Only bounces that arrive after you resume are judged
+again.
 
 ### Test, pause and disconnect {#mailbox-actions}
 
@@ -285,6 +300,70 @@ one went, and why they stopped when they have. For each one you can:
 - **Mark do-not-contact** — puts the address on your organization's
   do-not-contact list, which every sequence checks before every send, and
   stops them in every other sequence too.
+
+## How sends are scheduled {#sending}
+
+Every **15 minutes**, Outreach sends the steps that have come due, from each
+rep's own mailbox:
+
+- **In the sending hours** of the sequence, or of its mailbox, read in the
+  mailbox's timezone. A step that comes due outside them waits for the next
+  opening.
+- **Within the day's limit** — the daily cap and the warm-up — spread across
+  the sending hours, so a day's emails do not all leave in its first half
+  hour. One run sends at most five emails from a mailbox, follow-ups before
+  first emails.
+- **After every check again.** Everything enrolling checked is checked again
+  before each email — the do-not-contact list, the suppression lists, the
+  site's sales-email opt-outs, whether the person became a customer or joined
+  your workspace — because a person enrolled on Monday can unsubscribe by
+  Thursday.
+
+Each email is sent once: two runs that overlap never send the same step
+twice, and never go over a mailbox's cap between them. It is filed on the
+contact's timeline in the CRM as an email from the rep, and a **task** step
+becomes a CRM task for the rep, due the day it comes due.
+
+Nothing is sent while your organization's legal name or postal address is
+missing, or while a mailbox is paused or needs reconnecting — those
+sequences wait.
+
+## What stops a sequence {#what-stops-a-sequence}
+
+Outreach reads each connected mailbox every 15 minutes for what came back:
+
+| What happens | What Outreach does |
+| --- | --- |
+| **The person replies** | Stops the sequence (**Replied**), files the reply on the contact's timeline, and gives the rep the task **Reply from** *their name*. |
+| **An out-of-office reply** | Keeps the sequence going, and moves the next step to at least five business days after the reply. |
+| **They ask not to be emailed** — a reply such as "no" or "unsubscribe", the unsubscribe link, or a message to the unsubscribe address | Stops the sequence (**Opted out**), puts the address on your do-not-contact list, unsubscribes it from the site's **Sales outreach** email, and stops it in every other sequence. |
+| **The email hard-bounces** | Stops the sequence (**Bounced**) and puts the address on your do-not-contact list and on the platform's suppression list. |
+| **A check refuses them before the next email** — a customer now, a member of your workspace, on a suppression list | Stops the sequence, saying which check. |
+| **The mailbox is disconnected or removed, or the member who connected it leaves the organization** | Stops the sequences that send from it. |
+| **The next email needs something the contact doesn't have** — a first name for `{{contact.firstName}}` | Pauses the enrollment, naming what is missing. Fill it in and select **Resume**. |
+
+A reply that arrives after the sequence finished, or after it was stopped,
+is still read: the enrollment moves to **Replied**, or to **Opted out** when
+the reply asks not to be emailed.
+
+## Unsubscribe {#unsubscribe}
+
+Every Outreach email carries two ways out beside the footer's "reply no":
+
+- a **one-click unsubscribe link** in the email's `List-Unsubscribe` header,
+  which Gmail, Yahoo and most mail apps show as an **Unsubscribe** button;
+- an **unsubscribe address** — the rep's own address with `+unsubscribe`
+  added — for mail apps that unsubscribe by email.
+
+Either one stops the person's sequences, puts the address on your
+do-not-contact list and unsubscribes it from the site's **Sales outreach**
+email. The link needs no sign-in, shows a plain page saying it is done, and
+keeps working for good — including after Outreach is paused for your
+workspace.
+
+When a person is erased from your workspace, their enrollments are deleted
+with them. Their do-not-contact entry stays — it holds no address, only a
+one-way key — so they are never emailed again.
 
 ## Related
 

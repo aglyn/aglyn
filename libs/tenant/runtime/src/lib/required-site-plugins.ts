@@ -54,6 +54,13 @@
  * page; the cost of wrongly dropping a plugin is a site that does not render.
  */
 
+import {
+  isPluginUsedOnPage,
+  pagePresence,
+  type PresenceNode,
+} from '@aglyn/aglyn/plugin-manager/plugin-contributions'
+import type { RealmPluginInstall } from '@aglyn/aglyn/plugin-manager/realm-plugins'
+
 /** Registered regardless of the org's list; the canvas cannot render without it. */
 export const ALWAYS_ON_SITE_PLUGINS: readonly string[] = ['mui']
 
@@ -93,4 +100,31 @@ export function requiredSitePlugins({
   // the loader than the list it already had.
   if (!required.length || required.length === enabledPlugins.length) return null
   return required
+}
+
+/**
+ * The trusted-realm installs a published page uses (AGL-3116), and only
+ * those: the page loads the realm-plugin host — which hands a bundle the
+ * whole core namespace — and each bundle only when something on the page
+ * uses it.
+ *
+ * Installation is not use. A workspace that installed a plugin for its
+ * console widget used to load the host and the bundle on every page of every
+ * site it owns, and the bundle's `register()` then added a widget no
+ * published page renders. An install is kept when its version declares a
+ * component this page places or a site feature, or when a node is stamped
+ * with its id; one that declares nothing is kept only for a stamped node, the
+ * default `plugin-contributions.ts` documents.
+ *
+ * Read from the FULL composed document, like `requiredSitePlugins`: an
+ * element inside a withheld lazy panel is still this page's element. A page
+ * with no nodes places nothing, so only a site feature can be in use on it.
+ */
+export function realmPluginsInUse(
+  installs: readonly RealmPluginInstall[],
+  nodes: Record<string, PresenceNode | null | undefined> | null | undefined,
+): RealmPluginInstall[] {
+  if (!installs.length) return []
+  const page = pagePresence(nodes)
+  return installs.filter((install) => isPluginUsedOnPage(install, page))
 }
