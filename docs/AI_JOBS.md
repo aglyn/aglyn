@@ -1156,6 +1156,17 @@ nothing itself.
   and it is why a page places the scaffold's own form by id rather than planning
   one of its own. SEO travels with each page: the page step writes its search
   listing on its own last pass.
+- **What the welcome email is told** (AGL-2918). Who the site is for, what became
+  of the message it answers — the person's own `submissions` answer, so the email
+  and the form it acknowledges cannot say different things — and which KIND of
+  email it is, on the line the email step puts above the brief. The kind is
+  `reply`, never `welcome`: the five kinds a member picks are campaigns sent to
+  an audience, this one answers a single person who wrote in, and `welcome`
+  names a signup the site has not had. Its key is held in the site model's
+  `AI_SITE_EMAIL_TYPE` rather than imported from the email step, because a
+  deployment that scaffolds need not have loaded that step;
+  `ai-job-email-step.spec.ts` holds the key to the catalog. A DRAFT either way:
+  the email step writes an unpublished design and stops.
 - **The plans it admits.** `src/lib/model/ai-site-job.ts`: four to eight screens,
   each with sections and at most eight of them, unique addresses, at least one
   page in the navigation, and creations limited to a layout, a form and a theme

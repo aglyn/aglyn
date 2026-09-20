@@ -30,6 +30,7 @@ import type {
   AiJobPlan,
 } from '../model/ai-jobs.types'
 import {
+  AI_SITE_EMAIL_TYPE,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
   aiSitePlanRefusal,
@@ -515,6 +516,11 @@ export function aiSiteUnitJob(
     // A theme change on a site with no theme of its own is a new palette.
     ...(unit.kind === 'theme'
       ? { inputs: { ...job.inputs, mode: 'create' } }
+      : {}),
+    // The email step reads the kind off the inputs it is handed, so a job the
+    // scaffold composed says which kind it is exactly as a member's own does.
+    ...(unit.kind === 'email'
+      ? { inputs: { ...job.inputs, emailType: AI_SITE_EMAIL_TYPE } }
       : {}),
     brief: brief.join('\n').slice(0, AI_JOB_BRIEF_MAX_CHARS),
   }

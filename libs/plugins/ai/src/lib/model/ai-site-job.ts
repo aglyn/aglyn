@@ -144,6 +144,24 @@ export const AI_SITE_SUBMISSIONS = ['inbox', 'lead'] as const
 
 export type AiSiteSubmissions = (typeof AI_SITE_SUBMISSIONS)[number]
 
+/**
+ * Which kind of email a scaffold's email unit is (AGL-2918), carried on the
+ * derived job as `inputs.emailType`. The email step names the kind on the one
+ * line it puts above the brief, and a scaffold was naming none.
+ *
+ * A key of the email step's own `AI_EMAIL_TYPES`, held here because neither
+ * step may import the other: a scaffold delegates by job kind, and a
+ * deployment that scaffolds is not necessarily one that has loaded the email
+ * step. `ai-job-email-step.spec.ts` holds this key to that catalog.
+ *
+ * `reply` and not `welcome`. The five kinds a member picks are campaigns
+ * somebody sends to an audience, and this is an answer to one person who
+ * wrote in through the site; the nearest, `welcome`, is a label about signing
+ * up, and a kind that misdescribes the email is worse than an absent one
+ * because it is the first thing the model is told.
+ */
+export const AI_SITE_EMAIL_TYPE = 'reply'
+
 /** Where a job's inputs say submissions go, or `null` where they do not say. */
 export function aiSiteSubmissions(
   inputs: Readonly<Record<string, unknown>> | null | undefined,
