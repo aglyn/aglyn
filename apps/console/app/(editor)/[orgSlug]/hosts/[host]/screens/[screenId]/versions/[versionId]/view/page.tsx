@@ -61,6 +61,7 @@ import {
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -130,7 +131,10 @@ import {
 } from '../../../../../../../../../../constants/screen-publishing'
 import { announceLiveScreenChange } from '../../../../../../../../../../constants/screen-live-announce'
 import PluginWidgetSlot from '../../../../../../../../../../components/plugin-widget-slot.component'
-import { CONTENT_MAX_WIDTH } from '../../../../../../../../../../constants/shared'
+import {
+  CONTENT_MAX_WIDTH,
+  TABLE_PAGE_SIZE_DEFAULT,
+} from '../../../../../../../../../../constants/shared'
 import { docsHelp } from '../../../../../../../../../../constants/docs-links'
 import UsedByCard from '../../../../../../../../../../components/used-by-card.component'
 import ArtifactDeleteConfirmDescription, {
@@ -302,6 +306,39 @@ function ScreenDetails() {
       ),
     [versionDocs],
   )
+
+  /*
+   * A PAGE of versions, on the console's own pagination control.
+   *
+   * The card drew all fifty — the query's own ceiling — as one unbroken run of
+   * rows, each with four actions on it. A screen that has been edited for a
+   * year is a card taller than everything else on the page put together, and
+   * the reader's way to the oldest version was the scrollbar.
+   *
+   * Sliced here rather than in the query: fifty documents are already read and
+   * already on this client for the restore picker below, so paging the read
+   * would cost a round trip to hide rows we are holding anyway.
+   *
+   * `ListPagination` is the one footer (AGL-2501) — same page sizes, same
+   * count line and same rows-per-page menu as every other list in the console.
+   */
+  const [versionsPage, setVersionsPage] = useState(0)
+  const [versionsPageSize, setVersionsPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const pagedVersions = useMemo(
+    () =>
+      versions.slice(
+        versionsPage * versionsPageSize,
+        versionsPage * versionsPageSize + versionsPageSize,
+      ),
+    [versions, versionsPage, versionsPageSize],
+  )
+  // Publishing or deleting a version can leave a reader standing past the last
+  // page, which renders as an empty table and no way to read that it is empty
+  // because the rows moved rather than because there are none.
+  useEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(versions.length / versionsPageSize) - 1)
+    if (versionsPage > lastPage) setVersionsPage(lastPage)
+  }, [versions.length, versionsPage, versionsPageSize])
 
   // A collection's list/entry template is published so the compose pipeline
   // picks it up, but it is not a page of the site (AGL-1267) — so nothing
@@ -1151,6 +1188,28 @@ function ScreenDetails() {
     publishedPath,
   ])
 
+  /**
+   * ONE Save SEO control, rendered in two places on its card — the header's
+   * action slot and the foot of the content.
+   *
+   * Written once rather than twice because the two must never disagree about
+   * whether there is anything staged: `!seoDraft && !seoImage` is also
+   * `handleSeoSave`'s own early return, so a second copy that drifted would
+   * offer a live-looking button that does nothing.
+   */
+  const seoSaveButton = (
+    <Button
+      size="small"
+      variant="outlined"
+      color="primary"
+      disabled={!seoDraft && !seoImage}
+      onClick={handleSeoSave}
+      sx={{ alignSelf: 'flex-start' }}
+    >
+      {'Save SEO'}
+    </Button>
+  )
+
   const details = [
     {
       key: 'id',
@@ -1672,6 +1731,15 @@ function ScreenDetails() {
                     contentGutterX
                     contentGutterY
                     contentBordered="all"
+                    /* The same save, in the header's action slot as well as at
+                       the foot of the card. This card is tall \u2014 six inputs, a
+                       social image picker and the Write-with-AI panel \u2014 so
+                       from the top of it the only control that commits any of
+                       it is off screen, and the AI panel's own "Write SEO"
+                       button is the one in view. Both render the same
+                       `seoSaveButton`, so they cannot disagree about whether
+                       there is anything to save. */
+                    HeaderProps={{ action: seoSaveButton }}
                   >
                     <Stack spacing={1.5}>
                       {/* The inputs and their lengths come from the one SEO
@@ -1743,16 +1811,7 @@ function ScreenDetails() {
                         hasImage={Boolean(seoImageRef)}
                         proposeValues={proposeSeoValues}
                       />
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="primary"
-                        disabled={!seoDraft && !seoImage}
-                        onClick={handleSeoSave}
-                        sx={{ alignSelf: 'flex-start' }}
-                      >
-                        {'Save SEO'}
-                      </Button>
+                      {seoSaveButton}
                     </Stack>
                   </CardDisplay>
                 ),
@@ -1774,7 +1833,7 @@ function ScreenDetails() {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {versions.map((version) => {
+                        {pagedVersions.map((version) => {
                           const isLive = version.$id === screen?.versionId
                           return (
                             <TableRow key={version.$id} hover>
@@ -1875,6 +1934,14 @@ function ScreenDetails() {
                         })}
                       </TableBody>
                     </ScrollTable>
+                    <ListPagination
+                      page={versionsPage}
+                      pageSize={versionsPageSize}
+                      rowCount={pagedVersions.length}
+                      count={versions.length}
+                      onPageChange={setVersionsPage}
+                      onPageSizeChange={setVersionsPageSize}
+                    />
                   </CardDisplay>
                 ),
               },

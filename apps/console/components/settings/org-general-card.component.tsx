@@ -107,7 +107,7 @@ export function OrgGeneralCard() {
   contentGutterX
   contentGutterY
 >
-  <Stack spacing={2} sx={{ maxWidth: 480 }}>
+  <Stack spacing={2}>
     <TextField
       label="Organization name"
       value={name}

@@ -168,7 +168,17 @@ export function SubmissionListAssignment(props: SubmissionListAssignmentProps) {
   }, [busy, listId, attested, post, enqueueSnackbar])
 
   return (
-    <CardDisplay title="Add to a marketing list">
+    // `header`, outlined, and with its gutters on — see the same block in
+    // `submission-reply.component`, which sits directly above this one in the
+    // submission reader and had the identical defect.
+    <CardDisplay
+      header={'Add to a marketing list'}
+      variant="outlined"
+      contentGutterX
+      contentGutterY
+      contentBordered="top"
+      sx={{ mt: 2 }}
+    >
       <Stack spacing={2}>
         {/*
           Said before anything is loaded, because it is the sentence that

@@ -382,6 +382,12 @@ async function* streamEvents(
             usage.inputTokens = delta.inputTokens || usage.inputTokens
             usage.cacheReadTokens = delta.cacheReadTokens || usage.cacheReadTokens
             usage.cacheWriteTokens = delta.cacheWriteTokens || usage.cacheWriteTokens
+            // Kept where the breakdown is reported and left absent where it
+            // is not (AGL-3143), never set to a zero the provider did not
+            // send. A stream needs it for the reason a completion does: it
+            // is the figure that accounts for a spent ceiling first, and it
+            // arrives in the same usage object as the four above.
+            if (delta.thinkingTokens !== undefined) usage.thinkingTokens = delta.thinkingTokens
             const reason = (event['delta'] as { stop_reason?: unknown } | undefined)
               ?.stop_reason
             if (typeof reason === 'string' && reason) stopReason = reason

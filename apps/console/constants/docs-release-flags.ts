@@ -272,6 +272,22 @@ export const FLAG_DOC_PAGES: Partial<
       disclosure: 'admonition',
       checkNoPriceClaim: true,
     },
+    // AGL-2923 put a full description of the generative add-on on the BILLING
+    // page, where a buyer decides. It carried no disclosure and was declared
+    // for no flag, so nothing here looked at it while every door it named
+    // answered 404. Windowed rather than whole-page: this page is about every
+    // add-on, so the disclosure has to be tied to THIS claim or deleting it
+    // passes while the word survives beside some other add-on.
+    {
+      path: 'docs/workspace-and-billing/billing-and-plans/add-ons.md',
+      disclosure: [
+        /\*\*Generative building is rolling out\.\*\*[\s\S]{0,240}not open in every workspace yet/,
+        /\| Aglyn AI \| Generative building \(\*\*rolling out\*\*\)/,
+      ],
+      checkNoPriceClaim: false,
+      priceClaimNote:
+        'The add-ons page is the billing page for every add-on: seats, sites, datasets, POS registers and the Event Calendar all state how they charge. A whole-file price check would fail on those forever, and they have their own surfaces in docs/PRICING_SURFACES.md.',
+    },
     {
       path: 'docs/building-sites/theme-builder/edit-your-theme.md',
       disclosure: [/## Change it with AI\s+\*\*Rolling out\.\*\* The \*\*Theme assistant\*\*/],

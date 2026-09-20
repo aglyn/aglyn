@@ -41,6 +41,7 @@ import {
   AI_RAW_OUTPUT_MAX_CHARS,
   AI_UPSTREAM_FAILURE_COPY,
   AiUpstreamError,
+  aiCutOffFigures,
   aiRawOutputOf,
   aiStoppedAtCeiling,
   type AiProvider,
@@ -674,5 +675,80 @@ describe('where a generation’s output went (AGL-3143)', () => {
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
     })
+  })
+
+  /**
+   * A stream reads its usage through the same parser, from the same object
+   * the four metered figures come from — and then copies the figures across
+   * one at a time. A door that streams is the one that most needs this one:
+   * it has no re-ask to spend and must say from the close of the stream
+   * alone whether a cut-off turn thought its ceiling away.
+   */
+  it('carries the split out of a STREAM too, and still says nothing where none was reported', async () => {
+    const anthropic = SUBJECTS[0]
+    const closing = (usage: Record<string, unknown>) => [
+      { type: 'message_start', message: { usage: { input_tokens: 900 } } },
+      { type: 'message_delta', delta: { stop_reason: 'max_tokens' }, usage },
+      { type: 'message_stop' },
+    ]
+
+    armFetch({
+      status: 200,
+      headers: {},
+      events: closing({
+        output_tokens: 4008,
+        output_tokens_details: { thinking_tokens: 3698 },
+      }),
+    })
+    const reported = await collect(await anthropic.provider.stream(request(anthropic)))
+    const split = reported[reported.length - 1]
+    if (split.type !== 'done') throw new Error('unreachable')
+    expect(split.usage).toMatchObject({ outputTokens: 4008, thinkingTokens: 3698 })
+
+    armFetch({ status: 200, headers: {}, events: closing({ output_tokens: 4008 }) })
+    const silent = await collect(await anthropic.provider.stream(request(anthropic)))
+    const none = silent[silent.length - 1]
+    if (none.type !== 'done') throw new Error('unreachable')
+    expect(none.usage).not.toHaveProperty('thinkingTokens')
+  })
+})
+
+/**
+ * The log half of the same rule (AGL-3143): what a cut-off call may say about
+ * itself where a person will read it.
+ */
+describe('the figures a cut-off call is logged by (AGL-3143)', () => {
+  it('reduces the model’s own words to their length, and passes nothing else of them on', () => {
+    const runaway = `{"rootId":"${'n'.repeat(5_000)}`
+    const figures = aiCutOffFigures({
+      usage: {
+        inputTokens: 374,
+        outputTokens: 4008,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        thinkingTokens: 3698,
+      },
+      parsed: { rootId: 'n1' },
+      rawOutput: runaway,
+    })
+    expect(figures).toEqual({
+      outputTokens: 4008,
+      thinkingTokens: 3698,
+      parsedChars: 15,
+      rawChars: runaway.length,
+    })
+    // The one thing this must never do, whatever a call site then does with
+    // what it returns.
+    expect(JSON.stringify(figures)).not.toContain('nnn')
+  })
+
+  it('a call that reported no thinking and kept no bytes says so as nothing, not as zero', () => {
+    expect(
+      aiCutOffFigures({
+        usage: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        parsed: null,
+        rawOutput: undefined,
+      }),
+    ).toEqual({ outputTokens: 2, thinkingTokens: null, parsedChars: 0, rawChars: null })
   })
 })

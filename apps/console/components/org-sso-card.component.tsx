@@ -387,7 +387,7 @@ export function OrgSsoCard() {
     // promises the rest is theirs.
     return (
       <SsoCardShell>
-        <Stack spacing={2} sx={{ maxWidth: 560 }}>
+        <Stack spacing={2}>
           <Alert severity="info">
             {'Single sign-on is part of Enterprise.'}
           </Alert>
@@ -410,7 +410,7 @@ export function OrgSsoCard() {
     // have.
     return (
       <SsoCardShell>
-        <Stack spacing={2} sx={{ maxWidth: 560 }}>
+        <Stack spacing={2}>
           <Alert
             severity="error"
             action={
@@ -519,7 +519,7 @@ export function OrgSsoCard() {
 
   return (
     <SsoCardShell>
-      <Stack spacing={4} sx={{ maxWidth: 720 }}>
+      <Stack spacing={4}>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Chip
             size="small"
