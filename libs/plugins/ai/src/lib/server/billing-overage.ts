@@ -195,10 +195,12 @@ async function handler(request: Request): Promise<Response> {
     const bandCredits = resolveAssistCreditBudget(org as never)
     // The rate the card quotes must be the rate the rollup bills, so it is
     // read through the one resolver every reader of the rate goes through.
-    // `PLAN_PRICING` alone is not that rate: Starter carries no listed band,
-    // and the add-on's rate is added by the resolver rather than written onto
-    // the table, where it would advertise a rate on a band the plan does not
-    // carry without the add-on (AGL-3014).
+    // That mattered acutely under AGL-3014, when Starter's rate lived off
+    // `PLAN_PRICING` and reading the table directly quoted $0.00 on an org
+    // that was really being invoiced. AGL-3203 put the rate on Starter's own
+    // row and deleted the exception, so the table and the resolver now agree
+    // — and this still reads the resolver, because a comp is priced at
+    // nothing and only `resolvePlanPricing` knows that.
     const overageRateUsdPer1k = resolveAssistOverageRateUsdPer1k(org as never)
     const sellsOverage = bandCredits !== null && overageRateUsdPer1k !== null
 

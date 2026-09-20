@@ -162,8 +162,12 @@ If a quoted page did not cover what you meant, just ask again with more detail
   them; when they are used, AI pauses until next month or an upgrade, and
   nothing is ever billed. A new account waits a short while after signing up
   before it can generate, and free requests are capped per day.
-- **Pro and higher plans** get generous limits, page-aware guidance, and the
-  offers to open a page described above.
+- **Paid plans** include their own monthly AI credits for the assistant and AI
+  generation together, rising with the plan, and sell credits past the band rather
+  than stopping at it — so the assistant keeps working and the month's overage is
+  billed, unless you switch that off or set a ceiling in **Billing**.
+- **Pro and higher plans** also get page-aware guidance and the offers to open a
+  page described above.
 
 When a free workspace reaches its daily limit, the assistant says so and the
 counter resets the next day (UTC).

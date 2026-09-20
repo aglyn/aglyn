@@ -302,17 +302,24 @@ describe('a plan that sells nothing past its band never reaches the guards', () 
 
 describe('Starter WITH the AI add-on is bounded like every plan that sells past its band (AGL-3014)', () => {
   /**
-   * Starter lists no rate, so a guard that decided "is there overage to
-   * guard?" off the plan table would skip the one workspace whose overage
-   * rate comes from the add-on: billed past its band, with no unpaid limit.
+   * Starter used to list no rate, so a guard that decided "is there overage
+   * to guard?" off the plan table skipped the one workspace whose overage
+   * rate came from the add-on: billed past its band, with no unpaid limit.
+   * AGL-3203 put 750 credits and the $3.00 rate on Starter's own row, so the
+   * table and the guard read one figure and the skip has no source left.
    */
   const STARTER_WITH_AI = {
     plan: 'starter',
     subscription: { status: 'active' },
     seatAddons: { aiAddon: 1 },
   }
-  /** $50.00 of overage past the add-on's 4,000 credits, at $3.00 per 1,000. */
-  const FIFTY_PAST_THE_ADDON_BAND = (4_000 + (50 / 3) * 1_000) * 0.001
+  /**
+   * Starter's whole band with the add-on on: the plan's own 750 credits
+   * (AGL-3203) plus the add-on's 4,000. The add-on widens the one pool.
+   */
+  const ADDON_BAND = 4_750
+  /** $50.00 of overage past that band, at $3.00 per 1,000. */
+  const FIFTY_PAST_THE_ADDON_BAND = (ADDON_BAND + (50 / 3) * 1_000) * 0.001
   /** The top rung of the ladder, so only the unpaid limit can refuse. */
   const TOP_RUNG = {
     paymentMethodType: 'card',

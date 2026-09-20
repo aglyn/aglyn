@@ -92,6 +92,59 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-20 — Starter includes 750 AI assist credits, sold past at $3.00/1k: a paid plan was including fewer than the free one
+
+- **Decided by:** the account owner, 2026-09-20, reading the live `/pricing` comparison table and seeing the "AI credits / mo" row read `300 / mo` for Free and `—` for Starter; set the figure himself at "at least 750 or something cheap for us". The rate beside it was not a second decision but the rule: a finite band with no rate is silently free past the band.
+- **Scope:** pricing
+- **Evidence:** `PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth` (0 → 750) and `PLAN_PRICING.starter.extraAssistCreditsUsdPer1k` (null → 3) in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K` and the `plan === 'starter'` branch of `resolveAssistOverageRateUsdPer1k` in `libs/aglyn/src/lib/app-utils/assist-credits.ts`, both deleted; `plan-entitlements.spec.ts` (the band/rate pair rule, AGL-2653), `assist-credits.spec.ts`, `apps/console/specs/tier-margin-floor.spec.ts` (Starter's modeled cost $10.34 → $11.09 against $15.51 net of Stripe on the annual price, margin at 100% of every band 32.3% → 27.6%, still the widest rung), `apps/console/specs/published-pricing-table-parity.spec.ts` (two rows pinned APART pending the republish); `tools/marketing/pricing-copy/tables.json` regenerated; AGL-3203.
+
+**No charged price moves.** Starter stays $25 monthly and $16 annual, and no
+Stripe object changes hands. What moves is what the subscription INCLUDES.
+
+**The defect was visible in the published column.** Free carries the AGL-2925
+taste of 300 credits. Starter banded at 0, deliberately — the reasoning of
+AGL-2896 was that Starter was not sold generative building, so the AI add-on
+was what gave it a band, and a rate written beside a band of zero would
+advertise a fee on a quantity the plan never sold. That reasoning was
+self-consistent and it produced a comparison table in which the first paid
+tier included strictly less of an axis than the free tier. On the one row a
+visitor reads straight down a column, the page argued against the upgrade it
+exists to sell.
+
+**Two fields, because one of them alone is a known defect.** A positive,
+finite band with no rate beside it is usage past a bound that bills nothing —
+the silent free overage `plan-entitlements.spec.ts` forbids on every other
+plan, and the shape AGL-2653 was filed about. So the band and the rate moved
+in the same commit. $3.00 is Pro's figure, JOINED rather than stepped above:
+the retail ladder descends with the tier ($3.00 → $2.75 → $2.50 → $2.25 →
+$2.00, the last at the `ASSIST_CREDIT_MIN_MARGIN_PCT` floor of cost x2), and
+Starter is the rung below Pro rather than a new one over it.
+
+**A constant collapsed.** `AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K` existed
+only because the rate could not be written onto a plan row that sold no band;
+it was held off-row and read through `resolveAssistOverageRateUsdPer1k`.
+With the band on the row that reason is gone, the resolver's Starter branch
+became unreachable, and the function is now a single read of
+`resolvePlanPricing`. That is also the fix for the shape of AGL-3014, where
+the rate living in two places let the card quote $0.00 on an org that was
+really being invoiced: there is now one place the rate is written.
+
+**What it costs.** 750 credits is $0.75 a month of provider spend at
+`ASSIST_CREDIT_COST_USD`. Starter was the widest rung on the ladder and
+remains it. No tier goes under water on either interval.
+
+**Consequences worth stating.** A bare Starter now sells overage, so its
+billing page carries the stop switch and the dollar ceiling like every paid
+tier; `assistBandRefuses` is false for it; and Starter with the AI add-on
+bands at 4,750 rather than 4,000. No plan row bands at zero any more, so the
+"this org sells no band" path is reached only by a per-org override.
+
+⛔ **The page has not caught up.** `/pricing` still shows `—` in both Starter
+cells. The two parity rows are pinned apart with the gap named, in the
+direction the campaign-email row of 2026-09-07 established; the band gap
+favors the customer, the rate gap does not, which is why the republish is
+owed. The Figma frames are declared stale in `build-pricing-tables.mts`.
+
 ## 2026-09-20 — The extra site rises to $20 on every tier, Starter included: the $8 add-on undercut every rung of the ladder
 
 - **Decided by:** the account owner, 2026-09-20, shown that with extra sites at $8 and no cap a plan plus extras undercuts every higher plan; offered a uniform $16 (holds on annual prices only) and a per-plan cap on extras (a product change) as the alternatives, chose a uniform $20.

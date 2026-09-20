@@ -535,7 +535,31 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // to it, and the CRM is what a Starter site builds before it upgrades.
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
-    assistCreditsPerMonth: 0,
+    // The first paid rung of the assist ladder (AGL-3203). Starter banded at
+    // 0 until 2026-09-20, which put a PAYING workspace below the Free taste's
+    // 300 on the one axis a visitor compares straight down the column — the
+    // `/pricing` row read `300 / mo` for Free and `—` for Starter. A paid
+    // plan that includes less of something than the free plan is not a
+    // packaging subtlety; it is the comparison table arguing against the
+    // upgrade.
+    //
+    // 750 is deliberately small: 2.5x the taste, enough that the assistant is
+    // a thing the tier HAS rather than a thing it is shown, and $0.75 of
+    // provider spend a month at `ASSIST_CREDIT_COST_USD` against a $16 annual
+    // price — a twentieth of the $8.81 the tier's other metered bands already
+    // cost, and the widest margin on the ladder absorbs it with room left
+    // (`tier-margin-floor.spec.ts` carries the arithmetic).
+    //
+    // It is NOT a wall, unlike Free's: `PLAN_PRICING.starter
+    // .extraAssistCreditsUsdPer1k` is $3.00, so past 750 the tier meters and
+    // bills like every paid plan above it. The two fields move together by
+    // rule — a positive band with no rate beside it is usage past a bound
+    // that is silently free, which `plan-entitlements.spec.ts` forbids.
+    //
+    // `features.aiAssist` stays false: the band is credits, not the guided
+    // rung of the console assistant, exactly as on Free. The AI add-on adds
+    // `AI_ADDON_CREDITS_PER_MONTH.starter` on top and switches both flags on.
+    assistCreditsPerMonth: 750,
     apiRequestsPerMonth: 0,
     datasetsPerOrg: 3,
     maxDatasetsPerOrg: 10,
@@ -1299,26 +1323,6 @@ export const aiAddonName = (brand: string = PLATFORM_BRAND_NAME): string =>
   `${brand} AI`
 
 /**
- * The per-1,000 rate Starter sells assist credits at past its band when it
- * carries the Aglyn AI add-on (AGL-2896).
- *
- * Starter has no band of its own — `assistCreditsPerMonth` is 0 and
- * `extraAssistCreditsUsdPer1k` is null, because with nothing sold there is
- * nothing to be over. The add-on gives it a band, and a finite band with no
- * rate beside it is usage past a bound that is silently free, the shape
- * `plan-entitlements.spec.ts` forbids on every other plan. Pro's $3.00 is
- * the top of the ladder and the rate Starter's band joins at; it does not
- * step above it, because the ladder descends with the tier and Starter is
- * the tier below Pro rather than a new rung.
- *
- * Read ONLY through `resolveAssistOverageRateUsdPer1k` in
- * `assist-credits.ts`, which every reader of the rate goes through. It is
- * not written onto `PLAN_PRICING.starter`, where it would advertise a rate
- * on a band the plan does not sell without the add-on.
- */
-export const AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K = 3
-
-/**
  * Purchase ceilings for the two add-on kinds that have NO per-plan hard max
  * (AGL-1738). They live here, beside the bands and the resolver they bound,
  * because they ARE the bound — and until now they were two private literals
@@ -1445,25 +1449,24 @@ export interface PlanPricing {
    * Every retail line carries at least a 50% margin
    * (`ASSIST_CREDIT_MIN_MARGIN_PCT`), which at $1.00 of cost per 1,000 is a
    * floor of $2.00 per 1,000 — cost x2. The ladder steps down with the tier
-   * the way contacts and API requests do, $3.00 -> $2.75 -> $2.50 -> $2.25,
-   * and stops at the floor on Agency rather than running past it.
+   * the way contacts and API requests do, and since AGL-3203 it begins on
+   * Starter: $3.00 on Starter and Pro together, then $2.75 -> $2.50 ->
+   * $2.25, stopping at the floor on Agency rather than running past it.
+   * Starter joins at Pro's figure rather than stepping above it, because the
+   * ladder descends with the tier and Starter is the rung below Pro.
    *
    * ## Where it is null, and why that is not "free overage"
    *
-   * Null on Starter because it carries no `aiAssist` and bands at 0
-   * credits: there is no generative building to overspend, so there is no
-   * overage to price. Null on Free because its band is a WALL by decision
-   * (AGL-2925): the 300-credit taste refuses at 100% with nothing sold past
-   * it, and a rate here would be a charge on a plan that must never produce
-   * one. Null on Enterprise, where every rate is the "not for sale"
-   * sentinel and the terms are contractual.
+   * Null on Free because its band is a WALL by decision (AGL-2925): the
+   * 300-credit taste refuses at 100% with nothing sold past it, and a rate
+   * here would be a charge on a plan that must never produce one. Null on
+   * Enterprise, where every rate is the "not for sale" sentinel and the
+   * terms are contractual.
    *
-   * Starter with the Aglyn AI add-on is the exception, and it is NOT written
-   * here: that org has a band, so it sells past it at
-   * `AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K`, which
-   * `resolveAssistOverageRateUsdPer1k` in `assist-credits.ts` answers for
-   * every reader of this field. A rate on this row would advertise a fee on
-   * a band the plan does not carry without the add-on.
+   * Those two are the only nulls. Every self-serve PAID plan now includes a
+   * positive assist band and therefore carries a rate, Starter included —
+   * a finite band with no rate beside it is usage past a bound that is
+   * silently free, which `plan-entitlements.spec.ts` forbids.
    *
    * ## What the rate decides at the gate (AGL-2653)
    *
@@ -1485,8 +1488,10 @@ export interface PlanPricing {
    * `features.aiGenerative` — generative building and automation, the rung
    * no self-serve tier includes — plus `AI_ADDON_CREDITS_PER_MONTH[plan]`
    * added to the plan's assist band. It also switches `aiAssist` on, so on
-   * Starter the add-on is the whole assistant: the band, the copy assist and
-   * the generative rung arrive together.
+   * Starter it brings the two rungs the tier does not carry — the copy
+   * assist and the generative one — on top of the 750 credits the plan
+   * already includes (AGL-3203). It ADDS to that band; it does not replace
+   * it, on Starter or on any tier.
    *
    * ## Where the ladder sits
    *
@@ -1620,7 +1625,13 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 2,
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: null,
-    extraAssistCreditsUsdPer1k: null,
+    // The top of the retail ladder, which Starter JOINS rather than steps
+    // above (AGL-3203): the ladder descends with the tier, and Starter is the
+    // rung below Pro, not a new one over it. Moves in lockstep with the 750
+    // credit band on the Starter entitlements — the band without this rate is
+    // the silent free overage, and this rate without the band is a fee
+    // advertised on a quantity the plan never sold.
+    extraAssistCreditsUsdPer1k: 3,
     aiAddonMonthlyUsd: 9,
     extraContactsUsdPer1k: 1,
     // No email band to be "over" — see `emailSendsPerMonth` on the Starter

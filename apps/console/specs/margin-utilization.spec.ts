@@ -193,12 +193,14 @@ describe('the bands are real, and the plan is what selects them', () => {
         'workflowRuns',
         'actionRuns',
       ],
-      // API access is Business-and-above; campaign email, assist credits and
-      // action runs are Pro-and-above. Starter sells workflow runs but no
-      // actions, and its email band is 0 for the same reason Free's is —
-      // sending campaigns needs a per-site verified sending domain, so the
-      // allowance starts at the tier that carries that cost.
-      starter: ['apiRequests', 'emailSends', 'assistCredits', 'actionRuns'],
+      // API access is Business-and-above; campaign email and action runs are
+      // Pro-and-above. Assist credits are NOT: every plan sells a band since
+      // AGL-3203 gave Starter 750, so `assistCredits` is absent from every
+      // list here. Starter sells workflow runs but no actions, and its email
+      // band is 0 for the same reason Free's is — sending campaigns needs a
+      // per-site verified sending domain, so the allowance starts at the
+      // tier that carries that cost.
+      starter: ['apiRequests', 'emailSends', 'actionRuns'],
       pro: ['apiRequests'],
       business: [],
       scale: [],
@@ -281,10 +283,12 @@ describe('the bands are real, and the plan is what selects them', () => {
     expect(Number.isFinite(orgIncludedBands(orgOn('enterprise') as never).assistCredits)).toBe(
       true,
     )
-    // Starter sells none, and every tier above it sells more than the last.
-    expect(credits[0]).toBe(0)
-    expect(credits.slice(1)).toEqual([...credits.slice(1)].sort((a, b) => a - b))
-    expect(new Set(credits.slice(1)).size).toBe(credits.length - 1)
+    // Starter sells the smallest band on the paid ladder since AGL-3203, and
+    // every tier above it sells more than the last — so the whole ladder is
+    // ascending and distinct now, not just the part above Starter.
+    expect(credits[0]).toBe(750)
+    expect(credits).toEqual([...credits].sort((a, b) => a - b))
+    expect(new Set(credits).size).toBe(credits.length)
   })
 
   it('measures Assist in CREDITS against the credit band, not in dollars', () => {
@@ -313,16 +317,31 @@ describe('the bands are real, and the plan is what selects them', () => {
     expect(row.cogs.breakdown.assist).toBeCloseTo(halfUsd, 9)
   })
 
-  it('reads a STARTER org’s Assist band as no allowance, not as 0% used', () => {
+  it('reads an org with NO Assist band as no allowance, not as 0% used', () => {
+    // Starter supplied this case until AGL-3203 gave it 750 credits. No plan
+    // row bands at zero now, so the state is reached by a per-org override —
+    // and it still has to be told apart from 0% of a real band, which is the
+    // distinction the surface most needs to be right about.
     const row = orgMarginRow({
-      orgId: 'starter-1',
-      org: orgOn('starter') as never,
+      orgId: 'bandless-1',
+      org: { ...orgOn('starter'), entitlements: { assistCreditsPerMonth: 0 } } as never,
       month: '2026-07',
       rollup: { assistCostUsd: 1.2 },
     })
     expect(row.bands.assistCredits.state).toBe('noAllowance')
     expect(row.bands.assistCredits.fraction).toBeNull()
     expect(row.bands.assistCredits.used).toBe(1200)
+    // THE CONTRAST: the same org on its plan's own band is MEASURED, so the
+    // `noAllowance` above is the override and not the surface refusing to
+    // measure Starter.
+    const onPlan = orgMarginRow({
+      orgId: 'starter-1',
+      org: orgOn('starter') as never,
+      month: '2026-07',
+      rollup: { assistCostUsd: 1.2 },
+    })
+    expect(onPlan.bands.assistCredits.state).toBe('measured')
+    expect(onPlan.bands.assistCredits.included).toBe(750)
   })
 
   it('gives a BIGGER tier a bigger band — the ladder is visible, not assumed', () => {

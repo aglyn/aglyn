@@ -134,10 +134,10 @@ under [Aglyn AI](../../ai/overview.md).
   **Billing** before you confirm; on annual billing it bills yearly with the plan, like
   every add-on. Enterprise workspaces carry generative building in their agreement
   instead of buying it.
-- **Starter gains a band.** Starter includes no AI credits on its own, so without the
-  add-on there is nothing to generate against. With it, Starter has the add-on's band
-  and credits past it are sold at the same rate as Pro, so the stop switch and the
-  ceiling appear on its billing page as they do on Pro.
+- **Starter widens a band it already has.** Starter includes its own monthly AI
+  credits, and credits past them are sold at the same rate as Pro — so the stop switch
+  and the ceiling are on its billing page with or without the add-on. Adding Aglyn AI
+  increases the band and opens generative building and the guided assist.
 - **Free workspaces** do not buy it. They generate against the
   [monthly taste](overview.md#free-ai-credits) instead, which stops at its band and
   never bills.

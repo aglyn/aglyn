@@ -565,10 +565,15 @@ describe('an uncapped comp lifts every cap (AGL-3049)', () => {
     expect(resolved.contactsPerHost).toBe(2000)
     expect(Object.values(resolved).includes(UNLIMITED)).toBe(false)
     expect(checkQuota(live, 'hostLimit', PLAN_ENTITLEMENTS.starter.hostLimit).allowed).toBe(false)
-    // The paying workspace's AI band is sold past as Starter's own terms say,
-    // not lifted: no add-on, no band, so it is a wall like any Starter's.
-    expect(assistBandRefuses(live)).toBe(true)
+    // The paying workspace's AI band is sold past as Starter's own terms
+    // say, not lifted by the dormant comp: since AGL-3203 Starter includes
+    // 750 credits and carries a $3.00 rate, so it meters past the band like
+    // any paying Starter — and, crucially, at the PLAN's prices. A comp in
+    // force would have made `resolvePlanPricing` sell nothing; this one is
+    // dormant, so it sells everything the plan sells.
+    expect(assistBandRefuses(live)).toBe(false)
     expect(resolvePlanPricing(live)).toEqual(PLAN_PRICING.starter)
+    expect(resolvePlanPricing(live).extraAssistCreditsUsdPer1k).toBe(3)
     // Dormant, and said so.
     const description = describeOrgPlan(live)
     expect(description).toMatchObject({

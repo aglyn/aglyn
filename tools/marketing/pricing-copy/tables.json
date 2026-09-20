@@ -769,7 +769,7 @@
             "duplicateOf": null,
             "values": {
               "free": "300 / mo",
-              "starter": "—",
+              "starter": "750 / mo",
               "pro": "2.75k / mo",
               "business": "7.5k / mo",
               "scale": "10k / mo",
@@ -1110,7 +1110,7 @@
         "label": "AI credits, per 1,000 over the included band",
         "rate": "extraAssistCreditsUsdPer1k",
         "values": {
-          "starter": "—",
+          "starter": "$3",
           "pro": "$3",
           "business": "$2.75",
           "scale": "$2.50",

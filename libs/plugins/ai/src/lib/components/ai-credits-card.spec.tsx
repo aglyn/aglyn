@@ -59,8 +59,19 @@ import AiCreditsCard from './ai-credits-card.component'
 
 /** Business: 7,500 credits included. */
 const BUSINESS = { $id: 'org-1', plan: 'business' } as any
-/** Starter: `assistCreditsPerMonth: 0` — the plan sells no band. */
+/** Starter: 750 credits included since AGL-3203, sold past at $3.00/1k. */
 const STARTER = { $id: 'org-1', plan: 'starter' } as any
+/**
+ * An org that sells NO band. Since AGL-3203 no plan row bands at zero, so
+ * the only way here is a per-org `assistCreditsPerMonth` override — which
+ * resolves exactly as bare Starter used to, and is what the "no meter"
+ * cases below are about.
+ */
+const NO_BAND = {
+  $id: 'org-1',
+  plan: 'starter',
+  entitlements: { assistCreditsPerMonth: 0 },
+} as any
 
 /** Named for the ONE pool (AGL-2899): the add-on widens it, never a second meter. */
 const METER = 'AI credits (this month)'
@@ -72,7 +83,7 @@ const PRO_WITH_AI = {
   plan: 'pro',
   seatAddons: { aiAddon: 1 },
 } as any
-/** Starter with the add-on: no band of its own, 4,000 from the add-on. */
+/** Starter with the add-on: its own 750, plus 4,000 from the add-on. */
 const STARTER_WITH_AI = {
   $id: 'org-1',
   plan: 'starter',
@@ -97,11 +108,22 @@ beforeEach(() => {
 })
 
 describe('the fixture is a plan that really sells a band', () => {
-  it('Business includes 7,500 credits, Starter includes none, and Free carries the taste', () => {
+  it('Business includes 7,500, Starter 750, and Free carries the taste', () => {
     expect(PLAN_ENTITLEMENTS.business.assistCreditsPerMonth).toBe(7_500)
-    expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBe(0)
+    // Starter includes 750 since AGL-3203, and sells past them.
+    expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBe(750)
     // The Free taste (AGL-2925): a real band, so the meter renders for it.
     expect(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth).toBe(300)
+  })
+
+  it('NO plan row bands at zero, so the "no meter" fixture is an override', () => {
+    // The premise every "renders nothing" case below rests on. Were a plan
+    // row to band at zero again, those cases would silently start testing a
+    // plan rather than the override they name (AGL-3203).
+    for (const [plan, row] of Object.entries(PLAN_ENTITLEMENTS)) {
+      expect(`${plan}: ${String(row.assistCreditsPerMonth > 0)}`).toBe(`${plan}: true`)
+    }
+    expect(NO_BAND.entitlements.assistCreditsPerMonth).toBe(0)
   })
 })
 
@@ -154,12 +176,23 @@ describe('a workspace with a band can see how much of it is left', () => {
     expect(row?.textContent).not.toContain('0 / 18000')
   })
 
-  it('renders NO meter for a plan that sells no band', async () => {
-    // "0 of 0" is not a readout of anything, and Starter's assistant is
-    // bounded by a message cap the panel already states.
+  it('renders NO meter for an org that sells no band', async () => {
+    // "0 of 0" is not a readout of anything, and such a workspace's
+    // assistant is bounded by a message cap the panel already states. Since
+    // AGL-3203 the zero is a per-org override rather than a plan row.
     mockCredits = null
-    render(<AiCreditsCard orgId="org-1" org={STARTER} />)
+    render(<AiCreditsCard orgId="org-1" org={NO_BAND} />)
     await waitFor(() => expect(screen.queryAllByText(METER)).toHaveLength(0))
+  })
+
+  it('THE CONTROL: bare Starter DOES render one, against its 750 (AGL-3203)', async () => {
+    // Without this the test above would pass on a component that rendered
+    // nothing for Starter at all — which is what it used to do.
+    mockCredits = { used: 200, limit: 750, remaining: 550 }
+    render(<AiCreditsCard orgId="org-1" org={STARTER} />)
+    await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
+    const row = screen.getByText(METER).parentElement?.parentElement
+    await waitFor(() => expect(row?.textContent).toContain('200 / 750'))
   })
 })
 
@@ -254,24 +287,43 @@ describe('the Aglyn AI add-on widens the one meter (AGL-2899)', () => {
     expect(screen.queryAllByText(/credits \(this month\)/)).toHaveLength(1)
   })
 
-  it('Starter with the add-on has a meter after all — the add-on IS its band', async () => {
-    mockCredits = { used: 500, limit: 4_000, remaining: 3_500 }
+  it('Starter with the add-on widens its band to 750 + 4,000 (AGL-3203)', async () => {
+    // The add-on ADDS to the plan's own 750; it is not the band itself, and
+    // a meter reading 4,000 would be short by the credits the plan includes.
+    // The caption names the add-on's SHARE, which is still 4,000.
+    mockCredits = { used: 500, limit: 4_750, remaining: 4_250 }
     render(<AiCreditsCard orgId="org-1" org={STARTER_WITH_AI} />)
     await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
     const row = screen.getByText(METER).parentElement?.parentElement
-    await waitFor(() => expect(row?.textContent).toContain('500 / 4000'))
+    await waitFor(() => expect(row?.textContent).toContain('500 / 4750'))
     expect(
       screen.getByText('Includes 4,000 credits a month from the Aglyn AI add-on.'),
     ).toBeTruthy()
+    // Still one meter: the add-on widened the pool, it did not open a second.
+    expect(screen.getAllByText(METER)).toHaveLength(1)
   })
 
-  it('a plan that sells no band keeps today\'s wording: no meter, no link', async () => {
-    // Starter without the add-on sells no band; the meter section is silent
-    // there rather than upselling against a band that does not exist.
+  it('an org that sells no band keeps today\'s wording: no meter, no link', async () => {
+    // A band of zero renders nothing at all — no meter, and no upsell caption
+    // against a band that does not exist. Since AGL-3203 that org is one an
+    // override zeroed, never a plan row.
     mockCredits = null
-    render(<AiCreditsCard orgId="org-1" org={STARTER} billingHref="/acme/billing" />)
+    render(<AiCreditsCard orgId="org-1" org={NO_BAND} billingHref="/acme/billing" />)
     await waitFor(() => expect(screen.queryAllByText(METER)).toHaveLength(0))
     expect(screen.queryByRole('link', { name: 'Add Aglyn AI' })).toBeNull()
+  })
+
+  it('THE CONTROL: bare Starter has a band, so it gets the meter AND the link', async () => {
+    // The counter-case to the silence above: Starter sells the add-on and
+    // has not bought it, so it is exactly the org the upsell caption is for.
+    mockCredits = { used: 200, limit: 750, remaining: 550 }
+    render(<AiCreditsCard orgId="org-1" org={STARTER} billingHref="/acme/billing" />)
+    await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
+    const row = screen.getByText(METER).parentElement?.parentElement
+    await waitFor(() => expect(row?.textContent).toContain('200 / 750'))
+    const link = screen.getByRole('link', { name: 'Add Aglyn AI' })
+    expect(link.getAttribute('href')).toBe('/acme/billing#addons')
+    expect(screen.getByText(/add 4,000 credits a month to this pool/)).toBeTruthy()
   })
 
   it('Free shows the taste as a meter and never the add-on link (AGL-2925)', async () => {

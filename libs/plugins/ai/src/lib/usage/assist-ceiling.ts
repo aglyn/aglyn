@@ -58,9 +58,10 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
  * `off` removes the operator's ceiling and does NOT remove a plan band: the
  * word turns off a backstop, and the band is not one.
  *
- * An org with no band (`budgetUsd === null` — Starter without the AI add-on,
- * and any org whose plan sells no assist band) is unchanged in every case: it
- * gets exactly the ceiling it got before, default and all.
+ * An org with no band (`budgetUsd === null`) is unchanged in every case: it
+ * gets exactly the ceiling it got before, default and all. Since AGL-3203
+ * every plan row carries a band, so this is an org whose band was overridden
+ * to zero rather than a tier that sells none.
  *
  * ## When the band is a line rather than a wall (AGL-2653)
  *

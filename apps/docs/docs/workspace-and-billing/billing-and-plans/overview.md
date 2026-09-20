@@ -226,13 +226,15 @@ removing the ceiling needs the **Manage billing** permission, and a ceiling is n
 applied unless you set one.
 
 :::info Plans that sell no overage
-Starter includes no AI assist credits by default, so there is nothing to stop at — with
-the [Aglyn AI add-on](add-ons.md#aglyn-ai) it has the add-on's band, sells credits past
-it at Pro's rate, and gets the switch and the ceiling like Pro. A workspace on a plan
-that sells no credits past its band — Enterprise, whose credits are set by agreement, or
-a Free workspace — stops at the band on its own: the assistant refuses there until next
-month or an upgrade, and **nothing is ever billed** for AI assist. Neither the switch
-nor the ceiling is offered, because neither would change anything.
+Every paid plan includes AI assist credits and sells credits past them, so the switch
+and the ceiling are on every paid billing page — Starter included, at the same rate as
+Pro, with or without the [Aglyn AI add-on](add-ons.md#aglyn-ai).
+
+A workspace on a plan that sells no credits past its band — Enterprise, whose credits
+are set by agreement, or a Free workspace — stops at the band on its own: the assistant
+refuses there until next month or an upgrade, and **nothing is ever billed** for AI
+assist. Neither the switch nor the ceiling is offered, because neither would change
+anything.
 :::
 
 ### Free workspaces {#free-ai-credits}

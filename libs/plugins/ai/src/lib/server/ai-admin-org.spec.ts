@@ -365,8 +365,15 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
     delete mockDocsByPath['orgs/org-1/aiUsageByUser/user-b/months/2026-09']
     const body = await (await get({ token: 'tok' })).json()
     expect(body.addon.on).toBe(false)
-    expect(body.pool.totalCredits).toBeNull()
-    expect(body.pool.usedCredits).toBe(0)
+    // Nothing DRAWN, but the band is the plan's own: since AGL-3203 Starter
+    // includes 750 credits and sells past them, so an untouched workspace
+    // reads its row rather than a null. Empty is the usage, not the terms.
+    expect(body.pool).toMatchObject({
+      planCredits: 750,
+      addonCredits: 0,
+      totalCredits: 750,
+      usedCredits: 0,
+    })
     expect(body.refusals.total).toBe(0)
     expect(body.jobs).toEqual({
       counts: { queued: 0, running: 0, needs_input: 0, needs_review: 0, done: 0, failed: 0, canceled: 0 },
@@ -374,17 +381,44 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
       truncated: false,
     })
     expect(body.users).toEqual([])
-    expect(body.overage.sellsOverage).toBe(false)
+    expect(body.overage.sellsOverage).toBe(true)
   })
 
-  it('prices Starter WITH the add-on past its band at the rate the invoice bills (AGL-3014)', async () => {
-    // Starter lists no rate on `PLAN_PRICING`; the add-on's $3.00 per 1,000
-    // comes from the resolver `assistMonthOverage` asks. Staff reading "not
-    // sold past the band" beside a real overage line on the workspace's
-    // invoice would be this issue on the staff surface.
+  it('reads an org with NO band as no pool at all, and nothing sold past it', async () => {
+    // The counter-case to every band reading above. No plan row bands at
+    // zero since AGL-3203, so staff reach this only where a per-org
+    // `assistCreditsPerMonth` override writes one — and then the pool is
+    // `null` rather than a band of zero, and the route sells nothing past a
+    // band that is not there. The plan's own row still shows through as
+    // `planCredits`, beside the override that replaced it.
+    staff()
+    delete mockDocsByPath['orgs/org-1/assistUsage/2026-09']
+    mockDocsByPath['orgs/org-1'] = {
+      name: 'Bandless',
+      plan: 'starter',
+      entitlements: { assistCreditsPerMonth: 0 },
+    }
+    const body = await (await get({ token: 'tok' })).json()
+    expect(body.addon.on).toBe(false)
+    expect(body.pool).toMatchObject({
+      planCredits: 750,
+      overrideCredits: 0,
+      addonCredits: 0,
+      totalCredits: null,
+      remainingCredits: null,
+    })
+    expect(body.overage).toMatchObject({ sellsOverage: false, overageCredits: 0 })
+  })
+
+  it('prices Starter WITH the add-on past its band at the rate the invoice bills (AGL-3014, AGL-3203)', async () => {
+    // Starter used to list no rate on `PLAN_PRICING`, and the add-on's $3.00
+    // per 1,000 came from a constant the resolver read instead — so staff
+    // could read "not sold past the band" beside a real overage line on the
+    // workspace's invoice. AGL-3203 put the band and the rate on Starter's
+    // own row, and the add-on now only ADDS to that band: 750 + 4,000.
     staff()
     mockDocsByPath['orgs/org-1'] = { name: 'Starter AI', plan: 'starter', seatAddons: { aiAddon: 1 } }
-    // $10.50 drawn: 10,500 credits, 6,500 past the add-on's 4,000.
+    // $10.50 drawn: 10,500 credits, 5,750 past the 4,750 band.
     mockDocsByPath['orgs/org-1/assistUsage/2026-09'] = {
       month: '2026-09',
       estCostUsd: 10.5,
@@ -393,15 +427,18 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
     const body = await (await get({ token: 'tok' })).json()
     expect(body.addon.on).toBe(true)
     expect(body.pool).toMatchObject({
-      planCredits: 0,
+      planCredits: PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth,
       addonCredits: AI_ADDON_CREDITS_PER_MONTH.starter,
-      totalCredits: 4_000,
+      totalCredits: 4_750,
       usedCredits: 10_500,
     })
+    expect(
+      PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth + AI_ADDON_CREDITS_PER_MONTH.starter,
+    ).toBe(4_750)
     expect(body.overage).toMatchObject({
-      overageCredits: 6_500,
+      overageCredits: 5_750,
       rateUsdPer1k: 3,
-      accruedUsd: 19.5,
+      accruedUsd: 17.25,
       sellsOverage: true,
       bandRefuses: false,
     })

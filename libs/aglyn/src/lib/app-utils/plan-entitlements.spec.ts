@@ -82,7 +82,6 @@ import {
   marketplacePriceFloorHint,
   marketplaceSaleEconomics,
   AI_ADDON_CREDITS_PER_MONTH,
-  AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K,
   aiAddonUnits,
   hasAiAddon,
 } from './plan-entitlements'
@@ -290,7 +289,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 2,
         extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: null,
-        extraAssistCreditsUsdPer1k: null,
+        extraAssistCreditsUsdPer1k: 3,
         aiAddonMonthlyUsd: 9,
         extraContactsUsdPer1k: 1,
         extraEmailSendsUsdPer1k: null,
@@ -2695,10 +2694,24 @@ describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
           expect(`${plan}: ${price}`).toBe(`${plan}: null`)
         }
       }
-      // The premise, both ways: some plan sells the band and some does not,
-      // or one of the two branches above never ran.
+      // The premise. Some plan must sell the band, or the rate branch never
+      // ran and the rule proved nothing.
       expect(sold.length).toBeGreaterThan(0)
-      expect(unsold.length).toBeGreaterThan(0)
+      if (band === 'assistCreditsPerMonth') {
+        // Assist has no unsold self-serve plan since AGL-3203: Starter was
+        // the last one banded at zero, and it now includes 750. That is a
+        // DECISION, so it is asserted rather than tolerated — an empty
+        // `unsold` here must mean every self-serve tier sells a band, not
+        // that the loop stopped classifying. The two plans that carry no
+        // rate are handled by the branches above, each on its own reason:
+        // Free's band is a wall, Enterprise's usage is contractual.
+        expect(unsold).toEqual([])
+        expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBeGreaterThan(0)
+        expect(PLAN_PRICING.free.extraAssistCreditsUsdPer1k).toBeNull()
+        expect(assistBandRefuses({ plan: 'free' })).toBe(true)
+      } else {
+        expect(unsold.length).toBeGreaterThan(0)
+      }
     },
   )
 
@@ -3030,10 +3043,13 @@ describe('the Aglyn AI add-on (AGL-2896)', () => {
     expect(starter.assistCreditsPerMonth).toBe(
       PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth + AI_ADDON_CREDITS_PER_MONTH.starter,
     )
-    expect(starter.assistCreditsPerMonth).toBe(4_000)
+    expect(starter.assistCreditsPerMonth).toBe(4_750)
     expect(starter.features.aiGenerative).toBe(true)
-    // Starter has no `aiAssist` of its own; the add-on is its whole assistant.
+    // Starter has no `aiAssist` of its own — the add-on brings the guided
+    // rung. It does NOT bring the band: the plan carries 750 either way
+    // (AGL-3203), and the add-on adds to it.
     expect(PLAN_ENTITLEMENTS.starter.features.aiAssist).toBe(false)
+    expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBe(750)
     expect(starter.features.aiAssist).toBe(true)
     // Nothing else moves.
     expect(starter.hostLimit).toBe(PLAN_ENTITLEMENTS.starter.hostLimit)
@@ -3173,7 +3189,11 @@ describe('the Aglyn AI add-on (AGL-2896)', () => {
       expect(Number.isFinite(band)).toBe(true)
       expect(band).not.toBe(UNLIMITED)
     }
-    // Starter's overage rate joins the ladder at Pro's figure.
-    expect(AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K).toBe(PLAN_PRICING.pro.extraAssistCreditsUsdPer1k)
+    // Starter's overage rate joins the ladder at Pro's figure — on its own
+    // plan row since AGL-3203, where it used to be a constant read through
+    // the resolver because the plan banded at zero.
+    expect(PLAN_PRICING.starter.extraAssistCreditsUsdPer1k).toBe(
+      PLAN_PRICING.pro.extraAssistCreditsUsdPer1k,
+    )
   })
 })

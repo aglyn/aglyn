@@ -372,7 +372,11 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
        * the taste — 300 a month behind a hard wall — and it is the reason
        * the row exists: "AI assist ✓" above says nothing about a plan whose
        * `aiAssist` is off but which still generates against a band. Starter
-       * prints the dash `perMonth` gives a band of zero; Enterprise talks.
+       * is the same shape since AGL-3203 — 750 credits with `aiAssist` off —
+       * and this row is where the decision is actually read, because it was
+       * this column that showed a paying plan below the free one. No plan row
+       * bands at zero now, so `perMonth`'s dash is unreachable here;
+       * Enterprise talks.
        */
       {
         label: 'AI credits / mo',
@@ -507,15 +511,20 @@ const USAGE_ROWS: UsageRow[] = [
      * "AI assist" because the compare grid's band row and the add-on card
      * both name the unit that way, and the three read together.
      *
-     * Starter's dash is CORRECT rather than a gap, and for the opposite
-     * reason to the email row above. Assist is refused at the band on every
-     * tier, so a plan with no rate simply stops; email cannot be refused —
-     * transactional mail goes out at every tier — so a null there would be
-     * unbounded absorbed spend. Same-looking cell, different fact. With the
-     * add-on Starter gains a band and joins the ladder at Pro's rate
-     * (`AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K`); that rate is not on
-     * `PLAN_PRICING.starter`, so the row does not print it, and the add-on
-     * card's sentence is where the page says so.
+     * Starter prints $3.00 here since AGL-3203, Pro's rate, joined rather
+     * than stepped above — the ladder descends with the tier. It used to
+     * print a dash, and the dash was correct then for a reason worth keeping
+     * on record: a plan with no band has nothing to be over, and assist is
+     * refused at the band, so a missing rate simply stopped the tier. Email
+     * is the opposite and the rows look alike — transactional mail goes out
+     * at every tier and cannot be refused, so a null THERE is unbounded
+     * absorbed spend rather than a stop. Same-looking cell, different fact.
+     *
+     * The rate now lives on `PLAN_PRICING.starter` like every other plan's.
+     * Before AGL-3203 it was held off-row in a constant, because writing it
+     * beside a band of zero would have advertised a fee on a quantity the
+     * plan never sold; the band made that unnecessary and the constant is
+     * gone.
      */
     label: 'AI credits, per 1,000 over the included band',
     rate: 'extraAssistCreditsUsdPer1k',
@@ -1177,7 +1186,12 @@ for (const [label, [why]] of injected('--declare-extra-row', 2)) {
  * matching and is reported as resolved, so it cannot outlive its reason. An
  * exemption that outlives its reason is just an untested cell.
  */
-const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
+const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
+  'AI credits / mo · Starter': {
+    frame: '—',
+    why: "AGL-3203 gave Starter a band of its own — 750 credits a month — because a paying workspace was including FEWER AI credits than the Free taste's 300, which is what the published comparison column showed. The frame still prints the dash it printed while the band was 0. Resolves when `/pricing` is republished with `750 / mo` in the Starter column of this row; the besigner screen is the only place that cell can be changed, and this declaration fails the moment it is",
+  },
+}
 
 /*
  * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.
@@ -1703,7 +1717,12 @@ tierStrip.finish()
  * bound achieves nothing. The pair is only ever right together, and this is
  * what reads the half of it that lives on the page.
  *=========================================*/
-const USAGE_STALE: Record<string, Divergence> = {}
+const USAGE_STALE: Record<string, Divergence> = {
+  'AI credits, per 1,000 over the included band · Starter': {
+    frame: '—',
+    why: "The other half of AGL-3203. A band and its rate are only ever right together — a finite band with no rate beside it is silently free past the band — so `PLAN_PRICING.starter.extraAssistCreditsUsdPer1k` moved from null to $3.00, Pro's rate, in the same commit as the 750-credit band. The frame still prints the dash from when Starter sold nothing past a band it did not have. Resolves when `/pricing` is republished with `$3` in the Starter column of this row",
+  },
+}
 
 /**
  * The rate the product BILLS and the page has never stated.
