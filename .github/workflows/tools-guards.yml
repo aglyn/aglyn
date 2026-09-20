@@ -1161,6 +1161,7 @@ jobs:
       # self-test runs first: its fixtures are the core importing a plugin
       # and a plugin importing a plugin, the two edges the map exists for.
       - run: npm run test:lib-boundaries
+      - run: npm run test:publish-packages
       - run: npm run check:lib-boundaries
 
       # AGL-3079 — every Firestore document the platform names is named by

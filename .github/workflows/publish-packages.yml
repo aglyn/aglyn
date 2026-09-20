@@ -1,0 +1,88 @@
+name: Publish packages
+
+# Every `libs/**` project is an npm package (docs/PACKAGES.md), and this is
+# what puts them on the registry (AGL-3201).
+#
+# ---------------------------------------------------------------------------
+# WHEN
+# ---------------------------------------------------------------------------
+# On the push to `production`, which is a promotion: the version every package
+# carries was written by `release:prepare` for that release, so the promoted
+# sha is the one moment the repo and the registry can be made to agree. It can
+# also be run by hand — as a dry run, which is the default, or for real.
+#
+# `@aglyn/cli` keeps a version of its own and rides the same run: it goes out
+# whenever its version is one the registry has not seen.
+#
+# ---------------------------------------------------------------------------
+# WHY A SECOND RUN IS SAFE
+# ---------------------------------------------------------------------------
+# `publish-packages.mjs` publishes what the registry is MISSING and skips the
+# rest, so a promotion that changed no lib publishes nothing, and a run that
+# died part way is finished by running it again. It builds and checks every
+# package before it publishes the first, because a published version cannot be
+# replaced.
+#
+# ---------------------------------------------------------------------------
+# CREDENTIALS
+# ---------------------------------------------------------------------------
+# `NPM_TOKEN` is an npm automation token with publish rights on the `@aglyn`
+# scope. `id-token: write` is for provenance: npm signs each package with this
+# run's identity, which is what links a registry page to the commit it was
+# built from. A missing token FAILS the run — a release whose packages did not
+# go out must not read as a green check.
+
+on:
+  push:
+    branches:
+      - production
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish for real. Off is a dry run that builds and packs everything and publishes nothing.'
+        type: boolean
+        default: false
+      only:
+        description: 'Comma-separated package names to limit the run to (empty = every package).'
+        type: string
+        default: ''
+
+concurrency:
+  group: publish-packages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm ci
+
+      - name: Publish what the registry is missing
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
+          ONLY: ${{ inputs.only }}
+        run: |
+          args=()
+          if [ "$PUBLISH" = "true" ]; then
+            if [ -z "$NODE_AUTH_TOKEN" ]; then
+              echo "::error::NPM_TOKEN is not set, so nothing can be published. Add an npm automation token with publish rights on the @aglyn scope as the NPM_TOKEN repository secret, then re-run this job."
+              exit 1
+            fi
+            args+=(--publish)
+          fi
+          if [ -n "$ONLY" ]; then args+=(--only "$ONLY"); fi
+          node tools/scripts/publish-packages.mjs "${args[@]}"
