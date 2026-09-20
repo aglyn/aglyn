@@ -12,7 +12,7 @@
  *
  * So this stub models the real replace semantics and asserts the EFFECT.
  */
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 
 const SLOTS = [5, 1, 14, 9, 11, 17, 13, 4]
 const PAGES = ['console','commerce','forms','media','workflows','plugins','analytics','marketing']
@@ -213,6 +213,90 @@ for (const page of TEN_CARD_PAGES) {
     applyPageCopy(COPY, { dryRun: true }).problems?.length > 0,
     'refuses a canvas that already carries the band — pour first, place second',
   )
+}
+
+/**
+ * The blog posts (AGL-2922). `blog-copy/post-<slug>.json` is prose, not slots,
+ * so there is no arity to assert — the failure mode is different and worse: a
+ * published post full of links to pages that do not exist. The keyword plan
+ * these were written from is dated 2026-09-13 and names `/alternatives/framer`
+ * and a docs path `ai/generate-a-page`, neither of which exists, so every link
+ * is resolved here against the docs tree and against the routes the live
+ * sitemap actually serves.
+ *
+ * The other thing asserted is the rolling-out disclosure. `release_ai_generative`
+ * is off in production; each post carries the notice as a DISCRETE element
+ * outside `body`, so the flip deletes one block per post rather than reopening
+ * the prose. A disclosure whose words had leaked into a paragraph would look
+ * identical in the JSON and be impossible to remove cleanly, so the check is
+ * that `body` does not contain them.
+ */
+{
+  /**
+   * Routes `https://aglyn.com/sitemaps/pages/1.xml` served on 2026-09-20.
+   * There is no repo record of what the marketing site publishes — it is a
+   * besigner site — and `seed-marketing-screens.mjs` seeds only part of it
+   * (no `/alternatives/*`, no `/pricing`). Re-read the sitemap before trusting
+   * this list; a route that has since been built belongs in it, and a link to
+   * a route that is NOT in it is a 404 on a published post.
+   */
+  const LIVE_ROUTES = new Set([
+    '/pricing',
+    '/product/besigner', '/product/console', '/product/crm', '/product/marketing',
+    '/solutions/agencies',
+    '/alternatives/duda', '/alternatives/webflow',
+  ])
+  const DOCS_ORIGIN = 'https://docs.aglyn.com/'
+  const ROLLING_OUT = 'release-flagged feature, currently being rolled out'
+
+  const posts = readdirSync('tools/marketing/blog-copy')
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => ({ f, post: JSON.parse(readFileSync(`tools/marketing/blog-copy/${f}`, 'utf8')) }))
+  console.log(`\nblog posts — ${posts.length} decks`)
+  check(posts.length === 3, 'three posts (AI-Keyword-Plan.md §4 briefs 1-3)')
+
+  const disclosures = new Set(posts.map(({ post }) => post.disclosure.body))
+  check(disclosures.size === 1, `one rolling-out wording across every post (${disclosures.size} found)`)
+  check([...disclosures][0]?.includes(ROLLING_OUT), 'it is the wording the docs use')
+
+  for (const { f, post } of posts) {
+    check(post.body.length === post.bodyContract.blocks, `${f}: ${post.bodyContract.blocks} blocks`)
+    const body = post.body.join('\n\n')
+
+    // The disclosure comes off as ONE block, so none of it may be in the prose.
+    const leaked = post.disclosure.body
+      .split(/(?<=\.)\s+/)
+      .filter((sentence) => body.includes(sentence.trim()))
+    check(leaked.length === 0 && post.disclosure.removeAtFlip === true,
+      `${f}: the rolling-out notice is its own removable block`)
+
+    // Every link the prose carries is declared with what it was checked
+    // against, and every declared link is used — a link recorded and then cut
+    // is a verification nobody needed.
+    const used = [...body.matchAll(/\]\(([^)]+)\)/g)].map((m) => m[1])
+    const declared = new Set(post.internalLinks.map((l) => l.href))
+    const undeclared = used.filter((href) => !declared.has(href))
+    check(undeclared.length === 0, `${f}: every link is declared (${undeclared.join(', ') || 'none missing'})`)
+    const unused = [...declared].filter((href) => !used.includes(href))
+    check(unused.length === 0, `${f}: every declared link is used (${unused.join(', ') || 'none stray'})`)
+
+    const dead = post.internalLinks.filter(({ href }) => {
+      if (href.startsWith(DOCS_ORIGIN)) {
+        const page = href.slice(DOCS_ORIGIN.length).split('#')[0]
+        return !existsSync(`apps/docs/docs/${page}.md`)
+      }
+      return !LIVE_ROUTES.has(href.split('#')[0])
+    })
+    check(dead.length === 0, `${f}: every link resolves (${dead.map((l) => l.href).join(', ') || 'no 404s'})`)
+    check(post.internalLinks.every((l) => l.verifiedAgainst),
+      `${f}: every link records what it was checked against`)
+
+    // `docs/PRICING_SURFACES.md` owns prices. A post may say "metered in
+    // credits"; a figure of any currency on this surface is the bug.
+    check(!/[$£€]\s?\d/.test(body), `${f}: no price figure`)
+    check(post.claimsToVerify.length > 0 && post.claimsToVerify.every((c) => c.source && c.concern),
+      `${f}: every flagged claim carries its source and its verdict`)
+  }
 }
 
 console.log(failures ? `\nFAILED — ${failures} check(s)` : '\nAll checks passed.')

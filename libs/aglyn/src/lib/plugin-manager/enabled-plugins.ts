@@ -23,9 +23,15 @@
  * `featureFlag` entitlement resolves; marketplace/marketplace listings keep
  * their per-host/org `installs` docs on top.
  *
- * This catalog intentionally knows ids and labels only — package names live
- * in `plugins.config.json` (codegen), so core stays free of plugin imports.
+ * The catalog's rows are declared by the plugins themselves, in
+ * `plugins.config.json`, beside the package names the loader manifests are
+ * generated from; this module holds the row's shape and the resolvers.
  */
+
+import {
+  FIRST_PARTY_PLUGINS,
+  PUBLISHED_SITE_IMPACT,
+} from './first-party-plugins.generated'
 
 export interface FirstPartyPlugin {
   /**
@@ -157,32 +163,12 @@ export interface FirstPartyPlugin {
 export type PublishedSiteImpact = 'elements' | 'routes' | 'console-only'
 
 /**
- * Every catalog id classified. Kept beside the catalog rather than inside it
- * because the `elements` verdict is a fact about `plugins.config.json`
- * (`register.site`), and a spec cross-checks the two so a new
- * site-registering bundle cannot be added without declaring its consequence.
+ * Every catalog id classified, from the `publishedSiteImpact` each plugin
+ * declares on its own row. The generator refuses a row whose verdict
+ * disagrees with its `register.site`, so a site-registering bundle cannot be
+ * added without declaring its consequence.
  */
-export const PUBLISHED_SITE_IMPACT: Readonly<
-  Record<string, PublishedSiteImpact>
-> = {
-  mui: 'elements',
-  forms: 'elements',
-  accounts: 'routes',
-  bookings: 'elements',
-  commerce: 'elements',
-  marketplace: 'console-only',
-  crm: 'console-only',
-  outreach: 'console-only',
-  data: 'console-only',
-  email: 'elements',
-  'events-calendar': 'elements',
-  inbox: 'console-only',
-  logic: 'console-only',
-  marketing: 'elements',
-  redirects: 'routes',
-  workflows: 'routes',
-  ai: 'console-only',
-}
+export { PUBLISHED_SITE_IMPACT }
 
 /**
  * The user-accounts capability (AGL-2486): visitor sign-in, sign-up and
@@ -208,100 +194,17 @@ export const ACCOUNTS_PLUGIN_ID = 'accounts'
  */
 export const FORMS_PLUGIN_ID = 'forms'
 
-export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
-  {
-    id: 'mui',
-    label: 'Components',
-    alwaysOn: true,
-    description: 'The base component and theme library every site builds on.',
-  },
-  {
-    id: FORMS_PLUGIN_ID,
-    label: 'Forms',
-    alwaysOnForWorkspace: true,
-    description: 'Forms on the site and the catalog that owns them.',
-    siteOff: {
-      stops:
-        'Switching Forms off for this site stops forms rendering on its ' +
-        'published pages, refuses every submission sent to it, and blocks ' +
-        'publishing a form, or a page that carries one, until Forms is back on.',
-      keeps:
-        'Submissions already received, the workspace’s form catalog and the ' +
-        'CRM leads its forms created are kept, and forms keep working on the ' +
-        'workspace’s other sites.',
-      confirm: true,
-      pages: {
-        heading:
-          'These published pages carry a form. Their forms stop rendering and ' +
-          'stop accepting submissions:',
-        none: 'No published page on this site carries a form.',
-      },
-    },
-    // On for every workspace and switchable per site (AGL-3029): the catalog
-    // and the submissions already stored belong to the workspace. A site's
-    // switch reaches every half of a form through this id — the tenant stops
-    // drawing it, `/api/forms/submit` refuses it, and the publish-time
-    // contract check refuses to put one live — so no half keeps running
-    // behind a page that no longer shows it.
-  },
-  {
-    id: 'ai',
-    label: 'AI',
-    alwaysOnForWorkspace: true,
-    description: 'The assistant, generative building and automation, and the AI add-on.',
-    siteOff: {
-      stops:
-        'Switching AI off for this site hides the assistant, Describe it, the ' +
-        'AI cards and the editor’s AI controls on this site, refuses every AI ' +
-        'request made for it, and stops its queued AI jobs without spending ' +
-        'credits.',
-      keeps:
-        'It does not stop the workspace’s AI add-on, credits, allotments or ' +
-        'overage billing, and AI keeps working on the workspace’s other sites.',
-    },
-    // On for every workspace, off for a site only when that site says so, and
-    // no catalog flag (AGL-2939): the workspace half — the add-on, credits,
-    // allotments, overage billing and the staff doors — carries no site and
-    // must keep running whatever any one site decides. Its doors gate
-    // themselves one by one — the assistant by `release_assist`, the
-    // generative doors by `release_ai_generative` inside their gate ladder,
-    // the copy assistant by the provider key. A flag on the bundle would
-    // switch off the released doors with the unreleased ones.
-  },
-  {
-    id: ACCOUNTS_PLUGIN_ID,
-    label: 'User Accounts',
-    description:
-      'Visitor accounts on the site: the /signin, /signup and /recover ' +
-      'pages, and the Members blocks. Off for a site until you turn it on.',
-    releaseFlag: 'release_member_accounts',
-    defaultOffPerSite: true,
-    // The Members blocks and the `membership/*` handlers are registered by
-    // the COMMERCE bundle (`plugins.config.json` gives commerce the
-    // `membership` api prefix). Commerce off = member pages with no server.
-    requires: ['commerce'],
-  },
-  { id: 'bookings', label: 'Bookings', description: 'Services, open slots, and paid bookings.', releaseFlag: 'release_bookings' },
-  { id: 'commerce', label: 'Commerce', description: 'Products, carts, checkout, orders, POS.', releaseFlag: 'release_commerce_v2' },
-  { id: 'marketplace', label: 'Marketplace', description: 'Marketplace listings, templates, and installs.', releaseFlag: 'release_marketplace' },
-  // `crm` was `contacts` until AGL-2595 widened one list into the hub; the
-  // release flag kept its key because it is persisted in Remote Config.
-  { id: 'crm', label: 'CRM', description: 'Leads, contacts, companies, deals, tasks and reports.', releaseFlag: 'release_crm' },
-  // Sequences (AGL-2974) works the CRM's records but is released and entitled
-  // on its own: sending sequences from a rep's mailbox is a capability a
-  // workspace can hold the CRM without. The id stays `outreach`, because it
-  // is stored in `org.enabledPlugins` (AGL-3199).
-  { id: 'outreach', label: 'Sequences', description: 'One-to-one email sequences sent from connected mailboxes.', releaseFlag: 'release_outreach' },
-  { id: 'data', label: 'Data', description: 'Datasets, records, and CSV import/export.', releaseFlag: 'release_data_store' },
-  { id: 'email', label: 'Email', description: 'Designed emails and campaign sending.', releaseFlag: 'release_email' },
-  { id: 'events-calendar', label: 'Events Calendar', description: 'Event lists and calendars.', releaseFlag: 'release_events' },
-  { id: 'inbox', label: 'Inbox', description: 'Form submissions and lead inbox.', releaseFlag: 'release_inbox' },
-  { id: 'logic', label: 'Logic', description: 'Variables, functions, and reference health.', releaseFlag: 'release_logic' },
-  { id: 'marketing', label: 'Marketing', description: 'Overlays, campaigns, and experiments.', releaseFlag: 'release_marketing' },
-  { id: 'redirects', label: 'Redirects', description: 'URL redirect rules.', releaseFlag: 'release_redirects' },
-  // `id` is stored on every org's enabled-plugin list; only the label moved.
-  { id: 'workflows', label: 'Automation', description: 'Workflows, actions, webhooks, and run logs.', releaseFlag: 'release_workflows' },
-] as const
+/**
+ * The switchboard catalog. The core holds no row of it: each plugin declares
+ * its own in `plugins.config.json` (`catalog`, and one per `capabilities`
+ * entry), and the generator compiles them here in their declared order, so
+ * adding a plugin edits no core file.
+ *
+ * Compiled in rather than registered at runtime, because every resolver below
+ * is synchronous and runs in each bundle of both apps; a registry that one of
+ * those bundles had not filled would read as every plugin switched OFF.
+ */
+export { FIRST_PARTY_PLUGINS }
 
 /** Ids loaded for orgs that have never touched the switchboard. */
 export const DEFAULT_ENABLED_PLUGINS: readonly string[] =

@@ -11,6 +11,7 @@ on Aglyn**). These are authoring inputs for the besigner, not application code
 | `verify-applier.mjs` | `node tools/marketing/verify-applier.mjs` — drives the applier over all eight pages against a stub canvas that models the REAL write semantics. |
 | `product-copy/copy-<page>.json` | Copy and structure extracted verbatim from the Figma frames, one file per product page, plus a `claimsToVerify` list per page. |
 | `shared-copy/band-<name>.json` | A block placed on **many** pages, worded once. `band-ai.json` is the first (AGL-2921) — see "One band on twenty-five pages" below. |
+| `blog-copy/post-<slug>.json` | One blog post: prose rather than slots, every internal link resolved against the real tree, and the rolling-out notice held outside the body. Three so far (AGL-2922) — see "Blog posts are prose, so the contract is the links" below. |
 | `extract-solutions-copy.mjs` | Extracts one `solutions-copy/copy-<page>.json` per solutions/use-case frame from a `get_metadata` dump of canvas `163:89`. Unit is a **card in a grid**. |
 | `extract-pricing-copy.mjs` | Extracts `pricing-copy/copy-<variant>.json` from the four Pricing frame dumps. Unit is a **row in a table**. See below — it is deliberately not the solutions extractor. |
 | `build-pricing-tables.mts` | Builds `pricing-copy/tables.json` FROM `plan-entitlements.ts` and reconciles all six tables it emits — `compare` (rows and plan columns), `tiers`, `usage`, `metered`, `fees`, `addons` — against the extractions, cell by cell. `npm run check:pricing-tables` runs it without writing. Deliberate divergences are declared with the frame's exact stale value, and a declaration the frame has caught up on fails until it is deleted. The tables that read every breakpoint print a compared-cell count; zero is a failure, because a reader that matches nothing reports clean. A rate the code charges but no row publishes is a failure too: `RATE_KEYS` enumerates every `extra*` field off `PLAN_PRICING` itself, so a new overage rate fails on the commit that adds it rather than after somebody reads an invoice line with no published price. A row we publish that the frame carries nowhere is declared in `USAGE_EXPECTED_ABSENT` and resolves — failing until the entry is deleted — once every breakpoint carries it. |
@@ -333,3 +334,53 @@ the `/product` index, not a detail page — no Statement, no Capabilities/
 Deep-dive pair, a centred hero with the mockup below, and three sections the
 detail pages never have (a logo strip, a pricing teaser and a roadmap band). The
 applier refuses it by design; it needs its own build.
+
+## Blog posts are prose, so the contract is the links (AGL-2922)
+
+A blog post has no skeleton to pour into: the body is a markdown block on a
+`blog` collection entry, not 74 slots in a fixed section order. There was no
+home for post bodies at all — the four posts already published were written
+straight into the CMS, and the only trace of them in this repository is their
+cover art in `tools/scripts/generate-blog-covers.mjs`. `blog-copy/` is that
+home, in the shape the rest of this directory already uses: one file per post,
+`seo` and `disclosure` as top-level keys the applier never reads, and
+`claimsToVerify` carrying the provenance of every capability sentence.
+
+`body` is an **array of markdown blocks** rather than one string, for the same
+reason `product-copy` bodies are arrays: a block is the unit that gets edited,
+moved and diffed. Join with a blank line to get the entry body.
+
+Since there is no arity to assert, the harness asserts the two things that can
+actually go wrong:
+
+- **Every link resolves.** A docs link is checked against a real file under
+  `apps/docs/docs/`; a site link against the routes the live sitemap serves.
+  These posts were written from a keyword plan dated 2026-09-13 whose internal
+  links had already rotted — it names `/alternatives/framer`, which this site
+  does not have, and a docs path `ai/generate-a-page` that is really
+  `building-sites/screens-and-layouts/generate-a-page.md`. Reinstating either
+  is the harness's negative control, and it fails on both at once. Each link
+  also records `verifiedAgainst`, so the next reader checks the claim rather
+  than the memory of it.
+- **The rolling-out notice is a block, not a sentence.** Same doctrine as the
+  shared band and as `/product/ai`: `disclosure` sits outside `body`, so the
+  flip deletes one block per post. A post whose disclosure wording had leaked
+  into a paragraph would look identical in the JSON and be impossible to
+  remove cleanly, so the harness asserts `body` does not contain it — and that
+  all three posts carry the *same* wording, the one the docs use.
+
+⛔ **`/product/ai` is not a live route.** Its copy deck is committed here but
+the page has not been built on the canvas, so no post links it. Each file's
+`linksConsideredAndNotUsed` records that as a publish precondition; swap the
+link in once the page is live. Routes are verified against
+`https://aglyn.com/sitemaps/pages/1.xml`, which is the only record of what the
+marketing site actually publishes — `seed-marketing-screens.mjs` seeds a
+subset and knows nothing about `/alternatives/*` or `/pricing`.
+
+Two things these files do **not** do. They carry no price, credit count or
+time-saved figure: `docs/PRICING_SURFACES.md` owns the first and nothing
+measures the others yet (AGL-3024's live run records credits and tokens per
+document kind, and is what a cost line would have to come from). And the
+covers are not generated — add a `POSTS` entry to
+`tools/scripts/generate-blog-covers.mjs` and upload the PNG to the media
+library separately, which an agent cannot do.
