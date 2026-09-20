@@ -18,7 +18,9 @@
 import {
   AI_SITE_INPUT_MAX_CHARS,
   AI_SITE_PAGES,
+  AI_SITE_SUBMISSIONS,
   type AiSiteJobInputs,
+  type AiSiteSubmissions,
 } from './ai-site-job'
 
 /**
@@ -132,20 +134,43 @@ export interface AiSiteStartAnswers {
   example: string | null
   /** How many pages to plan. */
   pages: number
+  /** Where the contact form's submissions go. */
+  submissions: AiSiteSubmissions
   /** Whether the scaffold also drafts a welcome email. */
   welcomeEmail: boolean
 }
 
+/** What each answer to "where do submissions go" is called, and what it means. */
+export const AI_SITE_START_SUBMISSIONS: ReadonlyArray<{
+  id: AiSiteSubmissions
+  label: string
+  blurb: string
+}> = [
+  {
+    id: 'inbox',
+    label: 'The Inbox',
+    blurb: 'Every message is one to read and reply to.',
+  },
+  {
+    id: 'lead',
+    label: 'The Inbox, and CRM as a lead',
+    blurb: 'Every message with an email address is also somebody to follow up.',
+  },
+]
+
 /**
  * What the questions start on. Five pages because it is the middle of the
- * band the scaffold builds, and a welcome email because the scaffold drafts
- * one unless it is told not to.
+ * band the scaffold builds, a welcome email because the scaffold drafts one
+ * unless it is told not to, and the Inbox because it is what every submission
+ * does anyway — filing a lead as well is the addition, and an addition is the
+ * thing a person should have to choose.
  */
 export const AI_SITE_START_ANSWERS: AiSiteStartAnswers = {
   siteType: '',
   audience: '',
   example: null,
   pages: 5,
+  submissions: 'inbox',
   welcomeEmail: true,
 }
 
@@ -181,6 +206,9 @@ export function aiSiteStartRefusal(answers: AiSiteStartAnswers): string | null {
   if (answers.example !== null && !aiSiteStartExample(answers)) {
     return 'Pick one of the examples, or none of them.'
   }
+  if (!(AI_SITE_SUBMISSIONS as readonly string[]).includes(answers.submissions)) {
+    return 'Say where the contact form’s submissions go.'
+  }
   return null
 }
 
@@ -205,6 +233,12 @@ export function aiSiteStartBrief(answers: AiSiteStartAnswers): string {
   sentences.push(
     'Plan a page for each thing a visitor comes to do, and a contact form on the page that asks to be contacted.',
   )
+  if (audience) {
+    // Said of the FORM as well as of the copy: who fills a form in is what
+    // decides which fields it asks for, and a brief that named the audience
+    // once, in a sentence about the pages, left the form to guess.
+    sentences.push(`Ask the contact form for what ${audience} would be asked for.`)
+  }
   return sentences.join(' ')
 }
 
@@ -230,6 +264,7 @@ export function aiSiteStartInputs(
     businessName: '',
     city: '',
     brand: '',
+    submissions: answers.submissions,
     welcomeEmail: answers.welcomeEmail,
   }
 }
