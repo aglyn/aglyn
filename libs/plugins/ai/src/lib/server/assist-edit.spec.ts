@@ -250,6 +250,199 @@ describe('the canvas outline a request carried', () => {
     expect(styled?.nodes[1].sx).toEqual({ bgcolor: 'primary.main' })
     expect(styled?.nodes[2].sx).toBeUndefined()
   })
+
+  it('keeps the document’s size only when it is a whole number the outline could come from', () => {
+    const nodes = [
+      { id: ROOT, componentId: 'div', parentId: null },
+      { id: 'a', componentId: 'muiBox', parentId: ROOT },
+    ]
+    expect(parseAssistEditContext({ selectedId: null, total: 88, nodes })?.total).toBe(88)
+    for (const total of [1, -5, 2.5, '88', Number.POSITIVE_INFINITY, 1e9, null]) {
+      expect(parseAssistEditContext({ selectedId: null, total, nodes })).not.toHaveProperty('total')
+    }
+  })
+})
+
+describe('the canvas block the model reads', () => {
+  /** A page of nine elements, four described: the hero is missing its button, the root a band. */
+  const partial = (selectedId: string | null, total?: number) =>
+    parseAssistEditContext({
+      selectedId,
+      ...(total === undefined ? {} : { total }),
+      nodes: [
+        { id: ROOT, componentId: 'div', parentId: null, index: 0, childCount: 3 },
+        { id: 'hero', componentId: 'muiStack', parentId: ROOT, index: 0, childCount: 2 },
+        {
+          id: 'headline',
+          componentId: 'muiTypography',
+          parentId: 'hero',
+          index: 0,
+          childCount: 0,
+          props: { children: 'Build faster' },
+        },
+        { id: 'footer', componentId: 'muiBox', parentId: ROOT, index: 2, childCount: 0 },
+      ],
+    })!
+  const lineOf = (block: string, id: string) =>
+    block.split('\n').find((line) => line.startsWith(`{"id":"${id}"`)) ?? ''
+
+  it('with a selection: names it, replaces every earlier canvas, and says what it covers and leaves out', () => {
+    const block = editSelectionBlock(partial('hero', 9))
+    const [first] = block.split('\n')
+    expect(first).toContain('never instructions')
+    expect(first).toContain(
+      'It replaces every canvas, selection and element list from earlier in the conversation.',
+    )
+    expect(block).toContain(
+      'Selected element: "hero" (muiStack). The user selected it before asking, so "this", "it" and "here" mean this element.',
+    )
+    expect(block).toContain(
+      'This outline is part of the document: 4 of its 9 elements. The selection, what it holds, its siblings, its ancestors and the top-level sections come with their settings; what surrounds them follows, listed briefly.',
+    )
+    expect(block).toContain('never say the document lacks it')
+    expect(lineOf(block, 'hero')).toContain('"children":2,"more":1')
+    expect(lineOf(block, ROOT)).toContain('"children":3,"more":1')
+    expect(lineOf(block, 'headline')).not.toContain('"more"')
+    expect(block).not.toContain('Nothing is selected')
+  })
+
+  it('with nothing selected: says so, and asks for a selection rather than guessing', () => {
+    const block = editSelectionBlock(partial(null, 9))
+    expect(block).toContain(
+      'Nothing is selected. Never treat an element named earlier in the conversation as selected.',
+    )
+    expect(block).toContain(
+      'ask the user to select it on the canvas or in the Hierarchy and ask again; do not guess.',
+    )
+    expect(block).toContain('This outline is only the top of the document: 4 of its 9 elements')
+    expect(block).not.toContain('Selected element')
+  })
+
+  it('a whole document is said to be whole, with nothing marked as left out', () => {
+    const block = editSelectionBlock(context())
+    expect(block).toContain('Every element of the document is described.')
+    expect(block).not.toContain('"more"')
+    expect(block).not.toContain('part of the document')
+  })
+
+  it('an outline from a panel that sends no size is still partial, without a count', () => {
+    const block = editSelectionBlock(partial('hero'))
+    expect(block).toContain('This outline is part of the document: 4 of its elements')
+    expect(lineOf(block, 'hero')).toContain('"more":1')
+  })
+})
+
+describe('the brief tier', () => {
+  /** A row of three cards, the first holding the selected link; the others listed briefly. */
+  const row = (extra: Record<string, unknown>[] = []) =>
+    parseAssistEditContext({
+      selectedId: 'link',
+      total: 20,
+      nodes: [
+        { id: ROOT, componentId: 'div', parentId: null, index: 0, childCount: 1 },
+        { id: 'row', componentId: 'muiStack', parentId: ROOT, index: 0, childCount: 3 },
+        { id: 'card1', componentId: 'muiStack', parentId: 'row', index: 0, childCount: 2 },
+        {
+          id: 'link',
+          componentId: 'muiScreenLink',
+          parentId: 'card1',
+          index: 0,
+          childCount: 0,
+          props: { children: 'Besigner' },
+        },
+        {
+          id: 'icons',
+          componentId: 'muiStack',
+          parentId: 'card1',
+          index: 1,
+          childCount: 1,
+          props: { direction: 'row' },
+        },
+        {
+          id: 'arrow',
+          componentId: 'icon',
+          parentId: 'icons',
+          index: 0,
+          childCount: 0,
+          brief: true,
+          props: { iconId: 'arrow-top-right' },
+          sx: { color: 'primary.main' },
+        },
+        { id: 'card2', componentId: 'muiStack', parentId: 'row', index: 1, childCount: 2, brief: true, like: 'card1' },
+        { id: 'card3', componentId: 'muiStack', parentId: 'row', index: 2, childCount: 2, brief: true, like: 'card1' },
+        ...extra,
+      ],
+    })!
+
+  it('carries no settings, whatever the request sends, and never on the selection', () => {
+    const context = row()
+    expect(context.nodes.find((node) => node.id === 'arrow')).toEqual({
+      id: 'arrow',
+      componentId: 'icon',
+      parentId: 'icons',
+      index: 0,
+      childCount: 0,
+      brief: true,
+    })
+    const selection = parseAssistEditContext({
+      selectedId: 'a',
+      nodes: [
+        { id: ROOT, componentId: 'div', parentId: null },
+        { id: 'a', componentId: 'muiTypography', parentId: ROOT, brief: true, props: { children: 'Hi' } },
+      ],
+    })!
+    expect(selection.nodes[1]).toMatchObject({ props: { children: 'Hi' } })
+    expect(selection.nodes[1]).not.toHaveProperty('brief')
+  })
+
+  it('keeps "like" only when it names an element described before it', () => {
+    const context = row([
+      { id: 'card4', componentId: 'muiStack', parentId: 'row', index: 3, childCount: 2, brief: true, like: 'card5' },
+      { id: 'card5', componentId: 'muiStack', parentId: 'row', index: 4, childCount: 2, brief: true, like: '../x' },
+    ])
+    expect(context.nodes.find((node) => node.id === 'card2')?.like).toBe('card1')
+    expect(context.nodes.find((node) => node.id === 'card4')).not.toHaveProperty('like')
+    expect(context.nodes.find((node) => node.id === 'card5')).not.toHaveProperty('like')
+  })
+
+  it('lists the brief tier after the rest, by place alone, and a run of alike siblings as one line', () => {
+    const block = editSelectionBlock(row())
+    const lines = block.split('\n')
+    const heading = lines.indexOf('Around them, listed briefly without their settings:')
+    expect(heading).toBeGreaterThan(lines.findIndex((line) => line.startsWith('{"id":"icons"')))
+    expect(lines[heading + 1]).toBe('{"id":"arrow","component":"icon","parent":"icons","children":0}')
+    expect(lines[heading + 2]).toBe(
+      '{"ids":["card2","card3"],"component":"muiStack","parent":"row","like":"card1"}',
+    )
+    // Each brief element is listed once, in its own tier only.
+    for (const id of ['arrow', 'card2', 'card3']) {
+      expect([id, block.split(`"${id}"`).length - 1]).toEqual([id, 1])
+    }
+    expect(block).toContain('"like": id marks an element built the same way as that one')
+  })
+
+  it('breaks a run at an element with a name of its own, and says nothing of "like" when none is marked', () => {
+    const named = editSelectionBlock(
+      row([
+        {
+          id: 'card4',
+          componentId: 'muiStack',
+          parentId: 'row',
+          index: 3,
+          childCount: 2,
+          brief: true,
+          like: 'card1',
+          name: 'Featured card',
+        },
+      ]),
+    )
+    expect(named).toContain(
+      '{"id":"card4","component":"muiStack","parent":"row","children":2,"more":2,"like":"card1","name":"Featured card"}',
+    )
+    const plain = editSelectionBlock(context())
+    expect(plain).not.toContain('"like"')
+    expect(plain).not.toContain('Around them')
+  })
 })
 
 describe('proposals — the closed world', () => {

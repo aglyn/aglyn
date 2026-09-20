@@ -170,6 +170,21 @@ describe('what the request sends', () => {
     }
   })
 
+  it('leaves out the brief tier around the selection, which it never binds', () => {
+    const withBrief = context()
+    withBrief.nodes.push({
+      id: 'around',
+      componentId: 'muiStack',
+      parentId: CANVAS_ROOT_ELEMENT_ID,
+      index: 9,
+      childCount: 2,
+      brief: true,
+    })
+    expect(aiComponentSelectionPrompt(withBrief, SELECTED, GOLDEN.name)).toBe(
+      aiComponentSelectionPrompt(context(), SELECTED, GOLDEN.name),
+    )
+  })
+
   it('caches its instructions, and names the tool it must be answered through', () => {
     expect(AI_COMPONENT_SELECTION_INSTRUCTIONS).toHaveLength(1)
     expect(AI_COMPONENT_SELECTION_INSTRUCTIONS[0].cacheBreakpoint).toBe(true)
