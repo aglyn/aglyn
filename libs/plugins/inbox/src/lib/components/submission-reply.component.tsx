@@ -167,7 +167,28 @@ export function SubmissionReply(props: SubmissionReplyProps) {
   }
 
   return (
-    <CardDisplay title="Reply">
+    /*
+     * `header`, NOT `title` — the bug class AGL-1140 named and
+     * `card-display-header.spec` guards, which this file escaped because that
+     * sweep read `apps/console` only. `title` is a valid DOM attribute, so it
+     * rides in on `CardProps`, compiles clean and renders a browser tooltip:
+     * the card drew with no heading at all, and its content sat against the
+     * card's edges because the gutters are opt-in, so inside the submission
+     * reader it read as an unexplained lighter slab rather than a section.
+     *
+     * Outlined for the same reason: this card is nested inside a Dialog, whose
+     * own surface is already raised, and a filled card on top of it is the
+     * paper-on-paper that made the slab look like a rendering fault. A border
+     * says "section" without a second background.
+     */
+    <CardDisplay
+      header={'Reply'}
+      variant="outlined"
+      contentGutterX
+      contentGutterY
+      contentBordered="top"
+      sx={{ mt: 2 }}
+    >
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
           {`To ${(recipient as { email: string }).email}`}
