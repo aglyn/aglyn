@@ -16,11 +16,8 @@
  */
 
 import type { HostThemeScheme } from '@aglyn/shared-data-types'
-import {
-  consoleOptions,
-  consoleThemeDark,
-  consoleThemeLight,
-} from '../console.theme'
+import { consoleOptions } from '../console.theme'
+import { siteFallbackTheme } from '../tenant.theme'
 import {
   DEFAULT_TOOLBAR_SM,
   DEFAULT_TOOLBAR_XS,
@@ -29,7 +26,7 @@ import {
 
 /**
  * What each theme editor control resolves to when the site sets nothing
- * (AGL-1180, AGL-2938): the brand theme every site is layered over.
+ * (AGL-1180, AGL-2938): the theme that site is layered over.
  *
  * Read off the BUILT themes rather than the options, because text, divider
  * and the light and dark shades are derived by MUI, and the raw options would
@@ -38,24 +35,33 @@ import {
  * reads the same values, so "the default primary" is one color wherever it
  * is named.
  *
+ * WHICH theme is a property of the site, not of the platform (AGL-3068): the
+ * operator's own hosts are layered over the brand, every customer site over
+ * the neutral tenant default. Named by its site key, and unnamed resolves
+ * what a customer site resolves — a "Default" that reported the brand to a
+ * site publishing in the tenant palette named a color that site never draws.
+ *
  * Kept apart from `theme-editor-fields.ts` because this module builds the
- * brand themes when it loads, and the catalog is read where no theme needs
+ * themes when it loads, and the catalog is read where no theme needs
  * building.
  */
 
 type PaletteRecord = Record<string, unknown>
 
-function builtPalette(scheme: HostThemeScheme): PaletteRecord {
-  return (scheme === 'dark' ? consoleThemeDark : consoleThemeLight)
-    .palette as unknown as PaletteRecord
+function builtPalette(
+  scheme: HostThemeScheme,
+  host: string | undefined,
+): PaletteRecord {
+  return siteFallbackTheme(host, scheme).palette as unknown as PaletteRecord
 }
 
 /** The color a slot renders in one scheme when the site leaves it unset. */
 export function inheritedThemeColor(
   scheme: HostThemeScheme,
   token: ThemeColorToken,
+  host?: string,
 ): string | undefined {
-  const palette = builtPalette(scheme)
+  const palette = builtPalette(scheme, host)
   const [group, key] = token.split('.')
   const value =
     token === 'divider'
@@ -65,12 +71,16 @@ export function inheritedThemeColor(
 }
 
 /**
- * The corner radius the brand theme ships. Read rather than written as a
+ * The corner radius every site ships with. Read rather than written as a
  * literal, so the default the editor shows cannot stop matching the theme.
+ *
+ * One value for every site, unlike the colors above: the tenant default
+ * changes the PALETTE and takes the rest of its options — shape, spacing,
+ * type ramp, component behaviour — from the same place the brand does.
  */
 export const INHERITED_BORDER_RADIUS =
-  typeof consoleThemeLight.shape?.borderRadius === 'number'
-    ? consoleThemeLight.shape.borderRadius
+  typeof consoleOptions.shape?.borderRadius === 'number'
+    ? consoleOptions.shape.borderRadius
     : 4
 
 /** The spacing unit the brand theme ships. */

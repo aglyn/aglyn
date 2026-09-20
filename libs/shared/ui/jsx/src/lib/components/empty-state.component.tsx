@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
+import {
+  generateComponentClassKeys,
+  styled,
+  type CSSObject,
+  type Theme,
+} from '@aglyn/shared-ui-theme'
 import { Box, type BoxProps, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 
@@ -110,6 +115,37 @@ const EmptyStateRoot = styled(Box, { name: 'AglynEmptyState' })(
     },
   }),
 )
+
+/**
+ * The wash a grid's no-rows overlay paints, for an empty state that is NOT
+ * inside one.
+ *
+ * Every list built on `DataTableComponent` draws this component inside MUI
+ * X's `GridOverlay`, which fills itself with `background.default` at
+ * `action.disabledOpacity`. A hand-built table — the screens tree — has no
+ * overlay to inherit that from, so its empty cell asks for the fill here
+ * instead of spelling the formula a second time.
+ *
+ * The tokens are read through `theme.vars` wherever the theme has them. On a
+ * CSS-variables theme — the console's — `theme.palette` is bound to the
+ * DEFAULT color scheme, so a palette read composes the LIGHT value and keeps
+ * it through a switch to dark; only the `--mui-palette-*` variables follow
+ * the scheme. `theme.alpha` is MUI's theme-bound helper: handed a variable it
+ * spells the `rgba(var(--…Channel) / …)` form that stays bound to it, and
+ * handed a literal — a published site renders under a plain `createTheme()`,
+ * which has no `vars` — it composes a literal `rgba()`.
+ *
+ * Pass it as an `sx` on its own, or spread it into one that carries more.
+ */
+export const emptyStateBackdropSx = (theme: Theme): CSSObject => {
+  const tokens = theme.vars ?? theme
+  return {
+    backgroundColor: theme.alpha(
+      tokens.palette.background.default,
+      tokens.palette.action.disabledOpacity,
+    ),
+  }
+}
 
 export interface EmptyStateProps extends Omit<BoxProps, 'title'> {
   /** The headline — what is not here. */
