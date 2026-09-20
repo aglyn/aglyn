@@ -9,7 +9,7 @@ single largest source of first-run CI reds (AGL-2752).
 | -- | -- | -- | -- |
 | targeted | `npx eslint <staged tools files>`, `npm run typecheck:changed` | seconds | before every push |
 | pre-push | `.husky/pre-push` runs `tools/scripts/prepush.mjs` by itself (AGL-2837) | 2.3s for 8 files, 2.6s for 217 | every `git push` |
-| guards | `node tools/scripts/run-guards.mjs --concurrency 8` | 102 guards, 146s | once, before opening a promotion PR |
+| guards | `node tools/scripts/run-guards.mjs --concurrency 8` | 125 guards, 88s | before a promotion PR — and it is the same sweep Main Gate's `fast` job runs, at `--concurrency 4` |
 | gate | `bash tools/gate.sh` | 25-90 min | never locally — the PR runs it |
 
 ⛔ Do not run `tools/gate.sh` locally. The `main`→`production` PR runs the same
