@@ -53,6 +53,7 @@ import {
 } from '../jobs/ai-job-crm-step'
 import { AI_JOB_EMAIL_INSTRUCTIONS, AI_JOB_EMAIL_TOOL } from '../jobs/ai-job-email-step'
 import { AI_JOB_FORM_INSTRUCTIONS, AI_JOB_FORM_TOOL } from '../jobs/ai-job-form-step'
+import { AI_JOB_EXPERIMENT_SYSTEM } from '../jobs/ai-job-experiment-step'
 import { AI_JOB_INSIGHT_SYSTEM } from '../jobs/ai-job-insight-step'
 import { AI_JOB_LAYOUT_INSTRUCTIONS } from '../jobs/ai-job-layout-step'
 import { AI_JOB_PAGE_INSTRUCTIONS, AI_PAGE_SECTION_TOOL } from '../jobs/ai-job-page-sections'
@@ -68,6 +69,7 @@ import { aiAutomationTool, aiWorkflowExplanationTool } from '../tools/ai-workflo
 import { AI_SEO_FIXES_INSTRUCTIONS, AI_SEO_SITE_INSTRUCTIONS } from '../jobs/ai-job-seo-step'
 import { AI_BUILD_PLAN_TOOL } from '../model/ai-build-plan'
 import { aiComponentTool } from '../tools/ai-component-tool'
+import { aiExperimentExplainTool, aiExperimentVariantsTool } from '../tools/ai-experiment-tool'
 import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
 import { AI_CRM_EMAIL_TOOL, AI_CRM_MAPPING_TOOL, aiCrmRecordTool } from '../tools/ai-crm-tool'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
@@ -234,6 +236,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     step: 'job.workflow',
     caches: true,
     why: 'the doctrine and the automation vocabulary, or the explanation rules; no site inventory block',
+  },
+  'jobs/ai-job-experiment-step.ts': {
+    step: 'job.experiment',
+    caches: false,
+    why: "the A/B test rules and the acceptable-use block are under the balanced tier's minimum; the copy under test, or a test's arms with its verdict, is the request",
   },
   'jobs/ai-job-insight-step.ts': {
     step: 'job.insight',
@@ -502,6 +509,18 @@ const REQUESTS: Record<string, Composed> = {
     blocks: () => [...AI_JOB_INSIGHT_SYSTEM],
     tools: () => [aiInsightReadTool()],
   },
+  'experiment-variants': {
+    door: 'jobs/ai-job-experiment-step.ts',
+    step: 'job.experiment',
+    blocks: () => [...AI_JOB_EXPERIMENT_SYSTEM],
+    tools: () => [aiExperimentVariantsTool('screen')],
+  },
+  'experiment-explain': {
+    door: 'jobs/ai-job-experiment-step.ts',
+    step: 'job.experiment',
+    blocks: () => [...AI_JOB_EXPERIMENT_SYSTEM],
+    tools: () => [aiExperimentExplainTool()],
+  },
   'insight-answer': {
     door: 'jobs/ai-job-insight-step.ts',
     step: 'job.insight',
@@ -640,6 +659,11 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'eval-grade': { prefixTokens: 2_003, minimum: 1_024, caches: true, toolsStable: true },
       // An insight's rules are short on purpose: no model caches them, so every
       // byte is billed as input on both calls and on a re-ask.
+      // A/B tests by AI (AGL-2914): the rules are one block, well under the
+      // balanced tier's minimum, so nothing is cached and the copy under test
+      // — or the arms and the verdict — is billed as the request.
+      'experiment-variants': { prefixTokens: 987, minimum: 1_024, caches: false, toolsStable: true },
+      'experiment-explain': { prefixTokens: 911, minimum: 1_024, caches: false, toolsStable: true },
       'insight-read': { prefixTokens: 883, minimum: 1_024, caches: false, toolsStable: true },
       'insight-answer': { prefixTokens: 923, minimum: 1_024, caches: false, toolsStable: true },
       // A product's copy, a catalog, and categories with discounts (AGL-2916):

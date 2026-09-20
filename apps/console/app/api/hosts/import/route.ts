@@ -101,6 +101,24 @@ function cleanDoc(
     clean['props'] = withMatchableConditions(clean['props'])
   }
   clean['updatedAt'] = firebaseAdmin.firestore.FieldValue.serverTimestamp()
+  /*
+   * `createdAt` TOO, and this one closes a trap rather than tidying a pair
+   * (AGL-3196).
+   *
+   * No allow-list carries `createdAt`, and the write below is `merge: false`,
+   * so every document a bundle restored arrived with an `updatedAt` and no
+   * `createdAt` at all. For a version that is not cosmetic: five version
+   * histories in the console read `limit(N)` with NO `orderBy` and sort in the
+   * browser, and `table-footer-consistency` records why — `orderBy('createdAt')`
+   * would DROP a restored version rather than mis-order it, because Firestore
+   * omits a document that is missing the field it is ordering by. So the
+   * cheapest correct read was blocked by a field nobody was writing.
+   *
+   * The restore time is the honest value: this copy of the document came into
+   * existence in this workspace now. It cannot clobber an older one, because
+   * `merge: false` is already replacing the whole document.
+   */
+  clean['createdAt'] = firebaseAdmin.firestore.FieldValue.serverTimestamp()
   return clean
 }
 

@@ -2016,6 +2016,100 @@ describe('the green path', () => {
     ).toMatch(/cut short/i)
   })
 
+  /*
+   * WHERE A CUT-OFF TURN'S OUTPUT WENT (AGL-3143). The generation path can
+   * re-ask and hard-codes `stream: false`; this door streams and cannot. So
+   * when a tool call is cut off here, the only account of where the tokens
+   * went is what the stream closed with — and the reader's sentence is the
+   * same one whether the model thought its ceiling away, wrote a runaway
+   * string the partial parse discarded, or stalled and wrote nothing usable.
+   */
+  describe('an assist turn cut off at its ceiling (AGL-3143)', () => {
+    /** A stream the ceiling stopped with a tool call still open. */
+    function armUpstreamCutOffToolCall(partial: string, thinking?: number): void {
+      const encoder = new TextEncoder()
+      const events = [
+        { type: 'message_start', message: { usage: { input_tokens: 900 } } },
+        {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: 'toolu_1', name: 'assist_edit', input: {} },
+        },
+        {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'input_json_delta', partial_json: partial },
+        },
+        {
+          type: 'message_delta',
+          delta: { stop_reason: 'max_tokens' },
+          usage: {
+            output_tokens: 4008,
+            ...(thinking === undefined ? {} : { output_tokens_details: { thinking_tokens: thinking } }),
+          },
+        },
+        { type: 'message_stop' },
+      ]
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            for (const event of events) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+            }
+            controller.close()
+          },
+        }),
+      })
+    }
+
+    /** The one runaway string the model wrote instead of an edit. */
+    const RUNAWAY = `{"ops":[{"set":{"title":"${'blue '.repeat(400)}`
+
+    it('counts what the model wrote, and never carries the words themselves', async () => {
+      seedOrgs()
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      armUpstreamCutOffToolCall(RUNAWAY)
+      const events = await readEvents(await POST(post(QUESTION_BODY(FREE_ORG))))
+
+      const line = warn.mock.calls.find(
+        (call) => String(call[0]) === 'assist answer cut off at its ceiling',
+      )
+      expect(line).toBeDefined()
+      // A big spend against a tool input that parsed to nothing, and bytes
+      // to account for the difference: a runaway string, not a stall. Read
+      // off the stream, which is the only place these bytes ever existed.
+      expect(line?.[1]).toMatchObject({
+        outputTokens: 4008,
+        parsedChars: 0,
+        rawChars: RUNAWAY.length,
+      })
+
+      // The bytes are the model's own words and therefore the author's
+      // canvas. They are counted and dropped — not logged, and not sent to
+      // the panel with the sentence that says the answer was cut short.
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('blue blue')
+      expect(JSON.stringify(events)).not.toContain('blue blue')
+      expect(String(events.find((event) => event.type === 'error')?.error)).toMatch(/cut short/i)
+    })
+
+    it('accounts for the spend by thinking first, where the stream reported it', async () => {
+      seedOrgs()
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      // The same ceiling, the same tiny input — and a budget spent thinking
+      // rather than a decoder to fix. Only this figure tells them apart, and
+      // it arrives in the same usage object the four metered ones do.
+      armUpstreamCutOffToolCall('{"ops":[', 3698)
+      await readEvents(await POST(post(QUESTION_BODY(FREE_ORG))))
+      expect(
+        warn.mock.calls.find(
+          (call) => String(call[0]) === 'assist answer cut off at its ceiling',
+        )?.[1],
+      ).toMatchObject({ outputTokens: 4008, thinkingTokens: 3698, rawChars: 8 })
+    })
+  })
+
   it('502 when the upstream refuses, in words the reader can use', async () => {
     seedOrgs()
     mockFetch.mockResolvedValue({

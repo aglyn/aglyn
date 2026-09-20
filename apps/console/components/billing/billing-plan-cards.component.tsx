@@ -1830,6 +1830,37 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
   // self-serve CTA is: that agreement is changed by talking to us.
   const canCancelToFree = subscriptionActive && !enterprise && currentIndex > 0
 
+  /*
+   * HOW THE LAST ROW CLOSES.
+   *
+   * A rung is a third of a row, but the fold means the number of rungs DRAWN
+   * moves with the reader's own plan, and the two cards at the end were sized
+   * for one case: seven rungs, which end on a full row and leave Agency to
+   * start a new one beside Enterprise at half each.
+   *
+   * Five rungs — what a Pro org sees — end with Advanced alone. Agency's fixed
+   * half no longer fit the four columns left beside it, so it wrapped, took
+   * Enterprise's other half with it, and left Enterprise stranded on a third
+   * row with two empty columns beside it: three rows, two gaps, for six cards.
+   *
+   * So the last two size themselves to what the fold left. Agency fills
+   * whatever remains of the rungs' final row, and Enterprise takes the row
+   * below whole. When the rungs do end evenly, there is no remainder to fill
+   * and the two share a row at half each — the ladder's top two steps side by
+   * side, which is what the seven-rung case already showed.
+   */
+  const drawnRungs =
+    showLowerTiers || currentIndex <= 0
+      ? PLAN_ORDER.length
+      : PLAN_ORDER.length - currentIndex
+  // Rungs below Agency that land in a final, partly filled row of three.
+  const trailingRungs = (drawnRungs - 1) % 3
+  const agencySpan = trailingRungs === 0 ? 6 : 12 - 4 * trailingRungs
+  const enterpriseSpan = trailingRungs === 0 ? 6 : 12
+  // Two per row at `sm`, so the same remainder decides it there: an odd number
+  // of cards leaves Enterprise, the last of them, to fill its row alone.
+  const enterpriseSpanSm = drawnRungs % 2 === 0 ? 12 : 6
+
   return (
     <Grid container spacing={2} id="plans">
       {PLAN_ORDER.map((tier, index) => {
@@ -1852,14 +1883,20 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
            * ragged lines, and the columns stopped being scannable across,
            * which is the only thing a comparison table is for.
            *
-           * The top rung takes HALF a row instead, so the Enterprise card can
-           * sit beside it: Enterprise is the step above Agency, and leaving
-           * Agency alone on a row of three put the two ends of the ladder in
-           * different places with a gap between them.
+           * The top rung takes the REST of its row instead, so nothing ragged
+           * is left at the end of the ladder: Enterprise is the step above
+           * Agency, and leaving Agency alone on a row of three put the two
+           * ends of the ladder in different places with a gap between them.
+           * `agencySpan` above works out what "the rest" is for the number of
+           * rungs the fold actually drew.
            */
           <Grid
             key={tier}
-            size={{ xs: 12, sm: 6, lg: index === PLAN_ORDER.length - 1 ? 6 : 4 }}
+            size={{
+              xs: 12,
+              sm: 6,
+              lg: index === PLAN_ORDER.length - 1 ? agencySpan : 4,
+            }}
           >
             <Card
               variant="outlined"
@@ -2043,10 +2080,11 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
       {/* Enterprise (AGL-1118): custom-priced, so it shows what it includes
           and how to get it — never a headline price or a checkout button.
 
-          It sits IMMEDIATELY after the ladder, sharing a row with Agency at
-          half width each. It is the rung above Agency, so the two belong side
-          by side — and the disclosure below is full width, which would push
-          them onto separate rows if it came between them.
+          It sits IMMEDIATELY after the ladder: the rung above Agency, beside
+          it at half width each when the rungs end on a full row, and on a row
+          of its own when Agency had a remainder to fill (`enterpriseSpan`).
+          The disclosure below is full width, which would push the two onto
+          separate rows if it came between them.
 
           ONE SKELETON, like every card in the ladder: heading, price, tagline,
           the control, then `PlanCardBody`. It reads as the top of the ladder
@@ -2058,7 +2096,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
           highlights about a third of half a card, so "Twice Agency's sites,
           seats and storage…" wrapped every two or three words beside
           a mostly empty card. */}
-      <Grid size={{ xs: 12, sm: 6, lg: 6 }}>
+      <Grid size={{ xs: 12, sm: enterpriseSpanSm, lg: enterpriseSpan }}>
         <Card
           variant="outlined"
           sx={{

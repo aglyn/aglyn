@@ -35,12 +35,13 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { setRegisteringPluginId } from '@aglyn/aglyn/app-utils/registering-plugin'
 import { resetPluginServicesForTests } from '@aglyn/aglyn'
-import { anthropicProvider, buildAnthropicRequestBody } from './anthropic'
+import { anthropicProvider, anthropicUsageFrom, buildAnthropicRequestBody } from './anthropic'
 import { estimateAiBilledUsd } from './catalog'
 import {
   AI_RAW_OUTPUT_MAX_CHARS,
   AI_UPSTREAM_FAILURE_COPY,
   AiUpstreamError,
+  aiCutOffFigures,
   aiRawOutputOf,
   aiStoppedAtCeiling,
   type AiProvider,
@@ -635,5 +636,119 @@ describe('the routing table (AGL-2937)', () => {
     // `platform` defers to the environment; an unregistered choice falls back too.
     expect(aiModelForStep('job.text', { provider: 'platform' })).toBe('claude-opus-5')
     expect(resolveAiRoute('job.text', { provider: 'nope' })?.provider.id).toBe('anthropic')
+  })
+})
+
+describe('where a generation’s output went (AGL-3143)', () => {
+  // The figure that separates the shapes a small answer against a spent
+  // ceiling comes in. Thinking is drawn from the same ceiling as the answer,
+  // so a model that thought its budget away and answered correctly and
+  // briefly reads exactly like one whose runaway string was discarded — and
+  // only this tells them apart, on every answer rather than only on the ones
+  // that reach the ceiling.
+  it('keeps how much of the output the model spent thinking, inside the output tokens and never beside them', () => {
+    const usage = anthropicUsageFrom({
+      input_tokens: 374,
+      output_tokens: 4008,
+      cache_read_input_tokens: 4293,
+      cache_creation_input_tokens: 0,
+      output_tokens_details: { thinking_tokens: 3698 },
+    })
+    expect(usage).toEqual({
+      inputTokens: 374,
+      outputTokens: 4008,
+      cacheReadTokens: 4293,
+      cacheWriteTokens: 0,
+      thinkingTokens: 3698,
+    })
+    // Inside `output_tokens`: pricing the four reported figures must not
+    // charge the thinking twice.
+    expect(estimateAiBilledUsd(usage, 'claude-sonnet-5')).toBe(
+      estimateAiBilledUsd({ ...usage, thinkingTokens: undefined }, 'claude-sonnet-5'),
+    )
+  })
+
+  it('says nothing rather than zero where the answer reported no breakdown', () => {
+    expect(anthropicUsageFrom({ input_tokens: 10, output_tokens: 20 })).toEqual({
+      inputTokens: 10,
+      outputTokens: 20,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    })
+  })
+
+  /**
+   * A stream reads its usage through the same parser, from the same object
+   * the four metered figures come from — and then copies the figures across
+   * one at a time. A door that streams is the one that most needs this one:
+   * it has no re-ask to spend and must say from the close of the stream
+   * alone whether a cut-off turn thought its ceiling away.
+   */
+  it('carries the split out of a STREAM too, and still says nothing where none was reported', async () => {
+    const anthropic = SUBJECTS[0]
+    const closing = (usage: Record<string, unknown>) => [
+      { type: 'message_start', message: { usage: { input_tokens: 900 } } },
+      { type: 'message_delta', delta: { stop_reason: 'max_tokens' }, usage },
+      { type: 'message_stop' },
+    ]
+
+    armFetch({
+      status: 200,
+      headers: {},
+      events: closing({
+        output_tokens: 4008,
+        output_tokens_details: { thinking_tokens: 3698 },
+      }),
+    })
+    const reported = await collect(await anthropic.provider.stream(request(anthropic)))
+    const split = reported[reported.length - 1]
+    if (split.type !== 'done') throw new Error('unreachable')
+    expect(split.usage).toMatchObject({ outputTokens: 4008, thinkingTokens: 3698 })
+
+    armFetch({ status: 200, headers: {}, events: closing({ output_tokens: 4008 }) })
+    const silent = await collect(await anthropic.provider.stream(request(anthropic)))
+    const none = silent[silent.length - 1]
+    if (none.type !== 'done') throw new Error('unreachable')
+    expect(none.usage).not.toHaveProperty('thinkingTokens')
+  })
+})
+
+/**
+ * The log half of the same rule (AGL-3143): what a cut-off call may say about
+ * itself where a person will read it.
+ */
+describe('the figures a cut-off call is logged by (AGL-3143)', () => {
+  it('reduces the model’s own words to their length, and passes nothing else of them on', () => {
+    const runaway = `{"rootId":"${'n'.repeat(5_000)}`
+    const figures = aiCutOffFigures({
+      usage: {
+        inputTokens: 374,
+        outputTokens: 4008,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        thinkingTokens: 3698,
+      },
+      parsed: { rootId: 'n1' },
+      rawOutput: runaway,
+    })
+    expect(figures).toEqual({
+      outputTokens: 4008,
+      thinkingTokens: 3698,
+      parsedChars: 15,
+      rawChars: runaway.length,
+    })
+    // The one thing this must never do, whatever a call site then does with
+    // what it returns.
+    expect(JSON.stringify(figures)).not.toContain('nnn')
+  })
+
+  it('a call that reported no thinking and kept no bytes says so as nothing, not as zero', () => {
+    expect(
+      aiCutOffFigures({
+        usage: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        parsed: null,
+        rawOutput: undefined,
+      }),
+    ).toEqual({ outputTokens: 2, thinkingTokens: null, parsedChars: 0, rawChars: null })
   })
 })

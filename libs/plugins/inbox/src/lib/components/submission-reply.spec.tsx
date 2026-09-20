@@ -48,8 +48,26 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar }),
 }))
 
+/*
+ * The double DRAWS THE HEADER, because a double that swallowed it is how the
+ * card came to be written with `title` — a DOM attribute, so a tooltip rather
+ * than a heading — and to stay that way through every green run of this file.
+ * A double may stand in for a component; it may not answer a question the real
+ * one would have answered differently.
+ */
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CardDisplay: ({
+    children,
+    header,
+  }: {
+    children: ReactNode
+    header?: ReactNode
+  }) => (
+    <div>
+      {header ? <div className="MuiCardHeader-root">{header}</div> : null}
+      {children}
+    </div>
+  ),
 }))
 
 jest.mock('firebase/firestore', () => ({
@@ -85,6 +103,24 @@ it('says answers arrive in the merchant email, not in the Inbox', () => {
     <SubmissionReply hostId="host1" submission={SUBMISSION} />,
   )
   expect(container.textContent).toContain('Answers arrive in your email, not in this Inbox.')
+})
+
+/**
+ * The card was written `<CardDisplay title="Reply">`, which is a DOM attribute
+ * — a browser tooltip, not a heading (AGL-1140's class). Inside the submission
+ * reader it drew as an unheaded, unpadded slab of lighter paper against the
+ * text above it, and the same card sat below it doing the same thing.
+ *
+ * Both halves are asserted because the wrong prop caused both: a card with no
+ * heading also never turned its gutters on.
+ */
+it('is a headed card, not an unexplained slab', () => {
+  const { container } = render(
+    <SubmissionReply hostId="host1" submission={SUBMISSION} />,
+  )
+  expect(container.querySelector('.MuiCardHeader-root')?.textContent).toBe('Reply')
+  // The native tooltip the wrong prop produced, which is what made it silent.
+  expect(container.querySelector('[title="Reply"]')).toBeNull()
 })
 
 it('names the address answers will come back to', () => {

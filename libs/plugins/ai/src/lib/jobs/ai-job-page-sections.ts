@@ -31,6 +31,7 @@ import {
 } from '../runtime/ai-doctrine'
 import {
   detectCutLines,
+  detectDisagreeingNodes,
   isAiLinkElement,
   validateAiDoctrineTree,
   walkTree,
@@ -324,6 +325,13 @@ export function aiPageSectionCheck(input: AiPageSectionCheckInput): AiGeneration
   const forms = new Set((input.inventory?.forms ?? []).map((row) => row.id))
   return (answer) => {
     const raw = aiAnswerTree(answer)
+    // Before anything is drawn or dropped: a repeated item written and never
+    // placed is content the section loses silently, and a child named and
+    // never written ends the pass with nothing to answer (AGL-3143).
+    const disagreeing = detectDisagreeingNodes(raw)
+    if (disagreeing.length) {
+      return { value: null, violations: disagreeing, ...offendingOf(raw, disagreeing) }
+    }
     const drawn = expandAiRepeatedItems(raw, { inline: input.context.reusableComponents === false, noun: 'section' })
     if (drawn.ok === false) {
       return { value: null, violations: drawn.violations, ...offendingOf(raw, drawn.violations) }

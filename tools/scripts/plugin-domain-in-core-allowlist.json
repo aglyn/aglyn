@@ -1,0 +1,1612 @@
+{
+  "note": "Files outside libs/plugins/** that carry a plugin's domain today (AGL-3080): a domain-named file or route directory, a vendor literal, a quoted first-party plugin id, or a static plugin import. `lane` is the line of AGL-3080's move set that takes the file out; `\"lane\": \"stays\"` is a binding argued to be the platform's own, with the argument in `why`. Read by check-plugin-domain-in-core.mjs, which is red for a finding missing here AND for a row or rule nothing trips any more (`--prune` drops those). This list may shrink and must never grow: a new finding is refused, not recorded.",
+  "files": [
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/billing/(sections)/page.tsx",
+      "rules": [
+        "vendor:ga4"
+      ],
+      "lane": "analytics-provider"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/contacts/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/crm/[[...crmSlug]]/layout.tsx",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/crm/[[...crmSlug]]/page.tsx",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/hosts/[host]/templates/[templateId]/page.tsx",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/browse/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/installed/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/layout.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/licences/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/listings/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/payouts/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/profile/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/sales/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/upload/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/layout.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/listing-social-card.server.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/listing-social-card.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/layout.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/publish/plugin/layout.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/publish/plugin/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/publisher/[handle]/layout.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/(app)/[orgSlug]/marketplace/publisher/[handle]/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/layout.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/preview/layout.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/preview/page.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/api/_lib/publisher-review-email.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/app/api/_lib/site-export.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/api/admin/plugin-reviews/route.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/api/admin/revenue/route.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/api/crm/daily-digest/route.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/app/api/crm/export/route.ts",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/app/api/crm/inbound/route.ts",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/app/api/crm/task-reminders/route.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/app/api/hosts/export/route.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/api/hosts/forms/promote/route.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "forms"
+    },
+    {
+      "path": "apps/console/app/api/hosts/import/route.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/api/hosts/resources/route.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/api/hosts/where-used/route.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/app/api/orgs/datasets/export/route.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "data"
+    },
+    {
+      "path": "apps/console/app/api/orgs/datasets/route.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "data"
+    },
+    {
+      "path": "apps/console/app/plugin-page-title.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/components/assist-dock-slot.component.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "ai"
+    },
+    {
+      "path": "apps/console/components/billing/billing-plan-cards.component.tsx",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/components/billing/billing-usage.component.tsx",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/components/content/entry-cover-video-field.component.tsx",
+      "rules": [
+        "vendor:wistia"
+      ],
+      "lane": "video-embed-provider"
+    },
+    {
+      "path": "apps/console/components/content/entry-detail-page.component.tsx",
+      "rules": [
+        "vendor:wistia"
+      ],
+      "lane": "video-embed-provider"
+    },
+    {
+      "path": "apps/console/components/global-search/global-search-scope.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/components/interaction-builder-dialog.component.tsx",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "workflows"
+    },
+    {
+      "path": "apps/console/components/marketplace-payments-notice.component.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/components/marketplace/edit-listing-dialog.component.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/components/marketplace/listing-detail-editor.component.tsx",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/components/marketplace/listing-review-status.component.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/components/marketplace/listing-verification-request.component.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/components/marketplace/publish-plugin-form.component.tsx",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/components/notifications-menu.component.tsx",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/components/site-accounts-card.component.tsx",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/components/site-security-cards.component.tsx",
+      "rules": [
+        "vendor:wistia"
+      ],
+      "lane": "video-embed-provider"
+    },
+    {
+      "path": "apps/console/components/templates/host-templates-card.component.tsx",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/components/templates/template-gallery-dialog.component.tsx",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/components/web-vitals-reporter.component.tsx",
+      "rules": [
+        "vendor:ga4"
+      ],
+      "lane": "analytics-provider"
+    },
+    {
+      "path": "apps/console/constants/legal-documents.ts",
+      "rules": [
+        "vendor:wistia",
+        "plugin-id"
+      ],
+      "lane": "stays",
+      "why": "Legal text names the vendors it discloses."
+    },
+    {
+      "path": "apps/console/constants/marketplace-sections.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "apps/console/constants/subprocessor-inventory.ts",
+      "rules": [
+        "vendor:ga4",
+        "vendor:wistia",
+        "vendor:resend"
+      ],
+      "lane": "stays",
+      "why": "The subprocessor inventory discloses every vendor by name; naming them is its whole job, and a plugin-declared row still folds in through the subprocessor seam."
+    },
+    {
+      "path": "apps/console/next.config.js",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/utils/api-v1-openapi.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/utils/api-v1-resources.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/console/utils/api-v1/contacts-merge.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/utils/api-v1/crm-activities.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/utils/api-v1/crm-companies.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/utils/api-v1/crm-deals.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/utils/api-v1/crm-email-templates.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/utils/api-v1/crm-leads.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/utils/api-v1/crm-pipelines.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/utils/api-v1/crm-shared.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/utils/api-v1/crm-tasks.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "apps/console/utils/revenue-view.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/tenant/app/[host]/[scheme]/[[...slug]]/load-page-data.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/tenant/app/[host]/[scheme]/[[...slug]]/site-analytics.tsx",
+      "rules": [
+        "vendor:ga4",
+        "plugin-id"
+      ],
+      "lane": "analytics-provider"
+    },
+    {
+      "path": "apps/tenant/app/api/edit-context/route.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "apps/tenant/app/api/forms/submit/route.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "forms"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/advertising-tag-mounts.tsx",
+      "rules": [
+        "vendor:ga4"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/advertising-tags.ts",
+      "rules": [
+        "vendor:ga4"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/analytics-events.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/assist-credits.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "ai"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/binding-token-catalog.ts",
+      "rules": [
+        "vendor:wistia"
+      ],
+      "lane": "video-embed-provider"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/campaign-attribution.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/campaign-forwarding.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/campaign-membership.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/campaign-touch.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/collection-entries.ts",
+      "rules": [
+        "vendor:wistia"
+      ],
+      "lane": "video-embed-provider"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/console-record-links.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/console-routes.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/contact-holder.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/contact-merge.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/contacts.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-booking.ts",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-company-import.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-csv.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-deal-import.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-digest.ts",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-import.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-inbound.ts",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-kinds.ts",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-lead-import.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-next-activity.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-reports.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-task-import.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm-task-reminders.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/dataset-csv.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "data"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/dataset-models.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "data"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/dataset-query.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "data"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/dataset-record-view.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "data"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/datasets.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "data"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/dynamic-list-rule.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/email-topics.ts",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/form-abuse-ceiling.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "forms"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/form-contract.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "forms"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/form-dataset-binding.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "data"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/forms.ts",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "forms"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/internal-traffic.ts",
+      "rules": [
+        "vendor:ga4"
+      ],
+      "lane": "analytics-provider"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/list-assignment-policy.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/list-import.ts",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/marketplace-listing-visibility.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/marketplace-merge.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/marketplace-overrides.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/marketplace-provenance.ts",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/marketplace-theme.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/marketplace-update-state.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/marketplace-verification.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/notifications.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/platform-ad-conversions.ts",
+      "rules": [
+        "vendor:ga4"
+      ],
+      "lane": "stays",
+      "why": "Aglyn's own signup funnel, not a tenant feature."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/platform-advertising-tags.ts",
+      "rules": [
+        "vendor:ga4"
+      ],
+      "lane": "stays",
+      "why": "Aglyn's own console and docs surfaces, not a tenant feature: the operator's tags, swapped with the operator identity on a self-host."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/platform-consent-default.ts",
+      "rules": [
+        "vendor:ga4"
+      ],
+      "lane": "analytics-provider"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/publisher-agreement.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/publisher-attestation.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketplace"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/release-flags.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/server.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/starter-templates.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/video-object.ts",
+      "rules": [
+        "vendor:wistia"
+      ],
+      "lane": "video-embed-provider"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/visitor-consent.ts",
+      "rules": [
+        "vendor:ga4"
+      ],
+      "lane": "analytics-provider"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/web-vitals-rum.ts",
+      "rules": [
+        "vendor:ga4"
+      ],
+      "lane": "analytics-provider"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/wistia-embed.ts",
+      "rules": [
+        "domain-name",
+        "vendor:wistia"
+      ],
+      "lane": "video-embed-provider"
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/workflows.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "workflows"
+    },
+    {
+      "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "stays",
+      "why": "One postal-address shape (AGL-1133); generic despite the name, and no CRM vocabulary is in it."
+    },
+    {
+      "path": "libs/aglyn/src/lib/foundation/definitions/host-content-collections.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/aglyn/src/lib/foundation/definitions/platform.types.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/commerce-zone-props.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "commerce"
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/order-fulfilment.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "commerce"
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/plugin-loader.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/plugin-manager.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/besigner/feature/designer/src/lib/form-fields/form-fields.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "stays",
+      "why": "The designer's generic form controls; nothing of the forms plugin's model."
+    },
+    {
+      "path": "libs/shared/data/forms/src/lib/forms.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "stays",
+      "why": "Generic field definitions for any data-driven form; nothing of the forms plugin."
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-inbox.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-shopping.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-tray-alert.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-tray-full.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-tray-minus.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-tray-plus.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-tray-remove.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/5.9.55/modules/mdi-tray.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-inbox.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-shopping.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-tray-alert.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-tray-full.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-tray-minus.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-tray-plus.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-tray-remove.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/data/mdi/generated/6.5.95/icons/mdi-tray.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/ui/email-campaigns/src/lib/components/campaign-picker.component.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-container.ts",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-conversions.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-report.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-revenue.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/shared/ui/email-campaigns/src/lib/model/campaign-send-time.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/shared/ui/jsx-forms/src/lib/mapper/form-field-grid.tsx",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "stays",
+      "why": "A generic data-driven-forms mapper component."
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/email-delivery-events.ts",
+      "rules": [
+        "vendor:resend"
+      ],
+      "lane": "mail-provider"
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/email-health.ts",
+      "rules": [
+        "vendor:resend"
+      ],
+      "lane": "mail-provider"
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/marketing-send.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/received-email.ts",
+      "rules": [
+        "vendor:resend"
+      ],
+      "lane": "mail-provider"
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/send-email.ts",
+      "rules": [
+        "vendor:resend"
+      ],
+      "lane": "mail-provider"
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/sending-domain.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/tenant-email-catalog.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/campaign-attribution-store.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/campaign-conversion-attribution.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/connect-account-status.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "payment-provider"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/connect-payout-failure.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "payment-provider"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/contact-company-link.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/contact-email-engagement.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/contact-email-index.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/contact-lifecycle-floor.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/contact-merge.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/contact-suppression.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/crm-booking-activity.ts",
+      "rules": [
+        "domain-name",
+        "plugin-id"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/crm-email-activity.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/crm-inbound-email.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/crm-next-activity.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/crm-records.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/dataset-live-pages.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "data"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/duplicate-resource.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/dynamic-list-materialize.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/email-marketing-gate.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/email-topic-confirmation.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/erase-person.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/form-dataset-binding-token.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "data"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts",
+      "rules": [
+        "domain-name",
+        "vendor:ga4"
+      ],
+      "lane": "analytics-provider"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/list-members.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "marketing"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/serve-media-cdn.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/tenant/data/admin/src/lib/server/stripe-account-mode.ts",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "payment-provider"
+    },
+    {
+      "path": "libs/tenant/feature/instance/src/lib/hooks/firebase/firebase-services.tsx",
+      "rules": [
+        "vendor:ga4",
+        "plugin-id"
+      ],
+      "lane": "analytics-provider"
+    },
+    {
+      "path": "libs/tenant/feature/instance/src/lib/hooks/host-collection-queries.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/tenant/runtime/src/lib/collection-fallback-nodes.ts",
+      "rules": [
+        "vendor:wistia"
+      ],
+      "lane": "video-embed-provider"
+    },
+    {
+      "path": "libs/tenant/runtime/src/lib/get-collection-content.ts",
+      "rules": [
+        "vendor:wistia"
+      ],
+      "lane": "video-embed-provider"
+    },
+    {
+      "path": "libs/tenant/runtime/src/lib/get-variables.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "libs/tenant/runtime/src/lib/required-site-plugins.ts",
+      "rules": [
+        "plugin-id"
+      ],
+      "lane": "plugin-id"
+    },
+    {
+      "path": "tools/scripts/lib/contact-addresses.mjs",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "tools/scripts/lib/crm-fixtures.mjs",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "tools/scripts/lib/crm-free-plan-fixtures.mjs",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    },
+    {
+      "path": "tools/scripts/lib/crm-lifecycle-backfill.mjs",
+      "rules": [
+        "domain-name"
+      ],
+      "lane": "crm"
+    }
+  ]
+}

@@ -50,6 +50,7 @@ import { aiComponentSelectionTool } from '../server/ai-generate-component'
 import { assistEditTool } from '../server/assist-edit'
 import { aiComponentTool } from '../tools/ai-component-tool'
 import { AI_CRM_EMAIL_TOOL, AI_CRM_MAPPING_TOOL, aiCrmRecordTool } from '../tools/ai-crm-tool'
+import { aiExperimentExplainTool, aiExperimentVariantsTool } from '../tools/ai-experiment-tool'
 import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
 import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_CATALOG_TOOL, AI_CATEGORIES_TOOL, AI_PRODUCT_COPY_TOOL } from '../tools/ai-products-tool'
@@ -169,6 +170,13 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
     explain: () => [aiWorkflowExplanationTool()],
   },
   'jobs/ai-job-insight-step.ts': { read: () => [aiInsightReadTool()], answer: () => [aiInsightAnswerTool()] },
+  // A/B tests by AI (AGL-2914): the variants tool carries only the fields
+  // the target under test has, so a screen's set and an email's differ.
+  'jobs/ai-job-experiment-step.ts': {
+    'screen variants': () => [aiExperimentVariantsTool('screen')],
+    'email variants': () => [aiExperimentVariantsTool('email')],
+    explain: () => [aiExperimentExplainTool()],
+  },
   'jobs/ai-job-text-step.ts': { text: () => [] },
   'server/ai-assist.ts': { element: () => [], blog: () => [], section: () => [assistSectionTool()] },
   'server/assist-chat.ts': {

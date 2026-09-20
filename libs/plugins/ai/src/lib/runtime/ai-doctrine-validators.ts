@@ -2299,6 +2299,83 @@ export function estimateAiOutputLoad(
   }
 }
 
+/**
+ * A NODE MAP THAT DOES NOT AGREE WITH ITSELF (AGL-3143).
+ *
+ * A flat node map is two halves that have to match: what each node lists
+ * under `nodes`, and what the map holds. A model writing one section in one
+ * pass gets them out of step in two ways, and neither reaches it as
+ * something it can act on.
+ *
+ * An element written but listed by nobody is dropped on the way in, so the
+ * container that should have held it reads as empty and the answer comes
+ * back "an element meant to hold content is empty — remove it, or fill it".
+ * The content is already written; it is one line away from being placed, and
+ * the re-ask does not say so. A live page build was told exactly that of a
+ * card grid whose repeated card it had written and not placed; it answered by
+ * naming four children and writing one.
+ *
+ * Which is the other half: a name listed under `nodes` that the map never
+ * holds. That one is refused, but by the sanitizer under the palette
+ * validator, as `Missing node "card2"` — which the door turns into "the
+ * answer could not be used as a section", with no rule, no node and nothing
+ * to change. It cost that page its last attempt and the build stopped three
+ * sections in, so the page's form — the thing being measured — was never
+ * reached at all.
+ *
+ * Both are read off the tree AS THE MODEL WROTE IT, before the palette
+ * validator drops anything, so a re-ask can quote the node at fault.
+ */
+export function detectDisagreeingNodes(input: unknown): AiDoctrineViolation[] {
+  if (!isRecord(input) || typeof input['rootId'] !== 'string' || !isRecord(input['nodes'])) return []
+  const rootId = input['rootId']
+  const nodes = input['nodes']
+  if (!isRecord(nodes[rootId])) return []
+  const childrenOf = (id: string): string[] => {
+    const node = nodes[id]
+    const listed = isRecord(node) ? node['nodes'] : undefined
+    return Array.isArray(listed) ? listed.filter((child): child is string => typeof child === 'string') : []
+  }
+  const reached = new Set<string>([rootId])
+  const missing = new Map<string, string[]>()
+  const queue = [rootId]
+  while (queue.length) {
+    const id = queue.shift() as string
+    for (const child of childrenOf(id)) {
+      if (!isRecord(nodes[child])) {
+        missing.set(id, [...(missing.get(id) ?? []), child])
+        continue
+      }
+      if (reached.has(child)) continue
+      reached.add(child)
+      queue.push(child)
+    }
+  }
+  const orphans = Object.keys(nodes).filter((id) => !reached.has(id) && isRecord(nodes[id]))
+  const violations: AiDoctrineViolation[] = []
+  if (missing.size) {
+    const named = unique([...missing.values()].flat())
+    violations.push({
+      rule: null,
+      code: 'missing-child',
+      message:
+        'This holds elements that were never written, so the answer could not be read. Write each one, or take its name out of the list of what this holds.',
+      detail: `Listed under "nodes" and missing from the answer: ${named.map((id) => `"${id}"`).join(', ')}.`,
+      nodeIds: [...missing.keys()],
+    })
+  }
+  if (orphans.length) {
+    violations.push({
+      rule: 16,
+      code: 'orphan-node',
+      message:
+        'This element was written, but nothing holds it, so none of it reaches the page. List it under the element it belongs in, or take it out.',
+      nodeIds: orphans,
+    })
+  }
+  return violations
+}
+
 export interface AiDoctrineTreeReport {
   ok: boolean
   /** The palette validator's result: the tree to store, its repairs and its id map. */
@@ -2319,8 +2396,15 @@ export function validateAiDoctrineTree(
   context: AiDoctrineTreeContext = {},
   otherPages: readonly AiDoctrineTree[] = [],
 ): AiDoctrineTreeReport {
-  const validated = validateAiNodeTree(input, AI_OUTPUT_SURFACE[outputKind], context)
   const publish = detectPublishIntent(input)
+  // Asked of the answer as written, because the palette validator drops an
+  // element nobody lists and refuses a name nobody wrote in words no re-ask
+  // can act on (AGL-3143).
+  const disagreeing = detectDisagreeingNodes(input)
+  if (disagreeing.length) {
+    return { ok: false, tree: null, violations: [...disagreeing, ...publish], score: null, load: null }
+  }
+  const validated = validateAiNodeTree(input, AI_OUTPUT_SURFACE[outputKind], context)
   if (validated.ok === false) {
     return {
       ok: false,

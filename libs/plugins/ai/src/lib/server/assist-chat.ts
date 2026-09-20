@@ -29,6 +29,7 @@ import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { aiOverageReservationRefusal } from '../billing/ai-overage-gate'
 import { aiAllotmentRefusalText } from '../model/ai-allotments'
 import { aiOffForSiteResponse, isAiOffForSite } from '../model/ai-site-switch'
+import { aiCutOffFigures } from '../providers/contract'
 import { AI_MODEL_AUTO, resolveAiModelChoice } from '../providers/model-choice'
 import { aiUsageMeter } from '../usage/ai-usage-meter'
 import {
@@ -1384,6 +1385,13 @@ async function handler(request: Request): Promise<Response> {
         let stopReason: string | null = null
         /** The first call of the edit tool, as the stream delivered it. */
         let editInput: Record<string, unknown> | null = null
+        /**
+         * What the model wrote into its tool calls, when the stream stopped
+         * at its ceiling (AGL-3143). Held here only long enough to be
+         * counted: `editInput` is as much of it as still parsed, and the two
+         * lengths together are what say where a cut-off turn's output went.
+         */
+        let rawOutput: string | null = null
         let usage: AssistTokenUsage = {
           inputTokens: 0,
           outputTokens: 0,
@@ -1412,6 +1420,7 @@ async function handler(request: Request): Promise<Response> {
             } else if (event.type === 'done') {
               usage = event.usage
               stopReason = event.stopReason
+              rawOutput = event.rawOutput ?? null
             }
           }
           // End of stream: the fence ambiguity is resolved, so flush the
@@ -1470,6 +1479,19 @@ async function handler(request: Request): Promise<Response> {
                   `or ask about a different part of ${resolveBrandingProfile(org as never).productName}.`,
             })
           } else if (stopReason === 'max_tokens') {
+            // WHERE THE OUTPUT WENT (AGL-3143). A cut-off edit call reaches
+            // `resolveAssistEdit` as whatever still parsed, so the card the
+            // author does not get looks the same however the tokens were
+            // spent: thinking that left no room to answer, a runaway string
+            // the partial parse discarded, or decoding that wrote nothing
+            // usable. These figures are what separate them. The bytes they
+            // count are the model's own words and therefore the author's
+            // canvas, so they are counted and dropped — never logged, and
+            // never sent down the wire below.
+            console.warn('assist answer cut off at its ceiling', {
+              model,
+              ...aiCutOffFigures({ usage, parsed: editInput, rawOutput }),
+            })
             emit({
               type: 'error',
               error: 'That answer was cut short — ask for the next part, or narrow the question.',

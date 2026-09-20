@@ -292,7 +292,8 @@ warning you against the new number straight away.
   enforced per tier — seats cover the people who build and manage your sites.
 - Buy **paid seat add-ons** to grow your team beyond the included seats —
   self-serve from [Billing → Add-ons](add-ons.md), alongside extra sites,
-  datasets, POS registers, and the Event Calendar.
+  datasets, POS registers, the Event Calendar, and
+  [Aglyn AI](add-ons.md#aglyn-ai).
 - **Site member accounts are not seats**: visitors who sign up to your published
   site are unlimited on every plan.
 

@@ -1333,3 +1333,51 @@ describe('an uncapped quota never leaks its sentinel (AGL-2482)', () => {
     expect(screen.queryAllByText(/500,000 CRM records/).length).toBeGreaterThan(0)
   })
 })
+
+/**
+ * THE GRID CLOSES ITS LAST ROW, whatever the fold left it.
+ *
+ * A rung is a third of a row and Enterprise follows the ladder, so the number
+ * of cards drawn — which moves with the reader's own plan — decides whether
+ * the two at the end pair up or take a row each. Sized for the seven-rung case
+ * alone, a Pro org (five rungs) got Advanced alone in a row, Agency wrapped
+ * away from it, and Enterprise stranded on a third row beside two empty
+ * columns: three rows and two gaps for six cards.
+ *
+ * Asserted as the span classes rather than as pixels because jsdom lays
+ * nothing out — the span IS the decision, and it is the thing that was wrong.
+ */
+describe('the ladder ends on a full row', () => {
+  const spanOf = (label: string) => {
+    const item = screen
+      .queryAllByText(label)
+      .map((node) => node.closest('.MuiGrid-root'))
+      .find(Boolean) as HTMLElement
+    return (
+      item.className.match(/MuiGrid-grid-lg-(\d+)/)?.[1] ?? 'no lg span'
+    )
+  }
+
+  it('Agency fills what the fold left beside it, and Enterprise takes a row', () => {
+    // Five rungs drawn: Pro, Business, Scale, Advanced, Agency. Advanced ends
+    // a row of three four columns short, so Agency is eight wide.
+    renderGrid({ plan: 'pro' })
+    expect([spanOf('Agency'), spanOf('Enterprise')]).toEqual(['8', '12'])
+  })
+
+  it('and pairs the two top rungs when the ladder ends evenly', () => {
+    // Seven rungs — what a Free org sees — end on a full row, so Agency starts
+    // a fresh one and Enterprise sits beside it at half each.
+    renderGrid({ plan: 'free' })
+    expect([spanOf('Agency'), spanOf('Enterprise')]).toEqual(['6', '6'])
+  })
+
+  it('sizes from what is DRAWN, not from the ladder', () => {
+    // The same org as the first case, with the fold opened: seven rungs are
+    // now on screen, so the pairing comes back. A span computed from
+    // `PLAN_ORDER` rather than from the fold would not move.
+    renderGrid({ plan: 'pro' })
+    revealLowerTiers()
+    expect([spanOf('Agency'), spanOf('Enterprise')]).toEqual(['6', '6'])
+  })
+})

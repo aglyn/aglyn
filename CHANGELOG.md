@@ -9,6 +9,98 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.139 — 2026-09-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/d20eca5ea...v1.0.0-beta.139)
+
+### Added
+
+- **marketing:** the blog post for agencies running one brief across clients ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922))
+- **marketing:** the blog post on AI email campaigns and consent ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922))
+- **marketing:** the blog post that keeps a generated page on brand ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922), [AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+- **ai:** the welcome email is written to somebody, about something ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **ai:** the contact form is built for the people who fill it in ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **ai:** the guided start's answers write the site's search listings ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **tools:** a guard refuses a plugin's domain outside its plugin ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **marketing:** /product/ai claims A/B variants, and says what they need ([AGL-2920](https://linear.app/aglyn/issue/AGL-2920), [AGL-2914](https://linear.app/aglyn/issue/AGL-2914), [AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+- **marketing:** one AI band, worded once, for twenty-five pages ([AGL-2921](https://linear.app/aglyn/issue/AGL-2921))
+- **marketing:** the /product/ai copy deck, drafts first ([AGL-2920](https://linear.app/aglyn/issue/AGL-2920))
+- **ai:** the guided start asks in a full screen dialog ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **pricing:** an extra site is $20 on every tier, Starter included ([AGL-3198](https://linear.app/aglyn/issue/AGL-3198))
+
+### Fixed
+
+- **console:** the client plugin manifest lists the AI plugin's two experiment slots ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914))
+- **console:** the A/B arms table is classified, and the spec parses ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914))
+- **ai:** three guards the day's work walked past ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914), [AGL-2918](https://linear.app/aglyn/issue/AGL-2918), [AGL-2922](https://linear.app/aglyn/issue/AGL-2922), [AGL-3116](https://linear.app/aglyn/issue/AGL-3116), [AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+
+### Changed
+
+- **commerce:** the storefront CSV import reads parseCsv where it lives ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+### Documentation
+
+- **ai:** the guided start says which answer changes what ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **ai:** the guided start is a dialog, and says every way out of it ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **ai:** the page for A/B tests by AI, and the help link both cards lacked ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914))
+- **uptime:** the per-minute beat jobs are counted, not paged per failure ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+
+<details>
+<summary>Also in this release: 2 test</summary>
+
+- **marketing:** every blog link resolves, and the flip note comes off whole ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922))
+- **console:** the A/B door is a declared Anthropic data flow ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914), [AGL-1909](https://linear.app/aglyn/issue/AGL-1909), [AGL-3069](https://linear.app/aglyn/issue/AGL-3069))
+
+</details>
+
+## v1.0.0-beta.138 — 2026-09-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.137...v1.0.0-beta.138)
+
+### Added
+
+- **ai:** a person can reach A/B tests by AI, from the A/B testing card ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914))
+- **ai:** an experiment proposal is held to its verdict a second time, in the browser ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914))
+- **marketing:** the A/B testing card hosts a zone for variants and one for a result ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914))
+- **console:** a + and an autocomplete for the variables in a title ([AGL-3197](https://linear.app/aglyn/issue/AGL-3197))
+- **seo:** a page title can be written in variables ([AGL-3197](https://linear.app/aglyn/issue/AGL-3197), [AGL-1341](https://linear.app/aglyn/issue/AGL-1341))
+- **ai:** a whole site is planned from the questions asked at onboarding ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918), [AGL-2911](https://linear.app/aglyn/issue/AGL-2911))
+- **console:** a newly created site can be offered a start, and hand back the blank one ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **ai:** an experiment job writes variants and explains a result ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914))
+- **ai:** a result's verdict is code's before a model explains it ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914))
+
+### Fixed
+
+- **docs:** the site builds again — front matter that parses ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922))
+- **console:** the versions card pages an ORDERED read ([AGL-3196](https://linear.app/aglyn/issue/AGL-3196), [AGL-2213](https://linear.app/aglyn/issue/AGL-2213))
+- **ai:** a variant's dedupe key joins with no control character ([AGL-2914](https://linear.app/aglyn/issue/AGL-2914))
+- **ai:** a streamed turn accounts for where its output went ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+- **ui:** a labelled select shrinks its label off its own placeholder ([AGL-3196](https://linear.app/aglyn/issue/AGL-3196))
+- **inbox:** the submission reader's two cards are headed, not slabs ([AGL-3196](https://linear.app/aglyn/issue/AGL-3196), [AGL-1140](https://linear.app/aglyn/issue/AGL-1140))
+- **settings:** a settings card's content fills the card ([AGL-3196](https://linear.app/aglyn/issue/AGL-3196))
+- **team:** a member who has a photo gets one on the roster too ([AGL-3196](https://linear.app/aglyn/issue/AGL-3196), [AGL-1122](https://linear.app/aglyn/issue/AGL-1122), [AGL-1131](https://linear.app/aglyn/issue/AGL-1131), [AGL-1976](https://linear.app/aglyn/issue/AGL-1976))
+- **billing:** the plan grid closes its last row whatever the fold left ([AGL-3196](https://linear.app/aglyn/issue/AGL-3196))
+- **ai:** a node map that disagrees with itself, and where a ceiling went ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+
+### Documentation
+
+- **ai:** generating a site says where the questions start and how to leave them ([AGL-2918](https://linear.app/aglyn/issue/AGL-2918))
+- **ai:** the AI pages are titled for what people search ([AGL-2922](https://linear.app/aglyn/issue/AGL-2922))
+- **billing:** the add-ons page discloses that generative building is rolling out ([AGL-2923](https://linear.app/aglyn/issue/AGL-2923), [AGL-1601](https://linear.app/aglyn/issue/AGL-1601))
+- **billing:** the AI add-on answers what a buyer asks at its toggle ([AGL-2923](https://linear.app/aglyn/issue/AGL-2923))
+- **releasing:** the bump commit names every lib package.json ([AGL-2941](https://linear.app/aglyn/issue/AGL-2941))
+- **ai:** the raw-output field says the same thing in both halves of its contract ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+
+<details>
+<summary>Also in this release: 3 test, 1 chore</summary>
+
+- **console:** the stale-token case measures the takeover's closures deterministically ([AGL-2590](https://linear.app/aglyn/issue/AGL-2590), [AGL-1959](https://linear.app/aglyn/issue/AGL-1959))
+- **tools:** the outreach emulator suites run one at a time against the shared emulator ([AGL-2981](https://linear.app/aglyn/issue/AGL-2981))
+- **console:** two console specs stop racing a Select menu and a module mock ([AGL-3145](https://linear.app/aglyn/issue/AGL-3145))
+- **tools:** the cached Linear ceiling reads AGL-3195 ([AGL-3195](https://linear.app/aglyn/issue/AGL-3195), [AGL-3194](https://linear.app/aglyn/issue/AGL-3194))
+
+</details>
+
 ## v1.0.0-beta.137 — 2026-09-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.136...v1.0.0-beta.137)

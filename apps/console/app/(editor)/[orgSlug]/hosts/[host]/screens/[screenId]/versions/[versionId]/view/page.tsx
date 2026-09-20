@@ -44,6 +44,11 @@ import {
   type ScreenSeoCardTextField,
 } from '@aglyn/aglyn/app-utils/seo-listing-fields'
 import {
+  hasSeoTitleVariables,
+  resolveSeoTitleVariables,
+  SEO_TITLE_VARIABLES,
+} from '@aglyn/aglyn/app-utils/seo-title-variables'
+import {
   ICON_VARIANT_BESIGNER,
   ICON_VARIANT_DATE_TIME,
   ICON_VARIANT_PAGES,
@@ -61,7 +66,9 @@ import {
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { VariableTextField } from '@aglyn/shared-ui-jsx/components/variable-text-field.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -93,6 +100,7 @@ import {
   deleteField,
   doc,
   limit,
+  orderBy,
   query,
   updateDoc,
 } from 'firebase/firestore'
@@ -130,7 +138,10 @@ import {
 } from '../../../../../../../../../../constants/screen-publishing'
 import { announceLiveScreenChange } from '../../../../../../../../../../constants/screen-live-announce'
 import PluginWidgetSlot from '../../../../../../../../../../components/plugin-widget-slot.component'
-import { CONTENT_MAX_WIDTH } from '../../../../../../../../../../constants/shared'
+import {
+  CONTENT_MAX_WIDTH,
+  TABLE_PAGE_SIZE_DEFAULT,
+} from '../../../../../../../../../../constants/shared'
 import { docsHelp } from '../../../../../../../../../../constants/docs-links'
 import UsedByCard from '../../../../../../../../../../components/used-by-card.component'
 import ArtifactDeleteConfirmDescription, {
@@ -290,6 +301,23 @@ function ScreenDetails() {
     () =>
       query(
         collection(firestore, 'hosts', hostId, 'screens', screenId, 'versions'),
+        /*
+         * ORDERED, and the `limit` is a cap on that order (AGL-2501's rule,
+         * the eighth time this shape has come up).
+         *
+         * `limit(50)` alone is not "the fifty newest": Firestore answers it in
+         * document-id order and a version id is generated, so the window was a
+         * pseudo-random fifty of the collection which the `useMemo` below then
+         * sorted. The rows looked right — a believable descending list — and
+         * were simply the wrong rows, with the missing ones leaving no gap to
+         * notice. Paging the card is what would have made that visible, on a
+         * screen with more than fifty versions.
+         *
+         * Safe to add: every one of the 248 screen version documents in the
+         * estate carries `createdAt`, and a document missing an `orderBy`
+         * field is one Firestore drops from the answer entirely.
+         */
+        orderBy('createdAt', 'desc'),
         limit(50),
       ),
     [firestore, hostId, screenId],
@@ -302,6 +330,39 @@ function ScreenDetails() {
       ),
     [versionDocs],
   )
+
+  /*
+   * A PAGE of versions, on the console's own pagination control.
+   *
+   * The card drew all fifty — the query's own ceiling — as one unbroken run of
+   * rows, each with four actions on it. A screen that has been edited for a
+   * year is a card taller than everything else on the page put together, and
+   * the reader's way to the oldest version was the scrollbar.
+   *
+   * Sliced here rather than in the query: fifty documents are already read and
+   * already on this client for the restore picker below, so paging the read
+   * would cost a round trip to hide rows we are holding anyway.
+   *
+   * `ListPagination` is the one footer (AGL-2501) — same page sizes, same
+   * count line and same rows-per-page menu as every other list in the console.
+   */
+  const [versionsPage, setVersionsPage] = useState(0)
+  const [versionsPageSize, setVersionsPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const pagedVersions = useMemo(
+    () =>
+      versions.slice(
+        versionsPage * versionsPageSize,
+        versionsPage * versionsPageSize + versionsPageSize,
+      ),
+    [versions, versionsPage, versionsPageSize],
+  )
+  // Publishing or deleting a version can leave a reader standing past the last
+  // page, which renders as an empty table and no way to read that it is empty
+  // because the rows moved rather than because there are none.
+  useEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(versions.length / versionsPageSize) - 1)
+    if (versionsPage > lastPage) setVersionsPage(lastPage)
+  }, [versions.length, versionsPage, versionsPageSize])
 
   // A collection's list/entry template is published so the compose pipeline
   // picks it up, but it is not a page of the site (AGL-1267) — so nothing
@@ -993,9 +1054,30 @@ function ScreenDetails() {
     description: seoDraft?.description ?? screen?.seo?.description ?? '',
     breadcrumb: seoDraft?.breadcrumb ?? screen?.seo?.breadcrumb ?? '',
   }
+  const setSeoValue = (field: ScreenSeoCardTextField, value: string) =>
+    setSeoDraft({ ...seoValue, [field]: value })
   const setSeoField = (field: ScreenSeoCardTextField) =>
-    (event: { target: { value: string } }) =>
-      setSeoDraft({ ...seoValue, [field]: event.target.value })
+    (event: { target: { value: string } }) => setSeoValue(field, event.target.value)
+
+  /**
+   * The title as the live page will render it (AGL-3197).
+   *
+   * A written title may name variables, so what the author typed and what a
+   * search result shows are two different strings — and the one worth counting
+   * against sixty characters is the second. Resolved against THIS host's own
+   * site title and separator, which is the whole reason the variables are
+   * worth having: the preview is where an author sees that `{{site.name}}` is
+   * forty-nine characters on this site before they publish a title that runs
+   * off the end of a search result.
+   */
+  const resolvedSeoTitle = resolveSeoTitleVariables(seoValue.title, {
+    'page.name': screen?.displayName ?? '',
+    'site.name': hostData?.seo?.title ?? hostData?.displayName ?? '',
+    'site.separator': hostData?.seo?.separator ?? '',
+  })
+  const titleHelperText = hasSeoTitleVariables(seoValue.title)
+    ? `${seoListingFieldCount('title', resolvedSeoTitle)} — renders as “${resolvedSeoTitle}”`
+    : `${seoListingFieldCount('title', seoValue.title)} — published verbatim; the site title is not appended. Add a variable to keep it in step with Host setup → SEO.`
   /**
    * Staged social image (AGL-1368); `null` = untouched, `''` = cleared. Kept
    * separate from `seoDraft` so picking an image does not stage the title and
@@ -1150,6 +1232,28 @@ function ScreenDetails() {
     hostId,
     publishedPath,
   ])
+
+  /**
+   * ONE Save SEO control, rendered in two places on its card — the header's
+   * action slot and the foot of the content.
+   *
+   * Written once rather than twice because the two must never disagree about
+   * whether there is anything staged: `!seoDraft && !seoImage` is also
+   * `handleSeoSave`'s own early return, so a second copy that drifted would
+   * offer a live-looking button that does nothing.
+   */
+  const seoSaveButton = (
+    <Button
+      size="small"
+      variant="outlined"
+      color="primary"
+      disabled={!seoDraft && !seoImage}
+      onClick={handleSeoSave}
+      sx={{ alignSelf: 'flex-start' }}
+    >
+      {'Save SEO'}
+    </Button>
+  )
 
   const details = [
     {
@@ -1672,30 +1776,63 @@ function ScreenDetails() {
                     contentGutterX
                     contentGutterY
                     contentBordered="all"
+                    /* The same save, in the header's action slot as well as at
+                       the foot of the card. This card is tall \u2014 six inputs, a
+                       social image picker and the Write-with-AI panel \u2014 so
+                       from the top of it the only control that commits any of
+                       it is off screen, and the AI panel's own "Write SEO"
+                       button is the one in view. Both render the same
+                       `seoSaveButton`, so they cannot disagree about whether
+                       there is anything to save. */
+                    HeaderProps={{ action: seoSaveButton }}
                   >
                     <Stack spacing={1.5}>
                       {/* The inputs and their lengths come from the one SEO
                           field catalog (AGL-2910), which the besigner's panel
                           and every proposer read too. */}
-                      {SCREEN_SEO_CARD_TEXT_FIELDS.map((field) => (
-                        <TextField
-                          key={field}
-                          size="small"
-                          label={SEO_LISTING_FIELDS[field].label}
-                          value={seoValue[field]}
-                          onChange={setSeoField(field)}
-                          multiline={SEO_LISTING_FIELDS[field].multiline}
-                          minRows={SEO_LISTING_FIELDS[field].multiline ? 2 : undefined}
-                          helperText={
-                            field === 'title'
-                              ? `${seoListingFieldCount(field, seoValue[field])} — published verbatim; the site title is not appended`
-                              : field === 'breadcrumb'
+                      {SCREEN_SEO_CARD_TEXT_FIELDS.map((field) =>
+                        /*
+                         * The title takes variables (AGL-3197), so it is the
+                         * one field with an insert control and a preview. The
+                         * rest are plain: a description is prose, and a
+                         * breadcrumb label is a word.
+                         */
+                        field === 'title' ? (
+                          <VariableTextField
+                            key={field}
+                            size="small"
+                            label={SEO_LISTING_FIELDS[field].label}
+                            value={seoValue[field]}
+                            onChange={(next) => setSeoValue(field, next)}
+                            variables={SEO_TITLE_VARIABLES}
+                            insertLabel="Insert a variable"
+                            helperText={titleHelperText}
+                            // The RESOLVED length, because that is what a
+                            // search result truncates. `{{site.name}}` is
+                            // thirteen characters of written title and however
+                            // many the site is called; counting the written
+                            // form would flag a title that fits and pass one
+                            // that does not.
+                            error={seoListingFieldTooLong(field, resolvedSeoTitle)}
+                          />
+                        ) : (
+                          <TextField
+                            key={field}
+                            size="small"
+                            label={SEO_LISTING_FIELDS[field].label}
+                            value={seoValue[field]}
+                            onChange={setSeoField(field)}
+                            multiline={SEO_LISTING_FIELDS[field].multiline}
+                            minRows={SEO_LISTING_FIELDS[field].multiline ? 2 : undefined}
+                            helperText={
+                              field === 'breadcrumb'
                                 ? `${seoListingFieldCount(field, seoValue[field])} — the page’s name in a breadcrumb trail`
                                 : seoListingFieldCount(field, seoValue[field])
-                          }
-                          error={seoListingFieldTooLong(field, seoValue[field])}
-                        />
-                      ))}
+                            }
+                            error={seoListingFieldTooLong(field, seoValue[field])}
+                          />
+                        ),
+                      )}
                       {/* The same field the besigner's Screen Properties ▸
                           SEO panel uses (AGL-1368), not a second one: the
                           docs have always sent people here for all three
@@ -1743,16 +1880,7 @@ function ScreenDetails() {
                         hasImage={Boolean(seoImageRef)}
                         proposeValues={proposeSeoValues}
                       />
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="primary"
-                        disabled={!seoDraft && !seoImage}
-                        onClick={handleSeoSave}
-                        sx={{ alignSelf: 'flex-start' }}
-                      >
-                        {'Save SEO'}
-                      </Button>
+                      {seoSaveButton}
                     </Stack>
                   </CardDisplay>
                 ),
@@ -1774,7 +1902,7 @@ function ScreenDetails() {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {versions.map((version) => {
+                        {pagedVersions.map((version) => {
                           const isLive = version.$id === screen?.versionId
                           return (
                             <TableRow key={version.$id} hover>
@@ -1875,6 +2003,14 @@ function ScreenDetails() {
                         })}
                       </TableBody>
                     </ScrollTable>
+                    <ListPagination
+                      page={versionsPage}
+                      pageSize={versionsPageSize}
+                      rowCount={pagedVersions.length}
+                      count={versions.length}
+                      onPageChange={setVersionsPage}
+                      onPageSizeChange={setVersionsPageSize}
+                    />
                   </CardDisplay>
                 ),
               },

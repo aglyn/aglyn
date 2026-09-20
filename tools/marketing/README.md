@@ -10,6 +10,8 @@ on Aglyn**). These are authoring inputs for the besigner, not application code
 | `apply-page-copy.js` | Pours one `product-copy/copy-<page>.json` into a freshly-pasted copy of that skeleton, in the besigner's page context. Verifies every section's slot count and writes **nothing** on a mismatch. |
 | `verify-applier.mjs` | `node tools/marketing/verify-applier.mjs` — drives the applier over all eight pages against a stub canvas that models the REAL write semantics. |
 | `product-copy/copy-<page>.json` | Copy and structure extracted verbatim from the Figma frames, one file per product page, plus a `claimsToVerify` list per page. |
+| `shared-copy/band-<name>.json` | A block placed on **many** pages, worded once. `band-ai.json` is the first (AGL-2921) — see "One band on twenty-five pages" below. |
+| `blog-copy/post-<slug>.json` | One blog post: prose rather than slots, every internal link resolved against the real tree, and the rolling-out notice held outside the body. Three so far (AGL-2922) — see "Blog posts are prose, so the contract is the links" below. |
 | `extract-solutions-copy.mjs` | Extracts one `solutions-copy/copy-<page>.json` per solutions/use-case frame from a `get_metadata` dump of canvas `163:89`. Unit is a **card in a grid**. |
 | `extract-pricing-copy.mjs` | Extracts `pricing-copy/copy-<variant>.json` from the four Pricing frame dumps. Unit is a **row in a table**. See below — it is deliberately not the solutions extractor. |
 | `build-pricing-tables.mts` | Builds `pricing-copy/tables.json` FROM `plan-entitlements.ts` and reconciles all six tables it emits — `compare` (rows and plan columns), `tiers`, `usage`, `metered`, `fees`, `addons` — against the extractions, cell by cell. `npm run check:pricing-tables` runs it without writing. Deliberate divergences are declared with the frame's exact stale value, and a declaration the frame has caught up on fails until it is deleted. The tables that read every breakpoint print a compared-cell count; zero is a failure, because a reader that matches nothing reports clean. A rate the code charges but no row publishes is a failure too: `RATE_KEYS` enumerates every `extra*` field off `PLAN_PRICING` itself, so a new overage rate fails on the commit that adds it rather than after somebody reads an invoice line with no published price. A row we publish that the frame carries nowhere is declared in `USAGE_EXPECTED_ABSENT` and resolves — failing until the entry is deleted — once every breakpoint carries it. |
@@ -258,8 +260,127 @@ them out before matching. Analytics and Marketing looked like 10-section pages
 purely because of that; all **eight detail pages are the same 8-section
 skeleton**, and all eight pour cleanly (73–74 writes each).
 
+## One band on twenty-five pages (AGL-2921)
+
+The format had **no way to say a block is shared**. `product-copy/` and
+`solutions-copy/` each hold one page's own sections, and `apply-page-copy.js`
+pours one file into one canvas — so "the same band on every product, segment
+and solutions page" could only be expressed by pasting the same six strings
+into twenty-five files, where the second edit forks them and nothing notices.
+
+`shared-copy/band-ai.json` is the smallest thing that says it instead: the
+band's copy **once**, a `slotContract` in the same shape as the section
+contracts in the applier, and a `targets` list of the pages it rides on with
+each one's copy file. `verify-applier.mjs` asserts the heading appears in no
+page file, that the flatten arity matches the declared slot count, that the
+rolling-out line is the last slot, and that every named target file exists.
+
+Two things about it are load-bearing:
+
+- **Pour the page copy FIRST, then place the band.** The applier asserts the
+  canvas holds exactly as many root sections as the 8-section contract, so a
+  page already carrying the band is a page it will refuse forever after. To
+  re-pour, remove the band, pour, place it again. The harness carries this as
+  a negative control — a nine-section canvas must be refused — so the ordering
+  is checked rather than remembered.
+- **On the canvas it is one reusable component, instanced per page.** Not
+  twenty-five copies of a section. It is what the platform's own building
+  rules tell a customer to do with a block that repeats, and it makes the
+  rolling-out line's eventual deletion one edit instead of twenty-five.
+
+## `copy-ai.json` is authored, not extracted (AGL-2920)
+
+Every other file here is a record of a Figma frame. `/product/ai` has no
+frame, so `figmaNodeId`, `frameName` and `frameSize` are null, each `notes`
+describes the skeleton slot rather than a drawn section, and every capability
+claim carries its source in `claimsToVerify` — a path under
+`apps/docs/docs/ai/` or in the AI plugin — because there was no design to
+check the copy against, only the product.
+
+It pours through the unchanged applier as an ordinary 8-section deck, with two
+differences from the older ones:
+
+- **Ten Explore cards**, like `copy-datasets.json`: Aglyn AI is not one of the
+  roster of ten, so there is no self-link to omit. Grow the grid to ten before
+  pouring — the applier takes that section's count from `explore.items`.
+- **The early-access chip is poured**, not kept. `eyebrow` is set, so the
+  applier writes over the skeleton's "Now in early access"; every other deck
+  leaves it null. That is why the page writes 80 slots where Datasets writes
+  79, and the harness derives the figure rather than pinning it.
+
+It also carries three keys the applier never reads and a besigner pass must
+place by hand: `seo` (title and description are fields on the screen's detail
+page, not text nodes — the surface `docs/PRICING_SURFACES.md` records as
+missed twice), `disclosure` (the rolling-out notice, below), and `placements`
+(the nav entry, the footer entry and the eleventh `/product` grid card, which
+belong to the layout and to another page).
+
+### The rolling-out line is a slot, not a sentence
+
+`disclosure` is a **discrete, removable** element: its own notice band under
+the hero, not a qualifier threaded through the prose. Generative building is
+behind `release_ai_generative`, which is off in production — every generative
+route answers 404 — so the notice is required until the flip, and the flip
+then **deletes** it rather than rewriting the page around it, the same way the
+`:::caution Rolling out` admonitions come out of `apps/docs/docs/ai/`.
+
+The split it makes is the honest one: the assistant that answers questions is
+released (`release_assist`, and `ai-assist.ts` carries no flag at all); it is
+generative **building** that is rolling out. A page that blurs the two
+undersells what works or oversells what does not.
+
 `copy-product-overview.json` is the real exception: **11 page sections**. It is
 the `/product` index, not a detail page — no Statement, no Capabilities/
 Deep-dive pair, a centred hero with the mockup below, and three sections the
 detail pages never have (a logo strip, a pricing teaser and a roadmap band). The
 applier refuses it by design; it needs its own build.
+
+## Blog posts are prose, so the contract is the links (AGL-2922)
+
+A blog post has no skeleton to pour into: the body is a markdown block on a
+`blog` collection entry, not 74 slots in a fixed section order. There was no
+home for post bodies at all — the four posts already published were written
+straight into the CMS, and the only trace of them in this repository is their
+cover art in `tools/scripts/generate-blog-covers.mjs`. `blog-copy/` is that
+home, in the shape the rest of this directory already uses: one file per post,
+`seo` and `disclosure` as top-level keys the applier never reads, and
+`claimsToVerify` carrying the provenance of every capability sentence.
+
+`body` is an **array of markdown blocks** rather than one string, for the same
+reason `product-copy` bodies are arrays: a block is the unit that gets edited,
+moved and diffed. Join with a blank line to get the entry body.
+
+Since there is no arity to assert, the harness asserts the two things that can
+actually go wrong:
+
+- **Every link resolves.** A docs link is checked against a real file under
+  `apps/docs/docs/`; a site link against the routes the live sitemap serves.
+  These posts were written from a keyword plan dated 2026-09-13 whose internal
+  links had already rotted — it names `/alternatives/framer`, which this site
+  does not have, and a docs path `ai/generate-a-page` that is really
+  `building-sites/screens-and-layouts/generate-a-page.md`. Reinstating either
+  is the harness's negative control, and it fails on both at once. Each link
+  also records `verifiedAgainst`, so the next reader checks the claim rather
+  than the memory of it.
+- **The rolling-out notice is a block, not a sentence.** Same doctrine as the
+  shared band and as `/product/ai`: `disclosure` sits outside `body`, so the
+  flip deletes one block per post. A post whose disclosure wording had leaked
+  into a paragraph would look identical in the JSON and be impossible to
+  remove cleanly, so the harness asserts `body` does not contain it — and that
+  all three posts carry the *same* wording, the one the docs use.
+
+⛔ **`/product/ai` is not a live route.** Its copy deck is committed here but
+the page has not been built on the canvas, so no post links it. Each file's
+`linksConsideredAndNotUsed` records that as a publish precondition; swap the
+link in once the page is live. Routes are verified against
+`https://aglyn.com/sitemaps/pages/1.xml`, which is the only record of what the
+marketing site actually publishes — `seed-marketing-screens.mjs` seeds a
+subset and knows nothing about `/alternatives/*` or `/pricing`.
+
+Two things these files do **not** do. They carry no price, credit count or
+time-saved figure: `docs/PRICING_SURFACES.md` owns the first and nothing
+measures the others yet (AGL-3024's live run records credits and tokens per
+document kind, and is what a cost line would have to come from). And the
+covers are not generated — add a `POSTS` entry to
+`tools/scripts/generate-blog-covers.mjs` and upload the PNG to the media
+library separately, which an agent cannot do.

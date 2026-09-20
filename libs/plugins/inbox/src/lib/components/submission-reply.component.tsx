@@ -33,6 +33,7 @@
  * rather than as a conversation: this list is one-sided by construction.
  */
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -167,7 +168,37 @@ export function SubmissionReply(props: SubmissionReplyProps) {
   }
 
   return (
-    <CardDisplay title="Reply">
+    /*
+     * `header`, NOT `title` — the bug class AGL-1140 named and
+     * `card-display-header.spec` guards, which this file escaped because that
+     * sweep read `apps/console` only. `title` is a valid DOM attribute, so it
+     * rides in on `CardProps`, compiles clean and renders a browser tooltip:
+     * the card drew with no heading at all, and its content sat against the
+     * card's edges because the gutters are opt-in, so inside the submission
+     * reader it read as an unexplained lighter slab rather than a section.
+     *
+     * Outlined for the same reason: this card is nested inside a Dialog, whose
+     * own surface is already raised, and a filled card on top of it is the
+     * paper-on-paper that made the slab look like a rendering fault. A border
+     * says "section" without a second background.
+     */
+    <CardDisplay
+      header={'Reply'}
+      // A headered card carries help (AGL-2213), and the guard that says so
+      // reads `libs/plugins` — which is how a card with the wrong prop, and
+      // therefore no header at all, went un-flagged here for so long.
+      help={pluginDocsHelp('forms', {
+        anchor: '#replying-to-a-submission',
+        excerpt:
+          'Answer a submission by email. Replies are transactional — they ' +
+          'add nobody to a list and never touch your campaign allowance.',
+      })}
+      variant="outlined"
+      contentGutterX
+      contentGutterY
+      contentBordered="top"
+      sx={{ mt: 2 }}
+    >
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
           {`To ${(recipient as { email: string }).email}`}

@@ -1,10 +1,10 @@
 ---
 sidebar_position: 2
-title: SEO by AI
-description: Have AI write a page's or a product's search listing, audit every published page with a proposed fix for each finding, and draft your structured data and /llms.txt guidance — as drafts you review and save.
+title: AI SEO for your website
+description: "AI SEO for websites, on the pages you already have: have AI write a page or product's search listing, audit every published page with a proposed fix for each finding, and draft your structured data and /llms.txt."
 ---
 
-# SEO by AI
+# AI SEO for your website
 
 AI can write the search listing for a page or a product, audit your whole site, and
 draft the structured data and agent guidance your site publishes. Everything it does is

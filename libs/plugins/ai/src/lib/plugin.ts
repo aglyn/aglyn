@@ -59,6 +59,8 @@ import {
 import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.component'
 import AiSeoAuditCard from './components/ai-seo-audit-card.component'
 import AiSiteBatchCard from './components/ai-site-batch-card.component'
+import AiSiteSeoStartCard from './components/ai-site-seo-start-card.component'
+import AiSiteStartCard from './components/ai-site-start-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
 import AiDescribeAutomationButton from './components/ai-describe-automation.component'
 import AiCrmEmailDraft from './components/ai-crm-email-draft.component'
@@ -71,6 +73,10 @@ import {
   AiDescribeLayoutButton,
   AiDescribeTemplateButton,
 } from './components/ai-describe-button.component'
+import {
+  AiExperimentResultCard,
+  AiExperimentVariantsCard,
+} from './components/ai-experiment-cards.component'
 import {
   AiExplainAutomation,
   AiExplainRunFailure,
@@ -439,6 +445,34 @@ export function registerAiConsole(): void {
         permission: 'ai.generate',
         Component: AiCrmImportMapping,
       },
+      // The guided start (AGL-2918), on the page a newly created site lands
+      // on: a few questions that become a site scaffold. Gated as the other
+      // generative widgets are, and it asks the jobs route about the release
+      // flag before it shows anything — so a workspace the feature is not
+      // released to gets the blank page and nothing else. Skipping is the
+      // zone's own `startBlank`, which creates nothing.
+      {
+        slot: 'hostFirstRun',
+        widgetId: 'ai-site-start',
+        title: 'Start this site with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiSiteStartCard,
+      },
+      // The listing those answers describe (AGL-2918), on the site's SEO
+      // section: the site-wide search title and description the guided start
+      // implies, offered where they are edited. The same gates as every
+      // generative widget, and it stages into the SEO form rather than
+      // writing it — a person's Update is the write, as it is for the audit
+      // card beside it.
+      {
+        slot: 'hostSeo',
+        widgetId: 'ai-site-seo-start',
+        title: 'The listing your answers describe',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiSiteSeoStartCard,
+      },
       // The agency batch (AGL-2911): one brief across many of the org's
       // sites, from the page that lists them. The card asks the jobs route
       // about the release flag before it shows anything, and its own door
@@ -480,6 +514,30 @@ export function registerAiConsole(): void {
         featureFlag: 'aiGenerative',
         permission: 'ai.generate',
         Component: AiProductImportOption,
+      },
+      // A/B tests by AI (AGL-2914): variants written in the experiment
+      // editor, and one test's result read in plain words below its figures.
+      // The A/B testing card hosts both zones, so they are drawn only where
+      // that card is and only on a site with A/B testing; the shell holds the
+      // plan band and `ai.generate`, and each card asks the jobs route about
+      // the release flag before it shows anything. Neither writes: the
+      // experiment editor's Save is the only write, and an explanation has
+      // nothing to apply.
+      {
+        slot: 'experimentVariants',
+        widgetId: 'ai-experiment-variants',
+        title: 'Write variants with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiExperimentVariantsCard,
+      },
+      {
+        slot: 'experimentResult',
+        widgetId: 'ai-experiment-result',
+        title: 'Explain this result with AI',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiExperimentResultCard,
       },
     ],
   })

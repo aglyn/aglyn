@@ -48,7 +48,20 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 }))
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  // Draws the header — see `submission-reply.spec` for why a double that
+  // swallowed it let this card ship with no heading at all.
+  CardDisplay: ({
+    children,
+    header,
+  }: {
+    children: ReactNode
+    header?: ReactNode
+  }) => (
+    <div>
+      {header ? <div className="MuiCardHeader-root">{header}</div> : null}
+      {children}
+    </div>
+  ),
 }))
 
 const SUBMISSION = { $id: 'sub1' }

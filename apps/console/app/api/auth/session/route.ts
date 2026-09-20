@@ -24,6 +24,7 @@ import {
   toEpochMs,
 } from '@aglyn/aglyn/server'
 import {
+  backfillMemberIdentityEverywhere,
   consoleSessionEpochRefuses,
   emailUnverifiedResponse,
   findUserByUidAcrossPools,
@@ -529,6 +530,38 @@ async function handler(request: Request): Promise<Response> {
             if (record) await registerProviderAddresses(uid, record.record)
           } catch (error) {
             console.error('[auth/session] provider address registration failed', error)
+          }
+          /*
+           * THE FACE THE PERSON'S COLLEAGUES SEE, onto their roster rows.
+           *
+           * `users/{uid}` above is the person's OWN profile and no member
+           * surface reads it: the Team list, the member page, activity and
+           * presence all draw from `orgs/{orgId}/members/{uid}`, because none
+           * of them may read another person's auth record (AGL-1122). Nothing
+           * wrote that row's `photoURL` for an account that created its own
+           * workspace and signs in with Google — `createOrganization` writes
+           * the owner a row with a name and no photo, `upsertOrgMember` only
+           * runs when somebody ADDS you, and the two backfills that existed
+           * were SSO-only and Manage-Account-only. So the owner of a workspace
+           * saw their own face in the app bar and a grey initial in their own
+           * Team list.
+           *
+           * Here for the two reasons the seed above is here: the one place
+           * every interactive sign-in passes through with a verified token,
+           * and the thing that fixes existing rows on their next sign-in
+           * without a migration. Absent-only, so it can never replace a photo
+           * somebody chose — see `backfillMemberIdentityEverywhere`.
+           *
+           * Inside `after()` and its own `catch`, like its neighbours: an
+           * avatar must not be able to fail a sign-in.
+           */
+          try {
+            await backfillMemberIdentityEverywhere(uid, {
+              displayName: seed.displayName,
+              photoURL: seed.photoUrl,
+            })
+          } catch (error) {
+            console.error('[auth/session] roster identity backfill failed', error)
           }
         })
       } catch (error) {

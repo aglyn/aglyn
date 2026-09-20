@@ -216,6 +216,17 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       "the largest answer a CRM tool accepts: sixty columns matched to fields by number, or an email draft at its length limits, at three characters a token with room, as ai-job-crm-step.spec.ts measures it",
     eval: { kinds: ['crm'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9938 },
   },
+  'job.experiment': {
+    // Variants of one piece of copy, or a result explained against a verdict
+    // code reached before the request was made (AGL-2914). The judgment is
+    // already made either way, so it writes without thinking.
+    thinking: 'off',
+    effort: null,
+    maxTokens: 1500,
+    maxTokensBasis:
+      "four variants at the tool's own lengths — a name, a headline, a body and a rationale each — written as JSON, about 3,000 characters at three characters a token with room; an explanation is a headline, four sentences and a next step, well under it, as ai-job-experiment-step.spec.ts measures both",
+    eval: { kinds: ['experiment'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
+  },
   'job.form': {
     // A form's two halves in one answer: the field declaration and the design
     // that renders it, as JSON, with no extended thinking (AGL-2913). The step

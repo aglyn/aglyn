@@ -30,7 +30,7 @@ import {
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
 import type { AiStepKind } from '../providers/catalog'
-import { aiStoppedAtCeiling, type AiProvider } from '../providers/contract'
+import { aiCutOffFigures, aiStoppedAtCeiling, type AiProvider } from '../providers/contract'
 import { AI_ROUTING_TABLE, aiModelForStep, type AiPluginSettings } from '../providers/routing'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
@@ -1064,11 +1064,19 @@ export async function runValidatedGeneration(
       ...(input.settings ? { settings: input.settings } : {}),
       ...(input.provider ? { provider: input.provider } : {}),
     })
+    // Thinking tokens add up across the exchanges only where a provider
+    // breaks them out; a generation whose provider reports none carries none,
+    // rather than a zero that would read as "it did not think" (AGL-3143).
+    const thinking =
+      result.usage.thinkingTokens === undefined
+        ? spend.usage.thinkingTokens
+        : (spend.usage.thinkingTokens ?? 0) + result.usage.thinkingTokens
     spend.usage = {
       inputTokens: spend.usage.inputTokens + result.usage.inputTokens,
       outputTokens: spend.usage.outputTokens + result.usage.outputTokens,
       cacheReadTokens: spend.usage.cacheReadTokens + result.usage.cacheReadTokens,
       cacheWriteTokens: spend.usage.cacheWriteTokens + result.usage.cacheWriteTokens,
+      ...(thinking === undefined ? {} : { thinkingTokens: thinking }),
     }
     spend.estCostUsd = Math.round((spend.estCostUsd + result.estCostUsd) * 1_000_000) / 1_000_000
     spend.stopReason = result.stopReason
@@ -1125,20 +1133,22 @@ export async function runValidatedGeneration(
     refused = answer
     if (cutOff) {
       rawOutput = result.rawOutput ?? null
-      // WHERE THE OUTPUT WENT (AGL-3143). The two shapes a cut-off answer
-      // comes in are told apart by these figures: output tokens far past what
-      // the tool call parsed to, against raw output that is long (a runaway
-      // string the partial parse discarded) or short (decoding wrote nothing
-      // usable). The bytes themselves are the model's own words, which is the
-      // site's content, so they travel on the result for a trace to keep and
-      // never into the log.
+      // WHERE THE OUTPUT WENT (AGL-3143). The shapes a cut-off answer comes
+      // in are told apart by these figures. Thinking tokens account for the
+      // spend first, because the thinking budget is drawn from the same
+      // ceiling as the answer: a generation can spend nearly all of one
+      // thinking and be cut off mid-call with a correct, tiny tool input, and
+      // that is a ceiling to raise rather than a decoder to fix. What thinking
+      // does not account for is told apart by the raw output — long, and a
+      // runaway string the partial parse discarded; short, and decoding wrote
+      // nothing usable. The bytes themselves are the model's own words, which
+      // is the site's content, so they travel on the result for a trace to
+      // keep and never into the log.
       console.warn('ai answer cut off at its ceiling', {
         kind,
         model,
         maxTokens,
-        outputTokens: spend.usage.outputTokens,
-        parsedChars: answer ? JSON.stringify(answer).length : 0,
-        rawChars: rawOutput?.length ?? null,
+        ...aiCutOffFigures({ usage: spend.usage, parsed: answer, rawOutput }),
       })
     }
     violations = cutOff

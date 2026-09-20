@@ -64,6 +64,10 @@ const SITE_ZONES: readonly string[] = [
   // The dock is mounted on every page; on a site's pages it is listed from
   // the site's set, so a switched-off site draws none.
   CONSOLE_WIDGET_SLOTS.assistPanel,
+  // The guided start on a newly created site (AGL-2918). A site is the one
+  // thing it acts on, so a site that switched AI off is offered no start and
+  // keeps the blank page — which is what that site asked for.
+  CONSOLE_WIDGET_SLOTS.hostFirstRun,
   CONSOLE_WIDGET_SLOTS.hostScreens,
   // Describe it on a site's Templates, Layouts and Forms pages (AGL-3043).
   // The Forms page is the forms plugin's, which draws its zone through the
@@ -94,6 +98,13 @@ const SITE_ZONES: readonly string[] = [
   CONSOLE_WIDGET_SLOTS.recordInsights,
   CONSOLE_WIDGET_SLOTS.recordEmail,
   CONSOLE_WIDGET_SLOTS.importMapping,
+  // The A/B testing card's two zones (AGL-2914), hosted by the marketing
+  // plugin on a site's Marketing page. Plain ids rather than a core slot:
+  // the plugin that draws that card declares them, so the catalog names
+  // neither. A switched-off site draws neither widget, and the test they are
+  // about is that site's.
+  'experimentVariants',
+  'experimentResult',
 ]
 
 /** Zones drawn on the WORKSPACE's pages, where no site's switch reaches. */

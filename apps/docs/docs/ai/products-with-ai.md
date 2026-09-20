@@ -1,10 +1,10 @@
 ---
 sidebar_position: 8
-title: Products with AI
-description: Have Aglyn AI write product copy, write copy for many products or an import, propose a first catalog, and propose categories and discounts, as proposals you review before anything is saved.
+title: Product copy and catalogs with AI
+description: "An AI product description generator for your catalog: write copy for one product or a whole import, propose a first catalog, and propose categories and discounts — all as proposals you review."
 ---
 
-# Products with AI
+# Product copy and catalogs with AI
 
 Aglyn AI can write the copy for your products and help you set up a store. Everything it
 does is a **proposal**: you review it, and nothing is saved to your catalog until you

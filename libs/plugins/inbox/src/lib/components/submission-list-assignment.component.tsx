@@ -46,6 +46,7 @@
  * read-on-mount shape this codebase refuses.
  */
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -168,7 +169,26 @@ export function SubmissionListAssignment(props: SubmissionListAssignmentProps) {
   }, [busy, listId, attested, post, enqueueSnackbar])
 
   return (
-    <CardDisplay title="Add to a marketing list">
+    // `header`, outlined, and with its gutters on — see the same block in
+    // `submission-reply.component`, which sits directly above this one in the
+    // submission reader and had the identical defect.
+    <CardDisplay
+      header={'Add to a marketing list'}
+      // A headered card carries help (AGL-2213). The topic is campaigns, not
+      // forms: what this card does to somebody is put them in an audience, and
+      // the rules about that live with the audience.
+      help={pluginDocsHelp('emailCampaigns', {
+        anchor: '#add-to-a-list',
+        excerpt:
+          'Put this sender on a marketing list. A list is what a campaign ' +
+          'sends to; adding somebody sends them nothing now.',
+      })}
+      variant="outlined"
+      contentGutterX
+      contentGutterY
+      contentBordered="top"
+      sx={{ mt: 2 }}
+    >
       <Stack spacing={2}>
         {/*
           Said before anything is loaded, because it is the sentence that

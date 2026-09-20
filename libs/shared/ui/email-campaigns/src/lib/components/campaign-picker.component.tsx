@@ -108,6 +108,22 @@ export function CampaignPicker(props: CampaignPickerProps) {
       helperText={helperText}
       fullWidth
       slotProps={{
+        /*
+         * `shrink`, because `displayEmpty` below draws "No campaign" in the
+         * closed box while the value is still empty (AGL-2486's pairing).
+         *
+         * MUI shrinks a label when the input reports itself filled, and an
+         * empty multiple select reports the opposite — so the label sat at
+         * full size, inside the box, on top of the placeholder it had just
+         * drawn: two lines of text one on the other, on every screen, form,
+         * contact and dynamic-list page that renders this picker. Both halves
+         * have to be said together; `displayEmpty` alone IS the overlap.
+         *
+         * Nothing sets `notched` here on purpose: `TextField` derives it from
+         * this `shrink` for the outlined variant, so the outline's gap and the
+         * label can never disagree.
+         */
+        inputLabel: { shrink: true },
         select: {
           multiple: true,
           displayEmpty: true,

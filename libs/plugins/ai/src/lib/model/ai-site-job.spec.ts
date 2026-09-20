@@ -88,10 +88,13 @@ describe('a scaffold’s inputs', () => {
       }),
     ).toEqual({
       businessType: 'dog groomer',
+      audience: '',
+      starter: '',
       pages: 6,
       businessName: 'Wag & Co',
       city: 'Austin',
       brand: 'teal',
+      submissions: null,
       welcomeEmail: true,
       batchId: 'b-1',
     })
@@ -100,13 +103,34 @@ describe('a scaffold’s inputs', () => {
   it('defaults the variables, the welcome email and the batch', () => {
     expect(parseAiSiteJobInputs({ businessType: 'bakery', pages: 4 })).toEqual({
       businessType: 'bakery',
+      audience: '',
+      starter: '',
       pages: 4,
       businessName: '',
       city: '',
       brand: '',
+      submissions: null,
       welcomeEmail: true,
       batchId: null,
     })
+  })
+
+  it('reads the audience and the example the guided start asks for (AGL-2918)', () => {
+    expect(
+      parseAiSiteJobInputs({
+        businessType: 'dog groomer',
+        audience: ' local dog owners ',
+        starter: 'business',
+        pages: 5,
+      }),
+    ).toMatchObject({ audience: 'local dog owners', starter: 'business' })
+    expect(
+      parseAiSiteJobInputs({
+        businessType: 'dog groomer',
+        pages: 5,
+        audience: 'x'.repeat(200),
+      }),
+    ).toMatch(/audience must be text/)
   })
 
   it('takes a welcome email off only when it is explicitly false', () => {

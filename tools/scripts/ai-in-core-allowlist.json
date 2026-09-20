@@ -1,4 +1,0 @@
-{
-  "note": "Files outside libs/plugins/ai/src/lib/providers that still carry a vendor AI literal while the last of the AI code moves into the plugin (AGL-2939). Read by check-ai-in-core.mjs, which is red for a literal in a file missing here AND for a row whose file no longer carries one. This list may shrink and must never grow: a new vendor literal is refused, not recorded.",
-  "files": []
-}

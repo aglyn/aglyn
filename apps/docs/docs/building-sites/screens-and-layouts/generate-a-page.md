@@ -1,10 +1,10 @@
 ---
 sidebar_position: 5
-title: Generate a page with Aglyn AI
-description: Describe a page and an AI build job plans it, then builds it section by section as an unpublished draft from your site's theme, layout, components and forms.
+title: Generate a page from a prompt
+description: "An AI landing page generator built into the canvas: describe a page and Aglyn AI plans it, then builds it section by section as an unpublished draft from your own theme, layout, components and forms."
 ---
 
-# Generate a page with Aglyn AI
+# Generate a page from a prompt
 
 Describe the page you want, and an AI build job builds it for the site you have open: a new
 screen in your layout, made from your theme and the components and forms your site already

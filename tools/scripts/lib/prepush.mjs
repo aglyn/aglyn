@@ -97,14 +97,16 @@ export const CHECKS = Object.freeze([
     when: (path) => /^(?:apps|libs|cloud)\//.test(path) && JS.test(path) && !SPEC.test(path),
   },
   {
-    // A vendor AI literal outside the AI plugin's providers, or an app
-    // importing the plugin statically (AGL-2939). Whole-corpus, because
-    // the allowlist it reads must be checked for staleness against every
-    // file, not only the pushed ones.
-    name: 'check:ai-in-core',
-    script: 'tools/scripts/check-ai-in-core.mjs',
+    // A plugin's domain outside its plugin: a domain-named file, a vendor
+    // literal, a plugin id or a static plugin import (AGL-3080). Whole-corpus,
+    // because the allowlist it reads must be checked for staleness against
+    // every file, not only the pushed ones.
+    name: 'check:plugin-domain-in-core',
+    script: 'tools/scripts/check-plugin-domain-in-core.mjs',
     scoped: false,
-    when: (path) => /^(?:apps|libs)\//.test(path) && JS.test(path) && !SPEC.test(path),
+    when: (path) =>
+      (/^(?:apps|libs|cloud|tools)\//.test(path) && JS.test(path) && !SPEC.test(path)) ||
+      /^plugins\.config\.json$|^tools\/scripts\/plugin-domain-in-core-allowlist\.json$/.test(path),
   },
   {
     name: 'check:test-wiring',

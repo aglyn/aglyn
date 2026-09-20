@@ -31,7 +31,7 @@ just be a second copy to keep in step.
 | Extra sites | Publish more sites than your plan includes | Per site, per month — cheaper on higher plans |
 | POS registers | One extra point-of-sale register, assigned to one site | Flat per register, per month — the same on every plan |
 | Event Calendar | The event manager + calendar elements, workspace-wide | Flat per month — the same on every plan |
-| Aglyn AI | Generative building — pages, emails, campaigns, products and more — plus a monthly band of AI credits added to your plan's, workspace-wide | Flat per month, priced by plan — higher on higher plans, and so is the band it adds |
+| Aglyn AI | Generative building (**rolling out**) — pages, emails, campaigns, products and more — plus a monthly band of AI credits added to your plan's, workspace-wide | Flat per month, priced by plan — higher on higher plans, and so is the band it adds |
 
 - **Prices are per unit per month.** On annual billing, add-ons bill yearly alongside
   your plan (12× the monthly price) — a subscription has one billing interval.
@@ -108,6 +108,10 @@ add-ons.
 
 ## Aglyn AI {#aglyn-ai}
 
+**Generative building is rolling out.** The add-on is described here in full, but the
+doors that build are not open in every workspace yet. Aglyn Assist — the assistant that
+answers questions — is available today.
+
 **Aglyn AI** is the generative add-on: with it on, the assistant builds for you —
 pages, components, emails, campaigns, products and more — rather than only answering
 questions about them. It is bought once for the workspace, on any paid plan, and
@@ -140,6 +144,38 @@ under [Aglyn AI](../../ai/overview.md).
 - **Removing it** is immediate and prorated, like every add-on. The band shrinks back to
   your plan's own credits and generative building turns off; what the assistant already
   built stays exactly as it is.
+
+### Common questions {#aglyn-ai-questions}
+
+**Does buying it let everyone generate?** No. Generating is a permission as well as a
+plan feature. A workspace member also needs **Generate with AI** on their role, and a
+site collaborator needs the **Generate** box on that site's Users card; without it the
+request is refused with a message naming the key. See
+[the AI permissions](../teams-and-roles/custom-roles.md#ai-permissions).
+
+**Can one person spend the whole band?** Only if you let them. **AI allotments** under
+**Billing → Usage** give a member, a site collaborator or a whole site its own monthly
+share of the pool — a **hard** allotment stops at the line, a **soft** one keeps working
+and notifies. An agency can give every client site the same share, so one site running
+out never touches another. See [AI allotments](overview.md#ai-allotments).
+
+**Can I keep it off for one site?** Yes, but it is a site setting rather than a billing
+one. A site admin switches AI off for that site under **Admin → Plugins → AI**, which
+removes the assistant and every **Describe it** door from it while the rest of the
+workspace carries on. It does not pause the add-on or its charge — see
+[Switch AI off for one site](../../ai/overview.md#switch-ai-off-for-one-site).
+
+**Who can see what it cost?** Anyone with the **View billing** permission. Beneath the
+usage meters, a table gives each member's share of the month's credits, their requests,
+and how often the assistant refused them. It names who drew from the pool, never a
+dollar figure per person — the share is of the workspace's own credits. See
+[who is generating what](overview.md#who-is-generating-what).
+
+**What happens when the band runs out?** Whatever your plan already does when its own
+credits run out, because the add-on widens one band rather than adding a second. On a
+plan that sells credits past it the assistant keeps going and the extra is metered,
+unless you turn on the stop switch or set a monthly ceiling. See
+[AI credits and overage](overview.md#assist-overage).
 
 ## How changes bill
 

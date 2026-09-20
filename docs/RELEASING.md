@@ -107,11 +107,16 @@ npm install --package-lock-only --ignore-scripts
 
 Then commit with explicit paths — never `git add -A`, which sweeps up other
 agents' work. **Commit the lockfile alongside `package.json`**: a bump whose
-lockfile was not regenerated reds the promotion gate.
+lockfile was not regenerated reds the promotion gate. **Commit every lib
+manifest too**: `--write` rewrites the version in all fifty `libs/**/package.json`
+(AGL-2941), and `test:lib-boundaries` refuses a promotion whose libs disagree
+with the root. A cut that commits only the three root files leaves the libs on
+the previous version and reds its own PR on the first lib the guard reads.
 
 ```bash
 git add CHANGELOG.md    # first release only; --only cannot stage a new file
 git commit --only package.json package-lock.json CHANGELOG.md \
+  $(git ls-files 'libs/**/package.json') \
   -m 'chore(release): v1.0.0-beta.1 (AGL-2089)'
 git push origin main
 ```
@@ -132,6 +137,7 @@ git worktree add --detach /private/tmp/aglyn-release origin/main
 git -C /private/tmp/aglyn-release switch -c release/v1.0.0-beta.71
 npm --prefix /private/tmp/aglyn-release run release:prepare -- --write
 git -C /private/tmp/aglyn-release commit --only package.json package-lock.json CHANGELOG.md \
+  $(git -C /private/tmp/aglyn-release ls-files 'libs/**/package.json') \
   -m 'chore(release): v1.0.0-beta.71 (AGL-2089)'
 git -C /private/tmp/aglyn-release push -u origin release/v1.0.0-beta.71
 ```

@@ -1730,6 +1730,42 @@ describe('validateAiDoctrineTree — the palette first, then every rule', () => 
     expect(report.load?.pageBytes).toBe(ESTIMATED_PAGE_TRANSFER_BYTES)
   })
 
+  // A NODE MAP THAT DOES NOT AGREE WITH ITSELF (AGL-3143). Both halves used
+  // to reach the model as something it could not act on: an element nobody
+  // lists was dropped on the way in and its container reported empty, and a
+  // name nobody wrote came back as "the answer could not be used", with no
+  // rule and no node.
+  it('refuses an element that was written and never placed, naming it and everything under it', () => {
+    const stranded = golden()
+    const strandedId = Object.keys(stranded.nodes).find((id) => stranded.nodes[id].componentId === 'image') as string
+    for (const node of Object.values(stranded.nodes)) {
+      if (node.nodes) node.nodes = node.nodes.filter((child: string) => child !== strandedId)
+    }
+    const report = validateAiDoctrineTree(stranded, 'page')
+    expect(report.ok).toBe(false)
+    expect(report.violations).toEqual([
+      expect.objectContaining({ rule: 16, code: 'orphan-node', nodeIds: [strandedId] }),
+    ])
+    // Nothing downstream ran: the tree it would have read is the tree with the element silently gone.
+    expect(report.tree).toBeNull()
+  })
+
+  it('refuses a child that was named and never written, naming the element that lists it', () => {
+    const dangling = golden()
+    const parentId = Object.keys(dangling.nodes).find((id) => (dangling.nodes[id].nodes ?? []).length > 1) as string
+    dangling.nodes[parentId].nodes = [...(dangling.nodes[parentId].nodes as string[]), 'card2', 'card3']
+    const report = validateAiDoctrineTree(dangling, 'page')
+    expect(report.ok).toBe(false)
+    expect(report.violations).toEqual([
+      expect.objectContaining({
+        rule: null,
+        code: 'missing-child',
+        nodeIds: [parentId],
+        detail: 'Listed under "nodes" and missing from the answer: "card2", "card3".',
+      }),
+    ])
+  })
+
   it('reports each broken rule on a tree the palette admitted', () => {
     const broken = golden()
     const heading = Object.values(broken.nodes).find((node) => node.componentId === 'muiTypography') as unknown as { sx?: Record<string, unknown> }

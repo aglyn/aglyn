@@ -51,6 +51,11 @@ import type {
   AiJobPlan,
 } from '../model/ai-jobs.types'
 import { AI_SITE_MAX_SECTIONS, AI_SITE_PAGES } from '../model/ai-site-job'
+import {
+  AI_SITE_SEO_OUTPUT_ID,
+  aiSiteSeoProposalForInputs,
+  aiSiteSeoProposalOf,
+} from '../model/ai-site-start-seo'
 import { aiJobAdmissionRefusal } from './ai-job-admission'
 import { AI_JOB_ZERO_USAGE } from './ai-job-generation'
 import type {
@@ -104,6 +109,17 @@ function output(
   label = id,
 ): AiJobOutput {
   return { resource, id, hostId: 'host-1', label }
+}
+
+/** The site's own listing as the scaffold reports it, from `siteJob`'s inputs. */
+const SITE_LISTING: AiJobOutput = {
+  resource: 'seo',
+  id: AI_SITE_SEO_OUTPUT_ID,
+  hostId: 'host-1',
+  label: 'The site’s search title and description',
+  proposal: aiSiteSeoProposalForInputs({
+    businessType: 'dog groomer',
+  }) as unknown as Record<string, unknown>,
 }
 
 function planScreen(overrides: Record<string, unknown> = {}) {
@@ -407,6 +423,25 @@ describe('the job each unit is built under', () => {
     )
   })
 
+  it('carries who the site is for into every unit’s brief (AGL-2918)', () => {
+    // A guided start writes the audience into its brief; an agency batch's
+    // brief is a member's own sentence and may never mention it, so the
+    // scalar is said on the site line every unit reads.
+    const job = siteJob({
+      plan,
+      brief: 'A site for a dog groomer',
+      inputs: { businessType: 'dog groomer', audience: 'local dog owners', pages: 4 },
+    })
+    for (const unit of units) {
+      expect([unit.kind, aiSiteUnitJob(job, unit, built).brief]).toEqual([
+        unit.kind,
+        expect.stringContaining('for: local dog owners'),
+      ])
+    }
+    const said = siteJob({ plan, inputs: { businessType: 'dog groomer', pages: 4 } })
+    expect(aiSiteUnitJob(said, units[0], built).brief).not.toContain('for:')
+  })
+
   it('shows a delegate none of the scaffold’s other steps or outputs', () => {
     const job = siteJob({
       plan,
@@ -436,7 +471,9 @@ describe('one unit a pass', () => {
     })
     const outcome = await step(context(siteJob()))
     expect(pages.map((job) => job.$id)).toEqual(['drftPage00'])
-    expect(outcome.outputs).toEqual([output('screen', 'screen-0')])
+    // The site's own listing rides out beside the first unit's output; it is
+    // derived, not generated, so it costs the pass nothing (AGL-2918).
+    expect(outcome.outputs).toEqual([SITE_LISTING, output('screen', 'screen-0')])
     expect(outcome.continue).toBe(true)
   })
 
@@ -477,7 +514,7 @@ describe('one unit a pass', () => {
     const outcome = await step(context(siteJob()))
     expect(pages.map((job) => job.$id)).toEqual(['drftPage00'])
     expect(outcome.continue).toBe(true)
-    expect(outcome.outputs).toEqual([])
+    expect(outcome.outputs).toEqual([SITE_LISTING])
   })
 
   it('carries what the unit spent, and spends nothing of its own', async () => {
@@ -573,6 +610,134 @@ describe('one unit a pass', () => {
     expect(emails.map((each) => each.$id)).toEqual(['drftWelcom'])
     expect(emails[0].brief).toContain('welcome email')
     expect(outcome.continue).toBeUndefined()
+  })
+})
+
+/*
+ * The welcome email's copy (AGL-2918). It was one sentence and a yes/no
+ * toggle: a welcome email for a business in general, to nobody in
+ * particular, about nothing that had happened.
+ *
+ * ⛔ A DRAFT throughout. The email step writes an unpublished email design;
+ * nothing here sends, schedules or enrolls anybody, and none of these tests
+ * would pass if it did — the fake runner is the only thing that runs.
+ */
+describe('what the welcome email is told', () => {
+  const emailUnit = () => aiSiteJobUnits(confirmedPlan(), { welcomeEmail: true }).at(-1)
+
+  const emailBrief = (inputs: Record<string, unknown>) => {
+    const unit = emailUnit()
+    if (!unit || unit.kind !== 'email') throw new Error('the last unit is not the email')
+    return aiSiteUnitJob(
+      siteJob({ inputs: { businessType: 'dog groomer', pages: AI_SITE_PAGES.min, ...inputs } }),
+      unit,
+      new Map(),
+    ).brief
+  }
+
+  it('still says what it always said', () => {
+    expect(emailBrief({})).toContain(
+      'Write the welcome email this site sends someone who gets in touch.',
+    )
+  })
+
+  it('writes it to the people the site is for', () => {
+    expect(emailBrief({ audience: 'local dog owners' })).toContain(
+      'Write it to local dog owners.',
+    )
+    expect(emailBrief({})).not.toContain('Write it to')
+  })
+
+  it('says what became of the message, in the person’s own routing answer', () => {
+    // The email and the form it acknowledges cannot say different things:
+    // both read the one answer.
+    expect(emailBrief({ submissions: 'lead' })).toContain('somebody will be in touch about it')
+    expect(emailBrief({ submissions: 'inbox' })).toContain('a reply is coming')
+  })
+
+  it('says nothing about what became of it where nobody was asked', () => {
+    const brief = emailBrief({})
+    expect(brief).not.toContain('in touch about it')
+    expect(brief).not.toContain('a reply is coming')
+  })
+})
+
+/*
+ * The site's own search listing (AGL-2918). The scaffold's page step writes
+ * one listing per page; the SITE's title and description are the fallback
+ * every page with none of its own publishes, and nothing was filling them.
+ * They are arithmetic on the answers rather than a model's writing, so they
+ * cost no pass and no credit, and they are ready before anything is built.
+ */
+describe('the site’s own listing, from the answers', () => {
+  it('reports it once, beside the first unit, and never again', async () => {
+    const step = stepWith({
+      page: fakeRunner([], (job) => ({ outputs: [output('screen', job.$id)] })),
+    })
+    const first = await step(context(siteJob()))
+    expect(first.outputs.filter((entry) => entry.resource === 'seo')).toEqual([SITE_LISTING])
+    // A later pass has the listing among the job's outputs already, and adds
+    // no second one — a person staging it twice would stage it twice.
+    const later = await step(
+      context(siteJob({ outputs: [SITE_LISTING, output('screen', 'drftPage00')] })),
+    )
+    expect(later.outputs.filter((entry) => entry.resource === 'seo')).toEqual([])
+    expect(later.outputs).toEqual([output('screen', 'drftPage01')])
+  })
+
+  it('says what the person said the site is, and who it is for', async () => {
+    const step = stepWith({
+      page: fakeRunner([], () => ({ outputs: [output('screen', 's')] })),
+    })
+    const outcome = await step(
+      context(
+        siteJob({
+          inputs: {
+            businessType: 'a neighborhood dog groomer',
+            audience: 'local dog owners',
+            pages: AI_SITE_PAGES.min,
+            welcomeEmail: false,
+          },
+        }),
+      ),
+    )
+    expect(aiSiteSeoProposalOf(outcome.outputs)?.values).toEqual({
+      'seo.title': 'Neighborhood dog groomer',
+      'seo.description': 'Neighborhood dog groomer, for local dog owners.',
+    })
+  })
+
+  it('spends nothing to report it', async () => {
+    const step = stepWith({ page: fakeRunner([], () => ({ outputs: [output('screen', 's')] })) })
+    const outcome = await step(context(siteJob()))
+    // The pass's whole spend is the unit's. A listing that cost a token would
+    // show up here, because the fake unit reports none.
+    expect({ usage: outcome.usage, estCostUsd: outcome.estCostUsd }).toEqual({
+      usage: AI_JOB_ZERO_USAGE,
+      estCostUsd: 0,
+    })
+  })
+
+  it('does not move where the scaffold thinks it is', async () => {
+    // `aiSitePendingUnits` counts outputs by resource. An `seo` output is no
+    // unit's resource, so the scaffold resumes at the same unit with it among
+    // the outputs as it would without — the assertion the whole design rests
+    // on, and the one a new unit resource would quietly break.
+    const units = aiSiteJobUnits(confirmedPlan(), { welcomeEmail: true })
+    const built = [output('screen', 'screen-0')]
+    expect(aiSitePendingUnits(units, [SITE_LISTING, ...built])).toEqual(
+      aiSitePendingUnits(units, built),
+    )
+  })
+
+  it('proposes nothing for a scaffold whose inputs describe no site', async () => {
+    // The door refuses such a job, so this is the belt to that braces: a
+    // proposal with an empty title would be staged into a REQUIRED field.
+    const step = stepWith({ page: fakeRunner([], () => ({ outputs: [output('screen', 's')] })) })
+    const outcome = await step(
+      context(siteJob({ inputs: { businessType: '  ', pages: AI_SITE_PAGES.min } })),
+    )
+    expect(outcome.outputs.filter((entry) => entry.resource === 'seo')).toEqual([])
   })
 })
 

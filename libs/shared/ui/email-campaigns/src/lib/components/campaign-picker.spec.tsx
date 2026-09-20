@@ -86,6 +86,29 @@ describe('drawing what is assigned', () => {
     expect(screen.getByText('No campaign')).toBeTruthy()
   })
 
+  it('and shrinks its label out of the way of that placeholder', () => {
+    /*
+     * The other half of the line above. MUI shrinks a label when the input
+     * reports itself filled and an empty multiple select reports the opposite,
+     * so "No campaign" printed UNDER a full-size "Campaigns" — two lines of
+     * text on one line, on every screen, form, contact and dynamic-list page
+     * that renders this picker.
+     *
+     * `MuiInputLabel-shrink` is the state class MUI applies, so it is the one
+     * thing that distinguishes the two paints in jsdom, which lays out nothing.
+     */
+    draw(
+      <CampaignPicker
+        options={OPTIONS}
+        value={[]}
+        label="Campaigns"
+        onChange={() => undefined}
+      />,
+    )
+    const label = document.querySelector('.MuiInputLabel-root') as HTMLElement
+    expect(label.className).toContain('MuiInputLabel-shrink')
+  })
+
   it('explains an empty site instead of offering an empty menu', () => {
     // An empty select and a site with no campaigns look identical, and only
     // one of them is a control that is working.

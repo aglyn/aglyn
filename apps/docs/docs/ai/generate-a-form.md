@@ -1,10 +1,10 @@
 ---
 sidebar_position: 4
-title: Generate a form from a brief
-description: Describe the form you need and an Aglyn AI build job makes it as a draft on the Forms page, with its fields, required answers, marketing consent and routing agreeing with each other.
+title: Generate a form from a description
+description: "An AI form generator inside Aglyn: describe the form you need and a build job makes it as a draft on the Forms page, with its fields, required answers, marketing consent and routing already agreed."
 ---
 
-# Generate a form from a brief
+# Generate a form from a description
 
 An AI build job can make a form from a brief, such as *"a quote request form for a roofing
 company"*. The job proposes a plan first, and builds once you confirm it: the fields a

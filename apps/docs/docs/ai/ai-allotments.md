@@ -1,5 +1,5 @@
 ---
-sidebar_position: 11
+sidebar_position: 12
 title: AI allotments, usage and model choice
 description: Give a member, a site collaborator or a whole site a monthly share of the workspace's AI credits, see your own usage while you work, and choose which model answers.
 ---

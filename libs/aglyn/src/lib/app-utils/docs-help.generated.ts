@@ -49,8 +49,13 @@ export const PLUGIN_DOCS = {
   },
   aiCrm: {
     path: '/ai/crm-by-ai',
-    title: 'CRM by AI',
-    excerpt: 'A short summary and a suggested next step on a contact, company, deal or lead, a one-to-one email drafted into the composer, and an import\'s columns matched to fields. Aglyn AI suggests; you save, send and import.',
+    title: 'The AI CRM built into Aglyn',
+    excerpt: 'An AI CRM for small business: a short summary and a suggested next step on a contact, company, deal or lead, a one-to-one email drafted into the composer, and an import\'s columns matched to fields.',
+  },
+  aiExperiments: {
+    path: '/ai/ab-tests-with-ai',
+    title: 'A/B tests by AI: write variants, read the result',
+    excerpt: 'Have Aglyn AI write two to four variants for a screen, section or email experiment, and put a finished test into plain language — with the verdict decided from the counts before the model is asked anything.',
   },
   aiMonitoring: {
     path: '/staff-console/ai-monitoring',
@@ -59,13 +64,13 @@ export const PLUGIN_DOCS = {
   },
   aiProducts: {
     path: '/ai/products-with-ai',
-    title: 'Products with AI',
-    excerpt: 'Have Aglyn AI write product copy, write copy for many products or an import, propose a first catalog, and propose categories and discounts, as proposals you review before anything is saved.',
+    title: 'Product copy and catalogs with AI',
+    excerpt: 'An AI product description generator for your catalog: write copy for one product or a whole import, propose a first catalog, and propose categories and discounts — all as proposals you review.',
   },
   aiSeo: {
     path: '/building-sites/seo/seo-by-ai',
-    title: 'SEO by AI',
-    excerpt: 'Have AI write a page\'s or a product\'s search listing, audit every published page with a proposed fix for each finding, and draft your structured data and /llms.txt guidance — as drafts you review and save.',
+    title: 'AI SEO for your website',
+    excerpt: 'AI SEO for websites, on the pages you already have: have AI write a page or product\'s search listing, audit every published page with a proposed fix for each finding, and draft your structured data and /llms.txt.',
   },
   aiThemes: {
     path: '/ai/theme-assist',
@@ -261,6 +266,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   aglynAssist: ['#what-it-can-do', '#aglyn-ai', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#edits-in-the-besigner', '#where-an-answer-came-from', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
   aiAutomations: ['#draft', '#explain', '#why-a-run-failed', '#what-is-sent', '#who-can-use-it', '#related'],
   aiCrm: ['#summarize-a-record', '#summaries-are-reused-until-the-record-changes', '#draft-an-email', '#match-columns', '#what-is-sent', '#who-can-use-it', '#related'],
+  aiExperiments: ['#it-proposes-you-write', '#write-variants', '#putting-them-in', '#what-it-will-not-write', '#read-a-result', '#the-verdict', '#the-words', '#undecided', '#what-is-sent', '#who-can-use-it', '#related'],
   aiMonitoring: ['#the-ai-card', '#where-else', '#one-account', '#the-spend-leaderboard', '#alerts', '#related'],
   aiProducts: ['#write-a-products-copy', '#write-copy-for-many-products', '#when-you-import-products', '#propose-a-first-catalog', '#propose-categories-and-discounts', '#what-the-copy-never-says', '#what-is-sent-to-the-ai-provider', '#who-can-use-it', '#related'],
   aiSeo: ['#write-a-pages-listing', '#write-a-products-listing', '#audit-the-whole-site', '#target-keywords', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],

@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { backfillMemberIdentity } from './organizations'
+import {
+  backfillMemberIdentity,
+  backfillMemberIdentityEverywhere,
+} from './organizations'
 
 /**
  * AGL-1131. This runs on the SSO route's already-a-member branch — the branch
@@ -130,5 +133,102 @@ describe('backfillMemberIdentity', () => {
         db,
       ),
     ).toEqual(['photoURL'])
+  })
+})
+
+/**
+ * The fan-out's own double: `users/{uid}/orgs` as the membership index, and a
+ * roster row per org behind it.
+ *
+ * Separate from `fakeDb` because the shape it has to get right is the one that
+ * function's double cannot express — SEVERAL orgs, each with its own row, and
+ * a membership listed with no row behind it.
+ */
+function fakeEstate(rows: Record<string, Record<string, unknown> | undefined>) {
+  const writes: Array<{ orgId: string; data: Record<string, unknown> }> = []
+  const memberships = Object.keys(rows)
+  return {
+    writes,
+    rows,
+    collection: (name: string) => ({
+      doc: (id: string) => ({
+        collection: () => ({
+          // `users/{uid}/orgs`
+          get: async () => ({ docs: memberships.map((orgId) => ({ id: orgId })) }),
+          // `orgs/{orgId}/members/{uid}`
+          doc: () => ({
+            get: async () => ({
+              exists: rows[id] !== undefined,
+              get: (field: string) => rows[id]?.[field],
+            }),
+            set: async (data: Record<string, unknown>) => {
+              writes.push({ orgId: id, data })
+              rows[id] = { ...(rows[id] ?? {}), ...data }
+            },
+          }),
+        }),
+      }),
+      name,
+    }),
+  } as any
+}
+
+describe('backfillMemberIdentityEverywhere', () => {
+  it('writes the photo onto every workspace the person is on', async () => {
+    // The measured defect: a Google account whose auth record and `users/{uid}`
+    // both carried the picture, and whose roster rows — the only avatar a
+    // colleague can read — carried none, in every org it owned.
+    const db = fakeEstate({
+      hz_KgetqSq: { role: 'owner', email: 'z@example.com' },
+      othr_org11: { role: 'admin', email: 'z@example.com' },
+    })
+    const written = await backfillMemberIdentityEverywhere(
+      'QQ7fixtureUid0000000000000001',
+      { displayName: 'Zach Gover', photoURL: 'https://cdn.example/z.png' },
+      db,
+    )
+    expect(written.sort()).toEqual(['hz_KgetqSq', 'othr_org11'])
+    expect(db.rows['hz_KgetqSq']).toMatchObject({
+      role: 'owner',
+      photoURL: 'https://cdn.example/z.png',
+    })
+  })
+
+  it('leaves a photo the person chose alone', async () => {
+    // Why it fans out the ABSENT-ONLY function and not `propagateMemberPhoto`:
+    // this runs on every sign-in, so an overwriting version would replace a
+    // chosen avatar with the provider thumbnail forever.
+    const db = fakeEstate({
+      o1: { role: 'owner', photoURL: 'https://cdn.example/chosen.png' },
+    })
+    expect(
+      await backfillMemberIdentityEverywhere(
+        'u1',
+        { photoURL: 'https://lh3.googleusercontent.com/idp' },
+        db,
+      ),
+    ).toEqual([])
+    expect(db.writes).toEqual([])
+  })
+
+  it('reads nothing when the token carried no identity', async () => {
+    // Every sign-in pays this, so the empty case must not cost a membership
+    // read to discover it has nothing to write.
+    const db = fakeEstate({ o1: { role: 'owner' } })
+    expect(
+      await backfillMemberIdentityEverywhere('u1', { photoURL: '  ' }, db),
+    ).toEqual([])
+    expect(db.writes).toEqual([])
+  })
+
+  it('skips a membership with no roster row behind it', async () => {
+    // Minting one here would be a membership document with no role — the same
+    // refusal `backfillMemberIdentity` makes, and the reason this fans that
+    // function out rather than writing rows itself.
+    const db = fakeEstate({ o1: undefined, o2: { role: 'viewer' } })
+    expect(
+      await backfillMemberIdentityEverywhere('u1', { displayName: 'Ada' }, db),
+    ).toEqual(['o2'])
+    expect(db.rows['o1']).toBeUndefined()
   })
 })

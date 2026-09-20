@@ -136,9 +136,10 @@ const REPO_WIDE = new Set([
   'generate:plugin-manifests:check',
   'sync:next-tsconfigs:check',
   'check:ai-palette',
-  // Sweeps apps/ and libs/ for a vendor AI literal outside the AI plugin's
-  // providers and for an app importing the plugin statically (AGL-2939).
-  'check:ai-in-core',
+  // Sweeps every tree that is not a plugin for a plugin's domain: a
+  // domain-named file, a vendor literal, a plugin id, a static plugin import
+  // (AGL-3080). A new one is refused; the allowlist only shrinks.
+  'check:plugin-domain-in-core',
   'check:manifest-versions',
   // Walk every app's routes and every lib they reach; a cost only a bundler
   // or a graph walk can see, which a green typecheck and green tests miss.

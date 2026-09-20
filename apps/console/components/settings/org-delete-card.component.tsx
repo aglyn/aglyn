@@ -196,7 +196,7 @@ export function OrgDeleteCard() {
       contentGutterY
     >
       {org?.erasureRequestedAt ? (
-        <Stack spacing={2} sx={{ maxWidth: 480 }}>
+        <Stack spacing={2}>
           <Alert severity="warning">
             {'This organization is scheduled for deletion. After a ' +
               '7-day hold, all of its sites, files, and data are ' +
@@ -212,7 +212,7 @@ export function OrgDeleteCard() {
           </Button>
         </Stack>
       ) : (
-        <Stack spacing={2} sx={{ maxWidth: 480 }}>
+        <Stack spacing={2}>
           <Typography variant="body2" color="text.secondary">
             {'Permanently delete this organization and everything in ' +
               'it — sites, files, datasets, and members. Nothing is ' +

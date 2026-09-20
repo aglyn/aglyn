@@ -2034,6 +2034,65 @@ export async function backfillMemberIdentity(
 }
 
 /**
+ * The same absent-only backfill, across every roster row that names `uid`.
+ *
+ * ## The hole this closes
+ *
+ * `orgs/{orgId}/members/{uid}.photoURL` is the ONLY avatar a member surface
+ * can read — a colleague's auth record is unreadable from another member's
+ * session, and an SSO member's lives in a pool the project cannot see at all
+ * (AGL-1122). Three writers filled it, and between them they missed the
+ * commonest account there is:
+ *
+ * - `upsertOrgMember` — someone ADDED you, so the adder's lookup had a record
+ *   to copy from.
+ * - `backfillMemberIdentity` via the SSO sign-in (AGL-1131) — enterprise only.
+ * - `propagateMemberPhoto` via Manage Account → Profile image (AGL-1976) — a
+ *   photo the person typed or browsed to.
+ *
+ * Nobody adds the person who CREATES a workspace, `createOrganization` writes
+ * their row with a name and an email and no photo, and a Google sign-in never
+ * visits the other two. So the owner of a workspace saw their own face in the
+ * app bar, which reads the live auth record, and a grey initial in their own
+ * Team list — measured on both rows of `test-org`, each with `photoURL` absent
+ * while the auth record and `users/{uid}.photoUrl` carried the picture.
+ *
+ * ## Absent-only, like the function it fans out
+ *
+ * It runs on EVERY sign-in, so the reasoning in `backfillMemberIdentity`
+ * applies unchanged and is the reason this is a fan-out of that function
+ * rather than a second writer: an overwriting version would replace a photo
+ * the person chose in Manage Account with their provider thumbnail on their
+ * next sign-in, silently, forever. `propagateMemberPhoto` is the overwriting
+ * direction and stays the only one, because its input is a choice the person
+ * made rather than an assertion a directory made about them.
+ *
+ * Memberships come from `users/{uid}/orgs`, the reverse index — never a
+ * collection-group query over `members`, which would read every workspace's
+ * roster in the estate to find one person's rows.
+ *
+ * @returns the org ids whose row was written, for logging and tests.
+ */
+export async function backfillMemberIdentityEverywhere(
+  uid: string,
+  identity: { displayName?: string | null; photoURL?: string | null },
+  db = firestore(),
+): Promise<string[]> {
+  if (!uid) return []
+  // Nothing to write beats a fan-out that reads every membership to discover
+  // it has nothing to write — this runs on every sign-in.
+  if (!identity.displayName?.trim() && !identity.photoURL?.trim()) return []
+
+  const memberships = await db.collection('users').doc(uid).collection('orgs').get()
+  const written: string[] = []
+  for (const row of memberships.docs) {
+    const fields = await backfillMemberIdentity(row.id, uid, identity, db)
+    if (fields.length) written.push(row.id)
+  }
+  return written
+}
+
+/**
  * Transfers org ownership (AGL-232): the target must already be on the
  * roster; the previous owner steps down to admin. One transaction across
  * the org doc, both member docs and both reverse-index entries, then the

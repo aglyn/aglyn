@@ -113,11 +113,19 @@ export function anthropicFailureIsRetryable(
 /** Anthropic's `usage` object, in the meter's shape. Missing fields read 0. */
 export function anthropicUsageFrom(usage: unknown): AiUsage {
   const record = (usage ?? {}) as Record<string, unknown>
+  // Part of `output_tokens`, and carried only where the response breaks them
+  // down, so an answer that reports none says nothing rather than zero.
+  const details = record['output_tokens_details']
+  const thinking =
+    details && typeof details === 'object'
+      ? (details as Record<string, unknown>)['thinking_tokens']
+      : undefined
   return {
     inputTokens: aiTokenCount(record['input_tokens']),
     outputTokens: aiTokenCount(record['output_tokens']),
     cacheReadTokens: aiTokenCount(record['cache_read_input_tokens']),
     cacheWriteTokens: aiTokenCount(record['cache_creation_input_tokens']),
+    ...(thinking === undefined ? {} : { thinkingTokens: aiTokenCount(thinking) }),
   }
 }
 
@@ -374,6 +382,12 @@ async function* streamEvents(
             usage.inputTokens = delta.inputTokens || usage.inputTokens
             usage.cacheReadTokens = delta.cacheReadTokens || usage.cacheReadTokens
             usage.cacheWriteTokens = delta.cacheWriteTokens || usage.cacheWriteTokens
+            // Kept where the breakdown is reported and left absent where it
+            // is not (AGL-3143), never set to a zero the provider did not
+            // send. A stream needs it for the reason a completion does: it
+            // is the figure that accounts for a spent ceiling first, and it
+            // arrives in the same usage object as the four above.
+            if (delta.thinkingTokens !== undefined) usage.thinkingTokens = delta.thinkingTokens
             const reason = (event['delta'] as { stop_reason?: unknown } | undefined)
               ?.stop_reason
             if (typeof reason === 'string' && reason) stopReason = reason

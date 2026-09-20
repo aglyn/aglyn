@@ -1006,12 +1006,12 @@
         "label": "Extra site, per month",
         "rate": "extraHostMonthlyUsd",
         "values": {
-          "starter": "$10",
-          "pro": "$8",
-          "business": "$8",
-          "scale": "$8",
-          "advanced": "$8",
-          "agency": "$8",
+          "starter": "$20",
+          "pro": "$20",
+          "business": "$20",
+          "scale": "$20",
+          "advanced": "$20",
+          "agency": "$20",
           "enterprise": "Custom"
         }
       },

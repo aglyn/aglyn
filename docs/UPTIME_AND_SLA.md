@@ -874,8 +874,23 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | `beacon-heartbeat tenant` | `aglyn.com/api/health/error-beacon` | HTTP 2xx and `$.status == "ok"` | 5 min |
 | `scheduled-jobs` | `app.aglyn.com/api/health/crons` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | Cloud Functions | `execution_count{status != ok}` | > 2 failures in 5 min | metric |
-| Cloud Scheduler | job attempt logged at `severity >= ERROR` | any | log match |
+| Cloud Scheduler | job attempt logged at `severity >= ERROR`, every job except the two per-minute beats | any | log match |
+| Cloud Scheduler, per-minute beats | `scheduler_beat_attempt_errors` for `pluginJobsBeat` and `consoleAiJobsBeat` | > 2 failed attempts in 10 min, per job | log-based metric |
 | Firestore rules denials | `rules/evaluation_count{result = DENY}` | > 5,000 in a trailing hour | metric |
+
+The two Cloud Scheduler rows were one until 2026-09-20. `pluginJobsBeat` and
+`consoleAiJobsBeat` fire every minute, so a single network-level miss at their
+Cloud Run URL (a 502, a 500, one DNS failure) is followed sixty seconds later
+by a success, and between 2026-09-13 and 2026-09-20 every page the per-entry
+policy sent was exactly that: three isolated misses on `pluginJobsBeat`, none
+on any hourly or daily job. The per-entry policy (`4528373087515223949`) now
+excludes those two job ids, because on every other job one failed attempt is
+the whole day's run; the beats are counted by the log-based metric
+`scheduler_beat_attempt_errors` and policy `5497524193796313076` pages at three
+failed attempts inside ten minutes for one job, which is a beat that has
+actually stopped. The threshold was set by an agent asked to fix the alerts, not
+chosen by the account owner; move it if three minutes of a dead beat is too
+long to wait.
 
 :::caution This table was re-read from the live project on 2026-09-14
 Fifteen checks, every one from three regions, every one green for the 24 hours
