@@ -18,14 +18,19 @@
 import {
   AI_PALETTE_CATALOG_MAX_TOKENS,
   AI_SURFACE_NAMES,
+  auditNodeCapabilities,
   estimateCatalogTokens,
+  nodeCapabilityProps,
+  type AiNodeCapability,
 } from './ai-palette'
 import {
+  AI_NODE_CAPABILITIES,
   AI_PALETTE,
   AI_PALETTE_CATALOG,
   AI_SURFACES,
   AI_SX_TOKENS,
 } from './ai-palette.generated'
+import { NODE_CAPABILITIES } from '@aglyn/aglyn/app-utils/node-capabilities'
 import {
   MARKETPLACE_COMPONENT_ID_ALLOWLIST,
   MARKETPLACE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST,
@@ -117,6 +122,183 @@ describe('AI_PALETTE agrees with the runtime registry (AGL-2905)', () => {
     expect(AI_SX_TOKENS.typographyVariants).toEqual(
       expect.arrayContaining(['h1', 'body1', 'caption']),
     )
+  })
+})
+
+/**
+ * Every field kind the palette carries SOMEWHERE, derived from the generated
+ * entries rather than restated: a capability attribute drawn with one of these
+ * is a prop the generator knows how to declare, so omitting it is a loss and
+ * not a choice.
+ */
+const OFFERED_FIELD_KINDS = new Set(
+  Object.values(AI_PALETTE).flatMap((entry) => Object.values(entry.propFields)),
+)
+
+/**
+ * The regression AGL-3156 records: AGL-3111 made repeat a node capability and
+ * took the four Repeat fields off Stack's schema, the generator reads
+ * component schemas, and so a clean regeneration dropped every repeat prop —
+ * `repeat` mentions in the generated palette fell from 16 to 4, and the four
+ * survivors were one component's prose. `check:ai-palette` stayed green
+ * throughout, because the generated file did match the generator's output for
+ * its inputs; what had changed was the inputs. These read the core
+ * declarations instead and ask whether the palette still accounts for them.
+ */
+describe('AI_NODE_CAPABILITIES carries what core declares (AGL-3156)', () => {
+  it('accounts for every declared capability and every attribute of one', () => {
+    expect(
+      auditNodeCapabilities(
+        NODE_CAPABILITIES,
+        AI_NODE_CAPABILITIES,
+        OFFERED_FIELD_KINDS,
+      ),
+    ).toEqual([])
+  })
+
+  it('offers repeat on every element, not on one of them', () => {
+    // The shape AGL-3111 was right to reach for and AGL-3156 restores: the
+    // capability is declared once, and no component schema names it.
+    const repeat = AI_NODE_CAPABILITIES['repeat']
+    expect(Object.keys(repeat.propsSchema.properties).sort()).toEqual([
+      'repeatFilter',
+      'repeatLimit',
+      'repeatSelf',
+      'repeatSort',
+    ])
+    for (const name of ['repeatLimit', 'repeatFilter', 'repeatSort']) {
+      expect(repeat.propsSchema.properties[name]).toEqual({
+        type: 'string',
+        maxLength: 200,
+      })
+      expect(repeat.propRoles[name]).toBe('text')
+      expect(repeat.propFields[name]).toBe('text-field')
+    }
+    expect(repeat.propsSchema.properties['repeatSelf'].enum).toEqual([
+      'false',
+      'true',
+    ])
+    // The scope reads the same on a leaf whichever way it is set, so it is
+    // offered only where the two readings differ — as the panel offers it.
+    expect(repeat.childrenOnlyProps).toEqual(['repeatSelf'])
+    for (const entry of Object.values(AI_PALETTE)) {
+      expect(Object.keys(entry.propsSchema.properties)).not.toContain(
+        'repeatLimit',
+      )
+    }
+  })
+
+  it('gives a node with children the scope prop, and a leaf the bounds alone', () => {
+    expect(
+      Object.keys(nodeCapabilityProps(AI_NODE_CAPABILITIES, true).properties).sort(),
+    ).toEqual(['repeatFilter', 'repeatLimit', 'repeatSelf', 'repeatSort'])
+    expect(
+      Object.keys(nodeCapabilityProps(AI_NODE_CAPABILITIES, false).properties).sort(),
+    ).toEqual(['repeatFilter', 'repeatLimit', 'repeatSort'])
+    expect(nodeCapabilityProps(AI_NODE_CAPABILITIES, false).textLimits).toEqual({
+      repeatFilter: 200,
+      repeatLimit: 200,
+      repeatSort: 200,
+    })
+  })
+
+  it('keeps the capabilities out of the surface catalogs, which is priced and not an oversight', () => {
+    // A catalog rides in the cached prefix of every pass of every generation
+    // job, and a repeat's bounds are unusable to a generator composing from
+    // nothing: what a node repeats OVER is picked from the datasets the site
+    // holds, which no model writes. Naming them there cost 72 tokens a pass —
+    // two credits on the Free page the wall is proven with, which keeps two.
+    // They are named instead where the element already exists: the assist
+    // editor's canvas context (`assist-edit.ts`).
+    for (const surface of AI_SURFACE_NAMES) {
+      expect(AI_PALETTE_CATALOG[surface]).not.toContain('Node capabilities')
+      expect(AI_PALETTE_CATALOG[surface]).not.toContain('repeatLimit')
+    }
+  })
+})
+
+/**
+ * The audit itself, on made-up data, because a guard that has only ever been
+ * seen passing is a guard nobody has tested. Each case is the regression in
+ * miniature.
+ */
+describe('auditNodeCapabilities reports a capability the palette lost (AGL-3156)', () => {
+  const DECLARED = [
+    {
+      id: 'repeat',
+      label: 'Repeat',
+      attributes: [
+        { name: 'repeatLimit', component: 'text-field' },
+        { name: 'repeatDataset', component: 'dataset-select' },
+      ],
+    },
+  ]
+  const CARRIED: Record<string, AiNodeCapability> = {
+    repeat: {
+      id: 'repeat',
+      displayName: 'Repeat',
+      summary: 'Renders an element once per record.',
+      propsSchema: {
+        type: 'object',
+        properties: { repeatLimit: { type: 'string', maxLength: 200 } },
+        required: [],
+        additionalProperties: false,
+      },
+      propRoles: { repeatLimit: 'text' },
+      propFields: { repeatLimit: 'text-field' },
+      textLimits: { repeatLimit: 200 },
+      childrenOnlyProps: [],
+      omittedProps: ['repeatDataset'],
+    },
+  }
+  const KINDS = new Set(['text-field', 'select', 'switch'])
+
+  it('passes while the palette carries the capability', () => {
+    expect(auditNodeCapabilities(DECLARED, CARRIED, KINDS)).toEqual([])
+  })
+
+  it('fails when the capability belongs to no component and so reaches no bundle', () => {
+    // Exactly AGL-3156: the generator read component schemas, repeat was on
+    // none of them, and the palette came out without it.
+    expect(auditNodeCapabilities(DECLARED, {}, KINDS)).toEqual([
+      'the palette carries no node capability "repeat": a model cannot use it at all',
+    ])
+  })
+
+  it('fails when a declared prop quietly stops being offered', () => {
+    const lost: Record<string, AiNodeCapability> = {
+      repeat: {
+        ...CARRIED['repeat'],
+        propsSchema: {
+          ...CARRIED['repeat'].propsSchema,
+          properties: {},
+        },
+      },
+    }
+    expect(auditNodeCapabilities(DECLARED, lost, KINDS)).toEqual([
+      'node capability "repeat" is carried with no prop a model can write',
+      'node capability "repeat" declares "repeatLimit", which the palette neither offers nor records as omitted',
+    ])
+  })
+
+  it('fails when a prop the palette can express is written off as omitted', () => {
+    const excused: Record<string, AiNodeCapability> = {
+      repeat: {
+        ...CARRIED['repeat'],
+        propsSchema: { ...CARRIED['repeat'].propsSchema, properties: {} },
+        omittedProps: ['repeatLimit', 'repeatDataset'],
+      },
+    }
+    expect(auditNodeCapabilities(DECLARED, excused, KINDS)).toEqual([
+      'node capability "repeat" is carried with no prop a model can write',
+      'node capability "repeat" omits "repeatLimit", whose "text-field" field the palette offers elsewhere',
+    ])
+  })
+
+  it('fails when the palette keeps a capability core has dropped', () => {
+    expect(auditNodeCapabilities([], CARRIED, KINDS)).toEqual([
+      'the palette carries node capability "repeat", which core no longer declares',
+    ])
   })
 })
 
