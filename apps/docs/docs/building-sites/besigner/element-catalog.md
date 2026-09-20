@@ -206,7 +206,7 @@ The **FAQ** preset drops three complete panels at once.
 
 | Element | What it's for |
 | --- | --- |
-| **Screen Link** | A link that targets a screen — or a content collection's listing page — by id, so it survives slug renames. Renders as a button or as a text link. See [Linking to a collection listing](#linking-to-a-collection-listing). |
+| **Screen Link** | A link that targets a screen, a content collection's listing page, one of its entries, or its RSS feed — by id, so it survives slug renames. Renders as a button or as a text link. See [Linking to a listing, an entry, or a feed](#linking-to-a-collection-listing). |
 | **Link Container** | A box that is itself one link, so a whole card is the click target. See [Link Container](#link-container) below. |
 | **App bar** / **Toolbar Content** | The site header frame. The app bar is the band; **Toolbar Content** is the row inside it that holds the brand, the links and the actions, and it may only be dropped into an app bar. |
 | **Nav menu** / **Mega menu** | Dropdown and full-width navigation menus. |
@@ -235,17 +235,30 @@ Links that open elsewhere are marked up so the new page can't reach back into th
 came from. **Link Container** has the same choice as a simple **Open in a new tab**
 switch, which applies to external destinations only.
 
-### Linking to a collection listing
+### Linking to a listing, an entry, or a feed {#linking-to-a-collection-listing}
 
-The **Screen** picker lists your screens first, then one entry for each content collection's
-listing page — the page at `/{collection}` that lists its entries, such as your blog's
-`/blog`. Each reads like **Blog (/blog) — collection listing**, so a listing is never mistaken
-for a screen with the same name.
+The **Screen** picker is a search box. Type and it looks through four kinds of target,
+grouped as you go:
 
-Picking one stores the collection itself, not its address. Rename the collection's slug and
-every link to its listing follows, just as a screen link follows its screen. It makes no
-difference whether the collection has a list template screen: without one, the link opens the
-built-in listing.
+- **Pages** — your screens.
+- **Collection listings** — the page at `/{collection}` that lists a collection's entries,
+  such as your blog's `/blog`. Each reads like **Blog (/blog) — collection listing**, so a
+  listing is never mistaken for a screen with the same name.
+- **RSS feeds** — a collection's feed, reading like **Blog (/blog/rss.xml) — RSS feed**.
+- **Entries** — a single post, reading like **Hello (/blog/hello) — Blog entry · published**.
+  The status is there because a link to a draft goes nowhere until the draft is published.
+
+Pages, listings and feeds are a handful of targets, so they are all there before you type.
+Entries are not: a site can hold thousands, so they are searched rather than listed. Type
+the beginning of an entry's address — "hello" finds `hello-world` — and the picker asks for
+a few matches per collection. Leave the box empty and it offers the entries most recently
+worked on.
+
+Picking any of them stores the target itself, not its address. Rename the collection's slug,
+or the entry's, and every link follows, just as a screen link follows its screen. An entry
+link is assembled from both names at render time, so renaming the collection moves every
+link to every entry inside it. For a listing it makes no difference whether the collection
+has a list template screen: without one, the link opens the built-in listing.
 
 Deleting the collection warns you first: [its delete dialog](../site-templates/build-a-blog.md#delete-a-collection)
 names the published screens, layouts and components that link to its listing, so you can point
@@ -255,6 +268,12 @@ collection listing (…)** — the same treatment an unpublished screen gets. Pi
 again or clear the link. A typed `/blog` in **External URL** gets none of this: it never
 follows a rename, nothing warns you when it stops working, and the delete dialog does not
 count it.
+
+An entry link behaves the same way, and it answers to publishing as well as to deletion: a
+post that is unpublished, deleted, or scheduled for a time that has not arrived has no
+address yet, so the link renders as nothing on the live page rather than as an address the
+site would 404 on. The picker shows **⚠ Unavailable entry (…)**. Publish the post and every
+link to it starts working — you do not need to reopen the pages that link to it.
 
 The same entries appear everywhere the Screen picker does — **Button**, **Image**, **Link
 Container**, **Tabs** links, an **Accordion Summary**'s header link, a form's redirect, and a

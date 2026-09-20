@@ -21,12 +21,15 @@ import { join } from 'node:path'
 import {
   collectMarkdownHeadings,
   isInternalMarkdownHref,
+  isMarkdownLinkReference,
   isSupportedImageSrc,
   isSupportedLinkHref,
   markdownHeadingSlugs,
   markdownInlinesToText,
   parseMarkdownInlines,
   parseMarkdownLite,
+  resolveMarkdownLink,
+  resolveMarkdownSourceLinks,
   serializeMarkdownInlines,
   serializeMarkdownLite,
   slugifyHeading,
@@ -576,6 +579,228 @@ describe('markdown-lite', () => {
   })
 })
 
+/**
+ * Links that NAME their target instead of spelling its address (AGL-3118).
+ *
+ * A post that links another post by `/blog/old-slug` breaks the day the slug
+ * changes. A reference names the entry, listing, feed or screen by id and is
+ * resolved by the renderer, so the parser has to keep it and the serializer
+ * has to give it back exactly as typed.
+ */
+describe('markdown-lite link references (AGL-3118)', () => {
+  const REFERENCES = [
+    'entry:videos/Hpy49iVFX3',
+    'collection:videos',
+    'feed:videos',
+    'screen:yFjgqiG2wm',
+  ]
+
+  it.each(REFERENCES)('keeps %s as the link target', (href) => {
+    expect(parseMarkdownInlines(`[watch](${href})`)).toEqual([
+      { type: 'link', text: 'watch', href },
+    ])
+    expect(isSupportedLinkHref(href)).toBe(true)
+    expect(isMarkdownLinkReference(href)).toBe(true)
+  })
+
+  it('round-trips a reference through the serializer', () => {
+    const source =
+      'See [the film](entry:videos/Hpy49iVFX3), [all videos](collection:videos) ' +
+      'and [the feed](feed:videos).'
+    expect(serializeMarkdownLite(parseMarkdownLite(source))).toBe(source)
+  })
+
+  it('drops a malformed or empty reference to text, as any unsupported target', () => {
+    for (const href of ['entry:videos', 'entry:a/b/c', 'screen:', 'collection:', 'feed:']) {
+      expect(isMarkdownLinkReference(href)).toBe(false)
+      expect(parseMarkdownInlines(`[x](${href})`)).toEqual([
+        { type: 'text', text: 'x' },
+      ])
+    }
+  })
+
+  it('never reads a bare id as a reference, since it could be a relative path', () => {
+    expect(isMarkdownLinkReference('yFjgqiG2wm')).toBe(false)
+    expect(isMarkdownLinkReference('/videos/film')).toBe(false)
+    expect(isMarkdownLinkReference('https://aglyn.com/videos')).toBe(false)
+  })
+
+  it('is not an internal address until a renderer resolves it', () => {
+    // A renderer must resolve the reference first; handing the raw value to
+    // the router would navigate to a path that does not exist.
+    expect(isInternalMarkdownHref('entry:videos/Hpy49iVFX3')).toBe(false)
+  })
+
+  it('refuses a reference as an image source, which must name a file', () => {
+    // Kept, it reached `<img src="entry:…">` in every renderer.
+    for (const src of ['entry:videos/Hpy49iVFX3', 'screen:yFjgqiG2wm']) {
+      expect(isSupportedImageSrc(src)).toBe(false)
+      expect(parseMarkdownLite(`![Cover](${src})`)).toEqual([])
+    }
+  })
+})
+
+/**
+ * What a parsed link RENDERS as (AGL-3118): the one decision every
+ * markdown-lite renderer on a site makes through `resolveMarkdownLink`.
+ */
+describe('resolveMarkdownLink (AGL-3118)', () => {
+  const SCREENS = {
+    home: '/',
+    pricing: 'pricing',
+    'collection:videos': 'videos',
+    'feed:videos': 'videos/rss.xml',
+    'entry:videos/Hpy49iVFX3': 'videos/the-film',
+  }
+
+  it('follows a reference to where its target is served now', () => {
+    expect(
+      resolveMarkdownLink('entry:videos/Hpy49iVFX3', { screens: SCREENS }),
+    ).toEqual({ kind: 'internal', href: '/videos/the-film' })
+    expect(resolveMarkdownLink('collection:videos', { screens: SCREENS })).toEqual(
+      { kind: 'internal', href: '/videos' },
+    )
+    expect(resolveMarkdownLink('feed:videos', { screens: SCREENS })).toEqual({
+      kind: 'internal',
+      href: '/videos/rss.xml',
+    })
+    expect(resolveMarkdownLink('screen:pricing', { screens: SCREENS })).toEqual({
+      kind: 'internal',
+      href: '/pricing',
+    })
+    expect(resolveMarkdownLink('screen:home', { screens: SCREENS })).toEqual({
+      kind: 'internal',
+      href: '/',
+    })
+  })
+
+  it('renders a reference to a missing target as its text, never as the stored value', () => {
+    for (const href of ['entry:videos/gone', 'collection:gone', 'screen:gone']) {
+      expect(resolveMarkdownLink(href, { screens: SCREENS })).toEqual({
+        kind: 'text',
+      })
+    }
+    // An isolated render has no map, and resolves no reference at all.
+    expect(resolveMarkdownLink('entry:videos/Hpy49iVFX3')).toEqual({ kind: 'text' })
+  })
+
+  it('leaves an address exactly as the parser kept it', () => {
+    expect(resolveMarkdownLink('/about', { screens: SCREENS })).toEqual({
+      kind: 'internal',
+      href: '/about',
+    })
+    expect(resolveMarkdownLink('https://example.com/a')).toEqual({
+      kind: 'external',
+      href: 'https://example.com/a',
+    })
+    // A file is not a page, reference or not (AGL-1686).
+    expect(resolveMarkdownLink('/api/media/cdn/site/doc')).toEqual({
+      kind: 'external',
+      href: '/api/media/cdn/site/doc',
+    })
+  })
+
+  it('withholds every href on an editing surface', () => {
+    const editing = { screens: SCREENS, suppressNavigation: true }
+    expect(resolveMarkdownLink('/about', editing)).toEqual({ kind: 'inert' })
+    expect(resolveMarkdownLink('https://example.com/a', editing)).toEqual({
+      kind: 'inert',
+    })
+    expect(resolveMarkdownLink('entry:videos/Hpy49iVFX3', editing)).toEqual({
+      kind: 'inert',
+    })
+  })
+
+  it('shows the published text on an editing surface once the map knows the target is gone', () => {
+    expect(
+      resolveMarkdownLink('entry:videos/gone', {
+        screens: SCREENS,
+        suppressNavigation: true,
+      }),
+    ).toEqual({ kind: 'text' })
+  })
+
+  it('keeps the link look while the map holds nothing of the target’s kind', () => {
+    // A map of screens and listings has not heard of entries at all, so it
+    // is no evidence this one is gone (`screenRoutesAnswerFor`).
+    expect(
+      resolveMarkdownLink('entry:videos/Hpy49iVFX3', {
+        screens: { home: '/', 'collection:videos': 'videos' },
+        suppressNavigation: true,
+      }),
+    ).toEqual({ kind: 'inert' })
+    expect(
+      resolveMarkdownLink('entry:videos/Hpy49iVFX3', { suppressNavigation: true }),
+    ).toEqual({ kind: 'inert' })
+  })
+})
+
+/**
+ * Markdown-lite SOURCE with its references resolved (AGL-3118) — what the
+ * Markdown twin of a page hands an agent, which follows links out of it.
+ */
+describe('resolveMarkdownSourceLinks (AGL-3118)', () => {
+  const ADDRESSES: Record<string, string> = {
+    'entry:videos/Hpy49iVFX3': 'https://acme.test/videos/the-film',
+    'screen:yFjgqiG2wm': 'https://acme.test/pricing',
+  }
+  const resolve = (reference: string) => ADDRESSES[reference]
+
+  it('writes each reference’s current address in its place', () => {
+    expect(
+      resolveMarkdownSourceLinks(
+        'Watch [the film](entry:videos/Hpy49iVFX3), then see [pricing](screen:yFjgqiG2wm).',
+        resolve,
+      ),
+    ).toBe(
+      'Watch [the film](https://acme.test/videos/the-film), then see ' +
+        '[pricing](https://acme.test/pricing).',
+    )
+  })
+
+  it('reduces a reference to a missing target to its text', () => {
+    expect(
+      resolveMarkdownSourceLinks('- [Gone](entry:videos/nope)\n- [Kept](/kept)', resolve),
+    ).toBe('- Gone\n- [Kept](/kept)')
+  })
+
+  it('leaves addresses, and everything that is not a link, byte-for-byte', () => {
+    const source =
+      '# Title\n\nSee [about](/about) and [docs](https://example.com/docs).\n\n' +
+      '![Chart](media:host-1/chart)\n\n| a | b |\n| --- | --- |\n| 1 | 2 |'
+    expect(resolveMarkdownSourceLinks(source, resolve)).toBe(source)
+  })
+
+  it('does not touch a reference quoted inside fenced code', () => {
+    const source =
+      'Link like this:\n\n```md\n[the film](entry:videos/Hpy49iVFX3)\n```\n\n' +
+      'or [here](entry:videos/Hpy49iVFX3).'
+    expect(resolveMarkdownSourceLinks(source, resolve)).toBe(
+      'Link like this:\n\n```md\n[the film](entry:videos/Hpy49iVFX3)\n```\n\n' +
+        'or [here](https://acme.test/videos/the-film).',
+    )
+  })
+
+  it('turns an image whose source is a reference into its alt text', () => {
+    expect(
+      resolveMarkdownSourceLinks('![The film](entry:videos/Hpy49iVFX3)', resolve),
+    ).toBe('The film')
+  })
+
+  it('keeps a written address inside the parentheses it sits in', () => {
+    expect(
+      resolveMarkdownSourceLinks('[a](entry:videos/Hpy49iVFX3)', () => '/a b(c)'),
+    ).toBe('[a](/a%20b(c%29)')
+  })
+
+  it('leaves a malformed reference as the parser leaves it', () => {
+    // Not a link the parser keeps, so there is nothing to resolve.
+    expect(resolveMarkdownSourceLinks('[x](entry:videos)', resolve)).toBe(
+      '[x](entry:videos)',
+    )
+  })
+})
+
 describe('serializeMarkdownLite (AGL-582)', () => {
   /**
    * Representative documents the WYSIWYG editor must round-trip. Each is
@@ -978,6 +1203,98 @@ describe('heading-anchor coverage across the markdown renderers (AGL-1162)', () 
     const files = new Set(renderers.map((entry) => entry.file))
     expect(
       Object.keys(NOT_ANCHORED).filter((file) => !files.has(file)),
+    ).toEqual([])
+  })
+})
+
+/**
+ * Link-reference coverage across EVERY markdown-lite renderer (AGL-3118).
+ *
+ * The same shape of risk the heading-anchor sweep above guards, with a worse
+ * failure: a renderer that never learned about link references draws the
+ * stored `entry:…` as an href, so a published post links nowhere and nothing
+ * in the renderer's own file looks wrong. So the renderers are enumerated
+ * from source again — every tracked file that calls `parseMarkdownLite` and
+ * renders a link inline — and each one must decide what a link renders as
+ * through `resolveMarkdownLink`, or appear below with a reason.
+ */
+describe('link-reference coverage across the markdown renderers (AGL-3118)', () => {
+  /** Renderers that deliberately do not resolve references, with why. */
+  const NOT_RESOLVED: Record<string, string> = {
+    'libs/aglyn-markdown-editor/src/lib/markdown-visual-editor.component.tsx':
+      'an EDITING surface: a link is a contentEditable span that carries its ' +
+      'stored target for the round trip back to source. It is never an ' +
+      'anchor and never followed.',
+    'libs/aglyn-markdown-editor/src/lib/markdown-lite-view.component.tsx':
+      'the console’s preview beside the editor, drawn from the document being ' +
+      'edited, where no published routing map exists; what its links show ' +
+      'belongs to the console link work (AGL-3119).',
+  }
+
+  const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+    encoding: 'utf8',
+  }).trim()
+
+  const tracked = execFileSync(
+    'git',
+    ['ls-files', '--', 'apps/*.ts', 'apps/*.tsx', 'libs/*.ts', 'libs/*.tsx'],
+    { encoding: 'utf8', cwd: repoRoot, maxBuffer: 32 * 1024 * 1024 },
+  )
+    .split('\n')
+    .filter(Boolean)
+    .filter((file) => !/\.spec\.tsx?$/.test(file))
+
+  /** Renders a link inline — `case 'link':`, or a test either way round. */
+  const RENDERS_A_LINK = /(?:case|===|!==)\s*'link'/
+  const CALLS_THE_PARSER = /parseMarkdownLite\(/
+  const DECLARES_THE_PARSER = /export function parseMarkdownLite\(/
+  const RESOLVES = 'resolveMarkdownLink('
+
+  const renderers = tracked
+    .map((file) => ({
+      file,
+      source: readFileSync(join(repoRoot, file), 'utf8'),
+    }))
+    .filter(
+      ({ source }) =>
+        CALLS_THE_PARSER.test(source) &&
+        RENDERS_A_LINK.test(source) &&
+        !DECLARES_THE_PARSER.test(source),
+    )
+
+  it('finds the renderers at all, the site’s three among them', () => {
+    const files = renderers.map((entry) => entry.file)
+    expect(files.length).toBeGreaterThanOrEqual(5)
+    expect(files).toEqual(
+      expect.arrayContaining([
+        'libs/plugins/mui/src/lib/components/markdown.tsx',
+        'libs/plugins/mui/src/lib/components/collection.tsx',
+        'apps/tenant/app/[host]/[scheme]/[[...slug]]/collection-fallback.tsx',
+      ]),
+    )
+  })
+
+  it('every renderer decides its links through resolveMarkdownLink', () => {
+    const unresolved = renderers
+      .filter(({ source }) => !source.includes(RESOLVES))
+      .map(({ file }) => file)
+      .filter((file) => !(file in NOT_RESOLVED))
+    expect(unresolved).toEqual([])
+  })
+
+  it('no exemption outlives its reason', () => {
+    const stale = Object.keys(NOT_RESOLVED).filter((file) =>
+      renderers
+        .find((candidate) => candidate.file === file)
+        ?.source.includes(RESOLVES),
+    )
+    expect(stale).toEqual([])
+  })
+
+  it('every exempt path is still a renderer that exists', () => {
+    const files = new Set(renderers.map((entry) => entry.file))
+    expect(
+      Object.keys(NOT_RESOLVED).filter((file) => !files.has(file)),
     ).toEqual([])
   })
 })

@@ -36,6 +36,8 @@ import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 // badge needs the brand, not the plan table.
 import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/app-utils/platform-brand'
 import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context-value'
+// The leaf, not the barrel: a published page pays for what it names.
+import { parseEntryLinkValue } from '@aglyn/aglyn/app-utils/screen-link-value'
 import { SiteContext } from '@aglyn/aglyn/app-utils/site-context'
 import { NODE_ROOT_ID } from '@aglyn/aglyn/canvas-manager/canvas-manager'
 import { AglynEvent } from '@aglyn/aglyn/emit-manager/emit-manager'
@@ -379,8 +381,31 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // ISR cache, and a `/api/screen/nodes` payload fetched by a client holding
   // it. Both then behave exactly as they did before, rather than losing every
   // link at once.
-  const screens = (props.screenRoutes ??
+  const pageScreens = (props.screenRoutes ??
     props.data?.host?.screens) as Record<string, string> | undefined
+  /**
+   * The entries a GATED page links to (AGL-3118).
+   *
+   * The map above was built by `page.tsx` from a page that ships
+   * `nodes: null`, so it can hold no entry a protected or members-only tree
+   * links to; those arrive with the nodes, from the same endpoint that opens
+   * the gate. Only entry keys are taken from that payload — the rest of the
+   * map is the server's own, and nothing that travels beside a plugin's
+   * slice may rewrite where a screen link goes.
+   */
+  const gatedEntryRoutes = gatedPageProps?.['entryRoutes'] as
+    | Record<string, string>
+    | undefined
+  const screens = useMemo(() => {
+    if (!gatedEntryRoutes) return pageScreens
+    const merged = { ...pageScreens }
+    for (const [key, path] of Object.entries(gatedEntryRoutes)) {
+      if (parseEntryLinkValue(key) && typeof path === 'string' && path) {
+        merged[key] = path
+      }
+    }
+    return merged
+  }, [pageScreens, gatedEntryRoutes])
   // Locale plumbing (AGL-164): the switcher component reads variants of
   // the CURRENT screen from this context.
   const screenLocale = (props.data?.screen?.data as any)?.locale
@@ -550,7 +575,14 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // neither a template screen nor the themed built-in (`nodes` present means
   // the collection page renders through the normal canvas path below).
   if (props.content?.collection && !nodes) {
-    return <CollectionFallback content={props.content} hostId={host?.$id} />
+    return (
+      // Inside the link context like every other surface (AGL-3118): the
+      // body it renders may name its links by reference, and the map is
+      // where those names resolve.
+      <ScreenLinkContext.Provider value={screenLinks}>
+        <CollectionFallback content={props.content} hostId={host?.$id} />
+      </ScreenLinkContext.Provider>
+    )
   }
 
   return (

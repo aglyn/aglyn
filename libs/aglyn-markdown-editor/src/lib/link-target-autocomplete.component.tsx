@@ -1,0 +1,377 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+'use client'
+
+/**
+ * The link-target lookup (AGL-3119): one searchable control for every place
+ * an author picks where a link goes — the designer's Screen pickers, a
+ * `Link`-typed component prop, and the markdown editor's link dialog.
+ *
+ * It lives in this package because this is the one core UI package both the
+ * designer and the console's content editor already reach, and the markdown
+ * link dialog beside it is one of its users. What it offers comes from two
+ * places, and only the second costs a read:
+ *
+ * - `targets` — the host's screens, collection listings and feeds, which the
+ *   caller already holds (`screenLinkTargetOptions`). Filtered in memory as
+ *   the author types.
+ * - entries, from `LinkTargetSearchContext`, fetched as the author types and
+ *   only while the list is open. With no provider mounted there is no
+ *   Entries group at all, and everything else works as before.
+ *
+ * The value is the routing-map KEY of the chosen target (a bare screen id,
+ * `collection:`, `feed:`, `entry:`) or one of the caller's pinned choices.
+ * How a key is stored is the caller's business: a Screen slot keeps it bare,
+ * a `Link` prop and a markdown link wrap a screen id as `screen:<id>`.
+ */
+
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  SAFE_HREF_PATTERN,
+  linkTargetKind,
+  useLinkTargetEntrySearch,
+  useLinkTargetLabel,
+} from '@aglyn/aglyn'
+import { Autocomplete, Box, ListSubheader, TextField } from '@mui/material'
+import { useMemo, useState, type ReactNode } from 'react'
+
+/**
+ * Value standing for "type a URL instead" (AGL-1335).
+ *
+ * UI-only: it is never stored. The persisted value in that mode is the URL
+ * the author types, so the AGL-1191 rule about `''`-valued options does not
+ * bite here — the one `''` option means genuinely unset, which is exactly
+ * what the graft reads as "fall back to the component's default".
+ *
+ * Spelled with a character no Firestore id contains so it can never collide
+ * with a real screen id in the same list.
+ */
+export const EXTERNAL_URL_OPTION = 'external-url:'
+
+/** A choice pinned above or below the targets, never filtered away. */
+export interface LinkTargetChoice {
+  value: string
+  label: string
+}
+
+/** What a choice carries beyond its value. */
+export interface LinkTargetChangeDetail {
+  /** The address the author typed, when they picked it as typed. */
+  address?: string
+  /** An entry's own title, for link text that should read as a sentence. */
+  title?: string
+}
+
+export interface LinkTargetAutocompleteProps {
+  /**
+   * The chosen target's key or pinned choice's value; `null` for nothing
+   * chosen yet.
+   */
+  value: string | null | undefined
+  onChange: (value: string, detail: LinkTargetChangeDetail) => void
+  /** Screens, listings and feeds, in the order they are offered. */
+  targets: readonly LinkTargetChoice[]
+  /** Pinned first: the empty choice, a stored target the host has lost. */
+  leading?: readonly LinkTargetChoice[]
+  /** Pinned last: the external-address mode. */
+  trailing?: readonly LinkTargetChoice[]
+  /**
+   * The trailing choice that stands for a typed address. When what the
+   * author typed already looks like one (`https://…`, `/pricing`), that
+   * choice offers to use it as typed.
+   */
+  addressOption?: string
+  label?: ReactNode
+  helperText?: ReactNode
+  placeholder?: string
+  name?: string
+  size?: 'small' | 'medium'
+  disabled?: boolean
+  error?: boolean
+  autoFocus?: boolean
+  /** Open the list on focus — for a dialog whose first job is choosing. */
+  openOnFocus?: boolean
+}
+
+interface PickerOption {
+  key: string
+  value: string
+  label: string
+  group: string
+  /** Shown whatever is typed. */
+  pinned?: boolean
+  disabled?: boolean
+  address?: string
+  title?: string
+}
+
+const GROUP_BY_KIND: Readonly<Record<Aglyn.LinkTargetKind, string>> = {
+  screen: 'Pages',
+  collection: 'Collection listings',
+  feed: 'RSS feeds',
+  entry: 'Entries',
+}
+
+const ENTRIES_GROUP = GROUP_BY_KIND.entry
+
+/**
+ * The value of a row that only reports on the search; never selectable.
+ *
+ * Written as an escape, not as the character itself: a raw NUL byte in the
+ * source makes git read the whole file as binary, so it has no diff and no
+ * line-wise merge.
+ */
+const STATUS_VALUE = '\u0000status'
+
+/** The typed text, when it already looks like a link address. */
+function typedAddress(query: string): string | undefined {
+  const trimmed = query.trim()
+  return trimmed && SAFE_HREF_PATTERN.test(trimmed) ? trimmed : undefined
+}
+
+function findChoice(
+  value: string,
+  ...lists: ReadonlyArray<readonly LinkTargetChoice[] | undefined>
+): LinkTargetChoice | undefined {
+  for (const list of lists) {
+    const found = list?.find((choice) => choice.value === value)
+    if (found) return found
+  }
+  return undefined
+}
+
+/**
+ * Screens, listings and feeds narrow to what was typed; entries arrive
+ * already narrowed by the search, and pinned rows stay put.
+ */
+function filterPickerOptions(
+  options: PickerOption[],
+  state: { inputValue: string },
+): PickerOption[] {
+  const needle = state.inputValue.trim().toLowerCase()
+  if (!needle) return options
+  return options.filter(
+    (option) =>
+      option.pinned ||
+      option.group === ENTRIES_GROUP ||
+      option.label.toLowerCase().includes(needle),
+  )
+}
+
+export function LinkTargetAutocomplete(props: LinkTargetAutocompleteProps) {
+  const {
+    value,
+    onChange,
+    targets,
+    leading,
+    trailing,
+    addressOption,
+    label,
+    helperText,
+    placeholder,
+    name,
+    size = 'small',
+    disabled,
+    error,
+    autoFocus,
+    openOnFocus,
+  } = props
+  const [open, setOpen] = useState(false)
+  // What the author TYPED, as distinct from the input's text: once a target
+  // is chosen the input shows its label, and searching for that label would
+  // spend a read to find what is already selected.
+  const [query, setQuery] = useState('')
+  const search = useLinkTargetEntrySearch(query, open && !disabled)
+
+  const chosen = typeof value === 'string' ? value : undefined
+  const known =
+    chosen === undefined ? undefined : findChoice(chosen, leading, targets, trailing)
+  // A chosen value no list holds — an entry, whose name only the search seam
+  // can read.
+  const described = useLinkTargetLabel(
+    chosen !== undefined && !known ? chosen : undefined,
+  )
+  const selectedLabel = known?.label ?? described?.label
+
+  // Keyed on the value and its label only. The input re-syncs its text
+  // whenever this object changes, so rebuilding it when unrelated results
+  // arrive would overwrite what the author is typing.
+  const selected = useMemo<PickerOption | null>(
+    () =>
+      chosen === undefined || selectedLabel === undefined
+        ? null
+        : {
+            key: `selected:${chosen}`,
+            value: chosen,
+            label: selectedLabel,
+            group: '',
+            pinned: true,
+          },
+    [chosen, selectedLabel],
+  )
+
+  const address = addressOption ? typedAddress(query) : undefined
+  const options = useMemo(() => {
+    const list: PickerOption[] = []
+    for (const choice of leading ?? []) {
+      list.push({
+        key: `leading:${choice.value}`,
+        value: choice.value,
+        label: choice.label,
+        group: '',
+        pinned: true,
+      })
+    }
+    // The current choice stays on offer while the search holds no row for
+    // it, or the list would not contain the value the input shows.
+    if (
+      selected &&
+      !known &&
+      !search.entries.some((entry) => entry.value === selected.value)
+    ) {
+      list.push(selected)
+    }
+    for (const target of targets) {
+      list.push({
+        key: `target:${target.value}`,
+        value: target.value,
+        label: target.label,
+        group: GROUP_BY_KIND[linkTargetKind(target.value)],
+      })
+    }
+    if (search.available) {
+      for (const entry of search.entries) {
+        list.push({
+          key: `entry:${entry.value}`,
+          value: entry.value,
+          label: entry.label,
+          group: ENTRIES_GROUP,
+          title: entry.title,
+        })
+      }
+      const status = search.searching
+        ? 'Searching entries…'
+        : search.failed
+          ? 'Entries could not be searched. Try again.'
+          : search.entries.length
+            ? undefined
+            : query.trim()
+              ? 'No entry address starts with that'
+              : 'No entries yet'
+      if (status) {
+        list.push({
+          key: 'entries-status',
+          value: STATUS_VALUE,
+          label: status,
+          group: ENTRIES_GROUP,
+          pinned: true,
+          disabled: true,
+        })
+      }
+    }
+    for (const choice of trailing ?? []) {
+      const typed = choice.value === addressOption ? address : undefined
+      list.push({
+        key: `trailing:${choice.value}`,
+        value: choice.value,
+        label: typed ? `Use the address ${typed}` : choice.label,
+        group: '',
+        pinned: true,
+        address: typed,
+      })
+    }
+    return list
+  }, [
+    leading,
+    selected,
+    known,
+    targets,
+    search.available,
+    search.entries,
+    search.searching,
+    search.failed,
+    query,
+    trailing,
+    addressOption,
+    address,
+  ])
+
+  return (
+    <Autocomplete<PickerOption, false, true, false>
+      size={size}
+      fullWidth
+      disabled={disabled}
+      disableClearable
+      openOnFocus={openOnFocus}
+      open={open}
+      onOpen={() => setOpen(true)}
+      onClose={() => setOpen(false)}
+      options={options}
+      // `null` is "nothing chosen yet"; the typing only rules it out because
+      // `disableClearable` means no control here can set it.
+      value={selected as PickerOption}
+      getOptionLabel={(option) => option.label}
+      getOptionKey={(option) => option.key}
+      getOptionDisabled={(option) => Boolean(option.disabled)}
+      isOptionEqualToValue={(option, current) => option.value === current.value}
+      groupBy={(option) => option.group}
+      filterOptions={filterPickerOptions}
+      renderGroup={(params) => (
+        <li key={params.key}>
+          {params.group ? (
+            <ListSubheader component="div" sx={{ lineHeight: '32px' }}>
+              {params.group}
+            </ListSubheader>
+          ) : null}
+          <Box component="ul" sx={{ p: 0 }}>
+            {params.children}
+          </Box>
+        </li>
+      )}
+      onInputChange={(_event, text, reason) => {
+        setQuery(reason === 'input' ? text : '')
+      }}
+      onChange={(_event, option) => {
+        if (!option || option.disabled) return
+        onChange(option.value, {
+          ...(option.address ? { address: option.address } : {}),
+          ...(option.title ? { title: option.title } : {}),
+        })
+      }}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          name={name}
+          label={label}
+          placeholder={placeholder}
+          helperText={helperText}
+          error={error}
+          autoFocus={autoFocus}
+          // Shrunk always: a chosen label fills the input, and an empty one
+          // shows the placeholder, which a floating label would sit on.
+          slotProps={{
+            ...params.slotProps,
+            inputLabel: { ...params.slotProps.inputLabel, shrink: true },
+          }}
+        />
+      )}
+    />
+  )
+}
+LinkTargetAutocomplete.displayName = 'LinkTargetAutocomplete'
+
+export default LinkTargetAutocomplete

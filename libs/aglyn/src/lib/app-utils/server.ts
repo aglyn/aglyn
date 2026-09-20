@@ -54,6 +54,9 @@ export * from './console-record-links'
 // What a stored screen-link value means, with no React attached — the
 // where-used scan reads these on the server (AGL-703).
 export * from './screen-link-value'
+// Which entries a page's links name (AGL-3118). The tenant render reads
+// exactly those entry documents, so the walk runs on the server.
+export * from './link-references'
 export * from './analytics-path-key'
 export * from './contacts'
 // The client-safe twin of `person-key` (server barrel only, for `node:crypto`).

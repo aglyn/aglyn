@@ -113,13 +113,16 @@ dropdown, the values must be ones that dropdown offers; the Attributes panel lis
 one is missing. A **Checkbox** with no answers is a single tick box; given answers, it is a
 list a page ticks several of.
 
-A **Link** property is a screen picker at both ends — in the dialog's **Default** column and
+A **Link** property is a target picker at both ends — in the dialog's **Default** column and
 in each instance's Attributes panel — exactly like a Button's own **Link to screen** field.
-It stores the screen's id, not its address, so the link keeps working when that screen's slug
-or parent changes. The picker also lists each content collection's listing page, such as
-**Blog (/blog) — collection listing**; picking one stores the collection, so the link follows
-that collection's slug the same way. Choose **External URL or path…** for anything that is
-neither; a typed address is used verbatim and does not follow a rename.
+It stores the target's id, not its address, so the link keeps working when a slug or parent
+changes. Type in it and it searches four kinds of target: your pages, each content
+collection's listing page (**Blog (/blog) — collection listing**), their RSS feeds, and the
+entries themselves (**Hello (/blog/hello) — Blog entry · published**). Whichever you pick,
+the link follows that target through a rename — see
+[Linking to a listing, an entry, or a feed](element-catalog.md#linking-to-a-collection-listing).
+Choose **External URL or path…** for anything that is none of them; a typed address is used
+verbatim and does not follow a rename.
 
 Link properties written before the picker existed hold a typed address. They keep working
 unchanged — but they are still typed addresses, so pick the screen again if you want them to

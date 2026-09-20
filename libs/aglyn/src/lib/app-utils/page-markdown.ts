@@ -58,6 +58,7 @@
 
 import { NODE_ROOT_ID } from '../canvas-manager/canvas-manager'
 import { authorHtmlToMarkdown, inlineAuthorHtmlToMarkdown } from './author-html-markdown'
+import { resolveMarkdownSourceLinks } from './markdown-lite'
 import { absoluteMediaSrc } from './media-ref'
 import {
   SAFE_HREF_PATTERN,
@@ -159,7 +160,10 @@ export interface PageMarkdownContext {
   origin?: string | null
   /** Host id, so a restricted org asset resolves for the site rendering it. */
   hostId?: string
-  /** The routing map screen links resolve against (`screenRoutes`). */
+  /**
+   * The routing map screen links resolve against (`screenRoutes`), and the
+   * link references in authored markdown with them (AGL-3118).
+   */
   screenRoutes?: Record<string, string> | null
 }
 
@@ -262,10 +266,11 @@ function walk(
         Already Markdown. Emitted VERBATIM and never re-escaped: `content` is
         the markdown-lite source an author typed, so escaping it would turn
         their headings into literal `#` characters — the one transformation
-        that can only make this output worse.
+        that can only make this output worse. Its link REFERENCES are the one
+        exception (AGL-3118), resolved as the page resolves them.
       */
       const content = props['content']
-      if (typeof content === 'string') push(content)
+      if (typeof content === 'string') push(authoredMarkdown(content, context))
       return
     }
     case 'custom-html': {
@@ -366,6 +371,25 @@ function screenLinkHref(
 }
 
 /**
+ * Authored markdown-lite — a Markdown element's content, an entry's body —
+ * as this document carries it: verbatim, except that each link REFERENCE
+ * (AGL-3118) points where the page's own link does, through the same routing
+ * map and the same `resolveScreenHref` as {@link screenLinkHref}, made
+ * absolute for the reason {@link absoluteHref} gives. A reference the map
+ * does not have becomes the link's text, as the page renders it: the stored
+ * `entry:…` is not a URL any reader can follow.
+ */
+function authoredMarkdown(
+  source: string,
+  context?: PageMarkdownContext,
+): string {
+  return resolveMarkdownSourceLinks(source, (reference) => {
+    const path = resolveScreenHref(context?.screenRoutes ?? undefined, reference)
+    return path ? absoluteHref(path, context) : undefined
+  })
+}
+
+/**
  * The node the document's content begins at.
  *
  * The `main` landmark first — `stampDocumentLandmark` puts it on the layout
@@ -441,7 +465,7 @@ export function buildPageMarkdown(options: {
   if (meta.length) parts.push(`_${meta.join(' · ')}_`)
 
   if (typeof options.body === 'string' && options.body.trim()) {
-    parts.push(options.body.trim())
+    parts.push(authoredMarkdown(options.body.trim(), options.context))
   } else if (options.nodes) {
     const contentRoot = pageContentRootId(options.nodes, options.rootId)
     if (contentRoot) {

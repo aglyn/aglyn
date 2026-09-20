@@ -54,7 +54,14 @@ jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
   getTemplateScreenIds: jest.fn(async () => new Set<string>()),
   getTemplateScreenRouting: jest.fn(),
 }))
+// The entry read itself has its own suite (`entry-link-routes.spec.ts`); what
+// is under test here is WHICH entries this page asks it about (AGL-3118).
+jest.mock('@aglyn/tenant-runtime/entry-link-routes', () => ({
+  __esModule: true,
+  resolveEntryLinkRoutes: jest.fn(async () => ({})),
+}))
 
+import { resolveEntryLinkRoutes } from '@aglyn/tenant-runtime/entry-link-routes'
 import { getTemplateScreenRouting } from '@aglyn/tenant-runtime/template-screens'
 import type { ReactElement } from 'react'
 import CatchAllClient from '../app/[host]/[scheme]/[[...slug]]/catch-all-client'
@@ -63,6 +70,7 @@ import CatchAllPage from '../app/[host]/[scheme]/[[...slug]]/page'
 
 const mockLoad = loadPageData as jest.Mock
 const mockRouting = getTemplateScreenRouting as jest.Mock
+const mockEntryRoutes = resolveEntryLinkRoutes as jest.Mock
 
 /** The live aglyn.com shape: the blog's list template published at a 404. */
 const PUBLISHED_MAP = {
@@ -169,5 +177,102 @@ describe('the routing map the renderer receives (AGL-1998)', () => {
 
     expect(props?.screenRoutes).toBeUndefined()
     expect(mockRouting).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The entries THIS page links to, in the map it hands the renderer
+ * (AGL-3118).
+ *
+ * Entries are not the whole site: a blog has thousands and a page names a
+ * handful, so the map carries only the ones this page's own links point at.
+ * Which means the walk that finds them is the feature — miss a link and it
+ * renders as plain text on a live post, with nothing to say so.
+ */
+describe('the entries a page links to (AGL-3118)', () => {
+  const HOST = {
+    $id: 'host-1',
+    subdomain: 'acme',
+    displayName: 'Acme',
+    screens: { home: '/' },
+  }
+
+  /** An entry page: a composed body node, a Markdown block, and a CTA. */
+  const ENTRY_PAGE = {
+    props: {
+      data: { host: HOST, screen: { data: { $id: 'tmpl' } } },
+      nodes: {
+        body: {
+          componentId: 'collectionEntryBody',
+          props: { markdown: 'Read [the launch](entry:blog/e1) first.' },
+        },
+        aside: {
+          componentId: 'markdown',
+          props: { content: '- [Every post](collection:blog)\n- [Next](entry:blog/e2)' },
+        },
+        cta: {
+          componentId: 'muiScreenLink',
+          props: { screenId: 'entry:vids/v1', children: 'Watch' },
+        },
+      },
+      content: {
+        collection: { $id: 'blog', slug: 'blog', displayName: 'Blog' },
+        entries: [],
+        entry: { $id: 'e9', title: 'Hello', body: 'Also [this](entry:blog/e3).' },
+      },
+    },
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockRouting.mockResolvedValue({
+      templateScreenIds: new Set<string>(),
+      listRoutes: {},
+      collectionListings: { blog: 'blog', vids: 'videos' },
+    })
+  })
+
+  it('asks about every entry the composed page and the body name, once each', async () => {
+    mockLoad.mockResolvedValue(ENTRY_PAGE)
+    mockEntryRoutes.mockResolvedValue({
+      'entry:blog/e1': 'blog/we-launched',
+      'entry:vids/v1': 'videos/the-film',
+    })
+
+    const routes = (await renderPage())?.screenRoutes as Record<string, string>
+
+    expect(mockEntryRoutes).toHaveBeenCalledWith({
+      hostId: 'host-1',
+      // Element slot, Markdown block, entry body — sorted and deduplicated.
+      refs: [
+        'entry:blog/e1',
+        'entry:blog/e2',
+        'entry:blog/e3',
+        'entry:vids/v1',
+      ],
+      collectionSlugs: { blog: 'blog', vids: 'videos' },
+    })
+    // Keyed by the ids, beside the screens and the listings.
+    expect(routes['entry:blog/e1']).toBe('blog/we-launched')
+    expect(routes['entry:vids/v1']).toBe('videos/the-film')
+    expect(routes['collection:blog']).toBe('blog')
+    expect(routes.home).toBe('/')
+    // An entry the read did not answer for is simply absent — its links
+    // render inert rather than pointing at a path that would 404.
+    expect(routes).not.toHaveProperty('entry:blog/e2')
+  })
+
+  it('reads nothing more for a page that links no entry', async () => {
+    mockLoad.mockResolvedValue({
+      props: {
+        data: { host: HOST, screen: { data: { $id: 'home' } } },
+        nodes: { cta: { props: { screenId: 'screen:home', href: '/pricing' } } },
+      },
+    })
+
+    const routes = (await renderPage())?.screenRoutes as Record<string, string>
+
+    expect(mockEntryRoutes).not.toHaveBeenCalled()
+    expect(routes).toEqual({ home: '/', 'collection:blog': 'blog', 'feed:blog': 'blog/rss.xml', 'collection:vids': 'videos', 'feed:vids': 'videos/rss.xml' })
   })
 })
