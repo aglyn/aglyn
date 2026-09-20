@@ -42,6 +42,7 @@ export const DOCS_HELP_EXCERPTS = {
   addALocale: 'Create a language variant of your site and translate its screens.',
   addOns: 'Buy extra seats, sites, datasets, POS registers, the Event Calendar, and Aglyn AI from the Billing page — prorated, self-serve, no support ticket.',
   addSearch: 'Drop the Search Box element onto a screen and publish — the built-in search page does the rest.',
+  agencySites: 'Run one brief across many client sites: each is its own build job with its own plan and drafts, per-site allotments keep spend separate, and nothing reaches a client\'s live site until your team publishes it.',
   aglynAssist: 'Ask the built-in AI helper how to do anything in Aglyn — it answers from these docs and links you straight to the right page.',
   ai: 'Aglyn AI is an AI website builder inside your console: describe a page, form, email, product listing or theme change and it builds a draft you edit and publish yourself. An add-on on every paid plan, metered in credits.',
   aiAllotments: 'Give a member, a site collaborator or a whole site a monthly share of the workspace\'s AI credits, see your own usage while you work, and choose which model answers.',
