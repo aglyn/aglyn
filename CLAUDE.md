@@ -67,3 +67,18 @@ it. An app never holds logic a consumer would need — it goes in a lib. A plugi
 never imports another plugin or core's UI; core never imports a plugin; `shared`
 imports only `shared`. A new lib gets its `scope:`/`type:` tags and its map row
 in the same commit. The allowlist of today's cross-package edges only shrinks.
+
+A lib's `package.json` declares every package its shipped source imports
+(AGL-3201), because inside this repo an undeclared import still resolves and
+the published package would not install. Adding an import of a package the lib
+does not yet name reds `check:lib-boundaries`, which the pre-push hook runs:
+`npm run sync:lib-dependencies` writes the declaration. Never import a
+transitive dependency of something else (`@popperjs/core` through MUI,
+`@firebase/firestore` through `firebase`) — it cannot be declared honestly.
+
+A spec that needs two plugins at once lives in `apps/console/specs` or
+`apps/tenant/specs` and reaches each through the generated manifest's
+`load()`; one plugin's spec never imports another plugin. Moving or renaming a
+file means grepping its old path across specs, `tools/` and `docs/` first:
+path-keyed sweep specs import nothing, so only the whole console suite sees
+them.
