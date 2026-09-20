@@ -120,6 +120,10 @@ jest.mock('../components/host-id-provider', () => ({
 jest.mock('../components/console-plugins-gate.component', () => ({
   __esModule: true,
   useEnabledPluginIds: () => NO_PLUGINS,
+  // No workspace to load plugins for (AGL-3142): this file's registry is a
+  // double, so a zone or a route here draws from it rather than fetching a
+  // plugin's code, and the loading hooks are settled at once.
+  usePluginLoadScope: () => ({ orgId: null, user: undefined }),
 }))
 
 import AdminStaffPluginPage from '../app/(app)/admin/[staffPage]/page'

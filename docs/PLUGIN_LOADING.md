@@ -140,11 +140,30 @@ Every link must hold before a byte executes:
 
 ### Client loading
 
-- **Console**: `ConsolePluginsGate` fetches
-  `GET /api/orgs/realm-plugins?orgId=` (server-side join of install pins
-  with the staff-only trust grants — clients can't read version docs) and
-  `loadRealmPlugins` executes each verified bundle via a blob-URL import,
-  calling its exported `register(host)`. Loaded before the shell renders.
+- **Console** (AGL-3142): the console loads by presence, like a published
+  page. Each place that draws something asks which plugins belong to it, and
+  each plugin's own `contributes.console` answers — carried onto its entry in
+  `plugins.client.generated.ts`, resolved by `isPluginUsedInConsole` and
+  applied by `consolePluginsAt`. No screen names a plugin.
+  - `ConsolePluginsGate` loads the plugins that declare `console.shell`: a nav
+    tab, an organization tab, a staff tab, a provider. A plugin that declares
+    NOTHING loads here too, because a nav tab is only discoverable by running
+    `register()`.
+  - A zone loads its own, at `useSlotWidgets` — the one place every
+    `PluginWidgetSlot` and every table-column read passes through.
+  - A plugin route loads its own, at the two `[...pluginSlug]` pages, matched
+    with `routeServes`: `/products` serves `/products/orders` and never
+    `/products-archive`. The page HOLDS its body until they land, because
+    `resolveConsolePluginPage` reads a registry `register()` fills and an
+    unresolved route is otherwise a "not installed" notice, or a 404.
+  - Realm installs follow the same rules: `ConsolePluginsGate` fetches
+    `GET /api/orgs/realm-plugins?orgId=` once per workspace (server-side join
+    of install pins with the staff-only trust grants — clients can't read
+    version docs), and `loadOrgRealmPlugins(orgId, user, where)` composes the
+    realm host and runs `loadRealmPlugins` only where an install declares
+    something that place draws. A screen that draws none loads neither.
+  - `check:plugins-load-where-used` holds the shell half of this against a
+    console production build.
 - **Within a plugin** (AGL-3141): `loader.ensure(ids, surfaces, use)` carries
   what the surface uses — `{ componentIds }` — to every register fn, and a
   plugin that can register a part of itself reads it. The tenant computes it

@@ -9,6 +9,50 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.135 — 2026-09-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.134...v1.0.0-beta.135)
+
+### Added
+
+- **console:** product-updates consent at sign-up, in preferences and via a prompt ([AGL-3185](https://linear.app/aglyn/issue/AGL-3185))
+- **consent:** a console decision is one record, with the person's own provenance ([AGL-3185](https://linear.app/aglyn/issue/AGL-3185))
+- **analytics,console:** the internal-traffic opt-in pins the domain, not one origin ([AGL-3175](https://linear.app/aglyn/issue/AGL-3175))
+
+### Fixed
+
+- **media:** the icon fixture writes its header as escapes, not raw NUL bytes ([AGL-3121](https://linear.app/aglyn/issue/AGL-3121))
+- **console:** the cookie registry's prose names the configured workspace domain ([AGL-3175](https://linear.app/aglyn/issue/AGL-3175), [AGL-2153](https://linear.app/aglyn/issue/AGL-2153))
+- **analytics:** the console's ad tags take the internal gate marketing already had ([AGL-3188](https://linear.app/aglyn/issue/AGL-3188), [AGL-2064](https://linear.app/aglyn/issue/AGL-2064))
+- **deploy:** a clean alias check no longer means the previous release ([AGL-3177](https://linear.app/aglyn/issue/AGL-3177))
+- **media:** an icon is skipped like a vector, so its upload reports no fault ([AGL-3121](https://linear.app/aglyn/issue/AGL-3121))
+- **ai:** the automation tool's schema compiles to a grammar the provider takes ([AGL-3096](https://linear.app/aglyn/issue/AGL-3096))
+- **console:** the new opt-in cookie is declared, and its guards follow the call ([AGL-3175](https://linear.app/aglyn/issue/AGL-3175))
+- **console:** the error pages card and the maintenance switch sit behind host admin ([AGL-3178](https://linear.app/aglyn/issue/AGL-3178), [AGL-1014](https://linear.app/aglyn/issue/AGL-1014), [AGL-428](https://linear.app/aglyn/issue/AGL-428))
+- **billing:** an ended subscription does not hand its interval to the toggle ([AGL-3155](https://linear.app/aglyn/issue/AGL-3155), [AGL-1715](https://linear.app/aglyn/issue/AGL-1715))
+- **console:** the usage scan drops two imports AGL-3113's extraction left behind ([AGL-3113](https://linear.app/aglyn/issue/AGL-3113), [AGL-3176](https://linear.app/aglyn/issue/AGL-3176))
+- **console:** every sign-in door awaits its login hit before the delegated hand-off ([AGL-3162](https://linear.app/aglyn/issue/AGL-3162), [AGL-1580](https://linear.app/aglyn/issue/AGL-1580), [AGL-2587](https://linear.app/aglyn/issue/AGL-2587), [AGL-2065](https://linear.app/aglyn/issue/AGL-2065))
+
+### Performance
+
+- **console:** a console screen loads the plugins it draws, not every one installed ([AGL-3142](https://linear.app/aglyn/issue/AGL-3142), [AGL-3116](https://linear.app/aglyn/issue/AGL-3116))
+- **plugins:** a published page registers the mui elements it places, not all sixty ([AGL-3141](https://linear.app/aglyn/issue/AGL-3141), [AGL-3116](https://linear.app/aglyn/issue/AGL-3116), [AGL-52](https://linear.app/aglyn/issue/AGL-52))
+
+### Documentation
+
+- **selfhost:** the marketing host that receives console consent is a setting ([AGL-3185](https://linear.app/aglyn/issue/AGL-3185))
+- **analytics:** per-origin pinning cannot cover an open-ended origin set ([AGL-3175](https://linear.app/aglyn/issue/AGL-3175))
+- **analytics:** the auth host is a second console origin the opt-in never listed ([AGL-3175](https://linear.app/aglyn/issue/AGL-3175), [AGL-3162](https://linear.app/aglyn/issue/AGL-3162))
+
+<details>
+<summary>Also in this release: 3 chore</summary>
+
+- **tools:** the Linear ceiling is 3188, read from the workspace ([AGL-3188](https://linear.app/aglyn/issue/AGL-3188))
+- **tools:** the Linear ceiling is 3175, read from the workspace ([AGL-3175](https://linear.app/aglyn/issue/AGL-3175))
+- **tools:** the Linear ceiling is 3162, read from the workspace ([AGL-3162](https://linear.app/aglyn/issue/AGL-3162), [AGL-3158](https://linear.app/aglyn/issue/AGL-3158), [AGL-3159](https://linear.app/aglyn/issue/AGL-3159), [AGL-3161](https://linear.app/aglyn/issue/AGL-3161))
+
+</details>
+
 ## v1.0.0-beta.134 — 2026-09-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.133...v1.0.0-beta.134)

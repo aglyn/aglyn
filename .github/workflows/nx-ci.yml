@@ -498,6 +498,9 @@ jobs:
       # Whose bytes a published page downloads (AGL-3116). The gate reads a
       # production build and runs in `build`; its forced reds are here.
       - run: npm run test:plugins-load-where-used
+      # And the console half of the same gate (AGL-3142): whose code a
+      # workspace screen loads. Same shape, a console build.
+      - run: npm run test:console-plugins-load-where-used
 
   # ~2m15s. Affected-scoped, so its cost tracks the range.
   lint:
@@ -823,6 +826,11 @@ jobs:
       # something uses it, so a published page's before-settle load holds
       # a plugin's site surface and nothing else of it. Same build, same
       # chunk set as the gate above, affected-scoped the same way. ~2s.
+      #
+      # Both halves (AGL-3142): the console half reads the console build
+      # this job may also have made, and holds the workspace shell to the
+      # plugins that draw on it. Each half skips itself when its app was
+      # not built in this run, and says which one it skipped.
       - run: node tools/scripts/check-plugins-load-where-used.mjs --if-built
 
   # ONE CHECK NAME FOR BRANCH PROTECTION TO REQUIRE (AGL-1777, AGL-2505).

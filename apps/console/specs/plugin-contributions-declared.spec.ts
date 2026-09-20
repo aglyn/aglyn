@@ -35,6 +35,7 @@
 import {
   components,
   listConsoleExtensions,
+  listCustomFieldTypes,
   type ConsoleExtension,
   type PluginContributions,
 } from '@aglyn/aglyn'
@@ -62,7 +63,20 @@ const SHELL_FIELDS = [
   'settingsSections',
 ] as const
 
-/** What a set of console extensions contributes, in the declaration's shape. */
+/**
+ * What a set of console extensions contributes, in the declaration's shape.
+ *
+ * `customFieldTypes` is counted as a shell contribution rather than as a zone
+ * (AGL-3142). A console registrar may register into registries the
+ * `ConsoleExtension` shape knows nothing about, and a custom field type is
+ * the one that is DRAWN: every schema editor lists the registered types, and
+ * the record editor resolves a field's `customType` through the same
+ * registry. Reading the extension alone put the marketplace plugin's
+ * `Rating (0-5)` in a declaration that said "four zones", so the plugin
+ * stopped loading anywhere else and the type silently left the Data plugin's
+ * field picker — absent, never broken, which is the whole failure mode of
+ * loading by presence.
+ */
 function consoleContributions(extensions: readonly ConsoleExtension[]) {
   const slots = new Set<string>()
   const routes = new Set<string>()
@@ -121,8 +135,14 @@ describe('first-party plugins declare what they register (AGL-3116)', () => {
       (extension) => extension.pluginId === id || !before.has(extension.pluginId),
     )
     const found = consoleContributions(registered)
+    // A custom field type is drawn by every schema editor and every record
+    // editor, so a registrar that adds one draws something the shell has on
+    // every screen — see `consoleContributions`.
+    const drawsAFieldType = listCustomFieldTypes().some(
+      (fieldType) => fieldType.pluginId === id,
+    )
     const own = declared.get(id)?.console ?? {}
-    expect({ id, ...found }).toEqual({
+    expect({ id, ...found, shell: found.shell || drawsAFieldType }).toEqual({
       id,
       slots: sorted(own.slots),
       routes: sorted(own.routes),
