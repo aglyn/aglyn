@@ -653,7 +653,7 @@ export function checkAiExperimentVariants(
       findings.push(VARIANT_MARKUP)
       continue
     }
-    const key = copy.join(' ').toLowerCase()
+    const key = JSON.stringify(copy).toLowerCase()
     if (seen.has(key)) {
       findings.push(VARIANT_DUPLICATE)
       continue
