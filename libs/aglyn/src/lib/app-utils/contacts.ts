@@ -55,6 +55,13 @@ export type ContactSource =
   // cannot answer for.
   | 'manual'
   | 'import'
+  // AGL-3185: the platform's own console — an account created there, and
+  // the product-updates decision that account makes at sign-up, in its
+  // preferences or at the one-time prompt. First-class for the reason `api`
+  // is: the operator's CRM asks "who signed up for the product", and
+  // `member` is a SITE's member, which an account holder of the platform
+  // is not.
+  | 'account'
 
 /**
  * How a capture source reads on screen.
@@ -74,6 +81,7 @@ export const CONTACT_SOURCE_LABELS: Record<ContactSource, string> = {
   api: 'API',
   manual: 'Added by hand',
   import: 'Import',
+  account: 'Account',
 }
 
 export interface ContactInteraction {

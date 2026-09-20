@@ -44,6 +44,11 @@ import {
   type ResolvedCampaignTouch,
 } from './campaign-conversion-attribution'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
+import {
+  declineMarketingConsentFields,
+  MARKETING_CONSENT_SOURCE_FIELD,
+  type MarketingConsentSource,
+} from '@aglyn/aglyn/app-utils/marketing-consent'
 /*
  * The module paths, like `name-search` above, rather than the barrel: the
  * pure helpers this door leans on are exactly the ones a spec of the door
@@ -287,6 +292,25 @@ export interface UpsertHostContactOptions {
    */
   marketingConsent?: boolean
   /**
+   * An explicit REFUSAL, recorded against {@link hostId} (AGL-3185).
+   *
+   * Its own flag rather than `marketingConsent: false`, because every door
+   * that passes a checkbox's value passes `false` for a box left alone, and
+   * a box left alone records nothing — absence is the third state, and
+   * turning it into a refusal would silently make every unticked visitor
+   * unmailable. A door sets this only for an act of refusal: a switch turned
+   * off, a prompt answered no. Ignored when {@link marketingConsent} is true.
+   */
+  declineMarketingConsent?: boolean
+  /**
+   * The provenance stored on the consent entry {@link marketingConsent} or
+   * {@link declineMarketingConsent} writes (AGL-3185): who recorded it, which
+   * door, which wording version. The console doors pass the person's own
+   * (`actor: 'person'`); a site's capture surface passes none, which the
+   * reader takes as the person's own act anyway.
+   */
+  marketingConsentSource?: MarketingConsentSource
+  /**
    * Order value in cents — rolls into RFM fields (AGL-328).
    *
    * WHAT IT COUNTS (AGL-1748). GROSS of the platform fee and GROSS of
@@ -473,6 +497,23 @@ export async function upsertHostContact(
      * whether the capture surface had to disclose anything.
      */
     const group = await consentGroupForSite(options.hostId)
+    /*
+     * THE CONSENT ENTRY THIS CAPTURE WRITES, decided once for both branches.
+     *
+     * A grant outranks a refusal flag set beside it — one door cannot mean
+     * both — and neither writes anything when the door carried no act, so
+     * an unticked box stays the third state. The provenance rides inside the
+     * per-host entry, where the reader looks for it, never at the top of a
+     * document every brand in the org shares.
+     */
+    const consentExtra = options.marketingConsentSource
+      ? { [MARKETING_CONSENT_SOURCE_FIELD]: options.marketingConsentSource }
+      : undefined
+    const consentFields = options.marketingConsent
+      ? marketingConsentFieldsForGroup(group, Date.now(), consentExtra)
+      : options.declineMarketingConsent
+        ? declineMarketingConsentFields(options.hostId, Date.now(), consentExtra)
+        : {}
     const interaction: ContactInteraction = {
       type: options.source,
       atMs: options.interaction.atMs ?? Date.now(),
@@ -731,9 +772,7 @@ export async function upsertHostContact(
            * person who opts in to a second site accumulates two grants rather
            * than replacing the first.
            */
-          ...(options.marketingConsent
-            ? marketingConsentFieldsForGroup(group, Date.now())
-            : {}),
+          ...consentFields,
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },
@@ -873,9 +912,7 @@ export async function upsertHostContact(
             : {}),
         },
       },
-      ...(options.marketingConsent
-        ? marketingConsentFieldsForGroup(group, Date.now())
-        : {}),
+      ...consentFields,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     })

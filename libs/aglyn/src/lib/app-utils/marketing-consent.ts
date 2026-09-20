@@ -113,10 +113,13 @@ import {
  * and consent that is an assertion, so it is carried on the record itself
  * rather than left to be reconstructed from when a script happened to run.
  *
- * Absent on every record written from a capture surface, which is why
+ * Absent on every record written from a site's capture surface, which is why
  * {@link readMarketingBasis} reads its absence as the person's own act: the
  * six checkbox writers are the norm and an operator assertion is the thing
- * that has to announce itself.
+ * that has to announce itself. The platform's own console doors (AGL-3185)
+ * do write it — which door, which wording version — and say whose act it
+ * describes with {@link MarketingConsentSource.actor}, so a record can carry
+ * provenance without being read as an assertion made on the person's behalf.
  */
 export const MARKETING_CONSENT_SOURCE_FIELD = 'marketingConsentSource'
 
@@ -259,16 +262,43 @@ export const CONSENT_GROUP_ID_FIELD = 'consentGroupId'
  */
 export const CONSENT_GROUP_NAME_FIELD = 'consentGroupName'
 
-/** The provenance stored alongside a basis somebody other than the person set. */
+/**
+ * The provenance stored alongside a basis: who recorded it, when, and why.
+ *
+ * Written by the operator backfill and, since AGL-3185, by the platform's
+ * own console doors for the person's own decision.
+ */
 export interface MarketingConsentSource {
-  /** What kind of assertion this is — {@link OPERATOR_BACKFILL_CONSENT_KIND}. */
+  /**
+   * What kind of record this is — {@link OPERATOR_BACKFILL_CONSENT_KIND}, or
+   * the console door that captured a person's own decision.
+   */
   kind: string
-  /** The operator who asserted it. Never blank on a well-formed record. */
+  /**
+   * Who recorded it: the operator who asserted it, or the account that made
+   * its own decision. Never blank on a well-formed record.
+   */
   by: string
-  /** When they asserted it. */
+  /** When it was recorded. */
   atMs: number | null
   /** Why, in prose, for whoever audits this later. */
   reason: string
+  /**
+   * Whose act this provenance describes.
+   *
+   * Absent on every record the operator writers stamp, and read as
+   * `'operator'`: an assertion is what provenance meant before a door
+   * existed that records the person's own click WITH provenance. Such a door
+   * writes `'person'`, which is the only way a record carrying this field
+   * reads as the person's own act.
+   */
+  actor?: MarketingConsentAssertedBy
+  /**
+   * The version of the consent wording the person was shown, when the door
+   * versions its wording. Absent on an operator assertion, which showed the
+   * person nothing.
+   */
+  textVersion?: string
 }
 
 /** Whose act a stored basis represents. */
@@ -351,8 +381,9 @@ export interface MarketingConsentRecord {
   basis: MarketingBasis
   /**
    * Whose act the basis represents, or `null` when there is no basis to
-   * attribute. `'person'` for the capture surfaces, `'operator'` for a basis
-   * an operator asserted on somebody's behalf.
+   * attribute. `'person'` for the capture surfaces and for a console door
+   * whose provenance says so, `'operator'` for a basis an operator asserted
+   * on somebody's behalf.
    *
    * Not a second grade of mailability — {@link marketingConsentVerdict}
    * ignores it, because an org that asserted a basis for its own seed data
@@ -361,7 +392,12 @@ export interface MarketingConsentRecord {
    * as evidence.
    */
   assertedBy: MarketingConsentAssertedBy | null
-  /** The provenance behind an `'operator'` basis; `null` for a person's own. */
+  /**
+   * The provenance behind the basis; `null` when the writer stamped none,
+   * which every site capture surface does. Present for an operator assertion
+   * and for a console door's record of the person's own decision — the two
+   * are told apart by {@link assertedBy}, not by this being set.
+   */
   source: MarketingConsentSource | null
   /** When the basis was recorded, when the writer stamped it. */
   basisAtMs: number | null
@@ -610,12 +646,19 @@ export function readMarketingBasis(
     capturedByHostIds: capturedBy,
     capturedByGroup: capturedBy.some((id) => group.hostIds.includes(id)),
     basis,
-    // A basis with no provenance is the person's own: the capture surfaces
-    // write nothing here, so absence is the norm and an operator assertion
-    // is what has to be stated. Attributing an absent basis to nobody keeps
-    // `unrecorded` from reading as a person who declined to be attributed.
+    // A basis with no provenance is the person's own: the site capture
+    // surfaces write nothing here, so absence is the norm and an operator
+    // assertion is what has to be stated. Provenance that names the person
+    // as its own actor is the one other way to be the person's act — a
+    // console door records which door and which wording, and says so.
+    // Attributing an absent basis to nobody keeps `unrecorded` from reading
+    // as a person who declined to be attributed.
     assertedBy:
-      basis === 'unrecorded' ? null : source !== null ? 'operator' : 'person',
+      basis === 'unrecorded'
+        ? null
+        : source !== null && source.actor !== 'person'
+          ? 'operator'
+          : 'person',
     source,
     basisAtMs,
     capturedAtMs:
@@ -798,13 +841,18 @@ export function marketingConsentFieldsForHost(
  *
  * Separate from the grant helper because the two are not one function with a
  * boolean. A refusal is written by the unsubscribe path and by the API's
- * explicit `marketingConsent: false`, it carries no provenance a person
- * supplied, and — unlike a grant — the pre-host field is still honored
+ * explicit `marketingConsent: false`, neither of which carries provenance a
+ * person supplied, and — unlike a grant — the pre-host field is still honored
  * against every host, so the two are not symmetric anywhere in this module.
+ *
+ * @param extra fields stored on the entry beside the refusal — the console
+ *              doors pass the person's own provenance here (AGL-3185), the
+ *              same way the grant helper takes it.
  */
 export function declineMarketingConsentFields(
   hostId: string,
   atMs: number,
+  extra?: Readonly<Record<string, unknown>>,
 ): Record<string, unknown> {
   if (!hostId) {
     throw new Error('[marketing-consent] a refusal cannot be recorded for no host')
@@ -821,6 +869,7 @@ export function declineMarketingConsentFields(
       [hostId]: {
         [MARKETING_CONSENT_FIELD]: false,
         marketingConsentAtMs: atMs,
+        ...(extra ?? {}),
       },
     },
   }
@@ -874,11 +923,24 @@ function readConsentSource(value: unknown): MarketingConsentSource | null {
   const kind = typeof source['kind'] === 'string' ? source['kind'] : ''
   const by = typeof source['by'] === 'string' ? source['by'] : ''
   if (!kind || !by) return null
+  // Only the two literals the type names; anything else reads as absent,
+  // which is the operator default — a malformed actor must not turn an
+  // assertion into the person's own act.
+  const actor =
+    source['actor'] === 'person' || source['actor'] === 'operator'
+      ? source['actor']
+      : undefined
+  const textVersion =
+    typeof source['textVersion'] === 'string' && source['textVersion']
+      ? source['textVersion']
+      : undefined
   return {
     kind,
     by,
     atMs: timestampMs(source['atMs']),
     reason: typeof source['reason'] === 'string' ? source['reason'] : '',
+    ...(actor ? { actor } : {}),
+    ...(textVersion ? { textVersion } : {}),
   }
 }
 
