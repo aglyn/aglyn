@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 11 edges the allowlist carries, and what removes each. An edge leaves the
+The 10 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -228,7 +228,7 @@ import and no production file may repeat it; the fix is a fixture that reads
 the table from the core's server entry, or the spec moving to a project that
 may import the core.
 
-**Plugin → plugin** (9, numbered to 17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (8, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -321,10 +321,13 @@ needs it starts.
     lives, and the sender is not reachable through marketing's server entry, so
     it keeps the row until it can assert the same thing on the shared mail
     rail (`@aglyn/shared-util-email`'s `marketing-send` injection seam).
-14. **`plugins-marketing` → `plugins-commerce`.** Crosses: `productPriceRange`
-    (`src/lib/server/campaign-send.ts`) — marketing reading a fact about a
-    commerce record. Fix: `registerPluginRecordFactsReader` — commerce registers
-    product facts, marketing resolves them. **Present.**
+14. **`plugins-marketing` → `plugins-commerce`.** Gone (AGL-3080). The campaign
+    sender read the products collection itself and imported `productPriceRange`
+    to price what it read. Commerce publishes a `product` card through
+    `registerPluginRecordCardReader` — a new core seam, since a send has no
+    member for the facts reader to answer — and the sender asks
+    `readPluginRecordCard`. The "from" price is worked out in one place. The
+    number stays.
 15. **`plugins-marketing` → `plugins-email`.** The widest row. Crosses:
     `CampaignComposer`, `useCampaignManageApi` and `useOrgEmailTopics`
     (`campaign-detail-card.tsx`, `campaigns-card.tsx`), and

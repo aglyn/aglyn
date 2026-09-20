@@ -36,7 +36,7 @@ import {
   type EmailRenderProduct,
 } from '@aglyn/plugins-email/model'
 import { assignExperimentVariant, type HostExperiment } from '../model'
-import { productPriceRange } from '@aglyn/plugins-commerce/model'
+import { readPluginRecordCard } from '@aglyn/aglyn/plugin-manager/plugin-record-cards'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { hostPublicOrigin } from '@aglyn/aglyn/server'
 import {
@@ -617,20 +617,17 @@ async function loadEmailTemplate(hostId: string, screenId: string) {
   const products: Record<string, EmailRenderProduct> = {}
   await Promise.all(
     productIds.map(async (productId) => {
-      const productSnapshot = await firestore
-        .collection('hosts')
-        .doc(hostId)
-        .collection('products')
-        .doc(productId)
-        .get()
-      if (!productSnapshot.exists) return
-      const data = productSnapshot.data() as any
-      const [minPrice] = productPriceRange(data)
+      // Asked of whichever plugin keeps products: its name, its "from" price
+      // as that plugin words it, its image and where it is read. A site with
+      // no such plugin, and a product since deleted, both resolve to no card —
+      // the block draws nothing, as it always has for a missing product.
+      const card = await readPluginRecordCard('product', { hostId, id: productId })
+      if (!card) return
       products[productId] = {
-        name: String(data.name ?? productId),
-        priceLabel: minPrice ? `$${minPrice}` : undefined,
-        imageUrl: data.imageUrl ?? data.mediaUrls?.[0],
-        url: data.slug ? `/products/${data.slug}` : undefined,
+        name: card.title,
+        priceLabel: card.caption,
+        imageUrl: card.imageUrl,
+        url: card.path,
       }
     }),
   )

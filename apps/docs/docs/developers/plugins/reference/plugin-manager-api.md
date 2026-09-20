@@ -354,6 +354,54 @@ plugin publishes the kind, or the owner has no address at that scope. Render
 text, which is what these surfaces already do while their route params settle.
 A link is not access: the page at the far end applies its own gates.
 
+## Record cards — `plugin-record-cards` (`/server`)
+
+What a plugin's record looks like in one line and one image, published by the
+plugin that owns it, for a surface that has to DRAW the record rather than link
+to it — a designed email that features a product, a picker over what another
+plugin keeps. Keyed by record kind, like the facts reader, the timeline and the
+route.
+
+```ts
+// the owner, from each of its server registrars
+registerPluginRecordCardReader('bottle', {
+  async read({ hostId, id }) {
+    const bottle = await readBottle(hostId, id)
+    return bottle
+      ? {
+          title: bottle.name,
+          caption: fromPrice(bottle), // the owner's rule, already worded
+          imageUrl: bottle.labelUrl,
+          path: `/cellar/${bottle.slug}`,
+        }
+      : null
+  },
+})
+
+// any other plugin's server code
+const card = await readPluginRecordCard('bottle', { hostId, id })
+if (card) draw(card)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginRecordCardReader(kind, reader, { pluginId? })` | A kind another plugin publishes throws naming both; the incumbent keeps serving, and the owner re-registering replaces its own. |
+| `readPluginRecordCard(kind, { hostId, id })` | `{ title, caption?, imageUrl?, path? }`, or **`null` when no plugin publishes the kind or the record is gone**. A caller treats both alike: there is nothing to draw. |
+| `pluginRecordCardReader(kind)` / `listPluginRecordCardKinds()` | The reader with its owner, and every published kind. |
+
+**A card carries nothing a caller could compute on.** The caption is a string
+the owner has already worded — a price, a date, a status — so the rule behind
+it lives in one place. A caller that read the owner's document and imported its
+model to agree is the coupling this replaces.
+
+**Server-side and unauthenticated, on purpose.** A reader runs with the Admin
+SDK for a caller that has already decided the read is the workspace's to make.
+`plugin-record-facts` answers one MEMBER and applies their permissions; the two
+are separate contracts so neither borrows the other's trust. Both apps load
+every plugin's server entry before a plugin handler runs, so a reader
+registered from a server registrar is there wherever a handler asks. Import it
+by its own subpath (`@aglyn/aglyn/plugin-manager/plugin-record-cards`).
+
 ## Contact capture — `plugin-contact-capture` (`/server`)
 
 A silo that meets a person — a form submission, a member sign-up, an order, a

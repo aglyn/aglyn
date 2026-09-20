@@ -27,10 +27,10 @@ import { normalizeResendDeliveryEvents } from '@aglyn/shared-util-email'
 import { verifySvixSignature } from '@aglyn/shared-util-email/svix-signature'
 // AGL-1771 lifted `isDocumentId` here from the local copy AGL-1768 wrote. The
 // copy's stated reason was wrong: `@nx/enforce-module-boundaries` does NOT
-// refuse an edge between two feature plugins — every plugin carries only
-// `aglyn:addons`, and that tag's rule permits `aglyn:addons` as a target, which
-// is why `campaign-send.ts` already imports `@aglyn/plugins-commerce/model`. It
-// now lives beside `updateExisting` in the library where Firestore paths are
+// refuse an edge between two feature plugins by that tag — every plugin
+// carries `aglyn:addons`, whose rule permits `aglyn:addons` as a target (it is
+// `scope:plugin` that refuses another plugin, and `check:lib-boundaries` that
+// holds it). It now lives beside `updateExisting` in the library where Firestore paths are
 // built, which was always the better home and is now the reachable one.
 import { firebaseAdmin, updateExisting } from '@aglyn/tenant-data-admin'
 // From the LEAF, not the barrel, for the same reason `isDocumentId` is
