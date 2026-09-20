@@ -524,6 +524,7 @@
           "slots": [
             "crmRecordAttribution",
             "hostDashboard",
+            "inboxCampaigns",
             "inboxRecordAttribution"
           ]
         }

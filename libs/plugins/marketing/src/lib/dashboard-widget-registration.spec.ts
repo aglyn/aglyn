@@ -72,6 +72,7 @@ describe('the marketing plugin registers the campaign glance', () => {
       CAMPAIGN_WIDGET,
       // Campaign attribution, in the zones the CRM and the Inbox host.
       'marketing-crm-record-attribution',
+      'marketing-inbox-campaigns',
       'marketing-inbox-record-attribution',
     ])
     expect(extension?.navItems?.[0]?.href).toBe('/marketing')

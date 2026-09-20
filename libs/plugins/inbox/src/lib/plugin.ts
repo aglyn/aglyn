@@ -20,7 +20,10 @@ import { mdiInboxArrowDown } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { INBOX_CONSOLE_SECTIONS } from './components/inbox-console-sections'
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
-import { INBOX_RECORD_ATTRIBUTION_ZONE } from './components/inbox-attribution-zone'
+import {
+  INBOX_CAMPAIGNS_ZONE,
+  INBOX_RECORD_ATTRIBUTION_ZONE,
+} from './components/inbox-attribution-zone'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /** Code-split: the Inbox console page only loads when opened. */
@@ -43,9 +46,9 @@ const InboxGlanceCard = lazy(
  * Inbox feature plugin (AGL-395). Console-only — form submissions, site
  * members/leads and campaigns live in Firestore and have no canvas element,
  * so there is no UI bundle. The console half declares the Inbox nav + its
- * three sections through the ConsoleExtension registry (always-on). Depends
- * on the marketing plugin for the borrowed Campaigns section and for the
- * conversion attribution shown inside a submission.
+ * three sections through the ConsoleExtension registry (always-on). The
+ * Campaigns section and the attribution shown inside a submission are zones
+ * this plugin hosts; the plugin that owns campaigns draws in them.
  */
 export function registerInboxConsole(): void {
   registerPluginZone(
@@ -57,6 +60,16 @@ export function registerInboxConsole(): void {
         'In a lead’s “Where this came from” dialog and under an open submission. A widget here says which campaign or link brought it; it is handed the site, what the record is and its id, and it writes nothing.',
     },
     // Named, because a spec calls this registrar without the loader.
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: INBOX_CAMPAIGNS_ZONE,
+      label: 'The Inbox’s Campaigns section',
+      surface: 'console',
+      description:
+        'The body of the Inbox’s Campaigns tab. A widget here lists the site’s campaigns; it is handed the site and nothing else.',
+    },
     { pluginId: BUNDLE_ID },
   )
   Aglyn.registerConsoleExtension({

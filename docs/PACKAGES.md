@@ -311,15 +311,16 @@ needs it starts.
     URL. With no plugin publishing the kind they draw text, not a link to a
     page the workspace cannot open. The number stays so the rows below keep
     theirs.
-13. **`plugins-inbox` → `plugins-marketing`.** `ConversionAttribution` no longer
-    crosses: the Inbox hosts an `inboxRecordAttribution` zone and marketing's
-    widget fills it, as in row 5 (AGL-3080). Still crosses: `HostCampaignsCard` (`inbox-console-page.tsx`), and
-    `performCampaignSend` in one spec. Fix, in two parts: marketing registers
-    both cards as widgets into zones the inbox page declares for itself — a slot
-    id is an open string, so a plugin-hosted zone needs no core release, and the
-    registry is **present**; and the spec asserts the consent gate on the shared
-    mail rail (`@aglyn/shared-util-email`'s `marketing-send` injection seam),
-    which every send passes, instead of importing marketing's send path.
+13. **`plugins-inbox` → `plugins-marketing`.** No shipped file crosses any
+    more (AGL-3080). The Inbox hosts two zones marketing fills: its Campaigns
+    section (`inboxCampaigns`) and the attribution under a lead or a submission
+    (`inboxRecordAttribution`, as in row 5). What still crosses is one spec,
+    `an-enrollment-is-not-a-license-to-send.spec.ts`, which drives the real
+    `performCampaignSend` against the real Inbox enrollment to prove the send
+    re-checks suppression. It is the consent proof, its header argues where it
+    lives, and the sender is not reachable through marketing's server entry, so
+    it keeps the row until it can assert the same thing on the shared mail
+    rail (`@aglyn/shared-util-email`'s `marketing-send` injection seam).
 14. **`plugins-marketing` → `plugins-commerce`.** Crosses: `productPriceRange`
     (`src/lib/server/campaign-send.ts`) — marketing reading a fact about a
     commerce record. Fix: `registerPluginRecordFactsReader` — commerce registers

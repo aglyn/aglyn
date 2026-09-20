@@ -17,7 +17,9 @@
 
 'use client'
 
+import { listConsoleWidgets } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import { Alert, AlertTitle } from '@mui/material'
 import { definePluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 
 /**
@@ -47,3 +49,34 @@ export function InboxRecordAttributionZone(
   return <Slot slot={INBOX_RECORD_ATTRIBUTION_ZONE.id} {...props} />
 }
 InboxRecordAttributionZone.displayName = 'InboxRecordAttributionZone'
+
+/**
+ * The Inbox's Campaigns section: a place, not a table.
+ *
+ * What arrived and who it came from sit beside what was sent to them, so the
+ * Inbox keeps a Campaigns tab. The campaigns themselves belong to a plugin
+ * that sends them, which draws its own card here; the Inbox hands it the site
+ * and nothing else.
+ */
+export interface InboxCampaignsZoneProps {
+  hostId: string
+}
+
+export const INBOX_CAMPAIGNS_ZONE =
+  definePluginZone<InboxCampaignsZoneProps>('inboxCampaigns')
+
+export function InboxCampaignsZone(props: InboxCampaignsZoneProps) {
+  const Slot = useConsoleWidgetSlot()
+  // Read at render, after the shell has loaded its plugins.
+  if (!Slot || listConsoleWidgets(INBOX_CAMPAIGNS_ZONE.id).length === 0) {
+    return (
+      <Alert severity="info">
+        <AlertTitle>{'Campaigns are part of Marketing'}</AlertTitle>
+        {'Marketing is switched off for this workspace or this site, so there ' +
+          'are no campaigns to show here.'}
+      </Alert>
+    )
+  }
+  return <Slot slot={INBOX_CAMPAIGNS_ZONE.id} {...props} />
+}
+InboxCampaignsZone.displayName = 'InboxCampaignsZone'

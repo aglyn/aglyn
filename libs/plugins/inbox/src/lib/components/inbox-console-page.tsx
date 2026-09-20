@@ -24,17 +24,13 @@ import {
   visitorRecordRefusedCounterId,
   visitorRecordsPausedNotice,
 } from '@aglyn/aglyn'
-// A deep import, NOT the plugin barrel (AGL-1151): the barrel is the entry
-// point the tenant's loader dynamically imports to activate the marketing
-// plugin's SITE half, so a console card named there ships to every published
-// page. The component path reaches the same module without crossing it.
-import { default as HostCampaignsCard } from '@aglyn/plugins-marketing/components/campaigns-card'
 import { HubSections } from '@aglyn/shared-ui-next'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { Alert, AlertTitle, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import ContactsCard from './contacts-card.component'
+import { InboxCampaignsZone } from './inbox-attribution-zone'
 import type { InboxConsoleSectionId } from './inbox-console-sections'
 import SubmissionsCard from './submissions-card.component'
 
@@ -57,7 +53,7 @@ function sectionBody(
     case 'contacts':
       return <ContactsCard hostId={hostId} />
     case 'campaigns':
-      return <HostCampaignsCard hostId={hostId} />
+      return <InboxCampaignsZone hostId={hostId} />
     default:
       return null
   }
@@ -66,8 +62,8 @@ function sectionBody(
 /**
  * Inbox (AGL-77/104/109 → AGL-395): form submissions reader, site members +
  * leads, and campaigns — owned by the inbox plugin and rendered by the shell's
- * generic plugin route. Depends on the marketing plugin for the borrowed
- * Campaigns section.
+ * generic plugin route. The Campaigns section is a zone this page hosts; the
+ * plugin that sends campaigns draws its card there.
  *
  * Orders are NOT here. A sale is not something that arrived in an inbox, and
  * the card was nested inside the members section rather than carrying a tab of

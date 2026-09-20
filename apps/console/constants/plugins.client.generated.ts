@@ -111,7 +111,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'marketing',
     apiPrefixes: ["campaigns","experiments"],
     register: {"console":"registerMarketingConsole","site":"registerMarketingPlugin"},
-    contributes: {"console":{"shell":true,"routes":["/marketing"],"slots":["crmRecordAttribution","hostDashboard","inboxRecordAttribution"]}},
+    contributes: {"console":{"shell":true,"routes":["/marketing"],"slots":["crmRecordAttribution","hostDashboard","inboxCampaigns","inboxRecordAttribution"]}},
     load: () => import('@aglyn/plugins-marketing'),
     loads: {
       site: () => import('@aglyn/plugins-marketing/site'),

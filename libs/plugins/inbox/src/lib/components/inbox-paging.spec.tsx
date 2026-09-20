@@ -253,10 +253,6 @@ jest.mock('@aglyn/aglyn', () => ({
   visitorRecordRefusedCounterId: (kind: string) => `${kind}Refused`,
   visitorRecordsPausedNotice: () => null,
 }))
-jest.mock('@aglyn/plugins-marketing/components/campaigns-card', () => ({
-  __esModule: true,
-  default: () => null,
-}))
 jest.mock('@aglyn/shared-ui-next', () => ({
   // The rail's chrome, passed through (AGL-2501). The two tables under test
   // are two SECTIONS now, so each describe mounts the one it is about — a

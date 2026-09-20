@@ -36,6 +36,9 @@ const CampaignGlanceCard = lazy(
   () => import('./components/campaign-glance-card.component'),
 )
 
+/** The site's campaigns, drawn in the Inbox's Campaigns section. */
+const HostCampaignsCard = lazy(() => import('./components/campaigns-card'))
+
 /** Loaded where a record page draws one of the attribution zones. */
 const RecordAttributionWidget = lazy(
   () => import('./components/record-attribution-widget'),
@@ -109,6 +112,13 @@ export function registerMarketingConsole(): void {
         widgetId: 'marketing-crm-record-attribution',
         title: 'Campaign attribution',
         Component: RecordAttributionWidget,
+      },
+      // The Inbox's Campaigns tab is a zone; this is the card that fills it.
+      {
+        slot: 'inboxCampaigns',
+        widgetId: 'marketing-inbox-campaigns',
+        title: 'Campaigns',
+        Component: HostCampaignsCard,
       },
       {
         slot: 'inboxRecordAttribution',
