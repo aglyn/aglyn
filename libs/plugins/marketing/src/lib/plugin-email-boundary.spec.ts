@@ -50,9 +50,10 @@
  *    library's source instead of being retyped here: a symbol that moves in
  *    either direction later moves in this guard with it.
  *
- * Imports of email BEHAVIOR — the composer, the send API, the topic
- * subscriptions — are outside what this asserts. Those are the Email plugin's
- * to govern, and gating them is a separate mechanism.
+ * Imports of email BEHAVIOR used to be outside what this asserts, while the
+ * composer, the send API and the topic hook lived in the Email plugin. The
+ * campaign surfaces are Marketing's own now and what is left of Email's is
+ * drawn in zones, so the last block holds the whole line: no import at all.
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
@@ -228,9 +229,37 @@ describe('the boundary this guard is reading', () => {
     )
   })
 
-  it('found marketing sources that do reach the email plugin', () => {
+  it('found marketing sources, and the scanner sees a reference when one is there', () => {
     expect(MARKETING_FILES.length).toBeGreaterThan(20)
-    expect(EMAIL_PLUGIN_REFERENCES.length).toBeGreaterThan(0)
+    /*
+     * Marketing once borrowed the composer, the send API and the topic hook,
+     * and that was this control. It borrows nothing now — the composer and the
+     * campaign API are its own, and the rest is drawn in zones — so the
+     * scanner is shown a line it must find instead. The specifier is assembled
+     * so this file is not itself a hit.
+     */
+    const specifier = ['@aglyn', 'plugins-email', 'model'].join('/')
+    const found = emailPluginReferences(
+      'libs/plugins/marketing/src/lib/example.ts',
+      `import { campaignReport } from '${specifier}'\n`,
+    )
+    expect(found).toHaveLength(1)
+    expect(found[0].names).toEqual(['campaignReport'])
+  })
+})
+
+describe('marketing imports nothing from the email plugin', () => {
+  it('names no module of it, for shapes or for behavior', () => {
+    /*
+     * The stronger line, which the two checks below are now special cases of.
+     * `check:lib-boundaries` holds the same edge across the project graph;
+     * this holds it where a failure names the file.
+     */
+    expect(
+      EMAIL_PLUGIN_REFERENCES.map(
+        (reference) => `${short(reference.file)} → ${reference.specifier}`,
+      ),
+    ).toEqual([])
   })
 })
 

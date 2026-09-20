@@ -75,8 +75,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'scale' }, ready: true }),
   useHostOrgId: () => 'org-1',
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
-  useHostResourceApi: () => jest.fn().mockResolvedValue({ id: 'new' }),
-  useHostVersionApi: () => jest.fn().mockResolvedValue({ id: 'v1' }),
   useFirestoreDoc: () => ({ data: undefined, status: 'success' }),
   useFirestoreCollection: () => ({
     data: [],
@@ -129,12 +127,6 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
       confirmations.push(options)
       return Promise.resolve(undefined)
     },
-  }),
-}))
-
-jest.mock('./use-org-email-topics', () => ({
-  useOrgEmailTopics: () => ({
-    topics: [{ id: 'marketing', name: 'Promotions and offers' }],
   }),
 }))
 

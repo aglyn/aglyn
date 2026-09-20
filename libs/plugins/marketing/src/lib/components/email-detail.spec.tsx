@@ -26,6 +26,7 @@
  * message went — the campaign, and the list as the SEND recorded it.
  */
 
+import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type {
@@ -144,6 +145,24 @@ const LINKS_PATH = 'hosts/site1/campaigns/msg_1/reports/links'
 const TEMPLATE_PATH = 'hosts/site1/screens/scr_1'
 const TEMPLATE_VERSION_PATH = 'hosts/site1/screens/scr_1/versions/ver_1'
 
+/**
+ * The shell's zone renderer, standing in for whichever plugin draws a design.
+ *
+ * The frame is not this page's: rendering a stored design into what an inbox
+ * receives belongs to the plugin that keeps email, and its own specs hold the
+ * sandbox and the send path's HTML. What is this page's is WHAT IT HANDS THE
+ * ZONE — the stored nodes or the plain-text body, the note saying which
+ * template this is, and what to say when there is nothing to draw — and where
+ * on the page the zone sits. So the stand-in records the props and leaves a
+ * marker to measure position by.
+ */
+let previewProps: Record<string, any> | null = null
+function ZoneRenderer(props: { slot: string } & Record<string, unknown>) {
+  if (props.slot !== 'campaignDesignPreview') return null
+  previewProps = props
+  return <div data-testid="design-preview" />
+}
+
 /** Rooted at `_@_`, the id the besigner really writes. */
 const NODES = {
   '_@_': { componentId: 'emailSection', nodes: ['t1'] },
@@ -171,6 +190,7 @@ async function renderEmail(options?: {
 }): Promise<void> {
   mockDocs.clear()
   composerProps = null
+  previewProps = null
   if (options?.email !== null) {
     mockDocs.set(EMAIL_PATH, {
       subject: 'Spring sale',
@@ -193,21 +213,23 @@ async function renderEmail(options?: {
   const { EmailDetail } = await import('./email-detail')
   render(
     (
-      <EmailDetail
-        hostId="site1"
-        emailId="msg_1"
-        basePath="/acme/hosts/site/emails"
-      />
+      <ConsoleWidgetSlotContext.Provider value={ZoneRenderer}>
+        <EmailDetail
+          hostId="site1"
+          emailId="msg_1"
+          basePath="/acme/hosts/site/emails"
+        />
+      </ConsoleWidgetSlotContext.Provider>
     ) as ReactNode as never,
   )
 }
 
 describe('a message previews its template, and says which template', () => {
-  it('draws the send path’s own HTML in a fully sandboxed frame', async () => {
+  it('hands the design zone the template’s stored nodes', async () => {
     await renderEmail()
-    const frame = document.querySelector('iframe[title="Email preview"]')
-    expect(frame?.getAttribute('sandbox')).toBe('')
-    expect(frame?.getAttribute('srcdoc')).toContain('Spring is here')
+    expect(previewProps?.hostId).toBe('site1')
+    expect(previewProps?.nodes).toEqual(NODES)
+    expect(previewProps?.subject).toBe('Spring sale')
   })
 
   it('says the preview is the template TODAY, not what was mailed', async () => {
@@ -215,29 +237,26 @@ describe('a message previews its template, and says which template', () => {
     // The mail is rendered per recipient at send time and not kept, so a
     // template edited since previews as it is now. A reader taking this for a
     // record of what went out is the failure this line exists to stop.
-    expect(screen.getByText(/template as it stands today/i)).toBeTruthy()
+    expect(previewProps?.note).toMatch(/template as it stands today/i)
   })
 
-  it('draws the synthesized HTML for a message written as plain text', async () => {
+  it('hands over the body of a message written as plain text', async () => {
     // A plain-text message is not previewless: the send path synthesizes an
-    // HTML part for it, and that part is what the inbox received. Reporting
-    // "nothing to draw" would describe the composer rather than the mail.
+    // HTML part for it, and that part is what the inbox received. Handing the
+    // zone nothing would describe the composer rather than the mail.
     await renderEmail({
       email: { templateScreenId: undefined, body: 'Hello from the composer.' },
     })
-    const frame = document.querySelector(
-      'iframe[title="Email preview"]',
-    ) as HTMLIFrameElement | null
-    expect(frame).toBeTruthy()
-    expect(frame?.getAttribute('srcdoc')).toContain('Hello from the composer.')
+    expect(previewProps?.nodes).toBeUndefined()
+    expect(previewProps?.text).toContain('Hello from the composer.')
   })
 
-  it('has nothing to draw only when there is no body either', async () => {
-    // The control. A frame drawn for an empty body would be an empty frame
-    // presented as the mail, which is worse than saying so.
+  it('says there is nothing to draw only when there is no body either', async () => {
+    // The control: the same branch with nothing in it, and the words the zone
+    // is given for that case.
     await renderEmail({ email: { templateScreenId: undefined, body: '' } })
-    expect(document.querySelector('iframe[title="Email preview"]')).toBeNull()
-    expect(screen.getByText(/carries no body/i)).toBeTruthy()
+    expect(String(previewProps?.text ?? '').trim()).toBe('')
+    expect(previewProps?.emptyMessage).toMatch(/carries no body/i)
   })
 })
 
@@ -916,7 +935,7 @@ describe('the preview sits below the recipients', () => {
      * true whichever way round they are.
      */
     await renderEmail()
-    const preview = document.querySelector('iframe[title="Email preview"]')
+    const preview = screen.getByTestId('design-preview')
     const recipients = screen.getByText('Recipients')
     expect(preview).toBeTruthy()
     expect(

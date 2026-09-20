@@ -1030,7 +1030,7 @@ const NOT_A_LIST: Array<[string, string]> = [
       'could page through.',
   ],
   [
-    'libs/plugins/email/src/lib/components/email-detail.tsx',
+    'libs/plugins/marketing/src/lib/components/email-detail.tsx',
     'One message’s report. Its tables are the message’s own facts — state, ' +
       'send time, campaign, list, template — the fixed population taxonomy, ' +
       'and the link rollup, which is bounded at WRITE time by ' +
@@ -1055,7 +1055,7 @@ const NOT_A_LIST: Array<[string, string]> = [
       'different problem than a truncated table.',
   ],
   [
-    'libs/plugins/email/src/lib/components/campaign-composer.tsx',
+    'libs/plugins/marketing/src/lib/components/campaign-composer.tsx',
     'A FORM, not a list. Everything it maps over is a picker’s options — the ' +
       'org’s segments and lists at `limit(50)`, the site’s email designs at ' +
       '`limit(200)`, its running experiments at `limit(50)` — plus the three ' +

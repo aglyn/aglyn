@@ -151,13 +151,13 @@ jest.mock('next/navigation', () => ({
  * The composer and the topic catalog, stubbed because they open listens of
  * their own and this file asserts nothing about either.
  */
-jest.mock('@aglyn/plugins-email/components/campaign-composer', () => ({
+jest.mock('./campaign-composer', () => ({
   __esModule: true,
   default: () => <div>{'composer'}</div>,
 }))
-jest.mock('@aglyn/plugins-email/components/use-org-email-topics', () => ({
+jest.mock('./use-campaign-topic-options', () => ({
   __esModule: true,
-  useOrgEmailTopics: () => ({ topics: [] }),
+  useCampaignTopicOptions: () => ({ topics: [], source: null }),
 }))
 
 /*

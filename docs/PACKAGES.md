@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 2 edges the allowlist carries, and what removes each. An edge leaves the
+The 1 edge the allowlist carries, and what removes it. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -331,31 +331,37 @@ needs it starts.
     member for the facts reader to answer — and the sender asks
     `readPluginRecordCard`. The "from" price is worked out in one place. The
     number stays.
-15. **`plugins-marketing` → `plugins-email`.** The widest row, and the two
-    plugins are coupled in BOTH directions: marketing serves
-    `/api/campaigns/send` and `/manage` while their client hook, the composer
-    that drives them and four other callers live in the email plugin. The owner
-    decided (2026-09-20) that **marketing owns campaigns end to end**, so it is
-    worked off in stages, each with a seam so the move does not swap this edge
-    for its reverse. *Stage 1, done:* the sender no longer imports email's
-    model — rendering one message for one recipient was never a campaign's or
-    an email design's alone, since email checks a design through the same call,
-    so it sits on the core's mail rail as
-    `@aglyn/aglyn/app-utils/recipient-email-render`. *Left:* the composer, the
-    test-send drawer and the campaign hooks move to marketing and are drawn in
-    zones email hosts; the topic picker and the sender editor are drawn in
-    zones the composer hosts. What follows is the row as first written. Crosses:
-    `CampaignComposer`, `useCampaignManageApi` and `useOrgEmailTopics`
-    (`campaign-detail-card.tsx`, `campaigns-card.tsx`), and
-    `@aglyn/plugins-email/model` (`src/lib/server/campaign-send.ts`). Fix, in
-    three parts: the composer is a widget email registers into a
-    marketing-hosted zone (**present**); the send and manage calls go through
-    email's own `registerPluginApiRoute` doors rather than a borrowed client
-    hook (**present**); and the model import becomes a plugin-declared campaign
-    resource kind whose numbers resolve through `registerPluginFigureReader` —
-    the reader is **present**, while the resource kind and the
-    subscription-topic contract `useOrgEmailTopics` needs are **owed**
-    (AGL-3124). That resource kind is the one the finding below turns on.
+15. **`plugins-marketing` → `plugins-email`.** Gone (AGL-3080). The widest
+    row, and the two plugins were coupled in BOTH directions: marketing served
+    `/api/campaigns/send`, `/manage` and `/recipients` while their client hook,
+    the composer that drives them and the message pages that call them lived
+    in the email plugin. The owner decided (2026-09-20) that **marketing owns
+    campaigns end to end**, so the move was made with a seam on each side
+    rather than by swapping this edge for its reverse.
+    *The mail rail.* Rendering one message for one recipient was never a
+    campaign's or an email design's alone — email checks a design through the
+    same call — so it sits in core as
+    `@aglyn/aglyn/app-utils/recipient-email-render`.
+    *What moved to marketing.* The composer, the test-send drawer, the
+    campaign API hooks, and the three message pages (list, report, compose)
+    with the recipients table: a message is one send of a campaign, and every
+    action on those pages is a marketing route.
+    *Zones email hosts, marketing fills.* `emailMessages` is the whole body of
+    `/emails/messages/**` — email owns the URL, marketing draws it — and
+    `emailTemplateRecipients` is the recipients table under a template's
+    report. A template links its campaigns through
+    `pluginRecordHref('campaign', …)`, which marketing publishes.
+    *Zones marketing hosts, email fills.* What a campaign email needs of the
+    mail itself: `campaignTopicSelect` (the stream picker),
+    `campaignTopicOptions` (a widget that draws nothing and REPORTS the active
+    topics to the two drawers whose select takes a list, read only while the
+    drawer is open), `campaignSenderEditor`, `campaignDesignCreate` and
+    `campaignDesignPreview`. Every one reports through a callback; none writes
+    a campaign. The tokens are in
+    `libs/plugins/marketing/src/lib/components/campaign-email-zones.tsx` and
+    `libs/plugins/email/src/lib/components/email-zones.ts`.
+    `plugin-email-boundary.spec.ts` now holds the whole line — marketing
+    imports nothing from the email plugin. The number stays.
 16. **`plugins-marketplace` → `plugins-mui`.** Gone (AGL-3080). The only
     crossing was the spec proving each block preset composes publishable
     components. It is about the palette's owner and the allowlist's owner at

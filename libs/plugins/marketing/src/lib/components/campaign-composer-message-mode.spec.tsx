@@ -38,6 +38,7 @@
  * "a saved template" name one thing.
  */
 
+import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 jest.setTimeout(30_000)
@@ -52,8 +53,6 @@ let posted: Array<Record<string, any>> = []
 // the composer passes. A zero-arity mock infers `calls` as `[][]`, so
 // `calls[0][0]` is a tuple index that does not exist and the spec config
 // fails to compile while jest itself runs it happily.
-const mockCreateResource = jest.fn(async (_input?: unknown) => ({ id: 'new' }))
-const mockCreateVersion = jest.fn(async () => ({ id: 'v1' }))
 
 // The sending-identity hook lives inside that package and reads the user from
 // its services leaf, which a mock of the barrel does not reach: hand it the
@@ -70,8 +69,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'scale' }, ready: true }),
   useHostOrgId: () => 'org-1',
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
-  useHostResourceApi: () => mockCreateResource,
-  useHostVersionApi: () => mockCreateVersion,
   useFirestoreDoc: () => ({ data: undefined, status: 'success' }),
   useFirestoreCollection: (build: () => any) => {
     const built = build()
@@ -128,12 +125,6 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({ confirm: () => Promise.resolve(undefined) }),
 }))
-jest.mock('./use-org-email-topics', () => ({
-  useOrgEmailTopics: () => ({
-    topics: [{ id: 'marketing', name: 'Promotions and offers' }],
-  }),
-}))
-
 import CampaignComposer from './campaign-composer'
 
 /**
@@ -222,8 +213,33 @@ const settle = async (ms: number) => {
   })
 }
 
+/**
+ * The shell's zone renderer, standing in for the plugin that mints a design.
+ *
+ * A design document is not the composer's to create: the control that does it
+ * is a widget in a zone the composer hosts, and what it writes is held by that
+ * plugin's own spec. The stand-in is that control reduced to its contract — a
+ * button that answers `onCreated` with the design it made — and it records
+ * what the composer asked for the design to be called.
+ */
+const CREATED_DESIGN = { screenId: 'scr_new', versionId: 'ver_new' }
+let designZone: Record<string, any> | null = null
+function ZoneRenderer(props: { slot: string } & Record<string, any>) {
+  if (props.slot !== 'campaignDesignCreate') return null
+  designZone = props
+  return (
+    <button type="button" onClick={() => props.onCreated(CREATED_DESIGN)}>
+      {'Design this email'}
+    </button>
+  )
+}
+
 const mount = async (props: Record<string, any> = {}) => {
-  render(<CampaignComposer hostId="host-1" {...props} />)
+  render(
+    <ConsoleWidgetSlotContext.Provider value={ZoneRenderer}>
+      <CampaignComposer hostId="host-1" {...props} />
+    </ConsoleWidgetSlotContext.Provider>,
+  )
   await settle(500)
 }
 
@@ -574,23 +590,18 @@ describe('what the mode needs before it can send', () => {
 
 describe('a one-off email gets a design of its own, not a "template"', () => {
   beforeEach(() => {
-    mockCreateResource.mockClear()
-    mockCreateVersion.mockClear()
+    designZone = null
   })
 
-  it('names the created design after the email it belongs to', async () => {
+  it('asks for the design to be named after the email it belongs to', async () => {
     await mount({ campaignId: 'msg_1', displayName: 'August newsletter' })
     await asDesigned()
 
-    fireEvent.click(screen.getByText('Design this email'))
-
-    await waitFor(() => expect(mockCreateResource).toHaveBeenCalledTimes(1))
-    const created = mockCreateResource.mock.calls[0][0] as any
-    expect(created.data.kind).toBe('email')
     // The name is the only thing that tells one design from another in the
     // picker; a list of identical "Untitled email" rows tells nobody
     // anything.
-    expect(created.data.displayName).toBe('August newsletter')
+    expect(designZone?.hostId).toBe('host-1')
+    expect(designZone?.name).toBe('August newsletter')
   })
 
   it('falls back to the subject when the email carries no display name', async () => {
@@ -598,12 +609,7 @@ describe('a one-off email gets a design of its own, not a "template"', () => {
     type('Subject', 'Spring clearance')
     await asDesigned()
 
-    fireEvent.click(screen.getByText('Design this email'))
-
-    await waitFor(() => expect(mockCreateResource).toHaveBeenCalledTimes(1))
-    expect((mockCreateResource.mock.calls[0][0] as any).data.displayName).toBe(
-      'Spring clearance',
-    )
+    expect(designZone?.name).toBe('Spring clearance')
   })
 
   it('records the created design on the record before leaving for the editor', async () => {
@@ -619,8 +625,7 @@ describe('a one-off email gets a design of its own, not a "template"', () => {
       expect(posted.some((body) => body.action === 'draft')).toBe(true),
     )
     const draft = posted.find((body) => body.action === 'draft') as any
-    const created = mockCreateResource.mock.calls[0][0] as any
-    expect(draft.templateScreenId).toBe(created.id)
+    expect(draft.templateScreenId).toBe(CREATED_DESIGN.screenId)
     expect(draft.campaignId).toBe('msg_1')
   })
 })

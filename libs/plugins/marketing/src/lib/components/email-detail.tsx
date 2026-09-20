@@ -63,7 +63,7 @@ import {
 } from '@aglyn/shared-ui-email-campaigns/model/email-record'
 import { emailPlainTextState } from '@aglyn/aglyn/app-utils/recipient-email-render'
 import { useMarketingHubPath } from './use-marketing-hub-path'
-import EmailDesignPreview from './email-design-preview'
+import { CampaignDesignPreview as EmailDesignPreview } from './campaign-email-zones'
 import EmailEditDrawer from './email-edit-drawer'
 import EmailRecipientsCard from './email-recipients-card'
 import {

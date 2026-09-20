@@ -366,7 +366,7 @@ names one; **none** is the arbitrary-sample defect described in §2.
 | `libs/plugins/commerce/src/lib/components/console/recovery-queue-card.component.tsx`:96 | 200 | **none** | **Fixed** — ordered ceiling + probe, disclosed |
 | `libs/plugins/commerce/src/lib/components/console/recovery-queue-card.component.tsx`:102 | 200 | **none** | **Fixed** — ordered ceiling + probe, disclosed |
 | `libs/plugins/data/src/lib/components/dataset-schema-dialog.component.tsx`:184 | 200 | **none** | unordered |
-| `libs/plugins/email/src/lib/components/campaign-composer.tsx`:298 | 200 | **none** | unordered |
+| `libs/plugins/marketing/src/lib/components/campaign-composer.tsx`:298 | 200 | **none** | unordered |
 | `libs/plugins/marketplace/src/lib/components/listing-content.component.tsx`:566 | 200 | **none** | **Fixed** — ordered ceiling + probe, disclosed above Buy |
 | `libs/plugins/marketplace/src/lib/components/marketplace-browse.component.tsx`:301 | 200 | **none** | **Fixed** — ordered ceiling + probe; install-state chips stated as a floor |
 

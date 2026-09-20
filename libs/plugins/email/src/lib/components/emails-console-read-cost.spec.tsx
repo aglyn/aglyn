@@ -374,10 +374,21 @@ describe('emails console read cost (AGL-2501)', () => {
    * listen, and it listens for its OWN collection.
    */
   it('CONTROL: the open section does listen, and for its own collection', async () => {
+    await renderConsole('suppressions')
+    summarize('suppressions section', mockListens)
+    expect(mockListens.length).toBeGreaterThan(0)
+    expect(listenedCollections()).toContain('suppressions')
+  })
+
+  /*
+   * The Messages section is a zone: what it reads is the plugin that owns
+   * campaigns', and is metered there. What this page owes is that hosting the
+   * zone costs nothing of its own — no listen, with or without a widget in it.
+   */
+  it('hosting the Messages zone reads nothing itself', async () => {
     await renderConsole('messages')
     summarize('messages section', mockListens)
-    expect(mockListens.length).toBeGreaterThan(0)
-    expect(listenedCollections()).toContain('campaigns')
+    expect(mockListens).toHaveLength(0)
   })
 
   /*

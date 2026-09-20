@@ -16,15 +16,26 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
+import {
+  registerPluginZone,
+  type PluginZone,
+} from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { mdiBullhornOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
+import {
+  CAMPAIGN_DESIGN_CREATE_ZONE,
+  CAMPAIGN_DESIGN_PREVIEW_ZONE,
+  CAMPAIGN_SENDER_EDITOR_ZONE,
+  CAMPAIGN_TOPIC_OPTIONS_ZONE,
+  CAMPAIGN_TOPIC_SELECT_ZONE,
+} from './components/campaign-email-zones'
 import {
   EXPERIMENT_RESULT_ZONE,
   EXPERIMENT_VARIANTS_ZONE,
 } from './components/experiment-zones'
 import { MARKETING_CONSOLE_SECTIONS } from './components/marketing-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerMarketingRecordRoutes } from './model/marketing-record-routes'
 
 /** Code-split: the Marketing console page only loads when opened. */
 const MarketingConsolePage = lazy(
@@ -38,6 +49,16 @@ const CampaignGlanceCard = lazy(
 
 /** The site's campaigns, drawn in the Inbox's Campaigns section. */
 const HostCampaignsCard = lazy(() => import('./components/campaigns-card'))
+
+/** The Emails page's Messages section: the list, one message, its composer. */
+const EmailMessagesWidget = lazy(
+  () => import('./components/email-messages-widget'),
+)
+
+/** Who received the sends built from one template, on the template's page. */
+const EmailRecipientsCard = lazy(
+  () => import('./components/email-recipients-card'),
+)
 
 /** Loaded where a record page draws one of the attribution zones. */
 const RecordAttributionWidget = lazy(
@@ -84,6 +105,49 @@ export function registerMarketingConsole(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+  /*
+   * What a campaign email asks of whichever plugin keeps the mail itself —
+   * the topic catalog, the sending identities, the design document and its
+   * renderer. Each is a zone the composer or a message's page hosts; see
+   * `components/campaign-email-zones` for what each hands a widget. All are
+   * `bare`: a widget there is a field, a button, a drawer or nothing at all,
+   * and the stack's spacing around it would be a gap in a form.
+   */
+  const bareZone = <Props,>(
+    zone: PluginZone<Props>,
+    label: string,
+    description: string,
+  ) =>
+    registerPluginZone(
+      { zone, label, description, surface: 'console', layout: 'bare' },
+      { pluginId: BUNDLE_ID },
+    )
+  bareZone(
+    CAMPAIGN_TOPIC_SELECT_ZONE,
+    'An email’s topic',
+    'In the campaign composer’s field stack. A widget here is the picker for the stream the email belongs to: it is handed the chosen id and reports a new one through `onChange`. The composer records it; the widget writes nothing.',
+  )
+  bareZone(
+    CAMPAIGN_TOPIC_OPTIONS_ZONE,
+    'The topics a campaign can open on',
+    'Beside the drawers that create and edit a campaign. A widget here draws nothing: while `enabled` it reads the streams a recipient can still leave and answers through `onTopics`.',
+  )
+  bareZone(
+    CAMPAIGN_SENDER_EDITOR_ZONE,
+    'Add a sender while composing',
+    'Mounted by the campaign composer once its author asks to add a sender. A widget here is that editor, open in its add mode; `onSaved` names the sender it created.',
+  )
+  bareZone(
+    CAMPAIGN_DESIGN_CREATE_ZONE,
+    'A design for one email',
+    'In the campaign composer, beside the design picker. A widget here is the control that mints a design document and names it through `onCreated`; the composer records the choice on the campaign and opens the editor.',
+  )
+  bareZone(
+    CAMPAIGN_DESIGN_PREVIEW_ZONE,
+    'A sent email as an inbox receives it',
+    'On one message’s page. A widget here renders the stored design, or the plain-text body, through the renderer the send path uses.',
+  )
+  registerMarketingRecordRoutes()
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Marketing',
@@ -112,6 +176,20 @@ export function registerMarketingConsole(): void {
         widgetId: 'marketing-crm-record-attribution',
         title: 'Campaign attribution',
         Component: RecordAttributionWidget,
+      },
+      // The Emails page hosts its Messages section as a zone: a message is
+      // one send of a campaign, and every action on it is this plugin's route.
+      {
+        slot: 'emailMessages',
+        widgetId: 'marketing-email-messages',
+        title: 'Messages',
+        Component: EmailMessagesWidget,
+      },
+      {
+        slot: 'emailTemplateRecipients',
+        widgetId: 'marketing-email-template-recipients',
+        title: 'Recipients',
+        Component: EmailRecipientsCard,
       },
       // The Inbox's Campaigns tab is a zone; this is the card that fills it.
       {

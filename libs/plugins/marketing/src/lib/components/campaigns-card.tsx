@@ -58,9 +58,8 @@ import {
   type EmailCampaign,
 } from '@aglyn/shared-ui-email-campaigns/model'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
-import { activeEmailTopics } from '@aglyn/aglyn'
-import { useCampaignManageApi } from '@aglyn/plugins-email/components/use-campaign-send-api'
-import { useOrgEmailTopics } from '@aglyn/plugins-email/components/use-org-email-topics'
+import { useCampaignManageApi } from './use-campaign-send-api'
+import { useCampaignTopicOptions } from './use-campaign-topic-options'
 
 /**
  * How many sends the list reads.
@@ -199,10 +198,12 @@ export function HostCampaignsCard(props: {
    * members. It is the largest read on this section at 200 documents, and it
    * is the only one nothing on screen needs.
    */
-  const { topics } = useOrgEmailTopics(hostId, { enabled: createOpen })
+  const { topics, source: topicSource } = useCampaignTopicOptions(hostId, {
+    enabled: createOpen,
+  })
   const topicOptions = useMemo(
     () =>
-      activeEmailTopics(topics).map((topic) => ({
+      topics.map((topic) => ({
         value: topic.id,
         label: topic.name,
       })),
@@ -699,6 +700,8 @@ export function HostCampaignsCard(props: {
         on; the description box is left off because the container stores none,
         and a field the writer discards is worse than one never offered.
        */}
+      {/* Draws nothing: the zone the topic catalog's owner answers through. */}
+      {topicSource}
       <CreateArtifactDrawer
         open={createOpen}
         onClose={() => setCreateOpen(false)}

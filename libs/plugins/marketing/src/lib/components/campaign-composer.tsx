@@ -23,7 +23,6 @@ import {
   emailPlainTextState,
   type EmailMessageMode,
 } from '@aglyn/aglyn/app-utils/recipient-email-render'
-import CampaignTopicSelect from './campaign-topic-select'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -39,14 +38,17 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, limit, query } from 'firebase/firestore'
-import { createEmailScreen } from '../utils/create-email-screen'
+import {
+  CampaignDesignCreate,
+  CampaignSenderEditor,
+  CampaignTopicSelect,
+} from './campaign-email-zones'
 import { useCampaignSendApi } from './use-campaign-send-api'
 import {
   useSendingApi,
   type HostSenderView,
   type SendingIdentityView,
 } from '@aglyn/tenant-feature-instance/hooks/use-sending-identity-api'
-import SendingSenderDrawer from './sending-sender-drawer'
 import { describeCallFailure } from '@aglyn/shared-util-http/authorized-token'
 import CampaignTestSendDrawer from './campaign-test-send-drawer'
 import { useRouter } from 'next/navigation'
@@ -59,8 +61,6 @@ import {
   useOrgDataScope,
   useHostOrgId,
   useOrgPlan,
-  useHostResourceApi,
-  useHostVersionApi,
 } from '@aglyn/tenant-feature-instance'
 
 // The besigner route is `/[orgSlug]/hosts/[host]/screens/[screenId]/
@@ -276,8 +276,6 @@ export function CampaignComposer(props: CampaignComposerProps) {
   // rather than segments and lists from a dead path.
   const { scope: dataScope } = useOrgDataScope({ hostId })
   const firestore = useFirestore()
-  const createHostResource = useHostResourceApi()
-  const createHostVersion = useHostVersionApi()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const router = useRouter()
@@ -547,7 +545,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
   )
 
   /*
-   * The draft save, reachable from above its declaration. `handleCreateDesign`
+   * The draft save, reachable from above its declaration. `handleDesignCreated`
    * persists the created design onto the record through the same save the
    * Save draft button uses, and that callback closes over most of the form —
    * a ref keeps this one from having to depend on all of it.
@@ -573,40 +571,41 @@ export function CampaignComposer(props: CampaignComposerProps) {
    * campaign still pointed at nothing, and the author would have to come
    * back and find their own screen in the picker.
    */
-  const handleCreateDesign = useCallback(async () => {
-    try {
-      const designName = displayName?.trim() || subject.trim() || undefined
-      const { screenId, versionId } = await createEmailScreen(
-        hostId,
-        createHostResource,
-        createHostVersion,
-        designName,
-      )
-      setTemplateScreenId(screenId)
-      if (campaignId) {
-        await handleSaveDraftRef.current?.({ templateScreenId: screenId })
-      }
-      if (orgSlug && subdomain) {
-        void router.push(besignerHref(orgSlug, subdomain, screenId, versionId))
-      }
-    } catch (error: any) {
+  const handleDesignFailed = useCallback(
+    (error: unknown) => {
       console.error(error)
-      enqueueSnackbar(error?.message ?? 'Creating the email design failed', {
-        variant: 'error',
-      })
-    }
-  }, [
-    hostId,
-    displayName,
-    subject,
-    campaignId,
-    createHostResource,
-    createHostVersion,
-    orgSlug,
-    subdomain,
-    router,
-    enqueueSnackbar,
-  ])
+      enqueueSnackbar(
+        (error as { message?: string } | null)?.message ??
+          'Creating the email design failed',
+        { variant: 'error' },
+      )
+    },
+    [enqueueSnackbar],
+  )
+  /*
+   * The design itself is minted by the widget in the create zone — a design
+   * document is the email plugin's — and named here. What is this composer's
+   * is the campaign: recording the choice on it, and opening the editor.
+   */
+  const handleDesignCreated = useCallback(
+    async (design: { screenId: string; versionId: string }) => {
+      const { screenId, versionId } = design
+      try {
+        setTemplateScreenId(screenId)
+        if (campaignId) {
+          await handleSaveDraftRef.current?.({ templateScreenId: screenId })
+        }
+        if (orgSlug && subdomain) {
+          void router.push(
+            besignerHref(orgSlug, subdomain, screenId, versionId),
+          )
+        }
+      } catch (error) {
+        handleDesignFailed(error)
+      }
+    },
+    [campaignId, orgSlug, subdomain, router, handleDesignFailed],
+  )
 
   /*
    * The one authorized caller of the campaign API, shared with the email
@@ -1287,7 +1286,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
   const [saving, setSaving] = useState(false)
   const handleSaveDraft = useCallback(
     /*
-     * `overrides.templateScreenId` exists for `handleCreateDesign`: it has
+     * `overrides.templateScreenId` exists for `handleDesignCreated`: it has
      * just minted a design and set it into state, but state set this tick is
      * not yet in `sentTemplateScreenId`, so the save it fires immediately
      * after would record the record's previous design — or none.
@@ -1801,9 +1800,12 @@ export function CampaignComposer(props: CampaignComposerProps) {
             think in templates. Reuse is the picker above: a saved template
             is chosen, not created, from a campaign.
            */}
-          <Button size="small" onClick={() => void handleCreateDesign()}>
-            {'Design this email'}
-          </Button>
+          <CampaignDesignCreate
+            hostId={hostId}
+            name={displayName?.trim() || subject.trim() || undefined}
+            onCreated={(design) => void handleDesignCreated(design)}
+            onError={handleDesignFailed}
+          />
         </Stack>
       ) : null}
       {/*==========================================
@@ -2165,11 +2167,9 @@ export function CampaignComposer(props: CampaignComposerProps) {
         by somebody composing an email.
        */}
       {addingSender ? (
-        <SendingSenderDrawer
-          open
+        <CampaignSenderEditor
           hostId={hostId}
           view={identityView}
-          senderId={null}
           onClose={() => setAddingSender(false)}
           onSaved={(created) => {
             /*

@@ -38,7 +38,9 @@
  * request this composer could not get answered fails here.
  */
 
+import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useEffect } from 'react'
 
 jest.setTimeout(30_000)
 
@@ -72,8 +74,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'scale' }, ready: true }),
   useHostOrgId: () => 'org-1',
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
-  useHostResourceApi: () => jest.fn().mockResolvedValue({ id: 'new' }),
-  useHostVersionApi: () => jest.fn().mockResolvedValue({ id: 'v1' }),
   useFirestoreDoc: () => ({ data: undefined, status: 'success' }),
   useFirestoreCollection: (build: () => any) => {
     const built = build()
@@ -127,15 +127,6 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
       confirmations.push(options)
       return confirmAnswer ? Promise.resolve(undefined) : Promise.reject()
     },
-  }),
-}))
-
-jest.mock('./use-org-email-topics', () => ({
-  useOrgEmailTopics: () => ({
-    topics: [
-      { id: 'marketing', name: 'Promotions and offers' },
-      { id: 'sales', name: 'Sales outreach' },
-    ],
   }),
 }))
 
@@ -200,8 +191,36 @@ const settle = async (ms: number) => {
   })
 }
 
+/**
+ * The shell's zone renderer, standing in for the plugin that keeps the topic
+ * catalog.
+ *
+ * The picker is a widget in a zone the composer hosts, and its contract is the
+ * part the composer depends on: handed an empty value, it SETTLES the field on
+ * a real topic — the org's default — through `onChange`, rather than leaving
+ * it blank while the server has already decided. The stand-in is that
+ * contract and nothing else; the catalog read and the retired-topic rule are
+ * held by that plugin's own specs.
+ */
+function TopicPickerStandIn(props: Record<string, any>) {
+  const { value, onChange } = props
+  useEffect(() => {
+    if (!value) onChange('marketing')
+  }, [value, onChange])
+  return null
+}
+function ZoneRenderer(props: { slot: string } & Record<string, any>) {
+  return props.slot === 'campaignTopicSelect' ? (
+    <TopicPickerStandIn {...props} />
+  ) : null
+}
+
 const mount = async (props: Record<string, any> = {}) => {
-  render(<CampaignComposer hostId="host-1" {...props} />)
+  render(
+    <ConsoleWidgetSlotContext.Provider value={ZoneRenderer}>
+      <CampaignComposer hostId="host-1" {...props} />
+    </ConsoleWidgetSlotContext.Provider>,
+  )
   // Past the count debounce.
   await settle(500)
 }
