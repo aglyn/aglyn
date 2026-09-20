@@ -46,6 +46,10 @@ import {
 } from '@aglyn/aglyn/app-utils/internal-traffic'
 import { PLATFORM_GA_MEASUREMENT_ID } from '@aglyn/aglyn/app-utils/platform-marketing-host'
 import {
+  resolvePlatformAdvertisingTags,
+  resolvePlatformGtmContainerId,
+} from '@aglyn/aglyn/app-utils/platform-advertising-tags'
+import {
   storeVisitorConsent,
   visitorConsentStorageKey,
 } from '@aglyn/aglyn/app-utils/visitor-consent'
@@ -531,6 +535,83 @@ describe('the advertising-tag gate', () => {
       expect(
         resolveAdvertisingTags(host as any, stored, production, true),
       ).toHaveLength(0)
+    })
+
+    /*
+     * THE CONSOLE TAKES THE SAME GATE (AGL-3188), and did not until it was
+     * measured doing the opposite.
+     *
+     * `resolveAdvertisingTags` above returns early unless the host is the
+     * marketing site, so every assertion before this one says nothing about
+     * `app.aglyn.com`, `auth.aglyn.com` or a workspace subdomain — which is
+     * where we actually spend the day, and where consent never intervenes
+     * because platform analytics load unconditionally there. Those surfaces
+     * go through the two platform resolvers, and neither consulted the flag.
+     *
+     * Read off the wire on `auth.aglyn.com`, 2026-09-20, browser pinned:
+     * `g/collect` carried `tt=internal` while the SAME document sent an
+     * unmarked `ccm/collect` to `AW-18401436785`.
+     */
+    it('the console vendor resolver refuses a browser we declared ours', () => {
+      const production = {
+        nodeEnv: 'production',
+        deployEnv: 'production',
+      } as const
+      // The live id, so this is the deployment rather than a near-miss.
+      const ids = { [GOOGLE_ADS_VENDOR.id]: 'AW-18401436785' }
+      // Both directions off ONE fixture, as above.
+      expect(
+        resolvePlatformAdvertisingTags(true, ids, production, false),
+      ).toHaveLength(1)
+      expect(
+        resolvePlatformAdvertisingTags(true, ids, production, true),
+      ).toHaveLength(0)
+    })
+
+    it('the console CONTAINER refuses too, because its tags reach AW- as well', () => {
+      const production = {
+        nodeEnv: 'production',
+        deployEnv: 'production',
+      } as const
+      // What a container loads is decided in Google's UI and is invisible to
+      // every spec here, so it has to be assumed to carry advertising tags.
+      expect(
+        resolvePlatformGtmContainerId(true, 'GTM-N65S88G', production, false),
+      ).toBe('GTM-N65S88G')
+      expect(
+        resolvePlatformGtmContainerId(true, 'GTM-N65S88G', production, true),
+      ).toBeNull()
+    })
+
+    it('the console escape hatch does not reopen it either', () => {
+      // A non-production build emitting because someone turned the hatch on is
+      // ours by definition; it must not be handed the real `AW-` id.
+      //
+      // `allowNonProduction` is what makes this case worth asserting: without
+      // it `analyticsMayEmit` is already false and the test would pass on the
+      // clause ABOVE, proving nothing about the one being added.
+      const hatched = {
+        nodeEnv: 'development',
+        deployEnv: 'development',
+        allowNonProduction: '1',
+      } as const
+      expect(analyticsMayEmit(hatched)).toBe(true)
+      const ids = { [GOOGLE_ADS_VENDOR.id]: 'AW-18401436785' }
+      expect(resolvePlatformAdvertisingTags(true, ids, hatched, false)).toEqual(
+        [],
+      )
+      expect(
+        resolvePlatformGtmContainerId(true, 'GTM-N65S88G', hatched, false),
+      ).toBeNull()
+      // Production with the same un-flagged browser still loads, so this is
+      // the hatch clause and not a blanket refusal.
+      const production = {
+        nodeEnv: 'production',
+        deployEnv: 'production',
+      } as const
+      expect(
+        resolvePlatformAdvertisingTags(true, ids, production, false),
+      ).toHaveLength(1)
     })
 
     /*

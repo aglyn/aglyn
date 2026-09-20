@@ -204,7 +204,7 @@ describe('generateMediaVariants with real sharp (AGL-1468)', () => {
     // all would throw, so a clean outcome here is the proof that the skip
     // happens BEFORE the decoder rather than around its error.
     const outcome = await generateMediaVariants({
-      buffer: Buffer.from('   not an icon', 'binary'),
+      buffer: Buffer.from('\x00\x00\x01\x00not an icon', 'binary'),
       contentType: 'image/vnd.microsoft.icon',
       objectPath: 'hosts/site-a/media/favicon',
       saveVariant: async () => {
