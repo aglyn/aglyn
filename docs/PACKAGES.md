@@ -216,17 +216,19 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 7 edges the allowlist carries, and what removes each. An edge leaves the
+The 6 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
 is silent and only this document holds it.
 
-**`shared-util-email` → `aglyn`** (1). A spec reads the shipped price table so
-its ceiling assertions check real numbers. It is inline-disabled at the one
-import and no production file may repeat it; the fix is a fixture that reads
-the table from the core's server entry, or the spec moving to a project that
-may import the core.
+**`shared-util-email` → `aglyn`.** Gone (AGL-3080). One spec read the shipped
+price table so its ceiling assertions checked real numbers. The check needs
+both the table and the ceiling model, and only one direction between them is
+legal, so it lives beside the table as
+`libs/aglyn/src/lib/app-utils/plan-entitlements-deliverable.spec.ts` and
+imports the model from the email library. `shared` imports only `shared`
+again, with no inline disable anywhere.
 
 **Plugin → plugin** (5, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
