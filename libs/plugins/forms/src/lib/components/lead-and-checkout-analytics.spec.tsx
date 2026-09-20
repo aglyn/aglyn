@@ -16,14 +16,14 @@
  */
 
 /**
- * The two elements every site is built from report to the HOST's GA4 property.
+ * The lead form reports to the HOST's GA4 property.
  *
  * `Form` is the generic lead form — the block behind a contact page, a quote
  * request, a survey — and it is the reason `generate_lead` has to mean the
- * same thing on every site. `Product` is the Commerce Starter block, which
- * takes real money through Stripe and reported nothing at all: a site built
- * from it alone showed GA4 a `purchase` with no checkout step in front of it,
- * which reads as a 0% checkout rate rather than as an unmeasured path.
+ * same thing on every site. The other element every site is built from, the
+ * Commerce Starter product block, is the MUI plugin's and reports
+ * `begin_checkout`; its half of this suite is
+ * `product-checkout-analytics.spec.tsx` beside it.
  *
  * ## Asserted against `window.gtag`, not against a mocked tracker
  *
@@ -36,7 +36,6 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import Form, { FormField, formNavigation } from './form'
-import Product from '@aglyn/plugins-mui/components/product'
 
 const gtag = jest.fn()
 let fetchMock: jest.Mock
@@ -156,79 +155,6 @@ describe('the generic form block', () => {
     expect(serialized).toContain('Contact')
     expect(serialized).not.toContain('ada@example.com')
     expect(serialized).not.toContain('555 0123')
-  })
-})
-
-describe('the Commerce Starter product block', () => {
-  const renderProduct = (props: Record<string, unknown> = {}) =>
-    render(
-      <Aglyn.SiteContext.Provider value={{ hostId: 'host-1' }}>
-        <Product
-          productId="prod-1"
-          name="Widget"
-          priceUsd="29.50"
-          {...props}
-        />
-      </Aglyn.SiteContext.Provider>,
-    )
-
-  it('reports begin_checkout once the server has minted a session', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ url: 'https://checkout.stripe.com/c/session' }),
-    })
-    renderProduct()
-    fireEvent.click(screen.getByRole('button', { name: 'Buy now' }))
-
-    await waitFor(() => expect(hitsFor('begin_checkout')).toHaveLength(1))
-    expect(hitsFor('begin_checkout')[0]).toEqual({
-      currency: 'USD',
-      value: 29.5,
-      items: [
-        {
-          item_id: 'prod-1',
-          item_name: 'Widget',
-          price: 29.5,
-          quantity: 1,
-        },
-      ],
-    })
-  })
-
-  it('THE CONTROL: reports nothing when the coupon is rejected', async () => {
-    /*
-     * `/api/commerce/checkout` refuses a sold-out product, an expired coupon
-     * and a store that has not connected Stripe. Counting those would report
-     * checkouts that Stripe never saw, on exactly the storefronts where the
-     * merchant is trying to work out why nothing sells.
-     */
-    fetchMock.mockResolvedValue({
-      ok: false,
-      json: async () => ({ error: 'Invalid or expired coupon' }),
-    })
-    renderProduct()
-    fireEvent.click(screen.getByRole('button', { name: 'Buy now' }))
-
-    await screen.findByText('Invalid or expired coupon')
-    expect(hitsFor('begin_checkout')).toHaveLength(0)
-  })
-
-  it('sends nothing rather than a zero when the block has no price', async () => {
-    /*
-     * The block's price is a display prop; the charge is priced server-side
-     * from the product doc. With no price typed there is no truthful `value`
-     * to report, and a `begin_checkout` worth 0 on a real sale is a wrong
-     * number in the merchant's report rather than a missing one.
-     */
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ url: 'https://checkout.stripe.com/c/session' }),
-    })
-    renderProduct({ priceUsd: undefined })
-    fireEvent.click(screen.getByRole('button', { name: 'Buy now' }))
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    expect(hitsFor('begin_checkout')).toHaveLength(0)
   })
 })
 

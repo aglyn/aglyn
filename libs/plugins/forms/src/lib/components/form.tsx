@@ -48,13 +48,18 @@ import {
   useState,
 } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { generatePresetId } from '../utils/generate-preset-id'
+
 /*
  * The heading and the stack this block's form sits inside are mui elements,
  * so the nodes that carry them say so. A node's `pluginId` names the bundle
  * that REGISTERS its component, not the bundle whose preset placed it.
+ *
+ * The id comes from the core's constant, as it does for every plugin that
+ * composes mui elements: importing the mui plugin for one string would make
+ * this plugin unusable without it on the import graph.
  */
-import { BUNDLE_ID as MUI_BUNDLE_ID } from '@aglyn/plugins-mui/constants/bundle-common'
-import { generatePresetId } from '../utils/generate-preset-id'
+const { MUI_BUNDLE_ID } = Aglyn
 
 // Component ids are persisted in screen documents; never rename.
 export const FORM_ID: Aglyn.ComponentId = 'form'

@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 5 edges the allowlist carries, and what removes each. An edge leaves the
+The 4 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -230,7 +230,7 @@ legal, so it lives beside the table as
 imports the model from the email library. `shared` imports only `shared`
 again, with no inline disable anywhere.
 
-**Plugin → plugin** (4, numbered to 17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (3, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -301,14 +301,15 @@ needs it starts.
     its submissions table there as a widget, narrowed to that form. The page
     says where submissions are read when no plugin registered a reader. The
     number stays.
-11. **`plugins-forms` → `plugins-mui`.** Crosses: `BUNDLE_ID as MUI_BUNDLE_ID`
-    (`src/lib/components/form.tsx`), plus MUI's `Product` component and its
-    bundle id in two specs. Fix: a form never needs another plugin's bundle id
-    spelled out — the id comes off the node being read, through the loader
-    registry, and the specs read presets and ids from that same registry.
-    **Present.** The core carries a copy of the literal (`MUI_BUNDLE_ID` in
-    `plugin-manager/feature-plugins.ts`); that file is AGL-3116's and is not
-    this row's to change.
+11. **`plugins-forms` → `plugins-mui`.** Gone (AGL-3080). The form block's
+    preset places a mui heading and stack, and its nodes name the bundle that
+    registers them. It takes that id from the core's `MUI_BUNDLE_ID`, as
+    commerce, bookings and events-calendar already do, instead of importing the
+    mui plugin for one string. The spec that rendered mui's `Product` beside
+    the form was two plugins' claims in one file: `begin_checkout` is held by
+    `product-checkout-analytics.spec.tsx` in the mui plugin now. The core still
+    carries that literal (`plugin-manager/feature-plugins.ts`), which is this
+    document's to record and not a plugin-to-plugin edge. The number stays.
 12. **`plugins-inbox` → `plugins-crm`.** Gone (AGL-3080). The CRM publishes
     where a contact, a lead, a company and a deal are read through
     `registerPluginRecordRoute`, and the Inbox's three cards ask
