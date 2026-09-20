@@ -151,6 +151,28 @@ export const formatStampShort = (value: any): string => {
   })
 }
 
+/**
+ * The instant the Published column speaks for: `publishedAt` once an entry has
+ * gone out, the scheduled `publishAt` while it is still due, and nothing at all
+ * for a draft (AGL-3206).
+ *
+ * Exported so the column's CELL and its SORT KEY read one function instead of
+ * two copies of this rule. They drifted once already: the cell fell back to
+ * `publishAt` and the sort did not, so a scheduled entry sorted on a field it
+ * does not carry, and DataGrid pins an empty value to the bottom in BOTH
+ * directions — a post due next week sat below one published last month.
+ *
+ * The `status` guard is load-bearing. A draft that still holds a `publishAt`
+ * from a cancelled schedule reads as undated here, which is what the cell
+ * shows, rather than sorting among the dated rows on a date it never displays.
+ */
+export const entryPublishStamp = (row: {
+  publishedAt?: any
+  publishAt?: any
+  status?: string
+}): any =>
+  row?.publishedAt ?? (row?.status === 'scheduled' ? row?.publishAt : undefined)
+
 /** The full instant behind {@link formatStampShort}, for a tooltip. */
 export const formatStampFull = (value: any): string | undefined => {
   const date = value?.toDate?.()
