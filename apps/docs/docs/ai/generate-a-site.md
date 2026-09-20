@@ -25,15 +25,17 @@ the feature.
 ## Starting a new site from a few questions
 
 A site you have just created opens on its **Setup** page, and **Start this site
-with AI** is at the top of it. It asks what kind of site you are creating, who
-it is for, and which of the starter examples you like — then writes the brief
-for you and plans the site from it.
+with AI** opens over it. It asks what kind of site you are creating, who it is
+for, and which of the starter examples you like — then writes the brief for you
+and plans the site from it.
 
-**Skip and start blank** is beside the questions from the moment they appear,
-and it is the same offer whether you have answered them or not. Taking it
-creates nothing at all: no job, no pages, no half-built site behind you. You
-keep the empty site you already have, on the page you are already on, and that
-site does not ask again.
+**Skip and start blank** is in the bar at the top, from the moment the questions
+appear, and it is the same offer whether you have answered them or not. So are
+the close control beside it and the Escape key: all three do the same thing, and
+none of them stops working while the site is being planned. Taking any of them
+creates nothing at all: no job, no pages, no half-built site behind you. You keep
+the empty site you already have, on the page you were already on, and that site
+does not ask again.
 
 ## What a scaffold builds
 
