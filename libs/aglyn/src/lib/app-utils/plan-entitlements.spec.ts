@@ -284,7 +284,7 @@ describe('plan entitlements', () => {
       starter: {
         basePriceMonthlyUsd: 25,
         basePriceAnnualMonthlyUsd: 16,
-        extraHostMonthlyUsd: 10,
+        extraHostMonthlyUsd: 20,
         extraSeatMonthlyUsd: 5,
         extraCollaboratorMonthlyUsd: 3,
         extraDatasetMonthlyUsd: 2,
@@ -299,7 +299,7 @@ describe('plan entitlements', () => {
       pro: {
         basePriceMonthlyUsd: 56,
         basePriceAnnualMonthlyUsd: 39,
-        extraHostMonthlyUsd: 8,
+        extraHostMonthlyUsd: 20,
         extraSeatMonthlyUsd: 4,
         extraCollaboratorMonthlyUsd: 2,
         extraDatasetMonthlyUsd: 2,
@@ -314,7 +314,7 @@ describe('plan entitlements', () => {
       business: {
         basePriceMonthlyUsd: 139,
         basePriceAnnualMonthlyUsd: 99,
-        extraHostMonthlyUsd: 8,
+        extraHostMonthlyUsd: 20,
         extraSeatMonthlyUsd: 3,
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
@@ -329,7 +329,7 @@ describe('plan entitlements', () => {
       scale: {
         basePriceMonthlyUsd: 249,
         basePriceAnnualMonthlyUsd: 179,
-        extraHostMonthlyUsd: 8,
+        extraHostMonthlyUsd: 20,
         extraSeatMonthlyUsd: 2,
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
@@ -344,7 +344,7 @@ describe('plan entitlements', () => {
       advanced: {
         basePriceMonthlyUsd: 399,
         basePriceAnnualMonthlyUsd: 299,
-        extraHostMonthlyUsd: 8,
+        extraHostMonthlyUsd: 20,
         extraSeatMonthlyUsd: 2,
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
@@ -359,7 +359,7 @@ describe('plan entitlements', () => {
       agency: {
         basePriceMonthlyUsd: 1299,
         basePriceAnnualMonthlyUsd: 1049,
-        extraHostMonthlyUsd: 8,
+        extraHostMonthlyUsd: 20,
         extraSeatMonthlyUsd: 2,
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
@@ -1520,7 +1520,7 @@ describe('plan entitlements', () => {
           subscription: { status: 'active' },
           seatAddons: { hosts: 2, posRegisters: 1, eventCalendar: 1 },
         } as any),
-      ).toBe(139 + 2 * 8 + 89 + 9)
+      ).toBe(139 + 2 * 20 + 89 + 9)
     })
   })
 
@@ -3132,7 +3132,7 @@ describe('the Aglyn AI add-on (AGL-2896)', () => {
         subscription: { status: 'active' },
         seatAddons: { aiAddon: 3, hosts: 1 },
       } as any),
-    ).toBe(1299 + 299 + 8)
+    ).toBe(1299 + 299 + 20)
     // A plan with no price for it adds nothing.
     expect(
       orgListPriceMonthlyUsd({

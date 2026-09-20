@@ -72,6 +72,17 @@ route. The parity spec's literal and the Figma extraction under
 `tools/marketing/pricing-copy/` moved in the same commit; the Figma frame
 itself still reads $5, which the reconciler cannot close.
 
+Later the same day it was republished to version `Te6EHU387Y`, "Extra site $20 on
+every tier (AGL-3198)", a copy of `pHMLIs5UF5` with the twelve extra-site cells
+moved to $20: the six in the desktop table and the one in each of the six plan
+panels. The same pass republished `/duda` to version `MNljGe3zbX`, whose one
+sentence quoting the add-on now reads $20/mo, and it is the reason the
+comparison pages count as a pricing surface: a rate quoted in prose there is
+as live as a cell here. The per-site cost calculator on
+`/resources/multi-site-cost-sheet` (AGL-2968) carries Aglyn's plan prices and
+the extra-site rate as constants inside a sandboxed embed, which no parity
+spec reads, so a rate change owes it an edit too.
+
 **#9 quotes the price in prose and nothing reads it.** `/pricing`'s
 description is a plain-text field on the screen's detail page, separate from
 the body, and it propagates into `<meta name="description">`,

@@ -1368,13 +1368,19 @@ export interface PlanPricing {
    *
    * A ladder that stepped down with the tier inverted that: the tiers
    * granting the most charged the least, and the two largest ran at 24% and
-   * 6% margin on a line sold as an add-on. The shape now is $10 on Starter,
-   * $8 everywhere above it — flat rather than descending, because above
-   * Starter the capacity an extra host grants is what varies and the price
-   * cannot chase it downward.
+   * 6% margin on a line sold as an add-on.
    *
-   * Business grants 20 GB and 8,000 submissions per host against Pro's 10 GB
-   * and 1,000, so it sits at Pro's $8 and not below it (2026-09-20).
+   * ## It sits above every rung's step rate, or the rungs stop meaning anything
+   *
+   * The shape is a flat $20 on every plan, Starter included. A flat $8 above
+   * Starter, with no cap on how many hosts a plan may add, priced the
+   * marginal host below every step of the base ladder, which costs $8.57 to
+   * $16 per included host on annual prices and $12 to $22 on monthly: ten
+   * Business sites plus fifteen extras came to $219 against Advanced's $299,
+   * and plus ninety extras to $819 against Agency's $1,049, so on host count
+   * alone no plan was ever worth upgrading to. $20 clears the steepest step on
+   * both intervals: extra hosts are how a plan takes a few more sites, and
+   * the next plan is how it takes many more (2026-09-20).
    */
   extraHostMonthlyUsd: number | null
   /**
@@ -1608,7 +1614,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
   starter: {
     basePriceMonthlyUsd: 25,
     basePriceAnnualMonthlyUsd: 16,
-    extraHostMonthlyUsd: 10,
+    extraHostMonthlyUsd: 20,
     extraSeatMonthlyUsd: 5,
     extraCollaboratorMonthlyUsd: 3,
     extraDatasetMonthlyUsd: 2,
@@ -1627,7 +1633,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
   pro: {
     basePriceMonthlyUsd: 56,
     basePriceAnnualMonthlyUsd: 39,
-    extraHostMonthlyUsd: 8,
+    extraHostMonthlyUsd: 20,
     extraSeatMonthlyUsd: 4,
     extraCollaboratorMonthlyUsd: 2,
     extraDatasetMonthlyUsd: 2,
@@ -1642,7 +1648,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
   business: {
     basePriceMonthlyUsd: 139,
     basePriceAnnualMonthlyUsd: 99,
-    extraHostMonthlyUsd: 8,
+    extraHostMonthlyUsd: 20,
     extraSeatMonthlyUsd: 3,
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
@@ -1657,7 +1663,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
   scale: {
     basePriceMonthlyUsd: 249,
     basePriceAnnualMonthlyUsd: 179,
-    extraHostMonthlyUsd: 8,
+    extraHostMonthlyUsd: 20,
     extraSeatMonthlyUsd: 2,
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
@@ -1672,7 +1678,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
   advanced: {
     basePriceMonthlyUsd: 399,
     basePriceAnnualMonthlyUsd: 299,
-    extraHostMonthlyUsd: 8,
+    extraHostMonthlyUsd: 20,
     extraSeatMonthlyUsd: 2,
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
@@ -1705,7 +1711,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     // 18.8% annual discount across the rise, which is what stops the annual
     // interval becoming the cheap way past a repricing.
     basePriceAnnualMonthlyUsd: 1049,
-    extraHostMonthlyUsd: 8,
+    extraHostMonthlyUsd: 20,
     extraSeatMonthlyUsd: 2,
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,

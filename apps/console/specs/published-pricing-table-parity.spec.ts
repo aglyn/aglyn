@@ -884,17 +884,18 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * $10 on Starter and a flat $8 on every tier above it, not a ladder that
-     * keeps descending. Storage and form submissions are per-HOST bands, so an
-     * extra host adds that tier's bands to the org's included allowance —
-     * under a descending ladder the tiers granting the most per host charged
-     * the least for one. Business grants 20 GB and 8,000 submissions per host
-     * against Pro's 10 GB and 1,000, so it cannot sit below Pro's $8
-     * (2026-09-20).
+     * A flat $20 on every tier, Starter included, not a ladder that descends
+     * and not a rate below the base ladder's own steps. Storage and form
+     * submissions are per-HOST bands, so an extra host adds that tier's bands
+     * to the org's included allowance, which rules out a descending ladder;
+     * and with no cap on extras, a rate under every rung's step ($8.57 to $16
+     * per included host on annual prices) made a plan plus extras cheaper
+     * than the next plan at every count, so the rate sits above the steepest
+     * step on both billing intervals (2026-09-20).
      */
-    it('Extra site, per month — $10 · $8 · $8 · $8 · $8 · $8', () => {
+    it('Extra site, per month — $20 · $20 · $20 · $20 · $20 · $20', () => {
       expect(PAID.map((p) => PLAN_PRICING[p].extraHostMonthlyUsd)).toEqual([
-        10, 8, 8, 8, 8, 8,
+        20, 20, 20, 20, 20, 20,
       ])
     })
 
