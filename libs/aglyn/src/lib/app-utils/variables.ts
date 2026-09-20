@@ -25,6 +25,7 @@ import {
 import {
   evaluateExpression,
   evaluateHostFunction,
+  functionReferencedNames,
   type HostFunction,
 } from './functions'
 
@@ -119,7 +120,6 @@ export function formatVariableValue(variable: HostVariable): string {
   }
 }
 
-
 /** A function definition lookup keyed by function name (AGL-93). */
 export type HostFunctionLookup = Record<string, HostFunction>
 
@@ -183,7 +183,13 @@ export function resolveBindings(
         definition.parameters?.forEach((parameter, index) => {
           args[parameter.name] = argValues[index]
         })
-        const result = evaluateHostFunction(definition, args)
+        // The site's variables are the function's outer scope (AGL-3202),
+        // so `{{fn:id(25)}}` can price 25 sites without every rate being
+        // passed in by position. Arguments still win over a variable of the
+        // same name, as every parameter does.
+        const result = evaluateHostFunction(definition, args, {
+          globals: scope,
+        })
         return result.ok ? String(result.value) : token
       } catch {
         return token
@@ -212,14 +218,44 @@ export function hasBindings(text: string): boolean {
 export const FUNCTION_WIDGET_COMPONENT_ID = 'functionWidget'
 
 /**
+ * The site variables ONE function reads, by name (AGL-3202).
+ *
+ * A widget runs in the visitor's browser, so whatever it may read has to be
+ * on the page. Handing it the whole variable list would publish every value
+ * a site holds to every page that places a calculator; this hands over the
+ * names the function's own expressions use and nothing else. A name the
+ * function declares itself is not a variable read — its parameter or local
+ * shadows the variable — so it is not shipped either.
+ */
+export function functionGlobals(
+  definition: HostFunction,
+  variables: Record<string, HostVariable>,
+): Record<string, number | string | boolean> {
+  const scope = variableScope(variables)
+  const globals: Record<string, number | string | boolean> = {}
+  for (const name of functionReferencedNames(definition)) {
+    if (Object.prototype.hasOwnProperty.call(scope, name)) {
+      globals[name] = scope[name]
+    }
+  }
+  return globals
+}
+
+/**
  * Injects each function widget's definition into its props at compose time
  * (AGL-93): the client runs the shared evaluator locally, so the published
  * page carries the definition instead of calling home. Unknown names leave
  * the node untouched (the widget renders its editor placeholder).
+ *
+ * With `variables`, the site variables that function reads ride along as
+ * `globals` (AGL-3202) — see {@link functionGlobals} for why it is only
+ * those. The key is omitted when the function reads none, so a page built
+ * before this existed serializes exactly as it did.
  */
 export function attachFunctionDefinitions<T extends Record<string, any>>(
   nodes: T,
   functions: HostFunctionLookup,
+  variables: Record<string, HostVariable> = {},
 ): T {
   if (!Object.keys(functions).length) return nodes
   const next: Record<string, any> = {}
@@ -229,9 +265,19 @@ export function attachFunctionDefinitions<T extends Record<string, any>>(
         ? node?.props?.functionName
         : undefined
     const definition = name ? functions[String(name).trim()] : undefined
-    next[id] = definition
-      ? { ...node, props: { ...node.props, definition } }
-      : node
+    if (!definition) {
+      next[id] = node
+      continue
+    }
+    const globals = functionGlobals(definition, variables)
+    next[id] = {
+      ...node,
+      props: {
+        ...node.props,
+        definition,
+        ...(Object.keys(globals).length ? { globals } : {}),
+      },
+    }
   }
   return next as T
 }

@@ -153,3 +153,76 @@ describe('resolveNodesBindings', () => {
     expect(resolveNodesBindings(nodes as any, {})).toBe(nodes)
   })
 })
+
+describe('site variables reach a function (AGL-3202)', () => {
+  const { attachFunctionDefinitions, functionGlobals } = require('./variables')
+  const prices = {
+    idWebflow01: { name: 'webflow_site', type: 'number', value: '25' },
+    idSecret002: {
+      name: 'internal_note',
+      type: 'text',
+      value: 'not for a page',
+    },
+    idSites0003: { name: 'sites', type: 'number', value: '999' },
+  }
+  const cost = {
+    name: 'cost',
+    parameters: [{ name: 'sites', type: 'number', required: true }],
+    variables: [{ name: 'total', type: 'text' }],
+    operations: [
+      {
+        if: { left: '1', comparator: '==', right: '1' },
+        then: [
+          { set: 'total', expression: "'$' + format(sites * webflow_site)" },
+        ],
+        otherwise: [] as unknown[],
+      },
+    ],
+    returnValue: 'total',
+  }
+
+  it('lets a token price by count alone', () => {
+    expect(
+      resolveBindings(
+        '{{fn:idCost(100)}}',
+        prices as any,
+        { idCost: cost } as any,
+      ),
+    ).toBe('$2,500')
+  })
+
+  it('hands a widget the variables its function names, and no others', () => {
+    expect(functionGlobals(cost as any, prices as any)).toEqual({
+      webflow_site: 25,
+    })
+    const nodes = {
+      widget: {
+        $id: 'widget',
+        componentId: 'functionWidget',
+        props: { functionName: 'cost' },
+      },
+    }
+    const result = attachFunctionDefinitions(nodes, { cost }, prices)
+    expect(result.widget.props.globals).toEqual({ webflow_site: 25 })
+    // `sites` is the function's own parameter, so the site's variable of the
+    // same name is neither read nor shipped; the note is simply never named.
+    expect(JSON.stringify(result.widget.props)).not.toContain('not for a page')
+    expect(JSON.stringify(result.widget.props)).not.toContain('999')
+  })
+
+  it('adds no key at all for a function that reads none', () => {
+    const plain = { ...cost, operations: [] as unknown[] }
+    const nodes = {
+      widget: {
+        $id: 'widget',
+        componentId: 'functionWidget',
+        props: { functionName: 'plain' },
+      },
+    }
+    const result = attachFunctionDefinitions(nodes, { plain }, prices)
+    expect(Object.keys(result.widget.props).sort()).toEqual([
+      'definition',
+      'functionName',
+    ])
+  })
+})
