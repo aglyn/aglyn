@@ -154,6 +154,12 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // is heavier: eight pages' findings and text, about 9,000 characters, with
   // up to about 8,000 back.
   'job.seo': { inputTokens: 1_500, outputTokens: 250, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  // The experiment step (AGL-2914). NOTHING is cached: the A/B test rules
+  // and the acceptable-use block come to about 2,300 characters, under the
+  // balanced tier's cacheable minimum, so they are billed as input every
+  // time. The copy under test, or a test's arms with its verdict, rides with
+  // them, and a four-variant answer is about 800 characters of JSON.
+  'job.experiment': { inputTokens: 900, outputTokens: 300, cacheReadTokens: 0, cacheWriteTokens: 0 },
   // The form step: the doctrine, the form instructions, the form surface's
   // catalog (about 150 tokens) and the tool's schema are the cached prefix, the
   // site inventory and the brief ride uncached, and a form's answer is 200 to

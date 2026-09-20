@@ -12,10 +12,12 @@
  *
  * So this stub models the real replace semantics and asserts the EFFECT.
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 const SLOTS = [5, 1, 14, 9, 11, 17, 13, 4]
 const PAGES = ['console','commerce','forms','media','workflows','plugins','analytics','marketing']
+/** Decks whose Explore grid carries the whole roster, so section 5 is wider. */
+const TEN_CARD_PAGES = ['datasets', 'ai']
 
 /** Early-access is section 6; its 4 stat pairs start after eyebrow+heading+intro+2 actions. */
 const SLOT_INDEX = { earlyaccess: { section: 6, first: 5 } }
@@ -119,11 +121,11 @@ for (const page of PAGES) {
 // Explore carries one card per product other than the page's own, so its slot
 // count comes from the copy rather than from a fixed contract. A ten-card deck
 // must pour into a ten-card grid and be refused by a seven-card one.
-{
-  const COPY = JSON.parse(readFileSync('tools/marketing/product-copy/copy-datasets.json', 'utf8'))
+for (const page of TEN_CARD_PAGES) {
+  const COPY = JSON.parse(readFileSync(`tools/marketing/product-copy/copy-${page}.json`, 'utf8'))
   const explore = COPY.sections.find((s) => s.kind === 'explore')
   const slots = SLOTS.map((n, i) => (i === 5 ? 3 + 2 * explore.items.length : n))
-  console.log(`datasets — ${explore.items.length} explore cards`)
+  console.log(`${page} — ${explore.items.length} explore cards`)
 
   globalThis.window = { AglynModule: { canvas: stubCanvas(), CANVAS_ROOT_ELEMENT_ID: '_@_' } }
   let applyPageCopy = eval(`${src}; applyPageCopy`)
@@ -133,17 +135,84 @@ for (const page of PAGES) {
   globalThis.window = { AglynModule: { canvas, CANVAS_ROOT_ELEMENT_ID: '_@_' } }
   applyPageCopy = eval(`${src}; applyPageCopy`)
   const res = applyPageCopy(COPY, { dryRun: false })
-  // Every slot is written except the early-access chip, which the copy leaves null.
-  const expectedWrites = slots.reduce((sum, n) => sum + n, 0) - 1
+  // Every slot is written except the ones the copy leaves null, which on these
+  // decks is the early-access chip — kept from the skeleton on the pages that
+  // do not name it, poured on the ones that do (Aglyn AI changes it).
+  const earlyAccess = COPY.sections.find((s) => s.kind === 'early-access')
+  const kept = earlyAccess.eyebrow == null ? 1 : 0
+  const expectedWrites = slots.reduce((sum, n) => sum + n, 0) - kept
   check(res.wrote === expectedWrites, `${expectedWrites} writes (got ${res.wrote}${res.problems ? `; ${res.problems.join('; ')}` : ''})`)
   const labels = explore.items.map((_, k) => canvas._nodes.get(`5:${3 + 2 * k}`).props.children)
   check(
     labels.every((label, k) => label === explore.items[k].title),
     `explore labels land in card order (last two: ${JSON.stringify(labels.slice(-2))})`,
   )
-  const stats = COPY.sections.find((s) => s.kind === 'early-access').items.flatMap((item) => [item.title, item.body])
+  const stats = earlyAccess.items.flatMap((item) => [item.title, item.body])
   const got = Array.from({ length: 8 }, (_, k) => canvas._nodes.get(`6:${5 + k}`).props.children)
   check(got.every((v, k) => v === stats[k]), `stat band is figure-then-label (got ${JSON.stringify(got.slice(0, 4))}…)`)
+}
+
+/**
+ * The shared AI band (AGL-2921) is ONE block placed on many pages, and the
+ * copy format has no section kind for it: `apply-page-copy.js` pours one
+ * page's `sections` into one canvas and asserts the canvas holds exactly as
+ * many root sections as the contract. So a page that already carries the band
+ * is a page the applier refuses — pour first, place the band second, and
+ * remove it before any re-pour. That ordering is the whole risk, so it is
+ * asserted here rather than left in a README.
+ */
+{
+  const BAND = JSON.parse(readFileSync('tools/marketing/shared-copy/band-ai.json', 'utf8'))
+  console.log(`shared band — ${BAND.targets.length} targets`)
+
+  // One band, not twenty-five copies: the wording lives here and nowhere else.
+  const pageFiles = [...PAGES, ...TEN_CARD_PAGES].map(
+    (page) => `tools/marketing/product-copy/copy-${page}.json`,
+  )
+  const forked = pageFiles.filter((file) => readFileSync(file, 'utf8').includes(BAND.heading))
+  check(forked.length === 0, `the band's heading is in one file (forked into: ${forked.join(', ') || 'none'})`)
+
+  // Its flatten arity is the contract a band-aware applier would assert.
+  const flattened = [
+    BAND.eyebrow,
+    BAND.heading,
+    BAND.body[0],
+    BAND.actions[0]?.label,
+    BAND.disclosure.body,
+  ]
+  check(flattened.length === BAND.slotContract.slots, `flattens to ${BAND.slotContract.slots} slots`)
+  check(
+    flattened.every((v) => typeof v === 'string' && v.trim()),
+    'no slot is empty — the applier refuses to blank a node',
+  )
+  // The rolling-out line is the LAST slot so the flip deletes a trailing node.
+  check(
+    flattened.at(-1) === BAND.disclosure.body &&
+      BAND.slotContract.slotsAfterFlip === BAND.slotContract.slots - 1,
+    'the disclosure is the last slot and drops one at the flip',
+  )
+  const missing = BAND.targets
+    .filter((t) => t.copyFile && !existsSync(`tools/marketing/${t.copyFile}`))
+    .map((t) => t.copyFile)
+  check(missing.length === 0, `every named copy file exists (missing: ${missing.join(', ') || 'none'})`)
+  check(
+    !BAND.targets.some((t) => t.route === '/product/ai'),
+    'the band does not link the hub page to itself',
+  )
+
+  // The negative control: a canvas carrying the band has nine root sections,
+  // and the applier must refuse it rather than pour eight sections' copy into
+  // the wrong nine slots.
+  const COPY = JSON.parse(readFileSync('tools/marketing/product-copy/copy-console.json', 'utf8'))
+  const withBand = [...SLOTS.slice(0, 5), BAND.slotContract.slots, ...SLOTS.slice(5)]
+  globalThis.window = {
+    AglynModule: { canvas: stubCanvas(withBand), CANVAS_ROOT_ELEMENT_ID: '_@_' },
+  }
+  const applyPageCopy = eval(`${src}; applyPageCopy`)
+  check(
+    applyPageCopy(COPY, { dryRun: true }).problems?.length > 0,
+    'refuses a canvas that already carries the band — pour first, place second',
+  )
 }
 
 console.log(failures ? `\nFAILED — ${failures} check(s)` : '\nAll checks passed.')

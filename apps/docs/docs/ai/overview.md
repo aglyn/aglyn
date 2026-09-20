@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
-title: Aglyn AI: the AI website builder
-description: Aglyn AI is an AI website builder inside your console: describe a page, form, email, product listing or theme change and it builds a draft you edit and publish yourself. An add-on on every paid plan, metered in credits.
+title: "Aglyn AI: the AI website builder"
+description: "Aglyn AI is an AI website builder inside your console: describe a page, form, email, product listing or theme change and it builds a draft you edit and publish yourself. An add-on on every paid plan, metered in credits."
 ---
 
 # Aglyn AI: the AI website builder

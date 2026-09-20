@@ -33,6 +33,7 @@ import { resolveEntryLinkRoutes } from '@aglyn/tenant-runtime/entry-link-routes'
 import { getTemplateScreenRouting } from '@aglyn/tenant-runtime/template-screens'
 import type { Metadata } from 'next'
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
+import { hostSeoTitleParts } from '../../../../utils/not-found-title'
 import { hostShowsPlatformAttribution } from '../../../../utils/platform-attribution'
 import CatchAllClient from './catch-all-client'
 import { loadPageData } from './load-page-data'
@@ -158,8 +159,10 @@ function buildMetadata(props: Props): Metadata {
   // What each asset a card below may name records now (AGL-2850). Every card
   // takes its pair from here before the copy stored beside its reference.
   const assetFacts = props.socialImageFacts
-  const siteTitle: string | undefined = host?.seo?.title ?? host?.displayName
-  const separator: string | undefined = host?.seo?.separator
+  // Through `hostSeoTitleParts`, not `host.seo` directly: it is the one reader
+  // of the fields a title composes from, so a site setting cannot reach some
+  // of this page's four branches and miss the others (AGL-3197).
+  const { siteTitle, separator, pattern } = hostSeoTitleParts(host)
   /**
    * `og:site_name`, on EVERY page (AGL-3148).
    *
@@ -219,6 +222,7 @@ function buildMetadata(props: Props): Metadata {
       ...parts,
       siteTitle,
       separator,
+      pattern,
       fallback: `${brandName} site`,
     })
 

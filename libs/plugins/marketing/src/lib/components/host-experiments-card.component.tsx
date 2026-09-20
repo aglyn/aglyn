@@ -82,6 +82,12 @@ import {
   usePagedCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  ExperimentResultZone,
+  ExperimentVariantsZone,
+  marketingExperimentVariantDrafts,
+  type MarketingExperimentVariantDraft,
+} from './experiment-zones'
 
 export interface HostExperimentsCardProps {
   hostId: string
@@ -215,6 +221,35 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
   const patch = (partial: Partial<ExperimentDraft>) =>
     setEditor((previous) =>
       previous ? { ...previous, ...partial } : previous,
+    )
+  /**
+   * What a widget in the variants zone proposes, put into the editor's own
+   * fields as unsaved changes. Only the variants the editor already holds are
+   * filled, in order: the test's shape — how many arms, their ids, their
+   * weights, the version each screen variant pins — is the person's, and a
+   * proposal that could add or drop an arm would be changing the test rather
+   * than writing copy for it. A field a widget left empty is left alone, so
+   * a proposal for an email's subject does not blank a body someone typed.
+   */
+  const proposeVariants = (
+    proposed: readonly MarketingExperimentVariantDraft[],
+  ) =>
+    setEditor((previous) =>
+      previous
+        ? {
+            ...previous,
+            variants: previous.variants.map((variant, index) => {
+              const draft = proposed[index]
+              if (!draft) return variant
+              return {
+                ...variant,
+                ...(draft.name ? { name: draft.name } : {}),
+                ...(draft.subject ? { subject: draft.subject } : {}),
+                ...(draft.body ? { body: draft.body } : {}),
+              }
+            }),
+          }
+        : previous,
     )
   const patchVariant = (index: number, partial: Partial<ExperimentVariant>) =>
     setEditor((previous) =>
@@ -757,6 +792,22 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
               ) : null}
             </Stack>
           ))}
+          {/*
+            Beneath the variants, never above them: a widget here writes copy
+            FOR the list that precedes it, and the list is what the person
+            came to the dialog for.
+          */}
+          {editor ? (
+            <ExperimentVariantsZone
+              hostId={hostId}
+              experimentId={editor.$id ?? ''}
+              name={editor.name ?? ''}
+              target={editor.target ?? 'screen'}
+              goal={editor.goal?.event ?? ''}
+              variants={marketingExperimentVariantDrafts(editor.variants)}
+              proposeVariants={proposeVariants}
+            />
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button color="inherit" onClick={() => setEditor(null)}>
@@ -876,6 +927,19 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
               })}
             </TableBody>
           </ScrollTable>
+          {/*
+            Below the figures, so anything a widget says about this test is
+            read after the counts it is talking about, and the test is named
+            as the results reader labels it — its name, or its id where it has
+            none, which is the same fallback that reader takes.
+          */}
+          {results ? (
+            <ExperimentResultZone
+              hostId={hostId}
+              experimentId={results.experiment.$id ?? ''}
+              test={results.experiment.name?.trim() || (results.experiment.$id ?? '')}
+            />
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button color="inherit" onClick={() => setResults(null)}>

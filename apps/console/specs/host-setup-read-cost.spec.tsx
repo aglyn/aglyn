@@ -389,12 +389,37 @@ describe('host Setup read cost, per section (AGL-2501)', () => {
    * — worth knowing, but measured separately it is a pointer document per
    * CUSTOMIZED template, about 142 bytes each, and the busiest site has one.
    * It is a classification to write down, not an egress problem to chase.
+   *
+   * Details went 60 -> 65 with the `hostFirstRun` zone (AGL-2918), and the
+   * five are stated rather than absorbed: they are five more listens on
+   * `orgs/{orgId}`, the document this page already subscribes five times, put
+   * there by the slot's own gates — the reader's org, their permissions and
+   * the workspace's plugin set — plus the page reading the org id it hands
+   * down, exactly as the SEO section reads it for `hostSeo`. No new
+   * collection, no new document, and no read that scales with the site. A
+   * sixth path appearing here is a real card to argue about.
    */
   it('holds each section under its document budget', () => {
     renderSetup('details')
-    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(60)
+    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(65)
     renderSetup('theme')
     expect(documentCeiling(mockListens)).toBeLessThanOrEqual(20)
+  })
+
+  /**
+   * What the budget above stops being able to say once a number moves: WHICH
+   * things are read. Details reads the site, the site's layouts and the
+   * reader's workspace, and the `hostFirstRun` zone added no fourth
+   * (AGL-2918) — so a card that opens a collection of its own fails here
+   * whether or not it fits under the ceiling.
+   */
+  it('reads no collection Details did not already read', () => {
+    renderSetup('details')
+    expect([...new Set(listenedPaths())].sort()).toEqual([
+      'hosts/host-1',
+      'hosts/host-1/layouts',
+      'orgs/org-1',
+    ])
   })
 })
 

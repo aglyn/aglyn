@@ -112,9 +112,9 @@ let dryRunMissing = 0
 // `aiAddonUsd` mirrors `aiAddonMonthlyUsd` (AGL-2896/2897): the Aglyn AI
 // add-on is one flat purchase per workspace, priced per plan, annual ×12.
 const PLANS = [
-  { plan: 'starter', name: 'Aglyn Starter', usd: 25, yearlyUsd: 16 * 12, extraHostUsd: 10, extraSeatUsd: 5, extraMemberUsd: 3, extraDatasetUsd: 2, aiAddonUsd: 9 },
-  { plan: 'pro', name: 'Aglyn Pro', usd: 56, yearlyUsd: 39 * 12, extraHostUsd: 8, extraSeatUsd: 4, extraMemberUsd: 2, extraDatasetUsd: 2, aiAddonUsd: 19 },
-  { plan: 'business', name: 'Aglyn Business', usd: 139, yearlyUsd: 99 * 12, extraHostUsd: 8, extraSeatUsd: 3, extraMemberUsd: 1, extraDatasetUsd: 1, aiAddonUsd: 39 },
+  { plan: 'starter', name: 'Aglyn Starter', usd: 25, yearlyUsd: 16 * 12, extraHostUsd: 20, extraSeatUsd: 5, extraMemberUsd: 3, extraDatasetUsd: 2, aiAddonUsd: 9 },
+  { plan: 'pro', name: 'Aglyn Pro', usd: 56, yearlyUsd: 39 * 12, extraHostUsd: 20, extraSeatUsd: 4, extraMemberUsd: 2, extraDatasetUsd: 2, aiAddonUsd: 19 },
+  { plan: 'business', name: 'Aglyn Business', usd: 139, yearlyUsd: 99 * 12, extraHostUsd: 20, extraSeatUsd: 3, extraMemberUsd: 1, extraDatasetUsd: 1, aiAddonUsd: 39 },
   // Pricing v3 (2026-07): Scale fills the $139→$399 gap; Agency sits above
   // Advanced for high-volume multi-site orgs. Keep in sync with PLAN_PRICING.
   // The extra host is a flat $8 from Scale up rather than a ladder that keeps
@@ -122,9 +122,9 @@ const PLANS = [
   // the tiers granting the most per host would charge the least for one.
   // Agency's annual is $1,049/mo because the live yearly price charges
   // $12,588 and a Stripe price is immutable.
-  { plan: 'scale', name: 'Aglyn Scale', usd: 249, yearlyUsd: 179 * 12, extraHostUsd: 8, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1, aiAddonUsd: 69 },
-  { plan: 'advanced', name: 'Aglyn Advanced', usd: 399, yearlyUsd: 299 * 12, extraHostUsd: 8, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1, aiAddonUsd: 99 },
-  { plan: 'agency', name: 'Aglyn Agency', usd: 1299, yearlyUsd: 1049 * 12, extraHostUsd: 8, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1, aiAddonUsd: 299 },
+  { plan: 'scale', name: 'Aglyn Scale', usd: 249, yearlyUsd: 179 * 12, extraHostUsd: 20, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1, aiAddonUsd: 69 },
+  { plan: 'advanced', name: 'Aglyn Advanced', usd: 399, yearlyUsd: 299 * 12, extraHostUsd: 20, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1, aiAddonUsd: 99 },
+  { plan: 'agency', name: 'Aglyn Agency', usd: 1299, yearlyUsd: 1049 * 12, extraHostUsd: 20, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1, aiAddonUsd: 299 },
 ]
 
 async function stripe(path, params) {

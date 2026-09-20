@@ -29,6 +29,10 @@ export interface DocsHelpTopic {
 // path and title are wanted the moment a help button renders, the excerpt only
 // once a tooltip opens.
 export const DOCS_HELP_TOPICS = {
+  abTestsWithAi: {
+    path: '/ai/ab-tests-with-ai',
+    title: 'A/B tests by AI: write variants, read the result',
+  },
   abuseReports: {
     path: '/staff-console/abuse-reports',
     title: 'Abuse reports',
@@ -692,6 +696,7 @@ export type DocsHelpTopicKey = keyof typeof DOCS_HELP_TOPICS
 // Heading anchors present on each topic's docs page. Only topics with H2–H4
 // headings appear; a topic absent here has no linkable anchors.
 export const DOCS_HELP_ANCHORS = {
+  abTestsWithAi: ['#it-proposes-you-write', '#write-variants', '#putting-them-in', '#what-it-will-not-write', '#read-a-result', '#the-verdict', '#the-words', '#undecided', '#what-is-sent', '#who-can-use-it', '#related'],
   abuseReports: ['#where-reports-come-from', '#triage-by-severity', '#csam', '#which-lever', '#statuses', '#disclosure', '#dmca', '#counter-notices', '#counter-notice-clock', '#counter-notice-steps', '#repeat-infringers', '#repeat-infringer-threshold', '#known-gaps', '#related'],
   account: ['#google-sign-in', '#sign-in-methods', '#signing-in-with-any-of-your-addresses', '#resetting-your-password', '#one-session-across-workspaces', '#automatic-sign-out-after-inactivity', '#when-the-console-asks-you-to-sign-in-again', '#recent-sign-ins', '#when-we-do-not-email-you', '#signing-a-device-out', '#passkeys', '#removing-one', '#blocked--possible-credential-copy', '#downloading-your-data', '#downloading-a-whole-workspace', '#privacy-requests', '#exporting-contacts-and-leads', '#erasing-a-person', '#product-updates', '#closing-your-account'],
   actionsBuilder: ['#create-an-action', '#recipes', '#describe-it', '#triggers', '#crm-events', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#crm-steps', '#step-conditions', '#sequences', '#run-history', '#what-is-and-isnt-recorded', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
@@ -761,7 +766,7 @@ export const DOCS_HELP_ANCHORS = {
   generateAComponentWithAglynAi: ['#from-a-brief', '#what-the-job-builds', '#optional-parts', '#defaults', '#where-it-lands', '#from-a-section-on-your-page', '#related'],
   generateAForm: ['#describe-the-form', '#what-the-form-gets', '#what-a-form-cannot-collect', '#nothing-is-live-until-you-place-it', '#who-can-use-it', '#related'],
   generateAPage: ['#describe-the-page', '#review-the-plan', '#how-the-page-is-built', '#the-draft', '#what-a-page-job-uses', '#who-can-use-it', '#related'],
-  generateASite: ['#what-a-scaffold-builds', '#nothing-is-published', '#what-it-costs-before-it-starts', '#watching-it-build', '#generate-for-several-sites-at-once'],
+  generateASite: ['#starting-a-new-site-from-a-few-questions', '#what-a-scaffold-builds', '#nothing-is-published', '#what-it-costs-before-it-starts', '#watching-it-build', '#generate-for-several-sites-at-once'],
   generateSection: ['#use-it', '#what-it-builds', '#tips', '#who-can-use-it', '#related'],
   generateWithAi: ['#what-you-get', '#write-the-brief', '#products', '#who-receives-it', '#merge-tokens', '#what-it-will-not-do', '#where-it-runs', '#related'],
   gettingStarted: ['#create-your-first-site', '#what-a-site-contains', '#switching-between-sites', '#next'],
@@ -825,7 +830,7 @@ export const DOCS_HELP_ANCHORS = {
   securityAndCompliance: ['#what-it-covers', '#contract-documents', '#legal-reacceptance', '#why-the-gaps-are-listed-first', '#reporting-a-vulnerability'],
   selfHosting: ['#the-short-version', '#the-full-runbook', '#who-runs-this-install', '#your-dmca-position-is-your-own', '#addresses', '#tenant-domain', '#tenant-host-cname', '#console-url', '#aglyn-standalone', '#reverse-proxy', '#platform-brand', '#optional-keys', '#scheduled-jobs', '#issue-reports', '#request-geo', '#bucket-cors', '#docs-build', '#honest-limits', '#related'],
   selfHostingEnvironment: ['#build-vs-runtime', '#firebase', '#firebase-client', '#firebase-admin', '#firebase-unused', '#firestore-storage', '#addresses', '#proxy', '#xff', '#geo', '#secrets', '#sso', '#auth-settings', '#stripe', '#stripe-webhook-events', '#stripe-prices', '#billing-switches', '#email', '#outreach', '#analytics', '#assist', '#video-delivery', '#cron', '#plugins', '#plugin-loader', '#operator', '#brand', '#tax', '#tax-collection', '#tax-filing', '#tax-what-to-do', '#caching', '#domains', '#domains-wildcard', '#domains-webhook', '#domains-vercel', '#domains-custom', '#vercel', '#docs-build', '#image-set', '#build-stamp', '#internal', '#related'],
-  seo: ['#per-screen-seo', '#how-a-page-title-is-built', '#site-wide-defaults', '#what-language-your-site-says-it-is-in', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#sitemap--robots', '#one-index-one-file-per-section', '#social-cards', '#what-each-kind-of-page-emits', '#structured-data', '#ai-agents', '#markdown-for-any-page', '#llmstxt', '#openapijson', '#well-knownapi-catalog', '#crawler-access', '#analytics-integration', '#related'],
+  seo: ['#per-screen-seo', '#how-a-page-title-is-built', '#variables-so-a-title-is-not-a-copy-of-your-site-name', '#site-wide-defaults', '#what-language-your-site-says-it-is-in', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#sitemap--robots', '#one-index-one-file-per-section', '#social-cards', '#what-each-kind-of-page-emits', '#structured-data', '#ai-agents', '#markdown-for-any-page', '#llmstxt', '#openapijson', '#well-knownapi-catalog', '#crawler-access', '#analytics-integration', '#related'],
   seoByAi: ['#write-a-pages-listing', '#write-a-products-listing', '#audit-the-whole-site', '#target-keywords', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],
   serverApis: ['#an-api-route', '#route-subject', '#webhooks-with-signature-verification', '#platform-billing-events', '#scheduled-jobs', '#lockdown--lockdown-is-required', '#troubleshooting'],
   settings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#email-templates', '#email-capture', '#your-sending-addresses', '#recipes', '#related'],

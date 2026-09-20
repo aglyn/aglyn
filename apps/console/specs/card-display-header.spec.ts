@@ -53,7 +53,11 @@ function* tsxFiles(dir: string): Generator<string> {
     if (entry === 'node_modules' || entry === '.next' || entry === 'dist') continue
     const path = join(dir, entry)
     if (statSync(path).isDirectory()) yield* tsxFiles(path)
-    else if (path.endsWith('.tsx')) yield path
+    // Shipped components only. A spec that QUOTES the wrong prop — to explain
+    // what it is guarding against, or to double `CardDisplay` — is not a card
+    // that renders with no heading, and reporting it teaches the next reader
+    // to edit the comment rather than the card.
+    else if (path.endsWith('.tsx') && !path.endsWith('.spec.tsx')) yield path
   }
 }
 

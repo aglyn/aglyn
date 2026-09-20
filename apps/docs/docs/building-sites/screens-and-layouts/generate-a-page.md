@@ -1,7 +1,7 @@
 ---
 sidebar_position: 5
 title: Generate a page from a prompt
-description: An AI landing page generator built into the canvas: describe a page and Aglyn AI plans it, then builds it section by section as an unpublished draft from your own theme, layout, components and forms.
+description: "An AI landing page generator built into the canvas: describe a page and Aglyn AI plans it, then builds it section by section as an unpublished draft from your own theme, layout, components and forms."
 ---
 
 # Generate a page from a prompt

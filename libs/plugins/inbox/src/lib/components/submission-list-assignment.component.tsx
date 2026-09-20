@@ -46,6 +46,7 @@
  * read-on-mount shape this codebase refuses.
  */
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -173,6 +174,15 @@ export function SubmissionListAssignment(props: SubmissionListAssignmentProps) {
     // submission reader and had the identical defect.
     <CardDisplay
       header={'Add to a marketing list'}
+      // A headered card carries help (AGL-2213). The topic is campaigns, not
+      // forms: what this card does to somebody is put them in an audience, and
+      // the rules about that live with the audience.
+      help={pluginDocsHelp('emailCampaigns', {
+        anchor: '#add-to-a-list',
+        excerpt:
+          'Put this sender on a marketing list. A list is what a campaign ' +
+          'sends to; adding somebody sends them nothing now.',
+      })}
       variant="outlined"
       contentGutterX
       contentGutterY

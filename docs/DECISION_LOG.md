@@ -92,6 +92,32 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-20 — The extra site rises to $20 on every tier, Starter included: the $8 add-on undercut every rung of the ladder
+
+- **Decided by:** the account owner, 2026-09-20, shown that with extra sites at $8 and no cap a plan plus extras undercuts every higher plan; offered a uniform $16 (holds on annual prices only) and a per-plan cap on extras (a product change) as the alternatives, chose a uniform $20.
+- **Scope:** pricing
+- **Evidence:** `PLAN_PRICING[*].extraHostMonthlyUsd` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; Stripe live prices `aglyn_{starter,pro,business,scale,advanced,agency}_extra_host` ($20/mo) and `_yearly` ($240/yr), minted 2026-09-20 with the lookup keys transferred from the $10/$8 prices; `tools/scripts/setup-stripe.mjs`; AGL-3198.
+
+**Six charged rates move, to one number.** The entry below this one, from the
+same morning, moved Business from $5 to $8 so that no tier charged less for
+an extra site than a tier granting less per host. The per-site cost calculator
+built the same day (AGL-2968) then computed what a buyer would actually pay
+and showed the other half of the problem: an extra site at $8, with no cap on
+how many a plan may add, is cheaper than every step of the base ladder, which
+costs $8.57 to $16 per included site on annual prices and $12 to $22 on
+monthly. Ten Business sites plus fifteen extras came to $219 against
+Advanced's $299; plus ninety extras, $819 against Agency's $1,049; and
+Starter's $10 extra undercut Pro the same way. On site count alone no plan was
+worth upgrading to, and a truthful cost sheet on the marketing site would have
+said so. At $20 no plan plus extras undercuts the next plan on either
+interval: Business plus five is $239 against Scale's $249 monthly, Advanced
+plus seventy-five is $1,799 against Agency's $1,299. Extras remain the way to
+add a few sites; the next plan is how to add many. Live Stripe held no
+subscription with an extra site, so no stored price changes hands. The Drive
+Pricing Decision Log entry of the same date carries the arithmetic and the
+alternatives; the `/pricing` and `/duda` republishes and the parity spec
+carry the cells.
+
 ## 2026-09-20 — The Business extra site rises from $5 to $8: $10 on Starter, $8 on every tier above it
 
 - **Decided by:** the account owner, 2026-09-20, asked directly why Business charged $5 for an extra site while every tier above Starter charges $8; offered "keep $5 as a deliberate growth-tier price" as the alternative, chose $8.

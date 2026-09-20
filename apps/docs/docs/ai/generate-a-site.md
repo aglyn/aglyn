@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Generate a whole site from a brief
-description: Generate a website from a prompt: describe a business and an Aglyn AI build job plans a small site — pages, navigation, layout, contact form and palette — then builds each page as an unpublished draft.
+description: "Generate a website from a prompt: describe a business and an Aglyn AI build job plans a small site — pages, navigation, layout, contact form and palette — then builds each page as an unpublished draft."
 ---
 
 # Generate a whole site from a brief
@@ -15,6 +15,19 @@ Everything it then builds follows [the building rules](./how-aglyn-ai-builds.md)
 piece is built by the same job that builds it on its own: the pages by the page job, the
 layout by the layout job, the form by the [form job](./generate-a-form.md). A scaffold is
 those jobs run in order, not a different way of building.
+
+## Starting a new site from a few questions
+
+A site you have just created opens on its **Setup** page, and **Start this site
+with AI** is at the top of it. It asks what kind of site you are creating, who
+it is for, and which of the starter examples you like — then writes the brief
+for you and plans the site from it.
+
+**Skip and start blank** is beside the questions from the moment they appear,
+and it is the same offer whether you have answered them or not. Taking it
+creates nothing at all: no job, no pages, no half-built site behind you. You
+keep the empty site you already have, on the page you are already on, and that
+site does not ask again.
 
 ## What a scaffold builds
 

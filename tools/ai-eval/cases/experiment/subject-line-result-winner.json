@@ -1,0 +1,59 @@
+{
+  "id": "experiment-subject-line-result-winner",
+  "kind": "experiment",
+  "brief": "Did the subject line test find anything?",
+  "framing": null,
+  "inventory": null,
+  "experiment": {
+    "task": "explain",
+    "test": "Renewal subject line",
+    "arms": [
+      { "id": "Your plan renews soon", "exposures": 6200, "conversions": 372, "rate": 6, "lift": null, "confidence": null },
+      { "id": "Your plan renews on the 12th", "exposures": 6180, "conversions": 470, "rate": 7.6, "lift": 26.7, "confidence": 99.7 }
+    ]
+  },
+  "candidates": [
+    {
+      "source": "authored",
+      "step": null,
+      "model": null,
+      "effort": null,
+      "note": "A reference answer for a result that did decide: it names the arm the reading named, quotes only figures it was given, and says what to do next.",
+      "plan": null,
+      "answer": {
+        "headline": "Naming the renewal date won: \"Your plan renews on the 12th\" converted 7.6% against 6%.",
+        "points": [
+          "The dated subject line was shown to 6,180 recipients and converted 470 of them.",
+          "The original was shown to 6,200 and converted 372, a rate of 6%.",
+          "That is a lift of 26.7%, at 99.7% confidence."
+        ],
+        "winner": "Your plan renews on the 12th",
+        "next": "Finish the test on the dated subject line and use it for the next renewal send."
+      },
+      "usage": null,
+      "rubric": { "structure": 5, "copy": 5, "reuse": null, "grader": "authored" }
+    }
+  ],
+  "controls": [
+    {
+      "why": "Names an arm the figures do not hold, so the reading takes it out.",
+      "answer": {
+        "headline": "The third subject line won.",
+        "points": ["It converted best of the three."],
+        "winner": "Your plan renews tomorrow",
+        "next": "Use it."
+      },
+      "fails": ["rules"]
+    },
+    {
+      "why": "A headline past the length an explanation's one sentence may run.",
+      "answer": {
+        "headline": "Naming the renewal date won, and the reason it won is that a date is a specific thing a person can act on, where a vague word like soon leaves them to guess, and a guess is the easiest thing in the world to put off until another day, which is exactly what most of the recipients of the original subject line appear to have done with it, again and again.",
+        "points": [],
+        "winner": "Your plan renews on the 12th",
+        "next": "Use the dated subject line."
+      },
+      "fails": ["budget"]
+    }
+  ]
+}

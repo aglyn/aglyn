@@ -26,6 +26,7 @@ import searchContent, {
   SEARCH_FACET_ALL,
   searchResultFacets,
 } from '../../../../utils/search-content'
+import { hostSeoTitleParts } from '../../../../utils/not-found-title'
 import getOrgBilling from '../../../../utils/get-org-billing'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import CatchAllClient from '../[[...slug]]/catch-all-client'
@@ -54,8 +55,9 @@ export async function generateMetadata({
   return {
     title: Aglyn.resolveSeoTitle({
       name: 'Search',
-      siteTitle: hostRes.host?.seo?.title ?? hostRes.host?.displayName,
-      separator: hostRes.host?.seo?.separator,
+      // The same reader every other head uses, so the site's title pattern
+      // reaches this page too (AGL-3197).
+      ...hostSeoTitleParts(hostRes.host as never),
       fallback: 'Search',
     }),
     robots: { index: false, follow: true },

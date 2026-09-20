@@ -554,6 +554,40 @@ export const CONSOLE_WIDGET_SLOTS = {
   /** Host setup page, below the built-in cards. Props: hostId, org. */
   hostSettings: 'hostSettings',
   /**
+   * The top of the page a newly created site lands on (AGL-2918): where a
+   * widget may offer to START the site for the person rather than leave them
+   * an empty one. Props: {@link ConsoleHostFirstRunZoneProps}.
+   *
+   * ── The blank path is the default, not the fallback ──────────────────────
+   *
+   * The site already exists, blank, and the page beneath this zone is the
+   * ordinary one every site gets. A widget here is an OFFER on top of that
+   * page: it asks the person what they want, it builds only what they then
+   * confirm, and everything it makes is a draft the site does not serve.
+   *
+   * So a zone with no widget — no plugin loaded, a feature not released, a
+   * reader without the permission — is not a degraded state. It is the blank
+   * path, unchanged and complete, which is why nothing on the page below
+   * depends on anything here.
+   *
+   * ── A widget here MUST offer `startBlank` ────────────────────────────────
+   *
+   * A guided start that a person cannot leave turns creating a site into a
+   * funnel, so `startBlank` is handed down rather than left to each widget to
+   * invent: a widget draws it where its questions START, not at the end of
+   * them, and taking it leaves the person on this same page with nothing
+   * begun behind them. The shell remembers the choice for this site and stops
+   * asking.
+   *
+   * A widget that takes the screen rather than sitting on the page — a full
+   * screen dialog, an overlay — owes the same exit in every shape it has one:
+   * a close control, and the key a person presses to dismiss it. Each of them
+   * is `startBlank`, because a takeover somebody can only dismiss BACK INTO is
+   * the funnel this zone exists to refuse, and nothing here is a half-answered
+   * state worth returning to.
+   */
+  hostFirstRun: 'hostFirstRun',
+  /**
    * The host setup Theme section, between the "What you have changed" card
    * and the editor (AGL-2938). Props: {@link ConsoleHostThemeZoneProps} — the
    * site, the theme the editor shows, where that theme came from, the
@@ -849,6 +883,28 @@ export interface ConsoleOrgSitesZoneProps {
   basePath: string
 }
 
+
+/** What the `hostFirstRun` zone hands each widget (AGL-2918). */
+export interface ConsoleHostFirstRunZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** The site's subdomain, which is what a console URL names a site by. */
+  host: string | null
+  /**
+   * Leaves the guided start for the blank site the person already has: this
+   * same page, with nothing created and nothing begun. The shell records the
+   * choice for this site and draws the zone no more.
+   *
+   * Required of every widget on this zone, drawn where its questions start
+   * rather than after them, and — for a widget that takes the screen — what
+   * every way of dismissing it does. See `hostFirstRun` in
+   * {@link CONSOLE_WIDGET_SLOTS}.
+   */
+  startBlank: () => void
+}
 
 /** What the `hostTheme` zone hands each widget (AGL-2938). */
 export interface ConsoleHostThemeZoneProps {

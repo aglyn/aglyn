@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Generate an email campaign with AI
-description: An AI email campaign generator that drafts rather than sends: turn a brief into a draft email design, or a draft campaign and the email it would send. Nothing is sent, and nothing is aimed at anybody, until you choose.
+description: "An AI email campaign generator that drafts rather than sends: turn a brief into a draft email design, or a draft campaign and the email it would send. Nothing is sent, and nothing is aimed at anybody, until you choose."
 ---
 
 # Generate an email campaign with AI

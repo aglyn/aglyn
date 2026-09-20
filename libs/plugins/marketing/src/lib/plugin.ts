@@ -16,8 +16,13 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { mdiBullhornOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
+import {
+  EXPERIMENT_RESULT_ZONE,
+  EXPERIMENT_VARIANTS_ZONE,
+} from './components/experiment-zones'
 import { MARKETING_CONSOLE_SECTIONS } from './components/marketing-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 
@@ -41,6 +46,36 @@ const CampaignGlanceCard = lazy(
  * uses the shell's media browser via `useMediaPicker`.
  */
 export function registerMarketingConsole(): void {
+  /*
+   * The two positions the A/B testing card hosts (AGL-2914), declared before
+   * the extension that draws the card. An id another plugin has already taken
+   * is refused, naming both. What each zone hands a widget is carried on its
+   * token, in `components/experiment-zones`, so a widget elsewhere is written
+   * against the same shape without importing this plugin.
+   */
+  registerPluginZone(
+    {
+      zone: EXPERIMENT_VARIANTS_ZONE,
+      label: 'A/B test variants',
+      surface: 'console',
+      description:
+        'In the experiment editor, beside the variants. A widget here proposes copy for the variants the editor holds; the dialog’s Save is the write, and nothing a widget returns starts or changes a test.',
+    },
+    // Named rather than left to the loader's marker, because this function is
+    // also called directly — by a spec, and by an app that loads the plugin
+    // without the loader — and a zone with no owner is refused.
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginZone(
+    {
+      zone: EXPERIMENT_RESULT_ZONE,
+      label: 'A/B test result',
+      surface: 'console',
+      description:
+        'Below the results of one test. A widget here explains what the figures show. There is nothing to apply, and a widget may not declare a winner the card has not.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Marketing',

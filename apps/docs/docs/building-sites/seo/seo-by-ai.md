@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: AI SEO for your website
-description: AI SEO for websites, on the pages you already have: have AI write a page or product's search listing, audit every published page with a proposed fix for each finding, and draft your structured data and /llms.txt.
+description: "AI SEO for websites, on the pages you already have: have AI write a page or product's search listing, audit every published page with a proposed fix for each finding, and draft your structured data and /llms.txt."
 ---
 
 # AI SEO for your website

@@ -34,6 +34,7 @@ import type { DocsHelpTopicKey } from './docs-help.generated'
  * A missing key is a compile error, so no topic can lose its excerpt quietly.
  */
 export const DOCS_HELP_EXCERPTS = {
+  abTestsWithAi: 'Have Aglyn AI write two to four variants for a screen, section or email experiment, and put a finished test into plain language — with the verdict decided from the counts before the model is asked anything.',
   abuseReports: 'The public abuse-report queue — where outside reports land, how to triage by severity, which lever answers which report, and the CSAM and DMCA paths that are not takedown buttons.',
   account: 'How console sign-in works — Google sign-in on desktop and mobile, one session across all your workspaces, and automatic sign-out after inactivity.',
   actionsBuilder: 'Map a single event to a single action without building a full workflow.',

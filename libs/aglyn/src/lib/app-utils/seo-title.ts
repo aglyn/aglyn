@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+import {
+  DEFAULT_TITLE_PATTERN,
+  hasSeoTitleVariables,
+  resolveSeoTitleVariables,
+} from './seo-title-variables'
+
 /**
  * The rendered page title (AGL-1341).
  *
@@ -93,6 +99,21 @@ export interface SeoTitleOptions {
    * white-label site must not leak the platform brand into its `<title>`).
    */
   fallback?: string | null
+  /**
+   * The site's title PATTERN — `seo.titlePattern` — for the composed case
+   * (AGL-3197).
+   *
+   * Rule 2 below was one composition written in code, so the only thing a site
+   * could change about it was the separator. It is now a written pattern with
+   * a default that says the same thing, so a site can put its name first, drop
+   * it from the composition entirely, or keep what it has by setting nothing.
+   *
+   * It composes the FALLBACK only. A pattern that also wrapped authored titles
+   * would rewrite every title anyone has already written, which is the one
+   * outcome this feature is not allowed to have — an authored title that wants
+   * the site name in it says so with a variable of its own.
+   */
+  pattern?: string | null
 }
 
 /**
@@ -115,12 +136,40 @@ function padSeparator(separator?: string | null): string {
  * an override and `siteTitle` is a fallback, never a suffix.
  */
 export function resolveSeoTitle(options: SeoTitleOptions): string {
-  const authored = clean(options.title)
-  if (authored) return authored
-
   const name = clean(options.name)
   const siteTitle = clean(options.siteTitle)
+  const values = {
+    'page.name': name,
+    'site.name': siteTitle,
+    'site.separator': clean(options.separator),
+  }
+
+  const authored = clean(options.title)
+  if (authored) {
+    // Verbatim, still — rule 1 is untouched. A title with no variables in it
+    // does not reach the resolver at all, so it comes back identical by the
+    // shortest path there is (AGL-3197).
+    return hasSeoTitleVariables(authored)
+      ? resolveSeoTitleVariables(authored, values) || clean(options.fallback)
+      : authored
+  }
+
+  const pattern = clean(options.pattern)
+  if (pattern) return resolveSeoTitleVariables(pattern, values) || clean(options.fallback)
+
   // Both sides live: this is the only case that renders a separator.
   if (name && siteTitle) return `${name}${padSeparator(options.separator)}${siteTitle}`
   return name || siteTitle || clean(options.fallback)
+}
+
+/**
+ * The pattern a site composes untitled pages with, ready to render.
+ *
+ * Separate from the resolver so the console's editor can show the same default
+ * as a placeholder without duplicating the constant, and so a stored pattern
+ * of `''` — what a cleared field writes (AGL-1191) — means "the default"
+ * rather than "compose nothing".
+ */
+export function seoTitlePatternOrDefault(pattern?: string | null): string {
+  return clean(pattern) || DEFAULT_TITLE_PATTERN
 }
