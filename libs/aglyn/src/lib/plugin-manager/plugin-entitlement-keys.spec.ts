@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { ResolvedOrgEntitlements } from '../app-utils/plan-entitlements'
 import { setRegisteringPluginId } from '../app-utils/registering-plugin'
 import type { OrgEntitlements, OrgFeatureFlags } from '../foundation'
 import {
@@ -77,6 +78,23 @@ describe('plugin entitlement keys', () => {
     const flags: OrgFeatureFlags = { versioning: true, cellarTastings: true }
     expect(entitlements.bottlesPerHost).toBe(250)
     expect(flags.cellarTastings).toBe(true)
+  })
+
+  it('keeps a resolved shape readable as a plain record, which several callers rely on', () => {
+    /*
+     * The plugin halves compose in their MAPPED form. Intersecting a bare
+     * interface would drop the implicit string index signature, and these two
+     * assignments — a quota line reading every number, a digest reading every
+     * gate — are what stops compiling when it is dropped, for a plugin half
+     * that is empty.
+     */
+    const resolved = { features: {} } as unknown as ResolvedOrgEntitlements
+    // These two declarations ARE the assertion: they stop compiling when the
+    // index signature goes, which `typecheck` is what catches.
+    const numbers: Record<string, unknown> = resolved
+    const gates: Record<string, boolean> = resolved.features
+    expect(Object.keys(numbers)).toEqual(['features'])
+    expect(gates).toEqual({})
   })
 
   it('records who declared each key, and what kind it is', () => {

@@ -27,8 +27,8 @@ import type {
   OrgSeatAddons,
 } from '../foundation'
 import type {
-  PluginEntitlementFeatures,
-  PluginEntitlementQuotas,
+  PluginOrgFeatures,
+  PluginOrgQuotas,
 } from '../plugin-manager/plugin-entitlement-keys'
 import {
   isOrgOverrideReasonCode,
@@ -245,6 +245,12 @@ type NonQuotaEntitlementKeys = 'planComp'
  * installed plugin's keys, which is the arrangement the seam retires. So the
  * plugin halves join as declared: present once a plugin declares them, and
  * optional, because a workspace without the plugin has no value for them.
+ *
+ * They join in their MAPPED form (`PluginOrgQuotas`, `PluginOrgFeatures`)
+ * because an intersection with a bare interface has no implicit string index
+ * signature, and readers that hand these objects to a `Record<string, …>`
+ * parameter — the quota line, the digest gates — would stop compiling for a
+ * plugin half that is empty.
  */
 export type ResolvedOrgEntitlements = Required<
   Omit<
@@ -255,8 +261,8 @@ export type ResolvedOrgEntitlements = Required<
     | NonQuotaEntitlementKeys
   >
 > &
-  PluginEntitlementQuotas & {
-    features: Required<CoreOrgFeatureFlags> & PluginEntitlementFeatures
+  PluginOrgQuotas & {
+    features: Required<CoreOrgFeatureFlags> & PluginOrgFeatures
   }
 
 /**

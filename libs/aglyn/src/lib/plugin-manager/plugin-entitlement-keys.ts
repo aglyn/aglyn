@@ -89,6 +89,31 @@ export interface PluginEntitlementQuotas {}
 export interface PluginEntitlementFeatures {}
 
 /**
+ * The two halves above as MAPPED types, for composing into a type alias
+ * rather than into an interface.
+ *
+ * Not a style choice. TypeScript hands an implicit string index signature to a
+ * mapped type and withholds it from an interface, and several readers pass a
+ * resolved entitlements or features object where a `Record<string, boolean>`
+ * or `Record<string, unknown>` is wanted — a quota line reading every number,
+ * a digest reading every gate. Intersecting `Required<CoreOrgFeatureFlags>`
+ * with the raw interface loses that index signature and those readers stop
+ * compiling, for a plugin half that is empty. Mapping it keeps them.
+ *
+ * An interface is still what a plugin AUGMENTS: `declare module` merges into
+ * an interface and not into a type alias, so the pair is the augmentation
+ * target and its composable form, and the mapping follows whatever is
+ * declared.
+ */
+export type PluginOrgQuotas = {
+  [Key in keyof PluginEntitlementQuotas]: PluginEntitlementQuotas[Key]
+}
+/** See {@link PluginOrgQuotas}. */
+export type PluginOrgFeatures = {
+  [Key in keyof PluginEntitlementFeatures]: PluginEntitlementFeatures[Key]
+}
+
+/**
  * What a declared key is, which is what decides where it is read.
  *
  * There is deliberately no third kind for a plugin's SETTINGS block on the
