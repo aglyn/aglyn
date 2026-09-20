@@ -371,6 +371,12 @@ export function splitLinkValue(
 }
 
 /**
+ * The target half of a markdown-lite link, `[text](target)` — the same shape
+ * the parser keeps, so this finds what a reader will be able to click.
+ */
+const MARKDOWN_LINK_TARGET = /\]\(([^)\s]+)\)/g
+
+/**
  * Whether a stored node tree links to a given screen (AGL-703).
  *
  * DEEP, unlike {@link nodesReferenceComponent} which reads `props.refId` at
@@ -394,6 +400,12 @@ export function splitLinkValue(
  * string for some unrelated reason is a theoretical case; and this answers
  * "what might I break", where naming one extra document costs a second look
  * and missing one costs a dead link on a live site.
+ *
+ * A MARKDOWN body counts too (AGL-3118). A link written `[text](collection:…)`
+ * inside a Markdown element's content, or inside an entry body, renders as a
+ * real link on the page, so whatever it names is as genuinely referenced as a
+ * link element's `screenId` — and a delete that ignored it would break the
+ * sentence silently.
  */
 export function nodesReferenceScreen(
   nodes: Record<string, unknown> | null | undefined,
@@ -403,10 +415,19 @@ export function nodesReferenceScreen(
   const matches = (value: unknown): boolean => {
     if (typeof value === 'string') {
       const trimmed = value.trim()
-      return (
-        trimmed === screenId ||
-        parseScreenLinkValue(trimmed) === screenId
-      )
+      if (trimmed === screenId || parseScreenLinkValue(trimmed) === screenId) {
+        return true
+      }
+      // Only strings that hold a markdown link are worth parsing, which on a
+      // page is almost none of them.
+      if (!trimmed.includes('](')) return false
+      for (const match of trimmed.matchAll(MARKDOWN_LINK_TARGET)) {
+        const target = (match[1] ?? '').trim()
+        if (target === screenId || parseScreenLinkValue(target) === screenId) {
+          return true
+        }
+      }
+      return false
     }
     if (Array.isArray(value)) return value.some(matches)
     if (value && typeof value === 'object') {

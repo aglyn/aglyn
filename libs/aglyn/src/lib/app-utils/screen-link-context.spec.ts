@@ -286,6 +286,42 @@ describe('nodesReferenceScreen (AGL-703)', () => {
     expect(nodesReferenceScreen(null, 'about')).toBe(false)
     expect(nodesReferenceScreen(nodes({ screenId: 'about' }), '')).toBe(false)
   })
+
+  /**
+   * A link inside a markdown body (AGL-3118), which the parser now keeps and
+   * the page renders. "What might I break" has to include the sentence in a
+   * post, or a delete breaks it silently.
+   */
+  it('finds a target linked from a markdown body', () => {
+    expect(
+      nodesReferenceScreen(
+        nodes({ content: 'Read [about us](screen:about) first.' }),
+        'about',
+      ),
+    ).toBe(true)
+    expect(
+      nodesReferenceScreen(
+        nodes({ content: 'Read [the blog](collection:blog) first.' }),
+        'collection:blog',
+      ),
+    ).toBe(true)
+  })
+
+  it('does not match a body that links something else', () => {
+    expect(
+      nodesReferenceScreen(
+        nodes({ content: 'Read [the news](collection:news) first.' }),
+        'collection:blog',
+      ),
+    ).toBe(false)
+    // The words around a link are not a link: only the target half counts.
+    expect(
+      nodesReferenceScreen(
+        nodes({ content: 'The about screen is [here](/about).' }),
+        'about',
+      ),
+    ).toBe(false)
+  })
 })
 
 /**
