@@ -59,7 +59,7 @@ const page = (section: string, segments: string[]): ConsolePluginPageProps => ({
   sections: [
     {
       id: 'sequences',
-      label: 'Sequences',
+      label: 'All sequences',
       href: '/acme/outreach/sequences',
       visible: true,
     },

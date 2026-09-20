@@ -167,7 +167,7 @@ export function OutreachMailboxesSection(props: OutreachMailboxesSectionProps) {
     <Stack spacing={2}>
       <CardDisplay
         header="Mailboxes"
-        help={pluginDocsHelp('outreach', { anchor: '#connect-a-mailbox' })}
+        help={pluginDocsHelp('sequences', { anchor: '#connect-a-mailbox' })}
         contentGutterX
         contentGutterY
         HeaderProps={{ action: listed.mailboxes.length ? connectButton : undefined }}

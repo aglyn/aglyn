@@ -322,7 +322,7 @@ export function OutreachSequenceList(props: {
   return (
     <CardDisplay
       header="Sequences"
-      help={pluginDocsHelp('outreach', { anchor: '#sequences' })}
+      help={pluginDocsHelp('sequences', { anchor: '#sequences' })}
       HeaderProps={{
         action:
           sequences.status === 'ready' && sequences.data.length

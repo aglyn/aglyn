@@ -34,7 +34,7 @@ broadcast.
 ## Where it lives
 
 Sequences is a tab of its own at the **organization** level, beside the CRM. It
-has three sections: **Sequences**, **Mailboxes** and **Compliance**.
+has three sections: **All sequences**, **Mailboxes** and **Compliance**.
 
 Opening it takes the **Use Sequences** permission, which owners and admins hold
 by default. A [custom role](../../workspace-and-billing/teams-and-roles/custom-roles.md)
@@ -185,7 +185,7 @@ Add another country only for people who came to you first.
 ## Sequences {#sequences}
 
 A **sequence** is the emails, and the tasks between them, one person gets from
-one rep. **Sequences → Sequences** lists each one with its mailbox, its status,
+one rep. **Sequences → All sequences** lists each one with its mailbox, its status,
 and how many people it has enrolled, and how many of them are still active,
 replied, bounced or opted out.
 

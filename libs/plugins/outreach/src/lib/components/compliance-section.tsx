@@ -65,8 +65,8 @@ const EMPTY: OutreachComplianceSettings = {
 }
 
 /**
- * Outreach → Compliance (AGL-2980): who every email says sent it, and the
- * countries Outreach may send to at all.
+ * Sequences → Compliance (AGL-2980): who every email says sent it, and the
+ * countries a sequence may send to at all.
  *
  * The footer is previewed from what is typed, by the engine's own
  * `composeOutreachFooter`, so the page shows the lines every email will end
@@ -171,7 +171,7 @@ export function OutreachComplianceSection(
     <Stack spacing={2}>
       <CardDisplay
         header="Sender identity"
-        help={pluginDocsHelp('outreach', { anchor: '#compliance-settings' })}
+        help={pluginDocsHelp('sequences', { anchor: '#compliance-settings' })}
         contentGutterX
         contentGutterY
       >
@@ -248,7 +248,7 @@ export function OutreachComplianceSection(
 
       <CardDisplay
         header="Allowed countries"
-        help={pluginDocsHelp('outreach', { anchor: '#allowed-countries' })}
+        help={pluginDocsHelp('sequences', { anchor: '#allowed-countries' })}
         contentGutterX
         contentGutterY
       >

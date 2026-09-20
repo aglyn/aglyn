@@ -86,7 +86,7 @@ export function registerOutreachConsole(): void {
         header: {
           title: 'Sequences',
           icon: { path: mdiEmailFastOutline.path },
-          docsTopic: 'outreach',
+          docsTopic: 'sequences',
         },
         Component: OutreachConsolePage,
       },

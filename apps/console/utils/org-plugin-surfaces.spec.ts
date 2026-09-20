@@ -48,7 +48,7 @@ const outreach: ConsoleOrgNavEntry = {
     href: '/outreach',
     navTabId: 'nav-tab-org-outreach',
     sections: [
-      { id: 'sequences', label: 'Sequences' },
+      { id: 'sequences', label: 'All sequences' },
       { id: 'mailboxes', label: 'Mailboxes' },
     ],
     Component: Page,

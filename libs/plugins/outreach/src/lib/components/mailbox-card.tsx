@@ -278,7 +278,7 @@ export function MailboxCard(props: MailboxCardProps) {
     <CardDisplay
       header={mailbox.email}
       subheader={isMine ? 'Your mailbox' : 'A teammate’s mailbox'}
-      help={pluginDocsHelp('outreach', { anchor: '#connect-a-mailbox' })}
+      help={pluginDocsHelp('sequences', { anchor: '#connect-a-mailbox' })}
       contentGutterX
       contentGutterY
       HeaderProps={{
