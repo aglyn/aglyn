@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useHostOrgId, useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -24,6 +25,7 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Link,
   Stack,
   TableBody,
   TableCell,
@@ -215,6 +217,11 @@ export function AiExperimentVariantsCard(props: AiExperimentVariantsCardProps) {
 
   const busy = run.starting || run.running
   const noun = TARGET_NOUN[target]
+  const variantsHelp = pluginDocsHelp('aiExperiments', {
+    anchor: '#write-variants',
+    excerpt:
+      'Writes two to four variants of the copy under test, the first of them your copy unchanged. They go into the editor’s fields unsaved; nothing is saved until you save the experiment.',
+  })
   const write = () => {
     if (!orgId || !subject.trim()) return
     setApplied(null)
@@ -250,7 +257,20 @@ export function AiExperimentVariantsCard(props: AiExperimentVariantsCardProps) {
       aria-label="Write variants with AI"
     >
       <Stack spacing={1}>
-        <Typography variant="subtitle2">{'Write variants with AI'}</Typography>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline' }}>
+          <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
+            {'Write variants with AI'}
+          </Typography>
+          <Link
+            href={variantsHelp.href}
+            target="_blank"
+            rel="noopener"
+            variant="caption"
+            title={variantsHelp.excerpt}
+          >
+            {'How it works'}
+          </Link>
+        </Stack>
         <TextField
           size="small"
           multiline
@@ -470,6 +490,11 @@ export function AiExperimentResultCard(props: AiExperimentResultCardProps) {
   if (verdict !== 'ready') return null
 
   const busy = run.starting || run.running
+  const resultHelp = pluginDocsHelp('aiExperiments', {
+    anchor: '#the-verdict',
+    excerpt:
+      'What the figures support is worked out from the counts before a model is asked anything, and the explanation is held to it — so an undecided test reads as undecided and no variant is named.',
+  })
   const explain = () => {
     if (!orgId || !test) return
     void run.start({
@@ -495,6 +520,15 @@ export function AiExperimentResultCard(props: AiExperimentResultCardProps) {
           <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
             {'Read these figures in plain words, including whether they settle anything yet.'}
           </Typography>
+          <Link
+            href={resultHelp.href}
+            target="_blank"
+            rel="noopener"
+            variant="caption"
+            title={resultHelp.excerpt}
+          >
+            {'How it works'}
+          </Link>
           <Button
             size="small"
             variant="outlined"
