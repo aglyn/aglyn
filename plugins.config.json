@@ -522,7 +522,9 @@
             "/marketing"
           ],
           "slots": [
-            "hostDashboard"
+            "crmRecordAttribution",
+            "hostDashboard",
+            "inboxRecordAttribution"
           ]
         }
       }

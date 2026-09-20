@@ -74,9 +74,9 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({ confirm: mockConfirm }),
 }))
 
-jest.mock('@aglyn/plugins-marketing/components/conversion-attribution.component', () => ({
-  __esModule: true,
-  default: () => <p>{'Attribution'}</p>,
+/* The zone a plugin that credits conversions draws in; a marker stands in. */
+jest.mock('./inbox-attribution-zone', () => ({
+  InboxRecordAttributionZone: () => <p>{'Attribution'}</p>,
 }))
 
 /** Held, so the CRM hub's address is built from one set of params. */

@@ -21,7 +21,7 @@ import { normalizeContactEmail, pluginDocsHelp } from '@aglyn/aglyn'
 // point the tenant's loader dynamically imports to activate the marketing
 // plugin's SITE half, so a console card named there ships to every published
 // page. The component path reaches the same module without crossing it.
-import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
+import { InboxRecordAttributionZone } from './inbox-attribution-zone'
 // The CRM's route builder by its leaf path, not the plugin barrel: the barrel
 // carries the plugin registration, and a link needs only the address grammar.
 import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
@@ -370,10 +370,10 @@ export function ContactsCard({ hostId }: { hostId: string }) {
         <DialogTitle>{leadOrigin?.email ?? 'Lead'}</DialogTitle>
         <DialogContent>
           {leadOrigin?.$id ? (
-            <ConversionAttribution
+            <InboxRecordAttributionZone
               hostId={hostId}
-              kind="lead"
-              refId={String(leadOrigin.$id)}
+              recordKind="lead"
+              recordId={String(leadOrigin.$id)}
             />
           ) : null}
         </DialogContent>

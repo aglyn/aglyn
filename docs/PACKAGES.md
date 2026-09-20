@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 12 edges the allowlist carries, and what removes each. An edge leaves the
+The 11 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -228,7 +228,7 @@ import and no production file may repeat it; the fix is a fixture that reads
 the table from the core's server entry, or the spec moving to a project that
 may import the core.
 
-**Plugin → plugin** (10, numbered to 17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (9, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -267,11 +267,11 @@ needs it starts.
    `useConsoleWidgetSlot()`. **Present**, and in use for other zones today.
    Email's route stays behind its own `registerPluginApiRoute`; CRM never holds
    the client hook.
-5. **`plugins-crm` → `plugins-marketing`.** Crosses: marketing's
-   `ConversionAttribution` component, embedded twice
-   (`contact-associations-card.tsx`, `lead-history-card.tsx`). Fix: marketing
-   registers it as a widget into CRM's `recordInsights` zone — same registry,
-   same renderer as row 4. **Present.**
+5. **`plugins-crm` → `plugins-marketing`.** Gone (AGL-3080). The CRM hosts a
+   `crmRecordAttribution` zone on a contact's page and in a lead's history and
+   hands it `{ hostId, recordKind, recordId }` in its own words; marketing
+   registers one widget there that reads the kind as the identify moment it
+   credits, and draws nothing for a kind it never credits. The number stays.
 6. **`plugins-email` → `plugins-mui`.** Gone (AGL-3080). `sanitizeCustomHtml`
    had already become a one-line delegation to the core's `sanitizeAuthorHtml`
    (AGL-1901), so the email blocks call the core's function themselves — the
@@ -311,8 +311,9 @@ needs it starts.
     URL. With no plugin publishing the kind they draw text, not a link to a
     page the workspace cannot open. The number stays so the rows below keep
     theirs.
-13. **`plugins-inbox` → `plugins-marketing`.** Crosses: `ConversionAttribution`
-    (twice), `HostCampaignsCard` (`inbox-console-page.tsx`), and
+13. **`plugins-inbox` → `plugins-marketing`.** `ConversionAttribution` no longer
+    crosses: the Inbox hosts an `inboxRecordAttribution` zone and marketing's
+    widget fills it, as in row 5 (AGL-3080). Still crosses: `HostCampaignsCard` (`inbox-console-page.tsx`), and
     `performCampaignSend` in one spec. Fix, in two parts: marketing registers
     both cards as widgets into zones the inbox page declares for itself — a slot
     id is an open string, so a plugin-hosted zone needs no core release, and the

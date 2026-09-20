@@ -55,9 +55,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     .writeGuardedBySeed,
 }))
 
-jest.mock('@aglyn/plugins-marketing/components/conversion-attribution.component', () => ({
-  __esModule: true,
-  default: () => null,
+/* The attribution zone is another plugin's to fill; here it draws nothing. */
+jest.mock('./crm-attribution-zone', () => ({
+  CrmRecordAttributionZone: () => null,
+  useHasCrmRecordAttribution: () => false,
 }))
 /* The picker has a spec of its own; here it files the person under one campaign. */
 jest.mock('@aglyn/shared-ui-email-campaigns/components/campaign-picker.component', () => ({

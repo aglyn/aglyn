@@ -105,9 +105,8 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
     confirm: jest.fn().mockResolvedValue(undefined),
   }),
 }))
-jest.mock('@aglyn/plugins-marketing/components/conversion-attribution.component', () => ({
-  __esModule: true,
-  default: () => null,
+jest.mock('./inbox-attribution-zone', () => ({
+  InboxRecordAttributionZone: () => null,
 }))
 // The reader a row opens holds the reply and list controls, which read on
 // their own; this file is about the list, so they draw nothing here.

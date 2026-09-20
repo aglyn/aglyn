@@ -170,10 +170,10 @@ jest.mock('@aglyn/shared-ui-jsx/components/row-actions-menu.component', () => ({
 }))
 // The attribution and the campaign picker each open a listen of their own;
 // neither is what this file is about.
-jest.mock(
-  '@aglyn/plugins-marketing/components/conversion-attribution.component',
-  () => ({ __esModule: true, default: () => null }),
-)
+jest.mock('./crm-attribution-zone', () => ({
+  CrmRecordAttributionZone: () => null,
+  useHasCrmRecordAttribution: () => false,
+}))
 jest.mock(
   '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component',
   () => ({ __esModule: true, default: () => null }),

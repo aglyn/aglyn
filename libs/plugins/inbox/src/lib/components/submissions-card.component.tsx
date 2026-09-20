@@ -21,7 +21,7 @@ import { FORMS_MAX_PER_HOST, INBOX_SUBMISSION_PARAM, pluginDocsHelp } from '@agl
 // point the tenant's loader dynamically imports to activate the marketing
 // plugin's SITE half, so a console card named there ships to every published
 // page. The component path reaches the same module without crossing it.
-import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
+import { InboxRecordAttributionZone } from './inbox-attribution-zone'
 // The CRM's route builder by its leaf path, for the reason above: the barrel
 // is the plugin's site entry point.
 import {
@@ -648,10 +648,10 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
            */}
           {reader?.$id ? (
             <Box sx={{ mt: 2 }}>
-              <ConversionAttribution
+              <InboxRecordAttributionZone
                 hostId={hostId}
-                kind="form"
-                refId={String(reader.$id)}
+                recordKind="form"
+                recordId={String(reader.$id)}
               />
             </Box>
           ) : null}

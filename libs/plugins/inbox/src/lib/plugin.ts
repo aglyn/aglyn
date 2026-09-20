@@ -19,6 +19,8 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiInboxArrowDown } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { INBOX_CONSOLE_SECTIONS } from './components/inbox-console-sections'
+import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
+import { INBOX_RECORD_ATTRIBUTION_ZONE } from './components/inbox-attribution-zone'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /** Code-split: the Inbox console page only loads when opened. */
@@ -46,6 +48,17 @@ const InboxGlanceCard = lazy(
  * conversion attribution shown inside a submission.
  */
 export function registerInboxConsole(): void {
+  registerPluginZone(
+    {
+      zone: INBOX_RECORD_ATTRIBUTION_ZONE,
+      label: 'Where a lead or a submission came from',
+      surface: 'console',
+      description:
+        'In a lead’s “Where this came from” dialog and under an open submission. A widget here says which campaign or link brought it; it is handed the site, what the record is and its id, and it writes nothing.',
+    },
+    // Named, because a spec calls this registrar without the loader.
+    { pluginId: BUNDLE_ID },
+  )
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Inbox',

@@ -30,7 +30,7 @@ import { personKeyInBrowser } from '../model/person-key-web'
  * point the tenant's loader imports to activate the plugin's SITE half, so a
  * console card named there ships to every published page.
  */
-import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
+import { CrmRecordAttributionZone } from './crm-attribution-zone'
 import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -260,7 +260,11 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
           </Stack>
         ) : null}
         {hostId ? (
-          <ConversionAttribution hostId={hostId} kind="contact" refId={record.$id} />
+          <CrmRecordAttributionZone
+            hostId={hostId}
+            recordKind="contact"
+            recordId={record.$id}
+          />
         ) : null}
         <Stack spacing={0.5}>
           <Typography variant="subtitle2">{'Marketing email'}</Typography>

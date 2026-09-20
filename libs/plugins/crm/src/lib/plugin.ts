@@ -23,6 +23,8 @@ import { CrmGlanceCard } from './components/crm-glance-card'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { withCrmOrgMount } from './hooks/use-crm-org-mount'
 import { registerCrmRecordRoutes } from './model/crm-record-routes'
+import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
+import { CRM_RECORD_ATTRIBUTION_ZONE } from './components/crm-attribution-zone'
 
 /** Code-split: the CRM hub only loads when opened. */
 const CrmConsolePage = lazy(
@@ -50,6 +52,16 @@ const CrmTasksDueCard = lazy(
  */
 export function registerCrmConsole(): void {
   registerCrmRecordRoutes()
+  registerPluginZone(
+    {
+      zone: CRM_RECORD_ATTRIBUTION_ZONE,
+      label: 'Where a CRM record came from',
+      surface: 'console',
+      description:
+        'On a contact’s page and in a lead’s history. A widget here says which campaign or link brought the person; it is handed the site, what the record is and its id, and it writes nothing.',
+    },
+    { pluginId: BUNDLE_ID },
+  )
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'CRM',
