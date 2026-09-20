@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/besigner",
-  "version": "1.0.0-beta.141",
+  "version": "1.0.0-beta.142",
   "type": "module",
   "repository": {
     "type": "git",
@@ -19,11 +19,11 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.141",
-    "@aglyn/shared-data-types": "1.0.0-beta.141",
-    "@aglyn/shared-util-logger": "1.0.0-beta.141",
-    "@aglyn/shared-util-tools": "1.0.0-beta.141",
-    "@aglyn/shared-util-vendor": "1.0.0-beta.141",
+    "@aglyn/aglyn": "1.0.0-beta.142",
+    "@aglyn/shared-data-types": "1.0.0-beta.142",
+    "@aglyn/shared-util-logger": "1.0.0-beta.142",
+    "@aglyn/shared-util-tools": "1.0.0-beta.142",
+    "@aglyn/shared-util-vendor": "1.0.0-beta.142",
     "@swc/helpers": "0.5.23",
     "lodash-es": "^4.18.1",
     "mobx": "^6.16.1",
