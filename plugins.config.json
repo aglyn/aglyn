@@ -1,5 +1,5 @@
 {
-  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests — the only files allowed to reference @aglyn/plugins-* outside libs/plugins. Ids must match FIRST_PARTY_PLUGINS in libs/aglyn plugin-manager/enabled-plugins.ts. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry), declarations = the light registrations core reads before any surface loads (`/declarations`, both apps, client and server), serverDeclarations = the same for the server alone (`/declarations.server`, platform-event subscriptions), consoleServerDeclarations = the same for the CONSOLE's server alone (`/declarations.console-server`, never loaded or bundled by the tenant runtime: for registrations that open what only the console holds), subprocessors = the third-party recipients the plugin's code sends data to, and its other hosts and its uses of hosts declared elsewhere (`/subprocessors`, called by the generator rather than at runtime, and written into the console's subprocessors manifest as data for the subprocessor inventory). activityMutationPaths = the plugin's modules that create, transfer or destroy a durable customer object, which `tools/scripts/check-activity-coverage.mjs` holds to logging an activity entry like the platform's own. `alwaysOn` here is the LOADER's meaning — the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead. `modules` (AGL-3116) names the subpath a surface registers from when that surface's code must not ride with the package root's — each site surface has its own module, so a published page never loads a console registrar. `contributes` (AGL-3116, required) declares what the plugin adds and where, in the shape a marketplace manifest uses (core `plugin-contributions.ts`): `site.components` = the canvas component ids it registers, `site.features` = the site runtimes it mounts on every page of a site that switched it on, `console.slots` = the widget slots and panels it fills, `console.routes` / `console.orgRoutes` = the console routes it serves, `console.shell` = it draws a nav tab, a provider or a staff tab the shell renders on every screen. The loaders place a plugin by this declaration alone, so `apps/console/specs/plugin-contributions-declared.spec.ts` holds it to what the registrars actually register.",
+  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests — the only files allowed to reference @aglyn/plugins-* outside libs/plugins. `catalog` is the plugin's row on the workspace and site switchboards (label, description, release flag, what switching it off for a site stops, and what a published site loses); the generator compiles every row, in `order`, into libs/aglyn plugin-manager/first-party-plugins.generated.ts, so a new plugin is declared here and nowhere in core (AGL-3080). An entry with no `catalog` is not on the switchboard. `capabilities` are further switchboard ids the same bundle serves. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry), declarations = the light registrations core reads before any surface loads (`/declarations`, both apps, client and server), serverDeclarations = the same for the server alone (`/declarations.server`, platform-event subscriptions), consoleServerDeclarations = the same for the CONSOLE's server alone (`/declarations.console-server`, never loaded or bundled by the tenant runtime: for registrations that open what only the console holds), subprocessors = the third-party recipients the plugin's code sends data to, and its other hosts and its uses of hosts declared elsewhere (`/subprocessors`, called by the generator rather than at runtime, and written into the console's subprocessors manifest as data for the subprocessor inventory). activityMutationPaths = the plugin's modules that create, transfer or destroy a durable customer object, which `tools/scripts/check-activity-coverage.mjs` holds to logging an activity entry like the platform's own. `alwaysOn` here is the LOADER's meaning — the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead. `modules` (AGL-3116) names the subpath a surface registers from when that surface's code must not ride with the package root's — each site surface has its own module, so a published page never loads a console registrar. `contributes` (AGL-3116, required) declares what the plugin adds and where, in the shape a marketplace manifest uses (core `plugin-contributions.ts`): `site.components` = the canvas component ids it registers, `site.features` = the site runtimes it mounts on every page of a site that switched it on, `console.slots` = the widget slots and panels it fills, `console.routes` / `console.orgRoutes` = the console routes it serves, `console.shell` = it draws a nav tab, a provider or a staff tab the shell renders on every screen. The loaders place a plugin by this declaration alone, so `apps/console/specs/plugin-contributions-declared.spec.ts` holds it to what the registrars actually register.",
   "plugins": [
     {
       "id": "mui",
@@ -7,6 +7,13 @@
       "alwaysOn": true,
       "register": {
         "site": "registerMuiPlugin"
+      },
+      "catalog": {
+        "order": 0,
+        "label": "Components",
+        "alwaysOn": true,
+        "description": "The base component and theme library every site builds on.",
+        "publishedSiteImpact": "elements"
       },
       "contributes": {
         "site": {
@@ -85,6 +92,23 @@
       "modules": {
         "site": "site"
       },
+      "catalog": {
+        "order": 1,
+        "$comment": "On for every workspace and switchable per site (AGL-3029): the catalog and the submissions already stored belong to the workspace. A site's switch reaches every half of a form through this id, so no half keeps running behind a page that no longer shows it.",
+        "label": "Forms",
+        "alwaysOnForWorkspace": true,
+        "description": "Forms on the site and the catalog that owns them.",
+        "siteOff": {
+          "stops": "Switching Forms off for this site stops forms rendering on its published pages, refuses every submission sent to it, and blocks publishing a form, or a page that carries one, until Forms is back on.",
+          "keeps": "Submissions already received, the workspace’s form catalog and the CRM leads its forms created are kept, and forms keep working on the workspace’s other sites.",
+          "confirm": true,
+          "pages": {
+            "heading": "These published pages carry a form. Their forms stop rendering and stop accepting submissions:",
+            "none": "No published page on this site carries a form."
+          }
+        },
+        "publishedSiteImpact": "elements"
+      },
       "contributes": {
         "site": {
           "components": [
@@ -115,6 +139,13 @@
       "apiPrefixes": [
         "bookings"
       ],
+      "catalog": {
+        "order": 4,
+        "label": "Bookings",
+        "description": "Services, open slots, and paid bookings.",
+        "releaseFlag": "release_bookings",
+        "publishedSiteImpact": "elements"
+      },
       "contributes": {
         "site": {
           "components": [
@@ -145,6 +176,30 @@
         "commerce",
         "membership"
       ],
+      "capabilities": [
+        {
+          "id": "accounts",
+          "catalog": {
+            "order": 3,
+            "$comment": "The Members blocks and the membership/* handlers are registered by this bundle, so there is no separate package to load; what this id contributes is the SWITCH the tenant route gate, the console card and the sitemap all ask (AGL-2486). Commerce off = member pages with no server, hence requires.",
+            "label": "User Accounts",
+            "description": "Visitor accounts on the site: the /signin, /signup and /recover pages, and the Members blocks. Off for a site until you turn it on.",
+            "releaseFlag": "release_member_accounts",
+            "defaultOffPerSite": true,
+            "requires": [
+              "commerce"
+            ],
+            "publishedSiteImpact": "routes"
+          }
+        }
+      ],
+      "catalog": {
+        "order": 5,
+        "label": "Commerce",
+        "description": "Products, carts, checkout, orders, POS.",
+        "releaseFlag": "release_commerce_v2",
+        "publishedSiteImpact": "elements"
+      },
       "contributes": {
         "site": {
           "components": [
@@ -188,6 +243,13 @@
       "apiPrefixes": [
         "marketplace"
       ],
+      "catalog": {
+        "order": 6,
+        "label": "Marketplace",
+        "description": "Marketplace listings, templates, and installs.",
+        "releaseFlag": "release_marketplace",
+        "publishedSiteImpact": "console-only"
+      },
       "contributes": {
         "console": {
           "shell": true,
@@ -210,6 +272,14 @@
       "apiPrefixes": [
         "crm"
       ],
+      "catalog": {
+        "order": 7,
+        "$comment": "The id was contacts until AGL-2595 widened one list into the hub; the release flag kept its key because it is persisted in Remote Config.",
+        "label": "CRM",
+        "description": "Leads, contacts, companies, deals, tasks and reports.",
+        "releaseFlag": "release_crm",
+        "publishedSiteImpact": "console-only"
+      },
       "contributes": {
         "console": {
           "shell": true,
@@ -241,6 +311,14 @@
         "libs/plugins/outreach/src/lib/routes/enroll-routes.ts",
         "libs/plugins/outreach/src/lib/runtime/mailbox-health-store.ts"
       ],
+      "catalog": {
+        "order": 8,
+        "$comment": "Works the CRM's records but is released and entitled on its own (AGL-2974).",
+        "label": "Outreach",
+        "description": "One-to-one email sequences sent from connected mailboxes.",
+        "releaseFlag": "release_outreach",
+        "publishedSiteImpact": "console-only"
+      },
       "contributes": {
         "console": {
           "shell": true,
@@ -255,6 +333,13 @@
       "package": "@aglyn/plugins-data",
       "register": {
         "console": "registerDataConsole"
+      },
+      "catalog": {
+        "order": 9,
+        "label": "Data",
+        "description": "Datasets, records, and CSV import/export.",
+        "releaseFlag": "release_data_store",
+        "publishedSiteImpact": "console-only"
       },
       "contributes": {
         "console": {
@@ -283,6 +368,13 @@
       "apiPrefixes": [
         "email"
       ],
+      "catalog": {
+        "order": 10,
+        "label": "Email",
+        "description": "Designed emails and campaign sending.",
+        "releaseFlag": "release_email",
+        "publishedSiteImpact": "elements"
+      },
       "contributes": {
         "site": {
           "components": [
@@ -319,6 +411,13 @@
       "apiPrefixes": [
         "events"
       ],
+      "catalog": {
+        "order": 11,
+        "label": "Events Calendar",
+        "description": "Event lists and calendars.",
+        "releaseFlag": "release_events",
+        "publishedSiteImpact": "elements"
+      },
       "contributes": {
         "site": {
           "components": [
@@ -343,6 +442,13 @@
       "apiPrefixes": [
         "inbox"
       ],
+      "catalog": {
+        "order": 12,
+        "label": "Inbox",
+        "description": "Form submissions and lead inbox.",
+        "releaseFlag": "release_inbox",
+        "publishedSiteImpact": "console-only"
+      },
       "contributes": {
         "console": {
           "shell": true,
@@ -360,6 +466,13 @@
       "package": "@aglyn/plugins-logic",
       "register": {
         "console": "registerLogicConsole"
+      },
+      "catalog": {
+        "order": 13,
+        "label": "Logic",
+        "description": "Variables, functions, and reference health.",
+        "releaseFlag": "release_logic",
+        "publishedSiteImpact": "console-only"
       },
       "contributes": {
         "console": {
@@ -389,6 +502,13 @@
         "campaigns",
         "experiments"
       ],
+      "catalog": {
+        "order": 14,
+        "label": "Marketing",
+        "description": "Overlays, campaigns, and experiments.",
+        "releaseFlag": "release_marketing",
+        "publishedSiteImpact": "elements"
+      },
       "contributes": {
         "site": {
           "features": [
@@ -413,6 +533,13 @@
         "console": "registerRedirectsConsole",
         "tenantApi": "registerRedirectsApi"
       },
+      "catalog": {
+        "order": 15,
+        "label": "Redirects",
+        "description": "URL redirect rules.",
+        "releaseFlag": "release_redirects",
+        "publishedSiteImpact": "routes"
+      },
       "contributes": {
         "console": {
           "shell": true,
@@ -434,6 +561,14 @@
       "apiPrefixes": [
         "hooks"
       ],
+      "catalog": {
+        "order": 16,
+        "$comment": "The id is stored on every org's enabled-plugin list; only the label moved.",
+        "label": "Automation",
+        "description": "Workflows, actions, webhooks, and run logs.",
+        "releaseFlag": "release_workflows",
+        "publishedSiteImpact": "routes"
+      },
       "contributes": {
         "console": {
           "shell": true,
@@ -461,6 +596,18 @@
         "ai",
         "assist"
       ],
+      "catalog": {
+        "order": 2,
+        "$comment": "On for every workspace, off for a site only when that site says so, and no release flag (AGL-2939): the workspace half (the add-on, credits, allotments, overage billing, the staff doors) carries no site and must keep running whatever any one site decides. Its doors gate themselves one by one; a flag on the bundle would switch off the released doors with the unreleased ones.",
+        "label": "AI",
+        "alwaysOnForWorkspace": true,
+        "description": "The assistant, generative building and automation, and the AI add-on.",
+        "siteOff": {
+          "stops": "Switching AI off for this site hides the assistant, Describe it, the AI cards and the editor’s AI controls on this site, refuses every AI request made for it, and stops its queued AI jobs without spending credits.",
+          "keeps": "It does not stop the workspace’s AI add-on, credits, allotments or overage billing, and AI keeps working on the workspace’s other sites."
+        },
+        "publishedSiteImpact": "console-only"
+      },
       "contributes": {
         "console": {
           "shell": true,

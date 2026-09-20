@@ -438,6 +438,7 @@ writeFileSync(
 console.log('  update tsconfig.base.json (path aliases)')
 
 // plugins.config.json entry.
+const releaseFlag = `release_${id.replace(/-/g, '_')}`
 const configPath = join(repoRoot, 'plugins.config.json')
 const pluginsConfig = JSON.parse(readFileSync(configPath, 'utf8'))
 const register = {}
@@ -454,6 +455,23 @@ pluginsConfig.plugins.push({
   ...(surfaces.includes('tenantApi') || surfaces.includes('consoleApi')
     ? { apiPrefixes: [id] }
     : {}),
+  // The plugin's own row on the switchboards; the generator compiles it into
+  // the core's catalog, so no core file is edited for a new plugin.
+  catalog: {
+    order:
+      Math.max(
+        -1,
+        ...pluginsConfig.plugins.flatMap((plugin) =>
+          [plugin, ...(plugin.capabilities ?? [])].map(
+            (source) => source.catalog?.order ?? -1,
+          ),
+        ),
+      ) + 1,
+    label,
+    description: `TODO: one line for the switchboard about ${label}.`,
+    releaseFlag,
+    publishedSiteImpact: surfaces.includes('site') ? 'elements' : 'console-only',
+  },
 })
 writeFileSync(configPath, JSON.stringify(pluginsConfig, null, 2) + '\n')
 console.log('  update plugins.config.json')
@@ -466,9 +484,10 @@ execSync('node tools/scripts/generate-plugin-manifests.mjs', {
 
 console.log(`
 Done. Manual follow-ups (deliberately not auto-edited):
-1. Add { id: '${id}', label: '${label}', description: '…', releaseFlag: 'release_${id.replace(/-/g, '_')}' }
-   to FIRST_PARTY_PLUGINS in libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts.
-2. Register the release flag (AGL-422 three-synced-places):
+1. Write the switchboard description in this plugin's \`catalog\` block in
+   plugins.config.json (and \`publishedSiteImpact: "routes"\` if it serves
+   site routes without components), then re-run the generator.
+2. Register the release flag \`${releaseFlag}\` (AGL-422 three-synced-places):
    - ReleaseFlagKey + RELEASE_FLAGS entry in libs/aglyn/src/lib/app-utils/release-flags.ts
    - parameter in cloud/firebase-remoteconfig.template.json
 3. nx lint plugins-${id} && nx test plugins-${id}, then commit.
