@@ -147,6 +147,31 @@ const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
 const TENANT_DOMAIN = process.env.NEXT_PUBLIC_TENANT_DOMAIN ?? 'aglyn.app'
 
 export const COOKIE_WRITERS: Record<string, CookieWriter> = {
+  'libs/aglyn/src/lib/app-utils/internal-traffic.ts': {
+    note:
+      'Pins the internal-traffic opt-in across every console origin ' +
+      '(AGL-3175). `Domain`-scoped ON PURPOSE, which is the opposite call to ' +
+      'the handoff verifier above and for the opposite reason: the console is ' +
+      'served on every `*.aglyn.com` hostname, one per org workspace and ' +
+      'generated, so a host-only cookie could never be set on an origin ' +
+      'nobody has visited yet. It is written only where a caller passes ' +
+      '`cookieDomain` — the console helper, and only while the hostname is ' +
+      'under that domain — so it is never written on a customer domain. ' +
+      'Analytics only: it says this BROWSER is ours and nothing about who is ' +
+      'using it, and it is opt-in, never inferred.',
+    cookies: [
+      {
+        name: 'aglyn_traffic_type',
+        token: 'INTERNAL_TRAFFIC_COOKIE_KEY',
+        surface: 'The console, every origin under the workspace domain',
+        purpose:
+          'Marks a browser as ours so our own sessions stay out of the ' +
+          'launch metrics',
+        duration: '400 days, and cleared by `?aglyn_internal=0`',
+        httpOnly: false,
+      },
+    ],
+  },
   'apps/console/app/auth/handoff/start/route.ts': {
     note:
       'Sets the cross-domain handoff VERIFIER before bouncing to the auth ' +
