@@ -89,7 +89,7 @@ export function OrgOwnershipCard() {
   contentGutterX
   contentGutterY
 >
-  <Stack spacing={2} sx={{ maxWidth: 480 }}>
+  <Stack spacing={2}>
     <Typography variant="body2" color="text.secondary">
       {'Hand the organization to another member. They gain ' +
         'billing, workspace-URL and transfer powers; you step ' +
