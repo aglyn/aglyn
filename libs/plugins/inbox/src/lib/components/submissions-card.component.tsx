@@ -24,7 +24,10 @@ import { FORMS_MAX_PER_HOST, INBOX_SUBMISSION_PARAM, pluginDocsHelp } from '@agl
 import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
 // The CRM's route builder by its leaf path, for the reason above: the barrel
 // is the plugin's site entry point.
-import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
+import {
+  pluginRecordByEmailHref,
+  pluginRecordListHref,
+} from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
   mdiAccountArrowRight,
   mdiDeleteOutline,
@@ -84,7 +87,7 @@ import {
 } from '../model/submission-presenter'
 import SubmissionListAssignment from './submission-list-assignment.component'
 import SubmissionReply from './submission-reply.component'
-import { useCrmHubPath } from './use-crm-hub-path'
+import { useRecordRouteContext } from './use-record-route-context'
 
 /**
  * The Submissions section of the Inbox (AGL-77/104/109 → AGL-395): the form
@@ -130,7 +133,7 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
    * here does — opens the record. The same hub path the Members & leads
    * rows use to open a lead.
    */
-  const crmHubPath = useCrmHubPath()
+  const routeContext = useRecordRouteContext()
 
   /*
    * The site's forms, for the Submissions filter.
@@ -328,15 +331,27 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
    */
   const submissionActions = (submission: any): RowActionsMenuItem[] => {
     const senderEmail = submissionSender(submission.fields).email
+    // Where the sender's contact is read, asked of whichever plugin keeps
+    // people; with none loaded there is no such page, and no menu item.
+    const contactsHref = routeContext
+      ? pluginRecordListHref('contact', routeContext)
+      : null
     return [
-      ...(crmHubPath
+      ...(routeContext && contactsHref
         ? [
             {
               key: 'crm',
               label: 'Open contact in CRM',
               icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
               ...(senderEmail
-                ? { href: crmRoutes(crmHubPath).contactByEmail(senderEmail) }
+                ? {
+                    href:
+                      pluginRecordByEmailHref(
+                        'contact',
+                        routeContext,
+                        senderEmail,
+                      ) ?? contactsHref,
+                  }
                 : {
                     disabled: true,
                     disabledReason:

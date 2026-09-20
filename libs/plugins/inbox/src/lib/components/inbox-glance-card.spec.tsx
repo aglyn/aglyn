@@ -93,6 +93,22 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 }))
 
 import InboxGlanceCard from './inbox-glance-card.component'
+import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+
+/**
+ * A plugin that keeps people and says where a lead is read. The Inbox imports
+ * none, so the spec stands one up the way a loaded plugin would.
+ */
+const publishLeadRoutes = () =>
+  registerPluginRecordRoute(
+    'lead',
+    {
+      list: ({ orgSlug, host }) => `/${orgSlug}/hosts/${host}/crm/leads`,
+      record: ({ orgSlug, host }, id) => `/${orgSlug}/hosts/${host}/crm/leads/${id}`,
+    },
+    { pluginId: 'people' },
+  )
 
 const minutesAgo = (minutes: number) => {
   const at = new Date(Date.now() - minutes * 60_000)
@@ -130,6 +146,8 @@ async function renderCard() {
 }
 
 beforeEach(() => {
+  resetPluginServicesForTests()
+  publishLeadRoutes()
   submissions = []
   askedLimit = undefined
   askedOrder = undefined
@@ -222,6 +240,14 @@ describe('the inbox glance card', () => {
     expect(askedLeadStatuses).toBe('status in qualified,unqualified')
     const link = screen.getByRole('link', { name: 'Work them in the CRM' })
     expect(link.getAttribute('href')).toBe('/acme/hosts/demo/crm/leads')
+  })
+
+  it('says where the leads are in words alone when no plugin publishes a lead’s address', async () => {
+    resetPluginServicesForTests()
+    leadCounts = { all: 5, closed: 2 }
+    await renderCard()
+    expect(screen.getByText(/3 open leads/)).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Work them in the CRM' })).toBeNull()
   })
 
   it('shows the card for a site with leads and no submissions yet', async () => {

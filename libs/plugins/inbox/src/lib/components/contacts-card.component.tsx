@@ -24,7 +24,7 @@ import { normalizeContactEmail, pluginDocsHelp } from '@aglyn/aglyn'
 import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
 // The CRM's route builder by its leaf path, not the plugin barrel: the barrel
 // carries the plugin registration, and a link needs only the address grammar.
-import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
+import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
   mdiAccountArrowRight,
   mdiAccountRemoveOutline,
@@ -64,7 +64,7 @@ import {
   query,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useCrmHubPath } from './use-crm-hub-path'
+import { useRecordRouteContext } from './use-record-route-context'
 
 /**
  * How many members and how many leads the contacts table reads.
@@ -90,7 +90,11 @@ export function ContactsCard({ hostId }: { hostId: string }) {
   const { confirm } = useConfirmationContext()
   // Where a lead is WORKED (AGL-2608). This card lists leads; the CRM's
   // Leads section gives each one a status, an owner and a conversion.
-  const crmHubPath = useCrmHubPath()
+  const routeContext = useRecordRouteContext()
+  const leadHref = (contact: { $id?: unknown }): string | null =>
+    routeContext
+      ? pluginRecordHref('lead', routeContext, String(contact.$id))
+      : null
 
   /*==========================================
    * SITE MEMBERS + LEADS (AGL-109): ORDERED AND CEILINGED, NOT PAGED BY QUERY.
@@ -220,13 +224,15 @@ export function ContactsCard({ hostId }: { hostId: string }) {
           },
         ]
       : [
-          ...(crmHubPath
+          // Offered only where a plugin publishes a lead's address: text-less
+          // rather than a link to a page this workspace cannot open.
+          ...(leadHref(contact)
             ? [
                 {
                   key: 'crm',
                   label: 'Open in CRM',
                   icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
-                  href: crmRoutes(crmHubPath).lead(String(contact.$id)),
+                  href: leadHref(contact) as string,
                 },
               ]
             : []),

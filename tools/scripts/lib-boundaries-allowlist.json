@@ -17,7 +17,6 @@
     { "from": "plugins-forms", "to": "plugins-events-calendar", "why": "The form placement menu reads the events plugin entry." },
     { "from": "plugins-forms", "to": "plugins-inbox", "why": "The forms hub embeds the inbox submissions card." },
     { "from": "plugins-forms", "to": "plugins-mui", "why": "Form controls are the MUI plugin's components." },
-    { "from": "plugins-inbox", "to": "plugins-crm", "why": "Inbox rows link to CRM through its route table." },
     { "from": "plugins-inbox", "to": "plugins-marketing", "why": "Inbox embeds marketing's conversion attribution and campaigns card." },
     { "from": "plugins-marketing", "to": "plugins-commerce", "why": "Revenue attribution reads the commerce model." },
     { "from": "plugins-marketing", "to": "plugins-email", "why": "Campaign composition reuses the email plugin's send and topic hooks." },

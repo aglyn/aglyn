@@ -30,7 +30,7 @@ import {
 // is the entry point the tenant's loader imports to activate the plugin's
 // site half, and a console page named there would ship to every published
 // page. The same import the Inbox makes for the same reason.
-import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
+import { pluginRecordFilteredHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { ICON_VARIANT_BESIGNER } from '@aglyn/shared-data-enums'
 import { AppLink, CardDisplay, GridItems, MdiIcon, useLoading } from '@aglyn/shared-ui-jsx'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
@@ -213,16 +213,14 @@ export function FormDetailCard(props: FormDetailCardProps) {
   const hasEmailField = formFieldsCanYieldAnEmail(declaredFields)
   const capturesConsent = formFieldsCaptureConsent(declaredFields, effectiveConsent)
   /*
-   * Where this form's people are: the Contacts list, narrowed to source
-   * `form` and this form's id. Built from the resolved org slug and
+   * Where this form's people are: the contacts list narrowed to this form,
+   * asked of the plugin that keeps people (`null`, and no link, without one). Built from the resolved org slug and
    * subdomain the besigner link already waits on, so the link appears when
    * they land and never points at a half-built address.
    */
   const contactsHref =
     orgSlug && host
-      ? crmRoutes(
-          buildRoute(Route.HOST_PLUGIN, { orgSlug, host, pluginSlug: 'crm' }),
-        ).contactsByForm(formId)
+      ? pluginRecordFilteredHref('contact', { orgSlug, host }, 'form', formId)
       : null
   /*
    * WHICH CAMPAIGNS THIS FORM IS PART OF.

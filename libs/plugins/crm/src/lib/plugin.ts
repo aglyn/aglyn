@@ -22,6 +22,7 @@ import { CRM_CONSOLE_SECTIONS } from './components/crm-console-sections'
 import { CrmGlanceCard } from './components/crm-glance-card'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { withCrmOrgMount } from './hooks/use-crm-org-mount'
+import { registerCrmRecordRoutes } from './model/crm-record-routes'
 
 /** Code-split: the CRM hub only loads when opened. */
 const CrmConsolePage = lazy(
@@ -48,6 +49,7 @@ const CrmTasksDueCard = lazy(
  * address is a URL, not a stored id, and the nav item keeps redirecting it.
  */
 export function registerCrmConsole(): void {
+  registerCrmRecordRoutes()
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'CRM',

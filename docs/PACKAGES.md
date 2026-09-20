@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 18 edges the allowlist carries, and what removes each. An edge leaves the
+The 17 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -228,7 +228,7 @@ import and no production file may repeat it; the fix is a fixture that reads
 the table from the core's server entry, or the spec moving to a project that
 may import the core.
 
-**Plugin → plugin** (16, numbered to 17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (15, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -289,8 +289,9 @@ needs it starts.
    `useContactFieldDefinitions` (`form-contact-fields-card.tsx`) and `crmRoutes`
    (`form-detail-card.tsx`). Fix, in two halves: contact field definitions come
    through `registerCustomFieldType`, **present**; the route table comes through
-   the record route contract, **owed** (AGL-3124, which names this row). The
-   edge leaves the allowlist only when both halves have landed.
+   the record route contract, and that half has landed: `form-detail-card.tsx`
+   asks `pluginRecordFilteredHref('contact', …, 'form', formId)`. The edge
+   leaves the allowlist when the field-definitions half lands too.
 9. **`plugins-forms` → `plugins-events-calendar`.** Crosses:
    `EVENTS_CALENDAR_BUNDLE` and `BUNDLE_ID`, in
    `src/lib/plugin-id-backfill-table.spec.ts` only. Fix: the registry read of
@@ -308,11 +309,13 @@ needs it starts.
     **Present.** The core carries a copy of the literal (`MUI_BUNDLE_ID` in
     `plugin-manager/feature-plugins.ts`); that file is AGL-3116's and is not
     this row's to change.
-12. **`plugins-inbox` → `plugins-crm`.** Crosses: `crmRoutes`, in three console
-    components (`contacts-card.component.tsx`,
-    `inbox-glance-card.component.tsx`, `submissions-card.component.tsx`). Fix:
-    the record route contract, **owed** (AGL-3124). Nothing else crosses, so
-    this row retires on that seam alone.
+12. **`plugins-inbox` → `plugins-crm`.** Gone (AGL-3080). The CRM publishes
+    where a contact, a lead, a company and a deal are read through
+    `registerPluginRecordRoute`, and the Inbox's three cards ask
+    `pluginRecordHref` and its siblings with the org and site already in the
+    URL. With no plugin publishing the kind they draw text, not a link to a
+    page the workspace cannot open. The number stays so the rows below keep
+    theirs.
 13. **`plugins-inbox` → `plugins-marketing`.** Crosses: `ConversionAttribution`
     (twice), `HostCampaignsCard` (`inbox-console-page.tsx`), and
     `performCampaignSend` in one spec. Fix, in two parts: marketing registers

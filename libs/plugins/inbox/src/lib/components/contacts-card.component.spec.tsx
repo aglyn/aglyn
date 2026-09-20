@@ -89,11 +89,29 @@ jest.mock('next/navigation', () => ({
 
 import { deleteDoc } from 'firebase/firestore'
 import { ContactsCard } from './contacts-card.component'
+import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
+import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+
+/**
+ * A plugin that keeps people and says where a lead is read. The Inbox imports
+ * none, so the spec stands one up the way a loaded plugin would.
+ */
+const publishLeadRoutes = () =>
+  registerPluginRecordRoute(
+    'lead',
+    {
+      list: ({ orgSlug, host }) => `/${orgSlug}/hosts/${host}/crm/leads`,
+      record: ({ orgSlug, host }, id) => `/${orgSlug}/hosts/${host}/crm/leads/${id}`,
+    },
+    { pluginId: 'people' },
+  )
 
 const at = (iso: string) => ({ toDate: () => new Date(iso) })
 
 beforeEach(() => {
   jest.clearAllMocks()
+  resetPluginServicesForTests()
+  publishLeadRoutes()
   mockMembers = [
     { $id: 'same-id', email: 'ada@example.com', displayName: 'Ada', createdAt: at('2026-09-10T12:00:00Z') },
   ]
@@ -155,5 +173,18 @@ describe('ContactsCard (AGL-3045)', () => {
     expect(open.getAttribute('href')).toContain('same-id')
     fireEvent.click(screen.getByRole('menuitem', { name: 'Where this came from' }))
     expect(screen.getByText('Attribution')).toBeTruthy()
+  })
+
+  it('offers no link to a lead’s record when no plugin publishes its address', () => {
+    resetPluginServicesForTests()
+    render(<ContactsCard hostId="host-1" />)
+
+    fireEvent.click(
+      within(rowOf('lin@example.com')).getByRole('button', {
+        name: 'More actions for lin@example.com',
+      }),
+    )
+    expect(screen.queryByRole('menuitem', { name: 'Open in CRM' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: 'Where this came from' })).toBeTruthy()
   })
 })

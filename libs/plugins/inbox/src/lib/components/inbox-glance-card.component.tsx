@@ -26,7 +26,7 @@ import {
 // The CRM's route builder by its leaf path, not the plugin barrel: the
 // barrel is the CRM's site entry point, and a dashboard card named there
 // would ship to every published page.
-import { crmRoutes } from '@aglyn/plugins-crm/model/crm-routes'
+import { pluginRecordListHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Avatar, Box, Button, Stack, Typography } from '@mui/material'
 import {
@@ -40,7 +40,7 @@ import {
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
-import { useCrmHubPath } from './use-crm-hub-path'
+import { useRecordRouteContext } from './use-record-route-context'
 import {
   relativeTime,
   senderHue,
@@ -103,7 +103,10 @@ export function InboxGlanceCard(props: { hostId: string }) {
    * they land, and left null on a refused read so the line is withheld
    * rather than drawn as zero.
    */
-  const crmHubPath = useCrmHubPath()
+  const routeContext = useRecordRouteContext()
+  const leadsHref = routeContext
+    ? pluginRecordListHref('lead', routeContext)
+    : null
   const [openLeads, setOpenLeads] = useState<number | null>(null)
   useEffect(() => {
     let active = true
@@ -218,14 +221,15 @@ export function InboxGlanceCard(props: { hostId: string }) {
         </Typography>
         {/*
           Where the captures went (AGL-2622): the leads still to be worked,
-          and the CRM's Leads list where they are. Text alone until the
-          route params settle, so the line never links to nowhere.
+          and the Leads list where they are, which the plugin that keeps
+          them publishes. Text alone until the route params settle or where
+          no plugin publishes one, so the line never links to nowhere.
          */}
         {openLeads ? (
           <Typography variant="caption" color="text.secondary">
             {`${openLeads.toLocaleString()} open lead${openLeads === 1 ? '' : 's'} · `}
-            {crmHubPath ? (
-              <AppLink href={crmRoutes(crmHubPath).section('leads')}>
+            {leadsHref ? (
+              <AppLink href={leadsHref}>
                 {'Work them in the CRM'}
               </AppLink>
             ) : (
