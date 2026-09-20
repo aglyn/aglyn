@@ -147,7 +147,7 @@ jest.mock('./where-used-dialog.component', () => ({
   __esModule: true,
   default: () => null,
 }))
-jest.mock('../utils/fetch-where-used', () => ({
+jest.mock('@aglyn/aglyn/app-utils/where-used', () => ({
   fetchWhereUsed: jest.fn().mockResolvedValue({}),
   summarizeDependents: () => '',
 }))

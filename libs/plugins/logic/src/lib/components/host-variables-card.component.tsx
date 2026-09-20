@@ -75,7 +75,7 @@ import {
   fetchWhereUsed,
   summarizeDependents,
   type WhereUsedResult,
-} from '../utils/fetch-where-used'
+} from '@aglyn/aglyn/app-utils/where-used'
 
 /**
  * How many variables the card reads.

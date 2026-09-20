@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 10 edges the allowlist carries, and what removes each. An edge leaves the
+The 9 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -228,7 +228,7 @@ import and no production file may repeat it; the fix is a fixture that reads
 the table from the core's server entry, or the spec moving to a project that
 may import the core.
 
-**Plugin → plugin** (8, numbered to 17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (7, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -346,15 +346,14 @@ needs it starts.
     once, so that half lives in `apps/console/specs` and reaches both through
     the generated manifest; the marketplace keeps the half that is its own.
     The number stays.
-17. **`plugins-workflows` → `plugins-logic`.** Crosses: `WhereUsedDialog`, plus
-    `fetchWhereUsed`, `summarizeDependents` and `WhereUsedResult`
-    (`src/lib/components/host-workflows-card.component.tsx`) — a card and a
-    query, not the condition evaluation the allowlist's `why` describes. Fix, in
-    two parts: logic registers the dialog as a widget into the `hostAutomations`
-    and `automationEditor` zones workflows already hosts (**present**); and the
-    where-used query becomes a dependents service contract on
-    `definePluginServiceContract` — logic registers the answer, workflows
-    resolves it — which is **owed** (AGL-3124).
+17. **`plugins-workflows` → `plugins-logic`.** Gone (AGL-3080). What crossed
+    was a client and a dialog. The client called a route the console itself
+    serves (`/api/hosts/where-used`), which scans variables, functions and
+    workflows alike, so it was never logic's: it lives in the core beside the
+    route, at `@aglyn/aglyn/app-utils/where-used`, and both plugins ask the
+    platform. The dialog is a widget logic registers in the `workflowUsage`
+    zone the Automation page hosts; with nothing registered the page gives the
+    answer in words. The number stays.
 
 **Plugin → designer UI** (1). `plugins-mui` renders nested children through
 the designer's node leaf and contexts. A plugin that needs the designer UI

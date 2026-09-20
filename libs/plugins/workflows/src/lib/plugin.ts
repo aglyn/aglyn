@@ -20,6 +20,8 @@ import { mdiSitemap } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { HostActivityCard } from './components/host-activity-card.component'
 import { WORKFLOWS_CONSOLE_SECTIONS } from './components/workflows-console-sections'
+import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
+import { WORKFLOW_USAGE_ZONE } from './components/workflow-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /** Code-split: the Automation console page only loads when opened. */
@@ -33,8 +35,8 @@ const WorkflowsConsolePage = lazy(
  * a canvas element, so there is no UI bundle. The console half declares the
  * Automation nav + page through the ConsoleExtension registry, gated by the
  * `workflows` entitlement (the Actions/Webhooks tabs run their own per-plan
- * checks off the passed `org`). Depends on `@aglyn/plugins-logic` for the
- * shared where-used tooling.
+ * checks off the passed `org`). Where a workflow is used is asked of the
+ * platform's scan and drawn in a zone this plugin hosts.
  *
  * `pluginId`, `featureFlag` and `navTabId` all still read `workflows`: they
  * are stored — an org's enabled-plugin ids, the plan's entitlement flags, the
@@ -42,6 +44,17 @@ const WorkflowsConsolePage = lazy(
  * them. Only what a reader sees carries the new name.
  */
 export function registerWorkflowsConsole(): void {
+  registerPluginZone(
+    {
+      zone: WORKFLOW_USAGE_ZONE,
+      label: 'Where a workflow is used',
+      surface: 'console',
+      description:
+        'On the Automation page, after a reader asks where a workflow is used. A widget here lays out the scan the page already ran; it is handed the site, the answer and a way to close, and it writes nothing.',
+    },
+    // Named, because a spec calls this registrar without the loader.
+    { pluginId: BUNDLE_ID },
+  )
   Aglyn.registerConsoleExtension({
     // Host activity feed (AGL-419): rendered by the shell's
     // 'hostActivity' widget slot (dashboard + editor view page).

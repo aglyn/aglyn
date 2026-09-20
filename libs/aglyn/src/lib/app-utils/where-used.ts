@@ -17,6 +17,19 @@
 
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
+/**
+ * The client of the console's where-used scan (`/api/hosts/where-used`).
+ *
+ * The scan is the platform's: one route answers what references a variable, a
+ * function or a workflow across a site's published screens, layouts, workflows
+ * and variables. Its client sat in the logic plugin, so the workflows plugin
+ * imported logic to ask about a workflow. It is here beside the route it
+ * calls, and both ask the platform.
+ *
+ * Imported by its own subpath; it is not in the barrel, so a page that never
+ * asks does not carry it.
+ */
+
 export interface WhereUsedDependent {
   type: 'screen' | 'layout' | 'workflow' | 'variable'
   id: string

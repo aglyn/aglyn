@@ -104,7 +104,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   {
     id: 'logic',
     register: {"console":"registerLogicConsole"},
-    contributes: {"console":{"shell":true,"routes":["/logic"],"slots":["besignerFunctions"]}},
+    contributes: {"console":{"shell":true,"routes":["/logic"],"slots":["besignerFunctions","workflowUsage"]}},
     load: () => import('@aglyn/plugins-logic'),
   },
   {

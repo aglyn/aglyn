@@ -482,7 +482,8 @@
             "/logic"
           ],
           "slots": [
-            "besignerFunctions"
+            "besignerFunctions",
+            "workflowUsage"
           ]
         }
       }

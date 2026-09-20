@@ -14,7 +14,6 @@
     { "from": "plugins-forms", "to": "plugins-mui", "why": "Form controls are the MUI plugin's components." },
     { "from": "plugins-inbox", "to": "plugins-marketing", "why": "One spec only: the end-to-end proof that an enrollment is not a license to send drives the real campaign sender. No shipped file crosses." },
     { "from": "plugins-marketing", "to": "plugins-email", "why": "Campaign composition reuses the email plugin's send and topic hooks." },
-    { "from": "plugins-mui", "to": "besigner-feature-designer", "why": "MUI elements render nested children through the designer's node leaf and contexts." },
-    { "from": "plugins-workflows", "to": "plugins-logic", "why": "Workflow steps evaluate conditions with the logic plugin." }
+    { "from": "plugins-mui", "to": "besigner-feature-designer", "why": "MUI elements render nested children through the designer's node leaf and contexts." }
   ]
 }
