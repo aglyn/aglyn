@@ -110,11 +110,126 @@ function substituteValue(
   return value
 }
 
-/** A node is a repeatable container iff it names a dataset to repeat over. */
-const repeatDatasetKey = (node: unknown): string => {
+/**
+ * The key a node repeats over, trimmed, or `''` when it repeats over nothing.
+ *
+ * The one predicate every repeat question is asked through: the expansion, the
+ * datasets-read gate below, the reusable-component graft that moves a
+ * placement's repeat onto the element it becomes, and the besigner's preview
+ * and badge. Two copies of it are how a `.trim()` on one side and not the
+ * other becomes an empty list on a customer's page.
+ */
+export const repeatKey = (node: unknown): string => {
   const key = (node as { props?: { repeatDataset?: unknown } })?.props
     ?.repeatDataset
   return typeof key === 'string' ? key.trim() : ''
+}
+
+/**
+ * Makes an element that holds children repeat ITSELF, once per record, instead
+ * of what is inside it (AGL-3111): a card whose contents are the design, rather
+ * than a list whose contents are the item.
+ *
+ * Persisted in screen, layout and component documents — never rename. `'true'`
+ * counts too, because a switch round-tripped through a text-shaped store comes
+ * back as the string.
+ */
+export const REPEAT_SELF_PROP = 'repeatSelf'
+
+/**
+ * Every prop that directs a repeat. They are instructions to the composition,
+ * never attributes of the element: the expansion consumes them from every node
+ * it expands and every copy it makes, so a published element never carries
+ * one. Persisted — never rename.
+ */
+export const REPEAT_DIRECTIVE_PROPS: readonly string[] = [
+  'repeatDataset',
+  'repeatLimit',
+  'repeatFilter',
+  'repeatSort',
+  REPEAT_SELF_PROP,
+]
+
+/**
+ * What a repeating node copies once per record (AGL-3111).
+ *
+ * - `children` — what is inside it. The node stays one element around the
+ *   copies: the list, grid or gallery they fill. This is how a Stack has
+ *   always repeated (AGL-103), and a stored Stack names neither scope.
+ * - `self` — the node itself, with everything inside it. What a leaf and a
+ *   component instance repeat, and what any element carrying
+ *   {@link REPEAT_SELF_PROP} repeats.
+ */
+export type RepeatScope = 'self' | 'children'
+
+/**
+ * Which scope a repeating node has, read off the node alone so the published
+ * page's composition and the besigner decide it identically.
+ *
+ * {@link REPEAT_SELF_PROP} decides it whenever the node carries one, which is
+ * every repeat the Attributes panel writes. Without one the node's own shape
+ * decides, and it decides CONSERVATIVELY: anything that holds a child list —
+ * a Stack, empty or not — keeps repeating its children, and only a node with
+ * no child list at all repeats itself. A stored repeat predates the prop, so
+ * this branch is the one that has to render it unchanged, and an author who
+ * named a dataset before filling the container in would otherwise come back to
+ * a hundred empty copies of it.
+ *
+ * A component instance never reaches that branch: the graft stamps the prop on
+ * the element it becomes, whose children are the component's own.
+ */
+export function repeatScope(node: unknown): RepeatScope {
+  const { props, nodes } = (node ?? {}) as {
+    props?: Record<string, unknown>
+    nodes?: unknown
+  }
+  // `'true'`/`'false'` too: a switch round-tripped through a text-shaped
+  // store comes back as the string it was written as.
+  const self = props?.[REPEAT_SELF_PROP]
+  if (self === true || self === 'true') return 'self'
+  if (self === false || self === 'false') return 'children'
+  return Array.isArray(nodes) ? 'children' : 'self'
+}
+
+/** The node minus its repeat directives, or the node itself when it has none. */
+export function withoutRepeatDirective<N>(node: N): N {
+  const props = (node as { props?: Record<string, unknown> })?.props
+  if (!props || !REPEAT_DIRECTIVE_PROPS.some((key) => key in props)) {
+    return node
+  }
+  const kept = { ...props }
+  for (const key of REPEAT_DIRECTIVE_PROPS) delete kept[key]
+  return { ...node, props: kept }
+}
+
+/**
+ * The records a repeating node renders, in order (AGL-181): its filter and sort
+ * evaluated over the rows, then its limit, never past
+ * {@link REPEAT_MAX_RECORDS}. An unparseable filter or sort fails open.
+ *
+ * Shared by the expansion and the besigner's canvas preview and badge, so the
+ * canvas can never show a copy or a count the published page does not.
+ */
+export function repeatedRecords(
+  node: unknown,
+  dataset: RepeatableDataset | undefined,
+): Array<Record<string, unknown>> {
+  const props = ((node as { props?: unknown })?.props ?? {}) as Record<
+    string,
+    unknown
+  >
+  const where = parseDatasetFilter(String(props['repeatFilter'] ?? ''))
+  const orderBy = parseDatasetSort(String(props['repeatSort'] ?? ''))
+  const limit = Number(props['repeatLimit'])
+  return applyDatasetQuery(dataset?.model, dataset?.records ?? [], {
+    ...(where ? { where: [where] } : {}),
+    ...(orderBy ? { orderBy } : {}),
+  }).slice(
+    0,
+    Number.isFinite(limit) && limit > 0
+      ? Math.min(limit, REPEAT_MAX_RECORDS)
+      : REPEAT_MAX_RECORDS,
+  )
 }
 
 /**
@@ -126,15 +241,15 @@ const repeatDatasetKey = (node: unknown): string => {
  *
  * Any gate on that read has to ask EXACTLY the question the expansion asks,
  * which is why this and {@link repeatDatasetKeys} share the one predicate
- * `expandRepeatables` looks keys up with. A gate that is even slightly
- * stricter than the expansion is not a saving: it is a published page that
- * quietly renders one template row where the author put a list.
+ * `expandRepeatables` looks keys up with, {@link repeatKey}. A gate that is
+ * even slightly stricter than the expansion is not a saving: it is a published
+ * page that quietly renders one template row where the author put a list.
  */
 export function hasRepeatableNodes(
   nodes: Record<NodeId, unknown> | null | undefined,
 ): boolean {
   if (!nodes) return false
-  return Object.values(nodes).some((node) => repeatDatasetKey(node) !== '')
+  return Object.values(nodes).some((node) => repeatKey(node) !== '')
 }
 
 /**
@@ -151,26 +266,42 @@ export function repeatDatasetKeys(
 ): string[] {
   const keys = new Set<string>()
   for (const node of Object.values(nodes ?? {})) {
-    const key = repeatDatasetKey(node)
+    const key = repeatKey(node)
     if (key) keys.add(key)
   }
   return [...keys].sort()
 }
 
 /**
- * Repeatable components (AGL-103): a container node carrying
- * `props.repeatDataset` (dataset id or display name) treats its children as
- * the item template and renders them once per dataset record, with
- * `{{item.field}}` tokens in cloned string props replaced by that record's
+ * Repeats (AGL-103, AGL-3111): any node carrying `props.repeatDataset` (a
+ * dataset id or display name) renders once per record of that dataset, with
+ * `{{item.field}}` tokens in the copied string props replaced by the record's
  * values (unknown fields keep the literal token, like variable bindings).
  *
- * - Clone ids are namespaced `rep__{containerId}__{index}__…` so repeats
- *   never collide, including inside grafted reusable components — run this
- *   AFTER `composeReusableComponentNodes` and BEFORE binding resolution.
- * - Rows are bounded by `props.repeatLimit` and {@link REPEAT_MAX_RECORDS}.
- * - Unknown datasets or empty records leave the node untouched (fail-open:
- *   a deleted dataset must never take a published screen down).
- * - Inputs are never mutated; template nodes stay in the map unreferenced.
+ * What is copied is the node's {@link repeatScope}:
+ *
+ * - `children` — its children are the item template. The node stays, and its
+ *   child list becomes the copies, record by record. Its own props are not the
+ *   template, so no token in them is substituted.
+ * - `self` — the node and everything inside it are the template. The copies
+ *   take the node's place in its parent's child list, and every prop in the
+ *   subtree is substituted, the node's own included.
+ *
+ * - Copy ids are namespaced `rep__{repeatId}__{index}__…` — the repeat's own
+ *   id, then the template node's — so repeats never collide, including inside
+ *   grafted reusable components. A self-scoped node's first copy is
+ *   `rep__{id}__0__{id}`. Run this AFTER `composeReusableComponentNodes` and
+ *   BEFORE binding resolution.
+ * - Rows are the node's {@link repeatedRecords}.
+ * - The repeat directives ({@link REPEAT_DIRECTIVE_PROPS}) are consumed: every
+ *   node this expands, and every copy it makes, comes out without them.
+ * - Repeats do not nest. A repeat inside another repeat's template is copied
+ *   with its directives consumed, so it renders once in each copy.
+ * - An unknown dataset, no matching records, an empty template, or a
+ *   self-scoped node its parent does not list (the document root, say) leave
+ *   the node rendering once, as written (fail-open: a deleted dataset must
+ *   never take a published screen down).
+ * - Inputs are never mutated; templates stay in the map unreferenced.
  */
 export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
   nodes: Record<NodeId, N>,
@@ -178,52 +309,45 @@ export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
 ): Record<NodeId, N> {
   if (!datasetsByKey) return nodes
   const repeatIds = Object.entries(nodes).filter(
-    ([, node]) => repeatDatasetKey(node) !== '',
+    ([, node]) => repeatKey(node) !== '',
   )
   if (!repeatIds.length) return nodes
 
   const next: Record<NodeId, N> = { ...nodes }
-  for (const [containerId, container] of repeatIds) {
-    const key = repeatDatasetKey(container)
-    const dataset = datasetsByKey[key]
-    // Query config (AGL-181): `repeatFilter` ("field op value") and
-    // `repeatSort` ("field asc|desc") evaluate in memory over the
-    // fetch-bounded rows; unparseable input fails open (no filter).
-    const where = parseDatasetFilter(
-      String((container.props as any).repeatFilter ?? ''),
-    )
-    const orderBy = parseDatasetSort(
-      String((container.props as any).repeatSort ?? ''),
-    )
-    const records = applyDatasetQuery(dataset?.model, dataset?.records ?? [], {
-      ...(where ? { where: [where] } : {}),
-      ...(orderBy ? { orderBy } : {}),
-    })
-    if (!records.length) continue
-    const limitRaw = Number((container.props as any).repeatLimit)
-    const limit =
-      Number.isFinite(limitRaw) && limitRaw > 0
-        ? Math.min(limitRaw, REPEAT_MAX_RECORDS)
-        : REPEAT_MAX_RECORDS
-    const templateIds = Array.isArray(container.nodes)
-      ? (container.nodes as NodeId[])
-      : []
-    if (!templateIds.length) continue
+  for (const [repeatId, repeated] of repeatIds) {
+    const dataset = datasetsByKey[repeatKey(repeated)]
+    const records = repeatedRecords(repeated, dataset)
+    const self = repeatScope(repeated) === 'self'
+    // The copies' parent: the node itself, or — for a self-scoped node — the
+    // parent whose child list the copies take its place in, read from `next`
+    // so two self-scoped siblings both land in the list the other has left.
+    const parentId = (self ? repeated.parentId : repeatId) as NodeId
+    const siblings = next[parentId]?.nodes
+    const slot = Array.isArray(siblings)
+      ? (siblings as NodeId[]).indexOf(repeatId)
+      : -1
+    const templateIds = self
+      ? [repeatId]
+      : Array.isArray(repeated.nodes)
+        ? (repeated.nodes as NodeId[])
+        : []
+    next[repeatId] = withoutRepeatDirective(next[repeatId])
+    if (!records.length || !templateIds.length || (self && slot < 0)) continue
 
-    const childIds: NodeId[] = []
-    records.slice(0, limit).forEach((record, index) => {
-      const prefix = `${REPEAT_NODE_ID_PREFIX}${containerId}__${index}__`
+    const copyIds: NodeId[] = []
+    records.forEach((record, index) => {
+      const prefix = `${REPEAT_NODE_ID_PREFIX}${repeatId}__${index}__`
       const prefixId = (id: NodeId) => `${prefix}${id}`
-      const cloneSubtree = (id: NodeId, parentId: NodeId) => {
+      const cloneSubtree = (id: NodeId, clonedParentId: NodeId) => {
         const node = nodes[id]
         if (!node) return
         const clonedChildren = Array.isArray(node.nodes)
           ? (node.nodes as NodeId[])
           : undefined
-        next[prefixId(id)] = {
+        next[prefixId(id)] = withoutRepeatDirective({
           ...node,
           $id: prefixId(id),
-          parentId,
+          parentId: clonedParentId,
           props: substituteValue(node.props ?? {}, {
             record,
             model: dataset?.model,
@@ -232,17 +356,23 @@ export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
           ...(clonedChildren && {
             nodes: clonedChildren.map((childId) => prefixId(childId)),
           }),
-        }
+        })
         clonedChildren?.forEach((childId) =>
           cloneSubtree(childId, prefixId(id)),
         )
       }
       for (const templateId of templateIds) {
-        cloneSubtree(templateId, containerId)
-        childIds.push(prefixId(templateId))
+        cloneSubtree(templateId, parentId)
+        copyIds.push(prefixId(templateId))
       }
     })
-    next[containerId] = { ...container, nodes: childIds }
+    if (self) {
+      const listed = [...(next[parentId].nodes as NodeId[])]
+      listed.splice(slot, 1, ...copyIds)
+      next[parentId] = { ...next[parentId], nodes: listed }
+    } else {
+      next[repeatId] = { ...next[repeatId], nodes: copyIds }
+    }
   }
   return next
 }
