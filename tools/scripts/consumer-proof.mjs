@@ -65,6 +65,37 @@ export const STORIES = {
       "console.log('PROOF_OK')",
     ],
   },
+  // "The besigner as it ships, without the console."
+  //
+  // The peers are what the editor asks for TODAY, and two of them are debts
+  // rather than choices: `next` for two `next/dynamic` calls, and `firebase`
+  // because the working-draft store writes Firestore itself instead of taking
+  // a store from whoever embeds it. What this holds is the other half — no
+  // console, no tenant runtime and no plugin is in the closure.
+  'besigner-ui': {
+    packages: ['@aglyn/besigner-ui', '@aglyn/aglyn-node-renderer'],
+    peers: [
+      'react@19',
+      'react-dom@19',
+      'next',
+      'firebase',
+      '@mui/material',
+      '@mui/system',
+      '@mui/icons-material',
+      '@mui/lab',
+      '@mui/x-data-grid',
+      '@mui/x-date-pickers',
+      '@emotion/react',
+      '@emotion/styled',
+    ],
+    forbidden: ['firebase-admin', '@aglyn/tenant-runtime', '@aglyn/tenant-data-admin', '@aglyn/tenant-feature-instance', '@aglyn/plugins-mui', '@aglyn/plugins-crm'],
+    entry: [
+      "import * as ui from '@aglyn/besigner-ui'",
+      "import * as renderer from '@aglyn/aglyn-node-renderer'",
+      "if (Object.keys(ui).length < 5 || Object.keys(renderer).length < 1) throw new Error('an entry point exported almost nothing')",
+      "console.log('PROOF_OK')",
+    ],
+  },
 }
 
 function run(command, args, cwd) {

@@ -495,6 +495,7 @@ entry that imports them, and runs it.
 | story | asks for | brings | must not need | holds |
 | -- | -- | -- | -- | -- |
 | `logic-only` | `@aglyn/aglyn`, `@aglyn/besigner` | `react` | `next`, `firebase`, `firebase-admin`, `@mui/material`, `@aglyn/besigner-ui` | yes — ten packages in the closure, none of them a UI library |
+| `besigner-ui` | `@aglyn/besigner-ui`, `@aglyn/aglyn-node-renderer` | `react`, `react-dom`, `next`, `firebase`, `@mui/*`, `@emotion/*` | `firebase-admin`, any `@aglyn/tenant-*`, any `@aglyn/plugins-*` | **not yet.** All 21 packages build, pack and install, and no console, tenant runtime or plugin is in the closure — the separation holds. The bundle fails on `@aglyn/shared-data-mdi`, whose entry imports `../../generated/6.5.95/mdi-icons`, 29 MB of generated source outside `src/` that the build never emits. |
 
 What a build must do for this to hold, all of it invisible from inside: the
 swc output is ESM with `"type": "module"`, so `.swcrc` sets `resolveFully` and
@@ -505,9 +506,20 @@ load `mobx-utils/lib/*`, whose own files import each other without extensions
 — that is `mobx-utils`' packaging, a bundler resolves it, and every consumer of
 a React library has one.
 
-The story that is NOT yet written is the besigner without the console:
-`@aglyn/besigner-ui` on those two plus `@aglyn/aglyn-node-renderer`, mounting
-an editor with no console, no tenant runtime and no plugin.
+What stands between `besigner-ui` and holding, in the order a consumer meets
+them:
+
+1. **`@aglyn/shared-data-mdi` does not ship its icons.** Decide whether the
+   package carries the generated set (and at what size) or depends on the
+   upstream icon package; either way the entry must not reach outside `src/`.
+2. **`next` is a peer for two `next/dynamic` calls** in the designer
+   (`viewport-canvas`, `workspace-editor`). They carry SSR semantics the
+   console's editor route relies on, so replacing them wants a signed-in editor
+   to verify against.
+3. **`firebase` is a peer because the working-draft store writes Firestore
+   itself** (`drafts/besigner-server-draft.ts`). An embeddable editor takes a
+   draft store from whoever embeds it; the contract belongs in
+   `@aglyn/besigner` and the Firestore implementation beside the console.
 
 ## Later
 
