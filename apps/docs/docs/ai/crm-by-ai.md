@@ -1,7 +1,7 @@
 ---
 sidebar_position: 9
 title: The AI CRM built into Aglyn
-description: An AI CRM for small business: a short summary and a suggested next step on a contact, company, deal or lead, a one-to-one email drafted into the composer, and an import's columns matched to fields.
+description: "An AI CRM for small business: a short summary and a suggested next step on a contact, company, deal or lead, a one-to-one email drafted into the composer, and an import's columns matched to fields."
 ---
 
 # The AI CRM built into Aglyn

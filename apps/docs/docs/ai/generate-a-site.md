@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Generate a whole site from a brief
-description: Generate a website from a prompt: describe a business and an Aglyn AI build job plans a small site — pages, navigation, layout, contact form and palette — then builds each page as an unpublished draft.
+description: "Generate a website from a prompt: describe a business and an Aglyn AI build job plans a small site — pages, navigation, layout, contact form and palette — then builds each page as an unpublished draft."
 ---
 
 # Generate a whole site from a brief

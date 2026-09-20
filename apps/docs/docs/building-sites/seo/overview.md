@@ -81,10 +81,15 @@ site in Setup → SEO renames it on that page too. A title that names no variabl
 published exactly as it always was, so nothing you have already written changes.
 
 **Title pattern**, in Setup → SEO, is the same idea for every page that has no
-search title of its own. It defaults to `{{page.name}} {{site.separator}}
-{{site.name}}` — the composition in the table above — and you can reorder it
-(`{{site.name}} {{site.separator}} {{page.name}}`) or drop the site name from it
-entirely (`{{page.name}}`). Clear the field to go back to the default.
+search title of its own. It defaults to the composition in the table above:
+
+```
+{{page.name}} {{site.separator}} {{site.name}}
+```
+
+You can reorder it — `{{site.name}} {{site.separator}} {{page.name}}` — or drop the
+site name from it entirely with `{{page.name}}`. Clear the field to go back to the
+default.
 
 A separator with nothing rendered on one side of it is left out, so a page that is
 missing one of the pieces never renders a title that starts or ends with a dash.
