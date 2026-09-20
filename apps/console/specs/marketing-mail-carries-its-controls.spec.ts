@@ -186,7 +186,7 @@ describe('mail to a merchant’s audience carries its controls', () => {
       'libs/plugins/commerce/src/lib/server/process-abandoned.ts',
       'libs/plugins/commerce/src/lib/server/process-restock.ts',
       'libs/plugins/marketing/src/lib/server/campaign-send.ts',
-      'libs/tenant/runtime/src/lib/run-event-actions.ts',
+      'libs/plugins/workflows/src/lib/engine/run-event-actions.ts',
     ])
   })
 

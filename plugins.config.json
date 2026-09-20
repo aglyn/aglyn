@@ -427,7 +427,8 @@
       "register": {
         "console": "registerWorkflowsConsole",
         "tenantApi": "registerWorkflowsApi",
-        "consoleApi": "registerWorkflowsConsoleApi"
+        "consoleApi": "registerWorkflowsConsoleApi",
+        "serverDeclarations": "registerWorkflowsServerDeclarations"
       },
       "apiPrefixes": [
         "hooks"

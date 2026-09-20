@@ -92,6 +92,13 @@ lists.
 | `tenant-data-admin` | `@aglyn/tenant-data-admin` | `libs/tenant/data/admin` | `scope:tenant` `type:data` | with the runtime — its server data layer | `.`, `./*` |
 | `tenant-feature-instance` | `@aglyn/tenant-feature-instance` | `libs/tenant/feature/instance` | `scope:tenant` `type:feature` | with the runtime — the client hooks a site instance uses | `.`, `./*` |
 
+`tenant-runtime` raises host events and runs none of what they trigger:
+`emitHostEvent` hands each event to the listeners in `host-event-listeners`,
+which a plugin joins by a call from its `serverDeclarations` entry. The
+automation engine — the workflow and action runners, their step executors and
+the flow enrollments — is one such listener and lives in `plugins-workflows`
+(AGL-3105).
+
 ### Plugins
 
 Each plugin is one package. `libs/plugins/ai` (`@aglyn/plugins-ai`, AGL-2939)
@@ -117,7 +124,7 @@ changes, because every rule is by tag.
 | `plugins-outreach` | `@aglyn/plugins-outreach` | `libs/plugins/outreach` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-redirects` | `@aglyn/plugins-redirects` | `libs/plugins/redirects` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-video-delivery` | `@aglyn/plugins-video-delivery` | `libs/plugins/video-delivery` | `scope:plugin` `type:feature` | yes — library video served from Cloudflare R2 through a Worker, behind core's `core.media-delivery` contract | `.`, `./*` |
-| `plugins-workflows` | `@aglyn/plugins-workflows` | `libs/plugins/workflows` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
+| `plugins-workflows` | `@aglyn/plugins-workflows` | `libs/plugins/workflows` | `scope:plugin` `type:feature` | yes — the Automation section and the automation engine | `.`, `./*` |
 
 **What a plugin contributes, and where (AGL-3116).** Every plugin declares
 `contributes` — its `plugins.config.json` entry for the packages above, its

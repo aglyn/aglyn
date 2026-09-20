@@ -197,10 +197,10 @@ type BeaconFreeze = 'none' | 'automations' | 'all'
  * ## `read-only` — the HOST EVENT does not fire. This half was a defect.
  *
  * The last line of the handler is `emitHostEvent(hostId, 'pageView')`, and
- * that is not telemetry at all. It fans out to the workflow and action
- * runners, whose steps create records, merge values onto contacts,
- * `arrayUnion` people into campaigns, send email and call outbound webhooks
- * (`libs/tenant/runtime/src/lib/run-event-actions.ts`). Those are customer
+ * that is not telemetry at all. It fans out to every host-event listener —
+ * the automation engine's workflow and action runners among them, whose steps
+ * create records, merge values onto contacts, `arrayUnion` people into
+ * campaigns, send email and call outbound webhooks. Those are customer
  * content writes and outbound messages, triggered by an anonymous visitor.
  *
  * Every sibling visitor write on this runtime already refuses under read-only

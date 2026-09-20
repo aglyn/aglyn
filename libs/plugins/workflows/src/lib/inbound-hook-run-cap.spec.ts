@@ -172,7 +172,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 // The beat's handler, reached through the registration above. Mocked rather
 // than loaded because the real module reaches Firestore through the Admin SDK,
 // which this suite neither configures nor is about.
-jest.mock('@aglyn/tenant-runtime', () => ({
+jest.mock('./engine/run-event-actions', () => ({
   __esModule: true,
   runDueFlowEnrollments: async () => ({
     scanned: 0,

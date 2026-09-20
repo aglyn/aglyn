@@ -62,6 +62,18 @@
       "reason": "To fix: a company, deal or task an import or the task route creates; routed at /v1/companies/{companyId}, /v1/deals/{dealId}, /v1/tasks/{taskId} and in the console."
     },
     {
+      "site": "libs/plugins/workflows/src/lib/engine/crm-action-steps.ts: orgRef.collection(CRM_COLLECTIONS.activities).add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
+    },
+    {
+      "site": "libs/plugins/workflows/src/lib/engine/crm-action-steps.ts: orgRef.collection(CRM_COLLECTIONS.tasks).add(…)",
+      "class": "RESOURCE",
+      "issue": "AGL-3083",
+      "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
+    },
+    {
       "site": "libs/tenant/data/admin/src/lib/server/contact-merge.ts: orgRef.collection(CRM_COLLECTIONS.activities).add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3083",
@@ -117,18 +129,6 @@
     },
     {
       "site": "libs/tenant/runtime/src/lib/convert-host-lead.ts: pipelinesRef.add(…)",
-      "class": "RESOURCE",
-      "issue": "AGL-3083",
-      "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
-    },
-    {
-      "site": "libs/tenant/runtime/src/lib/crm-action-steps.ts: orgRef.collection(CRM_COLLECTIONS.activities).add(…)",
-      "class": "RESOURCE",
-      "issue": "AGL-3083",
-      "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
-    },
-    {
-      "site": "libs/tenant/runtime/src/lib/crm-action-steps.ts: orgRef.collection(CRM_COLLECTIONS.tasks).add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3083",
       "reason": "To fix: a company, pipeline, deal, task or activity created by lead conversion, domain matching or an automation step; routed by the console and the public API."
@@ -208,7 +208,7 @@
       "reason": "To fix: a form submission; routed at /v1/sites/{siteId}/form-submissions/{submissionId}, linked from the inbox as ?submission=, and referenced by contact interactions and campaign conversions."
     },
     {
-      "site": "libs/tenant/runtime/src/lib/run-event-actions.ts: datasetDoc.ref.collection('records').add(…)",
+      "site": "libs/plugins/workflows/src/lib/engine/run-event-actions.ts: datasetDoc.ref.collection('records').add(…)",
       "class": "RESOURCE",
       "issue": "AGL-3088",
       "count": 2,
@@ -606,6 +606,17 @@
       "reason": "A reply or a list assignment logged under a form submission: the submission's own history, read only by the inbox module."
     },
     {
+      "site": "libs/plugins/workflows/src/lib/engine/run-event-actions.ts: hostRef.collection('activity').add(…)",
+      "class": "RECORD",
+      "count": 3,
+      "reason": "A site or org activity-feed entry: listed by query in the feed and never addressed by its id."
+    },
+    {
+      "site": "libs/plugins/workflows/src/lib/engine/run-event-workflows.ts: hostRef.collection('activity').add(…)",
+      "class": "RECORD",
+      "reason": "A site or org activity-feed entry: listed by query in the feed and never addressed by its id."
+    },
+    {
       "site": "libs/plugins/workflows/src/lib/server.ts: hostRef.collection('activity').add(…)",
       "class": "RECORD",
       "reason": "A site or org activity-feed entry: listed by query in the feed and never addressed by its id."
@@ -660,17 +671,6 @@
       "site": "libs/tenant/feature/instance/src/lib/hooks/use-host-activity-logger.ts: addDoc(collection(firestore, 'hosts', hostId, 'activity'), …)",
       "class": "RECORD",
       "reason": "A site activity-feed entry written by the console's logger hook: listed by query and never addressed by its id."
-    },
-    {
-      "site": "libs/tenant/runtime/src/lib/run-event-actions.ts: hostRef.collection('activity').add(…)",
-      "class": "RECORD",
-      "count": 3,
-      "reason": "A site or org activity-feed entry: listed by query in the feed and never addressed by its id."
-    },
-    {
-      "site": "libs/tenant/runtime/src/lib/run-event-workflows.ts: hostRef.collection('activity').add(…)",
-      "class": "RECORD",
-      "reason": "A site or org activity-feed entry: listed by query in the feed and never addressed by its id."
     },
     {
       "site": "tools/scripts/attest-sso-domain.mjs: firestore.collection('adminAudit').add(…)",

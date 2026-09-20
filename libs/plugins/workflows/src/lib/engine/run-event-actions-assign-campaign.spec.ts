@@ -1,4 +1,9 @@
 /**
+ * @jest-environment node
+ *
+ * Must stay the FIRST block comment in the file — Jest reads the pragma only
+ * from there, and behind the license header the suite would run on jsdom.
+ *
  * @license
  * Copyright 2026 Aglyn LLC
  *

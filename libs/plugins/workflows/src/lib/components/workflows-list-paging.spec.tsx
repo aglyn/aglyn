@@ -98,6 +98,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHostActivityLogger: () => jest.fn(),
   useUser: () => ({ data: { uid: 'uid-test', getIdToken: jest.fn() } }),
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
+  // The step pickers ask for the org's data scope (AGL-3105): a workflow
+  // step may be an Actions step, and those are pointed at org records.
+  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'] }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
   useFirestoreCollection: (build: () => any) => {
@@ -133,6 +136,11 @@ jest.mock('firebase/firestore', () => ({
     direction,
   }),
   documentId: () => '__name__',
+  where: (field: unknown, op: string, value: unknown) => ({
+    where: field,
+    op,
+    value,
+  }),
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   setDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),

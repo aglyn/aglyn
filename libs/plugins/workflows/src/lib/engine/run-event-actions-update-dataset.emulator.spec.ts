@@ -67,7 +67,7 @@
  * (`npm run firebase:emulate`), then:
  *
  *   FIRESTORE_EMULATOR_HOST=localhost:8082 \
- *     npx jest -c libs/tenant/runtime/jest.config.ts \
+ *     npx jest -c libs/plugins/workflows/jest.config.ts \
  *       --testPathPatterns run-event-actions-update-dataset.emulator
  */
 
@@ -104,7 +104,7 @@ interface FieldOverride {
 
 const INDEX_FILE: { fieldOverrides: FieldOverride[] } = JSON.parse(
   readFileSync(
-    join(__dirname, '../../../../../cloud/firebase-firestore.indexes.json'),
+    join(__dirname, '../../../../../../cloud/firebase-firestore.indexes.json'),
     'utf8',
   ),
 )
