@@ -42,4 +42,4 @@
 export {
   computedFn,
   type IComputedFnOptions,
-} from 'mobx-utils/lib/computedFn'
+} from 'mobx-utils/lib/computedFn.js'

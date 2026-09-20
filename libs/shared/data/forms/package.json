@@ -16,7 +16,7 @@
   "dependencies": {
     "@aglyn/shared-data-regex": "1.0.0-beta.140",
     "@data-driven-forms/react-form-renderer": "^4.2.0",
-    "@swc/helpers": "~0.3.3"
+    "@swc/helpers": "0.5.23"
   },
   "sideEffects": false
 }

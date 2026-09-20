@@ -17,8 +17,8 @@
 
 import { HostViewType } from '@aglyn/aglyn'
 import { cloneDeep } from '@aglyn/shared-util-tools'
-import defaultsDeep from 'lodash-es/defaultsDeep'
-import isEqual from 'lodash-es/isEqual'
+import defaultsDeep from 'lodash-es/defaultsDeep.js'
+import isEqual from 'lodash-es/isEqual.js'
 import { BehaviorSubject } from 'rxjs'
 import {
   BesignerDeviceFlag,

@@ -28,7 +28,7 @@ import {
   measureNodeMap,
   versionStamp,
 } from '@aglyn/aglyn'
-import isEqual from 'lodash-es/isEqual'
+import isEqual from 'lodash-es/isEqual.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as Besigner from '@aglyn/besigner'
 import {

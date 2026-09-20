@@ -243,6 +243,7 @@
     "check:linear-ids": "node tools/scripts/check-linear-ids.mjs",
     "test:linear-ids": "node --test tools/scripts/lib/linear-ids.test.mjs",
     "check:lib-boundaries": "node tools/scripts/check-lib-boundaries.mjs",
+    "proof:consumer": "node tools/scripts/consumer-proof.mjs",
     "sync:lib-dependencies": "node tools/scripts/sync-lib-dependencies.mjs",
     "sync:lib-dependencies:check": "node tools/scripts/sync-lib-dependencies.mjs --check",
     "test:lib-boundaries": "node --test tools/scripts/lib/lib-boundaries.test.mjs",

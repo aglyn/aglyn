@@ -20,7 +20,7 @@ import {
   explainLinearTest,
   type LinearTest,
 } from '@aglyn/shared-util-tools/linear-regex'
-import isEmpty from 'lodash-es/isEmpty'
+import isEmpty from 'lodash-es/isEmpty.js'
 import type {
   ReusableComponentIcon,
   ReusableComponentProp,

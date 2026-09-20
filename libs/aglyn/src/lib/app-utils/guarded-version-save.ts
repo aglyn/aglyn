@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import isEqual from 'lodash-es/isEqual'
+import isEqual from 'lodash-es/isEqual.js'
 
 /**
  * Comparable form of a version doc's `updatedAt` (AGL-674).

@@ -21,7 +21,7 @@ import {
   versionStamp,
 } from '@aglyn/aglyn'
 import { runTransaction, type DocumentReference } from 'firebase/firestore'
-import isEqual from 'lodash-es/isEqual'
+import isEqual from 'lodash-es/isEqual.js'
 
 /**
  * What the editor believes the stored document looked like when it last

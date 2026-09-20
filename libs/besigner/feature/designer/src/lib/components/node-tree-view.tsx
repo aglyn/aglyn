@@ -51,7 +51,7 @@ import {
   Tooltip,
 } from '@mui/material'
 import clsx from 'clsx'
-import uniq from 'lodash-es/uniq'
+import uniq from 'lodash-es/uniq.js'
 import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import type { ComponentProps } from 'react'

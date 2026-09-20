@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@aglyn/shared-util-tools": "1.0.0-beta.140",
-    "@swc/helpers": "~0.3.3",
+    "@swc/helpers": "0.5.23",
     "change-case": "^5.4.4"
   },
   "sideEffects": false

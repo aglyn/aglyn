@@ -20,7 +20,7 @@
     "@aglyn/shared-ui-jsx": "1.0.0-beta.140",
     "@aglyn/shared-ui-theme": "1.0.0-beta.140",
     "@aglyn/shared-util-vendor": "1.0.0-beta.140",
-    "@swc/helpers": "~0.3.3",
+    "@swc/helpers": "0.5.23",
     "mobx": "^6.16.1",
     "mobx-react-lite": "^4.1.1"
   },

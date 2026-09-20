@@ -8,7 +8,8 @@
     },
     "keepClassNames": true,
     "externalHelpers": false,
-    "loose": true
+    "loose": true,
+    "baseUrl": "."
   },
   "module": {
     "type": "es6",

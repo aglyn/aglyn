@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@aglyn/shared-data-types": "1.0.0-beta.140",
-    "@swc/helpers": "~0.3.3",
+    "@swc/helpers": "0.5.23",
     "lodash-es": "^4.18.1",
     "php-serialize": "^5.1.3"
   },

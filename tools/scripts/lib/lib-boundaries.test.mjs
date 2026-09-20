@@ -322,6 +322,28 @@ describe('what a lib must declare (AGL-3201)', () => {
     ])
   })
 
+  it('refuses a third-party range the workspace does not run', () => {
+    const project = { name: 'besigner-core', root: 'libs/besigner/core', alias: '@aglyn/besigner', deepAlias: true }
+    const pkg = {
+      name: '@aglyn/besigner',
+      version: '2.0.0',
+      exports: { '.': {}, './*': {} },
+      sideEffects: false,
+      dependencies: { '@swc/helpers': '~0.3.3', mobx: '^6' },
+    }
+    const findings = packageFindings({
+      project,
+      pkg,
+      rootVersion: '2.0.0',
+      peers: [],
+      hasServerEntry: false,
+      rootRanges: { '@swc/helpers': '0.5.23', mobx: '^6' },
+    })
+    assert.deepEqual(findings, [
+      'dependencies["@swc/helpers"] is "~0.3.3" but the workspace runs "0.5.23" (sync:lib-dependencies writes it)',
+    ])
+  })
+
   it('THE CONTROL: the same package, declared, has nothing to report', () => {
     // Otherwise the refusal above passes on a check that always finds something.
     const project = { name: 'besigner-core', root: 'libs/besigner/core', alias: '@aglyn/besigner', deepAlias: true }

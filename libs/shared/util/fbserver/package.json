@@ -14,7 +14,7 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@swc/helpers": "~0.3.3"
+    "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
     "firebase-admin": "^14.3.0"

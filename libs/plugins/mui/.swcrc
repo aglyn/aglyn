@@ -12,12 +12,14 @@
     },
     "keepClassNames": true,
     "externalHelpers": true,
-    "loose": true
+    "loose": true,
+    "baseUrl": "."
   },
   "module": {
     "type": "es6",
     "strict": false,
-    "noInterop": false
+    "noInterop": false,
+    "resolveFully": true
   },
   "sourceMaps": true,
   "exclude": [

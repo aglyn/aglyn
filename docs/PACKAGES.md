@@ -475,6 +475,40 @@ Every lib carries, today:
 Build output is unchanged: the executors, entry files and `dist/` layout are
 what they were.
 
+## Proving a package installs
+
+Nothing inside this repo can see whether a lib is installable: an import
+resolves through a tsconfig alias or the root `node_modules`, and the apps
+consume a lib's source, never what `nx build` emits. So the map is proved from
+outside (AGL-3201):
+
+```sh
+npm run proof:consumer -- logic-only      # minutes; builds, installs from the registry, bundles
+```
+
+A story names what a consumer asks for, the peers they are told to bring, and
+the peers they must be able to do without. It builds the closure of `@aglyn/*`
+packages read off each `package.json`, packs them as they would be published,
+installs the tarballs into an empty project outside the workspace, bundles an
+entry that imports them, and runs it.
+
+| story | asks for | brings | must not need | holds |
+| -- | -- | -- | -- | -- |
+| `logic-only` | `@aglyn/aglyn`, `@aglyn/besigner` | `react` | `next`, `firebase`, `firebase-admin`, `@mui/material`, `@aglyn/besigner-ui` | yes — ten packages in the closure, none of them a UI library |
+
+What a build must do for this to hold, all of it invisible from inside: the
+swc output is ESM with `"type": "module"`, so `.swcrc` sets `resolveFully` and
+every emitted relative import names its file; a deep import of a package with
+no `exports` map names the file too (`lodash-es/isEqual.js`); and a lib's
+third-party ranges are the ones the workspace runs. Plain Node still cannot
+load `mobx-utils/lib/*`, whose own files import each other without extensions
+— that is `mobx-utils`' packaging, a bundler resolves it, and every consumer of
+a React library has one.
+
+The story that is NOT yet written is the besigner without the console:
+`@aglyn/besigner-ui` on those two plus `@aglyn/aglyn-node-renderer`, mounting
+an editor with no console, no tenant runtime and no plugin.
+
 ## Later
 
 A follow-up project, not this document's commit:

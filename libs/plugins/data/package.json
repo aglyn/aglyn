@@ -22,7 +22,7 @@
     "@aglyn/shared-util-timestamp": "1.0.0-beta.140",
     "@aglyn/tenant-feature-instance": "1.0.0-beta.140",
     "@aglyn/tenant-runtime": "1.0.0-beta.140",
-    "@swc/helpers": "~0.3.3"
+    "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
     "@mui/material": "^9.3.1",

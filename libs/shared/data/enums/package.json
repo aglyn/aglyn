@@ -16,7 +16,7 @@
   "dependencies": {
     "@aglyn/shared-data-mdi": "1.0.0-beta.140",
     "@aglyn/shared-util-tools": "1.0.0-beta.140",
-    "@swc/helpers": "~0.3.3"
+    "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
     "firebase": "^12.18.0"

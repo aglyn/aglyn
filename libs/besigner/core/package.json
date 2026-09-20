@@ -24,7 +24,7 @@
     "@aglyn/shared-util-logger": "1.0.0-beta.140",
     "@aglyn/shared-util-tools": "1.0.0-beta.140",
     "@aglyn/shared-util-vendor": "1.0.0-beta.140",
-    "@swc/helpers": "~0.3.3",
+    "@swc/helpers": "0.5.23",
     "lodash-es": "^4.18.1",
     "mobx": "^6.16.1",
     "rxjs": "^7.8.2"

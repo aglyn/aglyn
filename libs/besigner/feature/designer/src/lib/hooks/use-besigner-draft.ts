@@ -18,7 +18,7 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import { canvas, hasConcurrentWrite } from '@aglyn/aglyn'
 import type { Firestore } from 'firebase/firestore'
-import isEqual from 'lodash-es/isEqual'
+import isEqual from 'lodash-es/isEqual.js'
 import { autorun } from 'mobx'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {

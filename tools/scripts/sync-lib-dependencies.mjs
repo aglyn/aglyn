@@ -26,7 +26,8 @@
 //   - one of this repo's own libs, at the repo version, the only number it is
 //     ever published beside (`release:prepare` moves them together);
 //   - anything else at the range the root package.json holds, so a lib never
-//     states a version the workspace is not actually running;
+//     states a version the workspace is not actually running — including what
+//     was already declared, which is rewritten to that range;
 //   - a package that ships only types by its `@types/` name.
 //
 // The framework families (react, next, firebase, @mui/*) stay peers; that half
@@ -85,10 +86,17 @@ for (const project of packageMap) {
       unknown.push(`${project.root}: ${name}`)
     }
   }
-  // One of our own libs already declared rides the repo version too, unless
-  // this lib keeps a number of its own on the registry.
+  // Whatever is already declared is brought into step too, unless this lib
+  // keeps a number of its own on the registry: one of our own libs rides the
+  // repo version, and a third-party package carries the range the workspace
+  // actually runs. That second half is what caught every lib declaring
+  // `@swc/helpers ~0.3.3` — a generator default from years ago — while the
+  // compiled output imports a path that only exists from 0.5.
   if (versioned.has(project.name)) {
-    for (const name of Object.keys(next)) if (workspace.has(name)) next[name] = rootPkg.version
+    for (const name of Object.keys(next)) {
+      if (workspace.has(name)) next[name] = rootPkg.version
+      else if (name in rootRanges) next[name] = rootRanges[name]
+    }
   }
   const sorted = Object.fromEntries(Object.entries(next).sort(([a], [b]) => a.localeCompare(b)))
   if (JSON.stringify(sorted) === JSON.stringify(pkg.dependencies ?? {})) continue

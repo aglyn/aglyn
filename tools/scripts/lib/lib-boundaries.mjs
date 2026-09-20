@@ -527,8 +527,9 @@ export function declarationsOwed(imported) {
  * @param {boolean} args.hasServerEntry whether `src/server.ts` exists
  * @param {string[]} [args.dependencies] the non-peer packages the shipped source imports
  * @param {ReadonlySet<string>} [args.workspacePackages] npm names that are this repo's own libs
+ * @param {Record<string, string>} [args.rootRanges] the root package.json's ranges, by package
  */
-export function packageFindings({ project, pkg, rootVersion, peers, hasServerEntry, dependencies = [], workspacePackages = new Set() }) {
+export function packageFindings({ project, pkg, rootVersion, peers, hasServerEntry, dependencies = [], workspacePackages = new Set(), rootRanges = {} }) {
   const findings = []
   if (project.alias && pkg.name !== project.alias) {
     findings.push(`name is "${pkg.name}" but the alias, which is the npm name, is "${project.alias}"`)
@@ -566,6 +567,11 @@ export function packageFindings({ project, pkg, rootVersion, peers, hasServerEnt
   for (const [name, range] of Object.entries(bundled)) {
     if (workspacePackages.has(name) && range !== rootVersion) {
       findings.push(`dependencies["${name}"] is "${range}" but the repo version is "${rootVersion}" (release:prepare writes it)`)
+    }
+    // A third-party range is the one the workspace runs, or the package is
+    // published promising a version nobody here has ever built against.
+    if (!INDEPENDENTLY_VERSIONED.has(project.name) && !workspacePackages.has(name) && name in rootRanges && range !== rootRanges[name]) {
+      findings.push(`dependencies["${name}"] is "${range}" but the workspace runs "${rootRanges[name]}" (sync:lib-dependencies writes it)`)
     }
   }
   return findings

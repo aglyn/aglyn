@@ -23,7 +23,7 @@
     "@aglyn/shared-util-vendor": "1.0.0-beta.140",
     "@data-driven-forms/common": "^4.2.0",
     "@data-driven-forms/react-form-renderer": "^4.2.0",
-    "@swc/helpers": "~0.3.3",
+    "@swc/helpers": "0.5.23",
     "clsx": "^2.1.1",
     "lodash-es": "^4.18.1"
   },
