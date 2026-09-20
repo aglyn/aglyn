@@ -74,7 +74,7 @@ export const PLUGIN_DOCS = {
   },
   aiThemes: {
     path: '/ai/theme-assist',
-    title: 'Themes with AI',
+    title: 'Change your site\'s theme with AI',
     excerpt: 'Describe a change to your site\'s theme and get a proposal for the theme editor\'s own controls, previewed before and after, that you save in the editor. Rolling out.',
   },
   assistSignals: {

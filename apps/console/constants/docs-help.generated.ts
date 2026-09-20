@@ -319,7 +319,7 @@ export const DOCS_HELP_TOPICS = {
   },
   generateASite: {
     path: '/ai/generate-a-site',
-    title: 'Generate a whole site from a brief',
+    title: 'Generate a website from a prompt',
   },
   generateSection: {
     path: '/ai/generate-section',
@@ -643,7 +643,7 @@ export const DOCS_HELP_TOPICS = {
   },
   themeAssist: {
     path: '/ai/theme-assist',
-    title: 'Themes with AI',
+    title: 'Change your site\'s theme with AI',
   },
   themeBuilder: {
     path: '/building-sites/theme-builder/overview',

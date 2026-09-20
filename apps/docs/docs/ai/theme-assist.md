@@ -1,13 +1,13 @@
 ---
 sidebar_position: 7
-title: Themes with AI
+title: Change your site's theme with AI
 description: Describe a change to your site's theme and get a proposal for the theme editor's own controls, previewed before and after, that you save in the editor. Rolling out.
 ---
 
-# Themes with AI
+# Change your site's theme with AI
 
 :::caution Rolling out
-Themes with AI is a **release-flagged feature, currently being rolled out** — it is
+The Theme assistant is a **release-flagged feature, currently being rolled out** — it is
 not available in your workspace yet. This page says what it does, and grows with the
 feature.
 :::

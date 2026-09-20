@@ -1,7 +1,7 @@
 ---
 sidebar_position: 6
 title: Rewrite and write copy with AI
-description: Rewrite any text on the canvas, or write it from nothing, without leaving the Besigner — as an unsaved change you can undo.
+description: "An AI copywriter for the words already on your site: rewrite a headline, a paragraph, a button label or a blog entry in your own voice, as an unsaved change one undo takes back."
 ---
 
 # Rewrite and write copy with AI

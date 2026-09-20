@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: How Aglyn AI builds
-description: The building rules every AI build follows (reuse, components, layouts, forms, theme tokens, drafts only and a measured size) and what happens when an answer breaks one.
+description: Every AI build reuses what your site already has, takes its colors and spacing from your theme, and arrives as a draft. Every plan is checked against those rules before you see it, asked again, then stopped.
 ---
 
 # How Aglyn AI builds
