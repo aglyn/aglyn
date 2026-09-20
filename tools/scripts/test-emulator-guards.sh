@@ -143,19 +143,38 @@ PROJECTS=(
   libs/plugins/workflows
 )
 
+# Projects whose specs exercise a cross-workspace job run their suites one at
+# a time. The Outreach send and sync jobs read every workspace's due
+# enrollments and mailboxes through a collection group, so a fixture that a
+# sibling suite writes in a parallel jest worker lands in their report: the
+# routes suite's enrollment, due at the same pinned clock, made the runtime
+# spec's first tick read `due: 2, held: 1` on one run and `due: 1` on the
+# next, with no code change between them. A test's own cleanup cannot see a
+# writer that has not finished; a single worker can (AGL-2981).
+IN_BAND_PROJECTS=(
+  libs/plugins/outreach
+)
+
 REPORT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/emulator-guard-reports.XXXXXX")"
 status=0
 for project in "${PROJECTS[@]}"; do
   echo "==> $project"
   slug="${project//\//-}"
+  in_band=""
+  for serial in "${IN_BAND_PROJECTS[@]}"; do
+    if [ "$serial" = "$project" ]; then in_band="--runInBand"; fi
+  done
   # `--testPathPatterns`, PLURAL. jest 30 renamed it, and the singular
   # `--testPathPattern` is accepted-and-IGNORED rather than rejected: the run
   # then quietly executes the project's ENTIRE suite while reading as a
   # narrow one. Confirm the suite counts below look narrow if you change this.
+  # $in_band is one flag or nothing, so it stays unquoted on purpose.
+  # shellcheck disable=SC2086
   if ! npx jest \
     --config "$project/jest.config.ts" \
     --testPathPatterns '\.emulator\.spec\.ts$' \
     --ci \
+    $in_band \
     --json --outputFile "$REPORT_DIR/$slug.json"; then
     status=1
   fi
