@@ -11,7 +11,6 @@
     { "from": "plugins-crm", "to": "plugins-bookings", "why": "A contact record shows its bookings through the bookings model." },
     { "from": "plugins-crm", "to": "plugins-email", "why": "The contact record composes email through the email plugin's hooks." },
     { "from": "plugins-crm", "to": "plugins-marketing", "why": "Conversion attribution and the campaign-send server path are imported from marketing." },
-    { "from": "plugins-email", "to": "plugins-mui", "why": "The email bundle reuses the MUI plugin's bundle-common constants." },
     { "from": "plugins-forms", "to": "plugins-crm", "why": "Form submissions route to CRM through the CRM route table and contact field definitions." },
     { "from": "plugins-forms", "to": "plugins-inbox", "why": "The forms hub embeds the inbox submissions card." },
     { "from": "plugins-forms", "to": "plugins-mui", "why": "Form controls are the MUI plugin's components." },

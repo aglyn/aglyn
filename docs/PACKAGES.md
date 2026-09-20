@@ -216,7 +216,7 @@ allowlist. Everything else already holds.
 
 ## Violations
 
-The 14 edges the allowlist carries, and what removes each. An edge leaves the
+The 13 edges the allowlist carries, and what removes each. An edge leaves the
 list when its fix lands; the guard then refuses the stale row, so the list and
 this section move together. One violation at the end of the section is not an
 allowlist row at all — the map permits the edge that carries it, so the guard
@@ -228,7 +228,7 @@ import and no production file may repeat it; the fix is a fixture that reads
 the table from the core's server entry, or the spec moving to a project that
 may import the core.
 
-**Plugin → plugin** (12, numbered to 17). What two plugins share goes behind a core seam. It
+**Plugin → plugin** (11, numbered to 17). What two plugins share goes behind a core seam. It
 does not go sideways, and it does not go down into `libs/shared`: a plugin's
 domain is not generic, so `shared` is not a home for it, types included
 (Rule 4). One row per allowlist edge, in the allowlist's order, because each is
@@ -272,14 +272,10 @@ needs it starts.
    (`contact-associations-card.tsx`, `lead-history-card.tsx`). Fix: marketing
    registers it as a widget into CRM's `recordInsights` zone — same registry,
    same renderer as row 4. **Present.**
-6. **`plugins-email` → `plugins-mui`.** Crosses: `sanitizeCustomHtml`
-   (`src/lib/components/email-blocks.tsx`) — not bundle constants, which is
-   what the allowlist's `why` and this section's old fix both named. Fix: HTML
-   sanitization is a platform trust-and-safety obligation, not MUI's domain; it
-   belongs in the core beside `author-html.ts` and `sanitize-svg.ts`, and both
-   plugins call it there. Into the core is right here for the one reason that
-   makes it right anywhere: nothing plugin-shaped moves. A sanitizer knows no
-   plugin's model.
+6. **`plugins-email` → `plugins-mui`.** Gone (AGL-3080). `sanitizeCustomHtml`
+   had already become a one-line delegation to the core's `sanitizeAuthorHtml`
+   (AGL-1901), so the email blocks call the core's function themselves — the
+   same one the mailed copy is rendered under. The number stays.
 7. **`plugins-forms` → `plugins-bookings`.** Gone (AGL-3080). The only
    crossing was `plugin-id-backfill-table.spec.ts`, which checks a tools
    script against four plugins' bundles and so was never the forms plugin's

@@ -47,10 +47,10 @@ import {
 /*
  * The LEAF app-util, not `@aglyn/aglyn/server`: this module is pure and is
  * imported by client components, so a server entry point here would pull the
- * Admin SDK into a browser bundle. `sanitizeCustomHtml`, which the besigner
- * previews these same nodes under, is a one-line delegation to this function
- * — so the mailed copy and the previewed copy are the same policy over the
- * same string rather than two policies kept in step by hand.
+ * Admin SDK into a browser bundle. The email blocks the besigner previews
+ * these same nodes under call this same function — so the mailed copy and the
+ * previewed copy are one policy over one string rather than two kept in step
+ * by hand.
  */
 import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
 
