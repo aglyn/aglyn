@@ -17,8 +17,6 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { getHostDocAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { resolveEntryLinkRoutes } from './entry-link-routes'
-import { getTemplateScreenRouting } from './template-screens'
 
 /**
  * Where the entries a gated tree links to are served (AGL-3118), or
@@ -31,6 +29,13 @@ import { getTemplateScreenRouting } from './template-screens'
  *
  * Never rejects, so the caller can start it early and abandon it on a
  * failure of its own.
+ *
+ * The two readers it needs are loaded HERE rather than imported at the top of
+ * this file. Both reach `withRenderCache` and through it `next/cache`, which
+ * drags Next's server runtime into the module graph of everything that
+ * imports this enricher — including the commerce plugin, whose specs then
+ * fail to load at all. Loading them inside the one branch that reads also
+ * means a gated tree naming no entry pays for neither.
  */
 async function gatedEntryLinkRoutes(
   hostId: string,
@@ -41,6 +46,11 @@ async function gatedEntryLinkRoutes(
       nodes: [nodes as Record<string, unknown> | null],
     })
     if (!refs.length) return undefined
+    const [{ getTemplateScreenRouting }, { resolveEntryLinkRoutes }] =
+      await Promise.all([
+        import('./template-screens'),
+        import('./entry-link-routes'),
+      ])
     const routing = await getTemplateScreenRouting({ hostId })
     const routes = await resolveEntryLinkRoutes({
       hostId,
