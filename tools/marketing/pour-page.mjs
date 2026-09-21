@@ -63,6 +63,7 @@ import { readFileSync } from 'node:fs'
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { CANVAS_ROOT_ELEMENT_ID, firestoreCanvas } from './firestore-canvas.mjs'
+import { createResourceUid } from '../scripts/lib/resource-uid.mjs'
 
 const args = process.argv.slice(2)
 const flag = (name) => {
@@ -171,7 +172,9 @@ if (real.problems?.length) {
 }
 
 // A NEW version: the source is left exactly as it was.
-const newVersionRef = versionsRef.doc()
+// Named by the platform's own id, not a Firestore auto-id: a version is a
+// console resource and its id is addressed in besigner routes (AGL-3079).
+const newVersionRef = versionsRef.doc(createResourceUid())
 const { $id: _ignoredId, createdAt: _ignoredCreated, ...carried } = source
 await newVersionRef.set({
   ...carried,
