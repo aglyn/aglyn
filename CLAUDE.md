@@ -81,13 +81,20 @@ git reset --keep origin/main
 Then retire the backup, in the same breath (AGL-3221):
 
 ```bash
-git log origin/main..main-stale-<name>   # must be EMPTY
+git cherry -v origin/main main-stale-<name>   # every line '-', as before the reset
 git branch -D main-stale-<name>
 ```
 
-It is a backup for the seconds the reset takes, not a record. Empty means every
-commit it was holding is upstream, which is the only thing it was protecting
-against; after that it is clutter, and it accumulates fast — four of them were
+⛔ `git log origin/main..main-stale-<name>` is NOT the test, though it reads
+like it. It asks what is REACHABLE, and the whole reason you are here is that
+the worktree push put your commit upstream under a different sha — so the
+backup lists it as unique forever and the branch never looks retirable. The
+patch-id check is the one that answers it, which is why the recipe opens with
+the same line.
+
+It is a backup for the seconds the reset takes, not a record. All `-` means
+every commit it was holding is upstream, which is the only thing it was
+protecting against; after that it is clutter, and it accumulates fast — four of them were
 minted on 2026-09-21 alone, one within half an hour of the last sweep. The sha
 suffix is what lets two sessions realign on the same day: `$(date +%F)` on its
 own collides, `git branch` refuses the second, and you get `-b` and `-agl3216`
