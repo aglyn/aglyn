@@ -308,7 +308,13 @@ export function AiBriefDialog({ kind, open, onClose, orgId, hostId, user }: AiBr
               <>
                 <ChipGroup
                   id="ai-template-subject-label"
-                  label="One page for each"
+                  // Marked required because it IS (AGL-3143 §12): "Plan the
+                  // template" stays disabled until one is picked, and the page
+                  // dialog's chip group beside it reads "(optional)" — so an
+                  // unmarked label here read as optional too, and a member who
+                  // wrote a brief and stopped had nothing telling them why the
+                  // button would not light.
+                  label="One page for each (required)"
                   options={AI_TEMPLATE_SUBJECTS.map((subject) => ({
                     id: subject,
                     label: AI_TEMPLATE_SUBJECT_LABELS[subject],

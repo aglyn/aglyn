@@ -294,6 +294,17 @@ describe('a page template', () => {
     expect([...mockCollectionPaths]).toEqual([])
   })
 
+  it('says the subject is required, because the page dialog beside it says its type is optional (AGL-3143 §12)', async () => {
+    // The button is disabled until a subject is picked — asserted above — but
+    // a member reads the labels, not the button's disabled attribute. While
+    // this one was unmarked and the page dialog's read "(optional)", the pair
+    // said the same thing and behaved differently, and the live AGL-3024 run
+    // stalled here with a written brief and no way to tell why.
+    await openDialog(TEMPLATE)
+    expect(screen.getByText('One page for each (required)')).toBeTruthy()
+    expect(screen.queryByText('One page for each')).toBeNull()
+  })
+
   it('sends a product page with no collection', async () => {
     await openDialog(TEMPLATE)
     writeBrief(TEMPLATE, 'A page for each product: its photos, price and what is in the box')
