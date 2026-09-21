@@ -59,12 +59,26 @@ export const TABLE_OF_CONTENTS_ID: Aglyn.ComponentId = 'tableOfContents'
  * different from one built by hand next to it — which is how the legal pages
  * ended up hand-assembled from hundreds of Typography nodes in the first
  * place.
+ *
+ * ⚑ `inherit`, not `text.primary` (AGL-3210). The colour is still
+ * `text.primary` — {@link BODY_COLOUR_SX} puts it on the element's own root,
+ * where an authored `color` can replace it. Repeating the token on every
+ * block instead made the author's colour unreachable: it landed on the root
+ * and every child overrode it, so a card with a fixed light background kept
+ * dark mode's near-white body text and read as blank.
  */
 const BODY_SX = {
   fontSize: 17,
   lineHeight: 1.75,
-  color: 'text.primary',
+  color: 'inherit',
 } as const
+
+/**
+ * The element's own colour, applied to its root BEFORE the authored `sx`
+ * (AGL-3210), so it is a default the Styles panel can replace rather than a
+ * floor every block re-asserts. Inside the element everything inherits it.
+ */
+const BODY_COLOUR_SX = { color: 'text.primary' } as const
 
 /**
  * Heading ramp (AGL-1162). Sizes step across `{xs, sm, md}` and the tracking
@@ -227,7 +241,11 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
   }
 
   return (
-    <Box ref={ref} sx={sx} {...rest}>
+    <Box
+      ref={ref}
+      {...rest}
+      sx={[BODY_COLOUR_SX, ...(Array.isArray(sx) ? sx : sx ? [sx] : [])]}
+    >
       {blocks.map((block, index) => {
         if (block.type === 'heading') {
           return (
@@ -241,7 +259,9 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
               component={block.level === 2 ? 'h2' : 'h3'}
               sx={{
                 ...HEADING_SX[block.level],
-                color: 'text.primary',
+                // See BODY_SX: the token lives on the root, not on every
+                // block, so an authored colour reaches the words (AGL-3210).
+                color: 'inherit',
                 scrollMarginTop: `${ANCHOR_SCROLL_MARGIN}px`,
                 mt: block.level === 2 ? 5 : 3.5,
                 mb: 1.5,

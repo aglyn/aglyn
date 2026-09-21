@@ -90,6 +90,34 @@ describe('Markdown element (AGL-1162)', () => {
     expect(container.textContent).toBe('Prose.step twostep three')
   })
 
+  it('lets an authored colour reach the words (AGL-3210)', () => {
+    // A card with a fixed light background and a dark green body: the colour
+    // is set on the element, and every block used to override it with
+    // `text.primary` — which in dark mode is near-white on light green.
+    const { container } = render(
+      <Markdown
+        content={'## Do\n\nUse the supplied lockups.\n\n- keep the mark'}
+        sx={{ color: 'rgb(27, 94, 32)' }}
+      />,
+    )
+    const root = container.firstElementChild as HTMLElement
+    expect(getComputedStyle(root).color).toBe('rgb(27, 94, 32)')
+    // Nothing inside re-states a colour, so all of it inherits the one above.
+    for (const selector of ['h2', 'p', 'ul']) {
+      const node = container.querySelector(selector) as HTMLElement
+      expect(node).not.toBeNull()
+      expect(getComputedStyle(node).color).toBe('inherit')
+    }
+  })
+
+  it('still sets body type in text.primary when nobody asked otherwise', () => {
+    // The default did not move (AGL-1162): it just lives on the root now,
+    // where the Styles panel can replace it, instead of on every block.
+    const { container } = render(<Markdown content={'Prose.'} />)
+    const root = container.firstElementChild as HTMLElement
+    expect(getComputedStyle(root).color).toBe('rgba(0, 0, 0, 0.87)')
+  })
+
   it('renders real headings, not a paragraph painted to look like one', () => {
     // The trap the marketing applier already hit: an sx fontSize with no
     // `component` screenshots correctly and leaves the page with no
