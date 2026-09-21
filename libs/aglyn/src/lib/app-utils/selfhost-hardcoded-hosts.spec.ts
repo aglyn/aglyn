@@ -155,6 +155,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
   },
   {
+    file: 'libs/plugins/outreach/src/lib/mailboxes/oauth-redirect.ts',
+    count: 1,
+    reason:
+      "The same shape as `auth-action-url.ts` above, and modelled on it by name: `DEFAULT_CONSOLE_ORIGIN` is the `??` default of NEXT_PUBLIC_CONSOLE_URL and nothing else reads the literal, so an operator who sets that variable never evaluates it. It matters more here than for an auth email, because a mailbox's OAuth callback must be an address the operator REGISTERED with the provider — a self-hoster who left the variable unset would send Google to a console that is not theirs, and Google would refuse it as an unregistered redirect_uri rather than leak anything. That is the right failure: loud, at connect time, on a deployment that has not been configured. AGL-3228 added the fallback; this row is the decision it implies.",
+  },
+  {
     file: 'apps/console/app/api/_lib/render-system-email.ts',
     count: 1,
     reason:
