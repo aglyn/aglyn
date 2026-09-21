@@ -87,6 +87,14 @@ const PLATFORM_SENDERS: Record<string, string> = {
     "Weekly AI insights for a workspace's own members who opted in. The " +
     "recipient is Aglyn's customer, never a site's visitor or contact, and " +
     'the send is metered as platform mail, as the console usage alerts are.',
+  [join('libs', 'plugins', 'marketplace', 'src', 'lib', 'server', 'publisher-review-email.ts')]:
+    'The verdict on a marketplace submission. The recipient is the ' +
+    "PUBLISHER — Aglyn's customer, reached about Aglyn's own review " +
+    "process — never a site's visitor or contact, and the send is metered " +
+    'as platform mail (`meterPlatformEmail`) rather than to any host. It ' +
+    'sat under `apps/console/app/api/_lib/` until AGL-3080 moved the review ' +
+    'queue into the plugin that owns it, which is the only thing that ' +
+    'changed about who the mail is from.',
 }
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.next', 'coverage', '.nx', 'tmp'])

@@ -36,14 +36,21 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const ROOT = join(__dirname, '..')
+/*
+ * The queue moved into the marketplace plugin (AGL-3080). This pin stays in
+ * this app because it needs a whole-repo view — it holds a console ROUTE's
+ * actions against the page that reaches them — and both halves are now the
+ * plugin's, read by path.
+ */
+const MARKETPLACE = join(ROOT, '..', '..', 'libs', 'plugins', 'marketplace', 'src', 'lib')
 
 const ROUTE = readFileSync(
-  join(ROOT, 'app/api/admin/plugin-reviews/route.ts'),
+  join(MARKETPLACE, 'server/admin-reviews.ts'),
   'utf8',
 )
 
 const DETAIL_PAGE = readFileSync(
-  join(ROOT, 'app/(app)/admin/plugin-reviews/[listingId]/page.tsx'),
+  join(MARKETPLACE, 'components/plugin-review-detail.component.tsx'),
   'utf8',
 )
 

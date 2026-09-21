@@ -20,7 +20,7 @@ import {
   pluginRejectionCategory,
   rejectionHeadline,
   rejectionInputError,
-} from '../constants/plugin-rejection-categories'
+} from './plugin-rejection-categories'
 
 describe('PLUGIN_REJECTION_CATEGORIES', () => {
   it('has unique, storage-safe ids', () => {

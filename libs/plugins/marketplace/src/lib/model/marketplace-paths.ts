@@ -35,6 +35,19 @@
  * email the console itself sent. Treat them as persisted.
  */
 
+/**
+ * Where this plugin's hub is mounted under one organization, by slug.
+ *
+ * For a surface that is NOT the hub and has no `basePath` of its own — the
+ * staff review queue links a reviewer at the publisher's own listing, in the
+ * publisher's workspace, which is somebody else's org entirely. The mount
+ * segment is this plugin's `orgNavItems` href, so naming it here is the
+ * plugin naming its own surface rather than guessing at the console's.
+ */
+export function orgMarketplacePath(orgSlug: string): string {
+  return `/${encodeURIComponent(orgSlug)}/marketplace`
+}
+
 /** One listing's detail page. */
 export function listingPath(basePath: string, listingId: string): string {
   return `${basePath}/${encodeURIComponent(listingId)}`

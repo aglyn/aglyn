@@ -21,6 +21,7 @@ import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
 import MarketplaceBrowse from './components/marketplace-browse.component'
 import MarketplaceHub from './components/marketplace-hub.component'
 import MarketplaceReportsPage from './components/marketplace-reports-page.component'
+import PluginReviewsSurface from './components/plugin-reviews-surface.component'
 import MarketplacePaymentsNotice from './components/marketplace-payments-notice.component'
 import HostPluginsCard from './components/host-plugins-card.component'
 import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
@@ -192,6 +193,30 @@ export function registerMarketplaceConsole(): void {
           docsTopic: 'abuseReports',
         },
         Component: MarketplaceReportsPage,
+      },
+      /**
+       * The review queue (AGL-432, moved by AGL-3080).
+       *
+       * `ownsSubtree` is what makes the move possible at all: the queue is a
+       * list and each row opens one submission at
+       * `/admin/plugin-reviews/{listingId}`, and a staff page without it
+       * could only ever BE the list. Same URLs as the console routes it
+       * replaces — a staff page's id IS its segment under `/admin`.
+       *
+       * The queue carries no signing authority. Granting realm trust is a
+       * separate super-only act on its own route; listing and verifying here
+       * never signs anything.
+       */
+      {
+        id: 'plugin-reviews',
+        label: 'Plugin reviews',
+        ownsSubtree: true,
+        header: {
+          title: 'Plugin reviews',
+          icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
+          docsTopic: 'staffConsole',
+        },
+        Component: PluginReviewsSurface,
       },
     ],
     pluginId: BUNDLE_ID,

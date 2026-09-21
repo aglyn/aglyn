@@ -17,8 +17,8 @@
 'use client'
 
 import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
-import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
+import { PageHeaderHelp } from '@aglyn/aglyn'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Alert,
   Chip,
@@ -31,12 +31,8 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import DashboardLayout from '../../../../components/layouts/dashboard.layout'
-import StaffOnly from '../../../../components/staff-only.component'
-import { docsHelp } from '../../../../constants/docs-links'
-import { reviewStatusMeaning } from '../../../../constants/plugin-review-status'
-import { buildRoute, Route } from '../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import { pluginDocsHelp } from '@aglyn/aglyn'
+import { reviewStatusMeaning } from '../model/plugin-review-status'
 
 interface QueueRow {
   listingId: string
@@ -86,7 +82,7 @@ const STATUS_FILTERS = [
  * meant the most destructive controls in the platform sat as same-weight
  * text buttons in a wall of caption text.
  */
-const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
+export function PluginReviewsQueue({ basePath }: { basePath: string }) {
   const { data: user } = useUser()
   const [queue, setQueue] = useState<QueueRow[]>([])
   const [listed, setListed] = useState<ListedRow[]>([])
@@ -100,7 +96,7 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
   const [status, setStatus] = useState('all')
 
   const refresh = useCallback(async () => {
-    const response = await authorizedFetch(user, '/api/admin/plugin-reviews')
+    const response = await authorizedFetch(user, '/api/marketplace/admin/reviews')
     const payload = await response.json().catch(() => ({}))
     if (response.ok) {
       setLoadError(null)
@@ -177,7 +173,7 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
         spacing={1}
         sx={{ alignItems: 'center', flexWrap: 'wrap' }}
       >
-        <AppLink href={buildRoute(Route.ADMIN_PLUGIN_REVIEW, { listingId })}>
+        <AppLink href={`${basePath}/${encodeURIComponent(listingId)}`}>
           <Typography variant="subtitle2" component="span">
             {name}
           </Typography>
@@ -191,24 +187,21 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   return (
-    <DashboardLayout
-      breadcrumbItems={[
-        {
-          children: 'Plugin reviews',
-          href: buildRoute(Route.ADMIN_PLUGIN_REVIEWS),
-        },
-      ]}
-      help={{ topic: 'staffConsole', anchor: '#plugin-reviews' }}
-      header={{
-        children: 'Plugin reviews',
-        icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
-      }}
-    >
-      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        {/* Without this a non-staff visitor is told "No plugin submissions
-            waiting for review" — the queue fetch 403s and the empty result
-            reads as good news rather than as a refusal (AGL-760). */}
-        <StaffOnly>
+    <>
+      {/*
+        The staff console's own topic, anchored. A `staffPages` entry carries
+        one `docsTopic` and no anchor, and the staff console page is long
+        enough that landing at the top of it is the AGL-2200 shape.
+      */}
+      <PageHeaderHelp topic="staffConsole" anchor="#plugin-reviews" />
+      {/*
+        The staff gate is the shell's: the generic staff route renders every
+        plugin page inside `StaffOnly`, which renders nothing while the claim
+        resolves and 404s a non-holder. Without it a non-staff visitor was
+        told "No plugin submissions waiting for review" — the queue fetch
+        403s and the empty result reads as good news rather than a refusal
+        (AGL-760).
+      */}
           <Stack spacing={3}>
             <Stack
               direction="row"
@@ -259,7 +252,7 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
                 {visibleVerification.length ? (
                   <CardDisplay
                     header={`Verification requested (${visibleVerification.length})`}
-                    help={docsHelp('publisherHandbook', {
+                    help={pluginDocsHelp('publisherHandbook', {
                       anchor: '#asking-to-be-verified',
                       excerpt:
                         'Publishers who asked to be VERIFIED — a claim about who they are, ' +
@@ -309,7 +302,7 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
                 ) : null}
                 <CardDisplay
                   header={`Awaiting review (${visibleQueue.length})`}
-                  help={docsHelp('manifestAndEnvs', {
+                  help={pluginDocsHelp('manifestAndEnvs', {
                     anchor: '#review--trust-lifecycle',
                     excerpt:
                       'Submissions waiting on a staff verdict. Open one to read its manifest, verifier findings and act.',
@@ -379,7 +372,7 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
 
                 <CardDisplay
                   header={`Listed plugins (${visibleListed.length})`}
-                  help={docsHelp('publisherHandbook', {
+                  help={pluginDocsHelp('publisherHandbook', {
                     anchor: '#review-what-happens-after-you-publish',
                     excerpt:
                       'Listings already installable. Listing is the step that makes a ' +
@@ -463,10 +456,8 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
               </>
             )}
           </Stack>
-        </StaffOnly>
-      </Container>
-    </DashboardLayout>
+    </>
   )
 }
 
-export default PluginReviews
+export default PluginReviewsQueue

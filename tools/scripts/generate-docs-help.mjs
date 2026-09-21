@@ -173,9 +173,20 @@ const PLUGIN_TOPICS = {
   // (AGL-2978, AGL-2980).
   plugins: '/developers/plugins/overview',
   pos: '/commerce-and-bookings/commerce/pos-and-reservations',
-  // The marketplace's own console moved into libs/plugins in AGL-3080, and
-  // its seller panel and publisher profile link here.
   publishAPlugin: '/developers/plugins/publish-a-plugin',
+  /*
+   * The marketplace's REVIEW QUEUE moved into the plugin with its staff page
+   * (AGL-3080). A reviewer links at the two reference pages a submission is
+   * checked against.
+   *
+   * `staffConsole` is deliberately NOT here: the queue's page-level help
+   * names it, but through `PageHeaderHelp`, which carries a plain string the
+   * CONSOLE resolves against its own full registry. Only a
+   * `pluginDocsHelp('x')` call site needs a row in this subset, which is
+   * what `plugin-card-help.spec.ts` holds it to.
+   */
+  manifestAndEnvs: '/developers/plugins/reference/manifest-and-envs',
+  sandboxSecurity: '/developers/plugins/reference/sandbox-security',
   publisherHandbook: '/developers/plugins/publishing/publisher-handbook',
   redirects: '/building-sites/redirects/overview',
   sequences: '/content-and-data/crm/sequences',

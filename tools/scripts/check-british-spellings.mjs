@@ -95,11 +95,17 @@ const MARKDOWN_ROOTS = [
  * the day the marketplace's console routes became plugin components, and the
  * ratchet recorded their departure as a cleanup.
  *
- * Widening it is its own change, not a line here: `libs/plugins` holds 14
+ * It has now happened TWICE in one lane: four occurrences left with the
+ * marketplace's console surfaces, and two more with its review queue. The
+ * baseline is empty as a result, which reads as a clean console and is only
+ * half true — `apps/console` genuinely has none left, and six went somewhere
+ * nothing looks.
+ *
+ * Widening it is its own change, not a line here: `libs/plugins` holds ~20
  * occurrences across five plugins today, and each needs a per-plugin verdict
  * on whether it is a persisted value (a besigner emphasis id, an import
- * column header) or real debt. Recording fourteen of those blind is how a
- * ratchet baseline becomes a place things hide.
+ * column header, a `licences` URL segment) or real debt. Recording twenty of
+ * those blind is how a ratchet baseline becomes a place things hide.
  */
 const SOURCE_ROOTS = ['apps/console', 'apps/docs/src']
 

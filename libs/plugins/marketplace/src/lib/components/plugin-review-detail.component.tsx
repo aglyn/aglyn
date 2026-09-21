@@ -17,8 +17,20 @@
 'use client'
 
 import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
-import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
+import {
+  PageHeaderHelp,
+  PageHeaderRecord,
+  resolveStaffRoleGate,
+  SUPER_STAFF_ONLY_REASON,
+  type ConsoleStaffPagePaths,
+} from '@aglyn/aglyn'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import BlockedControl from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import {
+  listingPath,
+  orgMarketplacePath,
+  publisherPath,
+} from '../model/marketplace-paths'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -38,26 +50,20 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
-import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import { MarkdownLiteView } from '@aglyn/aglyn-markdown-editor'
-import StaffOnly from '../../../../../components/staff-only.component'
-import { SuperStaffOnly } from '../../../../../components/staff-super-only.component'
-import { docsHelp } from '../../../../../constants/docs-links'
-import { PLUGIN_REVIEW_CHECKLIST } from '../../../../../constants/plugin-review-checklist'
+import { pluginDocsHelp } from '@aglyn/aglyn'
+import { PLUGIN_REVIEW_CHECKLIST } from '../model/plugin-review-checklist'
 import {
   PLUGIN_REJECTION_CATEGORIES,
   pluginRejectionCategory,
   rejectionHeadline,
   rejectionInputError,
-} from '../../../../../constants/plugin-rejection-categories'
+} from '../model/plugin-rejection-categories'
 import { PUBLISHER_ATTESTATION } from '@aglyn/aglyn/app-utils/publisher-attestation'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { reviewStatusMeaning } from '../../../../../constants/plugin-review-status'
-import { buildRoute, Route } from '../../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
+import { reviewStatusMeaning } from '../model/plugin-review-status'
 
 interface VersionEntry {
   version: string
@@ -164,8 +170,31 @@ const SEVERITY_ORDER = ['error', 'warn', 'warning', 'info']
  * here rather than on the list, so nobody grants realm trust or takes a
  * plugin down while skimming rows.
  */
-const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
-  const params = useParams<{ listingId: string }>()
+export function PluginReviewDetail({
+  basePath,
+  segments,
+  staffRole,
+  staffPaths,
+}: {
+  basePath: string
+  segments?: readonly string[]
+  staffRole?: string | null
+  staffPaths?: ConsoleStaffPagePaths
+}) {
+  /*
+   * The row this page is: the first segment beneath the queue. The surface
+   * owns its subtree, so it also owns saying "no such thing" — which the
+   * body below already does for a listing that was withdrawn while a link
+   * to it sat in a reviewer's inbox.
+   */
+  const params = { listingId: String(segments?.[0] ?? '') }
+  /*
+   * Granting realm trust is super-only on the server (AGL-2131). The claim
+   * is the app's and arrives as a prop; `null` is "still reading the token"
+   * and must never render as a refusal, or every reviewer sees a disabled
+   * button for a beat.
+   */
+  const superGate = resolveStaffRoleGate(staffRole, ['super'])
   const listingId = String(params?.listingId ?? '')
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -196,7 +225,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (!listingId) return
     const response = await authorizedFetch(
       user,
-      `/api/admin/plugin-reviews?listingId=${encodeURIComponent(listingId)}` +
+      `/api/marketplace/admin/reviews?listingId=${encodeURIComponent(listingId)}` +
         (selectedVersion
           ? `&version=${encodeURIComponent(selectedVersion)}`
           : ''),
@@ -215,7 +244,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
       try {
         const response = await authorizedFetch(
           user,
-          '/api/admin/plugin-reviews',
+          '/api/marketplace/admin/reviews',
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -428,7 +457,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
           : null
       case 'publisher':
         return {
-          href: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: detail.publisherId }),
+          href: staffPaths?.orgDetail(detail.publisherId) ?? '',
           label: 'Publisher workspace',
         }
       case 'source-read': {
@@ -456,20 +485,20 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
         // a starting point this page can hand them.
         return detail.publisherSlug
           ? {
-              href: buildRoute(Route.ORG_MARKETPLACE_LISTING, {
-                orgSlug: detail.publisherSlug,
-                listingId: detail.listingId,
-              }),
+              href: listingPath(
+                orgMarketplacePath(detail.publisherSlug),
+                detail.listingId,
+              ),
               label: 'Install, then open the element picker',
             }
           : null
       case 'behaviour':
         return detail.publisherSlug
           ? {
-              href: buildRoute(Route.ORG_MARKETPLACE_LISTING, {
-                orgSlug: detail.publisherSlug,
-                listingId: detail.listingId,
-              }),
+              href: listingPath(
+                orgMarketplacePath(detail.publisherSlug),
+                detail.listingId,
+              ),
               label: 'Marketplace listing',
             }
           : null
@@ -519,28 +548,17 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
     checks.filter((check) => check.status === status).length
 
   return (
-    <DashboardLayout
-      breadcrumbItems={[
-        {
-          children: 'Plugin reviews',
-          href: buildRoute(Route.ADMIN_PLUGIN_REVIEWS),
-        },
-        {
-          children: detail?.displayName ?? listingId,
-          href: buildRoute(Route.ADMIN_PLUGIN_REVIEW, { listingId }),
-        },
-      ]}
-      help={{
-        topic: 'publisherHandbook',
-        anchor: '#review-what-happens-after-you-publish',
-      }}
-      header={{
-        children: detail?.displayName ?? 'Plugin review',
-        icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
-      }}
-    >
-      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <StaffOnly>
+    <>
+      {/*
+        The listing's own name in the heading and the trail: a review page
+        headed "Plugin reviews" reads identically on every submission, and
+        two reviewers with two tabs open would share one title.
+      */}
+      <PageHeaderRecord title={detail?.displayName ?? ''} />
+      <PageHeaderHelp
+        topic="publisherHandbook"
+        anchor="#review-what-happens-after-you-publish"
+      />
           {!loaded ? (
             <Stack spacing={2}>
               <Skeleton variant="rounded" height={120} />
@@ -555,7 +573,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
               {/* Status first: a reviewer needs to know what state they
                   are acting on before they read a word of the manifest. */}
               <CardDisplay header="Status"
-                help={docsHelp('publisherHandbook', {
+                help={pluginDocsHelp('publisherHandbook', {
                   anchor: '#review-what-happens-after-you-publish',
                   excerpt:
                     'Where this version stands: submitted, listed, verified, or ' +
@@ -615,10 +633,10 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                         // it passes the id — which that page still
                         // resolves, the same fallback that keeps existing
                         // links working.
-                        href={buildRoute(Route.ORG_MARKETPLACE_PUBLISHER, {
-                          orgSlug: detail.publisherSlug,
-                          handle: detail.publisherId,
-                        })}
+                        href={publisherPath(
+                          orgMarketplacePath(detail.publisherSlug),
+                          detail.publisherId,
+                        )}
                       >
                         {detail.publisherName}
                       </AppLink>
@@ -662,7 +680,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
               </CardDisplay>
 
               <CardDisplay header="Overview"
-                help={docsHelp('publisherHandbook', {
+                help={pluginDocsHelp('publisherHandbook', {
                   excerpt:
                     'The listing as a customer sees it — name, description, media and ' +
                     'links, all publisher-supplied.',
@@ -769,7 +787,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                   verifier found in it. The two questions that decide
                   whether this code may run in the app realm. */}
               <CardDisplay header="Security"
-                help={docsHelp('sandboxSecurity', {
+                help={pluginDocsHelp('sandboxSecurity', {
                   excerpt:
                     'What the bundle asked for, against what the sandbox enforces ' +
                     'regardless of what it asked for.',
@@ -987,7 +1005,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                   than a judgement call. */}
               <CardDisplay
                 header={`Publisher attestation — v${detail.reviewVersion} (${detail.attestation.length}/${PUBLISHER_ATTESTATION.length})`}
-                help={docsHelp('publisherHandbook', {
+                help={pluginDocsHelp('publisherHandbook', {
                   anchor: '#the-two-badges-and-what-each-one-promises',
                   excerpt:
                     'What the publisher asserted about THIS version. Their claim, not ' +
@@ -1081,7 +1099,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                     (item) => detail.checklist?.[item.id],
                   ).length
                 }/${PLUGIN_REVIEW_CHECKLIST.length})`}
-                help={docsHelp('publisherHandbook', {
+                help={pluginDocsHelp('publisherHandbook', {
                   anchor: '#review-what-happens-after-you-publish',
                   excerpt:
                     'The checklist a reviewer works through. Re-earned per version — a ' +
@@ -1225,7 +1243,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                 header="Review verdict"
                 contentGutterX
                 contentGutterY
-                help={docsHelp('manifestAndEnvs', {
+                help={pluginDocsHelp('manifestAndEnvs', {
                   anchor: '#review--trust-lifecycle',
                   excerpt:
                     'Move this submission through the review lifecycle — list, verify, or reject with a reason.',
@@ -1654,7 +1672,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
               </CardDisplay>
 
               <CardDisplay header="Versions"
-                help={docsHelp('publisherHandbook', {
+                help={pluginDocsHelp('publisherHandbook', {
                   anchor: '#versioning--updates',
                   excerpt:
                     'Every version this publisher has submitted. Review lives on the ' +
@@ -1751,7 +1769,10 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       {/* Realm trust bypasses the plugin sandbox's CSP, so
                           /api/admin/sign-plugin is super-only. The button was
                           live for support staff (AGL-2131). */}
-                      <SuperStaffOnly>
+                      <BlockedControl
+                        blocked={superGate.blocked}
+                        reason={superGate.reason ?? SUPER_STAFF_ONLY_REASON}
+                      >
                         <Button
                           size="small"
                           color={entry.trust === 'realm' ? 'error' : 'success'}
@@ -1767,7 +1788,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                             ? 'Revoke realm trust'
                             : 'Grant realm trust'}
                         </Button>
-                      </SuperStaffOnly>
+                      </BlockedControl>
                       {/* The kill switch for THESE bytes (AGL-1085) —
                           narrower than the takedown below, which stops every
                           version including the one customers are happily
@@ -1790,7 +1811,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
               {/* Separated on purpose: this is the only control here that
                   reaches code already running in customers' workspaces. */}
               <CardDisplay header="Danger zone"
-                help={docsHelp('publisherHandbook', {
+                help={pluginDocsHelp('publisherHandbook', {
                   anchor: '#review-what-happens-after-you-publish',
                   excerpt:
                     'Rejecting a version is not a kill switch — it stops new installs ' +
@@ -1833,9 +1854,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
               </CardDisplay>
             </Stack>
           )}
-        </StaffOnly>
-      </Container>
-    </DashboardLayout>
+    </>
   )
 }
 

@@ -117,13 +117,13 @@ jest.mock('@aglyn/shared-util-email', () => ({
   sendEmail: jest.fn(async () => undefined),
 }))
 
-import { POST } from '../app/api/admin/plugin-reviews/route'
+import { marketplaceAdminReviews as POST } from './admin-reviews'
 
 const LISTING = 'listing-atlas'
 
 const decline = (reason: string, token = 'staff-token') =>
   POST(
-    new Request('https://console.aglyn.com/api/admin/plugin-reviews', {
+    new Request('https://console.aglyn.com/api/marketplace/admin/reviews', {
       method: 'POST',
       headers: {
         authorization: `Bearer ${token}`,

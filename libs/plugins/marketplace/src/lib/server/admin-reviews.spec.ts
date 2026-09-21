@@ -197,16 +197,16 @@ function mockMakeFirestore() {
  * Stubbing any of them would turn the claims below into claims about a stub.
  */
 const mockUpdateExisting = jest.requireActual(
-  '../../../../../../libs/tenant/data/admin/src/lib/server/update-existing',
+  '@aglyn/tenant-data-admin/server/update-existing',
 ).updateExisting
 const mockUpdateState = jest.requireActual(
-  '../../../../../../libs/aglyn/src/lib/app-utils/marketplace-update-state',
+  '@aglyn/aglyn/app-utils/marketplace-update-state',
 )
 const mockPluginManifest = jest.requireActual(
-  '../../../../../../libs/aglyn/src/lib/app-utils/plugin-manifest',
+  '@aglyn/aglyn/app-utils/plugin-manifest',
 )
 const mockChecklist = jest.requireActual(
-  '../../../../constants/plugin-review-checklist',
+  '../model/plugin-review-checklist',
 )
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -273,12 +273,12 @@ jest.mock('@aglyn/shared-util-email', () => ({
   sendEmail: async () => ({ sent: true }),
 }))
 
-const { POST } = require('./route') as {
-  POST: (request: Request) => Promise<Response>
+const { marketplaceAdminReviews: POST } = require('./admin-reviews') as {
+  marketplaceAdminReviews: (request: Request) => Promise<Response>
 }
 
 function post(body: unknown) {
-  return new Request('https://app.aglyn.com/api/admin/plugin-reviews', {
+  return new Request('https://app.aglyn.com/api/marketplace/admin/reviews', {
     method: 'POST',
     headers: {
       authorization: 'Bearer staff-token',
@@ -987,7 +987,7 @@ describe('revoking a version does not un-review it', () => {
     // The one-line change that would resurrect every killed version into the
     // review queue as though it had never been read.
     const source = require('node:fs').readFileSync(
-      require('node:path').join(__dirname, 'route.ts'),
+      require('node:path').join(__dirname, 'admin-reviews.ts'),
       'utf8',
     ) as string
     expect(source).toContain(

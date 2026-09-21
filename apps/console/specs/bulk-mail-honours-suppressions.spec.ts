@@ -116,7 +116,6 @@ let mockOrgMembers: Array<{ $id: string; role: string }> = []
 let mockAuthEmails: Record<string, string> = {}
 
 import { emailOrgAdmins, orgAdminEmails } from '../app/api/_lib/usage-alert-email'
-import { emailPublisher } from '../app/api/_lib/publisher-review-email'
 import { POST as usageEmailCron } from '../app/api/billing/usage-email/route'
 import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression'
 
@@ -275,67 +274,16 @@ describe('the usage-alert fan-out', () => {
  * `filterSendableForHost` by, and a publisher's own site suppressions answer
  * a different question than "is this mailbox alive".
  */
-describe('the marketplace review fan-out', () => {
-  const PUBLISHER = 'publisher-org'
-
-  beforeEach(() => {
-    mockOrgMembers = [
-      { $id: 'u-owner', role: 'owner' },
-      { $id: 'u-admin', role: 'admin' },
-      // Not an owner or admin, so never in the fan-out at all.
-      { $id: 'u-member', role: 'member' },
-    ]
-    mockAuthEmails = {
-      'u-owner': 'owner@example.com',
-      'u-admin': 'admin@example.com',
-      'u-member': 'member@example.com',
-    }
-  })
-
-  it('PREMISE: an ordinary publisher is mailed the verdict', async () => {
-    /*
-     * The anti-vacuity control, and the one that catches the filter being
-     * applied so broadly that nobody is mailed — a `filterSendableForHost`
-     * wired in with an empty host id returns [] for everybody and every
-     * assertion below would still pass.
-     */
-    const store = fakeFirestore()
-    await emailPublisher(PUBLISHER, 'Rejected', 'Reason', { firestore: store })
-
-    expect(mockSent.map((message) => message['to'])).toEqual([
-      'owner@example.com',
-      'admin@example.com',
-    ])
-  })
-
-  it('does not mail a publisher whose address hard-bounced', async () => {
-    const store = fakeFirestore()
-    await suppressEmail({
-      email: 'admin@example.com',
-      reason: 'bounce',
-      firestore: store,
-    })
-
-    await emailPublisher(PUBLISHER, 'Rejected', 'Reason', { firestore: store })
-
-    // Per address. The dead mailbox is dropped and the other owner still
-    // learns their plugin was rejected.
-    expect(mockSent.map((message) => message['to'])).toEqual([
-      'owner@example.com',
-    ])
-  })
-
-  it('sends nothing when every publisher address is suppressed', async () => {
-    const store = fakeFirestore()
-    for (const email of ['owner@example.com', 'admin@example.com']) {
-      await suppressEmail({ email, reason: 'complaint', firestore: store })
-    }
-
-    await emailPublisher(PUBLISHER, 'Rejected', 'Reason', { firestore: store })
-
-    expect(mockSent).toHaveLength(0)
-  })
-})
+/*
+ * `the marketplace review fan-out` was HERE until AGL-3080, which moved the
+ * review queue and its sender into the marketplace plugin. A `scope:app`
+ * spec may not import an `aglyn:addons` lib, so that half travelled with the
+ * code rather than pointing at it, and lives in
+ * `libs/plugins/marketplace/src/lib/server/publisher-review-email.spec.ts`
+ * — same assertions, same real suppression gate.
+ *
+ * The senders below are the ones that stayed.
+ */
 
 describe('transactional mail is deliberately NOT gated', () => {
   it('the REAL sendEmail still posts to Resend for a suppressed address', async () => {

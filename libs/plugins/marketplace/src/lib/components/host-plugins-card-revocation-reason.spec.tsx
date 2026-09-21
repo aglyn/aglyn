@@ -18,7 +18,7 @@
 /**
  * THE CUSTOMER IS TOLD WHY THEIR PLUGIN WAS KILLED (AGL-2328, item 1).
  *
- * `/api/admin/plugin-reviews` refuses a revocation without a reason — staff
+ * `/api/marketplace/admin/reviews` refuses a revocation without a reason — staff
  * are made to type one — and stores it on `revocations/{listingId}` beside
  * the `versions` array. Every reader in the repo read `versions` and nothing
  * else; the type's own comment calls `versions` *"the ONLY field any reader

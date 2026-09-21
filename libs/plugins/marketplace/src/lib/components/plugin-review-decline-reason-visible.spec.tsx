@@ -23,7 +23,7 @@
 /**
  * STAFF CAN READ WHAT A COLLEAGUE TOLD THE PUBLISHER (AGL-2339, item 5).
  *
- * `/api/admin/plugin-reviews` serves `verificationRequest.declineReason` and
+ * `/api/marketplace/admin/reviews` serves `verificationRequest.declineReason` and
  * the detail page declared it in its own type — then branched on `state`
  * alone. So the PUBLISHER could read why verification was refused
  * (`listing-verification-request.component` renders it) and the staff reviewer
@@ -44,7 +44,6 @@ const mockDetail: { verificationRequest: Record<string, unknown> | null } = {
 }
 
 jest.mock('next/navigation', () => ({
-  useParams: () => ({ listingId: 'listing-1' }),
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'staff-1', getIdToken: async () => 'tok' } }),
@@ -60,19 +59,20 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 jest.mock('@aglyn/aglyn-markdown-editor', () => ({
   MarkdownLiteView: () => null,
 }))
-jest.mock('../components/layouts/dashboard.layout', () => ({
+/*
+ * The chrome and the staff gate are the SHELL's since AGL-3080 — the generic
+ * staff route owns the layout and wraps every plugin page in `StaffOnly` —
+ * so there is nothing here to stand in for. What is left is the header seam
+ * the page publishes into, which renders nothing on its own.
+ */
+jest.mock('@aglyn/aglyn', () => ({
   __esModule: true,
-  default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}))
-jest.mock('../components/staff-only.component', () => ({
-  __esModule: true,
-  default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}))
-jest.mock('../components/staff-super-only.component', () => ({
-  SuperStaffOnly: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ...jest.requireActual('@aglyn/aglyn'),
+  PageHeaderRecord: () => null,
+  PageHeaderHelp: () => null,
 }))
 
-import ReviewDetailPage from '../app/(app)/admin/plugin-reviews/[listingId]/page'
+import ReviewDetailPage from './plugin-review-detail.component'
 
 /**
  * The detail body the route returns.
@@ -144,7 +144,7 @@ describe('the reason a colleague already gave', () => {
         requestedAt: null,
         declineReason: reason,
       }
-      const view = render(<ReviewDetailPage />)
+      const view = render(<ReviewDetailPage basePath="/admin/plugin-reviews" segments={['listing-1']} />)
       await waitFor(() =>
         expect(screen.getByText(new RegExp(reason.slice(0, 30)))).toBeTruthy(),
       )
@@ -156,7 +156,7 @@ describe('the reason a colleague already gave', () => {
     // The control. A first-time request must not show a phantom refusal, and
     // "Previously declined:" with an empty tail reads as one.
     mockDetail.verificationRequest = { state: 'pending', requestedAt: null }
-    render(<ReviewDetailPage />)
+    render(<ReviewDetailPage basePath="/admin/plugin-reviews" segments={['listing-1']} />)
     // Anchor FIRST: a page that failed to render at all would satisfy the
     // absence assertion below without proving anything. The Decline button is
     // rendered by the same `verificationRequest` block the chip lives in.
