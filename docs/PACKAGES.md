@@ -600,9 +600,10 @@ operation with the account's second factor — `npm trust list` included, and
 `npm login` alone does not satisfy it. ⚑ npm answers that challenge with a
 BROWSER HANDSHAKE, so it must keep the terminal: a `npm trust` run with stdin
 closed cannot wait for the approval and fails `EOTP` instead of asking, which
-reads as "not signed in" to somebody who signed in a minute ago. The script
-makes one fully-interactive call before its loop so the handshake happens
-where it can be seen, and captures only stdout thereafter. So the run reads and configures each
+reads as "not signed in" to somebody who signed in a minute ago. The elevated token npm
+issues then lapses quickly, so the script asks for an approval only when a
+read actually needs one, at most once per run — and stops with a count if the
+token lapses part way through the 51 rather than asking again. So the run reads and configures each
 package in turn rather than reading all 51 first: the first package proves
 whether one browser approval carries the rest, and if it does not, that is
 known at package one instead of after fifty-one approvals with nothing
@@ -616,13 +617,18 @@ after 2026-09-03 permits staged publishing and nothing else unless publishing
 is asked for explicitly, so without the first flag every package would be
 configured, look configured, and refuse the release.
 
-**`NPM_TOKEN` is the fallback, and a bridge.** npm uses OIDC where it can and a
-token only where it cannot, so a package whose trusted publisher is not
-configured yet still publishes on the token. It is a granular token with the
-2FA bypass, expiring **2026-12-19**, and npm removes direct publishing with
-those in **January 2027** — so it is deleted once `trust:packages` reports
-every package configured, not renewed. Its absence is a notice rather than a
-failure: with trust configured there is nothing for it to do.
+**There is no token any more.** All 51 packages were configured and verified
+on 2026-09-21 — right repository, right workflow file, and `createPackage` on
+every one — and `NPM_TOKEN` was removed from the workflow. The token it
+replaced was granular with the 2FA bypass and expired 2026-12-19; npm removes
+direct publishing with those in **January 2027**. A secret that does not exist
+cannot expire, leak, or be rotated into a broken release.
+
+⛔ **`createPackage` is not the same as being configured**, and the check knows
+the difference. A row created after 2026-09-03 carries `createStagedPackage`
+alone unless publishing was asked for explicitly; it appears on every listing
+and refuses the release — and a version that failed to publish cannot be
+published again under the same number.
 
 ## Later
 

@@ -104,17 +104,37 @@ export function publishablePackages(root = ROOT) {
 }
 
 /**
- * Does `listing` already name this repo's workflow?
+ * The npm permission that allows a plain `npm publish`.
  *
- * Matched on the two claims that decide who may publish — the repository and
- * the workflow file — and deliberately not on the whole row: npm prints the
- * configuration back with an id and a created date that are not ours to
- * predict, and a match on the printed text as a whole would go stale on the
- * first formatting change npm makes.
+ * ⚑ NOT the same as being configured. A configuration created after
+ * 2026-09-03 permits `createStagedPackage` and nothing else unless publishing
+ * was asked for explicitly, and `publish-packages.mjs` runs a plain
+ * `npm publish` — so a stage-only row is a package that looks configured on
+ * every listing and refuses the release.
+ */
+export const PUBLISH_PERMISSION = 'createPackage'
+
+/**
+ * Does `listing` name this repo's workflow AND let it publish?
+ *
+ * Matched on the three things that decide whether a release goes out — the
+ * repository, the workflow file and the publish permission — and deliberately
+ * not on the whole row: npm prints the configuration back with an id and a
+ * created date that are not ours to predict, and a match on the printed text
+ * as a whole would go stale on the first formatting change npm makes.
+ *
+ * The permission is checked because the first version of this did not, and a
+ * stage-only configuration would have read as `ok` here right up until the
+ * promotion that failed on it — after which nothing could be republished at
+ * that version.
  */
 export function trustsThisWorkflow(listing) {
   const text = String(listing ?? '')
-  return text.includes(REPOSITORY) && text.includes(WORKFLOW_FILE)
+  return (
+    text.includes(REPOSITORY) &&
+    text.includes(WORKFLOW_FILE) &&
+    text.includes(PUBLISH_PERMISSION)
+  )
 }
 
 function npmVersion() {
@@ -171,27 +191,31 @@ function npmTrustList(name) {
 }
 
 /**
- * One fully-interactive trust read before the loop, so npm's browser
- * handshake happens where the person can see it.
+ * One fully-interactive trust read, so npm's browser handshake happens where
+ * the person can see it.
  *
- * The loop's reads capture stdout to parse `--json`, and a prompt npm chose
- * to write there would vanish into that pipe — leaving somebody staring at a
+ * ⚑ ON DEMAND, never up front. The elevated token npm issues for a trust
+ * operation lapses quickly, so whether one is needed is not knowable before
+ * asking — and asking anyway would put a browser approval in front of a run
+ * that did not need one.
+ *
+ * The ordinary reads capture stdout to parse `--json`, and a prompt npm chose
+ * to write there would vanish into that pipe, leaving somebody staring at a
  * hung command with no URL. This one inherits all three streams: whatever npm
  * prints, they see, and whatever it asks, they can answer. Its OUTPUT is
- * thrown away; the loop reads the same package again a moment later, from the
- * token this call established.
+ * thrown away — the caller reads the same package again from the token this
+ * established.
  */
 function warmUpTrustAuth(name) {
   console.log('')
-  console.log(`trust:packages: npm needs this account's second factor for every`)
-  console.log('trust operation. Approve once in the browser it opens — the rest of')
-  console.log('the run should then go through without asking again.')
+  console.log("trust:packages: npm wants this account's second factor. Approve once in")
+  console.log('the browser it opens — the rest of the run should then go through.')
   console.log('')
   try {
     execFileSync('npm', ['trust', 'list', name], { cwd: ROOT, stdio: 'inherit' })
     return true
   } catch {
-    // Not fatal on its own: the loop asks again and reports properly.
+    // Not fatal on its own: the caller reads again and reports properly.
     return false
   }
 }
@@ -207,7 +231,13 @@ function main(argv) {
 
   const names = publishablePackages()
   console.log(`trust:packages: ${names.length} package(s); ${REPOSITORY} → .github/workflows/${WORKFLOW_FILE}`)
-  if (names.length) warmUpTrustAuth(names[0])
+  /*
+   * One approval, offered once. `warmedUp` makes the interactive call happen
+   * at most once per run: if the token it establishes lapses part way through
+   * 51 packages, the run stops and says how far it got rather than asking for
+   * a fiftieth approval nobody expected.
+   */
+  let warmedUp = false
 
   /*
    * ONE PASS, reading and configuring each package in turn (AGL-3201).
@@ -231,7 +261,12 @@ function main(argv) {
   let configured = 0
   let failed = 0
   for (const name of names) {
-    const answer = readTrust(name)
+    let answer = readTrust(name)
+    if (answer.unauthenticated && !warmedUp) {
+      warmedUp = true
+      warmUpTrustAuth(name)
+      answer = readTrust(name)
+    }
     if (answer.unauthenticated) {
       console.error('')
       console.error("trust:packages: npm wanted this account's second factor for")

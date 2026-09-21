@@ -16,6 +16,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
 import {
+  PUBLISH_PERMISSION,
   REPOSITORY,
   WORKFLOW_FILE,
   atLeast,
@@ -51,10 +52,29 @@ describe('what counts as already trusted (AGL-3201)', () => {
   // to predict, so a match on the text as a whole would go stale the first
   // time npm changes its formatting — and this script would then reconfigure
   // all 51 packages on every run.
-  it('accepts a listing naming this repo and this workflow', () => {
+  it('accepts a listing naming this repo, this workflow and publish rights', () => {
     assert.equal(
-      trustsThisWorkflow(`id: tp_1  github  ${REPOSITORY}  ${WORKFLOW_FILE}  publish, stage`),
+      trustsThisWorkflow(
+        `id: tp_1  github  ${REPOSITORY}  ${WORKFLOW_FILE}  ${PUBLISH_PERMISSION}`,
+      ),
       true,
+    )
+  })
+
+  it('REFUSES a stage-only configuration, which otherwise looks configured', () => {
+    // The trap: a row created after 2026-09-03 permits staged publishing
+    // only unless publishing was asked for explicitly. It appears on every
+    // listing and refuses the release — and a version that failed to publish
+    // cannot be published again under the same number.
+    assert.equal(
+      trustsThisWorkflow(
+        JSON.stringify({
+          repository: REPOSITORY,
+          file: WORKFLOW_FILE,
+          permissions: ['createStagedPackage'],
+        }),
+      ),
+      false,
     )
   })
 
@@ -133,7 +153,7 @@ describe('telling "not signed in" from "configured nothing" (AGL-3201)', () => {
         id: 'tp_abc',
         type: 'github',
         claims: { repository: REPOSITORY, workflow_filename: WORKFLOW_FILE },
-        permissions: ['publish', 'stage-publish'],
+        permissions: [PUBLISH_PERMISSION, 'createStagedPackage'],
       },
     ])
     assert.equal(trustsThisWorkflow(readTrust('x', () => body).listing), true)
@@ -145,6 +165,7 @@ describe('telling "not signed in" from "configured nothing" (AGL-3201)', () => {
         id: 'tp_abc',
         type: 'github',
         claims: { repository: 'someone/else', workflow_filename: WORKFLOW_FILE },
+        permissions: [PUBLISH_PERMISSION],
       },
     ])
     assert.equal(trustsThisWorkflow(readTrust('x', () => body).listing), false)
@@ -156,7 +177,10 @@ describe('telling "not signed in" from "configured nothing" (AGL-3201)', () => {
     // does not name both of them.
     assert.equal(trustsThisWorkflow(readTrust('x', () => 'whatever').listing), false)
     assert.equal(
-      trustsThisWorkflow(readTrust('x', () => `github ${REPOSITORY} ${WORKFLOW_FILE}`).listing),
+      trustsThisWorkflow(
+        readTrust('x', () => `github ${REPOSITORY} ${WORKFLOW_FILE} ${PUBLISH_PERMISSION}`)
+          .listing,
+      ),
       true,
     )
   })
