@@ -238,6 +238,13 @@ describe('every listing address of one collection shares ONE read', () => {
     expect(first.pagination).toEqual({
       page: 1,
       perPage: 10,
+      // Twenty-five entries fit inside one read, so the totals are exact and
+      // the numbered addresses stay (AGL-3219). The cursor is stamped all the
+      // same — it costs nothing, it is the page's own last entry, and it is
+      // what the pager falls back to the moment a collection outgrows a
+      // single read.
+      nextCursor: 'entry-9',
+      prevCursor: '',
       totalEntries: 25,
       totalPages: 3,
     })

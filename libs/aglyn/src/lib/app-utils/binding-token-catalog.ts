@@ -213,7 +213,12 @@ export const COLLECTION_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
   {
     token: '{{pagination.totalPages}}',
     label: 'Total pages',
-    description: 'Pages in the listing, after any category filter.',
+    // A listing bigger than one read cannot be counted honestly (AGL-3219):
+    // the count and the entries were read at two different moments, and the
+    // pager built from them disagreed with itself at the page boundary. It
+    // still resolves, so a template binding it keeps rendering.
+    description:
+      'Pages in the listing, after any category filter. Empty on a listing too large to count — bind the next link instead.',
   },
   {
     token: '{{pagination.prevUrl}}',
@@ -223,7 +228,11 @@ export const COLLECTION_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
   {
     token: '{{pagination.nextUrl}}',
     label: 'Next page link',
-    description: 'Keeps the category; empty on the last page.',
+    // The reliable "is there more" (AGL-3219): it is set from a read that
+    // asked for one entry more than the page needed, so empty means there was
+    // no such entry rather than that a total said so.
+    description:
+      'Keeps the category; empty when there is nothing older to show.',
   },
 ]
 

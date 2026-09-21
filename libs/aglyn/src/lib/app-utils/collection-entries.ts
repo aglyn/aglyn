@@ -104,6 +104,24 @@ export const COLLECTION_SEARCH_COMPONENT_ID = 'collectionSearch'
  */
 export const COLLECTION_PAGE_ROUTE_SEGMENT = 'page'
 export const COLLECTION_CATEGORY_ROUTE_SEGMENT = 'category'
+/**
+ * `/{collection}/after/{cursor}` — the older page (AGL-3219).
+ *
+ * ## Why a PATH segment and not `?after=`
+ *
+ * The tenant catch-all is statically rendered and ISR-cached with the URL
+ * PATH as its key (`revalidate = 3600`, AGL-1152). A query string is not part
+ * of that key, so every cursor address would share ONE cache entry and serve
+ * whichever of them rendered first to everybody — the same reason a routed
+ * category is `/{collection}/category/{slug}` rather than `?category=`. And
+ * reading `searchParams` at all opts the whole catch-all out of static
+ * rendering, which is the opposite of what that page is for.
+ *
+ * A path segment is cached per address, crawlable, and costs nothing.
+ */
+export const COLLECTION_AFTER_ROUTE_SEGMENT = 'after'
+/** `/{collection}/before/{cursor}` — the newer page (AGL-3219). */
+export const COLLECTION_BEFORE_ROUTE_SEGMENT = 'before'
 
 /** Namespaces cloned template ids per container/entry (cf. `rep__`). */
 export const COLLECTION_ENTRIES_NODE_ID_PREFIX = 'centry__'
@@ -710,11 +728,37 @@ export function collectionListUrl(options: {
   collectionSlug: string
   categorySlug?: string | null
   page?: number | null
+  /** Continue after this entry's document id — the older direction. */
+  after?: string | null
+  /** Continue before this entry's document id — the newer direction. */
+  before?: string | null
 }): string {
   const scoped = options.categorySlug
     ? `/${options.collectionSlug}/${COLLECTION_CATEGORY_ROUTE_SEGMENT}/` +
       collectionCategorySlug(options.categorySlug)
     : `/${options.collectionSlug}`
+
+  /*
+   * A cursor address (AGL-3219) wins over a page number when both are given,
+   * because it is the one that survives a publish at the head of the list.
+   */
+  const cursor = (options.before || options.after || '').trim()
+  if (cursor) {
+    const segment = options.before
+      ? COLLECTION_BEFORE_ROUTE_SEGMENT
+      : COLLECTION_AFTER_ROUTE_SEGMENT
+    return `${scoped}/${segment}/${encodeURIComponent(cursor)}`
+  }
+
+  /*
+   * `/{collection}/page/{n}` is still MINTED for a collection that fits
+   * inside one read, where it is exactly as stable as it ever was: every one
+   * of those pages is sliced out of a single cached snapshot, so no publish
+   * can move one page's entries relative to another's. It is past the bound —
+   * where the head and the tail were two different reads of a moving list —
+   * that a number stopped being an address, and there the pager mints
+   * cursors instead.
+   */
   const page = Number(options.page)
   return Number.isFinite(page) && page > 1
     ? `${scoped}/${COLLECTION_PAGE_ROUTE_SEGMENT}/${Math.floor(page)}`
@@ -725,11 +769,16 @@ export function collectionListUrl(options: {
 export interface CollectionPaginationLinks {
   /** 1-based current page; 1 when the listing is unpaginated. */
   page: number
-  /** Total pages in the CURRENT (possibly category-filtered) set. */
+  /**
+   * Total pages in the CURRENT set.
+   *
+   * @deprecated AGL-3219 — 0 when it cannot be known, which is any collection
+   * past one read's bound. See `CollectionPagination.totalPages`.
+   */
   totalPages: number
   /** The previous page's URL, or `''` on the first page. */
   prevUrl: string
-  /** The next page's URL, or `''` on the last page. */
+  /** The next page's URL, or `''` when nothing older follows. */
   nextUrl: string
 }
 
@@ -757,26 +806,98 @@ export function collectionPaginationLinks(options: {
   categorySlug?: string | null
   /** 1-based current page; anything unusable reads as page 1. */
   page?: number | null
-  /** Total pages; anything unusable reads as a single page. */
+  /**
+   * Total pages.
+   *
+   * @deprecated AGL-3219 — no longer consulted for whether a next link
+   * exists; {@link collectionPaginationLinks} asks `nextCursor` instead.
+   */
   totalPages?: number | null
+  /**
+   * The document id the older page continues from, or `''` when there is no
+   * older page (AGL-3219).
+   *
+   * This is the ONLY thing that decides whether `nextUrl` is a link. It comes
+   * from a `limit(perPage + 1)` probe, so an empty string means the read
+   * looked for an eleventh entry and there was not one — which is a fact
+   * about the collection, unlike a total that two differently-cached reads
+   * could disagree about.
+   */
+  nextCursor?: string | null
+  /** The document id the newer page continues before, or `''`. */
+  prevCursor?: string | null
 }): CollectionPaginationLinks {
   const positive = (value: number | null | undefined): number => {
     const parsed = Math.floor(Number(value))
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
   }
   const page = positive(options.page)
-  const totalPages = positive(options.totalPages)
-  const href = (n: number) =>
-    collectionListUrl({
-      collectionSlug: options.collectionSlug,
-      ...(options.categorySlug ? { categorySlug: options.categorySlug } : {}),
-      page: n,
-    })
+  const totalPagesRaw = Math.floor(Number(options.totalPages))
+  /*
+   * Zero means UNKNOWN, and only a caller that deals in cursors can mean it
+   * (AGL-3219).
+   *
+   * A listing past the bound passes cursors and no total, and 0 is how it
+   * says the number cannot be had. A caller that passes neither — an entry
+   * route, which has no listing at all — is the inert case the tokens have
+   * always answered with "page 1 of 1", and it keeps that answer rather than
+   * telling an entry template it is on page 1 of 0.
+   */
+  const knowsCursors =
+    options.nextCursor !== undefined || options.prevCursor !== undefined
+  const totalPages =
+    Number.isFinite(totalPagesRaw) && totalPagesRaw > 0
+      ? totalPagesRaw
+      : knowsCursors
+        ? 0
+        : 1
+  const scope = {
+    collectionSlug: options.collectionSlug,
+    ...(options.categorySlug ? { categorySlug: options.categorySlug } : {}),
+  }
+  const next = (options.nextCursor ?? '').trim()
+  const prev = (options.prevCursor ?? '').trim()
+
+  /*
+   * Numbered while the whole set fits inside ONE read, cursors once it does
+   * not (AGL-3219).
+   *
+   * A total is only ever stated for a collection the shared read holds
+   * entirely, and there every page is sliced out of that one cached snapshot:
+   * no publish can move one page's entries relative to another's, so a number
+   * is a perfectly good address and stays the one readers and crawlers
+   * already have. Past the bound the head and the tail were two reads of a
+   * moving list, a number stopped naming the same ten entries from one render
+   * to the next, and the pager mints the cursor its own page proves instead.
+   */
+  const numbered = totalPages > 0
+  const numberedHref = (n: number) => collectionListUrl({ ...scope, page: n })
+
   return {
     page,
     totalPages,
-    prevUrl: page > 1 ? href(page - 1) : '',
-    nextUrl: page < totalPages ? href(page + 1) : '',
+    /*
+     * Page 2 going back lands on the bare listing either way: it is the head
+     * of the collection, and `/{collection}` is its address — there is no
+     * cursor for "the beginning".
+     */
+    prevUrl:
+      page === 2
+        ? collectionListUrl(scope)
+        : page > 2
+          ? numbered
+            ? numberedHref(page - 1)
+            : prev
+              ? collectionListUrl({ ...scope, before: prev })
+              : ''
+          : '',
+    nextUrl: numbered
+      ? page < totalPages
+        ? numberedHref(page + 1)
+        : ''
+      : next
+        ? collectionListUrl({ ...scope, after: next })
+        : '',
   }
 }
 
@@ -789,6 +910,10 @@ export interface CollectionRoute {
   categorySlug?: string
   /** 1-based list page; always 1 for entry routes. */
   page: number
+  /** Set only for `/{collection}/after/{cursor}` (AGL-3219). */
+  after?: string
+  /** Set only for `/{collection}/before/{cursor}` (AGL-3219). */
+  before?: string
 }
 
 const POSITIVE_INTEGER = /^[1-9]\d*$/
@@ -823,6 +948,28 @@ export function parseCollectionRoute(
     return POSITIVE_INTEGER.test(rest[1])
       ? { collectionSlug, page: Number(rest[1]) }
       : null
+  }
+  /*
+   * `/{collection}/after/{cursor}` and its `before` twin (AGL-3219).
+   *
+   * Checked BEFORE the category shape and after the one-segment entry shape,
+   * so an entry whose slug happens to be `after` still answers at
+   * `/{collection}/after` — that is one segment, and this is two.
+   *
+   * `page` stays 1: nothing counts a cursor address, and it is the display
+   * label rather than a position anything reads back.
+   */
+  if (
+    rest.length === 2 &&
+    (rest[0] === COLLECTION_AFTER_ROUTE_SEGMENT ||
+      rest[0] === COLLECTION_BEFORE_ROUTE_SEGMENT) &&
+    rest[1]
+  ) {
+    const cursor = decodeURIComponent(rest[1]).trim()
+    if (!cursor) return null
+    return rest[0] === COLLECTION_AFTER_ROUTE_SEGMENT
+      ? { collectionSlug, after: cursor, page: 1 }
+      : { collectionSlug, before: cursor, page: 1 }
   }
   if (rest.length === 2 && rest[0] === COLLECTION_CATEGORY_ROUTE_SEGMENT) {
     const categorySlug = collectionCategorySlug(rest[1])

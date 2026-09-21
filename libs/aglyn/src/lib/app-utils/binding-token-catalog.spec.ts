@@ -96,8 +96,18 @@ describe('binding token catalog (AGL-583)', () => {
           entry.description ?? '',
         ]),
       )
+      /*
+       * The INVARIANT is that each pager token says when it goes empty —
+       * nothing else in the editor can tell an author that a link they bound
+       * will sometimes resolve to nothing. The wording is free to change; in
+       * AGL-3219 the next link stopped being about a "last page" at all,
+       * because a listing too large to count has no last page to be on, and
+       * started being about whether anything older exists.
+       */
+      expect(byToken['{{pagination.prevUrl}}']).toMatch(/empty/i)
       expect(byToken['{{pagination.prevUrl}}']).toContain('first page')
-      expect(byToken['{{pagination.nextUrl}}']).toContain('last page')
+      expect(byToken['{{pagination.nextUrl}}']).toMatch(/empty/i)
+      expect(byToken['{{pagination.nextUrl}}']).toMatch(/older|last page/i)
     })
   })
 

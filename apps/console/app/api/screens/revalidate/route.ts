@@ -406,6 +406,14 @@ async function collectionRevalidation(
    * ones whose entries did not change. They catch up on their own ISR window,
    * which is the argument the category listings below already make for
    * themselves.
+   *
+   * Since AGL-3219 there is nothing for them to catch up ON. A deep page is
+   * addressed by the entry it continues from, so publishing at the head of
+   * the collection does not change which entries it holds — a stale cursor
+   * page is merely old, never wrong. It was POSITIONAL addressing that made
+   * this lag visible: the head refreshed here, the tail did not, and the two
+   * then disagreed by exactly the one entry that had been inserted above
+   * them both.
    */
   const listPages = Math.ceil(COLLECTION_SOURCE_MAX / COLLECTION_LIST_PAGE_SIZE)
   for (let page = 2; page <= listPages; page += 1) {

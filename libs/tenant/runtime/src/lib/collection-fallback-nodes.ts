@@ -438,7 +438,12 @@ export function buildCollectionEntryFallbackNodes(
 export interface FallbackListPagination {
   page: number
   perPage: number
-  totalPages: number
+  /** @deprecated AGL-3219 — absent past one read's bound. */
+  totalPages?: number
+  /** The older page's cursor, or `''`/absent when there is none (AGL-3219). */
+  nextCursor?: string
+  /** The newer page's cursor. */
+  prevCursor?: string
 }
 
 /** The routed category for a filtered listing (AGL-1321). */
@@ -447,7 +452,15 @@ export interface FallbackListCategory {
   name: string
 }
 
-/** Prev/next + "Page X of Y" nav linking to /{slug}/page/{n} (AGL-620). */
+/**
+ * Prev/next nav over the cursor addresses (AGL-620, AGL-3219).
+ *
+ * The label says "Page 4 of 9" only where nine is a number that can be known
+ * — a collection small enough to be read in one go. Past that it says "Page
+ * 4" and stops, because the alternative is a total derived from a count the
+ * listing's own reads could disagree with, which is how page 10 of a
+ * seventeen-page changelog came to call itself the last one.
+ */
 function paginationNodes(
   collection: FallbackCollection,
   pagination: FallbackListPagination,
@@ -465,7 +478,11 @@ function paginationNodes(
       collectionSlug: collection.slug,
       ...(category ? { categorySlug: category.slug } : {}),
       page: pagination.page,
-      totalPages: pagination.totalPages,
+      ...(pagination.totalPages === undefined
+        ? {}
+        : { totalPages: pagination.totalPages }),
+      nextCursor: pagination.nextCursor ?? '',
+      prevCursor: pagination.prevCursor ?? '',
     },
   )
   const children: string[] = []
@@ -487,7 +504,7 @@ function paginationNodes(
     parentId: id('pager'),
     props: {
       variant: 'body2',
-      children: `Page ${page} of ${totalPages}`,
+      children: totalPages > 1 ? `Page ${page} of ${totalPages}` : `Page ${page}`,
       sx: { color: 'text.secondary' },
     },
   }
@@ -577,8 +594,17 @@ export function buildCollectionListFallbackNodes(
     parentId: id('item'),
     props,
   })
+  /*
+   * A pager exists when there is somewhere to go (AGL-3219): an older page,
+   * proved by the cursor probe, or a newer one, proved by being past the
+   * first. `totalPages > 1` used to stand in for that and could not, once the
+   * total stopped being knowable.
+   */
   const pager =
-    pagination && pagination.totalPages > 1
+    pagination &&
+    (Boolean(pagination.nextCursor) ||
+      pagination.page > 1 ||
+      (pagination.totalPages ?? 0) > 1)
       ? paginationNodes(collection, pagination, category)
       : null
   return {

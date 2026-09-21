@@ -79,7 +79,17 @@ export function collectionTokens(
     collectionSlug: collection.slug,
     ...(category?.slug ? { categorySlug: category.slug } : {}),
     page: pagination?.page,
-    totalPages: pagination?.totalPages,
+    ...(pagination?.totalPages === undefined
+      ? {}
+      : { totalPages: pagination.totalPages }),
+    // Only a LISTING has cursors, so passing them is also what tells the
+    // builder this is a listing and not an inert entry route (AGL-3219).
+    ...(pagination
+      ? {
+          nextCursor: pagination.nextCursor ?? '',
+          prevCursor: pagination.prevCursor ?? '',
+        }
+      : {}),
   })
   return {
     'collection.name': collection.displayName,
