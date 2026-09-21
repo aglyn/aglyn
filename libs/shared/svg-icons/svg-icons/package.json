@@ -25,5 +25,8 @@
     },
     "./package.json": "./package.json"
   },
+  "peerDependencies": {
+    "react": "^19.2.8"
+  },
   "sideEffects": false
 }

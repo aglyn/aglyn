@@ -39,6 +39,7 @@ import {
   overrideWiring,
   packageFindings,
   sideEffectsFindings,
+  unresolvableSubpaths,
   packageOfSpecifier,
   packagesImported,
   peerFamiliesImported,
@@ -454,5 +455,21 @@ describe('a package says how it publishes', () => {
       findingsFor({ license: 'Apache-2.0', publishConfig: { access: 'public' }, repository: { type: 'git', url: 'x', directory: 'libs/plugins/crm' } }),
       [],
     )
+  })
+})
+
+describe('a subpath import has to resolve from the published package', () => {
+  const target = (name) =>
+    name === '@aglyn/shared-ui-email-campaigns'
+      ? { exports: { '.': {}, './explicit': {}, './*': {} }, hasModule: (subpath) => subpath === 'model/campaign-report' }
+      : null
+  const imported = (subpath) => ({ specifier: `@aglyn/shared-ui-email-campaigns/${subpath}`, name: '@aglyn/shared-ui-email-campaigns', subpath })
+
+  it('refuses a folder, which only a tsconfig alias resolves', () => {
+    assert.deepEqual(unresolvableSubpaths([imported('model')], target), ['@aglyn/shared-ui-email-campaigns/model'])
+  })
+
+  it('accepts a module file, and a subpath the exports map names', () => {
+    assert.deepEqual(unresolvableSubpaths([imported('model/campaign-report'), imported('explicit')], target), [])
   })
 })

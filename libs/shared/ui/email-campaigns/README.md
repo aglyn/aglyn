@@ -3,6 +3,14 @@
 The email-campaign document model and the figures that render it, owned by
 neither of the two plugins that read it.
 
+> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+
+## Install
+
+```bash
+npm install @aglyn/shared-ui-email-campaigns@beta
+```
+
 ## Why it is not in a plugin
 
 An email campaign is written by one plugin and reported by another. The
@@ -67,7 +75,6 @@ Sending. The send loop, the composer, the topic subscriptions and the
 send-time API all stay in `@aglyn/plugins-email`: they are behavior that the
 Email plugin's switch is supposed to govern, not shapes that two plugins share.
 
-## Running unit tests
+## License
 
-Run `nx test shared-ui-email-campaigns` to execute the unit tests via
-[Jest](https://jestjs.io).
+Apache-2.0. Source: https://github.com/aglyn/aglyn/tree/main/libs/shared/ui/email-campaigns

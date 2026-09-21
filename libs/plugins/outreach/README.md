@@ -1,9 +1,19 @@
 # @aglyn/plugins-outreach
 
-Sequences (AGL-2974): one-to-one, multi-step email sequences a rep sends from
+Sequences: one-to-one, multi-step email sequences a rep sends from
 their own connected mailbox, logged on the CRM's records.
 
-The name people read is **Sequences** (AGL-3199). The lib, the package, the
+> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+
+## Install
+
+```bash
+npm install @aglyn/plugins-outreach@beta
+```
+
+A plugin is loaded through Aglyn's plugin manager (`@aglyn/aglyn`) by the console and the tenant runtime; it is not a standalone library.
+
+The name people read is **Sequences**. The lib, the package, the
 release flag, the entitlement, the permission key, the collections and the API
 prefix stay `outreach`: they are stored vocabulary and live URLs, and no
 reader sees them.
@@ -33,7 +43,7 @@ Every `outreach*` collection is written by the server alone.
 
 ## Mailboxes
 
-`src/lib/mailboxes` and `src/lib/transport` (AGL-2978) connect a rep's own
+`src/lib/mailboxes` and `src/lib/transport` connect a rep's own
 Google mailbox and talk to it:
 
 | module | does |
@@ -53,7 +63,7 @@ and `outreach-credential-isolation.spec.ts` holds that no tenant file reaches it
 
 ## The engine
 
-`src/lib/engine` (AGL-2979) is every decision the sending runtime makes, as
+`src/lib/engine` is every decision the sending runtime makes, as
 pure functions with no I/O, exported from the package root:
 
 | module | decides |
@@ -74,7 +84,7 @@ pure functions with no I/O, exported from the package root:
 
 ## The sending runtime
 
-`src/lib/runtime` (AGL-2981) runs the engine against real mailboxes, in the
+`src/lib/runtime` runs the engine against real mailboxes, in the
 console alone — each run opens a rep's sealed grant:
 
 | module | does |
@@ -91,3 +101,7 @@ console-only declarations, which run them every fifteen minutes from
 `/api/admin/plugin-crons` and give each a row on `/api/health/crons`. Their
 dependencies are `runtime/runtime-deps`; `runtime/fixtures/fake-gmail` is the
 in-memory mailbox the emulator specs run them against.
+
+## License
+
+Apache-2.0. Source: https://github.com/aglyn/aglyn/tree/main/libs/plugins/outreach

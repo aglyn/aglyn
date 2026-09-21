@@ -22,6 +22,10 @@
       "types": "./src/server.d.ts",
       "default": "./src/server.js"
     },
+    "./foundation": {
+      "types": "./src/lib/foundation/index.d.ts",
+      "default": "./src/lib/foundation/index.js"
+    },
     "./*": {
       "types": "./src/lib/*.d.ts",
       "default": "./src/lib/*.js"

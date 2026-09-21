@@ -18,6 +18,10 @@
       "types": "./src/index.d.ts",
       "default": "./src/index.js"
     },
+    "./model": {
+      "types": "./src/lib/model/index.d.ts",
+      "default": "./src/lib/model/index.js"
+    },
     "./*": {
       "types": "./src/lib/*.d.ts",
       "default": "./src/lib/*.js"
