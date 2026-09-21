@@ -73,6 +73,7 @@ const entriesCollection = (name: string) => {
   if (name !== 'entries') throw new Error(`unexpected subcollection ${name}`)
   const query = {
     where: () => query,
+    select: () => query,
     limit: () => query,
     get: async () => ({
       docs: entryDocs.map((value) =>
@@ -113,6 +114,7 @@ const firestore = {
           }
           const query = {
             where: () => query,
+            select: () => query,
             limit: () => query,
             get: async () => ({
               docs:

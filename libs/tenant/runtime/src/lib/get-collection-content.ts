@@ -613,6 +613,57 @@ interface LiveEntriesRead {
 }
 
 /**
+ * The fields a LISTING read of an entry needs — the field mask on the query
+ * below (AGL-3213).
+ *
+ * The point of the mask is the field that is NOT in it. `body` is the whole
+ * post, and `mapEntryFields` has never mapped it on this path: a list card
+ * binds a title, an excerpt, a cover and a byline, and the routed entry page
+ * reads its one document separately. So the markdown of up to
+ * {@link COLLECTION_SOURCE_MAX} posts crossed the wire, was parsed out of the
+ * response, and was dropped one function later — on every fill of a cache
+ * that every listing address, every "Latest posts" rail, the feed and the
+ * author page share. A changelog is the worst case and also the common one.
+ *
+ * Firestore bills the document read either way, so this buys no reads; it
+ * buys egress and the JSON parse, which is the part of a collection render
+ * that grows with how much people have written.
+ *
+ * Site search is unaffected and must stay that way: it matches on `body`
+ * through its OWN query in `apps/tenant/utils/search-content.ts`, which this
+ * mask does not touch.
+ *
+ * ⛔ A reader added to `mapEntryFields` or to the liveness/schedule helpers
+ * must be added HERE in the same edit. A field left out does not error — it
+ * arrives `undefined`, which is exactly how `authorName` and `updatedAt` went
+ * missing for months (AGL-2486, AGL-2534). The four schedule fields are
+ * listed first for that reason: `status`, `publishAt` and `scheduleStatus`
+ * decide whether an entry is live at all, and `flipDueEntry` WRITES
+ * `publishAt` back as `publishedAt`, so a mask that dropped it would publish
+ * a due entry with no date.
+ */
+const LIVE_ENTRY_FIELDS = [
+  'status',
+  'publishAt',
+  'publishedAt',
+  'scheduleStatus',
+  'title',
+  'slug',
+  'excerpt',
+  'authorName',
+  'authorId',
+  'coverImage',
+  'coverImageAlt',
+  'coverVideo',
+  'seoTitle',
+  'seoDescription',
+  'categoryId',
+  'category',
+  'tags',
+  'updatedAt',
+] as const
+
+/**
  * Fetches a collection's live entries (newest first), shared by the route
  * loader and the compose-time Collection entries block (AGL-551).
  */
@@ -624,6 +675,9 @@ async function listLiveEntries(
   // sort client-side like the version lists.
   const entriesQuery = await entriesRef
     .where('status', 'in', ['published', 'scheduled'])
+    // Everything this function reads, and nothing else (AGL-3213) — see
+    // {@link LIVE_ENTRY_FIELDS}.
+    .select(...LIVE_ENTRY_FIELDS)
     // Named rather than literal (AGL-1516): a search index has to be able to
     // say "this read reached its bound", and it can only do that against a
     // bound it shares with the query. `collectionSourceReachedBound` reads

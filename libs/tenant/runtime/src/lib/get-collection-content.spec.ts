@@ -60,10 +60,35 @@ const snapshotFor = (id: string, value: Record<string, unknown>) => ({
  * the bounded-read case below is only honest if the fake stops where the real
  * query stops.
  */
+/**
+ * Apply a field mask the way Firestore does (AGL-3213): a field the query did
+ * not ask for is ABSENT from the snapshot, not merely ignored.
+ *
+ * Honored rather than waved through, for the reason the `where('slug', '==')`
+ * below is honored. `select()` is the one query builder whose mistakes are
+ * invisible — a field left out of the mask arrives `undefined`, which is a
+ * value the readers all tolerate, so a fake that returned the whole document
+ * would let a mask missing `publishAt` or `updatedAt` pass every assertion in
+ * this file. The two fields that went missing this way for months (AGL-2486,
+ * AGL-2534) were lost to exactly that shape of silence.
+ */
+const applyMask = (
+  value: Record<string, unknown>,
+  mask: readonly string[] | null,
+): Record<string, unknown> => {
+  if (!mask) return value
+  const masked: Record<string, unknown> = {}
+  for (const field of mask) {
+    if (field in value) masked[field] = value[field]
+  }
+  return masked
+}
+
 const entriesCollection = (name: string) => {
   if (name !== 'entries') throw new Error(`unexpected subcollection ${name}`)
   const filters: Array<(value: Record<string, unknown>) => boolean> = []
   let take = Number.POSITIVE_INFINITY
+  let mask: readonly string[] | null = null
   const query = {
     where: (field: string, op: string, wanted: unknown) => {
       filters.push((value) =>
@@ -71,6 +96,10 @@ const entriesCollection = (name: string) => {
           ? (wanted as unknown[]).includes(value[field])
           : value[field] === wanted,
       )
+      return query
+    },
+    select: (...fields: string[]) => {
+      mask = fields
       return query
     },
     limit: (count: number) => {
@@ -81,7 +110,11 @@ const entriesCollection = (name: string) => {
       docs: entryDocs
         .filter((value) => filters.every((matches) => matches(value)))
         .slice(0, take)
-        .map((value) => snapshotFor(String(value['$id']), value)),
+        // The id comes off the UNMASKED row: `$id` is the fake's own key, not
+        // a document field, and Firestore never puts the id in the mask.
+        .map((value) =>
+          snapshotFor(String(value['$id']), applyMask(value, mask)),
+        ),
     }),
   }
   return query
@@ -99,6 +132,7 @@ const firestore = {
           }
           const query = {
             where: () => query,
+            select: () => query,
             limit: () => query,
             get: async () => ({
               docs:

@@ -109,16 +109,78 @@ async function readContentAuthors(
   }
 }
 
-/** The public slugs of every content collection this host owns. */
-async function listContentCollections(hostId: string): Promise<
-  { slug: string; name: string }[]
-> {
+/**
+ * The only fields the author page asks a collection document for.
+ *
+ * A field mask rather than the whole document (AGL-3213). A collection doc
+ * carries its `categories` taxonomy — up to fifty `{ id, name, description }`
+ * entries, with prose in every one — and the three facts this read needs are
+ * a slug, a display name and a kind. The taxonomy IS read on this path, but
+ * out of the per-collection source the entries already come from, where it is
+ * cached alongside them; fetching it a second time here bought nothing.
+ *
+ * The three name candidates ride along together because the fallback chain
+ * below reads all three, and a mask that dropped one would silently rename
+ * every collection that stores its name under the older key.
+ */
+const AUTHOR_PAGE_COLLECTION_FIELDS = [
+  'slug',
+  'displayName',
+  'name',
+  'title',
+  'kind',
+] as const
+
+/**
+ * The public slugs of every content collection this host owns.
+ *
+ * ONE cached query per host (AGL-3213). This was the last uncached read on
+ * the author path, and the author path is the one that multiplies it: a
+ * person's archive is `/author/{slug}` plus a `/page/{n}` per ten entries,
+ * each its own ISR address regenerating on its own window, and each paid a
+ * fresh {@link AUTHOR_PAGE_COLLECTION_SCAN}-document scan for a table that
+ * changes when someone creates a collection. Everything else the page reads —
+ * the roster, and every collection's entries — has been shared through
+ * `withRenderCache` since AGL-2518/AGL-1302; this one simply never was.
+ *
+ * Tagged with the host's data tag like its neighbours, so creating or
+ * renaming a collection reaches the archive the moment the publish path busts
+ * the tag rather than at the TTL.
+ *
+ * Fail-open to no collections, which is the behaviour the caller's own
+ * try/catch already produced: an archive with no posts in it, never a 500.
+ */
+async function listContentCollections(
+  hostId: string,
+): Promise<{ slug: string; name: string }[]> {
+  try {
+    return await withRenderCache({
+      key: ['tenant-author-collections', hostId],
+      revalidate: PUBLISHED_SITE_DATA_TTL_SECONDS,
+      tags: [tenantDataTag(hostId)],
+      read: () => readContentCollections(hostId),
+      // A host whose scan came back empty is not cached, for the reason
+      // `withRenderCache` gives about negatives: a collections read that
+      // misses once must not make every author page on the site an empty
+      // archive for the hour.
+      store: (value) => value.length > 0,
+    })
+  } catch (error) {
+    console.error(error)
+    return readContentCollections(hostId)
+  }
+}
+
+async function readContentCollections(
+  hostId: string,
+): Promise<{ slug: string; name: string }[]> {
   const snapshot = await firebaseAdmin
     .app()
     .firestore()
     .collection('hosts')
     .doc(hostId)
     .collection('collections')
+    .select(...AUTHOR_PAGE_COLLECTION_FIELDS)
     .limit(AUTHOR_PAGE_COLLECTION_SCAN)
     .get()
   const collections: { slug: string; name: string }[] = []

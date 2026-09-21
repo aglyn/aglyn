@@ -94,6 +94,14 @@ jest.mock('@aglyn/aglyn/server', () => ({
   parseCollectionRoute: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/collection-entries',
   ).parseCollectionRoute,
+  // The REAL page window (AGL-3213), beside the parser it shares a module
+  // with. The loader calls it on the way into props for every collection
+  // route this suite drives, and a missing export is not a wrong answer here
+  // — it is a `TypeError` into the loader's catch, which 404s the case for a
+  // reason unrelated to the subject, exactly as the abuse ceiling above did.
+  collectionEntriesPageWindow: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-entries',
+  ).collectionEntriesPageWindow,
   HostScreenVisibility: { AUTHENTICATED: 'authenticated' },
   // None of these hosts has a custom domain, so the canonical-origin branch
   // (AGL-1272) is never taken — but the loader CALLS this on every render, and

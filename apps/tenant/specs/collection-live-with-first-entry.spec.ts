@@ -48,10 +48,15 @@ const mockSite: { collection: MockRow; entries: MockRow[] } = {
 }
 
 /**
- * `where` (`==` and `in`), `limit` and `get` — the three calls the reader
- * makes. Honored rather than ignored: the entry route reads ONE document by
- * slug, and a fake that answered it with the listing would let a wrong read
- * pass.
+ * `where` (`==` and `in`), `select`, `limit` and `get` — the four calls the
+ * reader makes. `where` and `limit` are honored rather than ignored: the entry
+ * route reads ONE document by slug, and a fake that answered it with the
+ * listing would let a wrong read pass.
+ *
+ * `select` returns the builder untouched (AGL-3213). This suite's subject is
+ * which addresses resolve, not which bytes arrive, and the mask's own
+ * completeness is pinned where it belongs — the fake in
+ * `get-collection-content.spec.ts` applies it for real.
  */
 function mockQuery(rows: () => MockRow[]): any {
   const filters: Array<(row: MockRow) => boolean> = []
@@ -65,6 +70,7 @@ function mockQuery(rows: () => MockRow[]): any {
       )
       return query
     },
+    select: () => query,
     limit: (count: number) => {
       take = count
       return query

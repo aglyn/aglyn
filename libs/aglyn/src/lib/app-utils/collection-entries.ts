@@ -183,6 +183,48 @@ export function collectionTotalPages(total: number, perPage: number): number {
   return Math.max(1, Math.ceil(total / perPage))
 }
 
+/**
+ * The slice of a listing's entries that the page named by `pagination`
+ * actually shows (AGL-3213).
+ *
+ * The loader hands the WHOLE narrowed set down to compose, because
+ * {@link expandCollectionEntries} does its own windowing off the block's
+ * props — a Collection entries block may carry its own `perPage`, its own
+ * pinned `page`, a `firstPageOnly` switch and its own filters, none of which
+ * this function can see. Slicing before compose would double-window and empty
+ * every page after the first.
+ *
+ * Everything the loader serializes into page PROPS is downstream of compose,
+ * and there the full set is not merely wasted bytes — it is a false
+ * statement. The `ItemList` JSON-LD numbers its items
+ * `(page - 1) * perPage + index + 1` on the premise that `entries` is the
+ * window; handed all one hundred, `/changelog/page/7` published
+ * `numberOfItems: 100` and positions 61 through 160, most of them past the
+ * end of the collection. The legacy fallback renderer read it the same way
+ * and rendered the whole list on every page.
+ *
+ * So: the loader keeps the full set until compose has had it, and narrows
+ * HERE on the way into props, where `pagination` is the route's own answer to
+ * which page this is.
+ *
+ * An unpaginated listing (an entry route, the RSS feed) passes no pagination
+ * and gets its entries back untouched.
+ */
+export function collectionEntriesPageWindow<T>(
+  entries: readonly T[],
+  pagination:
+    | { page?: number; perPage?: number }
+    | null
+    | undefined,
+): T[] {
+  const perPage = Number(pagination?.perPage)
+  if (!Number.isFinite(perPage) || perPage <= 0) return [...entries]
+  const pageRaw = Number(pagination?.page)
+  const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1
+  const start = (page - 1) * Math.floor(perPage)
+  return entries.slice(start, start + Math.floor(perPage))
+}
+
 /** Default/most related posts a Related posts block renders (AGL-582). */
 export const COLLECTION_RELATED_DEFAULT_LIMIT = 3
 export const COLLECTION_RELATED_MAX = 12

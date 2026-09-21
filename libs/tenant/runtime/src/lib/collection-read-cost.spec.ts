@@ -69,6 +69,11 @@ const entriesCollection = (name: string) => {
       if (field === 'slug') wantedSlug = String(value)
       return query
     },
+    // The field mask (AGL-3213) changes what a read COSTS in bytes, never
+    // what it costs in documents, so this suite waves it through — the
+    // projection's own correctness is `get-collection-content.spec.ts`'s,
+    // where the fake honours it.
+    select: () => query,
     limit: () => query,
     get: async () => {
       reads.entries += 1
@@ -100,6 +105,7 @@ const firestore = {
           }
           const query = {
             where: () => query,
+            select: () => query,
             limit: () => query,
             get: async () => {
               reads.collections += 1
