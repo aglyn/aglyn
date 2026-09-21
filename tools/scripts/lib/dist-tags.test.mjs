@@ -16,6 +16,8 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
 import {
+  LAG_ATTEMPTS,
+  LAG_WAIT_MS,
   TAG,
   probeWriteAccess,
   readTags,
@@ -90,14 +92,37 @@ describe('what to do about one package (AGL-3201)', () => {
     assert.deepEqual(v.tags, ['latest', 'beta'])
   })
 
-  it('SKIPS a package the version was never published for', () => {
-    // `@aglyn/cli` carries its own number, so the repo's version means
-    // nothing to it. Moving `latest` there would point at a version that
-    // does not exist — npm refuses, and counting that refusal as a failure
-    // would make every run of this red.
-    const v = verdictFor({ tags: { latest: '0.1.2' }, versions: ['0.1.2'] }, V)
+  it('SKIPS a package that carries its OWN version', () => {
+    // `@aglyn/cli` keeps its own number, so the repo's means nothing to it.
+    // Moving `latest` there would point at a version that does not exist —
+    // npm refuses, and counting that refusal as a failure would make every
+    // run of this red.
+    const v = verdictFor({ tags: { latest: '0.1.2' }, versions: ['0.1.2'] }, V, false)
     assert.equal(v.state, 'skip')
-    assert.match(v.why, /not published/)
+    assert.match(v.why, /its own version/)
+  })
+
+  it('does NOT skip a package that should have the version and does not', () => {
+    /*
+     * The defect this replaced. `skip` meant both "this package will never
+     * have this version" and "the registry did not show it to me", and the
+     * run reported success either way — so a publish whose read path had not
+     * caught up left `latest` behind on two packages, green.
+     *
+     * The registry lags a publish by minutes and this runs minutes after
+     * one, so that is the common case, not the strange one.
+     */
+    const v = verdictFor({ tags: { latest: '1.0.0-beta.145' }, versions: ['1.0.0-beta.145'] }, V, true)
+    assert.equal(v.state, 'missing')
+    assert.match(v.why, /not on the registry yet/)
+  })
+
+  it('treats an unknown package as expected, so the failure mode is loud', () => {
+    // A name the caller could not classify must not be silently skipped.
+    assert.equal(
+      verdictFor({ tags: {}, versions: [] }, V).state,
+      'missing',
+    )
   })
 
   it('agrees with the publish about which tag a version belongs on', () => {
@@ -188,5 +213,16 @@ describe('proving this runner may move a tag at all (AGL-3201)', () => {
   it('says so rather than guessing when there is no tag to rewrite', () => {
     assert.equal(probeWriteAccess('@aglyn/x', {}, () => '').ok, false)
     assert.equal(probeWriteAccess('@aglyn/x', undefined, () => '').ok, false)
+  })
+})
+
+describe('waiting out the registry rather than skipping past it (AGL-3201)', () => {
+  it('waits long enough to matter, and not forever', () => {
+    // The publish step runs this within minutes of publishing, and npm's read
+    // path lagged by more than five minutes on a 24 MB package. A single
+    // retry would not have covered it; an unbounded one would hang a release.
+    assert.ok(LAG_ATTEMPTS >= 3, 'more than one retry')
+    assert.ok((LAG_ATTEMPTS - 1) * LAG_WAIT_MS >= 60_000, 'at least a minute of patience')
+    assert.ok((LAG_ATTEMPTS - 1) * LAG_WAIT_MS <= 10 * 60_000, 'never long enough to hang a release')
   })
 })

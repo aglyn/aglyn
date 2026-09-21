@@ -60,7 +60,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { distTagFor, prereleaseLabelOf } from './publish-packages.mjs'
-import { publishablePackages } from './trust-packages.mjs'
+import { publishableEntries } from './trust-packages.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -134,10 +134,26 @@ function npmView(name) {
  * would point it at a version that does not exist, which npm refuses, and
  * treating that refusal as a failure would make every run of this red.
  */
-export function verdictFor(answer, version) {
+export function verdictFor(answer, version, expected = true) {
   if (answer.error) return { state: 'error', why: answer.error }
   if (!answer.versions.includes(version)) {
-    return { state: 'skip', why: `${version} is not published for it` }
+    /*
+     * ⚑ TWO DIFFERENT THINGS, and reading them as one is how a run goes
+     * green with a tag left wrong.
+     *
+     * A package that carries its OWN version — `@aglyn/cli` — will never
+     * have the repo's, and that is a fact, not a fault: `skip`.
+     *
+     * A package that carries the repo's version and does not have it is
+     * either mid-publish or unpublished, and its tag is now wrong. The
+     * registry's read path lags a publish by minutes, which is exactly when
+     * this runs, so this is the common case rather than the strange one —
+     * and the first run of it left `latest` behind on two packages while
+     * reporting success.
+     */
+    return expected
+      ? { state: 'missing', why: `${version} is not on the registry yet` }
+      : { state: 'skip', why: `it carries its own version, not ${version}` }
   }
   const behind = tagsFor(version, answer.versions).filter(
     (tag) => answer.tags[tag] !== version,
@@ -183,6 +199,18 @@ export function probeWriteAccess(name, tags, run = runNpm) {
   return { ok: true, tag, version }
 }
 
+/**
+ * Blocks the thread for `ms`. The run is synchronous throughout and the wait
+ * is between two registry reads, so there is nothing else for it to be doing.
+ */
+export function waitMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+/** How long to give the registry's read path to catch up with a publish. */
+export const LAG_ATTEMPTS = 6
+export const LAG_WAIT_MS = 15_000
+
 function runNpm(args) {
   return execFileSync('npm', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
 }
@@ -197,7 +225,10 @@ function main(argv) {
     return 1
   }
 
-  const names = publishablePackages()
+  const entries = publishableEntries()
+  const names = entries.map((entry) => entry.name)
+  /** A package that carries this version is expected to be on the registry at it. */
+  const expects = new Map(entries.map((entry) => [entry.name, entry.version === version]))
   console.log(`dist-tags: ${names.length} package(s); every tag ${version} owns → ${version}`)
 
   if (probe) {
@@ -230,13 +261,30 @@ function main(argv) {
   let moved = 0
   let failed = 0
   for (const name of names) {
-    const verdict = verdictFor(readTags(name), version)
+    let verdict = verdictFor(readTags(name), version, expects.get(name) !== false)
+    /*
+     * The registry's read path lags a publish by minutes, and this runs
+     * minutes after one. A version that is genuinely there but not yet
+     * visible must not be read as "nothing to do" — that is precisely how
+     * the first run of this left `latest` behind on two packages and
+     * reported success.
+     */
+    for (let attempt = 1; verdict.state === 'missing' && attempt < LAG_ATTEMPTS; attempt += 1) {
+      console.log(`  wait  ${name} — ${verdict.why} (${attempt}/${LAG_ATTEMPTS - 1})`)
+      waitMs(LAG_WAIT_MS)
+      verdict = verdictFor(readTags(name), version, true)
+    }
     if (verdict.state === 'ok') {
       console.log(`  ok    ${name}`)
       continue
     }
     if (verdict.state === 'skip') {
       console.log(`  skip  ${name} — ${verdict.why}`)
+      continue
+    }
+    if (verdict.state === 'missing') {
+      failed += 1
+      console.error(`  MISSING ${name} — ${verdict.why}, after waiting`)
       continue
     }
     if (verdict.state === 'error') {
@@ -271,7 +319,7 @@ function main(argv) {
 
   if (failed) {
     console.error(
-      `dist-tags: ${failed} tag(s) failed${moved ? `, ${moved} moved` : ''}. ` +
+      `dist-tags: ${failed} package(s) unresolved${moved ? `, ${moved} tag(s) moved` : ''}. ` +
         'Re-run — the ones already moved are skipped.',
     )
     return 1

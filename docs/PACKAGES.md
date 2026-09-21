@@ -667,8 +667,16 @@ npm run dist-tags -- --version 1.0.0  # a version other than the repo's
 
 `tagsFor` asks `distTagFor` rather than repeating its rule, so the publish and
 this can never disagree about which tag a version belongs on — and **`latest`
-is never walked back onto a prerelease once a release exists.** A package the
-version was never published for is skipped, not failed.
+is never walked back onto a prerelease once a release exists.**
+
+⛔ **"Not on the registry" is two different things.** A package that carries its
+OWN version (`@aglyn/cli`) will never have the repo's, and that is a fact:
+skipped. A package that carries the repo's version and does not have it is
+either mid-publish or unpublished, and its tag is now wrong. **npm's read path
+lags a publish by minutes** — this runs minutes after one — so the run waits
+and re-reads rather than moving on, and fails loudly if the version never
+appears. Reading the two as one is how the first run of this left `latest`
+behind on two packages and reported success.
 
 ⛔ **This is the one thing `NPM_TOKEN` still does.** An OIDC identity may not
 set a dist-tag, so the publish step runs tokenless and this one carries the
