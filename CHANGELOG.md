@@ -9,6 +9,22 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.146 — 2026-09-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.145...v1.0.0-beta.146)
+
+### Added
+
+- **tools:** the release publishes on trusted publishing, not on a token ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **marketplace:** the capability notice is the plugin's, not the app's ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+### Fixed
+
+- **tools:** a signed-out trust listing is not fifty-one missing packages ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **marketing:** the pour reads msgpack nodes, and says when it publishes ([AGL-2920](https://linear.app/aglyn/issue/AGL-2920), [AGL-1151](https://linear.app/aglyn/issue/AGL-1151), [AGL-2866](https://linear.app/aglyn/issue/AGL-2866))
+- **markdown:** an authored color reaches the words ([AGL-3210](https://linear.app/aglyn/issue/AGL-3210))
+- **besigner,console:** the Edit JSON dialog reaches Monaco, and outlives its menu ([AGL-3208](https://linear.app/aglyn/issue/AGL-3208), [AGL-1779](https://linear.app/aglyn/issue/AGL-1779), [AGL-3017](https://linear.app/aglyn/issue/AGL-3017))
+
 ## v1.0.0-beta.145 — 2026-09-21
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.144...v1.0.0-beta.145)
