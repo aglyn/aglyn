@@ -28,13 +28,17 @@ import {
   aiPlanCopiedPageViolations,
   aiPlanItemCountViolations,
   aiPlanRegionViolations,
+  aiPlanTemplateTokenViolations,
   aiPlannedLayoutRegions,
+  aiPlannedTemplateTokens,
+  aiTreeBoundTokens,
 } from './ai-job-plan-conformance'
+import { AI_TEMPLATE_SUBJECT_DEFINITIONS } from '../model/ai-template-subjects'
 
 /**
- * The build held to the plan the member confirmed (AGL-3024): the two shapes
- * a plan promises structurally — a count of items, and a layout's regions —
- * measured against what was actually built.
+ * The build held to the plan the member confirmed (AGL-3024): the three
+ * shapes a plan promises structurally — a count of items, a layout's regions
+ * and a template's binding tokens — measured against what was actually built.
  *
  * Every case here is a build that the doctrine validators admit: none of
  * these trees breaks a building rule, which is exactly why a plan that
@@ -252,6 +256,87 @@ describe('a region the plan promised (AGL-3024)', () => {
  * has to — over the whole page, because a copy carries the SOURCE's nodes and
  * nothing maps the plan's sections onto them.
  */
+
+describe('a token the plan promised for a template (AGL-3143 §11)', () => {
+  const AUTHOR = AI_TEMPLATE_SUBJECT_DEFINITIONS.author
+
+  const planWithTemplateFields = (fields: string[]): AiJobPlan => ({
+    reuse: [],
+    create: [
+      {
+        kind: 'template',
+        name: 'attorney-profile-template-v2',
+        why: 'The existing template lacks a bar-admissions block and a bound contact form.',
+        duplicateOf: 'tpl-base',
+        fields,
+      },
+    ],
+    screens: [],
+    status: 'confirmed',
+    labels: {},
+    proposedAt: NOW as unknown as AiJobPlan['proposedAt'],
+    confirmedAt: NOW as unknown as AiJobPlan['confirmedAt'],
+    confirmedBy: 'uid-1',
+  })
+
+  /** A template that binds the author's name and job title, and nothing else. */
+  const NAME_AND_TITLE = {
+    rootId: 'r',
+    nodes: {
+      r: { componentId: 'div', nodes: ['h', 't'] },
+      h: { componentId: 'muiTypography', props: { children: '{{author.name}}', variant: 'h1' } },
+      t: { componentId: 'muiTypography', props: { children: '{{author.jobTitle}}' } },
+    },
+  } as unknown as Parameters<typeof aiPlanTemplateTokenViolations>[2]
+
+  it('reads the tokens a built template binds, however they are nested in props', () => {
+    expect([...aiTreeBoundTokens(NAME_AND_TITLE)].sort()).toEqual(['author.jobtitle', 'author.name'])
+  })
+
+  it('reads a plan field as a token whether or not it wears its braces', () => {
+    expect(aiPlannedTemplateTokens(planWithTemplateFields(['{{author.bio}}', 'author.name']), AUTHOR)).toEqual({
+      tokens: ['{{author.bio}}', '{{author.name}}'],
+      unreadable: [],
+    })
+  })
+
+  it('refuses a template that binds less than the plan promised', () => {
+    const plan = planWithTemplateFields(['{{author.name}}', '{{author.jobTitle}}', '{{author.bio}}'])
+    const found = aiPlanTemplateTokenViolations(plan, AUTHOR, NAME_AND_TITLE)
+    expect(found.map((violation) => [violation.rule, violation.code])).toEqual([
+      [null, 'plan-token-missing'],
+    ])
+    expect(found[0].message).toContain('{{author.bio}}')
+    // The two it DID bind are not named: the finding is what is missing.
+    expect(found[0].message).not.toContain('{{author.name}}')
+  })
+
+  it('says nothing when the template binds everything the plan promised', () => {
+    const plan = planWithTemplateFields(['{{author.name}}', '{{author.jobTitle}}'])
+    expect(aiPlanTemplateTokenViolations(plan, AUTHOR, NAME_AND_TITLE)).toEqual([])
+  })
+
+  it('refuses a promise the subject cannot fill, which is the measured miss', () => {
+    // The live AGL-3024 run: the brief asked for an attorney's bar admissions,
+    // the plan promised "a bar-admissions block", the built template had none
+    // and reported Done. `author` fills six tokens and no catalog anywhere
+    // fills a bar admission, so the promise was unkeepable when it was made —
+    // and read as a token list it cannot be made at all.
+    const plan = planWithTemplateFields(['{{author.name}}', 'bar admissions'])
+    expect(aiPlannedTemplateTokens(plan, AUTHOR).unreadable).toEqual(['bar admissions'])
+    const found = aiPlanTemplateTokenViolations(plan, AUTHOR, NAME_AND_TITLE)
+    expect(found.map((violation) => violation.code)).toEqual(['plan-token-unreadable'])
+    expect(found[0].message).toContain('bar admissions')
+    // It names what the page CAN fill, so the re-ask has somewhere to go.
+    expect(found[0].message).toContain('{{author.bio}}')
+  })
+
+  it('says nothing about a plan with no template creation at all', () => {
+    expect(aiPlannedTemplateTokens(null, AUTHOR)).toEqual({ tokens: [], unreadable: [] })
+    expect(aiPlanTemplateTokenViolations(null, AUTHOR, NAME_AND_TITLE)).toEqual([])
+  })
+})
+
 describe('a count the plan promised, against a page a copy produced (AGL-3024)', () => {
   const sections = (items: number) => ({
     sections: [

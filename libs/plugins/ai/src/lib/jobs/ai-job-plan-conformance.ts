@@ -23,10 +23,13 @@ import {
   aiLayoutRegionOf,
   aiRepeatedItemCount,
   aiTreeLayoutRegions,
+  walkTree,
+  type AiDoctrineNode,
   type AiDoctrineTree,
   type AiDoctrineViolation,
   type AiLayoutRegion,
 } from '../runtime/ai-doctrine-validators'
+import { aiBindingTokensIn, type AiTemplateSubjectDefinition } from '../model/ai-template-subjects'
 import { aiPlanCreation } from './ai-job-generation'
 
 /**
@@ -55,6 +58,19 @@ import { aiPlanCreation } from './ai-job-generation'
  *    properties, so the planner is asked there for the one thing about a
  *    layout worth promising and worth checking — a checkable assertion the
  *    planner emits beside its prose, rather than English parsed out of it.
+ *  - **A token**: `create[].fields` on a template, from the subject's own
+ *    closed catalog (`AI_TEMPLATE_SUBJECT_DEFINITIONS[subject].tokens`), which
+ *    is the template's analogue of a layout's regions — the one thing about a
+ *    template that differs per record, and therefore the one worth promising.
+ *
+ * The third was added after a measured miss (AGL-3024, 2026-09-21). A brief
+ * asked for an attorney's bar admissions; the plan's `why` promised "a
+ * bar-admissions block"; the built template had no such thing and reported
+ * `Done`. Nothing had gone wrong in the build: `author` has six tokens —
+ * name, bio, image, jobTitle, worksFor, url — and no catalog anywhere fills a
+ * bar admission, so the promise was unkeepable when it was written. Read as a
+ * token list the promise cannot even be MADE, which is a better place to stop
+ * than after the document is paid for.
  *
  * ── It fails closed ──────────────────────────────────────────────────────
  *
@@ -195,6 +211,97 @@ export function aiPlanCopiedPageViolations(
       message: `The confirmed plan says the "${promised.name}" section shows ${promised.items} items, and this page is a copy that shows at most ${shown} of anything. Build the ${promised.items}.`,
     },
   ]
+}
+
+/** A token as the catalog spells it, for matching what a plan wrote against it. */
+function tokenKey(value: string): string {
+  return value.replace(/[{}\s]/g, '').toLowerCase()
+}
+
+/** Every binding token a built tree holds, spelled as the catalog spells them. */
+export function aiTreeBoundTokens(tree: AiDoctrineTree): Set<string> {
+  const bound = new Set<string>()
+  const nodes = tree.nodes as unknown as Record<string, AiDoctrineNode>
+  const strings = (value: unknown, out: string[]): string[] => {
+    if (typeof value === 'string') out.push(value)
+    else if (Array.isArray(value)) for (const inner of value) strings(inner, out)
+    else if (value && typeof value === 'object') {
+      for (const inner of Object.values(value as Record<string, unknown>)) strings(inner, out)
+    }
+    return out
+  }
+  for (const { node } of walkTree({ rootId: tree.rootId, nodes })) {
+    for (const token of strings(node.props, []).flatMap(aiBindingTokensIn)) {
+      bound.add(tokenKey(token))
+    }
+  }
+  return bound
+}
+
+/**
+ * The subject tokens the confirmed plan's template creation names, and the
+ * words it named that the subject's catalog does not answer to. A plan with
+ * no template creation names none.
+ */
+export function aiPlannedTemplateTokens(
+  plan: AiJobPlan | null,
+  definition: AiTemplateSubjectDefinition,
+): { tokens: string[]; unreadable: string[] } {
+  const catalog = new Map(definition.tokens.map((entry) => [tokenKey(entry.token), entry.token]))
+  const tokens = new Set<string>()
+  const unreadable: string[] = []
+  for (const field of aiPlanCreation(plan, 'template')?.fields ?? []) {
+    const token = catalog.get(tokenKey(field))
+    if (token) tokens.add(token)
+    else unreadable.push(field)
+  }
+  return { tokens: [...tokens], unreadable }
+}
+
+/**
+ * The plan's promised tokens against a built template: one finding naming
+ * every token the plan lists that the template does not bind, and one naming
+ * a word the subject's catalog could not read — which is a promise this check
+ * cannot settle either way, and, more usefully, one the page could never have
+ * filled.
+ */
+export function aiPlanTemplateTokenViolations(
+  plan: AiJobPlan | null,
+  definition: AiTemplateSubjectDefinition,
+  tree: AiDoctrineTree,
+): AiDoctrineViolation[] {
+  const { tokens, unreadable } = aiPlannedTemplateTokens(plan, definition)
+  const violations: AiDoctrineViolation[] = []
+  if (tokens.length) {
+    const bound = aiTreeBoundTokens(tree)
+    const missing = tokens.filter((token) => !bound.has(tokenKey(token)))
+    if (missing.length) {
+      const one = missing.length === 1
+      violations.push({
+        rule: null,
+        code: 'plan-token-missing',
+        message: `The confirmed plan says this template shows ${listed(missing)}, and it binds ${
+          one ? 'no such token' : 'no such tokens'
+        }. Put ${one ? 'it' : 'each of them'} on the page, so every ${
+          definition.noun.replace(/^an? /, '')
+        } shows their own.`,
+      })
+    }
+  }
+  if (unreadable.length) {
+    violations.push({
+      rule: null,
+      code: 'plan-token-unreadable',
+      message: `The confirmed plan says this template shows ${listed(
+        unreadable,
+      )}, which ${definition.noun}'s page does not fill, so nothing can check the template shows ${
+        unreadable.length === 1 ? 'it' : 'them'
+      }. Promise only what the page fills: ${definition.tokens
+        .map((entry) => entry.token)
+        .join(', ')}.`,
+    })
+  }
+  return violations
 }
 
 /** `"a"`, `"a" and "b"`, `"a", "b" and "c"`. */

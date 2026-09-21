@@ -603,6 +603,27 @@ describe('aiJobPlanPrompt', () => {
       'Job kind: page\nBrief: '.length + 4_000,
     )
   })
+
+  it('tells a template job what its fields are, and charges no other kind for it (AGL-3143 §11)', () => {
+    const template = aiJobPlanPrompt(job({ kind: 'template', inputs: { subject: 'author' } }))
+    // The subject's own catalog, so the planner promises only what the page
+    // fills and `aiPlanTemplateTokenViolations` can hold the build to it.
+    expect(template).toContain("The template's fields are the binding tokens its page shows")
+    expect(template).toContain('{{author.name}}')
+    expect(template).toContain('{{author.bio}}')
+
+    // ⛔ The line rides the job's OWN turn, never the plan tool's cached
+    // `fields` description. Written there it cost 40 tokens of the shared
+    // prefix, which is one credit of the Free page's 300-credit wall and takes
+    // the room it keeps for a re-asked section from 45 to 44.
+    expect(aiJobPlanPrompt(job())).not.toContain('binding tokens')
+    expect(aiJobPlanPrompt(job({ kind: 'layout', inputs: {} }))).not.toContain('binding tokens')
+    // A template job whose subject never arrived is told nothing it cannot use.
+    expect(aiJobPlanPrompt(job({ kind: 'template', inputs: {} }))).not.toContain('binding tokens')
+    expect(aiJobPlanPrompt(job({ kind: 'template', inputs: { subject: 'nonsense' } }))).not.toContain(
+      'binding tokens',
+    )
+  })
 })
 
 /**

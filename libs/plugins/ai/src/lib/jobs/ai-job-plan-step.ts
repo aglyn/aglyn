@@ -23,6 +23,10 @@ import {
   type AiBuildPlan,
 } from '../model/ai-build-plan'
 import type { AiJob, AiJobKind, AiJobPlan, AiJobStatus } from '../model/ai-jobs.types'
+import {
+  AI_TEMPLATE_SUBJECT_DEFINITIONS,
+  type AiTemplateSubject,
+} from '../model/ai-template-subjects'
 import { AI_PAGE_CREATE_KINDS, aiPagePlanShapeRefusal } from '../model/ai-page-job'
 import {
   aiPlanCapabilitiesForJob,
@@ -140,7 +144,36 @@ export function aiJobPlanPrompt(
     }
   }
   if (capabilities) lines.push(...aiPlanCapabilityLines(capabilities))
+  lines.push(...aiPlanTemplateTokenLines(job))
   return lines.join('\n')
+}
+
+/**
+ * What a TEMPLATE job's plan is told its creation's `fields` are (AGL-3143
+ * §11): the subject's binding tokens, listed so the planner promises only
+ * what the page can fill and the build can be held to it
+ * (`aiPlanTemplateTokenViolations`).
+ *
+ * ⛔ It rides the job's own turn and NOT the `fields` description in the plan
+ * tool, which every kind's request caches. Written there it read better and
+ * cost 40 tokens of the shared prefix — 2,980 to 3,020 — which is one credit
+ * of the Free page's 300-credit wall, taking the room it keeps for a re-asked
+ * section from 45 credits to 44 and breaking `ai-job-free-page.spec.ts`. A
+ * page job must not pay for a sentence about templates.
+ */
+export function aiPlanTemplateTokenLines(job: Pick<AiJob, 'kind' | 'inputs'>): string[] {
+  if (job.kind !== 'template') return []
+  const subject = (job.inputs ?? {})['subject']
+  const definition =
+    typeof subject === 'string'
+      ? AI_TEMPLATE_SUBJECT_DEFINITIONS[subject as AiTemplateSubject]
+      : undefined
+  if (!definition) return []
+  return [
+    `The template's fields are the binding tokens its page shows, each one of: ${definition.tokens
+      .map((entry) => entry.token)
+      .join(', ')}. Promise only what the page fills.`,
+  ]
 }
 
 /** A kind that builds only some plans: the creations it makes, and the shapes it refuses. */
