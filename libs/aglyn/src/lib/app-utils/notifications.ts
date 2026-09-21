@@ -201,6 +201,24 @@ export type AglynNotificationType =
   // muted as routine invoice traffic, and this is the one message on that
   // route where muting it means money moves with nobody looking.
   | 'system.disputeUnattributed'
+  // Somebody created an account, and somebody created a workspace
+  // (AGL-3225). Staff audience, and the only two types in the taxonomy whose
+  // subject is the platform's own growth rather than anybody's work.
+  //
+  // `staff.`, and NOT `system.`, and the AGL-1088 note above is the reason
+  // rather than an exception to it: `system` is the bucket nobody mutes to
+  // reduce noise, which is exactly what makes it the wrong home for the two
+  // routine, high-volume events in the product. A staff member must be able
+  // to stop hearing about every sign-up without also dropping the verifier
+  // regression and the unattributed dispute that share that bucket — and
+  // before this category existed, there was nowhere to put them where that
+  // was true.
+  //
+  // The category also tells the settings page who a row is for: `staff` is
+  // rendered only to claim holders, so no customer is shown a switch for
+  // notifications they could never receive.
+  | 'staff.userSignedUp'
+  | 'staff.orgCreated'
 
 export interface AglynNotification {
   $id?: string
@@ -252,6 +270,8 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'system.bandwidthCapEngaged': 'Monthly traffic limit reached',
     'system.billingWebhookHalfApplied': 'Billing webhook half applied',
     'system.disputeUnattributed': 'Card dispute with no owner',
+    'staff.userSignedUp': 'New account',
+    'staff.orgCreated': 'New workspace',
   }
 
 /** Preference buckets (AGL-267): the prefix before the dot. */
@@ -262,6 +282,9 @@ export type NotificationCategory =
   | 'marketplace'
   | 'support'
   | 'system'
+  // Staff-only, and shown only to staff (AGL-3225) — see
+  // {@link STAFF_NOTIFICATION_CATEGORIES}.
+  | 'staff'
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<
   NotificationCategory,
@@ -273,16 +296,34 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<
   marketplace: 'Marketplace',
   support: 'Support',
   system: 'Product & system',
+  staff: 'Platform growth',
 }
+
+/**
+ * The categories only staff can receive (AGL-3225).
+ *
+ * The settings page hides these rows from everybody else, because a switch
+ * for mail that can never arrive is a promise the product does not keep. It
+ * is presentation only: `notifyStaff` is what decides the audience, and it
+ * enumerates the `staff` claim rather than reading this.
+ */
+export const STAFF_NOTIFICATION_CATEGORIES: ReadonlySet<NotificationCategory> =
+  new Set<NotificationCategory>(['staff'])
 
 export function notificationCategory(
   type: AglynNotificationType | string,
 ): NotificationCategory {
   const prefix = String(type).split('.')[0]
   return (
-    ['billing', 'team', 'content', 'marketplace', 'support', 'system'].includes(
-      prefix,
-    )
+    [
+      'billing',
+      'team',
+      'content',
+      'marketplace',
+      'support',
+      'system',
+      'staff',
+    ].includes(prefix)
       ? prefix
       : 'system'
   ) as NotificationCategory
@@ -415,6 +456,11 @@ export const NOTIFICATION_CHANNEL_DEFAULTS: Record<
   marketplace: { console: true, email: false },
   support: { console: true, email: false },
   system: { console: true, email: false },
+  // Console ON, because the complaint this answers is that staff never heard
+  // about a sign-up at all; email off, like everything else, because that is
+  // what the channel defaults to and a sign-up is not urgent enough to be the
+  // exception that starts filling inboxes by default.
+  staff: { console: true, email: false },
 }
 
 /**

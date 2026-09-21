@@ -37,12 +37,14 @@ import {
   isImpersonationSession,
   lockdownRefusal,
   meterOrgEmail,
+  notifyStaff,
   OrgSlugTakenError,
   recordSignupAttempt,
   recordSignupRefusal,
 } from '@aglyn/tenant-data-admin'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { buildRoute, Route } from '../../../../constants/route-links'
 
 /**
  * Creates an organization for the signed-in user (AGL-233). Like Slack,
@@ -271,6 +273,30 @@ async function handler(request: Request): Promise<Response> {
       }
     } catch (welcomeError) {
       console.error('welcome email skipped', welcomeError)
+    }
+
+    /*
+     * AND TELL OURSELVES (AGL-3225).
+     *
+     * Nothing did. A workspace being created is the platform's most basic
+     * growth event and the only message it produced went to the customer —
+     * so the way to learn that anyone had signed up was to go and look at
+     * Firestore.
+     *
+     * After the response is decided and inside its own `catch`, like the
+     * welcome email above: `notifyStaff` never throws, and a sign-up that
+     * failed because we could not tell ourselves about it would be the worst
+     * trade in the route.
+     */
+    try {
+      await notifyStaff({
+        type: 'staff.orgCreated',
+        title: `New workspace: ${name}`,
+        body: `${decoded.email ?? 'An account'} created ${name} (/${slug}).`,
+        link: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId }),
+      })
+    } catch (staffError) {
+      console.error('staff new-workspace notification skipped', staffError)
     }
 
     return Response.json({ orgId, slug }, { status: 200 })

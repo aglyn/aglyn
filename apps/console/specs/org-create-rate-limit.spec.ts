@@ -93,6 +93,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     typeof decoded['impersonatedBy'] === 'string',
   lockdownRefusal: (...args: unknown[]) => mockLockdownRefusal(...args),
   meterOrgEmail: jest.fn(async () => undefined),
+  // AGL-3225: the staff announcement. Present for the reason the two notes
+  // below give — a wholesale mock that omits a new barrel export makes the
+  // route take its catch arm, not the assertion fail.
+  notifyStaff: jest.fn(async () => undefined),
   // AGL-2714: the drought denominator. A wholesale mock that omits a new
   // barrel export makes the route throw, not the assertion fail.
   recordSignupAttempt: () => undefined,

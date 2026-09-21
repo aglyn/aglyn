@@ -33,6 +33,7 @@ import {
   getLockdownVerdict,
   isImpersonationSession,
   lockdownJsonResponse,
+  notifyStaff,
   resolveConsoleDomain,
   seedUserProfile,
   ssoDomainRefusal,
@@ -49,6 +50,7 @@ import {
   SESSION_TOMBSTONE_TTL_MS,
 } from './session-tombstone'
 import { readCookie, requestIsHttps } from '../read-cookie'
+import { buildRoute, Route } from '../../../../constants/route-links'
 import {
   hostnameOf,
   isWorkspaceDomainHost,
@@ -500,7 +502,30 @@ async function handler(request: Request): Promise<Response> {
         }
         after(async () => {
           try {
-            await seedUserProfile(uid, seed)
+            const { created } = await seedUserProfile(uid, seed)
+            /*
+             * A NEW ACCOUNT, told to staff (AGL-3225).
+             *
+             * `created` is the one moment in the product that means this
+             * person did not exist before: the seed writes `users/{uid}` on
+             * first sight and only fills absent fields afterwards. Hanging
+             * the announcement off it rather than off a signup form is what
+             * makes it cover every provider — password, Google, passkey, SSO
+             * — since this is the one path every interactive sign-in takes.
+             *
+             * `notifyStaff` never throws and already respects each staff
+             * member's own preferences, so a claim holder who does not want
+             * to hear about sign-ups switches the category off and nothing
+             * here has to know.
+             */
+            if (created) {
+              await notifyStaff({
+                type: 'staff.userSignedUp',
+                title: 'New account',
+                body: `${decoded.email ?? uid} signed up.`,
+                link: buildRoute(Route.ADMIN_USER_DETAIL, { uid }),
+              })
+            }
           } catch (error) {
             console.error('[auth/session] profile seed failed', error)
           }

@@ -19,6 +19,7 @@ import {
   crmDailyDigestEnabled,
   NOTIFICATION_SELF_SENT_EMAIL_TYPES,
   NOTIFICATION_TYPE_LABELS,
+  STAFF_NOTIFICATION_CATEGORIES,
   notificationCategory,
   notificationChannelEnabled,
   notificationMuted,
@@ -264,5 +265,39 @@ describe('per-scope, per-channel notification settings (AGL-3223)', () => {
       NOTIFICATION_SELF_SENT_EMAIL_TYPES.has('content.insightsDigest'),
     ).toBe(true)
     expect(NOTIFICATION_SELF_SENT_EMAIL_TYPES.has('content.order')).toBe(false)
+  })
+})
+
+describe('the platform-growth category (AGL-3225)', () => {
+  it('is its own bucket, mutable without dropping a system alert', () => {
+    expect(notificationCategory('staff.userSignedUp')).toBe('staff')
+    expect(notificationCategory('staff.orgCreated')).toBe('staff')
+    // The reason the category exists. `system` is the bucket nobody mutes for
+    // noise (AGL-1088), so filing sign-ups there would mean a staff member
+    // who stopped the chatter also stopped the verifier regression.
+    const quiet = { account: { staff: { console: false } } }
+    expect(
+      notificationChannelEnabled(quiet, 'console', 'staff.userSignedUp'),
+    ).toBe(false)
+    expect(
+      notificationChannelEnabled(
+        quiet,
+        'console',
+        'system.pluginVerifierRegression',
+      ),
+    ).toBe(true)
+  })
+
+  it('arrives in the console and not the inbox until somebody asks', () => {
+    // Console on is the complaint this answers — staff heard nothing at all.
+    expect(notificationChannelEnabled(undefined, 'console', 'staff.orgCreated')).toBe(true)
+    expect(notificationChannelEnabled(undefined, 'email', 'staff.orgCreated')).toBe(false)
+  })
+
+  it('is marked staff-only, so no customer is shown a switch for it', () => {
+    expect(STAFF_NOTIFICATION_CATEGORIES.has('staff')).toBe(true)
+    for (const category of ['billing', 'team', 'content', 'marketplace', 'support', 'system'] as const) {
+      expect(STAFF_NOTIFICATION_CATEGORIES.has(category)).toBe(false)
+    }
   })
 })
