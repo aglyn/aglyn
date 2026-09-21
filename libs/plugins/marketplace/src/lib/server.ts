@@ -41,6 +41,7 @@ import { installTemplateHandler } from './server/install-template'
 import { installThemeHandler } from './server/install-theme'
 import { previewImageHandler } from './server/preview-image'
 import { publishHandler } from './server/publish'
+import { marketplaceAdminReports } from './server/admin-reports'
 import { reportHandler } from './server/report'
 import { reviewsHandler } from './server/reviews'
 import { publisherProfileSaveHandler } from './server/publisher-profile-save'
@@ -129,6 +130,16 @@ export function registerMarketplaceConsoleApi(): void {
   registerPluginApiRoute('marketplace/preview-image', previewImageHandler)
   registerPluginApiRoute('marketplace/publish', publishHandler)
   registerPluginApiRoute('marketplace/report', reportHandler)
+  /*
+   * The staff end of that button (AGL-2310), moved out of
+   * `apps/console/app/api/admin/` by AGL-3080. `web:` because it is a plain
+   * fetch from this plugin's own staff page, not a plugin-request handler —
+   * the same shape the AI plugin's `ai/admin/*` routes use, and for the same
+   * reason: a staff route names no host, so there is no subject to resolve.
+   */
+  registerPluginApiRoute('marketplace/admin/reports', {
+    web: marketplaceAdminReports,
+  })
   registerPluginApiRoute('marketplace/reviews', reviewsHandler)
   registerPluginApiRoute(
     'marketplace/publisher-profile',

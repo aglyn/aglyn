@@ -231,14 +231,23 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     ui: ['app/(app)/admin/abuse-reports/page.tsx'],
     via: /staff role/,
   },
-  // The marketplace half of the same job (AGL-2310). Like `abuse-reports` it
-  // REDACTS rather than refuses — triage is open to every staff role and the
-  // reporter's account is not — so the surface it maps to is the sentence
-  // that says so, not a disabled control.
-  'marketplace-reports/route.ts': {
-    ui: ['app/(app)/admin/marketplace-reports/page.tsx'],
-    via: /access level/,
-  },
+  /*
+   * `marketplace-reports/route.ts` was HERE — the marketplace half of the
+   * same job (AGL-2310), redacting rather than refusing, so the surface it
+   * mapped to was the sentence saying so rather than a disabled control.
+   *
+   * It is the marketplace plugin's since AGL-3080, at
+   * `marketplace/admin/reports`, because the collection it triages is one
+   * only that plugin writes. This sweep derives its subjects from
+   * `app/api/admin/`, so it no longer sees the route — the same boundary that
+   * already leaves the AI plugin's `ai/admin/*` routes out.
+   *
+   * The property did not go unguarded, and is better held than it was here:
+   * `libs/plugins/marketplace/src/lib/server/admin-reports.spec.ts` drives
+   * the handler as a `support` reader and asserts the redaction against an
+   * anonymous control, where this row could only assert that some UI file
+   * contained the words "access level".
+   */
   // The platform hourly send ceiling (AGL-2409). Reading it is open to every
   // staff role — during an incident the question "are we at the ceiling" must
   // be answerable by whoever is on — and SETTING it is `super`, the same bar

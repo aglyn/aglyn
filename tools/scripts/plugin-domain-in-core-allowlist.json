@@ -47,13 +47,6 @@
       "lane": "marketplace"
     },
     {
-      "path": "apps/console/app/(app)/admin/marketplace-reports/page.tsx",
-      "rules": [
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/app/(app)/admin/orgs/[orgId]/page.tsx",
       "rules": [
         "plugin-collection:data"
@@ -155,13 +148,6 @@
         "domain-declares:workflows"
       ],
       "lane": "ai"
-    },
-    {
-      "path": "apps/console/app/api/admin/marketplace-reports/route.ts",
-      "rules": [
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
     },
     {
       "path": "apps/console/app/api/admin/org-usage/route.ts",

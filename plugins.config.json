@@ -378,6 +378,7 @@
       "package": "@aglyn/plugins-marketplace",
       "register": {
         "console": "registerMarketplaceConsole",
+        "staff": "registerMarketplaceConsole",
         "consoleApi": "registerMarketplaceConsoleApi"
       },
       "apiPrefixes": [

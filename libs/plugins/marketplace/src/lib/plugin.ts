@@ -16,9 +16,11 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
 import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
 import MarketplaceBrowse from './components/marketplace-browse.component'
 import MarketplaceHub from './components/marketplace-hub.component'
+import MarketplaceReportsPage from './components/marketplace-reports-page.component'
 import MarketplacePaymentsNotice from './components/marketplace-payments-notice.component'
 import HostPluginsCard from './components/host-plugins-card.component'
 import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
@@ -166,6 +168,30 @@ export function registerMarketplaceConsole(): void {
             permission: 'publishToMarketplace',
           },
         ],
+      },
+    ],
+    /**
+     * The report queue, in the staff area (AGL-2310, moved by AGL-3080).
+     *
+     * `marketplaceReports` is a collection only this plugin writes, and the
+     * queue that triages it was a console staff route because the staff area
+     * had no way for a plugin to own a page. It does (AGL-2939), and the
+     * shell serves this at the same `/admin/marketplace-reports` it always
+     * had — a staff page's id IS its URL segment.
+     */
+    staffPages: [
+      {
+        id: 'marketplace-reports',
+        label: 'Marketplace reports',
+        header: {
+          title: 'Marketplace Reports',
+          icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
+          // The abuse queue's topic, for the reason the page's own help
+          // gives. The page publishes the `#statuses` anchor itself, which a
+          // `staffPages` entry cannot carry.
+          docsTopic: 'abuseReports',
+        },
+        Component: MarketplaceReportsPage,
       },
     ],
     pluginId: BUNDLE_ID,

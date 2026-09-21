@@ -17,8 +17,8 @@
 'use client'
 
 import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
-import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
+import { PageHeaderHelp, pluginDocsHelp } from '@aglyn/aglyn'
+import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -33,12 +33,6 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import DashboardLayout from '../../../../components/layouts/dashboard.layout'
-import StaffOnly from '../../../../components/staff-only.component'
-import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import useIsStaff from '../../../../hooks/use-is-staff'
 
 interface MarketplaceReportRow {
   id: string
@@ -86,9 +80,8 @@ const when = (ms: number | null) =>
  * date — is context for it, which is why it is rendered in full rather than
  * truncated into a column, and why it is never redacted by staff tier.
  */
-const AdminMarketplaceReports: NextPageWithLayout<Record<string, never>> = () => {
+export function MarketplaceReportsPage() {
   const { data: user } = useUser()
-  const isStaff = useIsStaff()
   const { enqueueSnackbar } = useSnackbar()
   const [reports, setReports] = useState<MarketplaceReportRow[] | null>(null)
   const [identityVisible, setIdentityVisible] = useState(false)
@@ -102,15 +95,22 @@ const AdminMarketplaceReports: NextPageWithLayout<Record<string, never>> = () =>
   useEffect(() => {
     let active = true
     void (async () => {
-      // Gated on `isStaff === true`, never on its loading `null` — a request
-      // fired from a loading default answers a question nobody asked.
-      if (isStaff !== true || !user) return
+      /*
+       * The staff claim is the SHELL's now (AGL-3080). This page used to
+       * hold `isStaff !== true` here, because it owned its own route and a
+       * request fired from the claim's loading `null` answers a question
+       * nobody asked. The generic staff route renders every plugin page
+       * inside `StaffOnly`, which renders NOTHING while the claim resolves
+       * and 404s a non-holder — so being mounted at all is the claim, and a
+       * second check here would be a copy free to disagree with it.
+       */
+      if (!user) return
       setLoading(true)
       setError(null)
       try {
         const response = await authorizedFetch(
           user,
-          `/api/admin/marketplace-reports?status=${encodeURIComponent(statusFilter)}`,
+          `/api/marketplace/admin/reports?status=${encodeURIComponent(statusFilter)}`,
         )
         const body = await response.json().catch(() => null)
         if (!active) return
@@ -129,7 +129,7 @@ const AdminMarketplaceReports: NextPageWithLayout<Record<string, never>> = () =>
     return () => {
       active = false
     }
-  }, [isStaff, user, statusFilter, epoch])
+  }, [user, statusFilter, epoch])
 
   const transition = useCallback(
     async (report: MarketplaceReportRow, status: string) => {
@@ -137,7 +137,7 @@ const AdminMarketplaceReports: NextPageWithLayout<Record<string, never>> = () =>
       try {
         const response = await authorizedFetch(
           user,
-          '/api/admin/marketplace-reports',
+          '/api/marketplace/admin/reports',
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -172,37 +172,27 @@ const AdminMarketplaceReports: NextPageWithLayout<Record<string, never>> = () =>
   )
 
   return (
-    <DashboardLayout
-      breadcrumbItems={[
-        { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
-        {
-          children: 'Marketplace reports',
-          href: buildRoute(Route.ADMIN_MARKETPLACE_REPORTS),
-        },
-      ]}
-      header={{
-        children: 'Marketplace Reports',
-        icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
-      }}
-      // The abuse-queue topic, deliberately: this is the same triage job on a
-      // different surface, and a second docs page describing the same four
-      // statuses is a second page to forget to update.
-      //
-      // ANCHORED, though. The abuse queue's own page opens the same topic
-      // bare, and two help icons that land in exactly the same place are
-      // interchangeable — which is the thing `docs-help-destinations` exists
-      // to catch. `#statuses` is what a reader arriving from HERE needs: the
-      // four states and what closing one means.
-      help={{ topic: 'abuseReports', anchor: '#statuses' }}
-    >
-      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <StaffOnly>
+    <>
+      {/*
+        The abuse-queue topic, deliberately: this is the same triage job on a
+        different surface, and a second docs page describing the same four
+        statuses is a second page to forget to update.
+
+        ANCHORED, though, and published rather than declared. The abuse
+        queue's own page opens the same topic bare, and two help icons landing
+        in exactly the same place are interchangeable — which is the thing
+        `docs-help-destinations` exists to catch. A `staffPages` entry carries
+        one `docsTopic` and no anchor, so `#statuses` — the four states and
+        what closing one means, which is what a reader arriving from HERE
+        needs — comes up through the header seam instead.
+      */}
+      <PageHeaderHelp topic="abuseReports" anchor="#statuses" />
           <Stack spacing={3}>
             {loading && <LinearProgress />}
             {error && <Alert severity="error">{error}</Alert>}
             <CardDisplay
               header={'Reported listings and reviews'}
-              help={docsHelp('abuseReports', {
+              help={pluginDocsHelp('abuseReports', {
                 excerpt:
                   'Reports users filed against a marketplace listing or a ' +
                   'review, with the reason each one gave. Closing one needs ' +
@@ -338,11 +328,9 @@ const AdminMarketplaceReports: NextPageWithLayout<Record<string, never>> = () =>
               )}
             </CardDisplay>
           </Stack>
-        </StaffOnly>
-      </Container>
-    </DashboardLayout>
+    </>
   )
 }
-AdminMarketplaceReports.displayName = 'Page:AdminMarketplaceReports'
+MarketplaceReportsPage.displayName = 'MarketplaceReportsPage'
 
-export default AdminMarketplaceReports
+export default MarketplaceReportsPage

@@ -22,12 +22,19 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
-import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /**
- * The staff end of the marketplace report button (AGL-2310).
+ * The staff end of the marketplace report button (AGL-2310), served at
+ * `/api/marketplace/admin/reports` for this plugin's Marketplace reports
+ * staff page.
  *
- * `libs/plugins/marketplace/src/lib/server/report.ts` has written
+ * It was `apps/console/app/api/admin/marketplace-reports/route.ts` until
+ * AGL-3080. The console held it because the staff area had no way for a
+ * plugin to own a page; it does (`staffPages`, AGL-2939), and the queue reads
+ * a collection only this plugin writes.
+ *
+ * `./report.ts` has written
  * `marketplaceReports` since the button shipped — `reason`, `reporterUid`,
  * `listingName`, `publisherOrgId`, `targetType`, and `status: 'open'` — and
  * NOTHING read it. No `collectionGroup`, no admin surface, no cron. The
@@ -285,5 +292,4 @@ async function handler(request: Request): Promise<Response> {
   }
 }
 
-export const dynamic = 'force-dynamic'
-export { handler as GET, handler as POST }
+export { handler as marketplaceAdminReports }

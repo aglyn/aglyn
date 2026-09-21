@@ -45,9 +45,9 @@
  *    still be able to tell a report with somebody behind it from one without.
  *
  * The writer half — that the stored `reason` is the reporter's own words and
- * not a constant — is guarded in
- * `libs/plugins/marketplace/src/lib/server/report-reaches-the-queue.spec.ts`.
- * It cannot live here: nx `depConstraints` forbid `scope:app` importing an
+ * not a constant — is guarded in `./report-reaches-the-queue.spec.ts`, BESIDE
+ * this one since AGL-3080. It could not be, while this lived in
+ * `apps/console/specs`: nx `depConstraints` forbid `scope:app` importing an
  * `aglyn:addons` lib.
  */
 
@@ -121,7 +121,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 // this file assert that a mock agreed with itself about what "actioned" is.
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
-  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/abuse-report'),
+  // The package subpath, not a relative hop out of this lib: this spec moved
+  // into the plugin with its handler (AGL-3080), and a `../../../` reach for
+  // core is the dependency the package boundaries exist to refuse.
+  ...jest.requireActual('@aglyn/aglyn/app-utils/abuse-report'),
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: Object.fromEntries(new URL(request.url).searchParams.entries()),
@@ -135,7 +138,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
 }))
 
-import { GET, POST } from '../app/api/admin/marketplace-reports/route'
+import { marketplaceAdminReports } from './admin-reports'
 
 const PHISHING = 'a'.repeat(40)
 const SPAM = 'b'.repeat(40)
@@ -146,16 +149,16 @@ const PHISHING_REASON =
 const SPAM_REASON = 'Five near-identical listings from the same publisher.'
 
 const get = (search = '') =>
-  GET(
+  marketplaceAdminReports(
     new Request(
-      `https://console.aglyn.com/api/admin/marketplace-reports${search}`,
+      `https://console.aglyn.com/api/marketplace/admin/reports${search}`,
       { headers: { authorization: 'Bearer staff-token' } },
     ),
   )
 
 const post = (body: Record<string, unknown>) =>
-  POST(
-    new Request('https://console.aglyn.com/api/admin/marketplace-reports', {
+  marketplaceAdminReports(
+    new Request('https://console.aglyn.com/api/marketplace/admin/reports', {
       method: 'POST',
       headers: {
         authorization: 'Bearer staff-token',
@@ -217,8 +220,8 @@ beforeEach(() => {
 
 describe('only staff reach the queue', () => {
   it('401s without a bearer token', async () => {
-    const response = await GET(
-      new Request('https://console.aglyn.com/api/admin/marketplace-reports'),
+    const response = await marketplaceAdminReports(
+      new Request('https://console.aglyn.com/api/marketplace/admin/reports'),
     )
     expect(response.status).toBe(401)
   })
