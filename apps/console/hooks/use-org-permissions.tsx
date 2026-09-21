@@ -18,8 +18,11 @@
 
 import {
   orgRoleTier,
+  pluginPermissionsVersion,
   resolveOrgPermissions,
   resolveRolePermissions,
+  subscribePluginEntitlements,
+  subscribePluginPermissions,
   toLegacyPermissions,
   type AglynOrgCustomRole,
   type AglynOrgMember,
@@ -33,6 +36,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -75,7 +79,7 @@ const deniedOnReadFailure = (): OrgPermissions & Record<string, boolean> => {
   for (const key of Object.keys(shape)) denied[key] = false
   return {
     ...denied,
-    ...toLegacyPermissions(ALL_DENIED, 'viewer'),
+    ...toLegacyPermissions(ALL_DENIED(), 'viewer'),
   } as OrgPermissions & Record<string, boolean>
 }
 
@@ -83,10 +87,33 @@ const deniedOnReadFailure = (): OrgPermissions & Record<string, boolean> => {
  * An owner's map, resolved per use: the catalog grows when a plugin's
  * declarations register, which can be after this module loads.
  */
-const ALL_GRANTED = () => resolveOrgPermissions({ role: 'owner' })
+const ALL_GRANTED = () => resolveOrgPermissions(OWNER_OF_NOTHING)
 
-/** Every dotted permission false. `resolveOrgPermissions(null)` is the catalog's own. */
-const ALL_DENIED = resolveOrgPermissions(null)
+/** The member a reader is before any organization is chosen. */
+const OWNER_OF_NOTHING: Partial<AglynOrgMember> = { role: 'owner' }
+
+/** Every dotted permission false, resolved per use for the same reason. */
+const ALL_DENIED = () => resolveOrgPermissions(null)
+
+/**
+ * Both registries a resolved map reads, as one external store (AGL-3228):
+ * the plugin permission keys and the org catalog's plugin-declared keys.
+ */
+function subscribeRegistries(listener: () => void): () => void {
+  const stopPermissions = subscribePluginPermissions(listener)
+  const stopEntitlements = subscribePluginEntitlements(listener)
+  return () => {
+    stopPermissions()
+    stopEntitlements()
+  }
+}
+let entitlementsVersion = 0
+subscribePluginEntitlements(() => {
+  entitlementsVersion += 1
+})
+function registriesVersion(): number {
+  return pluginPermissionsVersion() * 1_000_003 + entitlementsVersion
+}
 
 /**
  * Loading, answered, or failed — three states, never two (AGL-243 residual).
@@ -194,8 +221,18 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
   const firestore = useFirestore()
   const { currentOrg, loading: orgsLoading } = useOrgScope()
   const orgId = currentOrg?.$id
+  /*
+   * Re-render when a plugin registers a permission or an org-catalog key
+   * (AGL-3228). The maps below are resolved per render against the LIVE
+   * registries, and this provider renders only when its own state changes —
+   * so a plugin whose chunk registered after the member document arrived
+   * left every reader holding a map without its keys, and an absent key is
+   * a refusal. A cold load of a plugin deep link is exactly that order.
+   */
+  useSyncExternalStore(subscribeRegistries, registriesVersion, registriesVersion)
   const [state, setState] = useState<{
-    granted: Record<OrgPermission, boolean>
+    member: Partial<AglynOrgMember> | null
+    customRole: AglynOrgCustomRole | null
     isOwner: boolean
     orgId: string | undefined
     role: OrgRole | undefined
@@ -208,7 +245,8 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
     overrides: Record<string, boolean> | undefined
     status: OrgPermissionsStatus
   }>({
-    granted: ALL_GRANTED(),
+    member: null,
+    customRole: null,
     isOwner: true,
     orgId: undefined,
     role: undefined,
@@ -225,7 +263,8 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
     if (!orgId) {
       // No org yet — fresh account, full access (owner of its future org).
       setState({
-        granted: ALL_GRANTED(),
+        member: OWNER_OF_NOTHING,
+        customRole: null,
         isOwner: true,
         orgId: undefined,
         role: undefined,
@@ -265,7 +304,8 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
         }
         if (!active) return
         setState({
-          granted: resolveOrgPermissions(member, customRole),
+          member,
+          customRole,
           isOwner: role === 'owner' || role === 'admin',
           orgId,
           role,
@@ -286,7 +326,8 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
         // authorization answer, and it was seeded `true`.
         if (active)
           setState({
-            granted: ALL_DENIED,
+            member: null,
+            customRole: null,
             isOwner: false,
             orgId,
             role: undefined,
@@ -300,6 +341,13 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
     }
   }, [enabled, user, firestore, orgId, orgsLoading])
 
+  // Resolved per render, against the registries as they stand now.
+  const granted =
+    state.status === 'ready'
+      ? resolveOrgPermissions(state.member ?? OWNER_OF_NOTHING, state.customRole)
+      : state.status === 'error'
+        ? ALL_DENIED()
+        : ALL_GRANTED()
   return {
     // PLUGIN KEYS RIDE ALONG (AGL-2474), in the server resolver's own order:
     // tier defaults first, then the dotted catalog's projection over them.
@@ -317,13 +365,13 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
       state.status === 'ready'
         ? {
             ...resolveRolePermissions(orgRoleTier(state.role), state.overrides),
-            ...toLegacyPermissions(state.granted, state.role),
+            ...toLegacyPermissions(granted, state.role),
           }
         : state.status === 'error'
           ? deniedOnReadFailure()
           : allTrueWhileLoading(),
-    can: (permission) => state.granted[permission],
-    granted: state.granted,
+    can: (permission) => granted[permission],
+    granted,
     isOwner: state.isOwner,
     orgId: state.orgId,
     role: state.role,
