@@ -20,6 +20,7 @@ import {
   WORKFLOW_FILE,
   atLeast,
   publishablePackages,
+  readTrust,
   trustsThisWorkflow,
 } from '../trust-packages.mjs'
 
@@ -93,5 +94,70 @@ describe('the set it configures (AGL-3201)', () => {
     // named separately and the file is looked for under .github/workflows.
     assert.ok(!WORKFLOW_FILE.includes('/'))
     assert.match(WORKFLOW_FILE, /\.ya?ml$/)
+  })
+})
+
+describe('telling "not signed in" from "configured nothing" (AGL-3201)', () => {
+  // `npm trust list` is NOT public — it answers EOTP to anyone not signed in
+  // with the account's second factor, even for a public package. Reading that
+  // as an empty listing would report all 51 packages as missing, and send
+  // somebody to reconfigure 51 that are already correct.
+  const eotp = JSON.stringify({
+    error: { code: 'EOTP', summary: 'This operation requires a one-time password.' },
+  })
+
+  it('reports a signed-out read as unauthenticated, not as empty', () => {
+    const answer = readTrust('@aglyn/aglyn', () => eotp)
+    assert.equal(answer.unauthenticated, true)
+    assert.equal(trustsThisWorkflow(answer.listing), false)
+  })
+
+  for (const code of ['ENEEDAUTH', 'E401']) {
+    it(`treats ${code} the same way`, () => {
+      const body = JSON.stringify({ error: { code, summary: code } })
+      assert.equal(readTrust('@aglyn/aglyn', () => body).unauthenticated, true)
+    })
+  }
+
+  it('a real error is NOT unauthenticated — it is a package that failed', () => {
+    const body = JSON.stringify({ error: { code: 'E404', summary: 'Not found' } })
+    const answer = readTrust('@aglyn/nope', () => body)
+    assert.notEqual(answer.unauthenticated, true)
+    assert.equal(answer.error, 'Not found')
+    assert.equal(trustsThisWorkflow(answer.listing), false)
+  })
+
+  it('finds this workflow in a real listing shape', () => {
+    const body = JSON.stringify([
+      {
+        id: 'tp_abc',
+        type: 'github',
+        claims: { repository: REPOSITORY, workflow_filename: WORKFLOW_FILE },
+        permissions: ['publish', 'stage-publish'],
+      },
+    ])
+    assert.equal(trustsThisWorkflow(readTrust('x', () => body).listing), true)
+  })
+
+  it('does not find it in a listing for another repository', () => {
+    const body = JSON.stringify([
+      {
+        id: 'tp_abc',
+        type: 'github',
+        claims: { repository: 'someone/else', workflow_filename: WORKFLOW_FILE },
+      },
+    ])
+    assert.equal(trustsThisWorkflow(readTrust('x', () => body).listing), false)
+  })
+
+  it('survives output that is not JSON at all', () => {
+    // An npm too old for `--json` on this subcommand, or a crash. The text
+    // is taken as the listing, and the claim match refuses anything that
+    // does not name both of them.
+    assert.equal(trustsThisWorkflow(readTrust('x', () => 'whatever').listing), false)
+    assert.equal(
+      trustsThisWorkflow(readTrust('x', () => `github ${REPOSITORY} ${WORKFLOW_FILE}`).listing),
+      true,
+    )
   })
 })

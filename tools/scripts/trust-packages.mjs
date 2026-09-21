@@ -45,12 +45,16 @@
 // ---------------------------------------------------------------------------
 // WHAT IT CANNOT DO
 // ---------------------------------------------------------------------------
-// ⛔ AN AGENT MUST NOT RUN `--set`. Adding a trusted publisher is a change to
-// the npm account's own security settings and npm challenges it with the
-// account's second factor. It runs in the OWNER'S terminal, under the owner's
-// login, and this script never sees or handles a credential — `npm trust` does
-// its own auth. The read-only default is the half an agent may run, and it
-// needs no login at all for the packages that are public.
+// ⛔ NEITHER MODE RUNS WITHOUT THE OWNER'S LOGIN, and `--set` is theirs
+// outright. `npm trust list` is not public: it answers `EOTP` to anyone who is
+// not signed in with the account's second factor, even for a public package.
+// And adding a trusted publisher is a change to the npm account's own security
+// settings, which an agent may not make at all. So this runs in the OWNER'S
+// terminal, under the owner's login, and never sees or handles a credential —
+// `npm trust` does its own auth, in their browser.
+//
+// A signed-out run says so rather than reporting all 51 as missing, which
+// would read as "nothing is configured" when the truth is "nobody asked".
 //
 // Exit codes: 0 every package trusts this workflow · 1 at least one does not
 // (or a `--set` failed), which is also what makes this usable as a check.
@@ -117,11 +121,41 @@ function npmVersion() {
   return execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim()
 }
 
-function listTrust(name) {
+/**
+ * What `name` trusts today, as text — or `{ unauthenticated: true }` when the
+ * registry asked for the account's second factor.
+ *
+ * `--json`, so a match is made against npm's own field values rather than
+ * against a table it renders for a person and may reformat. The error shape
+ * is JSON too, which is what makes "not signed in" tellable from "configured
+ * nothing" — and those two must never be confused: the second would send
+ * somebody to reconfigure 51 packages that are already correct.
+ */
+export function readTrust(name, run = npmTrustList) {
+  const raw = run(name)
+  let parsed
   try {
-    return execFileSync('npm', ['trust', 'list', name], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    parsed = JSON.parse(raw)
+  } catch {
+    // Not JSON at all: an npm too old for `--json` here, or a crash. Treat
+    // the text as the listing; `trustsThisWorkflow` refuses anything that
+    // does not name both claims.
+    return { listing: raw }
+  }
+  const code = parsed?.error?.code
+  if (code === 'EOTP' || code === 'ENEEDAUTH' || code === 'E401') {
+    return { unauthenticated: true, listing: '' }
+  }
+  if (parsed?.error) return { listing: '', error: parsed.error.summary ?? code ?? 'unknown' }
+  return { listing: JSON.stringify(parsed) }
+}
+
+function npmTrustList(name) {
+  try {
+    return execFileSync('npm', ['trust', 'list', name, '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   } catch (error) {
-    return `ERROR ${`${error.stderr ?? ''}${error.stdout ?? ''}`.trim() || error.message}`
+    // npm exits non-zero AND prints the JSON error body on stdout.
+    return `${error.stdout ?? ''}`.trim() || `${error.stderr ?? ''}`.trim() || '{}'
   }
 }
 
@@ -139,13 +173,23 @@ function main(argv) {
 
   const missing = []
   for (const name of names) {
-    const listing = listTrust(name)
-    if (trustsThisWorkflow(listing)) {
+    const answer = readTrust(name)
+    if (answer.unauthenticated) {
+      console.error('')
+      console.error('trust:packages: npm asked for this account\'s second factor, so nothing could be read.')
+      console.error('`npm trust list` is not public — it needs the owner signed in, even for a public package.')
+      console.error('')
+      console.error('  npm login          # approve in the browser it opens')
+      console.error('  npm run trust:packages')
+      console.error('')
+      return 1
+    }
+    if (trustsThisWorkflow(answer.listing)) {
       console.log(`  ok      ${name}`)
       continue
     }
     missing.push(name)
-    console.log(`  MISSING ${name}`)
+    console.log(`  MISSING ${name}${answer.error ? ` (${answer.error})` : ''}`)
   }
 
   if (!missing.length) {

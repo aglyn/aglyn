@@ -595,9 +595,13 @@ npm run trust:packages            # read only: what each package trusts today
 npm run trust:packages -- --set   # the owner configures the ones missing it
 ```
 
-`--set` is the account owner's to run: npm challenges it with the account's
-second factor, and an agent may not touch an account's security settings. It
-needs npm 11.15.0 or later, which is when `npm trust` arrived. It asks for
+**Both** modes need the owner signed in: `npm trust list` is not public —
+it answers `EOTP` to anyone without the account's second factor, even for a
+public package — and `--set` changes the account's own security settings,
+which an agent may not do at all. A signed-out run says so rather than
+reporting all 51 as missing. It needs npm 11.15.0 or later, which is when
+`npm trust` arrived; the repo's current npm is older, so `npm install -g
+npm@latest` comes first. It asks for
 **both** `--allow-publish` and `--allow-stage-publish`: a configuration created
 after 2026-09-03 permits staged publishing and nothing else unless publishing
 is asked for explicitly, so without the first flag every package would be
