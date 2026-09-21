@@ -16,7 +16,8 @@
  */
 
 /**
- * Which host subcollections the media usage scan reads (AGL-1867).
+ * The host subcollections CORE owns, and how the media usage scan reads them
+ * (AGL-1867, AGL-3080).
  *
  * ## Why this exists, and why it is shaped the way it is
  *
@@ -35,8 +36,8 @@
  * feared is only necessary if the default is NOT to scan. So the default here
  * is inverted:
  *
- * **Every host subcollection is scanned unless it is named below with a
- * reason it is not.**
+ * **Every host subcollection is scanned unless it is named with a reason it is
+ * not.**
  *
  * That turns the open question from "does this carry media?" — which needs a
  * judgement about a schema nobody wrote down — into "is scanning this wasteful
@@ -45,15 +46,27 @@
  * thought about is READ, so a plugin shipping a new media-bearing collection is
  * covered the day it lands rather than the day somebody remembers it.
  *
- * ## What keeps the list from rotting
+ * ## Core holds core's, and asks the plugins for theirs (AGL-3080)
+ *
+ * This file used to hold every collection in the product: which ones commerce
+ * writes, which ones marketing writes, and which console page each deep-links
+ * to. That is the platform keeping a map of its plugins' storage, and the map
+ * went stale exactly where a stale map is invisible — three of its deep links
+ * pointed at a hub that did not hold the document, and nothing could tell.
+ *
+ * So a plugin declares its own collections in `plugins.config.json` and the
+ * readers ask `plugin-manager/plugin-host-collections`. What is left here is
+ * core's own storage, which is the only part core is entitled to name.
+ *
+ * ## What keeps these lists from rotting
  *
  * `host-content-media-coverage.spec.ts` sweeps `apps/**` and `libs/**` for host
  * subcollection names — the same derived sweep
  * `host-subcollection-write-deny-coverage.spec.ts` uses, for the same reason —
- * and asserts {@link PLUGIN_CONTENT_COLLECTIONS} is EXACTLY that sweep minus
- * {@link CORE_CONTENT_COLLECTIONS} minus {@link MEDIA_SCAN_EXCLUDED}. A new
- * collection fails the build with a one-line decision to make, and the default
- * answer — add it to the scanned list — is also the safe one.
+ * and asserts the sweep is EXACTLY these three lists plus the plugins'
+ * declarations. A new collection fails the build with a one-line decision to
+ * make, and the default answer — declare it scanned, on the plugin that writes
+ * it — is also the safe one.
  *
  * ## The plugin boundary was NOT crossed to do this
  *
@@ -95,32 +108,46 @@ export const CORE_CONTENT_COLLECTIONS = [
 ] as const
 
 /**
- * Host subcollections deliberately NOT read by the media scan, and why.
+ * Core's own host subcollections that the scan reads generically.
+ *
+ * Generically: no per-collection field list and no per-collection decoder.
+ * Each document is flattened by `documentHaystack` — which decodes `nodes` and
+ * `elements` through `decodeStoredNodes` first — and the matching field's
+ * dotted path is recovered by walking the document. A field list here would be
+ * the same staleness trap `referencingFieldPath` was written to avoid one
+ * level down.
+ *
+ * Short because it is only core's: a blog author, the per-plugin settings
+ * document the plugin manager owns, and a site template. Everything else that
+ * is scanned generically belongs to a plugin and is declared by it.
+ */
+export const CORE_GENERIC_SCAN_COLLECTIONS = [
+  'authors',
+  'pluginSettings',
+  'templates',
+] as const
+
+/**
+ * Core's own host subcollections that the media scan deliberately does NOT
+ * read, and why.
  *
  * Every entry has to answer one of two questions: what would scanning it cost,
  * or what would scanning it get wrong. "It probably has no images in it" is not
  * an accepted reason — that is the guess this file is arranged to avoid making.
+ * A plugin's exclusions carry the same burden and live in its own declaration,
+ * where `mediaScanReason` is required with `mediaScan: 'none'`.
  */
 export const MEDIA_SCAN_EXCLUDED: Record<string, string> = {
-  // ── Scanning these would be WRONG, not merely expensive ────────────────
   media:
-    'The library itself. The asset under audit IS a document in here, and its ' +
-    'own record holds its own url, cdnPath and storage path — every needle ' +
-    'the scan carries. Reading this collection would report every asset as ' +
-    'referencing itself, which turns a deletion-safety control into noise ' +
-    'that nobody reads.',
+    'The library itself. The asset under audit IS a document in here, and ' +
+    'its own record holds its own url, cdnPath and storage path — every ' +
+    'needle the scan carries. Reading this collection would report every ' +
+    'asset as referencing itself, which turns a deletion-safety control into ' +
+    'noise that nobody reads.',
   mediaFolders:
     'Folder records: a name, a parent pointer and a scope. A folder never ' +
     'holds an asset reference, and it is not a dependent either — deleting a ' +
     'file does not break the folder it sat in.',
-  emailCampaigns:
-    'The campaign CONTAINER — a name, a date window, the list ids it is ' +
-    'aimed at and a topic. Distinct from `campaigns`, which holds the sends ' +
-    'and IS scanned because a send carries the copy that went out. A ' +
-    'container carries no copy and no asset reference: the design a send ' +
-    'renders is a screen, and the screen is where the picker writes.',
-
-  // ── Machine-written telemetry: unbounded, and no author picks into it ──
   analytics:
     'Per-day traffic rollups written by the tenant collector. One document ' +
     'per day per site forever, no author-editable field, and no surface that ' +
@@ -135,160 +162,11 @@ export const MEDIA_SCAN_EXCLUDED: Record<string, string> = {
     'The site activity feed — an append-only audit log the console writes a ' +
     'row into on every change. Unbounded by design, and a row that quotes an ' +
     'asset id is a record that somebody touched it, not a place it is used.',
-
-  // ── Transaction and ledger rows: unbounded, and a SNAPSHOT is not a use ─
-  orders:
-    'Completed orders. Line items COPY a product\'s `imageUrl` at purchase ' +
-    'time, so these would match — and matching would be the wrong answer: an ' +
-    'order is an immutable record of what was sold, deleting the asset ' +
-    'changes nothing about it, and no author can edit one. A busy store also ' +
-    'holds more of these than the whole read budget.',
-  carts:
-    'Live and abandoned carts, with the same copied line-item image and the ' +
-    'same reasoning, at higher volume — one document per shopper session.',
-  checkouts:
-    'In-flight checkout sessions. Transient buyer state carrying the same ' +
-    'line-item snapshot as `carts`.',
-  formSubmissions:
-    'Visitor form submissions. Unbounded, PII-heavy, and a file attached to ' +
-    'one is the visitor\'s upload — not a library asset an author picked, and ' +
-    'not something deleting a library asset would break.',
-  leads:
-    'Captured leads, on the same footing as `formSubmissions`: visitor-' +
-    'submitted, unbounded, and never a place an author places an asset.',
-  bookings:
-    'Booking records — a customer, a time and a service pointer. The service ' +
-    'holds the imagery and IS scanned; a booking is the transaction against ' +
-    'it.',
-  campaignAttributions:
-    'One row per conversion — a form submission, a lead, a contact or a ' +
-    'booking — recording which campaign the visitor arrived from. Written ' +
-    'only by the Admin SDK, and the whole record is three sanitized UTM ' +
-    'strings capped at a hundred characters: there is no field an asset ' +
-    'could occupy and no surface that could pick one into it. Unbounded on ' +
-    'the same footing as the conversions it credits.',
-  reservations:
-    'POS and booking holds. Short-lived transaction rows pointing at a ' +
-    'resource that is itself scanned.',
-  stockHolds:
-    'Inventory holds taken during checkout. Machine-written, short-lived, ' +
-    'and a quantity rather than content.',
-  subscriptions:
-    'Site membership subscriptions: a plan pointer, a status and Stripe ' +
-    'ids. Server-written from the billing webhook.',
-  registers:
-    'POS register allocations — a count against the register add-on, read by ' +
-    'billing (AGL-1775). No content field at all.',
-  giftCards:
-    'Gift card balances and redemption history. Money, not content.',
-  licenseKeys:
-    'Digital-product license keys issued at fulfilment: a code, an order ' +
-    'pointer and a revocation flag.',
-  inventoryAdjustments:
-    'The append-only stock adjustment ledger (AGL-2269). One row per manual ' +
-    'stock edit and per cancellation release, unbounded over a store\'s life.',
-  inventoryReconciliation:
-    'Reconciliation runs comparing counted stock against recorded stock. ' +
-    'Machine-written totals.',
-  restockAlerts:
-    'Back-in-stock requests: an email address and a product pointer, written ' +
-    'by visitors.',
-  suppressions:
-    'Unsubscribes, bounces and spam complaints. Email addresses and a ' +
-    'reason.',
-  stripeTaxRates:
-    'Cached Stripe tax rate ids, written by the tax sync. Vendor ids.',
   members:
     'The ORG-facing member roster mirrored onto the site, server-owned ' +
     '(AGL-1367). A member\'s photo is their own account photo, uploaded ' +
     'through /api/account/photo and stored outside any site\'s library, so it ' +
     'is not an asset this scan can be asked about.',
-}
-
-/**
- * Host subcollections the media scan reads generically.
- *
- * Generically: no per-collection field list and no per-collection decoder.
- * Each document is flattened by `documentHaystack` — which decodes `nodes` and
- * `elements` through `decodeStoredNodes` first, so a plugin that adopts the
- * compressed storage form is covered without touching this file — and the
- * matching field's dotted path is recovered by walking the document. A field
- * list here would be the same staleness trap `referencingFieldPath` was written
- * to avoid one level down.
- *
- * MUST equal the repo-wide host subcollection sweep minus
- * {@link CORE_CONTENT_COLLECTIONS} minus {@link MEDIA_SCAN_EXCLUDED}. The guard
- * spec asserts exactly that, in both directions, so this list can neither miss
- * a new collection nor keep naming a deleted one.
- */
-export const PLUGIN_CONTENT_COLLECTIONS = [
-  'actions',
-  'authors',
-  'campaigns',
-  'coupons',
-  'discounts',
-  'events',
-  'experiments',
-  'forms',
-  'functions',
-  'installs',
-  'locations',
-  'memberPosts',
-  'overlays',
-  'pluginSettings',
-  'productCategories',
-  'products',
-  'redirects',
-  'resources',
-  'reviews',
-  'services',
-  'settings',
-  'siteMembers',
-  'suppliers',
-  'templates',
-  'variables',
-  'webhooks',
-  'workflows',
-] as const
-
-export type PluginContentCollection =
-  (typeof PLUGIN_CONTENT_COLLECTIONS)[number]
-
-/**
- * Console page slug a plugin-content reference row deep-links to.
- *
- * Optional on purpose, and deliberately not required for a collection to be
- * scanned. A row with no destination still renders — as text rather than a
- * link — and that is strictly better than the row not existing, which is the
- * bug this issue is about. Requiring a slug would have made the deep link a
- * precondition for coverage and quietly re-created the hole for every
- * collection nobody had got round to routing.
- *
- * Keyed by collection, valued with the `[pluginSlug]` segment of
- * `Route.HOST_PLUGIN`.
- */
-export const PLUGIN_CONTENT_ROUTE_SLUG: Partial<
-  Record<PluginContentCollection, string>
-> = {
-  products: 'products',
-  productCategories: 'products',
-  suppliers: 'products',
-  locations: 'products',
-  coupons: 'products',
-  discounts: 'products',
-  reviews: 'products',
-  memberPosts: 'products',
-  events: 'events',
-  services: 'bookings',
-  resources: 'bookings',
-  redirects: 'redirects',
-  campaigns: 'marketing',
-  experiments: 'marketing',
-  workflows: 'workflows',
-  webhooks: 'workflows',
-  functions: 'logic',
-  variables: 'logic',
-  actions: 'logic',
 }
 
 /**
@@ -299,6 +177,9 @@ export const PLUGIN_CONTENT_ROUTE_SLUG: Partial<
  * `productCategories` reads as "Product category". Singularised with the two
  * rules English spells consistently enough to be worth automating; anything
  * else keeps its name, which is a cosmetic miss rather than a coverage one.
+ *
+ * Shared with `pluginHostCollectionLabel`, which prefers a plugin's declared
+ * label and falls back to exactly this.
  */
 export function hostContentCollectionLabel(collection: string): string {
   const singular = /ies$/.test(collection)

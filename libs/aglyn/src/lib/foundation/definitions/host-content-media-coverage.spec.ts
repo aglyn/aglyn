@@ -17,7 +17,8 @@
 
 /**
  * The media usage scan's corpus is DERIVED from the repo, not remembered
- * (AGL-1867).
+ * (AGL-1867), and every collection in it is named by whoever owns it
+ * (AGL-3080).
  *
  * `scanMediaReferences` is what an author consults immediately before deleting
  * an asset, and every way it can be wrong points at "unused" — a document it
@@ -30,12 +31,12 @@
  * path shapes, that `host-subcollection-write-deny-coverage.spec.ts` uses to
  * keep the Firestore rules honest — and asserts:
  *
- *     PLUGIN_CONTENT_COLLECTIONS === sweep − CORE_CONTENT_COLLECTIONS
- *                                         − MEDIA_SCAN_EXCLUDED
+ *     scanned generically === sweep − CORE_CONTENT_COLLECTIONS − excluded
  *
- * in BOTH directions. A plugin that adds a host subcollection fails the build
- * with one decision to make, and the default answer — scan it — is also the
- * safe one. A collection that goes away fails the build too, so the corpus
+ * in BOTH directions, where each side is now composed of core's own names and
+ * the plugins' declarations. A plugin that adds a host subcollection fails the
+ * build with one decision to make, and the default answer — scan it — is also
+ * the safe one. A collection that goes away fails the build too, so the corpus
  * cannot keep naming documents nobody writes any more.
  *
  * ## Why the equality is exact rather than a subset check
@@ -47,10 +48,31 @@
  * is what makes the third state — "somebody looked at this and wrote down why
  * not" — the only way a collection can be outside the corpus.
  *
- * FORCED RED, both directions, and both were run before this was committed:
- * delete `'products'` from `PLUGIN_CONTENT_COLLECTIONS` and the first case
- * fails naming it; add `'products'` to `MEDIA_SCAN_EXCLUDED` and it fails
- * naming it as double-classified.
+ * ## What moving the lists onto the plugins does not change
+ *
+ * The equality above is the same equality, and it is asserted over the same
+ * sweep. What changed is where the answer is written: core holds its own three
+ * lists, each plugin holds its own, and this spec adds the one question the
+ * split makes possible — that no collection is claimed twice, by two plugins
+ * or by a plugin and core.
+ *
+ * FORCED RED, and each of these was run before this was committed: drop
+ * `products` from commerce's `hostCollections` and the coverage case fails
+ * naming `hosts/{hostId}/products`; declare `counters` — which core owns — on
+ * the CRM and the ownership case fails naming it; declare `products` on a
+ * second plugin and the generator refuses to write the manifest at all,
+ * naming both claimants.
+ *
+ * ## What this guard does NOT catch, stated so nobody trusts it to
+ *
+ * A FALSE exclusion. `mediaScan: "none"` with a plausible sixty-character
+ * reason passes every case here, because no test can tell a true account of
+ * what scanning would cost from a convincing one. That was equally true of
+ * the hand-kept list this replaced, and the control is the same: the reason
+ * is written down, in a reviewed file, next to the plugin that would benefit
+ * from the shortcut. The teeth here are on the failures a person cannot see —
+ * a collection nobody classified, one nobody writes any more, one classified
+ * twice, and one claimed by two owners.
  */
 
 import { readFileSync, readdirSync } from 'fs'
@@ -58,11 +80,16 @@ import type { Dirent } from 'fs'
 import { join, resolve } from 'path'
 
 import {
+  listPluginHostCollections,
+  pluginHostCollectionLabel,
+  pluginHostCollectionsExcludedFromMediaScan,
+  pluginHostCollectionsScannedGenerically,
+} from '../../plugin-manager/plugin-host-collections'
+import {
   CORE_CONTENT_COLLECTIONS,
+  CORE_GENERIC_SCAN_COLLECTIONS,
   hostContentCollectionLabel,
   MEDIA_SCAN_EXCLUDED,
-  PLUGIN_CONTENT_COLLECTIONS,
-  PLUGIN_CONTENT_ROUTE_SLUG,
 } from './host-content-collections'
 
 const REPO_ROOT = resolve(__dirname, '../../../../../..')
@@ -133,6 +160,27 @@ const hostSubcollectionsInRepo = (() => {
   return [...found].sort()
 })()
 
+/** Every collection the scan reads generically: core's own, then the plugins'. */
+const scannedGenerically = [
+  ...CORE_GENERIC_SCAN_COLLECTIONS,
+  ...pluginHostCollectionsScannedGenerically(),
+]
+
+/** Every collection deliberately not read, with the reason and who gave it. */
+const excluded: Array<{ name: string; reason: string; by: string }> = [
+  ...Object.entries(MEDIA_SCAN_EXCLUDED).map(([name, reason]) => ({
+    name,
+    reason,
+    by: 'core',
+  })),
+  ...pluginHostCollectionsExcludedFromMediaScan().map((one) => ({
+    name: one.name,
+    reason: one.reason,
+    by: one.pluginId,
+  })),
+]
+const excludedNames = new Set(excluded.map((one) => one.name))
+
 describe('the media usage corpus is derived from the repo (AGL-1867)', () => {
   it('sweeps a plausible set of host subcollections off the source tree', () => {
     // The floor, and the reason it is first. A regex that stopped matching
@@ -151,15 +199,26 @@ describe('the media usage corpus is derived from the repo (AGL-1867)', () => {
     )
   })
 
+  it('reads the plugins\' own declarations, not an empty registry', () => {
+    // The floor for the half that moved. The declarations are COMPILED from
+    // plugins.config.json precisely so this list is never empty in a process
+    // that loaded no plugin — and if that ever stops being true, every
+    // assertion below starts comparing core's three names against a sweep of
+    // sixty and fails loudly rather than passing vacuously. This case is here
+    // to say which failure it is.
+    expect(listPluginHostCollections().length).toBeGreaterThanOrEqual(40)
+    expect(listPluginHostCollections().map((one) => one.name)).toEqual(
+      expect.arrayContaining(['products', 'campaigns', 'services', 'orders']),
+    )
+  })
+
   it('scans every host subcollection that is not core or excluded', () => {
     const shouldScan = hostSubcollectionsInRepo.filter(
       (name) =>
         !(CORE_CONTENT_COLLECTIONS as readonly string[]).includes(name) &&
-        !(name in MEDIA_SCAN_EXCLUDED),
+        !excludedNames.has(name),
     )
-    const missing = shouldScan.filter(
-      (name) => !(PLUGIN_CONTENT_COLLECTIONS as readonly string[]).includes(name),
-    )
+    const missing = shouldScan.filter((name) => !scannedGenerically.includes(name))
     if (missing.length > 0) {
       throw new Error(
         `These host subcollections exist in the codebase and the media usage ` +
@@ -170,25 +229,25 @@ describe('the media usage corpus is derived from the repo (AGL-1867)', () => {
           `list — indistinguishable from "nothing uses this". AGL-1867 was ` +
           `exactly this for \`products\`: a photo used only on a product ` +
           `reported as unused, and the author was invited to delete it.\n\n` +
-          `Decide, on this commit, in ` +
-          `libs/aglyn/src/lib/foundation/definitions/host-content-collections.ts:\n` +
-          `  • scanned — add the name to PLUGIN_CONTENT_COLLECTIONS. This is ` +
-          `the DEFAULT and the safe answer: the scan reads documents ` +
-          `generically, so it needs no field list and no schema knowledge, ` +
-          `and optionally a PLUGIN_CONTENT_ROUTE_SLUG entry so the row deep-` +
-          `links somewhere;\n` +
-          `  • not scanned — add it to MEDIA_SCAN_EXCLUDED with a reason ` +
-          `saying what scanning it would COST or what it would get WRONG. ` +
-          `"It probably has no images in it" is not a reason — that guess is ` +
-          `the whole failure this guard exists to stop.`,
+          `Decide, on this commit, in the "hostCollections" block of the ` +
+          `plugin that writes it in plugins.config.json — or, if core writes ` +
+          `it, in host-content-collections.ts:\n` +
+          `  • scanned — name it, and nothing else. This is the DEFAULT and ` +
+          `the safe answer: the scan reads documents generically, so it needs ` +
+          `no field list and no schema knowledge. Add "routeSlug" (one of ` +
+          `that plugin's own console routes) so the row deep-links somewhere;\n` +
+          `  • not scanned — add "mediaScan": "none" with a ` +
+          `"mediaScanReason" saying what scanning it would COST or what it ` +
+          `would get WRONG. "It probably has no images in it" is not a ` +
+          `reason — that guess is the whole failure this guard exists to stop.`,
       )
     }
   })
 
   it('names no collection the repo has stopped using', () => {
     const stale = [
-      ...PLUGIN_CONTENT_COLLECTIONS,
-      ...Object.keys(MEDIA_SCAN_EXCLUDED),
+      ...scannedGenerically,
+      ...excludedNames,
       ...CORE_CONTENT_COLLECTIONS,
     ].filter((name) => !hostSubcollectionsInRepo.includes(name))
     // A corpus entry for a collection nothing writes is a per-host query per
@@ -199,45 +258,70 @@ describe('the media usage corpus is derived from the repo (AGL-1867)', () => {
   })
 
   it('classifies each collection exactly once', () => {
-    for (const name of PLUGIN_CONTENT_COLLECTIONS) {
+    for (const name of scannedGenerically) {
       // Scanned AND excluded is a contradiction, and the runtime would resolve
       // it silently in whichever direction the code happened to check first.
-      expect([name, name in MEDIA_SCAN_EXCLUDED]).toEqual([name, false])
+      expect([name, excludedNames.has(name)]).toEqual([name, false])
       expect([
         name,
         (CORE_CONTENT_COLLECTIONS as readonly string[]).includes(name),
       ]).toEqual([name, false])
     }
     for (const name of CORE_CONTENT_COLLECTIONS) {
-      expect([name, name in MEDIA_SCAN_EXCLUDED]).toEqual([name, false])
+      expect([name, excludedNames.has(name)]).toEqual([name, false])
     }
-    expect(new Set(PLUGIN_CONTENT_COLLECTIONS).size).toBe(
-      PLUGIN_CONTENT_COLLECTIONS.length,
-    )
+    expect(new Set(scannedGenerically).size).toBe(scannedGenerically.length)
+  })
+
+  it('gives every collection exactly one owner', () => {
+    // The split's own failure mode. Two plugins writing one collection under
+    // one site would be two schemas in one place, and the scan, the deep link
+    // and the artifact counters would each pick a winner by declaration order.
+    const declared = listPluginHostCollections()
+    const owners = new Map<string, string[]>()
+    for (const one of declared) {
+      owners.set(one.name, [...(owners.get(one.name) ?? []), one.pluginId])
+    }
+    expect(
+      [...owners.entries()]
+        .filter(([, holders]) => holders.length > 1)
+        .map(([name, holders]) => `${name}: ${holders.join(', ')}`),
+    ).toEqual([])
+    // And core does not name what a plugin owns — the whole point of the move.
+    const coreNames = [
+      ...CORE_CONTENT_COLLECTIONS,
+      ...CORE_GENERIC_SCAN_COLLECTIONS,
+      ...Object.keys(MEDIA_SCAN_EXCLUDED),
+    ]
+    expect(coreNames.filter((name) => owners.has(name))).toEqual([])
   })
 
   it('makes every exclusion say what it costs or what it gets wrong', () => {
-    for (const [name, reason] of Object.entries(MEDIA_SCAN_EXCLUDED)) {
+    for (const { name, reason, by } of excluded) {
       // Length is a crude proxy and it is the honest one available: the entries
       // that rot are the ones somebody added in a hurry, and a one-liner is
       // what that looks like.
-      expect([name, reason.length > 60]).toEqual([name, true])
+      expect([`${by}/${name}`, reason.length > 60]).toEqual([`${by}/${name}`, true])
     }
   })
 
   it('routes plugin rows only to collections it actually scans', () => {
-    for (const collection of Object.keys(PLUGIN_CONTENT_ROUTE_SLUG)) {
-      expect([
-        collection,
-        (PLUGIN_CONTENT_COLLECTIONS as readonly string[]).includes(collection),
-      ]).toEqual([collection, true])
+    for (const one of listPluginHostCollections()) {
+      if (!one.routeSlug) continue
+      expect([one.name, scannedGenerically.includes(one.name)]).toEqual([
+        one.name,
+        true,
+      ])
     }
     // The known gap is deliberate and stated: a scanned collection with no
     // slug still produces a ROW, it just renders as text. Coverage never waits
     // on a deep link.
     expect(
-      PLUGIN_CONTENT_COLLECTIONS.filter(
-        (name) => !(name in PLUGIN_CONTENT_ROUTE_SLUG),
+      scannedGenerically.filter(
+        (name) =>
+          !listPluginHostCollections().some(
+            (one) => one.name === name && one.routeSlug,
+          ),
       ).length,
     ).toBeGreaterThan(0)
   })
@@ -248,12 +332,15 @@ describe('the media usage corpus is derived from the repo (AGL-1867)', () => {
       'Product category',
     )
     expect(hostContentCollectionLabel('memberPosts')).toBe('Member post')
+    // A plugin may say it better than the derivation can: `settings` derives
+    // to "Setting", which tells an author nothing about which settings.
     expect(hostContentCollectionLabel('settings')).toBe('Setting')
+    expect(pluginHostCollectionLabel('settings')).toBe('Store settings')
     // Never the raw camelCase id, for any scanned collection — a "where is
     // this used" row that says `productCategories` is the one thing such a
     // list must not do.
-    for (const name of PLUGIN_CONTENT_COLLECTIONS) {
-      const label = hostContentCollectionLabel(name)
+    for (const name of scannedGenerically) {
+      const label = pluginHostCollectionLabel(name)
       expect([name, label]).not.toEqual([name, name])
       expect([name, /[A-Z]/.test(label.slice(1))]).toEqual([name, false])
     }

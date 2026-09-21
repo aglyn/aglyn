@@ -1730,16 +1730,6 @@
       "why": "One postal-address shape (AGL-1133); generic despite the name, and no CRM vocabulary is in it."
     },
     {
-      "path": "libs/aglyn/src/lib/foundation/definitions/host-content-collections.ts",
-      "rules": [
-        "plugin-id",
-        "domain-declares:commerce",
-        "domain-declares:forms",
-        "domain-declares:marketing"
-      ],
-      "lane": "plugin-id"
-    },
-    {
       "path": "libs/aglyn/src/lib/foundation/definitions/org-billing.types.ts",
       "rules": [
         "domain-declares:ai",
