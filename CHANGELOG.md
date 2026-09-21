@@ -11,12 +11,18 @@ content on the marketing site and is written separately.
 
 ## v1.0.0-beta.152 — 2026-09-21
 
-[Compare with the previous release](https://github.com/aglyn/aglyn/compare/5978c53eb...v1.0.0-beta.152)
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.151...v1.0.0-beta.152)
+
+### Added
+
+- **marketplace:** the marketplace decides what to sign, the shell signs it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 
 ### Fixed
 
+- **console:** the permission provider re-reads when a plugin registers a key, so a cold load of a plugin deep link no longer refuses its owner ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
 - **outreach:** the footer says "sales email", not "business solicitation" ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
-- **outreach:** the OAuth redirect falls back to the production console, and availability names its gate ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
+- **outreach:** the OAuth redirect falls back to the production console, and availability names its gate; the fallback is an argued row in the self-host ratchet ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
+- **tools:** the spelling census sweeps plugin consoles too ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 - **ai:** every copying step claims its copy, so a second pass replays it ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024), [AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
 
 ### Changed
