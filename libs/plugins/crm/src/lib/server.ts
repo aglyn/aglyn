@@ -81,6 +81,7 @@ import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refus
 import { captureHostContact, emitHostEvent } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
 import { CRM_API_ROUTES } from './constants/api-routes'
+import { registerCrmServerDeclarations } from './declarations.server'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { CRM_NEXT_ACTIVITY_ROUTE } from './model/next-activity'
 import { CRM_TASK_ROUTES } from './model/task-routes'
@@ -553,6 +554,13 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
 
 /** Console API registration, named in `plugins.config.json` as `consoleApi`. */
 export function registerCrmConsoleApi(): void {
+  /*
+   * The contact-capture writer, again (AGL-3080). Both apps run it at boot
+   * from their generated server-declarations manifest, and this is the
+   * backstop for a process whose boot did not: the first CRM door to load
+   * registers it. Registering twice replaces in place.
+   */
+  registerCrmServerDeclarations()
   registerPluginApiRoute(CRM_API_ROUTES.ping, crmPingHandler)
   registerPluginApiRoute(CRM_API_ROUTES.contactStage, contactStageHandler)
   // Every other console write to a contact's facets (AGL-2804): the rules

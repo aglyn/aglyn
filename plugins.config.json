@@ -280,7 +280,8 @@
       "package": "@aglyn/plugins-crm",
       "register": {
         "console": "registerCrmConsole",
-        "consoleApi": "registerCrmConsoleApi"
+        "consoleApi": "registerCrmConsoleApi",
+        "serverDeclarations": "registerCrmServerDeclarations"
       },
       "apiPrefixes": [
         "crm"
