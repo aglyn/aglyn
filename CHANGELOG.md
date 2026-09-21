@@ -9,6 +9,38 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.148 — 2026-09-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.147...v1.0.0-beta.148)
+
+### Added
+
+- **ai:** a template's plan promises binding tokens, and the build is held to them ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143), [AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+- **plugins:** a plugin backs the capacity it sells, and core counts it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
+- **plugins:** the plugin that writes a collection is the one that declares it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-3124](https://linear.app/aglyn/issue/AGL-3124), [AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
+- **crm:** the CRM is the plugin that keeps people, from boot ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-3124](https://linear.app/aglyn/issue/AGL-3124), [AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
+- **tools:** both dist-tags are set by CI, and the token does only that ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **tools:** a prerelease takes `latest` until a real release exists ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+
+### Fixed
+
+- **ai:** the per-member AI usage read asks months by id, not by a missing index ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+- **ai:** the template dialog says its subject is required ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143), [AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+- **ai:** a paid section is told how to repeat an item, not just how many elements ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143), [AGL-3070](https://linear.app/aglyn/issue/AGL-3070), [AGL-3053](https://linear.app/aglyn/issue/AGL-3053), [AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+- **tools:** the upload-CORS derivation reads every page of domains ([AGL-3220](https://linear.app/aglyn/issue/AGL-3220), [AGL-1408](https://linear.app/aglyn/issue/AGL-1408))
+- **tenant:** the pager fixtures carry the cursors the type now requires ([AGL-3219](https://linear.app/aglyn/issue/AGL-3219))
+- **tenant:** a listing pages by cursor, so its seam cannot drift ([AGL-3219](https://linear.app/aglyn/issue/AGL-3219), [AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-3213](https://linear.app/aglyn/issue/AGL-3213))
+- **tools:** a lagging registry is not a package to skip ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **tools:** the write probe leaves nothing to clean up ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **changelog:** `shared-ui` is UI components, not "Shared ui" ([AGL-3212](https://linear.app/aglyn/issue/AGL-3212))
+- **besigner:** the JSS (sx) tab names the second sx record ([AGL-3218](https://linear.app/aglyn/issue/AGL-3218), [AGL-1346](https://linear.app/aglyn/issue/AGL-1346))
+
+### Documentation
+
+- the backup's retirement test is git cherry, not a range ([AGL-3221](https://linear.app/aglyn/issue/AGL-3221))
+- the realignment backup branch is retired, not kept ([AGL-3221](https://linear.app/aglyn/issue/AGL-3221))
+- a second upload is the bug replace-in-place exists to prevent ([AGL-3216](https://linear.app/aglyn/issue/AGL-3216))
+
 ## v1.0.0-beta.147 — 2026-09-21
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.146...v1.0.0-beta.147)
