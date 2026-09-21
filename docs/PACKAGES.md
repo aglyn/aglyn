@@ -624,14 +624,33 @@ replaced was granular with the 2FA bypass and expired 2026-12-19; npm removes
 direct publishing with those in **January 2027**. A secret that does not exist
 cannot expire, leak, or be rotated into a broken release.
 
-### `latest` has to be moved by hand until 1.0.0
+### `latest`, until 1.0.0 exists
 
-`publish-packages.mjs` puts a prerelease under its own label (`beta`) and never
-`latest`, so a beta is not what `npm install` hands somebody who asked for
-nothing in particular. That rule assumes `latest` points at a release worth
-having, and it does not: **npm sets `latest` on a package's FIRST publish
-whatever `--tag` says**, so all 50 libs pinned it to `1.0.0-beta.143` — the one
-build whose folder-subpath imports a consumer cannot resolve at all.
+A prerelease normally publishes under its own label (`beta`) so it is not what
+`npm install` hands somebody who asked for nothing in particular. That rule
+assumes `latest` already points at a release worth having.
+
+**It did not.** npm sets `latest` on a package's FIRST publish whatever `--tag`
+says, so all 50 libs pinned it to `1.0.0-beta.143` — the one build whose
+folder-subpath imports a consumer cannot resolve at all — and every later beta
+went to `beta`, so `latest` never moved again.
+
+So `distTagFor` asks the registry: **a prerelease takes `latest` when that
+package has never published a non-prerelease**, and its own label once one
+exists. Between "the default is a prerelease" and "the default does not work",
+the first is the lesser harm, and it is only ever the newest prerelease. The
+condition is per package and read fresh, so it corrects itself the day `1.0.0`
+ships — nothing to remember, nothing to undo. `@aglyn/cli` carries its own
+stable number and is unaffected.
+
+⛔ **It cannot be done by moving the tag afterwards.** An OIDC token authorizes
+`npm publish` and `npm stage publish` and nothing else, so a `npm dist-tag add`
+step would need back the long-lived token trusted publishing exists to retire.
+The tag is chosen at publish time because that is the only moment CI may
+choose it.
+
+For a gap already on the registry — versions published before this rule — the
+tag is moved by hand:
 
 ```sh
 npm run dist-tag:latest            # read only: what each tag says
@@ -639,9 +658,9 @@ npm run dist-tag:latest -- --set   # the owner moves the ones behind
 ```
 
 It targets the version the repo carries, skips a package that version was never
-published for (`@aglyn/cli` keeps its own number), and is the owner's to run —
-it changes what every `npm install` of these packages hands out. When a
-non-prerelease ships it sets `latest` itself and this stops having a job.
+published for, and is the owner's to run: it changes what every `npm install`
+of these packages hands out, and npm challenges it with the account's second
+factor.
 
 ⛔ **`createPackage` is not the same as being configured**, and the check knows
 the difference. A row created after 2026-09-03 carries `createStagedPackage`
