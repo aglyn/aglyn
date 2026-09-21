@@ -9,6 +9,28 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.144 — 2026-09-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.143...v1.0.0-beta.144)
+
+### Added
+
+- **marketing:** pour a product page through Firestore, since the canvas is out of reach ([AGL-2920](https://linear.app/aglyn/issue/AGL-2920), [AGL-1227](https://linear.app/aglyn/issue/AGL-1227), [AGL-1233](https://linear.app/aglyn/issue/AGL-1233))
+- **tenant:** a scheduled post can be read on the live site ([AGL-3205](https://linear.app/aglyn/issue/AGL-3205))
+- **release:** every lib publishes to npm on a promotion ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **pricing:** Starter includes 750 AI credits, sold past at $3.00/1k ([AGL-3203](https://linear.app/aglyn/issue/AGL-3203), [AGL-2925](https://linear.app/aglyn/issue/AGL-2925), [AGL-3014](https://linear.app/aglyn/issue/AGL-3014))
+
+### Fixed
+
+- **release:** the first publish, and what it showed ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **console:** the Published column sorts on the date it shows ([AGL-3206](https://linear.app/aglyn/issue/AGL-3206))
+- **guards:** an icon named inbox is a drawing, not the Inbox plugin ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **console:** preview renders the stored document, not only the besigner's snapshot ([AGL-3204](https://linear.app/aglyn/issue/AGL-3204), [AGL-1203](https://linear.app/aglyn/issue/AGL-1203), [AGL-2551](https://linear.app/aglyn/issue/AGL-2551), [AGL-680](https://linear.app/aglyn/issue/AGL-680), [AGL-703](https://linear.app/aglyn/issue/AGL-703), [AGL-1021](https://linear.app/aglyn/issue/AGL-1021), [AGL-1261](https://linear.app/aglyn/issue/AGL-1261))
+
+### Documentation
+
+- **libs:** every package has a README a stranger can use ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+
 ## v1.0.0-beta.143 — 2026-09-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.142...v1.0.0-beta.143)
