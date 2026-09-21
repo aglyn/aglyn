@@ -26,6 +26,10 @@ import {
   composeExtensionEntitlements,
   resolveExtensionEntitlement,
 } from './extension-entitlement'
+import {
+  resolveExtensionPermission,
+  type PermissionAnswers,
+} from './extension-permission'
 
 /**
  * The release flag a nav tab id names, if any — the gate the nav strip
@@ -54,6 +58,19 @@ export interface HubSectionVerdicts {
    * refuses it.
    */
   featureFlag?: keyof OrgFeatureFlags
+  /**
+   * Where a section's own `permission` key is looked up (AGL-3080) — the
+   * shell's `useOrgPermissions()`, passed whole because the two key spaces
+   * are answered separately and `loaded` is what tells `pending` from
+   * `refused`.
+   *
+   * Omitted, every section resolves as it did before this gate existed: the
+   * hubs that declare no section permission are unaffected, and a caller
+   * that forgets to pass it cannot silently OPEN a gated section — a
+   * declared key with no answers to check it against is `pending`, which
+   * hides the section rather than offering it.
+   */
+  permission?: PermissionAnswers
 }
 
 /**
@@ -72,6 +89,14 @@ export interface HubSectionVerdicts {
  * page body composes them — `blocked`, never `pending`, so an unsettled org
  * draws no lock, the same three-state care the page body takes. Staff draw
  * the locks a member draws: the plan is a fact about the workspace.
+ *
+ * The third gate is the section's own `permission` (AGL-3080), and it is the
+ * one gate that SUBTRACTS the tab rather than locking it: a plan is something
+ * the workspace can buy and a permission is not, so a locked-looking tab
+ * would send a member to Billing to fix a thing only an owner can grant.
+ * `refused` carries the reason out, so a deep link into a hidden section is
+ * answered with the refusal that applies rather than with the release flag's
+ * "coming soon".
  */
 export function resolveHubSections(
   sections: readonly ConsoleNavSection[] | undefined,
@@ -79,20 +104,41 @@ export function resolveHubSections(
   verdicts: HubSectionVerdicts,
 ): readonly ResolvedConsoleNavSection[] | undefined {
   if (!sections?.length || !basePath) return undefined
-  const { flags, isStaff, org, orgReady, featureFlag } = verdicts
+  const { flags, isStaff, org, orgReady, featureFlag, permission } = verdicts
   const surface = resolveExtensionEntitlement(featureFlag, org, orgReady)
+  const answers: PermissionAnswers = permission ?? {
+    can: () => false,
+    permissions: undefined,
+    loaded: false,
+  }
   return sections.map((section) => {
     const flagKey = releaseFlagForNavTab(section.navTabId)
+    const released = flagKey ? flags[flagKey].released || isStaff : true
+    /*
+     * The permission gate, resolved for the rail exactly as the page body
+     * resolves it (AGL-3080). A section this refuses is HIDDEN rather than
+     * locked: `locked` draws a tab that links to the notice selling the
+     * plan, and a permission is not something the reader can buy — offering
+     * it would send a member to Billing to fix a thing only an owner can
+     * grant. `pending` hides it too, because the permission map answers as
+     * an admin's until the member read lands, so drawing on it would offer
+     * a seller's tab to every member for the paint before it vanished.
+     */
+    const permitted = resolveExtensionPermission(
+      section.permission ? [section.permission] : [],
+      answers,
+    )
     return {
       id: section.id,
       label: section.label,
       href: `${basePath}/${section.id}`,
-      visible: flagKey ? flags[flagKey].released || isStaff : true,
+      visible: released && permitted === 'granted',
       locked:
         composeExtensionEntitlements(
           surface,
           resolveExtensionEntitlement(section.featureFlag, org, orgReady),
         ) === 'blocked',
+      refused: permitted === 'refused',
     }
   })
 }
@@ -106,9 +152,10 @@ export function resolveHubSections(
  * the plan has rather than on an upgrade notice, and a redirect into a
  * section the gate would refuse answers the nav tab with a "coming soon"
  * notice.
- * `undefined` when nothing is open to this reader — every section locked,
- * as the whole CRM is on a plan without it — which the shell renders as the
- * hub's upgrade notice beside the rail rather than looping.
+ * `undefined` when nothing is open to this reader — every section locked, as
+ * the whole CRM is on a plan without it, or every section refused, as a
+ * seller-only hub is to a member — which the shell renders as the hub's own
+ * notice beside the rail rather than looping.
  */
 export function hubLandingHref(
   sections: readonly ResolvedConsoleNavSection[] | undefined,

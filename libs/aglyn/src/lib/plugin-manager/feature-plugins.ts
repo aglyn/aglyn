@@ -363,6 +363,29 @@ export interface ConsoleNavSection {
    * the sales suite built on that list starts at Starter.
    */
   featureFlag?: keyof OrgFeatureFlags
+  /**
+   * Permission key gating THIS section, when the surface is open to every
+   * member and part of it is not (AGL-3080). Omit to inherit the
+   * extension's and the nav item's, which is the common case.
+   *
+   * The third gate, composed the way the other two are: ANDed with what the
+   * extension and the nav item already require, so a section can only ever
+   * be narrower than the surface holding it. A section this refuses is not
+   * drawn in the rail at all — unlike a `featureFlag` refusal, which draws
+   * locked and links to the notice that sells it, because a permission is
+   * not something the reader can buy — and a deep link to it is answered
+   * with the shell's refusal instead of its body. One verdict, both places.
+   *
+   * ⚠️ NOT a replacement for the server's rule. The rules and the plugin's
+   * own handlers enforce this regardless of what renders; this keeps a
+   * reader from being offered a page that is about to refuse them.
+   *
+   * The case it exists for is a hub most of a workspace uses and whose
+   * seller half only a publisher does: the Marketplace's browse, installed
+   * and licences sections are every member's, and listings, upload, sales
+   * and payouts read the organization's revenue.
+   */
+  permission?: string
 }
 
 /** A {@link ConsoleNavSection} with the shell's answers filled in. */
@@ -382,6 +405,15 @@ export interface ResolvedConsoleNavSection {
    * workspace would be the AGL-1380 defect in a new place.
    */
   locked?: boolean
+  /**
+   * True when this section's own `permission` refuses this reader
+   * (AGL-3080) — the reason it is not `visible`, kept apart from the
+   * release flag's so a deep link is answered with the refusal that
+   * applies rather than with "coming soon". Never true while the member
+   * read is pending: the permission map answers as an admin's until it
+   * lands, so an unsettled read is neither a grant nor a refusal.
+   */
+  refused?: boolean
 }
 
 export interface ConsoleNavItem {

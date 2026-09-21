@@ -49,6 +49,7 @@ import {
   upgradeNoticeMessage,
 } from '../../../../../utils/extension-entitlement'
 import {
+  composeExtensionPermissions,
   refusedExtensionNotice,
   requiredExtensionPermissions,
   resolveExtensionPermission,
@@ -131,6 +132,16 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
   } = useOrgPermissions()
 
   /*
+   * The ONE place this route looks a permission key up (AGL-3080). The page
+   * body's gate and the rail's per-section gate read the same object, so the
+   * rail cannot draw a tab the body is about to refuse.
+   */
+  const permissionAnswers = useMemo(
+    () => ({ can: canOrgPermission, permissions, loaded: permissionsLoaded }),
+    [canOrgPermission, permissions, permissionsLoaded],
+  )
+
+  /*
    * THE GATE. Reach first, permission second — see `resolveOrgCrmAccess` for
    * why the order is load-bearing and why a permission alone (which a SITE
    * COLLABORATOR holds) is not an org-level check. `OrgGuard` in the parent
@@ -204,8 +215,12 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
         org,
         orgReady,
         featureFlag: resolved?.extension.featureFlag,
+        // The rail resolves a section's permission from the same answers the
+        // body below refuses it with (AGL-3080), so a hidden tab and a
+        // refused deep link are one verdict.
+        permission: permissionAnswers,
       }),
-    [resolved, basePath, flags, isStaff, org, orgReady],
+    [resolved, basePath, flags, isStaff, org, orgReady, permissionAnswers],
   )
   /*
    * A bare `/crm` goes to the first section this reader may open — the
@@ -276,7 +291,23 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
   // declares a narrower key than the org gate checks is still refused here.
   const extensionPermission = resolveExtensionPermission(
     requiredExtensionPermissions(resolved?.extension, resolved?.navItem),
-    { can: canOrgPermission, permissions, loaded: permissionsLoaded },
+    permissionAnswers,
+  )
+
+  /*
+   * The SECTION's own key inside the surface's (AGL-3080), composed the way
+   * the entitlement above is composed: a section can only ever be narrower
+   * than the surface holding it, so declaring one refuses more readers and
+   * never admits one the surface already refused. The rail resolved this from
+   * the same answers, which is what keeps a hidden tab and a refused deep
+   * link one verdict rather than two.
+   */
+  const surfacePermission = composeExtensionPermissions(
+    extensionPermission,
+    resolveExtensionPermission(
+      resolved?.section?.permission ? [resolved.section.permission] : [],
+      permissionAnswers,
+    ),
   )
 
   const header = resolved?.navItem.header
@@ -302,7 +333,7 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
       {"This page isn't available. It may have moved or the feature that " +
         'provided it is not installed.'}
     </Alert>
-  ) : access === 'pending' || !orgReady || extensionPermission === 'pending' ? (
+  ) : access === 'pending' || !orgReady || surfacePermission === 'pending' ? (
     // Nothing renders a plan claim until there is a plan to claim from
     // (AGL-1380), and nothing renders off the permissive loading map
     // (AGL-2474): the reach and the member read both have to have answered.
@@ -318,10 +349,19 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
     <Alert severity="info">
       {orgCrmRefusalNotice(reachReady && !orgWide ? 'scoped' : 'permission')}
     </Alert>
-  ) : extensionPermission === 'refused' ? (
+  ) : surfacePermission === 'refused' ? (
     // BEFORE the entitlement branch: a reader who may not open the surface
     // is not shown its upgrade path.
-    <Alert severity="warning">{refusedExtensionNotice(title)}</Alert>
+    <Alert severity="warning">
+      {refusedExtensionNotice(
+        // The SECTION's label when the surface admitted the reader and the
+        // section did not (AGL-3080). Naming the surface there would deny a
+        // page they can plainly see in the rail beside this one.
+        extensionPermission === 'refused'
+          ? title
+          : (resolved?.section?.label ?? title),
+      )}
+    </Alert>
   ) : surfaceEntitlement === 'blocked' ? (
     // Beside the rail (AGL-2851): what the plan leaves out is drawn locked
     // where the reader is, on a bare `/crm` as on a section or a record.

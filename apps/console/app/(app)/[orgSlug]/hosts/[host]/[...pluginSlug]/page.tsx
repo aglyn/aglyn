@@ -52,6 +52,7 @@ import {
   upgradeNoticeMessage,
 } from '../../../../../../utils/extension-entitlement'
 import {
+  composeExtensionPermissions,
   refusedExtensionNotice,
   requiredExtensionPermissions,
   resolveExtensionPermission,
@@ -107,6 +108,16 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     can: canOrgPermission,
     loaded: permissionsLoaded,
   } = useOrgPermissions()
+
+  /*
+   * The ONE place this route looks a permission key up (AGL-3080). The page
+   * body's gate and the rail's per-section gate read the same object, so the
+   * rail cannot draw a tab the body is about to refuse.
+   */
+  const permissionAnswers = useMemo(
+    () => ({ can: canOrgPermission, permissions, loaded: permissionsLoaded }),
+    [canOrgPermission, permissions, permissionsLoaded],
+  )
   // The site role, handed DOWN like the release verdict (AGL-2334). A plugin
   // surface that publishes has to disable its control with a reason, and the
   // member read it takes is `scope:app`.
@@ -247,8 +258,12 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
         org,
         orgReady,
         featureFlag: resolved?.extension.featureFlag,
+        // The rail resolves a section's permission from the same answers the
+        // body below refuses it with (AGL-3080), so a hidden tab and a
+        // refused deep link are one verdict.
+        permission: permissionAnswers,
       }),
-    [resolved, basePath, flags, isStaff, org, orgReady],
+    [resolved, basePath, flags, isStaff, org, orgReady, permissionAnswers],
   )
 
   /**
@@ -366,11 +381,23 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
    */
   const extensionPermission = resolveExtensionPermission(
     requiredExtensionPermissions(resolved?.extension, resolved?.navItem),
-    {
-      can: canOrgPermission,
-      permissions,
-      loaded: permissionsLoaded,
-    },
+    permissionAnswers,
+  )
+
+  /*
+   * The SECTION's own key inside the surface's (AGL-3080), composed the way
+   * the entitlement above is composed: a section can only ever be narrower
+   * than the surface holding it, so declaring one refuses more readers and
+   * never admits one the surface already refused. The rail resolved this from
+   * the same answers, which is what keeps a hidden tab and a refused deep
+   * link one verdict rather than two.
+   */
+  const surfacePermission = composeExtensionPermissions(
+    extensionPermission,
+    resolveExtensionPermission(
+      resolved?.section?.permission ? [resolved.section.permission] : [],
+      permissionAnswers,
+    ),
   )
 
   const header = resolved?.navItem.header
@@ -412,7 +439,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
       {"This page isn't available. It may have moved or the feature that " +
         'provided it is not installed.'}
     </Alert>
-  ) : !orgReady || !permissionsLoaded || extensionPermission === 'pending' ? (
+  ) : !orgReady || !permissionsLoaded || surfacePermission === 'pending' ? (
     // The choke point for every plugin console page (AGL-1380). `org` is
     // undefined both while the billing doc is in flight and while the read is
     // failing, and `checkEntitlement(undefined)` answers NO — so this route
@@ -434,7 +461,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     // map. A guess about who is reading is no more renderable than a guess
     // about what they bought.
     //
-    // `extensionPermission === 'pending'` says the same thing in the gate's
+    // `surfacePermission === 'pending'` says the same thing in the gate's
     // own terms, and the two are each other's backstop: either one alone
     // holds this wait shut. A surface with a declared permission must not
     // render off the permissive loading map, and that stays true if the
@@ -442,7 +469,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     <Box sx={{ p: 2 }}>
       <CircularProgress size={24} />
     </Box>
-  ) : extensionPermission === 'refused' ? (
+  ) : surfacePermission === 'refused' ? (
     // BEFORE the entitlement branch, and the order is the decision.
     //
     // Both branches refuse, and only one of them tries to sell something. A
@@ -451,7 +478,16 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     // standing between them and the page, and pointing them at it invites an
     // org to buy a feature that would change nothing for the person asking.
     // So authorization answers first and the plan question is never reached.
-    <Alert severity="warning">{refusedExtensionNotice(title)}</Alert>
+    <Alert severity="warning">
+      {refusedExtensionNotice(
+        // The SECTION's label when the surface admitted the reader and the
+        // section did not (AGL-3080). Naming the surface there would deny a
+        // page they can plainly see in the rail beside this one.
+        extensionPermission === 'refused'
+          ? title
+          : (resolved?.section?.label ?? title),
+      )}
+    </Alert>
   ) : surfaceEntitlement === 'blocked' ? (
     // Refused by the shell, not by the plugin — and refused with the upgrade
     // path attached, because the surface behind this notice is the only
