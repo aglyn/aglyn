@@ -485,6 +485,52 @@ describe('the template step', () => {
     expect(commits).toEqual([])
   })
 
+  it('asks once more, then stops for review, when the plan reuses a component the template never places (AGL-3024)', async () => {
+    // The layout and component doors already hold their builds to the reuse
+    // the plan confirmed; the template door did not, so a template could drop
+    // a component it had promised and still answer `Done`. AUTHOR_TREE places
+    // no instance at all.
+    mockReadInventory.mockResolvedValue({
+      ...INVENTORY,
+      components: [{ id: 'cmp-card', name: 'practice-area-card', props: {}, placeholders: {} }],
+    })
+    mockRunAiRequest
+      .mockResolvedValueOnce(treeAnswer(AUTHOR_TREE))
+      .mockResolvedValueOnce(treeAnswer(AUTHOR_TREE))
+    const outcome = await createAiJobTemplateStep()(
+      context({
+        inputs: { subject: 'author' },
+        plan: {
+          reuse: [{ kind: 'component', id: 'cmp-card', purpose: 'each practice area' }],
+          create: [
+            {
+              kind: 'template',
+              name: 'Author page template',
+              why: 'The firm needs a profile page per attorney.',
+              duplicateOf: null,
+              fields: ['{{author.name}}'],
+            },
+          ],
+          screens: [],
+          status: 'confirmed',
+          labels: {},
+          proposedAt: NOW as unknown as AiJobPlan['proposedAt'],
+          confirmedAt: NOW as unknown as AiJobPlan['confirmedAt'],
+          confirmedBy: 'uid-1',
+        },
+      }),
+    )
+    // It costs a re-ask, exactly as the layout and component doors charge one.
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    expect(mockRunAiRequest.mock.calls[1][0].messages[2].content as string).toContain('practice-area-card')
+    expect(outcome.outputs).toEqual([])
+    expect(outcome.review?.findings.map((finding) => [finding.rule, finding.code])).toEqual([
+      [7, 'plan-reuse-not-placed'],
+    ])
+    // Nothing was written: a template that dropped its promised reuse is not a draft.
+    expect(commits).toEqual([])
+  })
+
   it('builds an author page whose plan promised only what it binds, with no finding', async () => {
     mockRunAiRequest.mockResolvedValueOnce(treeAnswer(AUTHOR_TREE))
     const outcome = await createAiJobTemplateStep()(
