@@ -40,6 +40,9 @@ name: Tools guards
 #  - test:release-version     the semver/bump/changelog rules a release
 #                             depends on (AGL-2089) — a wrong bump does not
 #                             throw, it just mints a wrong number forever
+#  - test:changelog-entry     the wording of the entry a promotion publishes
+#                             on aglyn.com (AGL-3211) — checked against the
+#                             sixteen entries a human wrote in the console
 #  - test:manifest-versions   / check:manifest-versions  the package.json vs
 #                             package-lock.json version agreement (AGL-2108) —
 #                             a drift `npm ci` does not read and the promotion
@@ -551,6 +554,13 @@ jobs:
       # crash. Registered in rules-drift.test.mjs's wiring allowlist like the
       # rest, so deleting this step turns both drift workflows red.
       - run: npm run test:release-version
+
+      # AGL-3211. The customer-facing changelog entry a promotion publishes.
+      # Pure string logic over parsed commits, no git and no Firestore, and
+      # its fixture is v1.0.0-beta.117 exactly as it is live — so a renderer
+      # that starts dropping a release's work fails here rather than on the
+      # site, where nobody diffs an entry that reads fine.
+      - run: npm run test:changelog-entry
 
       # AGL-2108. Two steps in the AGL-2021 order: the unit test proves the
       # comparator can FAIL (a half-repaired lockfile, both fields stale), and

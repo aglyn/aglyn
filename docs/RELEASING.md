@@ -340,6 +340,38 @@ of the release that precedes it, and `CHANGELOG.md` there documents it. The
 second guard catches the commonest real mistake — promoting a batch that did not
 include the `chore(release)` commit.
 
+#### It also publishes the release's changelog entry
+
+A successful `--push` runs `release:changelog`, which writes this release's
+entry on the customer-facing changelog at `aglyn.com/changelog` — one entry per
+version, listing every change it shipped, dated at the instant it served.
+
+```bash
+npm run release:changelog                                   # report only
+npm run release:changelog -- --version 1.0.0-beta.144 --write
+npm run release:tag -- --write --push --no-changelog        # tag without it
+```
+
+It hangs off the tag because the tag is where "built **and served**" becomes
+true, and that is exactly what an entry claims. Two consequences worth knowing:
+
+* It **refuses** a version whose console and tenant deployments did not both
+  report success on GitHub — the same evidence the tag rests on, so an entry
+  can never outrun the release it describes.
+* A failure there never fails the tag. The tag is already pushed and correct;
+  the script prints the one command that finishes the job, and it is idempotent
+  by slug, so re-running converges instead of publishing a second entry.
+
+The entry needs Firestore credentials (the `FIREBASE_*` service-account triple,
+or ADC) and picks up `REVALIDATE_SECRET` when it is set to drop the live
+listing's cache. Without either it reports what it would have done, which is
+also what `--dry-run` would be if it had one.
+
+`CHANGELOG.md` is NOT that entry and is not a substitute for it: the file is cut
+on `main` at bump time and therefore records what a batch was *meant* to
+contain, including versions that were superseded before they promoted and
+v1.0.0-beta.5, which merged, failed to build, and served nobody.
+
 #### Backfilling a tag that was missed
 
 Because this step is run by hand, it is also the step that gets skipped. On
