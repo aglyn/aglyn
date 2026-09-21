@@ -597,7 +597,12 @@ npm run trust:packages -- --set   # the owner configures the ones missing it
 
 **Both** modes need the owner signed in, and npm challenges EVERY trust
 operation with the account's second factor — `npm trust list` included, and
-`npm login` alone does not satisfy it. So the run reads and configures each
+`npm login` alone does not satisfy it. ⚑ npm answers that challenge with a
+BROWSER HANDSHAKE, so it must keep the terminal: a `npm trust` run with stdin
+closed cannot wait for the approval and fails `EOTP` instead of asking, which
+reads as "not signed in" to somebody who signed in a minute ago. The script
+makes one fully-interactive call before its loop so the handshake happens
+where it can be seen, and captures only stdout thereafter. So the run reads and configures each
 package in turn rather than reading all 51 first: the first package proves
 whether one browser approval carries the rest, and if it does not, that is
 known at package one instead of after fifty-one approvals with nothing

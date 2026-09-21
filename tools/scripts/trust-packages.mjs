@@ -152,10 +152,47 @@ export function readTrust(name, run = npmTrustList) {
 
 function npmTrustList(name) {
   try {
-    return execFileSync('npm', ['trust', 'list', name, '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    return execFileSync('npm', ['trust', 'list', name, '--json'], {
+      encoding: 'utf8',
+      /*
+       * ⚑ STDIN AND STDERR STAY ON THE TERMINAL. npm answers a trust
+       * operation with a browser handshake — it prints a URL, waits for the
+       * approval, and only then does the work. With stdin closed it cannot
+       * wait, so it fails `EOTP` instead of asking, and the run reads as
+       * "not signed in" to somebody who signed in a minute ago. Only stdout
+       * is captured, because that is where `--json` puts the answer.
+       */
+      stdio: ['inherit', 'pipe', 'inherit'],
+    })
   } catch (error) {
     // npm exits non-zero AND prints the JSON error body on stdout.
     return `${error.stdout ?? ''}`.trim() || `${error.stderr ?? ''}`.trim() || '{}'
+  }
+}
+
+/**
+ * One fully-interactive trust read before the loop, so npm's browser
+ * handshake happens where the person can see it.
+ *
+ * The loop's reads capture stdout to parse `--json`, and a prompt npm chose
+ * to write there would vanish into that pipe — leaving somebody staring at a
+ * hung command with no URL. This one inherits all three streams: whatever npm
+ * prints, they see, and whatever it asks, they can answer. Its OUTPUT is
+ * thrown away; the loop reads the same package again a moment later, from the
+ * token this call established.
+ */
+function warmUpTrustAuth(name) {
+  console.log('')
+  console.log(`trust:packages: npm needs this account's second factor for every`)
+  console.log('trust operation. Approve once in the browser it opens — the rest of')
+  console.log('the run should then go through without asking again.')
+  console.log('')
+  try {
+    execFileSync('npm', ['trust', 'list', name], { cwd: ROOT, stdio: 'inherit' })
+    return true
+  } catch {
+    // Not fatal on its own: the loop asks again and reports properly.
+    return false
   }
 }
 
@@ -170,6 +207,7 @@ function main(argv) {
 
   const names = publishablePackages()
   console.log(`trust:packages: ${names.length} package(s); ${REPOSITORY} → .github/workflows/${WORKFLOW_FILE}`)
+  if (names.length) warmUpTrustAuth(names[0])
 
   /*
    * ONE PASS, reading and configuring each package in turn (AGL-3201).
@@ -196,11 +234,15 @@ function main(argv) {
     const answer = readTrust(name)
     if (answer.unauthenticated) {
       console.error('')
-      console.error("trust:packages: npm asked for this account's second factor and did not get it.")
-      console.error('Every trust operation needs it — `npm trust list` is not public, even for a')
-      console.error('public package. Sign in, approve in the browser npm opens, and run again:')
+      console.error("trust:packages: npm wanted this account's second factor for")
+      console.error(`\`npm trust list ${name}\` and did not get it.`)
       console.error('')
-      console.error('  npm login')
+      console.error('Being logged in is NOT enough — npm challenges every trust operation')
+      console.error('on its own, and `npm trust list` is not public even for a public')
+      console.error('package. If no browser opened just now, run this once by hand and')
+      console.error('approve it, then run this script again:')
+      console.error('')
+      console.error(`  npm trust list ${name}`)
       console.error(`  npm run trust:packages${set ? ' -- --set' : ''}`)
       console.error('')
       console.error(`${configured} package(s) were configured before this; re-running skips them.`)
