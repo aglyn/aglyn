@@ -703,6 +703,22 @@ describe('the CRM profile a door passes with a capture', () => {
     expect(facet('c1', 'h2')).toEqual({})
   })
 
+  it('writes the company name beside the link, and echoes it for search', async () => {
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'lead@example.com',
+      source: 'import',
+      interaction: { summary: 'Imported' },
+      facet: { companyId: 'co-1', companyName: '  Acme Widgets  ' },
+    })
+    expect(added).toHaveLength(1)
+    // The merge fields read `facet.companyName`; a link alone renders as nothing.
+    expect(added[0].facets.h1.companyId).toBe('co-1')
+    expect(added[0].facets.h1.companyName).toBe('Acme Widgets')
+    // The search echo, like the phone's.
+    expect(added[0].companyName).toBe('Acme Widgets')
+  })
+
   it('refuses a stage the union does not name rather than storing it', async () => {
     await upsertHostContact({
       hostId: 'h1',

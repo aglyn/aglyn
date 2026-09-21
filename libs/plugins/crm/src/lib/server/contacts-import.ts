@@ -122,6 +122,12 @@ async function loadFieldDefinitions(
     )
 }
 
+/** A company an import row named, as the CRM stores it. */
+interface ImportCompany {
+  id: string
+  name: string
+}
+
 /**
  * The company a name refers to in this scope, created when there is none.
  *
@@ -131,12 +137,12 @@ async function loadFieldDefinitions(
  * their own. Created with the same scope stamp every CRM creator uses, so
  * the company lands exactly where a contact captured on this site would.
  */
-async function resolveCompanyId(
+async function resolveCompany(
   context: Extract<ImportContext, { ok: true }>,
   name: string,
-  cache: Map<string, string>,
+  cache: Map<string, ImportCompany>,
   tally: { created: number },
-): Promise<string> {
+): Promise<ImportCompany | null> {
   const fields = nameSearchFields(name)
   const cached = cache.get(fields.nameLower)
   if (cached) return cached
@@ -154,8 +160,11 @@ async function resolveCompanyId(
     visibleToTokens(doc.get('visibleTo'), context.readTokens),
   )
   if (seen) {
-    cache.set(fields.nameLower, seen.id)
-    return seen.id
+    // The name as the record spells it, not as this row typed it, so the
+    // contact's facet reads the same as the company page.
+    const found = { id: seen.id, name: String(seen.get('name') ?? name) }
+    cache.set(fields.nameLower, found)
+    return found
   }
   /*
    * THE RECORDS BAND (AGL-2611). A company is a record of the same band
@@ -168,7 +177,7 @@ async function resolveCompanyId(
    * instead of refuse.
    */
   const room = await crmRecordsQuotaForOrg(context.org as never, orgRef)
-  if (!room.allowed) return ''
+  if (!room.allowed) return null
   const created = await companies.add({
     ...fields,
     hostId: context.hostId,
@@ -178,8 +187,9 @@ async function resolveCompanyId(
     updatedAt: FieldValue.serverTimestamp(),
   })
   tally.created += 1
-  cache.set(fields.nameLower, created.id)
-  return created.id
+  const made = { id: created.id, name }
+  cache.set(fields.nameLower, made)
+  return made
 }
 
 /**
@@ -238,7 +248,7 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
       normalized.map((entry) => entry.row),
     )
     const ownersUnresolved = new Set<string>()
-    const companies = new Map<string, string>()
+    const companies = new Map<string, ImportCompany>()
     const companyTally = { created: 0 }
     let created = 0
     let merged = 0
@@ -249,9 +259,9 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
         ownerUid = owners.get(row.ownerEmail)
         if (!ownerUid) ownersUnresolved.add(row.ownerEmail)
       }
-      const companyId = row.companyName
-        ? await resolveCompanyId(context, row.companyName, companies, companyTally)
-        : undefined
+      const company = row.companyName
+        ? await resolveCompany(context, row.companyName, companies, companyTally)
+        : null
       const verdict = await captureHostContact({
         hostId: context.hostId,
         email: row.email,
@@ -263,7 +273,9 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
         facet: {
           ...(row.phone ? { phone: row.phone } : {}),
           ...(row.jobTitle ? { jobTitle: row.jobTitle } : {}),
-          ...(companyId ? { companyId } : {}),
+          // The link AND the name: the merge fields read the facet's
+          // `companyName`, and a link written alone renders as nothing.
+          ...(company ? { companyId: company.id, companyName: company.name } : {}),
           ...(row.address ? { address: row.address } : {}),
           ...(ownerUid ? { ownerUid } : {}),
           ...(row.lifecycleStage ? { lifecycleStage: row.lifecycleStage } : {}),

@@ -129,6 +129,7 @@ export type UpsertHostContactFacet = Partial<
     | 'phone'
     | 'jobTitle'
     | 'companyId'
+    | 'companyName'
     | 'address'
     | 'ownerUid'
     | 'lifecycleStage'
@@ -161,6 +162,7 @@ function storableProfile(input: ContactProfileInput | undefined): {
   jobTitle?: string
   address?: ReturnType<typeof normalizeAddress>
   companyId?: string
+  companyName?: string
   ownerUid?: string
   lifecycleStage?: ContactFacet['lifecycleStage']
   custom?: Record<string, ContactCustomValue>
@@ -178,6 +180,11 @@ function storableProfile(input: ContactProfileInput | undefined): {
   if (input.address !== undefined) out.address = normalizeAddress(input.address)
   if (typeof input.companyId === 'string' && input.companyId.trim()) {
     out.companyId = input.companyId.trim().slice(0, 128)
+  }
+  // The name as this holder knows it, beside the link — the merge fields
+  // read `facet.companyName`, and a link with no name renders as nothing.
+  if (typeof input.companyName === 'string' && input.companyName.trim()) {
+    out.companyName = input.companyName.trim().slice(0, 120)
   }
   if (typeof input.ownerUid === 'string' && input.ownerUid.trim()) {
     out.ownerUid = input.ownerUid.trim().slice(0, 128)
@@ -678,6 +685,8 @@ export async function upsertHostContact(
           ...(merged.name ? nameSearchFields(merged.name) : {}),
           // The search echo of the facet's phone — see `HostContact.phone`.
           ...(profile.phone ? { phone: profile.phone } : {}),
+          // The search echo of the facet's company name — see `HostContact.companyName`.
+          ...(profile.companyName ? { companyName: profile.companyName } : {}),
           ...(mirror !== undefined ? { [CONTACT_COMPANY_IDS_FIELD]: mirror } : {}),
           /*
            * NESTED, not dot-pathed. This is a `set(…, { merge: true })`, and
@@ -881,6 +890,8 @@ export async function upsertHostContact(
       ...(options.name ? nameSearchFields(options.name.slice(0, 120)) : {}),
       // The search echo of the facet's phone — see `HostContact.phone`.
       ...(profile.phone ? { phone: profile.phone } : {}),
+      // The search echo of the facet's company name — see `HostContact.companyName`.
+      ...(profile.companyName ? { companyName: profile.companyName } : {}),
       // The company mirror the company page queries (AGL-2613) — a create
       // has nothing to union with, so the door's company is the whole list.
       ...(profile.companyId
