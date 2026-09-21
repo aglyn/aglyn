@@ -593,7 +593,7 @@ export const NodeLeaf = observer(
      * author drew is the form they see — which is every form built before the
      * entity existed.
      */
-    const placedFormTree = useMemo(() => {
+    const placedForm = useMemo(() => {
       if (node?.componentId !== FORM_COMPONENT_ID) return undefined
       const formId = (node?.props as { formId?: unknown } | undefined)?.formId
       if (typeof formId !== 'string' || !formId) return undefined
@@ -613,13 +613,52 @@ export const NodeLeaf = observer(
         definitions as any,
         [placedFormPlacement(formDesigns as any)],
       )
-      const graftedRootId = (composed[node.$id]?.nodes as string[])?.[0]
-      return graftedRootId
-        ? denormalizeTree(composed, graftedRootId)
-        : undefined
+      /*
+       * The composed REPLACEMENT is the node the published page draws in this
+       * placement's place — the design's root, carrying the placement's id
+       * (AGL-2521) — and its children are the design's own.
+       *
+       * Reading the replacement rather than the placement is what keeps the
+       * canvas honest about the element itself. A real form design is a
+       * container holding the `form` node, so the placement's `form` used to
+       * be drawn AROUND the design's: two `<form>` elements nested, each
+       * drawing its own send button, where a visitor sees one. Taking only
+       * the first child also dropped everything a design put beside its form.
+       */
+      const replacement = composed[node.$id]
+      const childIds = (replacement?.nodes as string[] | undefined) ?? []
+      if (!replacement || !childIds.length) return undefined
+      const trees = childIds
+        .map((childId) => denormalizeTree(composed, childId))
+        .filter(Boolean)
+      return trees.length ? { replacement, trees } : undefined
       // Observable props: the JSON string keys the memo, as above.
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [node, JSON.stringify(node?.props ?? {}), definitions, formDesigns])
+
+    /**
+     * The element this leaf DRAWS, once a placed form resolves.
+     *
+     * The published page renders the entity's root here, not the placement:
+     * the two denote the same element and the graft merges them. The canvas
+     * draws the same one, so an author sees the form their visitors will. As
+     * with the DAM facts and the host tokens above, this is a render copy —
+     * selection, the panels and every save keep reading `node`.
+     */
+    const shownLeafNode = useMemo(
+      () =>
+        placedForm
+          ? ({
+              ...(shownNode as Record<string, unknown>),
+              componentId: placedForm.replacement.componentId,
+              props: (placedForm.replacement.props ?? {}) as never,
+              ...(placedForm.replacement.sx === undefined
+                ? {}
+                : { sx: placedForm.replacement.sx }),
+            } as typeof shownNode)
+          : shownNode,
+      [placedForm, shownNode],
+    )
 
     return (
       <DraggableDroppable
@@ -630,7 +669,7 @@ export const NodeLeaf = observer(
       >
         <Leaf
           ref={registerElement}
-          node={shownNode as typeof node}
+          node={shownLeafNode as typeof node}
           data-aglyn-selected={Besigner.focus.isNodeSelected(node)}
           // Present while the selection lives in this node's subtree (the
           // node itself or any descendant). Canvas-aware components (nav
@@ -655,8 +694,8 @@ export const NodeLeaf = observer(
           {...rest}
         >
           {/* A resolved form entity REPLACES the page's own fields, exactly
-              as the published page composes it — see `placedFormTree`. */}
-          {placedFormTree ? null : firstRecord ? (
+              as the published page composes it — see `placedForm`. */}
+          {placedForm ? null : firstRecord ? (
             // The template IS the first copy: the real children, drawing the
             // first record. Provided around them rather than applied to them,
             // so every descendant leaf resolves its own tokens the way the
@@ -690,13 +729,15 @@ export const NodeLeaf = observer(
               count={repeatPreview.records.length}
             />
           ) : null}
-          {placedFormTree ? (
+          {placedForm ? (
             // Inert and click-through like the instance preview below: the
             // fields belong to the form, and they are edited in the form's own
             // besigner, so the only selectable thing here is the placement.
             <Box sx={{ pointerEvents: 'none' }} data-aglyn-form-preview="">
               <RendererComponents.Provider value={INERT_RENDERER as any}>
-                <Stem node={placedFormTree} />
+                {placedForm.trees.map((tree) => (
+                  <Stem key={tree.$id} node={tree} />
+                ))}
               </RendererComponents.Provider>
             </Box>
           ) : null}

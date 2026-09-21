@@ -17,9 +17,10 @@
 
 import {
   CORE_CONTENT_COLLECTIONS,
+  CORE_GENERIC_SCAN_COLLECTIONS,
   decodeStoredNodes,
-  PLUGIN_CONTENT_COLLECTIONS,
 } from '@aglyn/aglyn/server'
+import { pluginHostCollectionsScannedGenerically } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
 import { TENANT_EMAILS } from '@aglyn/shared-util-email'
 
 /**
@@ -63,7 +64,7 @@ import { TENANT_EMAILS } from '@aglyn/shared-util-email'
  * AGL-1867 closed the last two holes in the corpus: a site's transactional
  * email templates, and the documents owned by the first-party feature plugins
  * — products, events, services and the rest. Which collections those are is
- * declared in `PLUGIN_CONTENT_COLLECTIONS` and held equal to a repo-wide
+ * declared by the plugin that owns each one and held equal to a repo-wide
  * sweep by `host-content-media-coverage.spec.ts`, so the corpus is derived
  * from the codebase rather than remembered.
  */
@@ -193,7 +194,8 @@ export const HOSTS_PER_SCAN = 25
  * reasoning about the same four names this loop reads. `collections` is the
  * fifth core member and is walked one level deeper, into `…/entries`, below.
  *
- * Everything else is `PLUGIN_CONTENT_COLLECTIONS`, read by Pass 2b.
+ * Everything else is scanned generically by Pass 2b — core's own three, plus
+ * whatever the plugins declare they own.
  */
 const SCANNED_HOST_COLLECTIONS = CORE_CONTENT_COLLECTIONS.filter(
   (name) => name !== 'collections',
@@ -638,11 +640,14 @@ export async function scanMediaReferences(
   // `imageUrl` and `mediaUrls`, so a product photo used nowhere else came
   // back as an empty list — and the panel's job is to be believed.
   //
-  // WHICH collections is not decided here; see `PLUGIN_CONTENT_COLLECTIONS`,
-  // whose whole design is that a name nobody has thought about is SCANNED and
-  // a name outside the corpus had to be written down with a reason, with a
-  // build guard holding the list equal to a repo-wide sweep. Nothing about
-  // plugin schemas is known here: each document is flattened by
+  // WHICH collections is not decided here, and since AGL-3080 it is not
+  // decided in core either: each plugin declares what it owns and whether the
+  // scan reads it, and the design is unchanged — a name nobody has thought
+  // about is SCANNED, and a name outside the corpus had to be written down
+  // with a reason, with a build guard holding the whole set equal to a
+  // repo-wide sweep.
+  //
+  // Nothing about plugin schemas is known here: each document is flattened by
   // `documentHaystack` — decoding `nodes`/`elements` on the way, so a plugin
   // that adopts the compressed form is covered without a code change — and
   // the matching field's dotted path is recovered by the same generic walk
@@ -653,11 +658,17 @@ export async function scanMediaReferences(
   // belongs on the live tier, and running out of budget here downgrades the
   // answer to `partial`. It goes second within that tier because Pass 2 is
   // one read per document and this is one query per collection per site.
+  //
+  // Resolved per scan rather than at import: the compiled declarations are
+  // fixed, but a plugin the compiler never saw can register one, and a corpus
+  // frozen at module load would miss it in exactly the direction that reports
+  // an asset as unused.
+  const genericScanCollections = [
+    ...CORE_GENERIC_SCAN_COLLECTIONS,
+    ...pluginHostCollectionsScannedGenerically(),
+  ]
   for (const host of hosts.slice(0, HOSTS_PER_SCAN)) {
-    for (const group of chunked(
-      [...PLUGIN_CONTENT_COLLECTIONS],
-      PLUGIN_COLLECTION_CHUNK,
-    )) {
+    for (const group of chunked(genericScanCollections, PLUGIN_COLLECTION_CHUNK)) {
       if (!budget.open) {
         liveTruncated = true
         break

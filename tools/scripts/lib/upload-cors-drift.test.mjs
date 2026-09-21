@@ -29,6 +29,7 @@ import { test } from 'node:test'
 import {
   compareUploadCors,
   deriveRequiredOrigins,
+  fetchProjectDomains,
   formatReport,
   mergeUploadOrigins,
   permittedUploadOrigins,
@@ -61,6 +62,60 @@ const LIVE_DOMAINS = [
   // A Vercel wildcard name. Can never be an exact origin.
   { name: '*.aglyn.io', redirect: 'app.aglyn.com', verified: true },
 ]
+
+/**
+ * A Vercel project-domains endpoint that hands back `pages` in order, each with
+ * the cursor to the next. Records every URL asked for, because the bug is not
+ * in what a page contains — it is in never asking for the second one.
+ */
+function pagedDomains(pages) {
+  const asked = []
+  const fetchImpl = async (url) => {
+    asked.push(url)
+    const index = asked.length - 1
+    const page = pages[index] ?? []
+    return {
+      ok: true,
+      json: async () => ({
+        domains: page,
+        pagination: index + 1 < pages.length ? { next: 1000 + index } : { next: null },
+      }),
+    }
+  }
+  return { asked, fetchImpl }
+}
+
+test('every page of project domains is read, not just the first', async () => {
+  const first = Array.from({ length: 100 }, (_, i) => ({ name: `p${i}.aglyn.com` }))
+  const second = [{ name: 'app.aglyn.com' }, { name: 'zgover.aglyn.com' }]
+  const { asked, fetchImpl } = pagedDomains([first, second])
+  const domains = await fetchProjectDomains({ token: 't', fetchImpl })
+  assert.equal(domains.length, 102)
+  // The name that exposed this lives on the second page: the console's own
+  // platform origin read as "no longer served" for five days.
+  assert.ok(domains.some((domain) => domain.name === 'app.aglyn.com'))
+  assert.equal(asked.length, 2)
+  assert.ok(!asked[0].includes('until='))
+  assert.ok(asked[1].includes('until=1000'))
+})
+
+test('a final page ends the walk without asking for another', async () => {
+  const { asked, fetchImpl } = pagedDomains([[{ name: 'app.aglyn.com' }]])
+  const domains = await fetchProjectDomains({ token: 't', fetchImpl })
+  assert.equal(domains.length, 1)
+  assert.equal(asked.length, 1)
+})
+
+test('a cursor that never stops cannot spin the walk forever', async () => {
+  let calls = 0
+  const fetchImpl = async () => {
+    calls += 1
+    return { ok: true, json: async () => ({ domains: [], pagination: { next: 7 } }) }
+  }
+  const domains = await fetchProjectDomains({ token: 't', fetchImpl })
+  assert.deepEqual(domains, [])
+  assert.equal(calls, 1)
+})
 
 test('an origin is the scheme and host a browser actually sends', () => {
   assert.equal(uploadOriginFor('zgover.aglyn.com'), 'https://zgover.aglyn.com')

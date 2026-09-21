@@ -114,9 +114,11 @@ before a reusable form can honestly claim to capture leads.
 
 ### 1c. Absent
 
-- **Any `forms` collection.** There is no `hosts/{hostId}/forms`, no `formTemplate`, no `savedForm`. `PLUGIN_CONTENT_COLLECTIONS`
-  (`libs/aglyn/src/lib/foundation/definitions/host-content-collections.ts:220-238`)
-  is the complete list of host subcollections, and no member of it is a form.
+- **Any `forms` collection.** At the time of writing there was no
+  `hosts/{hostId}/forms`, no `formTemplate` and no `savedForm`; the forms
+  plugin has since taken the collection, and declares it in its
+  `hostCollections` block in `plugins.config.json`. There is still no form
+  TEMPLATE and no saved form — the point §1c is making.
 - **A form id on a submission.** The write at route :332-360 has no `formId`
   field and no place to put one.
 - **A declared field schema.** The field list exists only as nodes inside a
@@ -331,8 +333,9 @@ form: {
 Three guards fire the moment `forms` becomes a host subcollection, and they are
 features of this design rather than obstacles:
 
-- `host-content-media-coverage.spec.ts` asserts `PLUGIN_CONTENT_COLLECTIONS`
-  equals the repo-wide sweep minus the core list minus `MEDIA_SCAN_EXCLUDED`.
+- `host-content-media-coverage.spec.ts` asserts the collections declared as
+  scanned — core's own plus every plugin's — equal the repo-wide sweep minus
+  the core content list minus every declared exclusion.
   Adding `forms` fails the build with a one-line decision. The correct answer
   is **scan it** — a form definition can carry an image field's default and is
   author-edited, unlike `formSubmissions`, which is excluded for being

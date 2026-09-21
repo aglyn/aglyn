@@ -32,7 +32,8 @@ import {
   recordVisitorRecordCeilingTrip,
   resolveCampaignTouch,
 } from '@aglyn/tenant-data-admin'
-import { captureHostContact, emitHostEvent } from '@aglyn/tenant-runtime'
+import { emitHostEvent } from '@aglyn/tenant-runtime'
+import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import {
   hashMemberPassword,
   mintMemberSession,
@@ -226,19 +227,36 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       },
       ...(campaignTouch ? { touch: campaignTouch } : {}),
     })
-    // Contacts ingestion (AGL-197).
-    void captureHostContact({
+    /*
+     * Contacts ingestion (AGL-197), reported to whichever plugin keeps people
+     * rather than written by this one (AGL-3080). Commerce knows it just met
+     * somebody; what a person record is belongs to the plugin that models it,
+     * and a workspace that keeps none is a quiet, correct answer here.
+     */
+    void recordCapturedContact({
+      /*
+       * Not resolved here. The record system keys a person on the SITE they
+       * were met on, so this costs the capture nothing — and resolving it
+       * would put a Firestore read in front of the writer, which is the one
+       * thing `recordCapturedContact` asks a door not to do.
+       */
+      orgId: '',
       hostId,
-      email,
-      name: displayName || undefined,
-      source: 'member',
+      identity: { email, name: displayName || undefined },
+      interaction: {
+        source: 'member',
+        refId: memberRef.id,
+        summary: 'Joined as a member',
+      },
       // An account is a subscription to the site, not an enquiry (AGL-2612):
       // the lead this sign-up also files is the sales record, and the stage
-      // on the contact says only that the person asked to be kept.
-      initialLifecycleStage: 'subscriber',
-      interaction: { refId: memberRef.id, summary: 'Joined as a member' },
+      // on the contact says only that the person asked to be kept. A floor,
+      // so a customer who opens an account stays a customer.
+      lifecycleFloor: 'subscriber',
       ...(marketingConsent ? { marketingConsent: true } : {}),
-      ...(campaignTouch ? { campaignTouch } : {}),
+      // Where the visitor ARRIVED from — a fact about this visit and not
+      // about the person, which is what `detail` carries.
+      ...(campaignTouch ? { detail: { campaignTouch } } : {}),
     })
     // Event triggers (AGL-128/148): sign-ups double as leads here too. The
     // lead's id is the person key `addHostLead` filed it under, so a webhook

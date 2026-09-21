@@ -30,6 +30,11 @@ export function manageNavTabItems() {
       href: buildRoute(Route.MANAGE_NOTIFICATIONS),
     },
     {
+      id: 'nav-tab-manage-notification-settings',
+      label: 'Notification settings',
+      href: buildRoute(Route.MANAGE_NOTIFICATION_SETTINGS),
+    },
+    {
       id: 'nav-tab-manage-user',
       label: 'Manage Account',
       href: buildRoute(Route.MANAGE_USER_SETTINGS),

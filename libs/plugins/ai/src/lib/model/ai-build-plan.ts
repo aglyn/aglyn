@@ -121,9 +121,12 @@ export interface AiBuildPlanCreate {
    * A component: its props as `name:type`, an icon as `name:icon`
    * (AGL-3054). A layout: the regions it has, from the closed vocabulary
    * `AI_LAYOUT_REGIONS` holds (AGL-3024) — a layout has no props, and a
-   * region named here is what the built layout is held to. A form or a
-   * dataset: its field names. A theme change: the palette paths it adds or
-   * changes.
+   * region named here is what the built layout is held to. A template: the
+   * binding tokens its page shows, from the subject's own closed catalog
+   * (`AI_TEMPLATE_SUBJECT_DEFINITIONS[subject].tokens`, AGL-3143) — the
+   * template's analogue of a layout's regions, and what the built template is
+   * held to. A form or a dataset: its field names. A theme change: the
+   * palette paths it adds or changes.
    */
   fields: string[]
   /**

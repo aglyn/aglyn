@@ -614,13 +614,29 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   promised, and `Done` is the dangerous part, because it tells the customer they have no
   reason to re-read it. `jobs/ai-job-plan-conformance.ts` reads the plan's STRUCTURE,
   never its prose: a section's `items`, which the section prompt already states as "It
-  shows N items" and nothing read back, and a layout creation's `fields`, which are that
+  shows N items" and nothing read back, a layout creation's `fields`, which are that
   kind's regions (`AI_LAYOUT_REGIONS`: header, nav, sidebar, main, footer) because a
-  layout has no properties to list. Matching a plan's English `why` against a node tree
-  would be a second guess dressed as a check, so the planner is asked for a checkable
-  assertion instead. Findings name no rule (`plan-items-short`, `plan-region-missing`,
-  `plan-region-unreadable`) and ride the mechanism every rule rides: one re-ask, then a
-  stop for a person. The count is read as generously as the tree allows — the widest
+  layout has no properties to list, and a template creation's `fields`, which are the
+  subject's binding tokens — the template's analogue of a layout's regions, since what a
+  template promises is what differs per record. Matching a plan's English `why` against
+  a node tree would be a second guess dressed as a check, so the planner is asked for a
+  checkable assertion instead. Findings name no rule (`plan-items-short`,
+  `plan-region-missing`, `plan-region-unreadable`, `plan-token-missing`,
+  `plan-token-unreadable`) and ride the mechanism every rule rides: one re-ask, then a
+  stop for a person.
+- **A template's tokens (AGL-3143).** Added after a sixth live miss on beta.147: a brief
+  asked for an attorney's bar admissions, the plan's `why` promised "a bar-admissions
+  block", and the built template had none and reported `Done`. Nothing had gone wrong in
+  the build — `author` fills six tokens (name, bio, image, jobTitle, worksFor, url) and
+  no catalog anywhere fills a bar admission, so the promise was unkeepable when it was
+  written. Read as a token list the promise cannot even be made: `plan-token-unreadable`
+  names what the page CAN fill, which is a cheaper place to stop than after a document
+  is paid for. ⛔ The line telling a template job what its `fields` are rides that job's
+  OWN plan turn (`aiPlanTemplateTokenLines`), never the plan tool's `fields` description,
+  which every kind's request caches: written there it cost 40 tokens of the shared prefix
+  — 2,980 to 3,020 — which is one credit of the Free page's 300-credit wall and takes the
+  room it keeps for a re-asked section from 45 to 44. A page job does not pay for a
+  sentence about templates. The count is read as generously as the tree allows — the widest
   fan-out, or the largest group of one shape — and speaks only when the section is
   SHORT, so every reading that finds more items makes it quieter; a section whose items
   a collection fills at render is not counted at all, which is what rule 8 asked for.
@@ -1589,6 +1605,14 @@ Assist panel.
   to build with the inventory ids it places, the names of the sections built
   above it, never their content, and the most elements the section may carry
   (`aiJobPageSectionMaxElements`, [in real tokens](#the-time-budget)). A section
+  whose plan line shows items is also told how to repeat one within that budget,
+  and only then: written once where the workspace keeps no reusable components
+  (AGL-3053), and placed as one repeated instance of the component the section
+  places where it keeps them (AGL-3143). Before that second line existed, a paid
+  section was told how many elements to keep under but never how to get there,
+  and a six-card grid measured live on 2026-09-21 was drawn inline, cut off, and
+  cut off again on the re-ask, ending the job with no page. A section with
+  nothing to repeat, or nothing to repeat it from, is told neither. A section
   cut off at its ceiling is re-asked for a smaller one — fewer elements, shorter
   copy, a repeated item placed as an instance, or written once where the
   workspace keeps no reusable components — and one cut off twice stops as

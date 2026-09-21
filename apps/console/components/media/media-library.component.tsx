@@ -44,9 +44,9 @@ import {
   wouldCreateCycle,
 } from '@aglyn/aglyn'
 import {
-  hostContentCollectionLabel,
-  PLUGIN_CONTENT_ROUTE_SLUG,
-} from '@aglyn/aglyn'
+  pluginHostCollectionLabel,
+  pluginHostCollectionRouteSlug,
+} from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
 import { hostDisplayDomain } from '../../constants/tenant-links'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 // Subpath, not the barrel: the empty state is console-only and the barrel
@@ -344,12 +344,13 @@ const REF_KIND_LABEL: Record<MediaUsageRef['kind'], string> = {
  * Plugin rows do not share a label: a product, an event and a bookable service
  * are all `kind: 'plugin'`, and telling an author their photo is used by a
  * "Plugin" is barely better than not telling them at all. The collection name
- * is the label, humanised by the same helper the guard spec pins, so a newly
- * scanned collection reads correctly without a second list to keep in step.
+ * is the label — the owning plugin's if it declared one, else humanised by
+ * the same helper the guard spec pins, so a newly scanned collection reads
+ * correctly without a second list to keep in step.
  */
 const refKindLabel = (reference: MediaUsageRef): string =>
   reference.kind === 'plugin' && reference.collectionId
-    ? hostContentCollectionLabel(reference.collectionId)
+    ? pluginHostCollectionLabel(reference.collectionId)
     : REF_KIND_LABEL[reference.kind]
 
 
@@ -2896,15 +2897,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       }
       // A plugin-owned document (AGL-1867) — a product, an event, a service.
       // The destination is the plugin's own console page, which is where the
-      // author edits or removes the thing holding the asset. A collection with
-      // no declared slug renders as plain text rather than being dropped: the
-      // ROW is the safety answer, the link is a convenience, and making
-      // coverage wait on a route is how the collection ends up uncovered.
+      // author edits or removes the thing holding the asset, and the PLUGIN
+      // says which page that is (AGL-3080): core's hand-kept map had three
+      // that pointed somewhere the document is not, and an author sent to the
+      // wrong hub concludes the panel is lying. A collection with no declared
+      // slug renders as plain text rather than being dropped: the ROW is the
+      // safety answer, the link is a convenience, and making coverage wait on
+      // a route is how the collection ends up uncovered.
       if (reference.kind === 'plugin') {
         const slug = reference.collectionId
-          ? PLUGIN_CONTENT_ROUTE_SLUG[
-              reference.collectionId as keyof typeof PLUGIN_CONTENT_ROUTE_SLUG
-            ]
+          ? pluginHostCollectionRouteSlug(reference.collectionId)
           : undefined
         return slug
           ? buildRoute(Route.HOST_PLUGIN, {

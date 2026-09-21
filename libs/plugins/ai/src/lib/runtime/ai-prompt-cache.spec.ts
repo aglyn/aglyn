@@ -672,7 +672,7 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // the whole doctrine, each generation's rules and its tool, which clear
       // the balanced tier's minimum, so a bulk job reads the prefix once a
       // product after its first.
-      'product-copy': { prefixTokens: 2_391, minimum: 1_024, caches: true, toolsStable: true },
+      'product-copy': { prefixTokens: 2_421, minimum: 1_024, caches: true, toolsStable: true },
       catalog: { prefixTokens: 2_446, minimum: 1_024, caches: true, toolsStable: true },
       categories: { prefixTokens: 2_345, minimum: 1_024, caches: true, toolsStable: true },
       // CRM by AI (AGL-2917), on the fast tier: no shape reaches its minimum,

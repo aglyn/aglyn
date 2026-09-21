@@ -1199,7 +1199,7 @@ jobs:
       # a package whose tags were simply never read. The skip for a version a
       # package never published is held here too: `@aglyn/cli` carries its own
       # number, and counting npm's refusal as a failure would red every run.
-      - run: npm run test:dist-tag-latest
+      - run: npm run test:dist-tags
 
       # AGL-3079 — every Firestore document the platform names is named by
       # `createResourceUid()`, the 10-character id a member sees in the

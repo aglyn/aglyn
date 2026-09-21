@@ -31,7 +31,7 @@
  * only ever held the last request.
  */
 
-import { aiUsageByUserExpiry } from '../model/ai-usage-by-user'
+import { aiUsageByUserExpiry, aiUsageMonthKeys } from '../model/ai-usage-by-user'
 
 let mockDocs = new Map<string, Record<string, unknown>>()
 /** Every path handed to `recursiveDelete`, in order. */
@@ -441,15 +441,35 @@ describe('readOrgAiUsageByUser', () => {
 })
 
 describe('readUserAiUsageMonths', () => {
+  // The window the reader asks for, so these fixtures cannot age out of it.
+  const [THIS_MONTH, LAST_MONTH, TWO_BACK] = aiUsageMonthKeys()
+
   it('lists newest first, capped', async () => {
-    mockDocs.set(monthPath('user-a', '2026-07'), { credits: 1 })
-    mockDocs.set(monthPath('user-a', '2026-09'), { credits: 3 })
-    mockDocs.set(monthPath('user-a', '2026-08'), { credits: 2 })
+    mockDocs.set(monthPath('user-a', TWO_BACK), { credits: 1 })
+    mockDocs.set(monthPath('user-a', THIS_MONTH), { credits: 3 })
+    mockDocs.set(monthPath('user-a', LAST_MONTH), { credits: 2 })
     const months = await readUserAiUsageMonths(firestore(), ORG, 'user-a', 2)
     expect(months.map((entry) => [entry.month, entry.credits])).toEqual([
-      ['2026-09', 3],
-      ['2026-08', 2],
+      [THIS_MONTH, 3],
+      [LAST_MONTH, 2],
     ])
+  })
+
+  it('asks by id and never orders, so it needs no index a deploy must carry (AGL-3143 §13)', async () => {
+    // Production refused `orderBy(documentId, 'desc')` with FAILED_PRECONDITION
+    // — Firestore indexes __name__ ascending automatically and descending not
+    // at all — and /api/ai/usage?uid=… answered 500 on every call. Both
+    // doubles in this repo served that query happily, which is how it shipped.
+    // A month OUTSIDE the retention window is the tell: the ordered query
+    // returned it, and asking for the window by id cannot.
+    mockDocs.set(monthPath('user-a', THIS_MONTH), { credits: 3 })
+    mockDocs.set(monthPath('user-a', '2019-01'), { credits: 99 })
+    const months = await readUserAiUsageMonths(firestore(), ORG, 'user-a', 5)
+    expect(months.map((entry) => entry.month)).toEqual([THIS_MONTH])
+  })
+
+  it('reads a person with no months at all as none, spending no query', async () => {
+    expect(await readUserAiUsageMonths(firestore(), ORG, 'user-nobody', 3)).toEqual([])
   })
 })
 

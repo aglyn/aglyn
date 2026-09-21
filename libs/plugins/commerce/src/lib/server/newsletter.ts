@@ -36,7 +36,7 @@ import {
   resolveOrgIdForHost,
   siteRequiresDoubleOptIn,
 } from '@aglyn/tenant-data-admin'
-import { captureHostContact } from '@aglyn/tenant-runtime'
+import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { buildConfirmUrl } from '@aglyn/tenant-data-admin/server/email-unsubscribe-link'
 import { sendEmail } from '@aglyn/shared-util-email'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
@@ -326,19 +326,37 @@ export const newsletterHandler: PluginApiHandler = async (req, res) => {
       email,
       atMs: now,
     })
-    await captureHostContact({
+    /*
+     * Reported to whichever plugin keeps people, not written by this one
+     * (AGL-3080). A newsletter signup is commerce meeting somebody; what a
+     * person record is, and whether this workspace keeps any, belongs to the
+     * plugin that models them.
+     *
+     * Still awaited, because the confirmation below is deliberately after it.
+     */
+    await recordCapturedContact({
+      /*
+       * Not resolved here. The record system keys a person on the SITE they
+       * were met on, so this costs the capture nothing — and resolving it
+       * would put a Firestore read in front of the writer, which is the one
+       * thing `recordCapturedContact` asks a door not to do.
+       */
+      orgId: '',
       hostId,
-      email,
-      source: 'newsletter',
-      // The stage the name is for (AGL-2612): somebody who asked to hear
-      // from the site and nothing more yet.
-      initialLifecycleStage: 'subscriber',
-      marketingConsent: true,
+      identity: { email },
       interaction: {
+        source: 'newsletter',
         refId: `newsletter-${now}`,
         summary: 'Subscribed to the newsletter',
       },
-      ...(campaignTouch ? { campaignTouch } : {}),
+      // The stage the name is for (AGL-2612): somebody who asked to hear
+      // from the site and nothing more yet. A floor, so a customer who
+      // subscribes stays a customer.
+      lifecycleFloor: 'subscriber',
+      marketingConsent: true,
+      // Where the visitor ARRIVED from — a fact about this visit and not
+      // about the person, which is what `detail` carries.
+      ...(campaignTouch ? { detail: { campaignTouch } } : {}),
     })
     /*
      * The confirmation, when this site asks for one.

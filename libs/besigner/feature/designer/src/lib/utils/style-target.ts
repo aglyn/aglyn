@@ -64,6 +64,19 @@ export interface NodeStyleTarget {
   readonly overrideKey: string
   /** True when the target is a leaf inside the component, not its root. */
   readonly isLeafOverride: boolean
+  /**
+   * True when `sx` above is a COMPOSITION of two stored records rather than
+   * one — a plain node that carries both a `props.sx` and a `node.sx`
+   * (AGL-3218).
+   *
+   * The panel needs this to say so. Everything about the split is correct
+   * and invisible while you stay in the UI, and misleading the moment you
+   * leave it: the stored node does not contain the document the editor
+   * shows, and a reader who opens `props.sx` alone — a Raw JSON pane, an
+   * export, a script auditing the corpus — sees an edit that looks like it
+   * never landed.
+   */
+  readonly isComposed: boolean
   /** Replaces the target sx wholesale (MobX action inside). */
   setSx(next: Record<string, any> | undefined): void
 }
@@ -225,6 +238,9 @@ export function getNodeStyleTarget(
       isInstanceOverride: false,
       overrideKey: '',
       isLeafOverride: false,
+      get isComposed() {
+        return nodePropsSx(node) !== undefined
+      },
       get sx() {
         // The COMPOSED record, not `node.sx` alone (AGL-1346) — see
         // `composedNodeSx`. Identity is preserved when the node has no
@@ -248,6 +264,9 @@ export function getNodeStyleTarget(
     isInstanceOverride: true,
     overrideKey: key,
     isLeafOverride: key !== STYLE_OVERRIDES_ROOT_KEY,
+    // An override slice is read uncomposed (see below), so what the editor
+    // shows IS the stored record and there is nothing to disclose.
+    isComposed: false,
     get sx() {
       return (node.styleOverrides as Record<string, any> | undefined)?.[key]
     },

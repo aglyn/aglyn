@@ -43,7 +43,6 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 jest.mock('@aglyn/tenant-runtime', () => ({
-  captureHostContact: () => undefined,
   emitHostEvent: async () => ({ alerts: [] }),
 }))
 
@@ -142,6 +141,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
+import type { PluginContactCaptureRequest } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { standInRecordSystem } from './testing/stand-in-record-system'
 import { computeOpenSlots } from './model'
 import { bookHandler } from './server'
 
@@ -192,9 +193,13 @@ const makeReq = (overrides: Record<string, unknown> = {}) =>
     cookies: {},
   }) as any
 
+/** What the door reported, filled by the stand-in record system. */
+let captured: PluginContactCaptureRequest[] = []
+
 beforeEach(() => {
   state.bookings.clear()
   fileBookingOnCrm.mockClear()
+  captured = standInRecordSystem()
 })
 
 /** The one row the route wrote. */
@@ -222,6 +227,33 @@ describe('a free booking made through a CRM booking link', () => {
         crmRef: 'contact:contact-1',
       },
       service: { name: 'Intro call', crmFollowUpTask: true },
+    })
+  })
+
+  /**
+   * WHO KEEPS THE PERSON IS NOT THIS PLUGIN'S BUSINESS (AGL-3080).
+   *
+   * A booking request identifies somebody, and bookings reports that through
+   * the platform's contact-capture contract rather than writing a contact
+   * itself. What it owes the record system is the address, its own word for
+   * the door, the stage a request is worth and the consent the visitor gave;
+   * everything a person record is — keying the address, the audience band,
+   * the erasure rows — belongs to whichever plugin keeps people.
+   *
+   * ⚠️ The floor is `lead` and not `customer`: no money has moved when a
+   * request is made. The payment webhook is the door that makes a customer.
+   */
+  it('reports the person it met to whichever plugin keeps people', async () => {
+    const res = makeRes()
+    await bookHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+
+    expect(captured).toHaveLength(1)
+    expect(captured[0]).toMatchObject({
+      hostId: 'host-1',
+      identity: { email: 'dana@example.com' },
+      interaction: { source: 'booking', refId: writtenRow().id },
+      lifecycleFloor: 'lead',
     })
   })
 

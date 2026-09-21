@@ -141,6 +141,22 @@ export interface PluginContactCaptureRequest {
    * does not blank a title somebody typed.
    */
   profile?: Readonly<Record<string, unknown>>
+  /**
+   * Facts about THIS CAPTURE that the owner models and the platform does not
+   * (AGL-3080) — which form was filled in, which page it was on, where the
+   * visitor arrived from.
+   *
+   * Opaque for the reason {@link profile} is: every one of these is a concept
+   * belonging to the plugin that keeps people or to the silo that saw it, and
+   * a typed core field for each would be those models spelled out in the
+   * platform again. `profile` describes the PERSON and outlives the visit;
+   * this describes the visit and does not.
+   *
+   * A key the owner does not recognize is the owner's to ignore, and a silo
+   * that sends nothing here loses nothing: every field is an enrichment of a
+   * capture that is already complete without it.
+   */
+  detail?: Readonly<Record<string, unknown>>
 }
 
 /**

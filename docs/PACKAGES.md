@@ -624,24 +624,78 @@ replaced was granular with the 2FA bypass and expired 2026-12-19; npm removes
 direct publishing with those in **January 2027**. A secret that does not exist
 cannot expire, leak, or be rotated into a broken release.
 
-### `latest` has to be moved by hand until 1.0.0
+### `latest`, until 1.0.0 exists
 
-`publish-packages.mjs` puts a prerelease under its own label (`beta`) and never
-`latest`, so a beta is not what `npm install` hands somebody who asked for
-nothing in particular. That rule assumes `latest` points at a release worth
-having, and it does not: **npm sets `latest` on a package's FIRST publish
-whatever `--tag` says**, so all 50 libs pinned it to `1.0.0-beta.143` — the one
-build whose folder-subpath imports a consumer cannot resolve at all.
+A prerelease normally publishes under its own label (`beta`) so it is not what
+`npm install` hands somebody who asked for nothing in particular. That rule
+assumes `latest` already points at a release worth having.
+
+**It did not.** npm sets `latest` on a package's FIRST publish whatever `--tag`
+says, so all 50 libs pinned it to `1.0.0-beta.143` — the one build whose
+folder-subpath imports a consumer cannot resolve at all — and every later beta
+went to `beta`, so `latest` never moved again.
+
+So `distTagFor` asks the registry: **a prerelease takes `latest` when that
+package has never published a non-prerelease**, and its own label once one
+exists. Between "the default is a prerelease" and "the default does not work",
+the first is the lesser harm, and it is only ever the newest prerelease. The
+condition is per package and read fresh, so it corrects itself the day `1.0.0`
+ships — nothing to remember, nothing to undo. `@aglyn/cli` carries its own
+stable number and is unaffected.
+
+⛔ **It cannot be done by moving the tag afterwards.** An OIDC token authorizes
+`npm publish` and `npm stage publish` and nothing else, so a `npm dist-tag add`
+step would need back the long-lived token trusted publishing exists to retire.
+The tag is chosen at publish time because that is the only moment CI may
+choose it.
+
+### The second tag
+
+`npm publish --tag` takes ONE tag, so a version always leaves another unset:
+while no release exists the publish spends it on `latest` and `beta` is left
+behind, and afterwards it runs the other way round. `publish-packages.yml`
+closes that with a step of its own, and `dist-tags.yml` closes a gap on demand
+— a version published before a rule changed, or a tag step that failed —
+without a republish.
 
 ```sh
-npm run dist-tag:latest            # read only: what each tag says
-npm run dist-tag:latest -- --set   # the owner moves the ones behind
+npm run dist-tags                     # read only: where every tag points today
+npm run dist-tags -- --set            # move the ones behind
+npm run dist-tags -- --probe          # may this runner move a tag at all?
+npm run dist-tags -- --version 1.0.0  # a version other than the repo's
 ```
 
-It targets the version the repo carries, skips a package that version was never
-published for (`@aglyn/cli` keeps its own number), and is the owner's to run —
-it changes what every `npm install` of these packages hands out. When a
-non-prerelease ships it sets `latest` itself and this stops having a job.
+`tagsFor` asks `distTagFor` rather than repeating its rule, so the publish and
+this can never disagree about which tag a version belongs on — and **`latest`
+is never walked back onto a prerelease once a release exists.**
+
+⛔ **"Not on the registry" is two different things.** A package that carries its
+OWN version (`@aglyn/cli`) will never have the repo's, and that is a fact:
+skipped. A package that carries the repo's version and does not have it is
+either mid-publish or unpublished, and its tag is now wrong. **npm's read path
+lags a publish by minutes** — this runs minutes after one — so the run waits
+and re-reads rather than moving on, and fails loudly if the version never
+appears. Reading the two as one is how the first run of this left `latest`
+behind on two packages and reported success.
+
+⛔ **This is the one thing `NPM_TOKEN` still does.** An OIDC identity may not
+set a dist-tag, so the publish step runs tokenless and this one carries the
+secret. In `publish-packages.yml` it is `continue-on-error`: the default
+install is already correct by then, so a missing or expired token leaves a
+stale second tag and nothing worse. The token expires **2026-12-19**, and on
+that day releases go out exactly as before.
+
+`--probe` exists because a run where every tag already happens to be correct
+writes nothing, and so cannot tell a runner that MAY write from one that may
+not — the automation would look healthy until the first release that needed
+it. It rewrites one existing tag to the value it already has: a real
+authenticated write, a no-op in its effect, nothing to undo.
+
+⛔ It used to write a throwaway tag and delete it, and that was wrong. **The
+publish token may ADD a dist-tag and is refused `403` on DELETE**, so the probe
+proved write access and then could not clean up after itself. A probe that
+needs a second permission to undo its own first one is not a probe; it is a
+second thing that can fail.
 
 ⛔ **`createPackage` is not the same as being configured**, and the check knows
 the difference. A row created after 2026-09-03 carries `createStagedPackage`

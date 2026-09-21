@@ -2983,3 +2983,154 @@ describe('an entry that carries its own collection (AGL-2518)', () => {
     expect(index.map((row) => row.url)).toEqual(['/changelog/a-post', '/blog/b'])
   })
 })
+
+/**
+ * Cursor addressing (AGL-3219).
+ *
+ * `/{collection}/page/{n}` names a POSITION, and a listing takes its inserts
+ * at the head, so every publish moves every position by one. On a collection
+ * bigger than one read the head pages and the deep pages were two differently
+ * cached reads stitched at that position, and the seam between them repeated
+ * an entry or hid one — live, on `/changelog`, the day this was written.
+ *
+ * A cursor asks what follows a DOCUMENT, which nothing published above it can
+ * change.
+ */
+describe('cursor addressing (AGL-3219)', () => {
+  it('builds a PATH cursor, never a query string', () => {
+    // A query string is not part of the tenant page's ISR cache key, so every
+    // cursor address would share one entry and serve whichever rendered first
+    // to everybody — the same reason a category is a path segment (AGL-1152).
+    expect(collectionListUrl({ collectionSlug: 'blog', after: 'e9' })).toBe(
+      '/blog/after/e9',
+    )
+    expect(collectionListUrl({ collectionSlug: 'blog', before: 'e9' })).toBe(
+      '/blog/before/e9',
+    )
+    expect(
+      collectionListUrl({
+        collectionSlug: 'blog',
+        categorySlug: 'Open Source',
+        after: 'e9',
+      }),
+    ).toBe('/blog/category/open-source/after/e9')
+  })
+
+  it('escapes a cursor rather than letting it add segments', () => {
+    expect(
+      collectionListUrl({ collectionSlug: 'blog', after: 'a/b?c' }),
+    ).toBe('/blog/after/a%2Fb%3Fc')
+  })
+
+  it('prefers the cursor when a page number is passed too', () => {
+    // The number is a label and the cursor is the address; when they disagree
+    // the one that survives a publish wins.
+    expect(
+      collectionListUrl({ collectionSlug: 'blog', page: 7, after: 'e9' }),
+    ).toBe('/blog/after/e9')
+  })
+
+  it('still mints a numbered page for a collection that fits one read', () => {
+    // Inside the bound every page is sliced out of ONE cached snapshot, so no
+    // publish can move one page's entries relative to another's and the
+    // numbered address readers and crawlers already have stays valid.
+    expect(collectionListUrl({ collectionSlug: 'blog', page: 3 })).toBe(
+      '/blog/page/3',
+    )
+  })
+
+  it('parses both cursor directions', () => {
+    expect(parseCollectionRoute(['blog', 'after', 'e9'])).toEqual({
+      collectionSlug: 'blog',
+      after: 'e9',
+      page: 1,
+    })
+    expect(parseCollectionRoute(['blog', 'before', 'e9'])).toEqual({
+      collectionSlug: 'blog',
+      before: 'e9',
+      page: 1,
+    })
+    expect(parseCollectionRoute(['blog', 'after', 'a%2Fb'])).toEqual({
+      collectionSlug: 'blog',
+      after: 'a/b',
+      page: 1,
+    })
+  })
+
+  it('leaves an entry slugged `after` alone', () => {
+    // `/blog/after` is ONE segment past the collection and so is an entry;
+    // the cursor shape is two. A post about what comes after something keeps
+    // its URL.
+    expect(parseCollectionRoute(['blog', 'after'])).toEqual({
+      collectionSlug: 'blog',
+      entrySlug: 'after',
+      page: 1,
+    })
+  })
+
+  it('refuses a cursor segment with nothing after it', () => {
+    expect(parseCollectionRoute(['blog', 'after', ''])).toBeNull()
+  })
+
+  it('pages by cursor once the total is unknown', () => {
+    const links = collectionPaginationLinks({
+      collectionSlug: 'blog',
+      page: 11,
+      nextCursor: 'e120',
+      prevCursor: 'e111',
+    })
+    expect(links.nextUrl).toBe('/blog/after/e120')
+    expect(links.prevUrl).toBe('/blog/before/e111')
+    // Zero is "unknown", and the pager reads it as "do not print a total".
+    expect(links.totalPages).toBe(0)
+  })
+
+  it('has no next link when the probe found no extra row', () => {
+    // `''` is the whole of "there is nothing older" — the `perPage + 1` read
+    // asked for an eleventh entry and there was not one.
+    expect(
+      collectionPaginationLinks({
+        collectionSlug: 'blog',
+        page: 11,
+        nextCursor: '',
+        prevCursor: 'e111',
+      }).nextUrl,
+    ).toBe('')
+  })
+
+  it('sends page 2 back to the bare listing, not to a cursor', () => {
+    // The head of a collection has no cursor: `/blog` IS its address.
+    expect(
+      collectionPaginationLinks({
+        collectionSlug: 'blog',
+        page: 2,
+        nextCursor: 'e20',
+        prevCursor: 'e11',
+      }).prevUrl,
+    ).toBe('/blog')
+  })
+
+  it('keeps numbered links while a total is known', () => {
+    const links = collectionPaginationLinks({
+      collectionSlug: 'blog',
+      page: 2,
+      totalPages: 3,
+      nextCursor: 'e20',
+      prevCursor: 'e11',
+    })
+    expect(links.nextUrl).toBe('/blog/page/3')
+    expect(links.prevUrl).toBe('/blog')
+  })
+
+  it('answers an entry route with the inert page 1 of 1 it always did', () => {
+    // No cursors passed at all means no listing — an entry template binding
+    // `{{pagination.*}}` must not be told it is on page 1 of 0.
+    const links = collectionPaginationLinks({ collectionSlug: 'blog' })
+    expect(links).toEqual({
+      page: 1,
+      totalPages: 1,
+      prevUrl: '',
+      nextUrl: '',
+    })
+  })
+})

@@ -574,11 +574,43 @@ export interface CollectionRouteCategory {
 }
 
 export interface CollectionPagination {
-  /** 1-based current page. */
+  /**
+   * 1-based counter for display only (AGL-3219).
+   *
+   * It is what `{{pagination.page}}` renders and nothing reads it back: a
+   * cursor page is addressed by the document it starts after, so this number
+   * describes how far a reader has walked rather than where the read began.
+   * Hand-edit it in a URL and the label is wrong; the entries are not.
+   */
   page: number
   perPage: number
-  totalPages: number
-  totalEntries: number
+  /**
+   * The document id the NEXT (older) page starts after, or `''` when this is
+   * the last page (AGL-3219).
+   *
+   * Set from a `limit(perPage + 1)` probe: the extra row is the only evidence
+   * needed that an older page exists, and it costs one document rather than
+   * the `count()` aggregation a total used to need. It is also the only
+   * honest answer available — see {@link CollectionPagination.totalPages}.
+   */
+  nextCursor: string
+  /** The document id the PREVIOUS (newer) page starts before, or `''`. */
+  prevCursor: string
+  /**
+   * How many pages there are.
+   *
+   * @deprecated AGL-3219. Still resolved, so a template binding
+   * `{{pagination.totalPages}}` keeps rendering, but no longer a promise: a
+   * total can only be stated for a collection that fits inside one read, and
+   * past that it is absent rather than wrong. It used to be derived from a
+   * `count()` over a set the listing's two reads disagreed about, which is
+   * how the page 10/11 seam came to repeat an entry. Bind
+   * {@link CollectionPagination.nextCursor} instead — `''` means there is
+   * nothing older, which is the question a pager is actually asking.
+   */
+  totalPages?: number
+  /** @deprecated AGL-3219, with {@link CollectionPagination.totalPages}. */
+  totalEntries?: number
   /**
    * Where `entries` begins in the collection's own order (AGL-3213): 0 for a
    * listing served from the cached read, and the page's own offset for one
@@ -608,19 +640,6 @@ interface LiveEntriesRead {
   entries: CollectionEntrySummary[]
   /** The query came back holding its own `.limit()`. */
   reachedBound: boolean
-  /**
-   * How many entries are live in the WHOLE collection (AGL-3213), which is
-   * the number a pager has to state. `entries.length` is the size of the
-   * READ, and on a collection past the bound the two stop being the same
-   * number — which is how `/changelog` came to say "Page 10 of 10" while
-   * holding 166 entries.
-   *
-   * Counted rather than listed: one `count()` aggregation over the published
-   * entries, billed at a read per 1000 index entries, plus the live schedules
-   * this read already holds. Only asked for when the read DID reach its
-   * bound; under it the entries in hand ARE the collection.
-   */
-  totalLive: number
   /**
    * The read saw a `scheduled` entry whose `publishAt` has NOT arrived and
    * which has not been terminally refused — a schedule this collection is
@@ -857,42 +876,6 @@ function toLiveEntries(
 }
 
 /**
- * How many entries are live in the whole collection (AGL-3213).
- *
- * The aggregation counts `published`, which `isLive` admits unconditionally,
- * and the live schedules are added from the docs already in hand — a due
- * schedule is still stored as `scheduled` while this runs, because
- * `flipDueEntry` writes behind the render, so neither half can count it twice.
- *
- * Falls back to the size of the read on failure. A pager that overstates by a
- * page is a page a reader can see is empty; a pager that throws is a listing
- * that does not render.
- */
-async function countLiveEntries(
-  entriesRef: FirebaseFirestore.CollectionReference,
-  docs: readonly FirebaseFirestore.QueryDocumentSnapshot[],
-  permission: SchedulePermission,
-  fallback: number,
-): Promise<number> {
-  try {
-    const published = await entriesRef
-      .where('status', '==', 'published')
-      .count()
-      .get()
-    const counted = Number(published.data()?.count ?? Number.NaN)
-    if (!Number.isFinite(counted)) return fallback
-    const liveSchedules = docs.filter((entryDoc) => {
-      const value = entryDoc.data()
-      return value['status'] === 'scheduled' && isLive(value, permission)
-    }).length
-    return counted + liveSchedules
-  } catch (error) {
-    console.error(error)
-    return fallback
-  }
-}
-
-/**
  * Fetches a collection's live entries (newest first), shared by the route
  * loader and the compose-time Collection entries block (AGL-551).
  */
@@ -933,32 +916,55 @@ async function listLiveEntries(
     entries,
     reachedBound,
     pendingSchedule,
-    totalLive: reachedBound
-      ? await countLiveEntries(entriesRef, docs, permission, entries.length)
-      : entries.length,
   }
 }
 
+/** One page of a listing, and whether anything older follows it. */
+interface CollectionListingPage {
+  entries: CollectionEntrySummary[]
+  /** The `limit(perPage + 1)` probe found an extra row. */
+  hasMore: boolean
+}
+
 /**
- * One page of a listing that starts PAST the cached read (AGL-3213).
+ * One page of a listing that starts PAST the cached read (AGL-3213),
+ * addressed by the document it continues from rather than by a position
+ * (AGL-3219).
  *
  * Uncached on purpose, and it is the only read on the collection path that is.
- * The cached source exists because `/blog`, every `/blog/page/{n}`, every
- * category listing, the feed and every "Latest posts" rail want the same first
- * hundred entries (AGL-1302); a page past that bound wants ten entries nobody
- * else is asking for, and its own ISR entry is already the cache for them.
+ * The cached source exists because `/blog`, every listing address, the feed
+ * and every "Latest posts" rail want the same first hundred entries
+ * (AGL-1302); a page past that bound wants ten entries nobody else is asking
+ * for, and its own ISR entry is already the cache for them.
  *
- * `offset` bills the documents it skips, so page 11 of a long collection costs
- * its 110 reads per regeneration. That is the price of a listing that can be
- * read to the end, it is paid only by collections past the bound, and it is
- * paid once per page per revalidate window.
+ * ## Why a cursor, and not the offset this replaces
+ *
+ * `.offset(n)` asks for a POSITION, and a listing takes its inserts at the
+ * head, so every publish moves every position by one. The head pages and this
+ * read are cached under different policies and revalidated by different
+ * triggers — the publish fan-out refreshes the head eagerly and deliberately
+ * stops there — so the two sides were routinely describing the collection as
+ * it stood at two different moments, and the seam between them repeated an
+ * entry or hid one for as long as the slower side lagged. `v1.0.0-beta.147`
+ * shipped and `/changelog` showed `v1-0-0-beta-36` as both the last entry of
+ * page 10 and the first of page 11.
+ *
+ * `startAfter(doc)` asks a question whose answer does not move: what follows
+ * THIS entry. Publish a hundred entries at the head and this page returns the
+ * same ten. The seam cannot drift because there is no longer a number on
+ * either side of it to disagree about.
+ *
+ * `offset` also billed every document it skipped; a cursor bills none of them.
  */
-async function readCollectionListingWindow(options: {
+async function readCollectionListingPage(options: {
   hostId: string
   collectionSlug: string
-  offset: number
+  /** Start after this document id — the older direction. */
+  after?: string
+  /** Start before this document id — the newer direction. */
+  before?: string
   limit: number
-}): Promise<CollectionEntrySummary[] | null> {
+}): Promise<CollectionListingPage | null> {
   try {
     const collectionDoc = await findContentCollection(
       options.hostId,
@@ -966,15 +972,37 @@ async function readCollectionListingWindow(options: {
     )
     if (!collectionDoc) return null
     const entriesRef = collectionDoc.ref.collection('entries')
+
+    const cursorId = options.before || options.after
+    if (!cursorId) return null
+    // A direct get, not a `where('slug', ...)` query: the cursor IS the
+    // document name, which is the second field the read orders on, so the
+    // snapshot it needs is one document rather than an index lookup.
+    const cursorDoc = await entriesRef.doc(cursorId).get()
+    // A cursor naming a document that no longer exists — deleted, or a URL
+    // someone kept — cannot be positioned against. Null sends the caller back
+    // to the cached head, which is a page the reader can act on.
+    if (!cursorDoc.exists) return null
+
+    // Backwards is the same query read the other way up, so both directions
+    // rest on an index the project already deploys: `(status, publishedAt)`
+    // exists ascending and descending both.
+    const backwards = Boolean(options.before)
     const snapshot = await liveEntriesBase(entriesRef)
-      .orderBy('publishedAt', 'desc')
-      .orderBy('__name__', 'desc')
-      .offset(options.offset)
-      .limit(options.limit)
+      .orderBy('publishedAt', backwards ? 'asc' : 'desc')
+      .orderBy('__name__', backwards ? 'asc' : 'desc')
+      .startAfter(cursorDoc)
+      // One more than the page: the extra row is the whole of "is there
+      // another page", and it replaces a `count()` over the collection.
+      .limit(options.limit + 1)
       .get()
-    const due = snapshot.docs.filter((entryDoc) =>
-      isDueScheduled(entryDoc.data()),
-    )
+
+    const hasMore = snapshot.docs.length > options.limit
+    const pageDocs = snapshot.docs.slice(0, options.limit)
+    // Read backwards, the newest of the page came back last.
+    const docs = backwards ? [...pageDocs].reverse() : pageDocs
+
+    const due = docs.filter((entryDoc) => isDueScheduled(entryDoc.data()))
     const permission: SchedulePermission = due.length
       ? await scheduledPublishingPermission(options.hostId)
       : 'allowed'
@@ -983,18 +1011,63 @@ async function readCollectionListingWindow(options: {
         flipDueEntry(entryDoc.ref, entryDoc.data(), permission)
       }
     }
-    const entries = toLiveEntries(snapshot.docs, permission)
+    const entries = toLiveEntries(docs, permission)
     // The byline reads `authorName`, which a record-backed author only has
     // once resolved — the cached source does this for the entries it holds,
     // and a windowed page holds entries it never saw (AGL-2486).
     await attachEntryAuthors(options.hostId, entries)
-    return entries
+    return { entries, hasMore }
   } catch (error) {
     // Fail open to the cached head rather than to a 500: the caller keeps
     // whatever it already had, which is a page the reader has seen before
     // rather than an error they cannot get past.
     console.error(error)
     return null
+  }
+}
+
+/**
+ * The cursor a retired `/{collection}/page/{n}` address redirects onto
+ * (AGL-3219).
+ *
+ * This is the ONE place a position is still resolved, and it is deliberately
+ * the only one: a 301 is served once, the reader lands on an address that
+ * cannot drift afterwards, and whatever the position meant at that instant is
+ * the page they would have got anyway. Everything downstream is cursors.
+ *
+ * Keys only — `select()` with no fields asks Firestore for document names and
+ * nothing else — so the skipped documents are billed at the cheapest rate the
+ * offset can be had for. Returns `''` when the position is past the end,
+ * which is a 404 rather than a redirect to nowhere.
+ */
+export async function resolveCollectionPageCursor(options: {
+  hostId: string
+  collectionSlug: string
+  /** 1-based page whose PREVIOUS entry is the cursor. */
+  page: number
+  perPage: number
+}): Promise<string> {
+  const skip = (options.page - 1) * options.perPage - 1
+  if (!Number.isFinite(skip) || skip < 0) return ''
+  try {
+    const collectionDoc = await findContentCollection(
+      options.hostId,
+      options.collectionSlug,
+    )
+    if (!collectionDoc) return ''
+    const snapshot = await collectionDoc.ref
+      .collection('entries')
+      .where('status', 'in', ['published', 'scheduled'])
+      .select()
+      .orderBy('publishedAt', 'desc')
+      .orderBy('__name__', 'desc')
+      .offset(skip)
+      .limit(1)
+      .get()
+    return snapshot.docs[0]?.id ?? ''
+  } catch (error) {
+    console.error(error)
+    return ''
   }
 }
 
@@ -1029,12 +1102,6 @@ export interface PublishedCollectionSource {
    * would tell a reader their search covered less than it did.
    */
   reachedBound: boolean
-  /**
-   * How many entries are live in the whole collection (AGL-3213) — see
-   * {@link LiveEntriesRead.totalLive}. Equal to `entries.length` for every
-   * collection inside the bound, which is almost all of them.
-   */
-  totalLive: number
 }
 
 /**
@@ -1095,11 +1162,9 @@ async function readPublishedCollectionSource(
         entries: [],
         categories: [],
         reachedBound: false,
-        totalLive: 0,
       }
     }
-    const { entries, reachedBound, pendingSchedule, totalLive } =
-      await listLiveEntries(
+    const { entries, reachedBound, pendingSchedule } = await listLiveEntries(
       collectionDoc.ref.collection('entries'),
       options.hostId,
     )
@@ -1114,7 +1179,6 @@ async function readPublishedCollectionSource(
       entries,
       categories: mapCollectionCategories(collectionDoc.get('categories')),
       reachedBound,
-      totalLive,
       ...(pendingSchedule ? { pendingSchedule: true } : {}),
     }
   } catch (error) {
@@ -1124,7 +1188,6 @@ async function readPublishedCollectionSource(
       entries: [],
       categories: [],
       reachedBound: false,
-      totalLive: 0,
     }
   }
 }
@@ -1158,10 +1221,16 @@ function applyCategoryAndPagination(
     categorySlug?: string
   },
   listing?: {
-    /** Live entries in the whole collection — see `LiveEntriesRead.totalLive`. */
-    totalLive?: number
     /** Where `data.entries` begins in that collection's order. */
     windowStart?: number
+    /** The shared read came back holding its own limit. */
+    reachedBound?: boolean
+    /**
+     * The `perPage + 1` probe of a CURSOR page found an extra row — set only
+     * when this listing was served by one, because only that read can answer
+     * it (AGL-3219).
+     */
+    cursorHasMore?: boolean
   },
 ): void {
   const { page = 1, perPage } = options
@@ -1204,20 +1273,62 @@ function applyCategoryAndPagination(
      * a category of a very large collection is capped, and says so by
      * agreeing with what it shows.
      */
-    const known = Number(listing?.totalLive)
-    const totalEntries =
-      !routedCategory && Number.isFinite(known) && known > data.entries.length
-        ? known
-        : data.entries.length
     const windowStart = Number(listing?.windowStart)
+    const windowed = Number.isFinite(windowStart) && windowStart > 0
+
+    /*
+     * The cursors, which are the pager's real answer (AGL-3219).
+     *
+     * `data.entries` is either EXACTLY this page — a cursor read — or the
+     * whole cached head, which every listing address shares and each slices
+     * its own page out of. So the page's own last entry is at the end of the
+     * array in the first case and at `page * perPage - 1` in the second, and
+     * the cursor is that entry's document id.
+     */
+    const pageEnd = windowed ? data.entries.length : page * perPage
+    const last = data.entries[pageEnd - 1]
+    const first = data.entries[windowed ? 0 : (page - 1) * perPage]
+
+    /*
+     * Is there an older page?
+     *
+     * A cursor page KNOWS, because its read asked for one more entry than it
+     * needed and the extra row came back. The head has to reason: either it
+     * is holding more entries than this page shows, or it is holding all it
+     * could read and the read stopped at its own bound, which is the one
+     * thing `entries.length` can never tell you about the collection.
+     */
+    const hasMore =
+      listing?.cursorHasMore ??
+      (data.entries.length > pageEnd ||
+        (Boolean(listing?.reachedBound) && !routedCategory))
+
+    /*
+     * The deprecated total, stated ONLY where it can be true.
+     *
+     * A collection that fits inside one read can be counted, and a template
+     * binding `{{pagination.totalPages}}` keeps rendering the number it
+     * always did. Past the bound there is no honest total — the count and
+     * the listing were reading the collection at two different moments, which
+     * is what made the seam repeat an entry — so it is left absent rather
+     * than asserted. A routed category counts its own narrowed set, which is
+     * bounded by the same head and therefore countable.
+     */
+    const countable = routedCategory || !listing?.reachedBound
+    const totalEntries = countable ? data.entries.length : undefined
+
     data.pagination = {
       page,
       perPage,
-      totalEntries,
-      totalPages: collectionTotalPages(totalEntries, perPage),
-      ...(Number.isFinite(windowStart) && windowStart > 0
-        ? { windowStart }
-        : {}),
+      nextCursor: hasMore && last?.$id ? last.$id : '',
+      prevCursor: page > 1 && first?.$id ? first.$id : '',
+      ...(totalEntries === undefined
+        ? {}
+        : {
+            totalEntries,
+            totalPages: collectionTotalPages(totalEntries, perPage),
+          }),
+      ...(windowed ? { windowStart } : {}),
     }
   }
 }
@@ -1236,10 +1347,25 @@ export async function getCollectionContent(options: {
   hostId: string
   collectionSlug: string
   entrySlug?: string
-  /** 1-based list page (AGL-620); with `perPage`, drives pagination metadata. */
+  /**
+   * 1-based list page (AGL-620), now a DISPLAY counter (AGL-3219): it labels
+   * the page the reader is on and no read is positioned from it. The entries
+   * come from `after`/`before`, or from the head of the cached source when
+   * neither is set.
+   */
   page?: number
   /** Entries per page (AGL-620); when set the list is paginated. */
   perPage?: number
+  /**
+   * Continue AFTER this entry's document id — the older direction (AGL-3219).
+   *
+   * What `/{collection}?after={id}` carries. A page defined this way does not
+   * move when something is published above it, which is the whole reason the
+   * addresses stopped being positions.
+   */
+  after?: string
+  /** Continue BEFORE this entry's document id — the newer direction. */
+  before?: string
   /**
    * Category segment of `/{collection}/category/{slug}` (AGL-1321). Filters
    * the listing before pagination is computed, so page counts and the page
@@ -1326,28 +1452,47 @@ export async function getCollectionContent(options: {
        * it ten entries of which any number may belong to another category.
        */
       const { page = 1, perPage } = options
+      const cursor = (options.after ?? options.before ?? '').trim()
       let windowStart = 0
-      if (perPage && perPage > 0 && source.reachedBound) {
-        const offset = (page - 1) * perPage
-        if (!(options.categorySlug ?? '').trim() && offset >= source.entries.length) {
-          const windowed = await readCollectionListingWindow({
-            hostId,
-            collectionSlug,
-            offset,
-            limit: perPage,
-          })
-          // Null means the window read failed, and the cached head is the
-          // better answer than an empty page: the reader sees page 1's
-          // entries under page N's URL rather than nothing at all.
-          if (windowed) {
-            data.entries = windowed
-            windowStart = offset
-          }
+      let cursored: CollectionListingPage | null = null
+      /*
+       * A cursor address is served by its own read (AGL-3219). Everything
+       * reachable without one comes out of the shared source, so the pages a
+       * reader actually visits stay free.
+       *
+       * Only the unfiltered listing: a category route narrows in memory over
+       * the same head, and a cursor read of the whole collection would hand it
+       * ten entries of which any number belong to another category.
+       */
+      if (perPage && perPage > 0 && cursor && !(options.categorySlug ?? '').trim()) {
+        cursored = await readCollectionListingPage({
+          hostId,
+          collectionSlug,
+          ...(options.before ? { before: options.before } : { after: cursor }),
+          limit: perPage,
+        })
+        // Null means the cursor read failed, or named a document that is
+        // gone. The cached head is the better answer than an empty page: the
+        // reader sees the newest entries rather than nothing at all.
+        if (cursored) {
+          data.entries = cursored.entries
+          /*
+           * `entries` is now EXACTLY this page, and both windowing sites
+           * slice `[(page - 1) * perPage, …)`. Declaring the window to start
+           * at that same offset makes their subtraction come out at zero, so
+           * they take the page whole.
+           *
+           * Both sides of the subtraction are built from the same `page`, so
+           * a hand-edited counter in a URL cancels itself out: the label is
+           * wrong and the entries are still this cursor's page.
+           */
+          windowStart = (page - 1) * perPage
         }
       }
       applyCategoryAndPagination(data, options, {
-        totalLive: source.totalLive,
         windowStart,
+        reachedBound: source.reachedBound,
+        ...(cursored ? { cursorHasMore: cursored.hasMore } : {}),
       })
       return data
     }

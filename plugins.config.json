@@ -113,6 +113,12 @@
         },
         "publishedSiteImpact": "elements"
       },
+      "hostCollections": [
+        {
+          "name": "forms",
+          "routeSlug": "forms"
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -150,6 +156,17 @@
         "releaseFlag": "release_bookings",
         "publishedSiteImpact": "elements"
       },
+      "hostCollections": [
+        {
+          "name": "services",
+          "routeSlug": "bookings"
+        },
+        {
+          "name": "bookings",
+          "mediaScan": "none",
+          "mediaScanReason": "Booking records — a customer, a time and a service pointer. The service holds the imagery and IS scanned; a booking is the transaction against it."
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -212,6 +229,117 @@
           "path": "/products/orders"
         }
       },
+      "hostCollections": [
+        {
+          "name": "products",
+          "routeSlug": "products"
+        },
+        {
+          "name": "productCategories",
+          "routeSlug": "products"
+        },
+        {
+          "name": "suppliers",
+          "routeSlug": "products"
+        },
+        {
+          "name": "locations",
+          "routeSlug": "products"
+        },
+        {
+          "name": "coupons",
+          "routeSlug": "products"
+        },
+        {
+          "name": "discounts",
+          "routeSlug": "products"
+        },
+        {
+          "name": "reviews",
+          "routeSlug": "products"
+        },
+        {
+          "name": "memberPosts",
+          "routeSlug": "products"
+        },
+        {
+          "name": "resources",
+          "routeSlug": "products"
+        },
+        {
+          "name": "settings",
+          "label": "Store settings",
+          "routeSlug": "products"
+        },
+        {
+          "name": "siteMembers"
+        },
+        {
+          "name": "orders",
+          "mediaScan": "none",
+          "mediaScanReason": "Completed orders. Line items COPY a product's `imageUrl` at purchase time, so these would match — and matching would be the wrong answer: an order is an immutable record of what was sold, deleting the asset changes nothing about it, and no author can edit one. A busy store also holds more of these than the whole read budget."
+        },
+        {
+          "name": "carts",
+          "mediaScan": "none",
+          "mediaScanReason": "Live and abandoned carts, with the same copied line-item image and the same reasoning, at higher volume — one document per shopper session."
+        },
+        {
+          "name": "checkouts",
+          "mediaScan": "none",
+          "mediaScanReason": "In-flight checkout sessions. Transient buyer state carrying the same line-item snapshot as `carts`."
+        },
+        {
+          "name": "reservations",
+          "mediaScan": "none",
+          "mediaScanReason": "POS and booking holds. Short-lived transaction rows pointing at a resource that is itself scanned."
+        },
+        {
+          "name": "stockHolds",
+          "mediaScan": "none",
+          "mediaScanReason": "Inventory holds taken during checkout. Machine-written, short-lived, and a quantity rather than content."
+        },
+        {
+          "name": "subscriptions",
+          "mediaScan": "none",
+          "mediaScanReason": "Site membership subscriptions: a plan pointer, a status and Stripe ids. Server-written from the billing webhook."
+        },
+        {
+          "name": "registers",
+          "mediaScan": "none",
+          "mediaScanReason": "POS register allocations — a count against the register add-on, read by billing (AGL-1775). No content field at all."
+        },
+        {
+          "name": "giftCards",
+          "mediaScan": "none",
+          "mediaScanReason": "Gift card balances and redemption history. Money, not content."
+        },
+        {
+          "name": "licenseKeys",
+          "mediaScan": "none",
+          "mediaScanReason": "Digital-product license keys issued at fulfilment: a code, an order pointer and a revocation flag."
+        },
+        {
+          "name": "inventoryAdjustments",
+          "mediaScan": "none",
+          "mediaScanReason": "The append-only stock adjustment ledger (AGL-2269). One row per manual stock edit and per cancellation release, unbounded over a store's life."
+        },
+        {
+          "name": "inventoryReconciliation",
+          "mediaScan": "none",
+          "mediaScanReason": "Reconciliation runs comparing counted stock against recorded stock. Machine-written totals."
+        },
+        {
+          "name": "restockAlerts",
+          "mediaScan": "none",
+          "mediaScanReason": "Back-in-stock requests: an email address and a product pointer, written by visitors."
+        },
+        {
+          "name": "stripeTaxRates",
+          "mediaScan": "none",
+          "mediaScanReason": "Cached Stripe tax rate ids, written by the tax sync. Vendor ids."
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -262,10 +390,16 @@
         "releaseFlag": "release_marketplace",
         "publishedSiteImpact": "console-only"
       },
+      "hostCollections": [
+        {
+          "name": "installs"
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,
           "slots": [
+            "hostArtifactPublish",
             "marketplaceCapability",
             "marketplaceListing",
             "orgAddons",
@@ -280,7 +414,8 @@
       "package": "@aglyn/plugins-crm",
       "register": {
         "console": "registerCrmConsole",
-        "consoleApi": "registerCrmConsoleApi"
+        "consoleApi": "registerCrmConsoleApi",
+        "serverDeclarations": "registerCrmServerDeclarations"
       },
       "apiPrefixes": [
         "crm"
@@ -293,6 +428,13 @@
         "releaseFlag": "release_crm",
         "publishedSiteImpact": "console-only"
       },
+      "hostCollections": [
+        {
+          "name": "leads",
+          "mediaScan": "none",
+          "mediaScanReason": "Captured leads, on the same footing as `formSubmissions`: visitor-submitted, unbounded, and never a place an author places an asset."
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,
@@ -355,6 +497,20 @@
         "releaseFlag": "release_data_store",
         "publishedSiteImpact": "console-only"
       },
+      "orgCapacities": [
+        {
+          "kind": "datasets",
+          "order": 30,
+          "collection": "datasets",
+          "addonKind": "datasets",
+          "includedEntitlement": "datasetsPerOrg",
+          "nouns": {
+            "one": "dataset",
+            "many": "datasets",
+            "addon": "extra datasets"
+          }
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,
@@ -389,6 +545,13 @@
         "releaseFlag": "release_email",
         "publishedSiteImpact": "elements"
       },
+      "hostCollections": [
+        {
+          "name": "suppressions",
+          "mediaScan": "none",
+          "mediaScanReason": "Unsubscribes, bounces and spam complaints. Email addresses and a reason."
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -439,6 +602,12 @@
         "releaseFlag": "release_events",
         "publishedSiteImpact": "elements"
       },
+      "hostCollections": [
+        {
+          "name": "events",
+          "routeSlug": "events"
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -475,6 +644,13 @@
           "path": "/inbox"
         }
       },
+      "hostCollections": [
+        {
+          "name": "formSubmissions",
+          "mediaScan": "none",
+          "mediaScanReason": "Visitor form submissions. Unbounded, PII-heavy, and a file attached to one is the visitor's upload — not a library asset an author picked, and not something deleting a library asset would break."
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,
@@ -501,6 +677,16 @@
         "releaseFlag": "release_logic",
         "publishedSiteImpact": "console-only"
       },
+      "hostCollections": [
+        {
+          "name": "functions",
+          "routeSlug": "logic"
+        },
+        {
+          "name": "variables",
+          "routeSlug": "logic"
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,
@@ -537,6 +723,30 @@
         "releaseFlag": "release_marketing",
         "publishedSiteImpact": "elements"
       },
+      "hostCollections": [
+        {
+          "name": "campaigns",
+          "routeSlug": "marketing"
+        },
+        {
+          "name": "experiments",
+          "routeSlug": "marketing"
+        },
+        {
+          "name": "overlays",
+          "routeSlug": "marketing"
+        },
+        {
+          "name": "emailCampaigns",
+          "mediaScan": "none",
+          "mediaScanReason": "The campaign CONTAINER — a name, a date window, the list ids it is aimed at and a topic. Distinct from `campaigns`, which holds the sends and IS scanned because a send carries the copy that went out. A container carries no copy and no asset reference: the design a send renders is a screen, and the screen is where the picker writes."
+        },
+        {
+          "name": "campaignAttributions",
+          "mediaScan": "none",
+          "mediaScanReason": "One row per conversion — a form submission, a lead, a contact or a booking — recording which campaign the visitor arrived from. Written only by the Admin SDK, and the whole record is three sanitized UTM strings capped at a hundred characters: there is no field an asset could occupy and no surface that could pick one into it. Unbounded on the same footing as the conversions it credits."
+        }
+      ],
       "contributes": {
         "site": {
           "features": [
@@ -573,6 +783,12 @@
         "releaseFlag": "release_redirects",
         "publishedSiteImpact": "routes"
       },
+      "hostCollections": [
+        {
+          "name": "redirects",
+          "routeSlug": "redirects"
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,
@@ -602,6 +818,20 @@
         "releaseFlag": "release_workflows",
         "publishedSiteImpact": "routes"
       },
+      "hostCollections": [
+        {
+          "name": "workflows",
+          "routeSlug": "automation"
+        },
+        {
+          "name": "webhooks",
+          "routeSlug": "automation"
+        },
+        {
+          "name": "actions",
+          "routeSlug": "automation"
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,

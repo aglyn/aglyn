@@ -594,6 +594,34 @@ export const CONSOLE_WIDGET_SLOTS = {
   /** Marketplace listing detail body. Props: hostId, listingId, permissions. */
   marketplaceListing: 'marketplaceListing',
   /**
+   * Wherever a console page offers to publish something it holds (AGL-3080).
+   * Props: {@link ConsoleArtifactPublishZoneProps}.
+   *
+   * A layouts page, a components page and the org publish panel each held a
+   * dialog that posted to `marketplace/publish-layout` and read the
+   * marketplace's price floor. The console knows it has a layout; where a
+   * layout can be PUBLISHED, what a listing costs at the least, and what to
+   * call the thing in the copy all belong to whatever sells it.
+   *
+   * ── The page says what it has, never where it goes ───────────────────────
+   *
+   * The zone is handed a {@link ConsolePublishableArtifact} in the console's
+   * own vocabulary — a kind, the site or org it belongs to, the document id —
+   * and the widget decides the endpoint, the noun and the form. A kind the
+   * widget does not publish is one it draws nothing for, which is the same
+   * answer as no widget at all.
+   *
+   * ── An offer with nowhere to go must not be made ─────────────────────────
+   *
+   * The control that OPENS this — a menu item, a button — belongs to the page
+   * and is not a widget, because it is one entry of a list the page builds.
+   * So a page offering it asks `useSlotWidgets` whether this zone has a
+   * widget at all and leaves the entry out when it does not. Drawing it
+   * anyway would be a menu item that opens nothing on a workspace with no
+   * marketplace.
+   */
+  hostArtifactPublish: 'hostArtifactPublish',
+  /**
    * Above the whole Marketplace subtree: what THIS DEPLOYMENT cannot do
    * (AGL-2019, moved out of the console app by AGL-3080). No props — the
    * widget reads {@link DeploymentCapabilities} from the context the org's
@@ -971,6 +999,50 @@ export interface ConsoleHostFirstRunZoneProps {
    * {@link CONSOLE_WIDGET_SLOTS}.
    */
   startBlank: () => void
+}
+
+/**
+ * Something a console page holds that somebody may want to publish
+ * (AGL-3080).
+ *
+ * The console's own vocabulary and nothing else: a `kind` naming what the
+ * thing IS, the scope that holds it, and the document. Where it can be
+ * published to, what a listing of it is called and what it may cost are the
+ * publishing plugin's, which is the whole point of handing this over rather
+ * than building a request.
+ *
+ * `kind` is an open string for the reason a plugin's zone ids are: core
+ * listing every publishable noun would be core holding the catalog again. A
+ * widget that does not publish a kind draws nothing for it.
+ */
+export interface ConsolePublishableArtifact {
+  /** What the thing is: `layout`, `component`, `theme`, `site`, … */
+  kind: string
+  /** The site it belongs to, where the kind belongs to one. */
+  hostId?: string | null
+  /** The organization, for a kind held by the org rather than a site. */
+  orgId?: string | null
+  /**
+   * The document, in the holding surface's terms. Absent for a kind that IS
+   * the site or the org — a theme, a whole site template — where the scope
+   * above already names it.
+   */
+  artifactId?: string | null
+  /** Seeds the listing's name; the person may change it. */
+  displayName?: string
+  description?: string
+}
+
+/** What the `hostArtifactPublish` zone hands each widget (AGL-3080). */
+export interface ConsoleArtifactPublishZoneProps {
+  /**
+   * What the page asked to publish, or `null` while nothing is open. The
+   * page owns the open/closed state because the control that opens this is
+   * the page's own.
+   */
+  artifact: ConsolePublishableArtifact | null
+  /** Closes it, however it was closed — cancelled, published, or refused. */
+  onClose: () => void
 }
 
 /** What the `hostTheme` zone hands each widget (AGL-2938). */

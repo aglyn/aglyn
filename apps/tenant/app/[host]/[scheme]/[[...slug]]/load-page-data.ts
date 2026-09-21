@@ -29,7 +29,9 @@ import {
   composeCollectionFallbackPage,
   composeCollectionTemplatePage,
 } from '@aglyn/tenant-runtime/compose-collection-page'
-import getCollectionContent from '@aglyn/tenant-runtime/get-collection-content'
+import getCollectionContent, {
+  resolveCollectionPageCursor,
+} from '@aglyn/tenant-runtime/get-collection-content'
 import { resolveEntryLinkRoutes } from '@aglyn/tenant-runtime/entry-link-routes'
 import getAuthorContent from '@aglyn/tenant-runtime/get-author-content'
 import {
@@ -887,15 +889,81 @@ const loadPageDataCached = cache(
                 ...(route.categorySlug
                   ? { categorySlug: route.categorySlug }
                   : {}),
+                // The cursor is a PATH segment, so it arrives through the
+                // parsed route like every other shape and this page keeps its
+                // static render (AGL-3219; see the searchParams note above).
+                ...(route.after ? { after: route.after } : {}),
+                ...(route.before ? { before: route.before } : {}),
               }
             : {}),
         })
+        /*
+         * `/{collection}/page/{n}` is a RETIRED address on a collection too
+         * big to count, and it 301s onto the cursor for the same ten entries
+         * (AGL-3219).
+         *
+         * It is retired rather than merely redundant: past the bound the
+         * number no longer names a fixed set of entries, because publishing
+         * at the head moves every position under it. The redirect resolves
+         * the position ONCE — from the head already in hand where it reaches,
+         * and from a keys-only offset read where it does not — and lands the
+         * reader on an address that cannot drift afterwards. Inbound links
+         * and whatever standing the old URL earned come with them.
+         */
+        if (
+          isList &&
+          page > 1 &&
+          !route.after &&
+          !route.before &&
+          content.collection &&
+          content.pagination &&
+          content.pagination.totalPages === undefined
+        ) {
+          // The cursor is the LAST entry of the page before this one, which
+          // the shared head already holds for any page inside it.
+          const previousPageEnd =
+            (page - 1) * Aglyn.COLLECTION_LIST_PAGE_SIZE - 1
+          const fromHead = content.entries[previousPageEnd]?.$id ?? ''
+          const cursor =
+            fromHead ||
+            (await resolveCollectionPageCursor({
+              hostId,
+              collectionSlug: route.collectionSlug,
+              page,
+              perPage: Aglyn.COLLECTION_LIST_PAGE_SIZE,
+            }))
+          // No cursor means the position is past the end of the collection,
+          // which is the 404 a too-far page has always been — not a redirect
+          // to an address holding nothing.
+          if (cursor) {
+            return {
+              redirect: {
+                destination: Aglyn.collectionListUrl({
+                  collectionSlug: route.collectionSlug,
+                  ...(route.categorySlug
+                    ? { categorySlug: route.categorySlug }
+                    : {}),
+                  after: cursor,
+                }),
+                statusCode: 301,
+              },
+            } as never
+          }
+        }
+
         // A paged list beyond the last page 404s. Page 1 always renders, but
         // only for a collection with something live in it: one with nothing
         // live comes back with no collection and falls through to the 404
         // below, at every listing address (AGL-3101).
+        //
+        // A CURSOR address is always in range: its read either found entries
+        // or the collection ended, and there is no number to be beyond.
         const pageInRange =
-          !content.pagination || page <= content.pagination.totalPages
+          !content.pagination ||
+          Boolean(route.after) ||
+          Boolean(route.before) ||
+          content.pagination.totalPages === undefined ||
+          page <= content.pagination.totalPages
         if (content.collection && (isList ? pageInRange : content.entry)) {
           // Collection pages are first-class designed pages (AGL-551): both
           // routes carry the same plugin switchboard + branding flag as

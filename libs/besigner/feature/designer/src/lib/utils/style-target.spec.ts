@@ -141,6 +141,33 @@ describe('a node carrying props.sx as well as sx (AGL-1346)', () => {
     expect(target.sx?.['maxWidth']).toBe('1392px')
   })
 
+  it('flags the reading as COMPOSED so the panel can say so (AGL-3218)', () => {
+    // The split below is correct and invisible from inside the UI. What it
+    // is not is discoverable: the stored node holds neither the document
+    // the editor shows nor, in `props.sx`, the edit the author just made.
+    expect(getNodeStyleTarget(panelNode()).isComposed).toBe(true)
+
+    // A node with only its own `sx` — nearly all of them — has one record,
+    // so there is nothing to disclose and no caption to print.
+    const plain = { $id: 'p', componentId: 'muiStack', sx: { gap: 2 } } as any
+    expect(getNodeStyleTarget(plain).isComposed).toBe(false)
+
+    // And a node with neither.
+    expect(
+      getNodeStyleTarget({ $id: 'p', componentId: 'muiStack' } as any)
+        .isComposed,
+    ).toBe(false)
+  })
+
+  it('stops flagging once the last props.sx value is cleared', () => {
+    // The disclosure has to track the node, not the moment it was opened:
+    // clearing `props.sx` empty leaves one record again.
+    const node = panelNode()
+    getNodeStyleTarget(node).setSx({})
+    expect(node.props.sx).toBeUndefined()
+    expect(getNodeStyleTarget(node).isComposed).toBe(false)
+  })
+
   it('an unrelated edit leaves both records byte-identical but for it', () => {
     // The whole safety argument: the panel always writes back the full
     // composed record, so anything that copied it wholesale into node.sx

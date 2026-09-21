@@ -66,6 +66,7 @@ import {
   aiPlanReferenceLines,
   aiUnspentOutcome,
 } from './ai-job-generation'
+import { aiPlanTemplateTokenViolations } from './ai-job-plan-conformance'
 import type { AiJobStepRunner } from './ai-job-text-step'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
@@ -425,7 +426,15 @@ export function createAiJobTemplateStep(deps: AiJobTemplateStepDeps = {}): AiJob
       ...(AI_ROUTING_TABLE['job.template'].thinking ? { thinking: AI_ROUTING_TABLE['job.template'].thinking } : {}),
       ...(AI_ROUTING_TABLE['job.template'].effort ? { effort: AI_ROUTING_TABLE['job.template'].effort } : {}),
       context: { bindingTokens: aiTemplateAddressTokens(definition) },
-      extend: aiTemplateBindingCheck(definition),
+      // Rule 8's binding check, and the confirmed plan kept: a token the
+      // plan promised that the template does not bind (AGL-3143 §11).
+      extend: (tree) => [
+        ...aiTemplateBindingCheck(definition)(tree),
+        ...aiPlanTemplateTokenViolations(plan, definition, {
+          rootId: tree.rootId,
+          nodes: tree.nodes as unknown as Record<string, AiDoctrineNode>,
+        }),
+      ],
       ...(signal ? { signal } : {}),
     })
     const spent = aiGenerationSpent(result)

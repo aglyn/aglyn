@@ -124,10 +124,10 @@ describe('the sentences themselves', () => {
    *
    * The hole this sentence originally named — plugin-owned collections, where
    * a commerce product's `imageUrl` made a product photo report as unused — is
-   * closed: `PLUGIN_CONTENT_COLLECTIONS` puts products, events, services and
-   * twenty-two more into the corpus, and a build guard holds that list equal
-   * to a repo-wide sweep. What is left is the deliberate exclusions, which the
-   * sentence now names instead.
+   * closed: each plugin declares the collections it owns, which puts
+   * products, events, services and twenty-two more into the corpus, and a
+   * build guard holds those declarations equal to a repo-wide sweep. What is
+   * left is the deliberate exclusions, which the sentence now names instead.
    *
    * Asserted for every empty result including `full`: that is the one an
    * author acts on, and the one that used to claim the whole site.

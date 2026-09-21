@@ -94,6 +94,17 @@ file someone still links.
 
 ## Replacing a DAM asset
 
+⛔ **Never upload a second copy of an asset that already exists — replace it.**
+A new upload mints a new id and a new URL, so the old one goes on serving its
+old bytes to everything that already links it, which is the exact failure
+replace-in-place was built to prevent. It happened once, to the logo kit: a
+10 Aug ZIP sat beside the live one under the same filename until AGL-3216,
+twenty-two files behind and linked by nothing.
+
+The sweep that finds this groups the library by `contentSha256` — the same
+bytes under two ids is an upload that should have been a replace — and by
+`fileName`, since two assets with one name are indistinguishable in a picker.
+
 Replace-in-place keeps the id, `cdnPath`, `storagePath` and `url`, and drops
 the derived artifacts so nothing stale survives (AGL-2732). **An image must go
 through the console** — it has `variants` (320/640/1280/1920 WebP) that only
@@ -104,6 +115,19 @@ route is sound for those.
 After replacing an image, check every declared `intrinsicWidth`/`intrinsicHeight`
 that points at it. `srcset` picks a width from the declared pair, so a pair left
 describing the previous file upscales the new one.
+
+And read an asset before you replace it only when you have to: a `?download=1`
+fetch **warms the edge with the pre-replacement bytes**, and that entry can
+outlive its own `max-age=60` by twenty minutes or more. The plain URL will serve
+the new file while the download link still serves the old one.
+
+## Deleting one
+
+Prove it is unreferenced first, and prove the proof discriminates by running the
+same scan against an asset you know is used. Scan every host's screens — **all
+versions, not just the published one** — plus components, layouts, emails and
+the host documents. The console's own *Find where this is used* says out loud
+that it checks neither unpublished versions nor order history. Keep the bytes.
 
 ## The guidelines deck
 

@@ -113,7 +113,8 @@ import {
   hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
-import { captureHostContact, emitHostEvent } from '@aglyn/tenant-runtime'
+import { emitHostEvent } from '@aglyn/tenant-runtime'
+import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import {
   isEmailConfigured,
   loadHostEmail,
@@ -557,22 +558,36 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       convertedAtMs: bookedAtMs,
     })
 
-    // Contacts ingestion (AGL-197) — booking requests identify a person.
-    void captureHostContact({
+    /*
+     * Contacts ingestion (AGL-197) — booking requests identify a person —
+     * reported to whichever plugin keeps people rather than written by this
+     * one (AGL-3080). Bookings knows it just met somebody; what a person
+     * record is belongs to the plugin that models it, and a workspace that
+     * keeps none is a quiet, correct answer here.
+     */
+    void recordCapturedContact({
+      /*
+       * Not resolved here. The record system keys a person on the SITE they
+       * were met on, so this costs the capture nothing — and resolving it
+       * would put a Firestore read in front of the writer, which is the one
+       * thing `recordCapturedContact` asks a door not to do.
+       */
+      orgId: '',
       hostId,
-      email,
-      name: name || undefined,
-      source: 'booking',
-      // A request is interest, not a sale (AGL-2612): no money has moved at
-      // this point, so the stage is `lead`. The payment webhook is the door
-      // that makes a customer, once the charge has actually cleared.
-      initialLifecycleStage: 'lead',
+      identity: { email, name: name || undefined },
       interaction: {
+        source: 'booking',
         refId: bookingId,
         summary: `Booked "${String(service.name ?? 'a service').slice(0, 60)}"`,
       },
+      // A request is interest, not a sale (AGL-2612): no money has moved at
+      // this point, so the stage is `lead`. A floor — the payment webhook is
+      // the door that makes a customer, once the charge has actually cleared.
+      lifecycleFloor: 'lead',
       ...(marketingConsent ? { marketingConsent: true } : {}),
-      ...(campaignTouch ? { campaignTouch } : {}),
+      // Where the visitor ARRIVED from — a fact about this visit and not
+      // about the person, which is what `detail` carries.
+      ...(campaignTouch ? { detail: { campaignTouch } } : {}),
     })
 
     if (paid) {

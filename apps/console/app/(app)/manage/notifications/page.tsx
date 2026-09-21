@@ -16,36 +16,18 @@
  */
 'use client'
 
-import {
-  crmDailyDigestEnabled,
-  DIGEST_PREFS_FIELD,
-  INSIGHT_DIGESTS_FIELD,
-  insightDigestSubscribed,
-  NOTIFICATION_CATEGORY_LABELS,
-  type NotificationCategory,
-  PLATFORM_BRAND_NAME,
-} from '@aglyn/aglyn'
-import { mdiBellOutline } from '@aglyn/shared-data-mdi'
-import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { mdiBellOutline, mdiCogOutline } from '@aglyn/shared-data-mdi'
+import { CardDisplay, Container, MdiIcon } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import {
-  Button,
-  FormControlLabel,
-  Stack,
-  Switch,
-  Typography,
-} from '@mui/material'
+import { Button, Stack } from '@mui/material'
 import {
   collection,
   doc,
-  getDoc,
   getDocs,
   limit,
   orderBy,
   query,
   serverTimestamp,
-  setDoc,
   startAfter,
   updateDoc,
   writeBatch,
@@ -54,26 +36,17 @@ import {
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import NotificationsTable from '../../../../components/notifications-table.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import {
   CONTENT_MAX_WIDTH,
   TABLE_PAGE_SIZE_DEFAULT,
 } from '../../../../constants/shared'
-import useNotificationAlertPrefs from '../../../../hooks/use-notification-prefs'
 import useHostIndexEntries from '../../../../hooks/use-host-index-entries'
 import useOrgHosts from '../../../../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
-import {
-  desktopNotificationPermission,
-  playNotificationChime,
-  requestDesktopNotifications,
-  showDesktopNotification,
-} from '../../../../utils/notification-alerts'
 import {
   normalizeNotificationLink,
   resolveNotificationOrgSlug,
@@ -93,72 +66,6 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   // org-slug/subdomain routes and can't be migrated in place.
   const orgSlug = useOrgSlug()
   const { currentOrg, orgs } = useOrgScope()
-  // Per-device alert settings (AGL-650) — separate from the category mutes
-  // below, which are account-wide on the user doc.
-  const [alertPrefs, setAlertPrefs] = useNotificationAlertPrefs()
-  const { enqueueSnackbar } = useSnackbar()
-  const [permission, setPermission] = useState<
-    NotificationPermission | 'unsupported'
-  >('default')
-  useEffect(() => {
-    setPermission(desktopNotificationPermission())
-  }, [])
-  /**
-   * Send a test alert (AGL-650).
-   *
-   * Alert settings are otherwise unverifiable: you cannot tell whether the
-   * chime is audible, whether the browser actually granted permission, or
-   * what a desktop notification looks like on your OS, without waiting for
-   * something real to happen. Waiting to find out that alerts were silently
-   * broken is the failure this prevents.
-   *
-   * The chime always plays — previewing it is the point, and muting the
-   * preview because sound is off would make the button do nothing in the
-   * exact case where you want to hear it before switching it on. Desktop
-   * notifications need permission, so a still-undecided browser is prompted
-   * here; granting in response to a test is a clear enough signal to switch
-   * the preference on.
-   */
-  const handleTestAlerts = useCallback(async () => {
-    playNotificationChime()
-    let current = desktopNotificationPermission()
-    if (current === 'default') current = await requestDesktopNotifications()
-    setPermission(current)
-    if (current === 'granted') {
-      // force: the tab is focused by definition when you click Test, and
-      // desktop alerts are otherwise hidden-tab-only.
-      showDesktopNotification({
-        title: `${PLATFORM_BRAND_NAME} notifications are on`,
-        body: 'This is what a notification looks like.',
-        tag: 'aglyn-test',
-        force: true,
-      })
-      setAlertPrefs({ desktop: true })
-    }
-    enqueueSnackbar(
-      current === 'granted'
-        ? 'Played the chime and sent a test notification.'
-        : current === 'denied'
-          ? 'Chime played. Desktop notifications are blocked for this site — re-allow them in your browser settings.'
-          : current === 'unsupported'
-            ? "Chime played. This browser doesn't support desktop notifications."
-            : 'Chime played. Desktop notifications were not granted.',
-      { variant: current === 'granted' ? 'success' : 'info', persist: false },
-    )
-  }, [setAlertPrefs, enqueueSnackbar])
-
-  const handleDesktopToggle = useCallback(async () => {
-    if (alertPrefs.desktop) {
-      setAlertPrefs({ desktop: false })
-      return
-    }
-    // The prompt only works from a user gesture, which is why this lives on
-    // the toggle rather than firing on page load.
-    let current = desktopNotificationPermission()
-    if (current === 'default') current = await requestDesktopNotifications()
-    setPermission(current)
-    setAlertPrefs({ desktop: current === 'granted' })
-  }, [alertPrefs.desktop, setAlertPrefs])
   const { hosts } = useOrgHosts(firestore, uid, currentOrg?.$id ?? undefined)
   const [rows, setRows] = useState<any[]>([])
   // The console's shared default and shared menu (AGL-2501); this list used to
@@ -210,72 +117,6 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   useEffect(() => {
     void loadPage(0)
   }, [loadPage])
-
-  // Preferences (AGL-267): category mutes on users/{uid}.notificationPrefs,
-  // and the digest switches beside them on `digestPrefs` (AGL-2619) — a
-  // digest is a schedule a person keeps or drops, not a category.
-  const [prefs, setPrefs] = useState<Record<string, boolean>>({})
-  const [digestPrefs, setDigestPrefs] = useState<Record<string, boolean>>({})
-  // The workspaces whose weekly insights this person asked for (AGL-2915).
-  // Turned on beside the answers themselves; listed here to turn off.
-  const [insightDigests, setInsightDigests] = useState<Record<string, boolean>>({})
-  useEffect(() => {
-    if (!uid) return
-    let active = true
-    void (async () => {
-      try {
-        const snapshot = await getDoc(doc(firestore, 'users', uid))
-        if (active) {
-          setPrefs(
-            (snapshot.get('notificationPrefs') as Record<string, boolean>) ??
-              {},
-          )
-          setDigestPrefs(
-            (snapshot.get(DIGEST_PREFS_FIELD) as Record<string, boolean>) ?? {},
-          )
-          setInsightDigests(
-            (snapshot.get(INSIGHT_DIGESTS_FIELD) as Record<string, boolean>) ?? {},
-          )
-        }
-      } catch {
-        // Defaults (everything on) when the doc is unreadable.
-      }
-    })()
-    return () => {
-      active = false
-    }
-  }, [firestore, uid])
-  const togglePref = (category: NotificationCategory) => {
-    if (!uid) return
-    const next = { ...prefs, [category]: prefs[category] === false }
-    setPrefs(next)
-    void setDoc(
-      doc(firestore, 'users', uid),
-      { notificationPrefs: next },
-      { merge: true },
-    ).catch(console.error)
-  }
-  const toggleCrmDigest = () => {
-    if (!uid) return
-    const next = { ...digestPrefs, crmDaily: !crmDailyDigestEnabled(digestPrefs) }
-    setDigestPrefs(next)
-    void setDoc(
-      doc(firestore, 'users', uid),
-      { [DIGEST_PREFS_FIELD]: next },
-      { merge: true },
-    ).catch(console.error)
-  }
-
-  const toggleInsightDigest = (orgId: string) => {
-    if (!uid) return
-    const next = !insightDigestSubscribed(insightDigests, orgId)
-    setInsightDigests({ ...insightDigests, [orgId]: next })
-    void setDoc(
-      doc(firestore, 'users', uid),
-      { [INSIGHT_DIGESTS_FIELD]: { [orgId]: next } },
-      { merge: true },
-    ).catch(console.error)
-  }
 
   // Mark ALL unread read (AGL-267): the latest 200, batched.
   const [markingAll, setMarkingAll] = useState(false)
@@ -347,7 +188,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
         },
       ]}
       header={{ children: 'Notifications', icon: { path: mdiBellOutline.path } }}
-      help={{ topic: 'consoleTour', anchor: '#alerts-on-this-device' }}
+      help={{ topic: 'consoleTour', anchor: '#the-notifications-feed' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <CardDisplay
@@ -355,8 +196,9 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
           help={docsHelp('consoleTour', {
             anchor: '#workspace-settings--notifications',
             excerpt:
-              'Every console notification, newest first — mark all read ' +
-              "and mute the categories you don't want.",
+              'Every console notification, newest first. What arrives here, ' +
+              'and what also reaches your inbox, is set in Notification ' +
+              'settings.',
           })}
           contentGutterX
           contentGutterY
@@ -376,155 +218,22 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
               >
                 {markingAll ? 'Marking…' : 'Mark all read'}
               </Button>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ ml: 'auto' }}
-              >
-                {'Mute categories:'}
-              </Typography>
-              {(
-                Object.entries(NOTIFICATION_CATEGORY_LABELS) as Array<
-                  [NotificationCategory, string]
-                >
-              ).map(([category, label]) => (
-                <FormControlLabel
-                  key={category}
-                  control={
-                    <Switch
-                      size="small"
-                      checked={prefs[category] !== false}
-                      onChange={() => togglePref(category)}
-                    />
-                  }
-                  label={label}
-                  slotProps={{ typography: { variant: 'caption' } }}
-                />
-              ))}
-            </Stack>
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
-            >
-              <Typography variant="caption" color="text.secondary">
-                {'Daily digests:'}
-              </Typography>
-              <FormControlLabel
-                control={
-                  <Switch
-                    size="small"
-                    checked={crmDailyDigestEnabled(digestPrefs)}
-                    onChange={toggleCrmDigest}
-                  />
-                }
-                label="Daily CRM digest"
-                slotProps={{ typography: { variant: 'caption' } }}
-              />
-              <Typography variant="caption" color="text.secondary">
-                {'Each morning: your overdue and due-today tasks and the leads ' +
-                  'nobody has worked, here and by email.'}
-              </Typography>
-            </Stack>
-            {Object.keys(insightDigests).length ? (
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
-              >
-                <Typography variant="caption" color="text.secondary">
-                  {'Weekly insights:'}
-                </Typography>
-                {Object.keys(insightDigests)
-                  .sort()
-                  .map((orgId) => (
-                    <FormControlLabel
-                      key={orgId}
-                      control={
-                        <Switch
-                          size="small"
-                          checked={insightDigestSubscribed(insightDigests, orgId)}
-                          onChange={() => toggleInsightDigest(orgId)}
-                        />
-                      }
-                      label={
-                        (orgs ?? []).find((org) => org.$id === orgId)?.name ??
-                        'A workspace you left'
-                      }
-                      slotProps={{ typography: { variant: 'caption' } }}
-                    />
-                  ))}
-                <Typography variant="caption" color="text.secondary">
-                  {'Each Monday: what your sites’ figures showed that week, here ' +
-                    'and by email. Turned on from Ask about your numbers.'}
-                </Typography>
-              </Stack>
-            ) : null}
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
-            >
-              <Typography variant="caption" color="text.secondary">
-                {'Alerts on this device:'}
-              </Typography>
-              <FormControlLabel
-                control={
-                  <Switch
-                    size="small"
-                    checked={alertPrefs.tabBadge}
-                    onChange={() =>
-                      setAlertPrefs({ tabBadge: !alertPrefs.tabBadge })
-                    }
-                  />
-                }
-                label="Unread count in tab title"
-                slotProps={{ typography: { variant: 'caption' } }}
-              />
-              <FormControlLabel
-                control={
-                  <Switch
-                    size="small"
-                    checked={alertPrefs.sound}
-                    onChange={() => setAlertPrefs({ sound: !alertPrefs.sound })}
-                  />
-                }
-                label="Sound"
-                slotProps={{ typography: { variant: 'caption' } }}
-              />
-              <FormControlLabel
-                control={
-                  <Switch
-                    size="small"
-                    checked={alertPrefs.desktop}
-                    disabled={
-                      permission === 'unsupported' || permission === 'denied'
-                    }
-                    onChange={() => void handleDesktopToggle()}
-                  />
-                }
-                label="Desktop notifications"
-                slotProps={{ typography: { variant: 'caption' } }}
-              />
+              {/*
+                * The preferences moved out (AGL-3226) and this is what is
+                * left in their place: one button, on the right, where the
+                * row of switches used to start.
+                */}
               <Button
                 size="small"
                 variant="outlined"
-                onClick={() => void handleTestAlerts()}
+                startIcon={<MdiIcon path={mdiCogOutline.path} size={0.8} />}
+                sx={{ ml: 'auto' }}
+                onClick={() =>
+                  router.push(buildRoute(Route.MANAGE_NOTIFICATION_SETTINGS))
+                }
               >
-                {'Send test alert'}
+                {'Notification settings'}
               </Button>
-              {permission === 'denied' || permission === 'unsupported' ? (
-                <Typography variant="caption" color="text.secondary">
-                  {permission === 'denied'
-                    ? 'Blocked for this site — re-allow notifications in your ' +
-                      'browser settings to switch this on.'
-                    : 'This browser does not support desktop notifications.'}
-                </Typography>
-              ) : (
-                <Typography variant="caption" color="text.secondary">
-                  {'Shown only while this tab is in the background.'}
-                </Typography>
-              )}
             </Stack>
             <NotificationsTable
               rows={rows}

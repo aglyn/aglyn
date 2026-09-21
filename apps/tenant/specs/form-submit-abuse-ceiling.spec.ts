@@ -150,6 +150,39 @@ jest.mock('@aglyn/tenant-runtime', () => ({
   resolveDatasetDoc: async () => null,
 }))
 
+/*
+ * The route captures through the platform's contact-capture contract now
+ * (AGL-3080), and the plugin that keeps people is what calls
+ * `captureHostContact`. The CRM imports the LEAF module, so the barrel double
+ * above does not intercept it; this forwards the leaf to that same double.
+ *
+ * Deliberately not a double of the contract itself. Every assertion below is
+ * on the options the writer receives, so routing them through the real CRM
+ * adapter is what proves the translation from the contract's vocabulary to
+ * this one loses nothing — which is the half of this move that could fail
+ * silently.
+ */
+jest.mock('@aglyn/tenant-runtime/capture-host-contact', () => ({
+  captureHostContact: (...args: unknown[]) =>
+    (
+      jest.requireMock('@aglyn/tenant-runtime') as {
+        captureHostContact: (...a: unknown[]) => unknown
+      }
+    ).captureHostContact(...args),
+}))
+
+/*
+ * The CRM registers its writer from the app's own boot manifest. Without it
+ * `capturePluginContact` answers `null` — "this workspace keeps no records" —
+ * and every assertion below would be measuring a capture that never happened.
+ */
+beforeAll(async () => {
+  const { registerPluginServerDeclarations } = await import(
+    '../utils/plugins.declarations.server.generated'
+  )
+  await registerPluginServerDeclarations()
+})
+
 // Below the mocks by intent, not by accident: babel hoists `jest.mock` above
 // every import, so the route under test resolves the fakes above.
 import { POST } from '../app/api/forms/submit/route'

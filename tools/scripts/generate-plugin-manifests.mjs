@@ -580,6 +580,149 @@ function catalogRows() {
   return rows
 }
 
+/**
+ * The host subcollections each plugin declares it owns (AGL-3080).
+ *
+ * DATA rather than a runtime registration, for the reason every other row in
+ * this file is: the readers are the media-usage scan, which answers "what
+ * uses this asset" in the moment before an author deletes it, and the
+ * reference rows that answer shows. Both are synchronous, and the scan runs
+ * in a console request that loads no plugin. A registry that request had not
+ * filled would report every plugin-owned document as holding nothing — which
+ * is the ONE way this scan can be wrong that the author acts on, and it would
+ * be silent. `registerPluginHostCollections` stays for a plugin the compiler
+ * never sees; the compiled rows are the floor beneath it.
+ *
+ * Three things are checked here rather than left to a reader:
+ *
+ *  - ONE OWNER. Two plugins naming one collection would be two schemas in one
+ *    place, and the scan, the deep link and the counters would each pick a
+ *    winner by config order.
+ *  - A REASON TO SKIP. `mediaScan: "none"` has to say what scanning would
+ *    cost or get wrong. "It probably has no images in it" is the guess the
+ *    scan's inverted default exists to avoid making.
+ *  - A ROUTE THE OWNER ACTUALLY SERVES. `routeSlug` has to be one of the
+ *    plugin's own `contributes.console.routes`. Core's hand-kept map had
+ *    three that were not: `actions` pointed at the logic hub while the
+ *    workflows plugin holds it, `workflows` and `webhooks` pointed at a
+ *    `/workflows` hub that was renamed `/automation`, and `resources`
+ *    pointed at bookings while commerce writes it. Each sent an author
+ *    hunting for the document holding the asset they were about to delete.
+ */
+function hostCollectionRows() {
+  const rows = []
+  const owners = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.hostCollections
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" hostCollections`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name what the plugin owns`)
+    }
+    const routes = (plugin.contributes?.console?.routes ?? []).map((route) => route.replace(/^\//, ''))
+    for (const declaration of declared) {
+      const { name, label, mediaScan, mediaScanReason, routeSlug, artifact } = declaration
+      const what = `${where} "${name ?? ''}"`
+      if (typeof name !== 'string' || !name.trim()) throw new Error(`${where}: a collection needs a "name"`)
+      const held = owners.get(name)
+      if (held) throw new Error(`${what} is already declared by "${held}" — one collection has one owner`)
+      owners.set(name, plugin.id)
+      if (mediaScan !== undefined && !['generic', 'own', 'none'].includes(mediaScan)) {
+        throw new Error(`${what}: "mediaScan" is one of generic, own, none`)
+      }
+      if (mediaScan === 'none' && !String(mediaScanReason ?? '').trim()) {
+        throw new Error(`${what}: "mediaScan": "none" needs a "mediaScanReason" naming what scanning would cost, or what it would get wrong`)
+      }
+      if (mediaScan !== 'none' && mediaScanReason) {
+        throw new Error(`${what}: "mediaScanReason" reads as a reason NOT to scan, and this collection is scanned`)
+      }
+      if (routeSlug !== undefined && !routes.includes(routeSlug)) {
+        throw new Error(
+          `${what}: "routeSlug": "${routeSlug}" is not one of "${plugin.id}"'s own console routes ` +
+            `(${routes.length ? routes.join(', ') : 'it declares none'}) — a reference row would deep-link where the document is not`,
+        )
+      }
+      if (artifact !== undefined && typeof artifact !== 'boolean') {
+        throw new Error(`${what}: "artifact" is true or false`)
+      }
+      if (label !== undefined && (typeof label !== 'string' || !label.trim())) {
+        throw new Error(`${what}: "label" is what ONE of its documents is called, or is left out`)
+      }
+      rows.push({ pluginId: plugin.id, ...declaration })
+    }
+  }
+  return rows
+}
+
+/**
+ * The org capacities each plugin backs (AGL-3080).
+ *
+ * Compiled for the reason the whole file is, and here the reason is money: the
+ * readers are the downgrade REFUSAL and the warning the customer reads before
+ * choosing, and a capacity missing from one of them lets a plan change strand
+ * the thing it names with nothing red.
+ *
+ * Checked here: one declaration per kind, one per add-on kind, an order that
+ * does not collide with core's own two, and the nouns actually written. Core
+ * owns whether a reduction is refused; a declaration only says what is
+ * counted, against which entitlement, and what to call it.
+ */
+const CORE_ORG_CAPACITY_ORDERS = { sites: 10, seats: 20 }
+
+function orgCapacityRows() {
+  const rows = []
+  const kinds = new Map()
+  const addons = new Map()
+  const orders = new Map(Object.entries(CORE_ORG_CAPACITY_ORDERS))
+  for (const plugin of config.plugins) {
+    const declared = plugin.orgCapacities
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" orgCapacities`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the capacity the plugin backs`)
+    }
+    for (const declaration of declared) {
+      const { kind, order, collection, addonKind, includedEntitlement, nouns } = declaration
+      const what = `${where} "${kind ?? ''}"`
+      for (const [field, value] of [
+        ['kind', kind],
+        ['collection', collection],
+        ['addonKind', addonKind],
+        ['includedEntitlement', includedEntitlement],
+      ]) {
+        if (typeof value !== 'string' || !value.trim()) throw new Error(`${what} needs a "${field}"`)
+      }
+      if (!Number.isInteger(order)) throw new Error(`${what} needs an integer "order"`)
+      const heldKind = kinds.get(kind)
+      if (heldKind) throw new Error(`${what} is already declared by "${heldKind}" — one capacity has one owner`)
+      if (kind in CORE_ORG_CAPACITY_ORDERS) {
+        throw new Error(`${what} is a capacity the platform owns — a site and a team seat exist with no plugin loaded`)
+      }
+      kinds.set(kind, plugin.id)
+      const heldAddon = addons.get(addonKind)
+      if (heldAddon) {
+        throw new Error(`${what}: add-on kind "${addonKind}" is already backed by "${heldAddon}" — two capacities on one purchase would each measure the other's quantity`)
+      }
+      addons.set(addonKind, plugin.id)
+      const heldOrder = orders.get(String(order))
+      if (heldOrder) {
+        // Two capacities sharing an order list in whichever sequence the
+        // config happens to hold them, and the warning and the refusal would
+        // then disagree about which one to read first.
+        throw new Error(`${what}: "order" ${order} is already taken by "${heldOrder}"`)
+      }
+      orders.set(String(order), plugin.id)
+      for (const field of ['one', 'many', 'addon']) {
+        if (typeof nouns?.[field] !== 'string' || !nouns[field].trim()) {
+          throw new Error(`${what} needs "nouns.${field}" — a refusal that had no word for it would read as a bug`)
+        }
+      }
+      rows.push({ pluginId: plugin.id, ...declaration })
+    }
+  }
+  return rows.sort((a, b) => a.order - b.order)
+}
+
 function catalogContent() {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
@@ -603,7 +746,7 @@ function catalogContent() {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -619,6 +762,23 @@ ${rows.map((row) => `  ${JSON.stringify(row.plugin.id)}: ${JSON.stringify(row.im
  */
 export const PLUGIN_EDIT_BAR_LINKS: readonly PluginEditBarLink[] = [
 ${editBarRows.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every host subcollection a first-party plugin owns, declared by that plugin
+ * (AGL-3080). Core's readers ask this list; core names no collection.
+ */
+export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollection[] = [
+${hostCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every org capacity a first-party plugin backs, declared by that plugin
+ * (AGL-3080). Core owns the money; this says what is counted and what it is
+ * called.
+ */
+export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[] = [
+${orgCapacityRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 `
   )

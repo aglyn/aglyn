@@ -201,6 +201,24 @@ export type AglynNotificationType =
   // muted as routine invoice traffic, and this is the one message on that
   // route where muting it means money moves with nobody looking.
   | 'system.disputeUnattributed'
+  // Somebody created an account, and somebody created a workspace
+  // (AGL-3225). Staff audience, and the only two types in the taxonomy whose
+  // subject is the platform's own growth rather than anybody's work.
+  //
+  // `staff.`, and NOT `system.`, and the AGL-1088 note above is the reason
+  // rather than an exception to it: `system` is the bucket nobody mutes to
+  // reduce noise, which is exactly what makes it the wrong home for the two
+  // routine, high-volume events in the product. A staff member must be able
+  // to stop hearing about every sign-up without also dropping the verifier
+  // regression and the unattributed dispute that share that bucket — and
+  // before this category existed, there was nowhere to put them where that
+  // was true.
+  //
+  // The category also tells the settings page who a row is for: `staff` is
+  // rendered only to claim holders, so no customer is shown a switch for
+  // notifications they could never receive.
+  | 'staff.userSignedUp'
+  | 'staff.orgCreated'
 
 export interface AglynNotification {
   $id?: string
@@ -252,6 +270,8 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'system.bandwidthCapEngaged': 'Monthly traffic limit reached',
     'system.billingWebhookHalfApplied': 'Billing webhook half applied',
     'system.disputeUnattributed': 'Card dispute with no owner',
+    'staff.userSignedUp': 'New account',
+    'staff.orgCreated': 'New workspace',
   }
 
 /** Preference buckets (AGL-267): the prefix before the dot. */
@@ -262,6 +282,9 @@ export type NotificationCategory =
   | 'marketplace'
   | 'support'
   | 'system'
+  // Staff-only, and shown only to staff (AGL-3225) — see
+  // {@link STAFF_NOTIFICATION_CATEGORIES}.
+  | 'staff'
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<
   NotificationCategory,
@@ -273,16 +296,34 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<
   marketplace: 'Marketplace',
   support: 'Support',
   system: 'Product & system',
+  staff: 'Platform growth',
 }
+
+/**
+ * The categories only staff can receive (AGL-3225).
+ *
+ * The settings page hides these rows from everybody else, because a switch
+ * for mail that can never arrive is a promise the product does not keep. It
+ * is presentation only: `notifyStaff` is what decides the audience, and it
+ * enumerates the `staff` claim rather than reading this.
+ */
+export const STAFF_NOTIFICATION_CATEGORIES: ReadonlySet<NotificationCategory> =
+  new Set<NotificationCategory>(['staff'])
 
 export function notificationCategory(
   type: AglynNotificationType | string,
 ): NotificationCategory {
   const prefix = String(type).split('.')[0]
   return (
-    ['billing', 'team', 'content', 'marketplace', 'support', 'system'].includes(
-      prefix,
-    )
+    [
+      'billing',
+      'team',
+      'content',
+      'marketplace',
+      'support',
+      'system',
+      'staff',
+    ].includes(prefix)
       ? prefix
       : 'system'
   ) as NotificationCategory
@@ -333,4 +374,194 @@ export function insightDigestSubscribed(
   orgId: string,
 ): boolean {
   return Boolean(orgId) && value?.[orgId] === true
+}
+
+/**
+ * The channels a notification can travel on (AGL-3223).
+ *
+ * `console` is the feed at `/manage/notifications` and the app-bar dropdown
+ * that reads it — the only channel that existed. `email` is the message the
+ * fan-out sends beside that doc when the recipient asked for one.
+ */
+export type NotificationChannel = 'console' | 'email'
+
+/**
+ * One scope's answer for one category. **Tri-state on purpose**: `true` and
+ * `false` decide, and an ABSENT key inherits from the scope above.
+ *
+ * Inheritance is the whole reason this is a partial rather than a pair of
+ * booleans. A person who wants form submissions from one busy site and not
+ * from the other five has to be able to say that about the one site without
+ * restating their answer for every other category at every other scope — and
+ * a two-valued leaf cannot express "I have not said", so every override would
+ * have to be written out in full and would then stop tracking the account
+ * default it was never meant to detach from.
+ */
+export interface NotificationChannelPrefs {
+  console?: boolean
+  email?: boolean
+}
+
+export type NotificationCategoryPrefs = Partial<
+  Record<NotificationCategory, NotificationChannelPrefs>
+>
+
+/**
+ * Per-scope, per-channel notification preferences (AGL-3223), stored at
+ * `users/{uid}.notificationSettings`.
+ *
+ * Three layers, narrowest first when resolving: the SITE a notification
+ * concerns, then the WORKSPACE, then the account. Anything none of them
+ * answers falls to {@link NOTIFICATION_CHANNEL_DEFAULTS}.
+ *
+ * ON THE USER DOCUMENT, not on `orgs/{orgId}/members/{uid}`, and that is a
+ * cost decision rather than a modelling preference. `notifyUsers` already
+ * does exactly one `getAll` over the recipients' user docs to read their
+ * category mutes, so every layer living here means per-site preferences are
+ * read for free on the fan-out's hot path. The member row would add a read
+ * per recipient per notification to answer a question the document already in
+ * hand could have answered.
+ */
+export interface NotificationSettings {
+  account?: NotificationCategoryPrefs
+  /** Keyed by org id. */
+  orgs?: Record<string, NotificationCategoryPrefs>
+  /** Keyed by host id — a site's own answer, narrower than its workspace's. */
+  hosts?: Record<string, NotificationCategoryPrefs>
+}
+
+export const NOTIFICATION_SETTINGS_FIELD = 'notificationSettings'
+
+/**
+ * What a category does when nobody has said otherwise.
+ *
+ * Console on, email OFF, everywhere. Email defaults off because the inbox is
+ * not ours to fill: the product already sends transactional mail nobody opted
+ * into — welcome, verification, invites, dunning, usage alerts — and every one
+ * of those leaves on the same domain a customer's password reset depends on.
+ * Turning a busy site's form submissions into mail by default would put that
+ * domain's reputation behind traffic the recipient never asked for.
+ *
+ * Exhaustive `Record` deliberately: a new {@link NotificationCategory} is a
+ * compile error here until somebody decides what it does by default, which is
+ * the one question a new category must not be able to ship without answering.
+ */
+export const NOTIFICATION_CHANNEL_DEFAULTS: Record<
+  NotificationCategory,
+  Record<NotificationChannel, boolean>
+> = {
+  billing: { console: true, email: false },
+  team: { console: true, email: false },
+  content: { console: true, email: false },
+  marketplace: { console: true, email: false },
+  support: { console: true, email: false },
+  system: { console: true, email: false },
+  // Console ON, because the complaint this answers is that staff never heard
+  // about a sign-up at all; email off, like everything else, because that is
+  // what the channel defaults to and a sign-up is not urgent enough to be the
+  // exception that starts filling inboxes by default.
+  staff: { console: true, email: false },
+}
+
+/**
+ * The types that send their OWN email and must never be mailed again by the
+ * generic channel (AGL-3224).
+ *
+ * Both digests compose a message the fan-out could not reproduce — a day's
+ * owed tasks, a week's figures — and send it from their own route under their
+ * own switch (`digestPrefs.crmDaily`, `insightDigests.{orgId}`). A recipient
+ * who switches the `content` email channel on would otherwise receive the
+ * digest twice: once as the digest, once as a one-line "Daily CRM digest"
+ * notification saying that the digest happened.
+ */
+export const NOTIFICATION_SELF_SENT_EMAIL_TYPES: ReadonlySet<string> = new Set<
+  AglynNotificationType
+>(['content.crmDailyDigest', 'content.insightsDigest'])
+
+/**
+ * Whether a channel is on for one notification, at its own scope.
+ *
+ * Resolution order, first answer wins: the notification's SITE, its
+ * WORKSPACE, the account, then {@link NOTIFICATION_CHANNEL_DEFAULTS}. A scope
+ * that holds no entry for the category, or an entry with the channel key
+ * absent, does not answer — see {@link NotificationChannelPrefs}.
+ *
+ * `legacyPrefs` is the flat `notificationPrefs` mute map this replaces
+ * (AGL-267), and it sits BELOW the account layer rather than beside it.
+ * Nothing migrates it: a person who never opens the new settings page keeps
+ * being governed by the mutes they set years ago, and the first thing they do
+ * set on the account layer overrides the old map for that category without
+ * disturbing the rest of it. It answers for `console` only, because the map
+ * predates there being a second channel and reading a console mute as an
+ * email preference would be inventing an answer its author never gave.
+ */
+export function notificationChannelEnabled(
+  settings: NotificationSettings | null | undefined,
+  channel: NotificationChannel,
+  type: AglynNotificationType | string,
+  scope?: { orgId?: string | null; hostId?: string | null },
+  legacyPrefs?: Record<string, boolean> | null,
+): boolean {
+  const category = notificationCategory(type)
+  const layers: Array<NotificationCategoryPrefs | undefined> = [
+    scope?.hostId ? settings?.hosts?.[scope.hostId] : undefined,
+    scope?.orgId ? settings?.orgs?.[scope.orgId] : undefined,
+    settings?.account,
+  ]
+  for (const layer of layers) {
+    const answer = layer?.[category]?.[channel]
+    if (typeof answer === 'boolean') return answer
+  }
+  if (channel === 'console' && notificationMuted(legacyPrefs, type)) return false
+  return NOTIFICATION_CHANNEL_DEFAULTS[category][channel]
+}
+
+/**
+ * What one scope says, with no inheritance applied — what the settings page
+ * renders as Inherit / On / Off, and `undefined` is Inherit.
+ *
+ * `scope` names the layer directly rather than being derived from a
+ * notification, because the page edits a layer whether or not anything has
+ * ever arrived from it.
+ */
+export function notificationScopePref(
+  settings: NotificationSettings | null | undefined,
+  scope: { kind: 'account' } | { kind: 'org' | 'host'; id: string },
+  category: NotificationCategory,
+  channel: NotificationChannel,
+): boolean | undefined {
+  const layer =
+    scope.kind === 'account'
+      ? settings?.account
+      : scope.kind === 'org'
+        ? settings?.orgs?.[scope.id]
+        : settings?.hosts?.[scope.id]
+  return layer?.[category]?.[channel]
+}
+
+/**
+ * The scopes this person has said something different about — what the
+ * settings page lists so an override is never somewhere you have to go
+ * looking for.
+ *
+ * Returns ids, not names: the page holds the org and host rosters and this
+ * module holds no lookups. An id with no name is still worth listing, because
+ * a preference about a workspace somebody left is exactly the kind of
+ * leftover that is invisible until it is listed.
+ */
+export function notificationOverriddenScopes(
+  settings: NotificationSettings | null | undefined,
+): { orgIds: string[]; hostIds: string[] } {
+  const named = (layers: Record<string, NotificationCategoryPrefs> | undefined) =>
+    Object.entries(layers ?? {})
+      .filter(([, prefs]) =>
+        Object.values(prefs ?? {}).some((channels) =>
+          Object.values(channels ?? {}).some(
+            (value) => typeof value === 'boolean',
+          ),
+        ),
+      )
+      .map(([id]) => id)
+      .sort()
+  return { orgIds: named(settings?.orgs), hostIds: named(settings?.hosts) }
 }

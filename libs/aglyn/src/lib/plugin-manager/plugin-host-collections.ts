@@ -16,6 +16,8 @@
  */
 
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
+import { hostContentCollectionLabel } from '../foundation/definitions/host-content-collections'
+import { PLUGIN_HOST_COLLECTIONS_DECLARED } from './first-party-plugins.generated'
 import {
   definePluginServiceContract,
   registerPluginService,
@@ -63,6 +65,22 @@ import {
  * winner by registration order. So a collection another plugin declared is
  * refused naming both, and the incumbent keeps it; the same plugin declaring
  * again replaces its own.
+ *
+ * ## Declared in the config, not registered at boot (AGL-3080)
+ *
+ * A first-party plugin declares its collections in `plugins.config.json` and
+ * the generator compiles them, so every reader has the whole list the moment
+ * it imports this module. That is not a preference: the media scan answers
+ * "what uses this asset" in the moment before an author deletes it, every way
+ * it can be wrong points at "unused", and it runs inside a console request
+ * that loads no plugin code. A registry that request had not filled would
+ * report every plugin-owned document as holding nothing, with nothing red —
+ * the shape of AGL-3025, on the one answer here that somebody acts on.
+ *
+ * {@link registerPluginHostCollections} is still the door for a plugin the
+ * compiler never sees, and the two compose: the compiled rows are a floor a
+ * registration cannot lower, and a registration naming a compiled collection
+ * is refused the same way a second plugin's would be.
  *
  * Reached by its own subpath rather than through `plugin-manager/index.ts`:
  * the readers are the media scan, the console counters and the reference
@@ -141,9 +159,7 @@ export function registerPluginHostCollections(
           'what it would get wrong',
       )
     }
-    const incumbent = resolvePluginServices(PLUGIN_HOST_COLLECTIONS).find(
-      (entry) => entry.key === name,
-    )
+    const incumbent = pluginHostCollection(name)
     if (incumbent && pluginId && incumbent.pluginId !== pluginId) {
       throw new Error(
         `host collection "${name}" is already declared by ` +
@@ -160,12 +176,17 @@ export function registerPluginHostCollections(
   }
 }
 
-/** Every declared collection, with its owner, in registration order. */
+/**
+ * Every declared collection, with its owner: the compiled rows first, then
+ * anything registered at runtime that they do not already name.
+ */
 export function listPluginHostCollections(): ResolvedPluginHostCollection[] {
-  return resolvePluginServices(PLUGIN_HOST_COLLECTIONS).map((entry) => ({
-    ...entry.impl,
-    pluginId: entry.pluginId,
-  }))
+  const compiled = PLUGIN_HOST_COLLECTIONS_DECLARED.map((row) => ({ ...row }))
+  const named = new Set(compiled.map((row) => row.name))
+  const registered = resolvePluginServices(PLUGIN_HOST_COLLECTIONS)
+    .map((entry) => ({ ...entry.impl, pluginId: entry.pluginId }))
+    .filter((row) => !named.has(row.name))
+  return [...compiled, ...registered]
 }
 
 /** One declared collection by name, with its owner, or `null`. */
@@ -173,10 +194,7 @@ export function pluginHostCollection(
   name: string,
 ): ResolvedPluginHostCollection | null {
   const key = name.trim()
-  const entry = resolvePluginServices(PLUGIN_HOST_COLLECTIONS).find(
-    (one) => one.key === key,
-  )
-  return entry ? { ...entry.impl, pluginId: entry.pluginId } : null
+  return listPluginHostCollections().find((one) => one.name === key) ?? null
 }
 
 /** The plugin that owns a collection, or `undefined` when none declares it. */
@@ -228,19 +246,15 @@ export function pluginHostArtifactCollections(): string[] {
 
 /**
  * What to call one of a collection's documents in a reference row: the
- * declared label, else derived from the name — `productCategories` reads as
- * "Product category". Singularized with the two rules English spells
- * consistently enough to automate; anything else keeps its name, which is a
- * cosmetic miss rather than a coverage one.
+ * declared label, else core's own derivation from the name.
+ *
+ * The derivation is `hostContentCollectionLabel` rather than a second copy of
+ * it, because a reference row does not know or care whether the collection it
+ * names belongs to a plugin — two spellings of "Product category" reachable
+ * by two paths is the kind of difference nobody notices until a screenshot
+ * disagrees with a test.
  */
 export function pluginHostCollectionLabel(name: string): string {
   const declared = pluginHostCollection(name)?.label?.trim()
-  if (declared) return declared
-  const singular = /ies$/.test(name)
-    ? name.replace(/ies$/, 'y')
-    : /(ss|s)$/.test(name)
-      ? name.replace(/s$/, '')
-      : name
-  const spaced = singular.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase()
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+  return declared || hostContentCollectionLabel(name)
 }

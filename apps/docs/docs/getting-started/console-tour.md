@@ -208,18 +208,46 @@ for finding and installing new ones, not for administering what you already run:
 
 ![The Organization Settings page: a Navigation card listing General, Profile, Plugins, API keys, Branding, Single sign-on, Ownership and Delete, beside the General card with the organization name and workspace URL](/img/getting-started/org-settings-page.png)
 
-Your in-app notification feed — billing, publishing, workflow failures —
-lives under **Notifications**, with per-category mutes:
+### The notifications feed
 
-![The Notifications page: a Mark all read action, a row of per-category mute toggles (Billing, Team & access, Forms & bookings, Marketplace, Product & system), the three per-device Alerts switches with Send test alert beside them, and the paginated feed below](/img/getting-started/notifications-page.png)
+Your in-app notification feed — billing, publishing, workflow failures —
+lives under **Notifications**. The page shows what arrived, newest first, with
+**Mark all read** and a **Notification settings** button beside it:
+
+![The Notifications page: a Mark all read action, a Notification settings button, and the paginated feed of notifications below](/img/getting-started/notifications-page.png)
+
+### Notification settings
+
+Everything about *what* reaches you lives on its own page, **Notification
+settings**, reachable from that button or from the **Manage** tab strip.
+
+**What you are told about** is a table: one row per category, one column for
+**In console** and one for **Email**.
+
+- **In console** is on for every category. Switching it off stops that
+  category appearing in the feed and in the bell.
+- **Email** is **off for every category**. Switch one on and you also get a
+  message in your inbox when one of those notifications arrives. This does not
+  touch the mail Aglyn already sends you — invites, verification, receipts,
+  password resets and dunning are separate, and are not affected by anything on
+  this page.
+
+### Workspace and site overrides
+
+**One workspace or one site** sets the same answers for a single workspace or a
+single site, rather than for your whole account. Each cell starts at
+**Inherit**, which means it follows the level above it: a site follows its
+workspace, a workspace follows your account. Set one to **On** or **Off** and
+only that scope changes. This is how you take form submissions by email from
+one busy site without taking them from the other five.
 
 ### Daily digests
 
-**Daily CRM digest**, beside the category mutes, is on by default. Each morning it
-sends you one notification and one email listing your overdue and due-today tasks and
-the leads nobody has worked, across every workspace you belong to. Switch it off to stop
-both. It is account-wide, like the category mutes; muting **Forms & bookings** silences
-the digest's console notification but not its email. What it counts, and when, is in
+**Daily CRM digest** is on by default. Each morning it sends you one
+notification and one email listing your overdue and due-today tasks and the
+leads nobody has worked, across every workspace you belong to. Switch it off to
+stop both. Switching the **Forms & bookings** console channel off silences the
+digest's console notification but not its email. What it counts, and when, is in
 [Tasks & follow-ups](../content-and-data/crm/tasks.md#the-daily-digest).
 
 **Weekly insights** appear beside it once you have turned them on for a workspace from
@@ -228,13 +256,13 @@ them on. See [Insights](../marketing-and-automation/analytics/insights.md#weekly
 
 **Task reminders** — the notification and email a CRM task sends at its own due time —
 have no switch of their own. They are **Forms & bookings** notifications, beside **Task
-assigned to you**, and muting that category stops both the notification and the email;
-a single task is silenced by clearing its **Remind me** field. See
+assigned to you**, and switching that category off stops both the notification and the
+email; a single task is silenced by clearing its **Remind me** field. See
 [Reminders](../content-and-data/crm/tasks.md#reminders).
 
 ### Alerts on this device
 
-Below the category mutes, three switches control how a new notification
+At the foot of the settings page, three switches control how a new notification
 reaches you in **this browser**:
 
 - **Unread count in tab title** — badges the browser tab, e.g. `(3) Aglyn`,
@@ -250,7 +278,7 @@ reaches you in **this browser**:
 
 These are per-device, not per-account: notification permission is granted
 per browser, so muting sound on your laptop leaves your other devices alone.
-The **category mutes** above are account-wide and apply everywhere.
+Everything above them is account-wide and applies everywhere you sign in.
 
 **Send test alert** plays the chime and, if you've allowed them, fires a desktop
 notification — so you can confirm your setup works instead of discovering weeks

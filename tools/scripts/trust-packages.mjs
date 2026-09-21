@@ -94,13 +94,25 @@ export function atLeast(version, minimum) {
 
 /** Every package `publish-packages.mjs` would publish, by npm name. */
 export function publishablePackages(root = ROOT) {
+  return publishableEntries(root).map((entry) => entry.name)
+}
+
+/**
+ * The same set with the version each package carries.
+ *
+ * The version matters to a caller deciding whether a package is EXPECTED to
+ * be on the registry at a given number: every lib moves together on the repo
+ * version, and `@aglyn/cli` keeps its own. Told apart, "this package has no
+ * such version" is a fact about the cli and a FAILURE about anything else.
+ */
+export function publishableEntries(root = ROOT) {
   return readPackageMap(root)
     .filter((project) => project.projectType === 'library' && project.alias)
     .filter((project) => existsSync(join(root, project.root, 'package.json')))
     .map((project) => JSON.parse(readFileSync(join(root, project.root, 'package.json'), 'utf8')))
     .filter((pkg) => pkg.private !== true && typeof pkg.name === 'string')
-    .map((pkg) => pkg.name)
-    .sort()
+    .map((pkg) => ({ name: pkg.name, version: pkg.version }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 }
 
 /**

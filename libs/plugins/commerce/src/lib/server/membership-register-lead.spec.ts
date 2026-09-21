@@ -106,20 +106,6 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 })
 
 jest.mock('@aglyn/tenant-runtime', () => ({
-  // Every server door captures through `captureHostContact` (AGL-2605), which
-  // is `upsertHostContact` plus the contactCreated announcement. The stub
-  // hands the call to whichever double this spec keeps for the writer — the
-  // runtime mock's own, or the data-admin mock's when the spec doubles the
-  // data layer instead — so assertions on its options read the same calls.
-  captureHostContact: (...args: unknown[]) => {
-    const runtime = jest.requireMock('@aglyn/tenant-runtime') as {
-      upsertHostContact?: (...a: unknown[]) => unknown
-    }
-    const dataAdmin = jest.requireMock('@aglyn/tenant-data-admin') as {
-      upsertHostContact?: (...a: unknown[]) => unknown
-    }
-    return (runtime.upsertHostContact ?? dataAdmin.upsertHostContact)?.(...args)
-  },
   emitHostEvent: async (_hostId: string, event: string, payload: Record<string, unknown>) => {
     mockState.events.push({ event, payload })
     return { alerts: [] }
@@ -137,6 +123,8 @@ import {
   readMarketingBasis,
   soloConsentGroup,
 } from '@aglyn/aglyn/server'
+import type { PluginContactCaptureRequest } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { standInRecordSystem } from '../testing/stand-in-record-system'
 import { membershipRegisterHandler } from './membership-register'
 
 function makeRes(): any {
@@ -173,10 +161,14 @@ const register = (body: Record<string, unknown>) =>
     makeRes(),
   )
 
+/** What the door reported, filled by the stand-in record system. */
+let captured: PluginContactCaptureRequest[] = []
+
 beforeEach(() => {
   mockState.members = []
   mockState.leads = []
   mockState.events = []
+  captured = standInRecordSystem()
 })
 
 describe('the lead a sign-up leaves behind (AGL-2303)', () => {
@@ -244,6 +236,38 @@ describe('the lead a sign-up leaves behind (AGL-2303)', () => {
  * this transaction while leads append every time, and contacts are org-scoped
  * where a member belongs to one site.
  */
+/**
+ * WHO KEEPS THE PERSON IS NOT THIS PLUGIN'S BUSINESS (AGL-3080).
+ *
+ * A sign-up identifies somebody, and commerce reports that through the
+ * platform's contact-capture contract rather than writing a contact itself.
+ * The lead above and this capture are the same act seen by two systems: the
+ * lead is the site's own sales row, the capture is what the workspace's
+ * record system is told.
+ */
+describe('the person a sign-up introduces', () => {
+  it('is reported to whichever plugin keeps people', async () => {
+    await register({ displayName: 'Dana Reed' })
+    expect(captured).toHaveLength(1)
+    expect(captured[0]).toMatchObject({
+      hostId: 'host-1',
+      identity: { email: 'dana@example.com', name: 'Dana Reed' },
+      interaction: { source: 'member', summary: 'Joined as a member' },
+      // An account is a subscription to the site, not an enquiry (AGL-2612).
+      lifecycleFloor: 'subscriber',
+    })
+  })
+
+  /**
+   * Consent is DECLARED, never inferred from the act of signing up — the same
+   * rule the member document is held to a few tests below.
+   */
+  it('carries no consent the visitor did not give', async () => {
+    await register({})
+    expect(captured[0]).not.toHaveProperty('marketingConsent')
+  })
+})
+
 describe('the consent a member signs up with', () => {
   it('persists a ticked checkbox on the member document', async () => {
     await register({ displayName: 'Dana Reed', marketingConsent: true })

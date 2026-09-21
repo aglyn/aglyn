@@ -444,6 +444,79 @@ describe('the template step', () => {
     expect(commits).toEqual([])
   })
 
+  it('asks once more, then stops for review, when the plan promised a token the template never binds (AGL-3143 §11)', async () => {
+    // The measured AGL-3024 miss, in the shape a validator can hold: the plan
+    // promises what the page will show, the build shows less, and `Done` used
+    // to be the answer. AUTHOR_TREE binds {{author.name}} and nothing else.
+    mockRunAiRequest
+      .mockResolvedValueOnce(treeAnswer(AUTHOR_TREE))
+      .mockResolvedValueOnce(treeAnswer(AUTHOR_TREE))
+    const outcome = await createAiJobTemplateStep()(
+      context({
+        inputs: { subject: 'author' },
+        plan: {
+          reuse: [],
+          create: [
+            {
+              kind: 'template',
+              name: 'Author page template',
+              why: 'The firm needs a profile page per attorney.',
+              duplicateOf: null,
+              fields: ['{{author.name}}', '{{author.bio}}'],
+            },
+          ],
+          screens: [],
+          status: 'confirmed',
+          labels: {},
+          proposedAt: NOW as unknown as AiJobPlan['proposedAt'],
+          confirmedAt: NOW as unknown as AiJobPlan['confirmedAt'],
+          confirmedBy: 'uid-1',
+        },
+      }),
+    )
+    // It costs a re-ask, exactly as a broken building rule does.
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    expect(mockRunAiRequest.mock.calls[1][0].messages[2].content as string).toContain('{{author.bio}}')
+    expect(outcome.outputs).toEqual([])
+    expect(outcome.review?.findings.map((finding) => [finding.rule, finding.code])).toEqual([
+      [null, 'plan-token-missing'],
+    ])
+    // Nothing was written: a template that broke its promise is not a draft.
+    expect(commits).toEqual([])
+  })
+
+  it('builds an author page whose plan promised only what it binds, with no finding', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(treeAnswer(AUTHOR_TREE))
+    const outcome = await createAiJobTemplateStep()(
+      context({
+        inputs: { subject: 'author' },
+        plan: {
+          reuse: [],
+          create: [
+            {
+              kind: 'template',
+              name: 'Author page template',
+              why: 'The firm needs a profile page per attorney.',
+              duplicateOf: null,
+              fields: ['{{author.name}}'],
+            },
+          ],
+          screens: [],
+          status: 'confirmed',
+          labels: {},
+          proposedAt: NOW as unknown as AiJobPlan['proposedAt'],
+          confirmedAt: NOW as unknown as AiJobPlan['confirmedAt'],
+          confirmedBy: 'uid-1',
+        },
+      }),
+    )
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect(outcome.review).toBeUndefined()
+    expect(outcome.outputs).toEqual([
+      expect.objectContaining({ resource: 'template' }),
+    ])
+  })
+
   it('builds an author page under its own name and address', async () => {
     mockRunAiRequest.mockResolvedValueOnce(treeAnswer(AUTHOR_TREE))
     const outcome = await createAiJobTemplateStep()(context({ inputs: { subject: 'author' }, plan: null }))

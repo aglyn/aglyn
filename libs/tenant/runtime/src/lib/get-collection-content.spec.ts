@@ -112,6 +112,8 @@ interface FakeQueryState {
   mask: readonly string[] | null
   take: number
   skip: number
+  /** The document a `startAfter` cursor names, if any (AGL-3219). */
+  after: Record<string, unknown> | null
 }
 
 /**
@@ -150,7 +152,7 @@ const entriesQuery = (state: FakeQueryState) => {
         ),
       )
     if (!state.orders.length) return rows
-    return [...rows].sort((a, b) => {
+    const sorted = [...rows].sort((a, b) => {
       for (const order of state.orders) {
         const left = sortValue(a, order.field)
         const right = sortValue(b, order.field)
@@ -160,6 +162,18 @@ const entriesQuery = (state: FakeQueryState) => {
       }
       return 0
     })
+    if (!state.after) return sorted
+    /*
+     * `startAfter(doc)` positions by the ORDERED VALUES of that document, so
+     * the fake has to find it in the sorted rows rather than filter by id.
+     * A cursor document the query itself would not return — a draft, say —
+     * still positions correctly in Firestore; here it simply is not found,
+     * and an empty page is the safe reading for a spec.
+     */
+    const at = sorted.findIndex(
+      (row) => String(row['$id']) === String(state.after?.['$id']),
+    )
+    return at < 0 ? [] : sorted.slice(at + 1)
   }
 
   return {
@@ -175,6 +189,13 @@ const entriesQuery = (state: FakeQueryState) => {
         orders: [...state.orders, { field, direction }],
       }),
     offset: (count: number) => entriesQuery({ ...state, skip: count }),
+    startAfter: (cursor: { id: string }) =>
+      entriesQuery({
+        ...state,
+        after: entryDocs.find((row) => String(row['$id']) === cursor.id) ?? {
+          $id: cursor.id,
+        },
+      }),
     limit: (count: number) => entriesQuery({ ...state, take: count }),
     count: () => ({
       get: async () => ({ data: () => ({ count: matching().length }) }),
@@ -200,12 +221,25 @@ const entriesQuery = (state: FakeQueryState) => {
 
 const entriesCollection = (name: string) => {
   if (name !== 'entries') throw new Error(`unexpected subcollection ${name}`)
-  return entriesQuery({
+  const query = entriesQuery({
     filters: [],
     orders: [],
     mask: null,
     take: Number.POSITIVE_INFINITY,
     skip: 0,
+    after: null,
+  })
+  // A cursor read resolves its position with a DIRECT get (AGL-3219), not a
+  // query, so the collection reference has to answer `doc(id)` too.
+  return Object.assign(query, {
+    doc: (id: string) => ({
+      get: async () => {
+        const row = entryDocs.find((value) => String(value['$id']) === id)
+        return row
+          ? snapshotFor(id, row)
+          : { id, exists: false, data: () => undefined }
+      },
+    }),
   })
 }
 
@@ -294,13 +328,22 @@ beforeEach(() => {
 })
 
 /** A routed listing, as the page loader asks for one. */
-const listing = (options: { page?: number; categorySlug?: string } = {}) =>
+const listing = (
+  options: {
+    page?: number
+    categorySlug?: string
+    after?: string
+    before?: string
+  } = {},
+) =>
   getCollectionContent({
     hostId: HOST,
     collectionSlug: 'videos',
     page: options.page ?? 1,
     perPage: COLLECTION_LIST_PAGE_SIZE,
     ...(options.categorySlug ? { categorySlug: options.categorySlug } : {}),
+    ...(options.after ? { after: options.after } : {}),
+    ...(options.before ? { before: options.before } : {}),
   })
 
 describe('a collection with nothing live is not a listing (AGL-3101)', () => {
@@ -380,6 +423,11 @@ describe('one live entry makes it a listing, answered exactly as before', () => 
     expect(content.pagination).toEqual({
       page: 1,
       perPage: COLLECTION_LIST_PAGE_SIZE,
+      // Inside the bound the totals are still exact and still stated
+      // (AGL-3219): one read holds the whole collection, so counting it is
+      // honest. Both cursors are empty — nowhere older, nowhere newer.
+      nextCursor: '',
+      prevCursor: '',
       totalEntries: 1,
       totalPages: 1,
     })
@@ -483,27 +531,47 @@ describe('a collection past the bound', () => {
     expect(source.entries.map((entry) => entry.slug)).not.toContain('video-100')
   })
 
-  it('states the size of the COLLECTION, not the size of the read', async () => {
+  it('states no total it cannot know, and says so with a cursor', async () => {
     entries(150)
     const content = await listing()
-    expect(content.pagination?.totalEntries).toBe(150)
-    expect(content.pagination?.totalPages).toBe(15)
-    // The bug this replaces: a hundred-entry read counted as a hundred-entry
-    // collection, so the pager said ten pages and the last five did not exist.
-    expect(content.pagination?.totalPages).not.toBe(10)
+    /*
+     * Past the bound there IS no honest total (AGL-3219). The old answer was
+     * a `count()` over a set the listing's two reads disagreed about, which
+     * is what let page 10 of a seventeen-page changelog call itself the last
+     * one. Absent beats wrong.
+     */
+    expect(content.pagination?.totalEntries).toBeUndefined()
+    expect(content.pagination?.totalPages).toBeUndefined()
+    // What a pager actually needs is not the total but whether anything
+    // follows, and the newest page's last entry is where it follows FROM.
+    expect(content.pagination?.nextCursor).toBe(
+      `video-${COLLECTION_LIST_PAGE_SIZE - 1}`,
+    )
+    expect(content.pagination?.prevCursor).toBe('')
   })
 
-  it('serves a page past the bound from its own window', async () => {
+  it('counts a collection it can read whole, exactly as before', async () => {
+    entries(12)
+    const content = await listing()
+    // Inside the bound one read holds everything, every page is sliced out of
+    // that one snapshot, and a total is both knowable and stable. Nothing
+    // about those listings changes.
+    expect(content.pagination?.totalEntries).toBe(12)
+    expect(content.pagination?.totalPages).toBe(2)
+  })
+
+  it('serves a page past the bound from its cursor', async () => {
     entries(150)
-    const content = await listing({ page: 12 })
+    const content = await listing({ after: 'video-109' })
     expect(content.entries).toHaveLength(COLLECTION_LIST_PAGE_SIZE)
     expect(content.entries[0]?.slug).toBe('video-110')
     expect(content.entries.at(-1)?.slug).toBe('video-119')
+    expect(content.pagination?.nextCursor).toBe('video-119')
   })
 
-  it('says where that window starts, so the page is not windowed twice', async () => {
+  it('hands a cursor page through whole, without windowing it twice', async () => {
     entries(150)
-    const content = await listing({ page: 12 })
+    const content = await listing({ after: 'video-109', page: 12 })
     // Every consumer slices `[(page - 1) * perPage, …)`. Handed ten entries
     // and no `windowStart`, all of them would slice from 110 of an array of
     // ten and render an empty listing.
@@ -513,11 +581,58 @@ describe('a collection past the bound', () => {
     ).toHaveLength(COLLECTION_LIST_PAGE_SIZE)
   })
 
+  it('gives a cursor page the same entries whatever the page label says', async () => {
+    entries(150)
+    const real = await listing({ after: 'video-109', page: 12 })
+    // The counter is a label; the cursor is the address. A hand-edited number
+    // moves the window and the offset that corrects for it by the same
+    // amount, so the reader still gets the cursor's page.
+    const mislabelled = await listing({ after: 'video-109', page: 99 })
+    expect(
+      collectionEntriesPageWindow(mislabelled.entries, mislabelled.pagination)
+        .map((entry) => entry.slug),
+    ).toEqual(
+      collectionEntriesPageWindow(real.entries, real.pagination).map(
+        (entry) => entry.slug,
+      ),
+    )
+  })
+
+  it('does not move a cursor page when something is published above it', async () => {
+    /*
+     * THE SEAM (AGL-3219). `v1.0.0-beta.147` served, and `/changelog` showed
+     * one entry as both the last of page 10 and the first of page 11: the
+     * head was a cached snapshot from before the publish, the deep page was a
+     * live offset read from after it, and one insert at the head had moved
+     * every position under them by one.
+     *
+     * A cursor page is the answer to "what follows THIS entry", which no
+     * insert above it can change. The same read, before and after publishing
+     * a hundred newer entries, returns the same ten.
+     */
+    entries(150)
+    const before = await listing({ after: 'video-109' })
+    entryDocs = [
+      ...Array.from({ length: 100 }, (_, index) => ({
+        ...published(index),
+        $id: `newer-${index}`,
+        slug: `newer-${index}`,
+        publishedAt: { seconds: 1_900_000_000 - index },
+      })),
+      ...entryDocs,
+    ]
+    const after = await listing({ after: 'video-109' })
+    expect(after.entries.map((entry) => entry.slug)).toEqual(
+      before.entries.map((entry) => entry.slug),
+    )
+    expect(after.entries[0]?.slug).toBe('video-110')
+  })
+
   it('serves the pages inside the bound from the shared read', async () => {
     entries(150)
     const content = await listing({ page: 2 })
-    // No window read, so nothing to correct for: the cached source already
-    // holds page 2, and paying an offset read for it would undo the sharing
+    // No cursor read, so nothing to correct for: the cached source already
+    // holds page 2, and paying a second read for it would undo the sharing
     // that makes every listing address free.
     expect(content.pagination?.windowStart).toBeUndefined()
     expect(content.entries).toHaveLength(COLLECTION_SOURCE_MAX)

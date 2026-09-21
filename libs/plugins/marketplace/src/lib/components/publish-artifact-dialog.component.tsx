@@ -21,6 +21,10 @@ import {
   marketplacePriceCostNote,
   marketplacePriceFloorHint,
 } from '@aglyn/aglyn'
+import type {
+  ConsoleArtifactPublishZoneProps,
+  ConsolePublishableArtifact,
+} from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -34,40 +38,121 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
-export interface PublishArtifactTarget {
+/** One kind's publish route, and the words a person reads about it. */
+interface PublishRequest {
   /** Plugin API path, e.g. `marketplace/publish-layout`. */
   endpoint: string
   /** Extra body fields identifying what is being published. */
   payload: Record<string, unknown>
-  /** Seeds the name field. */
-  displayName?: string
-  description?: string
   /** Noun used in copy: "layout", "component", … */
   noun: string
   categoryPlaceholder?: string
 }
 
 /**
- * Publish an artifact to the marketplace (AGL-672).
+ * WHERE EACH KIND GOES, which is the knowledge that used to sit in the app
+ * (AGL-3080).
+ *
+ * A console page hands over what it has — a kind, the scope holding it, the
+ * document — and this is the only place that turns it into a request. The
+ * pages that offer publishing named the endpoint, the payload key and the
+ * noun themselves, which made them files that could not compile without a
+ * marketplace and could not be right without being kept in step with one.
+ *
+ * ⚠️ A KIND THIS DOES NOT KNOW IS SAID OUT LOUD, not drawn as nothing. It
+ * means a console offering to publish something this marketplace does not
+ * sell — the two lists have gone out of step — and the person has already
+ * clicked. Drawing nothing would make the control look broken with no way to
+ * tell what happened, and guessing an endpoint from the kind would post to a
+ * route that does not exist and report the 404 to the publisher.
+ *
+ * The control itself is a separate matter: a page only offers the publish
+ * when this zone has a widget at all, so a workspace with no marketplace
+ * never gets here.
+ */
+function publishRequestFor(
+  artifact: ConsolePublishableArtifact,
+): PublishRequest | null {
+  const hostId = artifact.hostId ?? ''
+  const orgId = artifact.orgId ?? ''
+  const artifactId = artifact.artifactId ?? ''
+  switch (artifact.kind) {
+    case 'layout':
+      return {
+        endpoint: 'marketplace/publish-layout',
+        payload: { hostId, layoutId: artifactId },
+        noun: 'layout',
+        categoryPlaceholder: 'e.g. Marketing, Docs, Storefront',
+      }
+    case 'component':
+      return {
+        endpoint: 'marketplace/publish',
+        payload: { hostId, componentId: artifactId },
+        noun: 'component',
+      }
+    case 'site':
+      return {
+        endpoint: 'marketplace/publish-template',
+        payload: { hostId },
+        noun: 'site template',
+      }
+    case 'theme':
+      return {
+        endpoint: 'marketplace/publish-theme',
+        payload: { hostId },
+        noun: 'theme',
+      }
+    // Datasets are org-scoped, so this route takes orgId rather than hostId.
+    case 'datasetSchema':
+      return {
+        endpoint: 'marketplace/publish-dataset-schema',
+        payload: { orgId, datasetId: artifactId },
+        noun: 'dataset schema',
+      }
+    case 'emailTemplate':
+      return {
+        endpoint: 'marketplace/publish-email-template',
+        payload: { hostId, templateKey: artifactId },
+        noun: 'email template',
+      }
+    case 'emailStarter':
+      return {
+        endpoint: 'marketplace/publish-email-starter',
+        payload: { hostId, screenId: artifactId },
+        noun: 'email starter',
+      }
+    default:
+      return null
+  }
+}
+
+/**
+ * Publish an artifact to the marketplace (AGL-672, moved out of the console
+ * app by AGL-3080).
  *
  * The publish form is identical across artifact types — name, description,
  * category, price — and only the endpoint and identifying fields differ, so
  * this takes both rather than being copied per type. Every gate that
  * matters (plan, publisher profile, payouts, host role) lives on the server;
  * this surfaces the server's message rather than trying to predict it.
+ *
+ * Drawn through the `hostArtifactPublish` zone, so the page that offers the
+ * publish keeps the control that opens it and never imports this. A page
+ * with no widget on that zone leaves the offer out entirely, which is why
+ * this may safely draw nothing for a kind it does not sell.
  */
 export function PublishArtifactDialog({
-  target,
+  artifact,
   onClose,
-  onPublished,
-}: {
-  /** Null closes the dialog. */
-  target: PublishArtifactTarget | null
-  onClose: () => void
-  onPublished?: (result: { listingId: string; version: number }) => void
-}) {
+}: ConsoleArtifactPublishZoneProps) {
+  // Memoized because it is a dependency of the publish callback: rebuilt
+  // every render, it would rebuild that callback every render too.
+  const target = useMemo(
+    () => (artifact ? publishRequestFor(artifact) : null),
+    [artifact],
+  )
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [name, setName] = useState('')
@@ -77,12 +162,12 @@ export function PublishArtifactDialog({
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (!target) return
-    setName(target.displayName ?? '')
-    setDescription(target.description ?? '')
+    if (!artifact) return
+    setName(artifact.displayName ?? '')
+    setDescription(artifact.description ?? '')
     setCategory('')
     setPrice('')
-  }, [target])
+  }, [artifact])
 
   const handlePublish = useCallback(async () => {
     if (!target || !name.trim() || busy) return
@@ -112,7 +197,6 @@ export function PublishArtifactDialog({
         variant: 'success',
         persist: false,
       })
-      onPublished?.(payload)
       onClose()
     } catch (error) {
       console.error(error)
@@ -132,9 +216,27 @@ export function PublishArtifactDialog({
     busy,
     user,
     enqueueSnackbar,
-    onPublished,
     onClose,
   ])
+
+  if (artifact && !target) {
+    return (
+      <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+        <DialogTitle>{'Nothing publishes this'}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            {`This marketplace does not publish a ${artifact.kind}, so there ` +
+              'is nowhere to send it. Nothing was changed.'}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button size="small" onClick={onClose}>
+            {'Close'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    )
+  }
 
   return (
     <Dialog

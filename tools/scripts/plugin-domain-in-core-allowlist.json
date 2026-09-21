@@ -808,13 +808,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/components/templates/publish-artifact-dialog.component.tsx",
-      "rules": [
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/components/templates/template-gallery-dialog.component.tsx",
       "rules": [
         "plugin-id",
@@ -985,20 +978,6 @@
       "lane": "workflows"
     },
     {
-      "path": "apps/console/utils/over-limit-summary.ts",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "apps/console/utils/over-limit.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "apps/console/utils/promote-form-version.ts",
       "rules": [
         "domain-declares:forms"
@@ -1018,13 +997,6 @@
       "path": "apps/console/utils/server/announce-dataset-change.ts",
       "rules": [
         "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "apps/console/utils/server/capacity-in-use.ts",
-      "rules": [
-        "plugin-collection:data"
       ],
       "lane": "data"
     },
@@ -1728,16 +1700,6 @@
       ],
       "lane": "stays",
       "why": "One postal-address shape (AGL-1133); generic despite the name, and no CRM vocabulary is in it."
-    },
-    {
-      "path": "libs/aglyn/src/lib/foundation/definitions/host-content-collections.ts",
-      "rules": [
-        "plugin-id",
-        "domain-declares:commerce",
-        "domain-declares:forms",
-        "domain-declares:marketing"
-      ],
-      "lane": "plugin-id"
     },
     {
       "path": "libs/aglyn/src/lib/foundation/definitions/org-billing.types.ts",

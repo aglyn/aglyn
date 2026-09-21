@@ -15,9 +15,20 @@
  * limitations under the License.
  */
 
-import { notificationMuted, type AglynNotification } from '@aglyn/aglyn/server'
+import {
+  buildRoute,
+  NOTIFICATION_SELF_SENT_EMAIL_TYPES,
+  NOTIFICATION_SETTINGS_FIELD,
+  notificationChannelEnabled,
+  type AglynNotification,
+  Route,
+  type NotificationSettings,
+} from '@aglyn/aglyn/server'
+import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
-import { listStaffUidsAcrossPools } from './auth-pools'
+import { findUserByUidAcrossPools, listStaffUidsAcrossPools } from './auth-pools'
+import { filterSuppressedEmails } from './email-suppression'
+import { meterOrgEmail, meterPlatformEmail } from './email-metering'
 import firebaseAdmin from './firebase-admin'
 import { listOrgMembers } from './organizations'
 
@@ -28,41 +39,179 @@ export type NotificationPayload = Omit<
   '$id' | 'createdAt' | 'readAt'
 >
 
+export interface NotifyUsersOptions {
+  /**
+   * Addresses the caller already holds, by uid (AGL-3224).
+   *
+   * Purely an optimization, and one worth taking where it is free: a caller
+   * that read the roster — `notifyOrgAdmins` does — has every address in hand
+   * already, and without this the email half would look each one up again in
+   * the directory. Absent uids fall back to that lookup, so passing a partial
+   * map is fine and passing none is correct.
+   */
+  emails?: Readonly<Record<string, string | null | undefined>>
+}
+
+/** The console's absolute origin for an email link, or `''` when unset. */
+function consoleOrigin(): string {
+  return (process.env.NEXT_PUBLIC_CONSOLE_URL ?? '').trim().replace(/\/+$/, '')
+}
+
+/**
+ * At most this many directory lookups per fan-out, and at most this many
+ * notification emails.
+ *
+ * Both ceilings only ever bite on a fan-out where many recipients have
+ * OPTED IN — the email channel defaults off, so the ordinary notification
+ * costs exactly what it cost before this existed. They are here because a
+ * fan-out takes up to 400 uids and `notifyUsers` runs inside the mutation
+ * that emitted it: a notification must not be able to turn one write into
+ * four hundred directory reads and four hundred sends.
+ */
+const NOTIFY_EMAIL_MAX_LOOKUPS = 25
+const NOTIFY_EMAIL_MAX_SENDS = 50
+
+/**
+ * The email beside the console notification (AGL-3224).
+ *
+ * One send per recipient, never a shared `to:` list — two people who manage
+ * the same site have not agreed to be shown each other's addresses, and the
+ * settings link in the footer belongs to one person.
+ *
+ * `List-Unsubscribe` points at the settings page rather than at a one-click
+ * endpoint: this is not marketing mail and RFC 8058's POST form would be
+ * claiming a capability that does not exist. What it does do is put the way
+ * out in the headers as well as the body, so a client that surfaces it shows
+ * the person the page where the switch they want actually is.
+ *
+ * Never throws, like everything else on this path.
+ */
+async function emailNotification(
+  uids: string[],
+  payload: NotificationPayload,
+  known: Readonly<Record<string, string | null | undefined>>,
+): Promise<void> {
+  const origin = consoleOrigin()
+  const settingsUrl = `${origin}${buildRoute(Route.MANAGE_NOTIFICATION_SETTINGS)}`
+  let lookups = 0
+  let sent = 0
+  for (const uid of uids) {
+    if (sent >= NOTIFY_EMAIL_MAX_SENDS) break
+    let address = String(known[uid] ?? '').trim().toLowerCase()
+    if (!address.includes('@')) {
+      if (lookups >= NOTIFY_EMAIL_MAX_LOOKUPS) continue
+      lookups += 1
+      const pooled = await findUserByUidAcrossPools(uid).catch(() => null)
+      address = String(pooled?.record?.email ?? '').trim().toLowerCase()
+    }
+    if (!address.includes('@')) continue
+    const recipients = await filterSuppressedEmails([address])
+    if (!recipients.length) continue
+    const link = payload.link && origin ? `${origin}${payload.link}` : ''
+    const body = [
+      payload.title,
+      payload.body ?? '',
+      link,
+      origin ? `Change what you are emailed about: ${settingsUrl}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+    const result = await sendEmail({
+      to: recipients,
+      subject: payload.title,
+      text: body,
+      context: 'notification',
+      ...(origin
+        ? { headers: { 'List-Unsubscribe': `<${settingsUrl}>` } }
+        : {}),
+    })
+    if (!result.sent) continue
+    sent += 1
+    // Whose cost it is: a notification about a workspace is that workspace's
+    // mail, and a staff alert or an account-level notice is the platform's.
+    await (payload.orgId ? meterOrgEmail(payload.orgId) : meterPlatformEmail())
+      .catch(() => undefined)
+  }
+}
+
 /**
  * Notification fan-out (AGL-259): batch-writes one doc per recipient at
- * `users/{uid}/notifications`. Never throws — a notification miss must
- * not break the mutation that emitted it.
+ * `users/{uid}/notifications`, and — for recipients who asked for it
+ * (AGL-3224) — sends one email beside it. Never throws: a notification miss,
+ * or a send that failed, must not break the mutation that emitted it.
  */
 export async function notifyUsers(
   uids: Iterable<string>,
   payload: NotificationPayload,
+  options: NotifyUsersOptions = {},
 ): Promise<void> {
   try {
     const db = firestore()
     const targets = [...new Set(uids)].filter(Boolean).slice(0, 400)
     if (!targets.length) return
-    // Per-user category mutes (AGL-267): one getAll over the user docs.
+    // Per-user preferences (AGL-267, AGL-3223): one getAll over the user
+    // docs, which now answers for both channels and for all three scopes —
+    // the settings live on this document precisely so that stays one read.
     const userDocs = await db.getAll(
       ...targets.map((uid) => db.collection('users').doc(uid)),
     )
+    const scope = { orgId: payload.orgId, hostId: payload.hostId }
     const batch = db.batch()
     let count = 0
+    const mailTo: string[] = []
     for (const userDoc of userDocs) {
-      const prefs = userDoc.get('notificationPrefs') as
+      const settings = userDoc.get(NOTIFICATION_SETTINGS_FIELD) as
+        | NotificationSettings
+        | undefined
+      const legacy = userDoc.get('notificationPrefs') as
         | Record<string, boolean>
         | undefined
-      if (notificationMuted(prefs, payload.type)) continue
-      batch.set(
-        db
-          .collection('users')
-          .doc(userDoc.id)
-          .collection('notifications')
-          .doc(),
-        { ...payload, createdAt: FieldValue.serverTimestamp() },
-      )
-      count += 1
+      if (
+        notificationChannelEnabled(
+          settings,
+          'console',
+          payload.type,
+          scope,
+          legacy,
+        )
+      ) {
+        batch.set(
+          db
+            .collection('users')
+            .doc(userDoc.id)
+            .collection('notifications')
+            .doc(),
+          { ...payload, createdAt: FieldValue.serverTimestamp() },
+        )
+        count += 1
+      }
+      if (
+        notificationChannelEnabled(settings, 'email', payload.type, scope, legacy)
+      ) {
+        mailTo.push(userDoc.id)
+      }
     }
     if (count > 0) await batch.commit()
+    /*
+     * THE EMAIL AFTER THE COMMIT, and not inside its `try`.
+     *
+     * The console notification is the durable record and the send is a
+     * courtesy on top of it, so the order is the one where a failing network
+     * call cannot lose the record. The two channels are independent by
+     * design — a person may have muted the feed and asked for mail, or the
+     * reverse — so neither is gated on the other having happened.
+     *
+     * Digests are excluded: they compose and send their own mail, under
+     * their own switches, and the generic channel would send a second
+     * message announcing that the first one had been sent.
+     */
+    if (
+      mailTo.length &&
+      isEmailConfigured() &&
+      !NOTIFICATION_SELF_SENT_EMAIL_TYPES.has(payload.type)
+    ) {
+      await emailNotification(mailTo, payload, options.emails ?? {})
+    }
   } catch (error) {
     console.error('notification fan-out failed', error)
   }
@@ -112,10 +261,20 @@ export async function notifyOrgAdmins(
 ): Promise<void> {
   try {
     const members = await listOrgMembers(orgId)
-    const admins = members
-      .filter((member) => member.role === 'owner' || member.role === 'admin')
-      .map((member) => member.$id)
-    await notifyUsers(admins, { ...payload, orgId })
+    const admins = members.filter(
+      (member) => member.role === 'owner' || member.role === 'admin',
+    )
+    // The roster rows carry addresses, so the email channel (AGL-3224) needs
+    // no directory lookup for anyone reached this way.
+    const emails: Record<string, string | undefined> = {}
+    for (const member of admins) {
+      if (member.email) emails[member.$id] = member.email
+    }
+    await notifyUsers(
+      admins.map((member) => member.$id),
+      { ...payload, orgId },
+      { emails },
+    )
   } catch (error) {
     console.error('org admin notification failed', error)
   }

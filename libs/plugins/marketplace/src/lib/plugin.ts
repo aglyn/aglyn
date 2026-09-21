@@ -20,6 +20,7 @@ import MarketplaceBrowse from './components/marketplace-browse.component'
 import MarketplacePaymentsNotice from './components/marketplace-payments-notice.component'
 import HostPluginsCard from './components/host-plugins-card.component'
 import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
+import PublishArtifactDialog from './components/publish-artifact-dialog.component'
 import { MarketplaceListingContent } from './components/listing-content.component'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { RATING_FIELD } from './model/rating-field'
@@ -84,6 +85,16 @@ export function registerMarketplaceConsole(): void {
         slot: 'pluginSiteSet',
         widgetId: 'marketplace-plugin-site-set',
         Component: PluginSiteSetPanel,
+      },
+      // Publishing something the console holds (AGL-3080). The page that
+      // offers it keeps the control that opens it — a menu item is one entry
+      // of a list the page builds, not a widget — and hands over what it has
+      // in its own vocabulary. Where a layout or a theme GOES, what a listing
+      // of it is called and what it may cost at the least are this plugin's.
+      {
+        slot: 'hostArtifactPublish',
+        widgetId: 'marketplace-publish-artifact',
+        Component: PublishArtifactDialog,
       },
     ],
     pluginId: BUNDLE_ID,

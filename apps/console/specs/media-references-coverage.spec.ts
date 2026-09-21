@@ -700,11 +700,11 @@ describe('media usage scan — email templates', () => {
  *
  * ## Every case here was mutation-tested against the fix
  *
- * Removing `'products'` from `PLUGIN_CONTENT_COLLECTIONS` turns the product
- * cases red and leaves the events/services/settings cases green — which is
- * the point of spreading the fixtures across four plugins. Removing the whole
- * `PLUGIN_CONTENT_COLLECTIONS` loop from the scanner turns all of them red
- * while the negative controls below stay green.
+ * Removing `'products'` from commerce's `hostCollections` declaration turns
+ * the product cases red and leaves the events/services/settings cases green —
+ * which is the point of spreading the fixtures across four plugins. Removing
+ * the generic-scan loop from the scanner turns all of them red while the
+ * negative controls below stay green.
  */
 describe('media usage scan — plugin-owned documents', () => {
   it('finds an asset used only on a product', async () => {

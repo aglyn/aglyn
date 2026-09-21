@@ -778,10 +778,24 @@ export const DOOR_FLOORS = [
   { path: 'libs/plugins/commerce/src/lib/server/membership-register.ts', floor: 'subscriber' },
 ]
 
-/** Whether one door's source still names its floor, matched on the write. */
+/**
+ * Whether one door's source still names its floor, matched on the write.
+ *
+ * TWO SPELLINGS, and both are current. A door that still calls
+ * `captureHostContact` names the floor `initialLifecycleStage`; a door that
+ * has moved to the platform's contact-capture contract (AGL-3080) names it
+ * `lifecycleFloor`, which is the contract's word for the same number. The
+ * doors are crossing one at a time, so the guard reads both rather than
+ * being rewritten on each crossing — and it still goes red for a door that
+ * names the floor under NEITHER name, which is the failure it exists for: a
+ * backfill run against a door that stopped writing a floor leaves a gap that
+ * grows from the moment it reports success.
+ */
 export function doorSetsFloor(doorSource, floor) {
   const source = stripComments(doorSource)
-  return new RegExp(`initialLifecycleStage:\\s*'${floor}'`).test(source)
+  return new RegExp(
+    `(?:initialLifecycleStage|lifecycleFloor):\\s*'${floor}'`,
+  ).test(source)
 }
 
 /**
