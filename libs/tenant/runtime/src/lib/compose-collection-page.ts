@@ -193,6 +193,12 @@ export async function composeCollectionTemplatePage(options: {
           ...(content.entriesReachedBound
             ? { entriesReachedBound: true }
             : {}),
+          // Where those entries start (AGL-3213): a listing page past the
+          // cached read's bound holds its own window, not the collection
+          // from the top, and the block has to window from the same origin.
+          ...(content.pagination?.windowStart
+            ? { windowStart: content.pagination.windowStart }
+            : {}),
         },
   })
   if (!nodes) return null
@@ -311,6 +317,10 @@ export async function composeCollectionFallbackPage(options: {
             // Same fact, same reason as the template path above (AGL-1516).
             ...(content.entriesReachedBound
               ? { entriesReachedBound: true }
+              : {}),
+            // Same window, same reason as the template path above (AGL-3213).
+            ...(content.pagination?.windowStart
+              ? { windowStart: content.pagination.windowStart }
               : {}),
           },
     })

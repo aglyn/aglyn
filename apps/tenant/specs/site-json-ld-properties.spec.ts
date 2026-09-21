@@ -279,6 +279,71 @@ describe('the page-level node of each type', () => {
   })
 })
 
+describe('the ItemList of a DEEP listing page (AGL-3213)', () => {
+  /** `/blog/page/7` as the loader now hands it over: ten entries, page 7. */
+  const page7 = {
+    data: { host: HOST },
+    content: {
+      collection: { slug: 'blog', displayName: 'Blog' },
+      pagination: { page: 7, perPage: 10, totalEntries: 100, totalPages: 10 },
+      entries: Array.from({ length: 10 }, (_, i) => ({
+        $id: `e${61 + i}`,
+        title: `Post ${61 + i}`,
+        slug: `post-${61 + i}`,
+      })),
+    },
+  }
+
+  it('counts the items this page has, not the ones the read held', async () => {
+    /*
+      `numberOfItems` and the positions below are ONE claim, and it used to be
+      false in both halves at once. The loader serialized the whole bounded
+      read into props — up to a hundred entries — and this builder maps all of
+      them while numbering from `pagination.page`, so `/blog/page/7` told
+      every crawler that the page carried a hundred items at positions 61
+      through 160. Sixty of those positions name entries the collection does
+      not have.
+    */
+    const blocks = await blocksFor(page7, ['blog', 'page', '7'])
+    const list = nodeOfType(blocks, 'ItemList')
+
+    expect(list?.['numberOfItems']).toBe(10)
+  })
+
+  it('numbers them from where the page actually starts', async () => {
+    const blocks = await blocksFor(page7, ['blog', 'page', '7'])
+    const items = nodeOfType(blocks, 'ItemList')?.['itemListElement']
+
+    expect(items.map((item: any) => item.position)).toEqual([
+      61, 62, 63, 64, 65, 66, 67, 68, 69, 70,
+    ])
+    // …and each position names the entry standing at it, which is the whole
+    // point of numbering across pages rather than restarting at 1.
+    expect(items[0].name).toBe('Post 61')
+    expect(items[0].url).toBe(`${ORIGIN}/blog/post-61`)
+    expect(items[9].name).toBe('Post 70')
+  })
+
+  it('still numbers an unpaginated listing from one', async () => {
+    const blocks = await blocksFor(
+      {
+        data: { host: HOST },
+        content: {
+          collection: { slug: 'blog', displayName: 'Blog' },
+          entries: [
+            { $id: 'e1', title: 'Hello', slug: 'hello' },
+            { $id: 'e2', title: 'World', slug: 'world' },
+          ],
+        },
+      },
+      ['blog'],
+    )
+    const items = nodeOfType(blocks, 'ItemList')?.['itemListElement']
+
+    expect(items.map((item: any) => item.position)).toEqual([1, 2])
+  })
+})
+
 describe('the author page’s breadcrumb', () => {
   const authorPage = PAGE_TYPES.find((type) => type.name === 'an author page')!
 

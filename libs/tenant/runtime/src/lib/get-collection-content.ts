@@ -579,6 +579,18 @@ export interface CollectionPagination {
   perPage: number
   totalPages: number
   totalEntries: number
+  /**
+   * Where `entries` begins in the collection's own order (AGL-3213): 0 for a
+   * listing served from the cached read, and the page's own offset for one
+   * served by a window read past that read's bound.
+   *
+   * Both windowing sites subtract it — `collectionEntriesPageWindow` on the
+   * way into props, and the Collection entries block on the way into compose.
+   * Without it a windowed listing renders empty, because every one of them
+   * slices `[(page - 1) * perPage, …)` on the premise that `entries` starts at
+   * the beginning of the collection.
+   */
+  windowStart?: number
 }
 
 /**
@@ -597,6 +609,19 @@ interface LiveEntriesRead {
   /** The query came back holding its own `.limit()`. */
   reachedBound: boolean
   /**
+   * How many entries are live in the WHOLE collection (AGL-3213), which is
+   * the number a pager has to state. `entries.length` is the size of the
+   * READ, and on a collection past the bound the two stop being the same
+   * number — which is how `/changelog` came to say "Page 10 of 10" while
+   * holding 166 entries.
+   *
+   * Counted rather than listed: one `count()` aggregation over the published
+   * entries, billed at a read per 1000 index entries, plus the live schedules
+   * this read already holds. Only asked for when the read DID reach its
+   * bound; under it the entries in hand ARE the collection.
+   */
+  totalLive: number
+  /**
    * The read saw a `scheduled` entry whose `publishAt` has NOT arrived and
    * which has not been terminally refused — a schedule this collection is
    * still waiting on.
@@ -613,6 +638,261 @@ interface LiveEntriesRead {
 }
 
 /**
+ * The fields a LISTING read of an entry needs — the field mask on the query
+ * below (AGL-3213).
+ *
+ * The point of the mask is the field that is NOT in it. `body` is the whole
+ * post, and `mapEntryFields` has never mapped it on this path: a list card
+ * binds a title, an excerpt, a cover and a byline, and the routed entry page
+ * reads its one document separately. So the markdown of up to
+ * {@link COLLECTION_SOURCE_MAX} posts crossed the wire, was parsed out of the
+ * response, and was dropped one function later — on every fill of a cache
+ * that every listing address, every "Latest posts" rail, the feed and the
+ * author page share. A changelog is the worst case and also the common one.
+ *
+ * Firestore bills the document read either way, so this buys no reads; it
+ * buys egress and the JSON parse, which is the part of a collection render
+ * that grows with how much people have written.
+ *
+ * Site search is unaffected and must stay that way: it matches on `body`
+ * through its OWN query in `apps/tenant/utils/search-content.ts`, which this
+ * mask does not touch.
+ *
+ * ⛔ A reader added to `mapEntryFields` or to the liveness/schedule helpers
+ * must be added HERE in the same edit. A field left out does not error — it
+ * arrives `undefined`, which is exactly how `authorName` and `updatedAt` went
+ * missing for months (AGL-2486, AGL-2534). The four schedule fields are
+ * listed first for that reason: `status`, `publishAt` and `scheduleStatus`
+ * decide whether an entry is live at all, and `flipDueEntry` WRITES
+ * `publishAt` back as `publishedAt`, so a mask that dropped it would publish
+ * a due entry with no date.
+ */
+const LIVE_ENTRY_FIELDS = [
+  'status',
+  'publishAt',
+  'publishedAt',
+  'scheduleStatus',
+  'title',
+  'slug',
+  'excerpt',
+  'authorName',
+  'authorId',
+  'coverImage',
+  'coverImageAlt',
+  'coverVideo',
+  'seoTitle',
+  'seoDescription',
+  'categoryId',
+  'category',
+  'tags',
+  'updatedAt',
+] as const
+
+/**
+ * Most SCHEDULED entries one live read considers (AGL-3213).
+ *
+ * Read by its own query rather than taken from the dated page below, because
+ * a schedule is invisible to that page: scheduling writes `publishAt` and
+ * never `publishedAt`, and `flipDueEntry` during a render is the only thing
+ * that publishes one. A schedule the read misses is a post that never goes
+ * out. The set is small by nature — a hundred pending schedules on one
+ * collection is already an unusual editorial calendar.
+ */
+const SCHEDULED_SOURCE_MAX = 100
+
+/** Everything a public listing may show, before any ordering. */
+function liveEntriesBase(
+  entriesRef: FirebaseFirestore.CollectionReference,
+): FirebaseFirestore.Query {
+  return (
+    entriesRef
+      .where('status', 'in', ['published', 'scheduled'])
+      // Everything this path reads, and nothing else (AGL-3213) — see
+      // {@link LIVE_ENTRY_FIELDS}.
+      .select(...LIVE_ENTRY_FIELDS)
+  )
+}
+
+/**
+ * The documents a live read considers, in the order the site shows them
+ * (AGL-3213).
+ *
+ * ## Why this is ordered now, and why ordering alone would have broken it
+ *
+ * It was `where(status).limit(100)` with NO `orderBy`, sorted in memory
+ * afterwards. That is not the newest hundred — it is a hundred documents in
+ * NAME order, then sorted. Under the bound the two agree, because a hundred
+ * out of a hundred is everything; past it they diverge completely. This site's
+ * own changelog reached 166 live entries and its listing showed an arbitrary
+ * hundred of them, chosen by document id, with 66 releases reachable only at
+ * their own URLs.
+ *
+ * The comment that used to sit here was right about `orderBy`, though:
+ * Firestore returns only documents that HAVE the ordered field, so a dated
+ * read does not mis-sort an entry without a date — it hides it. Two of those
+ * exist and both matter:
+ *
+ *   A SCHEDULE  carries `publishAt` and no `publishedAt` until it goes out.
+ *               Ordering alone would have stopped scheduled posts publishing
+ *               at all, silently, because nothing else publishes them.
+ *   AN IMPORT   restores whatever the bundle carried, and
+ *               `/api/hosts/resources` validates no field for presence
+ *               either — so a published entry with no `publishedAt` exists.
+ *
+ * So it is three queries, in the shape the console's sorted window uses
+ * (AGL-2853): the DATED page, every SCHEDULE, and — only when the dated page
+ * came back SHORT, which is the server's own proof that the collection fits
+ * inside the bound — a scan for live entries carrying no date. Past the bound
+ * an undated entry sorts after every dated one by definition, so it belongs to
+ * the tail pages, which are served by their own window read.
+ */
+async function readLiveEntryDocs(
+  entriesRef: FirebaseFirestore.CollectionReference,
+): Promise<{
+  docs: FirebaseFirestore.QueryDocumentSnapshot[]
+  reachedBound: boolean
+}> {
+  try {
+    const dated = await liveEntriesBase(entriesRef)
+      .orderBy('publishedAt', 'desc')
+      // The document name breaks ties, so two entries published in the same
+      // second cannot swap places between two reads and move a page boundary
+      // under a reader. Descending to match the date: a composite index ends
+      // with `__name__` in the last field's direction, which makes this the
+      // `(status, publishedAt DESC)` index the console's table already needs.
+      .orderBy('__name__', 'desc')
+      // Named rather than literal (AGL-1516): a search index has to be able to
+      // say "this read reached its bound", and it can only do that against a
+      // bound it shares with the query. `collectionSourceReachedBound` reads
+      // the same constant.
+      .limit(COLLECTION_SOURCE_MAX)
+      .get()
+
+    const scheduled = await entriesRef
+      .where('status', '==', 'scheduled')
+      .select(...LIVE_ENTRY_FIELDS)
+      .limit(SCHEDULED_SOURCE_MAX)
+      .get()
+
+    /*
+     * EITHER read stopping at its own limit means entries went unseen.
+     *
+     * The dated page is the usual one. The schedule page is the case a dated
+     * read alone cannot even detect: a collection holding nothing but pending
+     * schedules returns ZERO dated documents, so a bound measured only there
+     * would report a complete read of an empty collection — and "nothing is
+     * live here" is the claim that takes a listing off the site (AGL-3101).
+     */
+    const reachedBound =
+      dated.docs.length >= COLLECTION_SOURCE_MAX ||
+      scheduled.docs.length >= SCHEDULED_SOURCE_MAX
+
+    const undated = reachedBound
+      ? []
+      : (
+          await liveEntriesBase(entriesRef)
+            .orderBy('__name__')
+            .limit(COLLECTION_SOURCE_MAX)
+            .get()
+        ).docs.filter((entryDoc) => !entryDoc.get('publishedAt'))
+
+    const seen = new Set<string>()
+    const docs: FirebaseFirestore.QueryDocumentSnapshot[] = []
+    for (const entryDoc of [...dated.docs, ...scheduled.docs, ...undated]) {
+      if (seen.has(entryDoc.id)) continue
+      seen.add(entryDoc.id)
+      docs.push(entryDoc)
+    }
+    return { docs, reachedBound }
+  } catch (error) {
+    /*
+     * FAIL SOFT TO THE UNORDERED READ.
+     *
+     * The ordered query needs the `(status, publishedAt DESC)` composite
+     * index. Indexes do NOT ship with a promotion — RELEASING.md deploys them
+     * by hand afterwards — so the window between the code landing and the
+     * index existing has to degrade rather than break. An arbitrary hundred
+     * is a bad listing; a 500 is a customer's blog down.
+     */
+    console.error(error)
+    const unordered = await liveEntriesBase(entriesRef)
+      .limit(COLLECTION_SOURCE_MAX)
+      .get()
+    return {
+      docs: unordered.docs,
+      reachedBound: unordered.docs.length >= COLLECTION_SOURCE_MAX,
+    }
+  }
+}
+
+/** The live entries among `docs`, newest first, publishing any that came due. */
+function toLiveEntries(
+  docs: readonly FirebaseFirestore.QueryDocumentSnapshot[],
+  permission: SchedulePermission,
+): CollectionEntrySummary[] {
+  return (
+    docs
+      .filter((entryDoc) => isLive(entryDoc.data(), permission))
+      .map((entryDoc) => {
+        const value = entryDoc.data()
+        flipDueEntry(entryDoc.ref, value, permission)
+        return {
+          $id: entryDoc.id,
+          title: value['title'] ?? entryDoc.id,
+          slug: value['slug'] ?? entryDoc.id,
+          ...mapEntryFields(value),
+          publishedAt: (value['publishedAt'] ?? value['publishAt'])
+            ? {
+                seconds: (value['publishedAt'] ?? value['publishAt']).seconds,
+              }
+            : null,
+        }
+      })
+      // An entry carrying no date at all sorts last rather than to 1970 —
+      // the same place the query's own order puts it.
+      .sort(
+        (a, b) => (b.publishedAt?.seconds ?? 0) - (a.publishedAt?.seconds ?? 0),
+      )
+  )
+}
+
+/**
+ * How many entries are live in the whole collection (AGL-3213).
+ *
+ * The aggregation counts `published`, which `isLive` admits unconditionally,
+ * and the live schedules are added from the docs already in hand — a due
+ * schedule is still stored as `scheduled` while this runs, because
+ * `flipDueEntry` writes behind the render, so neither half can count it twice.
+ *
+ * Falls back to the size of the read on failure. A pager that overstates by a
+ * page is a page a reader can see is empty; a pager that throws is a listing
+ * that does not render.
+ */
+async function countLiveEntries(
+  entriesRef: FirebaseFirestore.CollectionReference,
+  docs: readonly FirebaseFirestore.QueryDocumentSnapshot[],
+  permission: SchedulePermission,
+  fallback: number,
+): Promise<number> {
+  try {
+    const published = await entriesRef
+      .where('status', '==', 'published')
+      .count()
+      .get()
+    const counted = Number(published.data()?.count ?? Number.NaN)
+    if (!Number.isFinite(counted)) return fallback
+    const liveSchedules = docs.filter((entryDoc) => {
+      const value = entryDoc.data()
+      return value['status'] === 'scheduled' && isLive(value, permission)
+    }).length
+    return counted + liveSchedules
+  } catch (error) {
+    console.error(error)
+    return fallback
+  }
+}
+
+/**
  * Fetches a collection's live entries (newest first), shared by the route
  * loader and the compose-time Collection entries block (AGL-551).
  */
@@ -620,23 +900,12 @@ async function listLiveEntries(
   entriesRef: FirebaseFirestore.CollectionReference,
   hostId: string,
 ): Promise<LiveEntriesRead> {
-  // No orderBy: entries missing publishedAt would be dropped by Firestore;
-  // sort client-side like the version lists.
-  const entriesQuery = await entriesRef
-    .where('status', 'in', ['published', 'scheduled'])
-    // Named rather than literal (AGL-1516): a search index has to be able to
-    // say "this read reached its bound", and it can only do that against a
-    // bound it shares with the query. `collectionSourceReachedBound` reads
-    // the same constant.
-    .limit(COLLECTION_SOURCE_MAX)
-    .get()
+  const { docs, reachedBound } = await readLiveEntryDocs(entriesRef)
 
   // Ask the plan question ONLY if something is actually due (AGL-471). A
   // collection with no due schedule — almost every render — never reads the
   // org at all.
-  const due = entriesQuery.docs.filter((entryDoc) =>
-    isDueScheduled(entryDoc.data()),
-  )
+  const due = docs.filter((entryDoc) => isDueScheduled(entryDoc.data()))
   const permission: SchedulePermission = due.length
     ? await scheduledPublishingPermission(hostId)
     : 'allowed'
@@ -651,40 +920,82 @@ async function listLiveEntries(
     }
   }
 
-  // Measured on the RAW docs, before the liveness filter (AGL-1516). This is
-  // the only place that can still see how many documents the query returned;
-  // one line down that number is gone for good.
-  const reachedBound = entriesQuery.docs.length >= COLLECTION_SOURCE_MAX
-
-  // Also measured on the RAW docs, and for the same reason: a not-yet-due
-  // entry is filtered out one line down, so this is the last place that can
-  // see one at all.
-  const pendingSchedule = entriesQuery.docs.some((entryDoc) =>
+  // Measured on the RAW docs, before the liveness filter (AGL-1516): a
+  // not-yet-due entry is filtered out one line down, so this is the last
+  // place that can see one at all.
+  const pendingSchedule = docs.some((entryDoc) =>
     isPendingScheduled(entryDoc.data()),
   )
 
-  const entries = entriesQuery.docs
-    .filter((entryDoc) => isLive(entryDoc.data(), permission))
-    .map((entryDoc) => {
-      const value = entryDoc.data()
-      flipDueEntry(entryDoc.ref, value, permission)
-      return {
-        $id: entryDoc.id,
-        title: value['title'] ?? entryDoc.id,
-        slug: value['slug'] ?? entryDoc.id,
-        ...mapEntryFields(value),
-        publishedAt: (value['publishedAt'] ?? value['publishAt'])
-          ? {
-              seconds: (value['publishedAt'] ?? value['publishAt']).seconds,
-            }
-          : null,
-      }
-    })
-    .sort(
-      (a, b) => (b.publishedAt?.seconds ?? 0) - (a.publishedAt?.seconds ?? 0),
-    )
+  const entries = toLiveEntries(docs, permission)
 
-  return { entries, reachedBound, pendingSchedule }
+  return {
+    entries,
+    reachedBound,
+    pendingSchedule,
+    totalLive: reachedBound
+      ? await countLiveEntries(entriesRef, docs, permission, entries.length)
+      : entries.length,
+  }
+}
+
+/**
+ * One page of a listing that starts PAST the cached read (AGL-3213).
+ *
+ * Uncached on purpose, and it is the only read on the collection path that is.
+ * The cached source exists because `/blog`, every `/blog/page/{n}`, every
+ * category listing, the feed and every "Latest posts" rail want the same first
+ * hundred entries (AGL-1302); a page past that bound wants ten entries nobody
+ * else is asking for, and its own ISR entry is already the cache for them.
+ *
+ * `offset` bills the documents it skips, so page 11 of a long collection costs
+ * its 110 reads per regeneration. That is the price of a listing that can be
+ * read to the end, it is paid only by collections past the bound, and it is
+ * paid once per page per revalidate window.
+ */
+async function readCollectionListingWindow(options: {
+  hostId: string
+  collectionSlug: string
+  offset: number
+  limit: number
+}): Promise<CollectionEntrySummary[] | null> {
+  try {
+    const collectionDoc = await findContentCollection(
+      options.hostId,
+      options.collectionSlug,
+    )
+    if (!collectionDoc) return null
+    const entriesRef = collectionDoc.ref.collection('entries')
+    const snapshot = await liveEntriesBase(entriesRef)
+      .orderBy('publishedAt', 'desc')
+      .orderBy('__name__', 'desc')
+      .offset(options.offset)
+      .limit(options.limit)
+      .get()
+    const due = snapshot.docs.filter((entryDoc) =>
+      isDueScheduled(entryDoc.data()),
+    )
+    const permission: SchedulePermission = due.length
+      ? await scheduledPublishingPermission(options.hostId)
+      : 'allowed'
+    if (permission !== 'allowed') {
+      for (const entryDoc of due) {
+        flipDueEntry(entryDoc.ref, entryDoc.data(), permission)
+      }
+    }
+    const entries = toLiveEntries(snapshot.docs, permission)
+    // The byline reads `authorName`, which a record-backed author only has
+    // once resolved — the cached source does this for the entries it holds,
+    // and a windowed page holds entries it never saw (AGL-2486).
+    await attachEntryAuthors(options.hostId, entries)
+    return entries
+  } catch (error) {
+    // Fail open to the cached head rather than to a 500: the caller keeps
+    // whatever it already had, which is a page the reader has seen before
+    // rather than an error they cannot get past.
+    console.error(error)
+    return null
+  }
 }
 
 /** Compose-time view of a collection: its live entries and its taxonomy. */
@@ -718,6 +1029,12 @@ export interface PublishedCollectionSource {
    * would tell a reader their search covered less than it did.
    */
   reachedBound: boolean
+  /**
+   * How many entries are live in the whole collection (AGL-3213) — see
+   * {@link LiveEntriesRead.totalLive}. Equal to `entries.length` for every
+   * collection inside the bound, which is almost all of them.
+   */
+  totalLive: number
 }
 
 /**
@@ -778,9 +1095,11 @@ async function readPublishedCollectionSource(
         entries: [],
         categories: [],
         reachedBound: false,
+        totalLive: 0,
       }
     }
-    const { entries, reachedBound, pendingSchedule } = await listLiveEntries(
+    const { entries, reachedBound, pendingSchedule, totalLive } =
+      await listLiveEntries(
       collectionDoc.ref.collection('entries'),
       options.hostId,
     )
@@ -795,6 +1114,7 @@ async function readPublishedCollectionSource(
       entries,
       categories: mapCollectionCategories(collectionDoc.get('categories')),
       reachedBound,
+      totalLive,
       ...(pendingSchedule ? { pendingSchedule: true } : {}),
     }
   } catch (error) {
@@ -804,6 +1124,7 @@ async function readPublishedCollectionSource(
       entries: [],
       categories: [],
       reachedBound: false,
+      totalLive: 0,
     }
   }
 }
@@ -836,6 +1157,12 @@ function applyCategoryAndPagination(
     perPage?: number
     categorySlug?: string
   },
+  listing?: {
+    /** Live entries in the whole collection — see `LiveEntriesRead.totalLive`. */
+    totalLive?: number
+    /** Where `data.entries` begins in that collection's order. */
+    windowStart?: number
+  },
 ): void {
   const { page = 1, perPage } = options
   const routedCategory = (options.categorySlug ?? '').trim()
@@ -861,12 +1188,36 @@ function applyCategoryAndPagination(
   }
 
   if (perPage && perPage > 0) {
-    const totalEntries = data.entries.length
+    /*
+     * The total is the COLLECTION's, not the read's (AGL-3213).
+     *
+     * `entries.length` was the count, and on a collection inside the bound it
+     * still is — the two are the same number there. Past the bound it is the
+     * size of the window, which is how `/changelog` advertised "Page 10 of
+     * 10" while holding 166 entries and linking to 100 of them.
+     *
+     * A ROUTED CATEGORY keeps counting its own entries, because that is the
+     * only honest number available here: the narrowing happens in memory over
+     * the cached head, so both the count and the listing describe the same
+     * bounded set. Paging a category past the bound needs its own ordered
+     * query and a `(categoryId, status, publishedAt DESC)` index; until then
+     * a category of a very large collection is capped, and says so by
+     * agreeing with what it shows.
+     */
+    const known = Number(listing?.totalLive)
+    const totalEntries =
+      !routedCategory && Number.isFinite(known) && known > data.entries.length
+        ? known
+        : data.entries.length
+    const windowStart = Number(listing?.windowStart)
     data.pagination = {
       page,
       perPage,
       totalEntries,
       totalPages: collectionTotalPages(totalEntries, perPage),
+      ...(Number.isFinite(windowStart) && windowStart > 0
+        ? { windowStart }
+        : {}),
     }
   }
 }
@@ -965,7 +1316,39 @@ export async function getCollectionContent(options: {
       data.collection = source.collection
       data.entries = source.entries
       data.entriesReachedBound = source.reachedBound
-      applyCategoryAndPagination(data, options)
+      /*
+       * A page that starts past the cached read is served by its own window
+       * (AGL-3213). Everything before that point comes out of the shared
+       * source, so the pages a reader actually visits stay free.
+       *
+       * Only the unfiltered listing: a category route narrows in memory over
+       * the same head, and a window read of the whole collection would hand
+       * it ten entries of which any number may belong to another category.
+       */
+      const { page = 1, perPage } = options
+      let windowStart = 0
+      if (perPage && perPage > 0 && source.reachedBound) {
+        const offset = (page - 1) * perPage
+        if (!(options.categorySlug ?? '').trim() && offset >= source.entries.length) {
+          const windowed = await readCollectionListingWindow({
+            hostId,
+            collectionSlug,
+            offset,
+            limit: perPage,
+          })
+          // Null means the window read failed, and the cached head is the
+          // better answer than an empty page: the reader sees page 1's
+          // entries under page N's URL rather than nothing at all.
+          if (windowed) {
+            data.entries = windowed
+            windowStart = offset
+          }
+        }
+      }
+      applyCategoryAndPagination(data, options, {
+        totalLive: source.totalLive,
+        windowStart,
+      })
       return data
     }
 

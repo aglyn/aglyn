@@ -9,6 +9,48 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.147 — 2026-09-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.146...v1.0.0-beta.147)
+
+### Added
+
+- **tools:** `latest` can be moved off the one broken build ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **tools:** the release publishes with no token at all ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **releasing:** a promotion publishes its own changelog entry ([AGL-3211](https://linear.app/aglyn/issue/AGL-3211), [AGL-2848](https://linear.app/aglyn/issue/AGL-2848))
+- **tenant:** the edit bar's quick links are the plugins' own ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
+
+### Fixed
+
+- **mui:** a Stack that is not flex spaces with gap, not margins ([AGL-3214](https://linear.app/aglyn/issue/AGL-3214))
+- **releasing:** the changelog publisher answers its two guards ([AGL-3211](https://linear.app/aglyn/issue/AGL-3211))
+- **tenant:** a listing can be read to the end, past the cached hundred ([AGL-3213](https://linear.app/aglyn/issue/AGL-3213), [AGL-2853](https://linear.app/aglyn/issue/AGL-2853))
+- **tools:** npm keeps the terminal, so it can ask for the approval ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **tools:** the trust run does not spend fifty-one approvals on nothing ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+- **marketing:** the Figma pricing frames carry the AI rows ([AGL-2920](https://linear.app/aglyn/issue/AGL-2920), [AGL-3198](https://linear.app/aglyn/issue/AGL-3198), [AGL-3207](https://linear.app/aglyn/issue/AGL-3207))
+- **changelog:** a scopeless commit gets no label, and greys are grays ([AGL-3212](https://linear.app/aglyn/issue/AGL-3212))
+
+### Performance
+
+- **tenant:** a listing page reads once and carries its own entries ([AGL-3213](https://linear.app/aglyn/issue/AGL-3213), [AGL-1302](https://linear.app/aglyn/issue/AGL-1302))
+
+### Changed
+
+- **shared-ui:** money figures live beside the rate figures ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+### Documentation
+
+- how brand assets are exported, named and replaced ([AGL-3216](https://linear.app/aglyn/issue/AGL-3216))
+- realigning local main is the last step of a worktree push ([AGL-3215](https://linear.app/aglyn/issue/AGL-3215))
+- **console:** the publish fan-out no longer covers a whole collection ([AGL-3213](https://linear.app/aglyn/issue/AGL-3213))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear ceiling is 3213, read from the workspace ([AGL-3213](https://linear.app/aglyn/issue/AGL-3213))
+
+</details>
+
 ## v1.0.0-beta.146 — 2026-09-21
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.145...v1.0.0-beta.146)

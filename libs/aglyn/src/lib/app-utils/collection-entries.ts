@@ -183,6 +183,55 @@ export function collectionTotalPages(total: number, perPage: number): number {
   return Math.max(1, Math.ceil(total / perPage))
 }
 
+/**
+ * The slice of a listing's entries that the page named by `pagination`
+ * actually shows (AGL-3213).
+ *
+ * The loader hands the WHOLE narrowed set down to compose, because
+ * {@link expandCollectionEntries} does its own windowing off the block's
+ * props — a Collection entries block may carry its own `perPage`, its own
+ * pinned `page`, a `firstPageOnly` switch and its own filters, none of which
+ * this function can see. Slicing before compose would double-window and empty
+ * every page after the first.
+ *
+ * Everything the loader serializes into page PROPS is downstream of compose,
+ * and there the full set is not merely wasted bytes — it is a false
+ * statement. The `ItemList` JSON-LD numbers its items
+ * `(page - 1) * perPage + index + 1` on the premise that `entries` is the
+ * window; handed all one hundred, `/changelog/page/7` published
+ * `numberOfItems: 100` and positions 61 through 160, most of them past the
+ * end of the collection. The legacy fallback renderer read it the same way
+ * and rendered the whole list on every page.
+ *
+ * So: the loader keeps the full set until compose has had it, and narrows
+ * HERE on the way into props, where `pagination` is the route's own answer to
+ * which page this is.
+ *
+ * An unpaginated listing (an entry route, the RSS feed) passes no pagination
+ * and gets its entries back untouched.
+ */
+export function collectionEntriesPageWindow<T>(
+  entries: readonly T[],
+  pagination:
+    | { page?: number; perPage?: number; windowStart?: number }
+    | null
+    | undefined,
+): T[] {
+  const perPage = Number(pagination?.perPage)
+  if (!Number.isFinite(perPage) || perPage <= 0) return [...entries]
+  const pageRaw = Number(pagination?.page)
+  const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1
+  // `windowStart` is where `entries` begins in the collection's own order
+  // (AGL-3213). A listing past the cached read's bound is served by a window
+  // read for that page alone, and slicing it from the page's absolute offset
+  // would return nothing.
+  const startRaw = Number(pagination?.windowStart)
+  const windowStart =
+    Number.isFinite(startRaw) && startRaw > 0 ? Math.floor(startRaw) : 0
+  const start = Math.max(0, (page - 1) * Math.floor(perPage) - windowStart)
+  return entries.slice(start, start + Math.floor(perPage))
+}
+
 /** Default/most related posts a Related posts block renders (AGL-582). */
 export const COLLECTION_RELATED_DEFAULT_LIMIT = 3
 export const COLLECTION_RELATED_MAX = 12
@@ -381,6 +430,17 @@ export interface CollectionEntriesSource {
    * wins: that is a deliberately pinned window, not a paginated list.
    */
   page?: number
+  /**
+   * The absolute index `entries[0]` holds in the collection's own order
+   * (AGL-3213). Zero everywhere except a listing page past the cached read's
+   * bound, which is served by a window read for that page alone.
+   *
+   * Without it a windowed source is silently empty: every consumer here
+   * slices `[(page - 1) * perPage, …)` on the premise that `entries` starts
+   * at the beginning of the collection, so page 11 of a windowed ten-entry
+   * source slices from 100 and renders nothing.
+   */
+  windowStart?: number
 }
 
 /**
@@ -1152,10 +1212,20 @@ export function expandCollectionEntries<
     // and was then thinned by the liveness gate.
     const sourceCapped = collectionSourceIsBounded(source)
 
+    // Where this source's first entry sits in the collection (AGL-3213):
+    // zero for a whole read, and the page's own offset for a windowed one.
+    const windowStartRaw = Number(source.windowStart)
+    const windowStart =
+      Number.isFinite(windowStartRaw) && windowStartRaw > 0
+        ? Math.floor(windowStartRaw)
+        : 0
+    const pageStart = perPage
+      ? Math.max(0, (page - 1) * perPage - windowStart)
+      : 0
     const windowed = suppressedBeyondFirstPage
       ? []
       : perPage
-        ? filtered.slice((page - 1) * perPage, (page - 1) * perPage + perPage)
+        ? filtered.slice(pageStart, pageStart + perPage)
         : filtered.slice(0, limit)
 
     const childIds: NodeId[] = []

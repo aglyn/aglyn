@@ -22,7 +22,7 @@
  * Nothing here imports React or MUI, so a server handler that needs a field
  * name or a rate can take this barrel without dragging a component graph
  * into its bundle. The renderers live one directory over, behind
- * `@aglyn/shared-ui-email-campaigns/components/report-figures`.
+ * `@aglyn/shared-ui-jsx/components/measured-figures.component`.
  */
 
 /**

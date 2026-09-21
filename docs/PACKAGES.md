@@ -595,11 +595,21 @@ npm run trust:packages            # read only: what each package trusts today
 npm run trust:packages -- --set   # the owner configures the ones missing it
 ```
 
-**Both** modes need the owner signed in: `npm trust list` is not public —
-it answers `EOTP` to anyone without the account's second factor, even for a
-public package — and `--set` changes the account's own security settings,
-which an agent may not do at all. A signed-out run says so rather than
-reporting all 51 as missing. It needs npm 11.15.0 or later, which is when
+**Both** modes need the owner signed in, and npm challenges EVERY trust
+operation with the account's second factor — `npm trust list` included, and
+`npm login` alone does not satisfy it. ⚑ npm answers that challenge with a
+BROWSER HANDSHAKE, so it must keep the terminal: a `npm trust` run with stdin
+closed cannot wait for the approval and fails `EOTP` instead of asking, which
+reads as "not signed in" to somebody who signed in a minute ago. The elevated token npm
+issues then lapses quickly, so the script asks for an approval only when a
+read actually needs one, at most once per run — and stops with a count if the
+token lapses part way through the 51 rather than asking again. So the run reads and configures each
+package in turn rather than reading all 51 first: the first package proves
+whether one browser approval carries the rest, and if it does not, that is
+known at package one instead of after fifty-one approvals with nothing
+configured. It is safe to re-run; packages already configured are skipped.
+`--set` changes the account's own security settings, which an agent may not
+do at all. It needs npm 11.15.0 or later, which is when
 `npm trust` arrived; the repo's current npm is older, so `npm install -g
 npm@latest` comes first. It asks for
 **both** `--allow-publish` and `--allow-stage-publish`: a configuration created
@@ -607,13 +617,37 @@ after 2026-09-03 permits staged publishing and nothing else unless publishing
 is asked for explicitly, so without the first flag every package would be
 configured, look configured, and refuse the release.
 
-**`NPM_TOKEN` is the fallback, and a bridge.** npm uses OIDC where it can and a
-token only where it cannot, so a package whose trusted publisher is not
-configured yet still publishes on the token. It is a granular token with the
-2FA bypass, expiring **2026-12-19**, and npm removes direct publishing with
-those in **January 2027** — so it is deleted once `trust:packages` reports
-every package configured, not renewed. Its absence is a notice rather than a
-failure: with trust configured there is nothing for it to do.
+**There is no token any more.** All 51 packages were configured and verified
+on 2026-09-21 — right repository, right workflow file, and `createPackage` on
+every one — and `NPM_TOKEN` was removed from the workflow. The token it
+replaced was granular with the 2FA bypass and expired 2026-12-19; npm removes
+direct publishing with those in **January 2027**. A secret that does not exist
+cannot expire, leak, or be rotated into a broken release.
+
+### `latest` has to be moved by hand until 1.0.0
+
+`publish-packages.mjs` puts a prerelease under its own label (`beta`) and never
+`latest`, so a beta is not what `npm install` hands somebody who asked for
+nothing in particular. That rule assumes `latest` points at a release worth
+having, and it does not: **npm sets `latest` on a package's FIRST publish
+whatever `--tag` says**, so all 50 libs pinned it to `1.0.0-beta.143` — the one
+build whose folder-subpath imports a consumer cannot resolve at all.
+
+```sh
+npm run dist-tag:latest            # read only: what each tag says
+npm run dist-tag:latest -- --set   # the owner moves the ones behind
+```
+
+It targets the version the repo carries, skips a package that version was never
+published for (`@aglyn/cli` keeps its own number), and is the owner's to run —
+it changes what every `npm install` of these packages hands out. When a
+non-prerelease ships it sets `latest` itself and this stops having a job.
+
+⛔ **`createPackage` is not the same as being configured**, and the check knows
+the difference. A row created after 2026-09-03 carries `createStagedPackage`
+alone unless publishing was asked for explicitly; it appears on every listing
+and refuses the release — and a version that failed to publish cannot be
+published again under the same number.
 
 ## Later
 

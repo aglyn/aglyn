@@ -949,6 +949,37 @@ const loadPageDataCached = cache(
               nodes: collectionNodes,
             })
 
+          /*
+            What the PROPS carry, once compose has had the full set
+            (AGL-3213).
+
+            `content.entries` is the whole narrowed listing — up to
+            `COLLECTION_SOURCE_MAX` of them — and compose needs it that way,
+            because a Collection entries block windows for itself off its own
+            props (`expandCollectionEntries`). Past that point nothing wants
+            the remainder: the composed nodes already hold the page's ten, and
+            everything downstream of here reads `entries` as THE PAGE.
+
+            Two readers had been doing exactly that against the full set. The
+            `ItemList` JSON-LD numbers its items from `pagination.page`, so
+            `/changelog/page/7` claimed a hundred items at positions 61–160;
+            and the legacy fallback renderer (`collection-fallback.tsx`, the
+            `nodes: null` path) maps `entries` with no window of its own and
+            re-rendered the entire list at every `/page/{n}`. Both read
+            correctly the moment `entries` means what its siblings
+            `pagination.page` and `pagination.perPage` say it means.
+
+            Built as a copy rather than by mutating `content`, because the
+            compose calls above hold a reference to the same object.
+          */
+          const collectionProps = {
+            ...content,
+            entries: Aglyn.collectionEntriesPageWindow(
+              content.entries,
+              content.pagination,
+            ),
+          }
+
           // Template screens (AGL-105/551): the collection's designated
           // list/entry screens render through the NORMAL published pipeline
           // — theme, shared layout, {{entry.*}}/{{collection.*}} tokens,
@@ -975,7 +1006,7 @@ const loadPageDataCached = cache(
                   nodes: templated.nodes,
                   // Entry JSON-LD + metadata read this (the client renders
                   // the composed nodes because they are present).
-                  content,
+                  content: collectionProps,
                   ...(templated.socialImageFacts
                     ? { socialImageFacts: templated.socialImageFacts }
                     : {}),
@@ -1013,7 +1044,7 @@ const loadPageDataCached = cache(
               JSON.stringify({
                 data: { host: hostRes.host },
                 nodes: fallback?.nodes ?? null,
-                content,
+                content: collectionProps,
                 ...(fallback?.socialImageFacts
                   ? { socialImageFacts: fallback.socialImageFacts }
                   : {}),

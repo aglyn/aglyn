@@ -21,7 +21,7 @@ import {
   Figure,
   MoneyFigure,
   Section,
-} from '@aglyn/shared-ui-email-campaigns/components/report-figures'
+} from '@aglyn/shared-ui-jsx/components/measured-figures.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'

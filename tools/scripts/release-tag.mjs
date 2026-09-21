@@ -134,12 +134,14 @@ function parseArgs(argv) {
     ref: 'origin/production',
     at: null,
     served: null,
+    changelog: true,
   }
   let sawRef = false
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]
     if (arg === '--write') options.write = true
     else if (arg === '--push') options.push = true
+    else if (arg === '--no-changelog') options.changelog = false
     else if (arg === '--ref') {
       options.ref = argv[++i]
       sawRef = true
@@ -174,6 +176,46 @@ function parseArgs(argv) {
     )
   }
   return options
+}
+
+/**
+ * Publish this release's entry on the customer-facing changelog (AGL-3211).
+ *
+ * Here, and not in its own step somebody has to remember, because the tag is
+ * the moment "this tree was built AND served" becomes true — and that is the
+ * claim the entry makes. A separate step is how the tag itself got missed for
+ * beta.114 and beta.115.
+ *
+ * BEST EFFORT, ALWAYS. The tag is already pushed and correct by the time this
+ * runs; a changelog write that fails — no credentials on this machine, a
+ * network that refused — must never make a correct release look failed. It
+ * prints what to re-run instead, and the script is idempotent by slug, so
+ * re-running it converges rather than publishing a second entry.
+ */
+function publishChangelogEntry(version) {
+  try {
+    const output = execFileSync(
+      process.execPath,
+      [
+        new URL('release-changelog-entry.mjs', import.meta.url).pathname,
+        '--version',
+        version,
+        '--write',
+      ],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    )
+    return output.split('\n').filter(Boolean)
+  } catch (error) {
+    return [
+      '',
+      '  The changelog entry was NOT published:',
+      `    ${(error.stderr || error.message || '').trim().split('\n').join('\n    ')}`,
+      '',
+      '  The tag is fine. Publish the entry with:',
+      '',
+      `    npm run release:changelog -- --version ${version} --write`,
+    ]
+  }
 }
 
 function main() {
@@ -475,6 +517,7 @@ function main() {
   if (options.push) {
     git('push', 'origin', tag)
     out.push(`  PUSHED   ${tag} to origin`)
+    if (options.changelog) out.push(...publishChangelogEntry(version))
   } else {
     out.push('')
     out.push('  The tag is LOCAL only. Publish it with:')

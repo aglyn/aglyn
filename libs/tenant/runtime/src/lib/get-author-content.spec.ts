@@ -52,16 +52,21 @@ const firestore = {
             }
           }
           if (sub === 'collections') {
-            return {
-              limit: () => ({
-                get: async () => ({
-                  docs: collectionDocs.map((value) => ({
-                    data: () => ({ ...value }),
-                    get: (key: string) => value[key],
-                  })),
-                }),
+            // `select()` returns the builder (AGL-3213); what the mask must
+            // CONTAIN is asserted in `author-collections-read-cost.spec.ts`,
+            // against the same `hostCollectionKind`/display-name fallbacks
+            // this fake's rows exercise.
+            const query = {
+              select: () => query,
+              limit: () => query,
+              get: async () => ({
+                docs: collectionDocs.map((value) => ({
+                  data: () => ({ ...value }),
+                  get: (key: string) => value[key],
+                })),
               }),
             }
+            return query
           }
           throw new Error(`unexpected subcollection ${sub}`)
         },

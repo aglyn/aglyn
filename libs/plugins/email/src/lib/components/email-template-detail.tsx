@@ -81,7 +81,7 @@ import {
   Figure,
   RateRow,
   Section,
-} from '@aglyn/shared-ui-email-campaigns/components/report-figures'
+} from '@aglyn/shared-ui-jsx/components/measured-figures.component'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 

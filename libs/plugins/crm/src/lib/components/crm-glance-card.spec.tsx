@@ -76,7 +76,7 @@ jest.mock('firebase/firestore', () => ({
   }),
   getAggregateFromServer: jest.fn(async () => ({ data: () => ({ amountCents: 0 }) })),
 }))
-jest.mock('@aglyn/shared-ui-email-campaigns/components/report-figures', () => ({
+jest.mock('@aglyn/shared-ui-jsx/components/measured-figures.component', () => ({
   money: (cents: number) => `$${(cents / 100).toFixed(2)}`,
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({

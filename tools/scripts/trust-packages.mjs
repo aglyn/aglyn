@@ -104,17 +104,37 @@ export function publishablePackages(root = ROOT) {
 }
 
 /**
- * Does `listing` already name this repo's workflow?
+ * The npm permission that allows a plain `npm publish`.
  *
- * Matched on the two claims that decide who may publish — the repository and
- * the workflow file — and deliberately not on the whole row: npm prints the
- * configuration back with an id and a created date that are not ours to
- * predict, and a match on the printed text as a whole would go stale on the
- * first formatting change npm makes.
+ * ⚑ NOT the same as being configured. A configuration created after
+ * 2026-09-03 permits `createStagedPackage` and nothing else unless publishing
+ * was asked for explicitly, and `publish-packages.mjs` runs a plain
+ * `npm publish` — so a stage-only row is a package that looks configured on
+ * every listing and refuses the release.
+ */
+export const PUBLISH_PERMISSION = 'createPackage'
+
+/**
+ * Does `listing` name this repo's workflow AND let it publish?
+ *
+ * Matched on the three things that decide whether a release goes out — the
+ * repository, the workflow file and the publish permission — and deliberately
+ * not on the whole row: npm prints the configuration back with an id and a
+ * created date that are not ours to predict, and a match on the printed text
+ * as a whole would go stale on the first formatting change npm makes.
+ *
+ * The permission is checked because the first version of this did not, and a
+ * stage-only configuration would have read as `ok` here right up until the
+ * promotion that failed on it — after which nothing could be republished at
+ * that version.
  */
 export function trustsThisWorkflow(listing) {
   const text = String(listing ?? '')
-  return text.includes(REPOSITORY) && text.includes(WORKFLOW_FILE)
+  return (
+    text.includes(REPOSITORY) &&
+    text.includes(WORKFLOW_FILE) &&
+    text.includes(PUBLISH_PERMISSION)
+  )
 }
 
 function npmVersion() {
@@ -152,10 +172,51 @@ export function readTrust(name, run = npmTrustList) {
 
 function npmTrustList(name) {
   try {
-    return execFileSync('npm', ['trust', 'list', name, '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    return execFileSync('npm', ['trust', 'list', name, '--json'], {
+      encoding: 'utf8',
+      /*
+       * ⚑ STDIN AND STDERR STAY ON THE TERMINAL. npm answers a trust
+       * operation with a browser handshake — it prints a URL, waits for the
+       * approval, and only then does the work. With stdin closed it cannot
+       * wait, so it fails `EOTP` instead of asking, and the run reads as
+       * "not signed in" to somebody who signed in a minute ago. Only stdout
+       * is captured, because that is where `--json` puts the answer.
+       */
+      stdio: ['inherit', 'pipe', 'inherit'],
+    })
   } catch (error) {
     // npm exits non-zero AND prints the JSON error body on stdout.
     return `${error.stdout ?? ''}`.trim() || `${error.stderr ?? ''}`.trim() || '{}'
+  }
+}
+
+/**
+ * One fully-interactive trust read, so npm's browser handshake happens where
+ * the person can see it.
+ *
+ * ⚑ ON DEMAND, never up front. The elevated token npm issues for a trust
+ * operation lapses quickly, so whether one is needed is not knowable before
+ * asking — and asking anyway would put a browser approval in front of a run
+ * that did not need one.
+ *
+ * The ordinary reads capture stdout to parse `--json`, and a prompt npm chose
+ * to write there would vanish into that pipe, leaving somebody staring at a
+ * hung command with no URL. This one inherits all three streams: whatever npm
+ * prints, they see, and whatever it asks, they can answer. Its OUTPUT is
+ * thrown away — the caller reads the same package again from the token this
+ * established.
+ */
+function warmUpTrustAuth(name) {
+  console.log('')
+  console.log("trust:packages: npm wants this account's second factor. Approve once in")
+  console.log('the browser it opens — the rest of the run should then go through.')
+  console.log('')
+  try {
+    execFileSync('npm', ['trust', 'list', name], { cwd: ROOT, stdio: 'inherit' })
+    return true
+  } catch {
+    // Not fatal on its own: the caller reads again and reports properly.
+    return false
   }
 }
 
@@ -170,18 +231,56 @@ function main(argv) {
 
   const names = publishablePackages()
   console.log(`trust:packages: ${names.length} package(s); ${REPOSITORY} → .github/workflows/${WORKFLOW_FILE}`)
+  /*
+   * One approval, offered once. `warmedUp` makes the interactive call happen
+   * at most once per run: if the token it establishes lapses part way through
+   * 51 packages, the run stops and says how far it got rather than asking for
+   * a fiftieth approval nobody expected.
+   */
+  let warmedUp = false
 
+  /*
+   * ONE PASS, reading and configuring each package in turn (AGL-3201).
+   *
+   * ⚑ npm challenges EVERY trust operation with the account's second factor,
+   * `trust list` included. Reading all 51 first and then writing would ask
+   * for up to 51 approvals before a single package was configured, and the
+   * person approving would have nothing to show for any of them. Interleaved,
+   * the first package proves whether one approval carries the rest — and if
+   * it does not, that is known at package one rather than at fifty-one.
+   *
+   * BOTH permissions on the write, deliberately. A configuration created
+   * after 2026-09-03 allows `npm stage publish` and nothing else unless
+   * publishing is asked for explicitly, and `publish-packages.mjs` runs a
+   * plain `npm publish` — so without `--allow-publish` every one of these
+   * would be configured, look configured, and refuse the release.
+   * `--allow-stage-publish` goes with it because staged publishing is the
+   * path npm is moving everyone to, and permitting it costs nothing today.
+   */
   const missing = []
+  let configured = 0
+  let failed = 0
   for (const name of names) {
-    const answer = readTrust(name)
+    let answer = readTrust(name)
+    if (answer.unauthenticated && !warmedUp) {
+      warmedUp = true
+      warmUpTrustAuth(name)
+      answer = readTrust(name)
+    }
     if (answer.unauthenticated) {
       console.error('')
-      console.error('trust:packages: npm asked for this account\'s second factor, so nothing could be read.')
-      console.error('`npm trust list` is not public — it needs the owner signed in, even for a public package.')
+      console.error("trust:packages: npm wanted this account's second factor for")
+      console.error(`\`npm trust list ${name}\` and did not get it.`)
       console.error('')
-      console.error('  npm login          # approve in the browser it opens')
-      console.error('  npm run trust:packages')
+      console.error('Being logged in is NOT enough — npm challenges every trust operation')
+      console.error('on its own, and `npm trust list` is not public even for a public')
+      console.error('package. If no browser opened just now, run this once by hand and')
+      console.error('approve it, then run this script again:')
       console.error('')
+      console.error(`  npm trust list ${name}`)
+      console.error(`  npm run trust:packages${set ? ' -- --set' : ''}`)
+      console.error('')
+      console.error(`${configured} package(s) were configured before this; re-running skips them.`)
       return 1
     }
     if (trustsThisWorkflow(answer.listing)) {
@@ -189,7 +288,24 @@ function main(argv) {
       continue
     }
     missing.push(name)
-    console.log(`  MISSING ${name}${answer.error ? ` (${answer.error})` : ''}`)
+    if (!set) {
+      console.log(`  MISSING ${name}${answer.error ? ` (${answer.error})` : ''}`)
+      continue
+    }
+    console.log(`  set     ${name}`)
+    try {
+      execFileSync(
+        'npm',
+        ['trust', 'github', name, '--repo', REPOSITORY, '--file', WORKFLOW_FILE, '--allow-publish', '--allow-stage-publish', '--yes'],
+        // Keeps the terminal: npm challenges this with the account's second
+        // factor and cannot ask for it with no stdin.
+        { cwd: ROOT, stdio: 'inherit' },
+      )
+      configured += 1
+    } catch (error) {
+      failed += 1
+      console.error(`    FAILED ${name} — ${error.message}`)
+    }
   }
 
   if (!missing.length) {
@@ -203,36 +319,11 @@ function main(argv) {
     console.log('')
     console.log('  npm run trust:packages -- --set')
     console.log('')
-    console.log('It needs an npm login with the account\'s second factor to hand, and it')
-    console.log('is the owner\'s to run — an agent may not touch an account\'s security settings.')
+    console.log("It needs an npm login with the account's second factor to hand, and it")
+    console.log("is the owner's to run — an agent may not touch an account's security settings.")
     return 1
   }
 
-  /*
-   * BOTH permissions, deliberately. A configuration created after 2026-09-03
-   * allows `npm stage publish` and nothing else unless publishing is asked for
-   * explicitly, and `publish-packages.mjs` runs a plain `npm publish` — so
-   * without `--allow-publish` every one of these would be configured, look
-   * configured, and refuse the release. `--allow-stage-publish` goes with it
-   * because staged publishing is the path npm is moving everyone to, and a
-   * configuration that permits it costs nothing today.
-   */
-  let failed = 0
-  for (const name of missing) {
-    console.log(`  · ${name}`)
-    try {
-      execFileSync(
-        'npm',
-        ['trust', 'github', name, '--repo', REPOSITORY, '--file', WORKFLOW_FILE, '--allow-publish', '--allow-stage-publish', '--yes'],
-        // Keeps the terminal: npm challenges this with the account's second
-        // factor and cannot ask for it with no stdin.
-        { cwd: ROOT, stdio: 'inherit' },
-      )
-    } catch (error) {
-      failed += 1
-      console.error(`    FAILED ${name} — ${error.message}`)
-    }
-  }
   if (failed) {
     console.error(`trust:packages: ${failed} of ${missing.length} could not be configured. Re-run — the ones that worked are skipped.`)
     return 1

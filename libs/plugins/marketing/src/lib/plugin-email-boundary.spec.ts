@@ -81,13 +81,19 @@ const MOVED_ENTRY_POINTS = [
   '@aglyn/plugins-email/components/report-figures',
 ]
 
-/** The shared library's source modules, in the order a reader meets them. */
+/**
+ * The shared library's source modules, in the order a reader meets them.
+ *
+ * `components/report-figures.tsx` is gone (AGL-3080): the figure primitives
+ * had already moved to `@aglyn/shared-ui-jsx` and only the money ones stayed
+ * behind, where the next surface to show money could not reach them. They
+ * live beside the rate primitives now and this library renders nothing.
+ */
 const SHARED_SOURCES = [
   'model/campaign-container.ts',
   'model/campaign-report.ts',
   'model/campaign-revenue.ts',
   'model/email-record.ts',
-  'components/report-figures.tsx',
 ]
 
 /** Every `.ts`/`.tsx` file under a directory, specs included. */
@@ -103,11 +109,10 @@ function sourceFiles(dir: string): string[] {
  * The names a module exports.
  *
  * Two forms cover this library: a declaration carrying `export`, and an
- * `export { … }` block (which `report-figures` and `campaign-revenue` both
- * use to pass a symbol through from another library — those are shared
- * definitions too, and reaching them through the Email plugin is the same
- * mistake). `as` renames export under the NEW name, which is the name an
- * importer would write.
+ * `export { … }` block (which `campaign-revenue` uses to pass a symbol
+ * through from another library — those are shared definitions too, and
+ * reaching them through the Email plugin is the same mistake). `as` renames
+ * export under the NEW name, which is the name an importer would write.
  */
 function exportedNames(source: string): string[] {
   const declared = [
@@ -213,7 +218,9 @@ describe('the boundary this guard is reading', () => {
 
   it('found the shared library and read real symbols out of it', () => {
     expect(OWNED_BY_SHARED_LIB.size).toBeGreaterThan(40)
-    // One from each source module, and both export forms.
+    // One from each source module, and both export forms. The figure
+    // primitives are no longer among them: they are `@aglyn/shared-ui-jsx`'s
+    // (AGL-3080), which is where every surface can reach them.
     expect([...OWNED_BY_SHARED_LIB]).toEqual(
       expect.arrayContaining([
         'CAMPAIGN_SEND_CONTAINER_FIELD',
@@ -221,10 +228,6 @@ describe('the boundary this guard is reading', () => {
         'CampaignStats',
         'campaignRevenueReport',
         'emailSendTimeMs',
-        'MoneyPerMessageRow',
-        'Figure',
-        'RateRow',
-        'Section',
       ]),
     )
   })

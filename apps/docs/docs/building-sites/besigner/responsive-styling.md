@@ -476,7 +476,7 @@ no custom CSS.
    can mix the two — bind the ends to Primary and Secondary and drop a
    literal mid-tone between them. **Add stop** adds one near the end of
    the ramp, ready to be positioned; a gradient always keeps at least
-   two, so the remove button greys out at two.
+   two, so the remove button grays out at two.
 
 Background Fill writes `background-image`, which paints *over* the
 Background Color — so a solid color set there still shows through

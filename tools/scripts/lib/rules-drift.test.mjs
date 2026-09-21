@@ -735,6 +735,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:standalone-installs',
       'check:standalone-installs',
       'test:release-version', // AGL-2089
+      'test:changelog-entry', // AGL-3211
       'test:manifest-versions', // AGL-2108
       'check:manifest-versions', // AGL-2108
       'test:funnel-alarm', // AGL-2587
@@ -836,6 +837,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:standalone-installs',
       'check:standalone-installs',
       'test:release-version', // AGL-2089
+      'test:changelog-entry', // AGL-3211
       'test:manifest-versions', // AGL-2108
       'check:manifest-versions', // AGL-2108
       'test:funnel-alarm', // AGL-2587

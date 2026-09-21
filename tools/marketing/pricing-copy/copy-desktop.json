@@ -5,7 +5,7 @@
   "frameName": "Pricing",
   "frameSize": {
     "width": 1440,
-    "height": 7175
+    "height": 7598
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -374,7 +374,7 @@
       "name": "Compare features",
       "order": 2,
       "widthPx": 1440,
-      "heightPx": 2909,
+      "heightPx": 3009,
       "groups": [
         {
           "figmaNodeId": "87:57",
@@ -1158,7 +1158,7 @@
               "cells": [
                 "AI assist",
                 "—",
-                "—",
+                "✓",
                 "✓",
                 "✓",
                 "✓",
@@ -1168,7 +1168,7 @@
               ]
             },
             {
-              "figmaNodeId": null,
+              "figmaNodeId": "2140:620",
               "name": "row",
               "cells": [
                 "Aglyn AI: generate pages, emails, campaigns, products and more",
@@ -1183,12 +1183,12 @@
               ]
             },
             {
-              "figmaNodeId": null,
+              "figmaNodeId": "2140:639",
               "name": "row",
               "cells": [
                 "AI credits / mo",
                 "300 / mo",
-                "—",
+                "750 / mo",
                 "2.75k / mo",
                 "7.5k / mo",
                 "10k / mo",
@@ -1290,7 +1290,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 1440,
-      "heightPx": 1106,
+      "heightPx": 1212,
       "groups": [
         {
           "figmaNodeId": "89:57",
@@ -1426,11 +1426,11 @@
               ]
             },
             {
-              "figmaNodeId": null,
+              "figmaNodeId": "2140:658",
               "name": "row",
               "cells": [
                 "AI credits, per 1,000 over the included band",
-                "—",
+                "$3",
                 "$3",
                 "$2.75",
                 "$2.50",
@@ -1477,7 +1477,7 @@
               ]
             },
             {
-              "figmaNodeId": null,
+              "figmaNodeId": "2146:621",
               "name": "h",
               "cells": [
                 "Aglyn AI",
@@ -1485,7 +1485,7 @@
               ]
             },
             {
-              "figmaNodeId": null,
+              "figmaNodeId": "2146:624",
               "name": null,
               "cells": [
                 "Starter $9 · Pro $19 · Business $39 · Scale $69 · Advanced $99 · Agency $299 a month, per workspace. Adds AI credits to your plan’s included band — 4,000 on Starter, 9,000 on Pro, 19,000 on Business, 34,000 on Scale, 49,000 on Advanced, 149,000 on Agency. Enterprise by agreement."
@@ -1560,7 +1560,7 @@
       "name": "FAQ",
       "order": 4,
       "widthPx": 1440,
-      "heightPx": 737,
+      "heightPx": 954,
       "groups": [
         {
           "figmaNodeId": "90:31",
@@ -1606,7 +1606,7 @@
               ]
             },
             {
-              "figmaNodeId": null,
+              "figmaNodeId": "2146:625",
               "name": "qa",
               "cells": [
                 "What does Aglyn AI cost?",

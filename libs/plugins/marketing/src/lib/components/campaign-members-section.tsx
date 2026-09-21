@@ -20,7 +20,7 @@ import { AppLink } from '@aglyn/shared-ui-jsx'
 import {
   Figure,
   Section,
-} from '@aglyn/shared-ui-email-campaigns/components/report-figures'
+} from '@aglyn/shared-ui-jsx/components/measured-figures.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {

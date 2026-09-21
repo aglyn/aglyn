@@ -70,7 +70,8 @@ two nodes changed, published the way the console publishes (the screen's
 `versionId` pointer), and the tenant cache dropped through the revalidate
 route. The parity spec's literal and the Figma extraction under
 `tools/marketing/pricing-copy/` moved in the same commit; the Figma frame
-itself still reads $5, which the reconciler cannot close.
+itself still read $5 until 2026-09-21, when it was brought to $20 with the
+rest of the AI pass below.
 
 Later the same day it was republished to version `Te6EHU387Y`, "Extra site $20 on
 every tier (AGL-3198)", a copy of `pHMLIs5UF5` with the twelve extra-site cells
@@ -82,6 +83,39 @@ as live as a cell here. The per-site cost calculator on
 `/resources/multi-site-cost-sheet` (AGL-2968) carries Aglyn's plan prices and
 the extra-site rate as constants inside a sandboxed embed, which no parity
 spec reads, so a rate change owes it an edit too.
+
+### 2026-09-21 — the Figma frames caught up, and the declarations are gone
+
+Surface #8 had drifted further than "a stale cell". Read by `characters`
+rather than by layer name, the four Pricing frames were missing **five** pieces
+of AI content outright: the `Aglyn AI: generate…` row, the `AI credits / mo`
+row, the `AI credits, per 1,000 over the included band` row, the **Aglyn AI
+add-on card**, and the **"What does Aglyn AI cost?"** FAQ entry. The
+plan-limit FAQ answer was also the pre-AI wording, and the extra-site row still
+read $10/$8/$5.
+
+All of it was added or corrected across `Pricing`, `Pricing — Widescreen`,
+`Pricing — Tablet` and `Pricing — Mobile`. Every table is a VERTICAL
+auto-layout, so a row is `insertChild` and the frame reflows itself — the
+earlier belief that these tables were absolutely positioned was wrong, read off
+computed x/y in a metadata dump.
+
+`copy-*.json` was then **re-extracted** from fresh dumps, and
+`FRAME_STALE_CELLS` and `USAGE_STALE` are now both `{}` — the honest steady
+state their own comments describe. `check:pricing-tables` reconciles 432
+compare cells, 179 add-on capacity cells and 48 add-on card cells with **zero**
+declared divergences.
+
+⛔ **Re-extraction is destructive when the frames are behind.** `copy-*.json`
+had been maintained ahead of Figma, so extracting before the frames were fixed
+would have deleted the add-on card and the AI FAQ entry from the artifact the
+reconciler reads. Diff a candidate extraction against the committed files and
+look at what goes MISSING before adopting one.
+
+⚠️ **A metadata dump carries a layer's `name`, not its text**, and a cloned or
+duplicated node keeps the name it was cloned from. Verify frame copy with
+`node.characters`; set `autoRename = true` and the name after editing, or the
+next extraction reads the old value.
 
 On **2026-09-21** it was republished to version `ZZkN4U426l`, "Starter AI
 credits 750 / mo and $3 per 1k (AGL-3203)": four stored text nodes, because a

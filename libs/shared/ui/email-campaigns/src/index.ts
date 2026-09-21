@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
-// Only the model reaches this barrel. `components/report-figures` renders MUI
-// and is imported by subpath instead — the tsconfig wildcard
-// `@aglyn/shared-ui-email-campaigns/*` already resolves it — so server
-// handlers reading a stored field name never pull a component graph behind
-// them.
+// THE MODEL IS ALL THIS LIBRARY IS NOW (AGL-3080). It used to carry
+// `components/report-figures` as well, reachable only by subpath so that a
+// server handler reading a stored field name never pulled a component graph
+// behind it. The figure primitives had already moved to
+// `@aglyn/shared-ui-jsx`; the money ones that stayed were stranded where only
+// the email surfaces could reach them, so they went the same way. This
+// library renders nothing, and the subpath rule no longer has a subject.
 export * from './lib/model'

@@ -38,19 +38,16 @@ name: Publish packages
 # `-- --set`; it is their account's security setting, so an agent may run the
 # listing and never the change.
 #
-# `NPM_TOKEN` is the FALLBACK, and it is on its way out. npm uses OIDC where
-# it can and a token only where it cannot, so a package without a trusted
-# publisher yet still publishes on this token — which is a granular token with
-# the 2FA bypass, expiring 2026-12-19. npm is removing direct publishing with
-# those in JANUARY 2027 regardless, so the token is a bridge to be deleted
-# once `npm run trust:packages` reports every package configured, not a thing
-# to renew.
+# THERE IS NO TOKEN ANY MORE. All 51 packages name this workflow as a trusted
+# publisher, each with `createPackage` — the permission a plain `npm publish`
+# needs, as distinct from the staged-publish one a configuration made after
+# 2026-09-03 gets by default. Verified package by package on 2026-09-21, which
+# is what let `NPM_TOKEN` go.
 #
-# A missing token is a NOTICE rather than a failure now: with trust
-# configured there is nothing for it to do, and failing on its absence would
-# turn the finished state into a red run. A release that genuinely cannot
-# publish still fails — npm refuses the publish and the script exits non-zero,
-# which is the failure that was always doing the real work.
+# The token it replaced was granular with the 2FA bypass and expired
+# 2026-12-19; npm removes direct publishing with those in January 2027. A
+# secret that no longer exists cannot expire, leak or be rotated into a broken
+# release, which is the whole point of the change.
 
 on:
   push:
@@ -108,20 +105,10 @@ jobs:
 
       - name: Publish what the registry is missing
         env:
-          # The fallback, for a package whose trusted publisher is not
-          # configured yet. npm prefers OIDC wherever a package names this
-          # workflow, so this goes unused as `trust:packages` is completed,
-          # and is deleted when it reports every package configured.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
           ONLY: ${{ inputs.only }}
         run: |
           args=()
-          if [ "$PUBLISH" = "true" ]; then
-            if [ -z "$NODE_AUTH_TOKEN" ]; then
-              echo "::notice::No NPM_TOKEN. Every package published here must name this workflow as a trusted publisher, or npm will refuse it — check with \`npm run trust:packages\`."
-            fi
-            args+=(--publish)
-          fi
+          if [ "$PUBLISH" = "true" ]; then args+=(--publish); fi
           if [ -n "$ONLY" ]; then args+=(--only "$ONLY"); fi
           node tools/scripts/publish-packages.mjs "${args[@]}"

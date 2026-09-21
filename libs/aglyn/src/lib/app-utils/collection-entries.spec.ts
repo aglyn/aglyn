@@ -39,6 +39,7 @@ import {
   collectionEntryTokens,
   collectionListUrl,
   collectionPaginationLinks,
+  collectionEntriesPageWindow,
   collectionTotalPages,
   entryMatchesCategoryRoute,
   entryMatchesFilter,
@@ -306,6 +307,69 @@ describe('collectionTotalPages (AGL-620)', () => {
     expect(collectionTotalPages(10, 10)).toBe(1)
     expect(collectionTotalPages(11, 10)).toBe(2)
     expect(collectionTotalPages(25, 10)).toBe(3)
+  })
+})
+
+describe('collectionEntriesPageWindow (AGL-3213)', () => {
+  const entries = Array.from({ length: 25 }, (_, i) => ({ slug: `post-${i}` }))
+  const slugs = (rows: { slug: string }[]) => rows.map((row) => row.slug)
+
+  it('returns the window the pagination names', () => {
+    expect(
+      slugs(collectionEntriesPageWindow(entries, { page: 1, perPage: 10 })),
+    ).toEqual(slugs(entries.slice(0, 10)))
+    expect(
+      slugs(collectionEntriesPageWindow(entries, { page: 3, perPage: 10 })),
+    ).toEqual(['post-20', 'post-21', 'post-22', 'post-23', 'post-24'])
+  })
+
+  it('agrees with collectionTotalPages about where the set ends', () => {
+    // The two are read together — a pager built from one and a list sliced by
+    // the other must not disagree about whether a page exists. Every page the
+    // count advertises has something on it, and the page after the last has
+    // nothing, which is the 404 the loader turns into a range check.
+    const total = collectionTotalPages(entries.length, 10)
+    for (let page = 1; page <= total; page += 1) {
+      expect(
+        collectionEntriesPageWindow(entries, { page, perPage: 10 }).length,
+      ).toBeGreaterThan(0)
+    }
+    expect(
+      collectionEntriesPageWindow(entries, { page: total + 1, perPage: 10 }),
+    ).toEqual([])
+  })
+
+  it('leaves an unpaginated listing alone', () => {
+    // An entry route and the RSS feed both pass no pagination, and both want
+    // every entry they were handed. Narrowing them to a default page size
+    // would silently truncate a feed.
+    expect(collectionEntriesPageWindow(entries, null)).toHaveLength(25)
+    expect(collectionEntriesPageWindow(entries, undefined)).toHaveLength(25)
+    expect(collectionEntriesPageWindow(entries, { page: 2 })).toHaveLength(25)
+  })
+
+  it('reads a missing or nonsense page as the first one', () => {
+    const first = slugs(entries.slice(0, 10))
+    expect(
+      slugs(collectionEntriesPageWindow(entries, { perPage: 10 })),
+    ).toEqual(first)
+    expect(
+      slugs(collectionEntriesPageWindow(entries, { page: 0, perPage: 10 })),
+    ).toEqual(first)
+    expect(
+      slugs(collectionEntriesPageWindow(entries, { page: -4, perPage: 10 })),
+    ).toEqual(first)
+  })
+
+  it('copies rather than aliases the array it was given', () => {
+    // The loader's `content.entries` is the CACHED array behind
+    // `getPublishedCollectionSource`, shared with every other page rendering
+    // this collection. A window that handed back the same reference, and a
+    // caller that then sorted or stamped it, would reach all of them.
+    const unpaginated = collectionEntriesPageWindow(entries, null)
+    expect(unpaginated).not.toBe(entries)
+    unpaginated.length = 0
+    expect(entries).toHaveLength(25)
   })
 })
 

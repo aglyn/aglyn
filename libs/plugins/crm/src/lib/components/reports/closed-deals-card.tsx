@@ -17,7 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import { money } from '@aglyn/shared-ui-email-campaigns/components/report-figures'
+import { money } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   measuredRate,
