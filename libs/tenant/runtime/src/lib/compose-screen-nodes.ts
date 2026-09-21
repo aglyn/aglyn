@@ -80,6 +80,15 @@ export interface ComposeCollectionContext {
    */
   entriesReachedBound?: boolean
   /**
+   * Where `entries` begins in the collection's own order (AGL-3213).
+   *
+   * Zero for every listing served from the cached read. A page past that
+   * read's bound carries only its own ten entries, and the block windows
+   * `[(page - 1) * perPage, …)` — so without this it would slice from an
+   * offset its own array never reaches and render an empty listing.
+   */
+  windowStart?: number
+  /**
    * Whether {@link slug} is a cache KEY rather than an address (AGL-2524).
    *
    * The author page mixes collections, and the compose pipeline keys entry
@@ -242,6 +251,11 @@ async function expandCollectionEntryBlocks(
           // ...nor its bound (AGL-1516): this is a fact about the read the
           // route already performed, and it describes only that collection.
           ...(collection.entriesReachedBound ? { reachedBound: true } : {}),
+          // ...nor where its window starts (AGL-3213), for the same reason:
+          // it is a fact about the read this route performed.
+          ...(collection.windowStart
+            ? { windowStart: collection.windowStart }
+            : {}),
         }
         return
       }

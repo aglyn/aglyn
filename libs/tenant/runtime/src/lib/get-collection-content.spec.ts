@@ -44,13 +44,22 @@ const collectionDoc: { fields: Record<string, unknown> | null } = {
 }
 let orgForHost: { orgId: string; org: Record<string, unknown> } | null = null
 
+/** Writes the loader made, so a spec can assert a schedule actually went out. */
+let entryUpdates: Array<{ id: string; patch: Record<string, unknown> }> = []
+
+/** Set to fail the ORDERED read, as a missing composite index does. */
+let orderedReadFails = false
+
 const snapshotFor = (id: string, value: Record<string, unknown>) => ({
   id,
   data: () => ({ ...value }),
   get: (key: string) => value[key],
   exists: true,
   ref: {
-    update: async () => undefined,
+    update: async (patch: Record<string, unknown>) => {
+      entryUpdates.push({ id, patch })
+      return undefined
+    },
     collection: (name: string) => entriesCollection(name),
   },
 })
@@ -84,40 +93,120 @@ const applyMask = (
   return masked
 }
 
+/**
+ * The value an ordered read sorts on: a timestamp by its seconds, the
+ * document name by its id, anything else as it is.
+ */
+const sortValue = (value: Record<string, unknown>, field: string): unknown => {
+  if (field === '__name__') return String(value['$id'])
+  const raw = value[field]
+  if (raw && typeof raw === 'object' && 'seconds' in (raw as object)) {
+    return Number((raw as { seconds: number }).seconds)
+  }
+  return raw
+}
+
+interface FakeQueryState {
+  filters: Array<{ field: string; op: string; wanted: unknown }>
+  orders: Array<{ field: string; direction: 'asc' | 'desc' }>
+  mask: readonly string[] | null
+  take: number
+  skip: number
+}
+
+/**
+ * A query BUILDS A NEW QUERY, it does not mutate the one it was called on.
+ *
+ * Firestore's builders are immutable, and a fake that accumulated state on one
+ * shared object read fine for a loader that built one query per collection
+ * reference — which this one did until AGL-3213. It now builds three, and on a
+ * mutating fake their predicates merged — a status that must be published or
+ * scheduled AND equal to scheduled — and matched nothing. The fake would have
+ * reported a collection with no live entries at all, for code that is
+ * correct.
+ */
+const entriesQuery = (state: FakeQueryState) => {
+  const matching = () => {
+    const rows = entryDocs
+      .filter((value) =>
+        state.filters.every(({ field, op, wanted }) =>
+          op === 'in'
+            ? (wanted as unknown[]).includes(value[field])
+            : value[field] === wanted,
+        ),
+      )
+      /*
+       * The rows an ordered read would NOT RETURN AT ALL (AGL-3213).
+       *
+       * `orderBy(field)` omits every document missing that field — it does not
+       * sort them last. That omission is the whole reason the loader's live
+       * read is three queries instead of one, so a fake that sorted such a row
+       * to the end would let a read that hides every schedule pass this file.
+       */
+      .filter((value) =>
+        state.orders.every(
+          (order) =>
+            order.field === '__name__' || value[order.field] !== undefined,
+        ),
+      )
+    if (!state.orders.length) return rows
+    return [...rows].sort((a, b) => {
+      for (const order of state.orders) {
+        const left = sortValue(a, order.field)
+        const right = sortValue(b, order.field)
+        if (left === right) continue
+        const ascending = (left as never) < (right as never) ? -1 : 1
+        return order.direction === 'desc' ? -ascending : ascending
+      }
+      return 0
+    })
+  }
+
+  return {
+    where: (field: string, op: string, wanted: unknown) =>
+      entriesQuery({
+        ...state,
+        filters: [...state.filters, { field, op, wanted }],
+      }),
+    select: (...fields: string[]) => entriesQuery({ ...state, mask: fields }),
+    orderBy: (field: string, direction: 'asc' | 'desc' = 'asc') =>
+      entriesQuery({
+        ...state,
+        orders: [...state.orders, { field, direction }],
+      }),
+    offset: (count: number) => entriesQuery({ ...state, skip: count }),
+    limit: (count: number) => entriesQuery({ ...state, take: count }),
+    count: () => ({
+      get: async () => ({ data: () => ({ count: matching().length }) }),
+    }),
+    get: async () => {
+      // A composite index the project has not deployed fails the QUERY, not
+      // the connection — which is why the loader has a fallback at all.
+      if (orderedReadFails && state.orders.length) {
+        throw new Error('FAILED_PRECONDITION: The query requires an index.')
+      }
+      return {
+        docs: matching()
+          .slice(state.skip, state.skip + state.take)
+          // The id comes off the UNMASKED row: `$id` is the fake's own key,
+          // not a document field, and Firestore never puts the id in the mask.
+          .map((value) =>
+            snapshotFor(String(value['$id']), applyMask(value, state.mask)),
+          ),
+      }
+    },
+  }
+}
+
 const entriesCollection = (name: string) => {
   if (name !== 'entries') throw new Error(`unexpected subcollection ${name}`)
-  const filters: Array<(value: Record<string, unknown>) => boolean> = []
-  let take = Number.POSITIVE_INFINITY
-  let mask: readonly string[] | null = null
-  const query = {
-    where: (field: string, op: string, wanted: unknown) => {
-      filters.push((value) =>
-        op === 'in'
-          ? (wanted as unknown[]).includes(value[field])
-          : value[field] === wanted,
-      )
-      return query
-    },
-    select: (...fields: string[]) => {
-      mask = fields
-      return query
-    },
-    limit: (count: number) => {
-      take = count
-      return query
-    },
-    get: async () => ({
-      docs: entryDocs
-        .filter((value) => filters.every((matches) => matches(value)))
-        .slice(0, take)
-        // The id comes off the UNMASKED row: `$id` is the fake's own key, not
-        // a document field, and Firestore never puts the id in the mask.
-        .map((value) =>
-          snapshotFor(String(value['$id']), applyMask(value, mask)),
-        ),
-    }),
-  }
-  return query
+  return entriesQuery({
+    filters: [],
+    orders: [],
+    mask: null,
+    take: Number.POSITIVE_INFINITY,
+    skip: 0,
+  })
 }
 
 const firestore = {
@@ -167,6 +256,7 @@ jest.mock('@aglyn/tenant-data-admin/render-cache', () => ({
 import {
   COLLECTION_LIST_PAGE_SIZE,
   COLLECTION_SOURCE_MAX,
+  collectionEntriesPageWindow,
 } from '@aglyn/aglyn/server'
 import {
   getCollectionContent,
@@ -189,6 +279,8 @@ const published = (index: number, extra: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   entryDocs = []
+  entryUpdates = []
+  orderedReadFails = false
   orgForHost = { orgId: 'org-1', org: { plan: 'business' } }
   collectionDoc.fields = {
     displayName: 'Videos',
@@ -358,5 +450,127 @@ describe('the compose-time source is untouched', () => {
       slug: 'videos',
     })
     expect(source.entries).toEqual([])
+  })
+})
+
+/**
+ * A collection with more live entries than one read may hold (AGL-3213).
+ *
+ * `published(index)` dates entry `index` hours ago, so index 0 is the newest
+ * and the ids sort in a DIFFERENT order than the dates do — `video-100` sorts
+ * between `video-10` and `video-11`. That divergence is the point: it is what
+ * made an unordered `limit(100)` return an arbitrary hundred rather than the
+ * newest hundred, and it is what these cases would not be able to see if the
+ * fixture's ids and dates agreed.
+ */
+describe('a collection past the bound', () => {
+  const entries = (count: number) => {
+    entryDocs = Array.from({ length: count }, (_, index) => published(index))
+  }
+
+  it('holds the NEWEST page, not the page the ids sorted to', async () => {
+    entries(150)
+    const source = await getPublishedCollectionSource({
+      hostId: HOST,
+      collectionSlug: 'videos',
+    })
+    expect(source.reachedBound).toBe(true)
+    expect(source.entries).toHaveLength(COLLECTION_SOURCE_MAX)
+    expect(source.entries[0]?.slug).toBe('video-0')
+    expect(source.entries.at(-1)?.slug).toBe(`video-${COLLECTION_SOURCE_MAX - 1}`)
+    // The id-ordered read took `video-100` inside its first hundred and left
+    // `video-99` out of it. Ordering by date is what reverses that.
+    expect(source.entries.map((entry) => entry.slug)).not.toContain('video-100')
+  })
+
+  it('states the size of the COLLECTION, not the size of the read', async () => {
+    entries(150)
+    const content = await listing()
+    expect(content.pagination?.totalEntries).toBe(150)
+    expect(content.pagination?.totalPages).toBe(15)
+    // The bug this replaces: a hundred-entry read counted as a hundred-entry
+    // collection, so the pager said ten pages and the last five did not exist.
+    expect(content.pagination?.totalPages).not.toBe(10)
+  })
+
+  it('serves a page past the bound from its own window', async () => {
+    entries(150)
+    const content = await listing({ page: 12 })
+    expect(content.entries).toHaveLength(COLLECTION_LIST_PAGE_SIZE)
+    expect(content.entries[0]?.slug).toBe('video-110')
+    expect(content.entries.at(-1)?.slug).toBe('video-119')
+  })
+
+  it('says where that window starts, so the page is not windowed twice', async () => {
+    entries(150)
+    const content = await listing({ page: 12 })
+    // Every consumer slices `[(page - 1) * perPage, …)`. Handed ten entries
+    // and no `windowStart`, all of them would slice from 110 of an array of
+    // ten and render an empty listing.
+    expect(content.pagination?.windowStart).toBe(110)
+    expect(
+      collectionEntriesPageWindow(content.entries, content.pagination),
+    ).toHaveLength(COLLECTION_LIST_PAGE_SIZE)
+  })
+
+  it('serves the pages inside the bound from the shared read', async () => {
+    entries(150)
+    const content = await listing({ page: 2 })
+    // No window read, so nothing to correct for: the cached source already
+    // holds page 2, and paying an offset read for it would undo the sharing
+    // that makes every listing address free.
+    expect(content.pagination?.windowStart).toBeUndefined()
+    expect(content.entries).toHaveLength(COLLECTION_SOURCE_MAX)
+  })
+})
+
+describe('the live read drops nothing', () => {
+  it('lists an entry that carries no publish date at all', async () => {
+    // An import restores what the bundle carried, and `/api/hosts/resources`
+    // validates no field for presence — so a published entry with no
+    // `publishedAt` exists, and an ordered read alone would hide it.
+    entryDocs = [
+      published(0),
+      { $id: 'undated', title: 'Undated', slug: 'undated', status: 'published' },
+    ]
+    const content = await listing()
+    expect(content.entries.map((entry) => entry.slug)).toEqual([
+      'video-0',
+      // Last, not missing, and not sorted to 1970 above a dated entry.
+      'undated',
+    ])
+  })
+
+  it('publishes a due schedule the dated read cannot see', async () => {
+    // Scheduling writes `publishAt` and never `publishedAt`, so the ordered
+    // read cannot return this document at all. Nothing else publishes a
+    // content entry: if this read misses it, the post never goes out.
+    entryDocs = [
+      published(0),
+      {
+        $id: 'due',
+        title: 'Due',
+        slug: 'due',
+        status: 'scheduled',
+        publishAt: AN_HOUR_AGO(),
+      },
+    ]
+    const content = await listing()
+    expect(content.entries.map((entry) => entry.slug)).toContain('due')
+    expect(entryUpdates).toContainEqual({
+      id: 'due',
+      patch: { status: 'published', publishedAt: expect.anything() },
+    })
+  })
+
+  it('falls back to the unordered read when the ordered one cannot run', async () => {
+    // The composite index ships by hand, after the code (RELEASING.md step 4).
+    // In that window the listing degrades to what it did before this change;
+    // it does not 500 a customer's blog.
+    orderedReadFails = true
+    entryDocs = [published(0), published(1)]
+    const content = await listing()
+    expect(content.collection).not.toBeNull()
+    expect(content.entries).toHaveLength(2)
   })
 })

@@ -213,7 +213,7 @@ export function collectionTotalPages(total: number, perPage: number): number {
 export function collectionEntriesPageWindow<T>(
   entries: readonly T[],
   pagination:
-    | { page?: number; perPage?: number }
+    | { page?: number; perPage?: number; windowStart?: number }
     | null
     | undefined,
 ): T[] {
@@ -221,7 +221,14 @@ export function collectionEntriesPageWindow<T>(
   if (!Number.isFinite(perPage) || perPage <= 0) return [...entries]
   const pageRaw = Number(pagination?.page)
   const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1
-  const start = (page - 1) * Math.floor(perPage)
+  // `windowStart` is where `entries` begins in the collection's own order
+  // (AGL-3213). A listing past the cached read's bound is served by a window
+  // read for that page alone, and slicing it from the page's absolute offset
+  // would return nothing.
+  const startRaw = Number(pagination?.windowStart)
+  const windowStart =
+    Number.isFinite(startRaw) && startRaw > 0 ? Math.floor(startRaw) : 0
+  const start = Math.max(0, (page - 1) * Math.floor(perPage) - windowStart)
   return entries.slice(start, start + Math.floor(perPage))
 }
 
@@ -423,6 +430,17 @@ export interface CollectionEntriesSource {
    * wins: that is a deliberately pinned window, not a paginated list.
    */
   page?: number
+  /**
+   * The absolute index `entries[0]` holds in the collection's own order
+   * (AGL-3213). Zero everywhere except a listing page past the cached read's
+   * bound, which is served by a window read for that page alone.
+   *
+   * Without it a windowed source is silently empty: every consumer here
+   * slices `[(page - 1) * perPage, …)` on the premise that `entries` starts
+   * at the beginning of the collection, so page 11 of a windowed ten-entry
+   * source slices from 100 and renders nothing.
+   */
+  windowStart?: number
 }
 
 /**
@@ -1194,10 +1212,20 @@ export function expandCollectionEntries<
     // and was then thinned by the liveness gate.
     const sourceCapped = collectionSourceIsBounded(source)
 
+    // Where this source's first entry sits in the collection (AGL-3213):
+    // zero for a whole read, and the page's own offset for a windowed one.
+    const windowStartRaw = Number(source.windowStart)
+    const windowStart =
+      Number.isFinite(windowStartRaw) && windowStartRaw > 0
+        ? Math.floor(windowStartRaw)
+        : 0
+    const pageStart = perPage
+      ? Math.max(0, (page - 1) * perPage - windowStart)
+      : 0
     const windowed = suppressedBeyondFirstPage
       ? []
       : perPage
-        ? filtered.slice((page - 1) * perPage, (page - 1) * perPage + perPage)
+        ? filtered.slice(pageStart, pageStart + perPage)
         : filtered.slice(0, limit)
 
     const childIds: NodeId[] = []
