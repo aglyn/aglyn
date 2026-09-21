@@ -27,7 +27,12 @@ import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { AppLink, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Box, CircularProgress } from '@mui/material'
-import { notFound, useParams, useRouter } from 'next/navigation'
+import {
+  notFound,
+  useParams,
+  useRouter,
+  useSearchParams,
+} from 'next/navigation'
 import { Suspense, useEffect, useMemo } from 'react'
 import ConsoleMediaPickerProvider from '../../../../../../components/console-media-picker-provider.component'
 import FeatureGate from '../../../../../../components/feature-gate.component'
@@ -57,7 +62,7 @@ import {
   requiredExtensionPermissions,
   resolveExtensionPermission,
 } from '../../../../../../utils/extension-permission'
-import { resolveHubSections } from '../../../../../../utils/plugin-hub-sections'
+import { hubRedirectTarget, resolveHubSections } from '../../../../../../utils/plugin-hub-sections'
 import { useConsoleRoutePlugins } from '../../../../../../hooks/use-console-plugins'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useHostRole from '../../../../../../hooks/use-host-role'
@@ -94,6 +99,14 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const router = useRouter()
+  /*
+   * The query on the way in, so a hub redirect carries it across (AGL-3080).
+   * A redirect that drops it silently deletes what somebody else put in the
+   * URL — Stripe's `?connect=` and `?purchase=` markers are held in a third
+   * party's records and are unfixable from this side once they land on a
+   * bare section.
+   */
+  const searchParams = useSearchParams()
   const hostId = useHostId()
   // `string[]` from the catch-all; `useParams` types it either way because a
   // user can type any URL, and the single-segment form is still the common one.
@@ -318,8 +331,9 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
       : undefined)
 
   useEffect(() => {
-    if (sectionRedirect) router.replace(sectionRedirect)
-  }, [sectionRedirect, router])
+    if (sectionRedirect)
+      router.replace(hubRedirectTarget(sectionRedirect, searchParams))
+  }, [sectionRedirect, router, searchParams])
 
   /*
    * The 404, after every hook and before anything renders (AGL-2501).

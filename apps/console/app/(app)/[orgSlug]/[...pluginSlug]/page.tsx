@@ -26,7 +26,12 @@ import { AppLink, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { Alert, Box, CircularProgress } from '@mui/material'
-import { notFound, useParams, useRouter } from 'next/navigation'
+import {
+  notFound,
+  useParams,
+  useRouter,
+  useSearchParams,
+} from 'next/navigation'
 import { Suspense, useEffect, useMemo } from 'react'
 import ConsoleMediaPickerProvider from '../../../../components/console-media-picker-provider.component'
 import { useEnabledPluginIds } from '../../../../components/console-plugins-gate.component'
@@ -63,6 +68,7 @@ import {
 } from '../../../../utils/org-plugin-surfaces'
 import {
   hubLandingHref,
+  hubRedirectTarget,
   releaseFlagForNavTab,
   resolveHubSections,
 } from '../../../../utils/plugin-hub-sections'
@@ -104,6 +110,14 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const params = useParams<{ pluginSlug?: string | string[] }>()
   const orgSlug = useOrgSlug()
   const router = useRouter()
+  /*
+   * The query on the way in, so a hub redirect carries it across (AGL-3080).
+   * A redirect that drops it silently deletes what somebody else put in the
+   * URL — Stripe's `?connect=` and `?purchase=` markers are held in a third
+   * party's records and are unfixable from this side once they land on a
+   * bare section.
+   */
+  const searchParams = useSearchParams()
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { currentOrg } = useOrgScope()
@@ -209,17 +223,18 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
       ? resolved.segments.length
         ? `${basePath}/${resolved.segments.join('/')}`
         : orgReady
-          ? (hubLandingHref(resolvedSections) ?? basePath)
+          ? (hubLandingHref(resolvedSections, searchParams) ?? basePath)
           : undefined
       : undefined
   const sectionRedirect =
     legacyRedirect ??
     (resolved && !resolved.section && resolvedSections?.length && orgReady
-      ? hubLandingHref(resolvedSections)
+      ? hubLandingHref(resolvedSections, searchParams)
       : undefined)
   useEffect(() => {
-    if (sectionRedirect) router.replace(sectionRedirect)
-  }, [sectionRedirect, router])
+    if (sectionRedirect)
+      router.replace(hubRedirectTarget(sectionRedirect, searchParams))
+  }, [sectionRedirect, router, searchParams])
 
   /*
    * The organization's sites, for the mount. Withheld until reach admits the

@@ -139,6 +139,7 @@ export function resolveHubSections(
           resolveExtensionEntitlement(section.featureFlag, org, orgReady),
         ) === 'blocked',
       refused: permitted === 'refused',
+      landsOnQuery: section.landsOnQuery,
     }
   })
 }
@@ -159,6 +160,47 @@ export function resolveHubSections(
  */
 export function hubLandingHref(
   sections: readonly ResolvedConsoleNavSection[] | undefined,
+  search?: URLSearchParams | null,
 ): string | undefined {
-  return sections?.find((section) => section.visible && !section.locked)?.href
+  const open = (section: ResolvedConsoleNavSection) =>
+    section.visible && !section.locked
+  /*
+   * A marker somebody else is holding wins over the bare rule (AGL-3080):
+   * a seller returning from Stripe Connect wants Payouts and a buyer
+   * returning from checkout wants what they now own, and neither is the
+   * section a bare hub URL lands on. Presence only — the value is the third
+   * party's business, and reading it would make a marker we cannot see
+   * ahead of time into a routing decision.
+   *
+   * Still `open`: a claim does not lift a gate. A section the reader may
+   * not open is not landed on, and the bare rule takes over, which is the
+   * same answer they would get typing the hub's address by hand.
+   */
+  if (search) {
+    const claimed = sections?.find(
+      (section) =>
+        open(section) &&
+        section.landsOnQuery?.some((key) => search.has(key)),
+    )
+    if (claimed) return claimed.href
+  }
+  return sections?.find(open)?.href
+}
+
+/**
+ * A hub redirect with the incoming query carried across — the client-side
+ * twin of `sectionIndexTarget` (AGL-3080).
+ *
+ * A redirect that drops the query silently deletes information somebody else
+ * put in the URL, and the generic plugin routes redirect a bare hub address
+ * in the browser rather than on the server. Carried WHOLE rather than by an
+ * allow-list, for the reason the server helper carries it whole: a marker
+ * nothing routes on today still survives the hop.
+ */
+export function hubRedirectTarget(
+  href: string,
+  search?: URLSearchParams | null,
+): string {
+  const query = search?.toString()
+  return query ? `${href}?${query}` : href
 }

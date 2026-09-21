@@ -386,6 +386,25 @@ export interface ConsoleNavSection {
    * and payouts read the organization's revenue.
    */
   permission?: string
+  /**
+   * Query keys that land a BARE hub URL on this section instead of on the
+   * first one the reader may open (AGL-3080).
+   *
+   * The case it exists for is a return URL held by somebody else. Stripe
+   * bakes `?connect=` into account-onboarding links and `?purchase=` into
+   * checkout sessions, so a seller part-way through onboarding is carrying
+   * one right now — in a third party's records, not ours, and unfixable from
+   * this side once it lands somewhere that means nothing to them. A seller
+   * coming back from Connect wants Payouts; a buyer coming back from
+   * checkout wants what they now own.
+   *
+   * The key's VALUE is not read, only its presence: these are markers, and a
+   * marker nothing routes on still survives the hop, which is what makes it
+   * safe for anyone to add one. The gates still apply — a section this
+   * claims but the reader may not open is not landed on, and the bare rule
+   * takes over.
+   */
+  landsOnQuery?: readonly string[]
 }
 
 /** A {@link ConsoleNavSection} with the shell's answers filled in. */
@@ -414,6 +433,9 @@ export interface ResolvedConsoleNavSection {
    * lands, so an unsettled read is neither a grant nor a refusal.
    */
   refused?: boolean
+  /** The section's declared {@link ConsoleNavSection.landsOnQuery}, carried
+   * through so the shell's landing rule can read it (AGL-3080). */
+  landsOnQuery?: readonly string[]
 }
 
 export interface ConsoleNavItem {

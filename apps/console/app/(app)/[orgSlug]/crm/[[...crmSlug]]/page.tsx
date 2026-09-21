@@ -26,7 +26,12 @@ import { AppLink, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { Alert, Box, CircularProgress } from '@mui/material'
-import { notFound, useParams, useRouter } from 'next/navigation'
+import {
+  notFound,
+  useParams,
+  useRouter,
+  useSearchParams,
+} from 'next/navigation'
 import { Suspense, useEffect, useMemo } from 'react'
 import ConsoleMediaPickerProvider from '../../../../../components/console-media-picker-provider.component'
 import { useEnabledPluginIds } from '../../../../../components/console-plugins-gate.component'
@@ -61,6 +66,7 @@ import {
 import { resolveOrgMount } from '../../../../../utils/org-mount'
 import {
   hubLandingHref,
+  hubRedirectTarget,
   releaseFlagForNavTab,
   resolveHubSections,
 } from '../../../../../utils/plugin-hub-sections'
@@ -119,6 +125,14 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
   const params = useParams<{ crmSlug?: string | string[] }>()
   const orgSlug = useOrgSlug()
   const router = useRouter()
+  /*
+   * The query on the way in, so a hub redirect carries it across (AGL-3080).
+   * A redirect that drops it silently deletes what somebody else put in the
+   * URL — Stripe's `?connect=` and `?purchase=` markers are held in a third
+   * party's records and are unfixable from this side once they land on a
+   * bare section.
+   */
+  const searchParams = useSearchParams()
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { currentOrg } = useOrgScope()
@@ -235,11 +249,12 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
    */
   const sectionRedirect =
     resolved && !resolved.section && orgReady
-      ? hubLandingHref(resolvedSections)
+      ? hubLandingHref(resolvedSections, searchParams)
       : undefined
   useEffect(() => {
-    if (sectionRedirect) router.replace(sectionRedirect)
-  }, [sectionRedirect, router])
+    if (sectionRedirect)
+      router.replace(hubRedirectTarget(sectionRedirect, searchParams))
+  }, [sectionRedirect, router, searchParams])
 
   /*
    * THE ORG'S SITES, for the mount. A record holds host document ids; a

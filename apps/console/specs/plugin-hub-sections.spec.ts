@@ -30,6 +30,7 @@
 import type { ConsoleNavSection, ReleaseFlagKey } from '@aglyn/aglyn'
 import {
   hubLandingHref,
+  hubRedirectTarget,
   releaseFlagForNavTab,
   resolveHubSections,
 } from '../utils/plugin-hub-sections'
@@ -336,5 +337,101 @@ describe('a section gated by its own permission (AGL-3080)', () => {
       permission: answers(false, false),
     })
     expect(shown(untouched)).toEqual(['contacts', 'leads', 'deals'])
+  })
+})
+
+/**
+ * A RETURN URL SOMEBODY ELSE IS HOLDING (AGL-3080).
+ *
+ * Stripe bakes `?connect=` into account-onboarding links and `?purchase=`
+ * into checkout sessions. Those live in a third party's records, not ours,
+ * and once one lands on a section that means nothing to the person carrying
+ * it there is no fixing it from this side — a seller coming back from Connect
+ * onboarding wants Payouts, and a buyer coming back from checkout wants what
+ * they now own.
+ *
+ * Two halves, and both are needed: the marker has to survive the redirect at
+ * all, and it has to decide where the redirect goes.
+ */
+describe('a hub URL carrying a return marker (AGL-3080)', () => {
+  const MARKET_RAIL: readonly ConsoleNavSection[] = [
+    { id: 'browse', label: 'Browse' },
+    { id: 'licences', label: 'Licences', landsOnQuery: ['purchase'] },
+    {
+      id: 'payouts',
+      label: 'Payouts',
+      permission: 'publishToMarketplace',
+      landsOnQuery: ['connect'],
+    },
+  ]
+  const publisher = {
+    can: () => false,
+    permissions: { publishToMarketplace: true },
+    loaded: true,
+  }
+  const rail = (permission = publisher) =>
+    resolveHubSections(MARKET_RAIL, '/acme/marketplace', {
+      flags: flags(),
+      isStaff: false,
+      org: CRM_ORG,
+      orgReady: true,
+      permission,
+    })
+
+  it('lands on the section the marker names, not on the first one', () => {
+    expect(
+      hubLandingHref(rail(), new URLSearchParams('connect=return')),
+    ).toBe('/acme/marketplace/payouts')
+    expect(
+      hubLandingHref(rail(), new URLSearchParams('purchase=abc123')),
+    ).toBe('/acme/marketplace/licences')
+  })
+
+  it('reads the marker by PRESENCE, whatever the third party put in it', () => {
+    // The value is Stripe's business. Routing on it would make a marker we
+    // cannot see ahead of time into a decision we cannot answer.
+    expect(hubLandingHref(rail(), new URLSearchParams('connect='))).toBe(
+      '/acme/marketplace/payouts',
+    )
+  })
+
+  it('falls back to the bare rule with no marker, and for an unknown one', () => {
+    expect(hubLandingHref(rail(), new URLSearchParams(''))).toBe(
+      '/acme/marketplace/browse',
+    )
+    expect(hubLandingHref(rail(), new URLSearchParams('utm_source=x'))).toBe(
+      '/acme/marketplace/browse',
+    )
+    expect(hubLandingHref(rail())).toBe('/acme/marketplace/browse')
+  })
+
+  it('does NOT let a marker lift a gate', () => {
+    // A member without the seller key gets the answer they would get typing
+    // the hub's address by hand — a claim is not a grant.
+    const member = rail({
+      can: () => false,
+      permissions: { publishToMarketplace: false },
+      loaded: true,
+    })
+    expect(hubLandingHref(member, new URLSearchParams('connect=return'))).toBe(
+      '/acme/marketplace/browse',
+    )
+  })
+
+  it('carries the WHOLE query across the redirect', () => {
+    // Whole rather than by allow-list: a marker nothing routes on today
+    // still survives the hop, which is what makes it safe to add one.
+    expect(
+      hubRedirectTarget(
+        '/acme/marketplace/payouts',
+        new URLSearchParams('connect=return&utm_source=stripe'),
+      ),
+    ).toBe('/acme/marketplace/payouts?connect=return&utm_source=stripe')
+    expect(hubRedirectTarget('/acme/marketplace/browse')).toBe(
+      '/acme/marketplace/browse',
+    )
+    expect(
+      hubRedirectTarget('/acme/marketplace/browse', new URLSearchParams('')),
+    ).toBe('/acme/marketplace/browse')
   })
 })
