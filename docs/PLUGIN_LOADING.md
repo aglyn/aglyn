@@ -87,7 +87,8 @@ Every link must hold before a byte executes:
    (`artifacts/{listingId}/{version}/{sha256}.bundle`). The loader hashes
    the fetched bytes and refuses on mismatch.
 2. **Staff signature** — granting `trust: 'realm'` (super-staff route
-   `POST /api/admin/sign-plugin`, console app) writes an Ed25519
+   `POST /api/marketplace/admin/trust`, the marketplace plugin's; the
+   SIGNING KEY stays the console deployment's) writes an Ed25519
    `signature` over the sha256 hex onto the server-only version doc.
    Loaders verify it with the platform public key and fail closed —
    unsigned, badly signed, or unverifiable (no WebCrypto Ed25519) never
@@ -219,7 +220,7 @@ per-request org gate applies to them too.
 | `PLUGIN_ARTIFACTS_BUCKET` | console server | Isolated bucket the publish flow writes bundles to |
 | `NEXT_PUBLIC_PLUGIN_TRUST_PUBLIC_KEY` | client | Ed25519 public key (base64 raw); when set, client realm loads require valid signatures |
 | `PLUGIN_TRUST_PUBLIC_KEY` | server | Same key for the server loader (mandatory there) |
-| `PLUGIN_TRUST_PRIVATE_KEY` | console server ONLY | Signing key (base64 PKCS8 DER) for the staff sign-plugin route |
+| `PLUGIN_TRUST_PRIVATE_KEY` | console server ONLY | Signing key (base64 PKCS8 DER) for the staff realm-trust route |
 | `PLUGIN_REMOTE_SERVER` | server | `enabled` turns on remote server bundles (default off) |
 | `PLUGIN_REMOTE_SERVER_BUNDLES` | server | Comma-separated `listingId@version` allowlist |
 | `NEXT_PUBLIC_PLUGIN_DEV_BUNDLES` | client, **dev only** | `id=http://localhost:PORT/plugin.bundle.mjs,...` — loads UNVERIFIED bundles for the local authoring loop (AGL-427). The code path is compiled out of production builds and refuses non-localhost URLs; never set it anywhere shared. Pair with `npm run watch` in the realm template and refresh. |
@@ -386,7 +387,7 @@ Firebase, just Cloud Storage SKUs rather than the Firebase Storage line.
 3. Publish through the marketplace pipeline (`marketplace/publish-plugin`) —
    content-addressed upload + version doc with sha256.
 4. Workspace installs (pin) the listing; org enables it.
-5. Staff review, then `POST /api/admin/sign-plugin`
+5. Staff review, then `POST /api/marketplace/admin/trust`
    `{listingId, version}` (super staff; audited). Revoke trust with
    `{action: 'revoke'}`; hard-kill with a `revocations/{listingId}` doc.
 6. Next console visit / site render loads the bundle through the chain

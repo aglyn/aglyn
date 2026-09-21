@@ -43,6 +43,7 @@ import { previewImageHandler } from './server/preview-image'
 import { publishHandler } from './server/publish'
 import { marketplaceAdminReports } from './server/admin-reports'
 import { marketplaceAdminReviews } from './server/admin-reviews'
+import { marketplaceAdminTrust } from './server/admin-trust'
 import { reportHandler } from './server/report'
 import { reviewsHandler } from './server/reviews'
 import { publisherProfileSaveHandler } from './server/publisher-profile-save'
@@ -145,6 +146,12 @@ export function registerMarketplaceConsoleApi(): void {
   // reason: a staff route names no host, so there is no subject to resolve.
   registerPluginApiRoute('marketplace/admin/reviews', {
     web: marketplaceAdminReviews,
+  })
+  // Realm trust (AGL-420, moved by AGL-3080). Super-staff only, and the
+  // SIGNATURE comes from the shell — the key is the console's and stays
+  // there. See `server/admin-trust.ts`.
+  registerPluginApiRoute('marketplace/admin/trust', {
+    web: marketplaceAdminTrust,
   })
   registerPluginApiRoute('marketplace/reviews', reviewsHandler)
   registerPluginApiRoute(

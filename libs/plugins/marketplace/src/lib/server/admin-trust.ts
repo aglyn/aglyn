@@ -16,17 +16,34 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { signPluginTrust } from '@aglyn/aglyn/plugin-manager/plugin-trust-signing'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
-import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { createPrivateKey, sign as nodeSign } from 'node:crypto'
+import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /**
- * Staff trust-signing for realm plugins (AGL-420). Granting writes
+ * Staff trust-signing for realm plugins (AGL-420), served at
+ * `/api/marketplace/admin/trust` for this plugin's review queue.
+ *
+ * It was `apps/console/app/api/admin/sign-plugin/route.ts` until AGL-3080.
+ * What moved is everything that is the MARKETPLACE's: `marketplaceListings`
+ * is its collection, "a version must have passed review" is its rule, and
+ * the fields a grant writes are its documents.
+ *
+ * ⛔ WHAT DID NOT MOVE IS THE KEY. `PLUGIN_TRUST_PRIVATE_KEY` is deployed to
+ * the console and nowhere else — never to a tenant runtime — and this
+ * package is published to npm, where a self-hoster generates their own
+ * pair. So the signature comes from the shell through
+ * `signPluginTrust`, and this route refuses the grant outright when it
+ * answers `signed: false`. A `trust: 'realm'` flag written without a
+ * signature beside it is the one state the loaders cannot tell from
+ * tampering.
+ *
+ * Granting writes
  * `{trust: 'realm', signature}` onto the listing's version doc, where the
  * signature is the platform Ed25519 key's signature over the version's
  * sha256 hex — the loaders (client blob-import + env-gated server import)
@@ -101,22 +118,23 @@ async function handler(request: Request): Promise<Response> {
     }
 
     if (action === 'grant') {
-      const privateKeyBase64 = process.env.PLUGIN_TRUST_PRIVATE_KEY
-      if (!privateKeyBase64) {
-        return Response.json({
-          error:
-            'Trust signing is not configured (missing PLUGIN_TRUST_PRIVATE_KEY)',
-        }, { status: 501 })
+      /*
+       * The shell signs; this decides what is worth signing. A refusal here
+       * is final — nothing is written, and the 501 is the same answer an
+       * unconfigured deployment has always given, now reached through the
+       * contract rather than by reading the key.
+       */
+      const { signed, signature, reason } = await signPluginTrust(sha256)
+      if (!signed || !signature) {
+        return Response.json(
+          {
+            error:
+              reason ??
+              'Trust signing is not configured (missing PLUGIN_TRUST_PRIVATE_KEY)',
+          },
+          { status: 501 },
+        )
       }
-      const privateKey = createPrivateKey({
-        key: Buffer.from(privateKeyBase64, 'base64'),
-        format: 'der',
-        type: 'pkcs8',
-      })
-      // Ed25519 signs the message directly (no digest algorithm).
-      const signature = nodeSign(null, Buffer.from(sha256), privateKey).toString(
-        'base64',
-      )
       await versionRef.set(
         {
           trust: 'realm',
@@ -161,5 +179,4 @@ async function handler(request: Request): Promise<Response> {
   }
 }
 
-export const dynamic = 'force-dynamic'
-export { handler as POST }
+export { handler as marketplaceAdminTrust }

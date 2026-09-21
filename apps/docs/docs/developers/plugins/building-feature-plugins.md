@@ -348,7 +348,7 @@ first-party-grade extensions installed per workspace, no repo change.
   emitted bundle imports nothing. Export `register(host)` for client
   surfaces; `registerApi()` for server handlers.
 - Publish through the marketplace pipeline, install (pins `{version,
-  sha256}`), then staff grant trust via `POST /api/admin/sign-plugin`.
+  sha256}`), then staff grant trust via `POST /api/marketplace/admin/trust`.
 - The console loads an org's realm installs before the shell renders;
   published sites load them post-hydration (additive runtimes — first
   paint never waits on a marketplace CDN). Every load verifies the sha256

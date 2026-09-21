@@ -145,7 +145,7 @@ publish ──▶ submitted ──▶ in_review ──▶ listed ──▶ verif
 - `listed`/`verified` (or legacy/absent) plugin listings appear in browse;
   everything else is owner-and-staff-only. Verified adds the ✅ badge.
 - **Realm trust is separate and orthogonal**: a super-staff signature over
-  a version's sha256 (`POST /api/admin/sign-plugin`) sets
+  a version's sha256 (`POST /api/marketplace/admin/trust`) sets
   `trust: 'realm'`, letting that version load into the app realm. The
   `revocations/{listingId}` kill switch beats everything.
 

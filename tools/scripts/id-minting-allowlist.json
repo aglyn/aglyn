@@ -381,7 +381,7 @@
       "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
     },
     {
-      "site": "apps/console/app/api/admin/sign-plugin/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
+      "site": "libs/plugins/marketplace/src/lib/server/admin-trust.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
       "class": "RECORD",
       "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
     },
