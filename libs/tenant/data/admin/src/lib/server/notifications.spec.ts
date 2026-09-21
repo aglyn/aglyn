@@ -54,7 +54,7 @@ jest.mock('./organizations', () => ({
 }))
 
 /**
- * The REAL resolver, not a stub (AGL-3224).
+ * The REAL resolver and the REAL route table, not stubs (AGL-3224).
  *
  * The barrel itself is mocked only because pulling `@aglyn/aglyn/server` into
  * a node test drags the whole framework in for one pure function; what it
@@ -62,9 +62,13 @@ jest.mock('./organizations', () => ({
  * inheritance and the defaults rather than a second copy of them that could
  * drift from what ships.
  */
-jest.mock('@aglyn/aglyn/server', () =>
-  jest.requireActual('../../../../../../aglyn/src/lib/app-utils/notifications'),
-)
+jest.mock('@aglyn/aglyn/server', () => ({
+  ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/notifications'),
+  // The route table too, for the settings link in the email's footer. Real,
+  // not a stub: a stubbed `buildRoute` would let this spec keep passing while
+  // the link in the message pointed at a page that does not exist.
+  ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/console-routes'),
+}))
 
 jest.mock('@aglyn/shared-util-email', () => ({
   isEmailConfigured: () => emailConfigured,

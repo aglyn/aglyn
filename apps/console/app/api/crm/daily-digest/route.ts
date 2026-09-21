@@ -374,7 +374,7 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
   const orgHubUrl = orgSlug
     ? `${ctx.origin}${buildRoute(Route.ORG_HOME, { orgSlug })}/crm`
     : null
-  const settingsUrl = `${ctx.origin}${buildRoute(Route.MANAGE_NOTIFICATIONS)}`
+  const settingsUrl = `${ctx.origin}${buildRoute(Route.MANAGE_NOTIFICATION_SETTINGS)}`
   const supportLine = brandSupportLine(branding)
 
   const report: OrgReport = { digests: 0, notified: 0, emailed: 0, members: {} }

@@ -261,6 +261,21 @@ export enum Route {
   MANAGE_USER_CLOSE = '/manage/user/close',
   MANAGE_NOTIFICATIONS = '/manage/notifications',
   /*
+   * The preferences, off the feed (AGL-3226).
+   *
+   * They lived in the header of the feed itself, which was already the
+   * tallest thing on that page before per-channel and per-scope settings
+   * multiplied them — and it put an edit form above the list it edits, which
+   * the console does nowhere else.
+   *
+   * A CHILD of the feed rather than a sibling under `/manage`, because the
+   * relationship is exactly that: it configures what the page above it shows.
+   * That also keeps `/manage/notifications` the address in the transactional
+   * mail already in people's inboxes, which keeps working and now carries a
+   * button to here.
+   */
+  MANAGE_NOTIFICATION_SETTINGS = '/manage/notifications/settings',
+  /*
    * A URL for the defect channel (AGL-2486). "Report an issue" was reachable
    * only by opening the account menu, so nothing outside the console could
    * send anyone to it — the repo's README pointed at GitHub issues, which we
@@ -576,6 +591,7 @@ export interface RoutePayload {
   [Route.MANAGE_USER_SECURITY]: undefined
   [Route.MANAGE_USER_CLOSE]: undefined
   [Route.MANAGE_NOTIFICATIONS]: undefined
+  [Route.MANAGE_NOTIFICATION_SETTINGS]: undefined
   [Route.MANAGE_REPORT_ISSUE]: undefined
   [Route.ORG_SETTINGS]: { orgSlug: string }
   [Route.ORG_SETTINGS_GENERAL]: { orgSlug: string }

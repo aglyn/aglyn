@@ -922,6 +922,17 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'apps/console/app/(app)/manage/notifications/settings/page.tsx',
+    'The notification CATEGORIES (AGL-3226) — two tables of the same six ' +
+      'rows, one per `NotificationCategory`, with a channel per column. The ' +
+      'rows are a closed union in the type system rather than a collection ' +
+      'anybody adds to: a seventh row can only arrive by somebody writing a ' +
+      'seventh category, which is a compile error in three places until they ' +
+      'decide what it does. Paging six rows would hide half of a person’s ' +
+      'own settings behind a click, and the whole point of the second table ' +
+      'is to read it against the first.',
+  ],
+  [
     'libs/plugins/ai/src/lib/components/ai-experiment-cards.component.tsx',
     'The arms of ONE A/B test, in the card that explains its result (AGL-2914) — ' +
       'the figures the explanation was written from, shown so a reader can check ' +
@@ -1754,7 +1765,13 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // the figures. An arm per variant and `AI_EXPERIMENT_MAX_VARIANTS` is 4,
     // so it cannot outgrow the test it belongs to — and comparing the arms at
     // a glance is the thing a footer would take away.
-    expect(NOT_A_LIST).toHaveLength(61)
+    //
+    // 62 since notification settings left the feed (AGL-3226): the same six
+    // notification categories, twice — once for the account and once for the
+    // scope being overridden. The rows are a closed union, so a seventh can
+    // only arrive by somebody adding a category, and the second table exists
+    // to be read against the first.
+    expect(NOT_A_LIST).toHaveLength(62)
   })
 })
 

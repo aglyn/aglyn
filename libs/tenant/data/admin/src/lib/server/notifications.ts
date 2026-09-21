@@ -16,10 +16,12 @@
  */
 
 import {
+  buildRoute,
   NOTIFICATION_SELF_SENT_EMAIL_TYPES,
   NOTIFICATION_SETTINGS_FIELD,
   notificationChannelEnabled,
   type AglynNotification,
+  Route,
   type NotificationSettings,
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
@@ -90,7 +92,7 @@ async function emailNotification(
   known: Readonly<Record<string, string | null | undefined>>,
 ): Promise<void> {
   const origin = consoleOrigin()
-  const settingsUrl = `${origin}/manage/notifications/settings`
+  const settingsUrl = `${origin}${buildRoute(Route.MANAGE_NOTIFICATION_SETTINGS)}`
   let lookups = 0
   let sent = 0
   for (const uid of uids) {

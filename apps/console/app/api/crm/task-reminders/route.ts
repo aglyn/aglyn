@@ -299,7 +299,7 @@ async function remindOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
     const link = crmTaskReminderLink(task.hostId || null, task)
     return `${hub}${link.slice(link.indexOf('/crm') + '/crm'.length)}`
   }
-  const settingsUrl = `${ctx.origin}${buildRoute(Route.MANAGE_NOTIFICATIONS)}`
+  const settingsUrl = `${ctx.origin}${buildRoute(Route.MANAGE_NOTIFICATION_SETTINGS)}`
   const supportLine = brandSupportLine(branding)
   let poolLookups = 0
 

@@ -17,18 +17,13 @@
 
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import { segmentTitle } from '../../../page-title'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
-// nearest server layout.
-//
-// `segmentTitle`, not a bare string, since AGL-3226 put a titled route below
-// this one: a plain title REPLACES the template for everything nested under
-// it, so the settings page would have lost the brand off its tab.
-export const metadata: Metadata = { title: segmentTitle('Notifications') }
+// nearest server layout. The suffix comes from the root title template.
+export const metadata: Metadata = { title: 'Notification settings' }
 
-export default function ManageNotificationsTitleLayout({
+export default function ManageNotificationSettingsTitleLayout({
   children,
 }: {
   children: ReactNode
