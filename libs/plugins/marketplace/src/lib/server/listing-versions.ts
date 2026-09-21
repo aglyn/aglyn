@@ -35,7 +35,7 @@ import {
 } from './version-stats'
 import { verifiedLivePins } from './install-pin-counts'
 import { canActAsPublisher } from './publisher-profile'
-import { attestationsForBytes } from '@aglyn/aglyn/app-utils/publisher-attestation'
+import { attestationsForBytes } from '../model/publisher-attestation'
 
 /**
  * One reconciled tally per version id, plus the totals (AGL-1418).

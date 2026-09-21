@@ -45,7 +45,7 @@ import {
   missingAttestationSubjects,
   PUBLISHER_ATTESTATION,
   requiredAttestationIds,
-} from '@aglyn/aglyn/app-utils/publisher-attestation'
+} from '../model/publisher-attestation'
 import {
   MarkdownField,
   type MarkdownFieldHandle,

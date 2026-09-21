@@ -1257,13 +1257,6 @@
       "lane": "marketplace"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/marketplace-verification.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/node-definition-sanitizer.ts",
       "rules": [
         "domain-exports:marketplace",
@@ -1334,14 +1327,6 @@
       "rules": [
         "domain-name",
         "domain-exports:marketplace",
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/publisher-attestation.ts",
-      "rules": [
-        "domain-name",
         "domain-declares:marketplace"
       ],
       "lane": "marketplace"

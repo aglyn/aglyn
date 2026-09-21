@@ -57,8 +57,8 @@ import {
   rejectionHeadline,
   rejectionInputError,
 } from '../model/plugin-rejection-categories'
-import { attestationsForBytes } from '@aglyn/aglyn/app-utils/publisher-attestation'
-import { VERIFICATION_DECLINE_COOLDOWN_DAYS } from '@aglyn/aglyn/app-utils/marketplace-verification'
+import { attestationsForBytes } from '../model/publisher-attestation'
+import { VERIFICATION_DECLINE_COOLDOWN_DAYS } from '../model/listing-verification'
 import {
   PUBLISHER_AGREEMENT_VERSION,
   publisherAgreementState,

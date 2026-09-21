@@ -25,7 +25,7 @@ import {
   VERIFICATION_DECLINE_COOLDOWN_DAYS,
   verificationRequestBlock,
   type VerifiableListing,
-} from '@aglyn/aglyn/app-utils/marketplace-verification'
+} from '../model/listing-verification'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { pluginDocsHelp } from '@aglyn/aglyn'

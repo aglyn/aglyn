@@ -17,7 +17,7 @@
  * @jest-environment node
  */
 
-import { requiredAttestationIds } from '@aglyn/aglyn/app-utils/publisher-attestation'
+import { requiredAttestationIds } from '../model/publisher-attestation'
 
 /** A valid subject for the `repository` attestation (AGL-1076). */
 const REPO_URL = 'https://github.com/acme/widget'

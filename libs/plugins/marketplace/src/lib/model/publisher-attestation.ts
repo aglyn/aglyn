@@ -38,7 +38,7 @@
  * staff what was claimed. Three copies of these strings would drift, and a
  * drifted attestation is one nobody can be held to.
  */
-import { PLATFORM_BRAND_NAME } from './platform-brand'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 
 export interface PublisherAttestationItem {
   id: string
