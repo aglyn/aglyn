@@ -123,14 +123,15 @@ function consoleAdminNavTabItems() {
       label: 'Abuse reports',
       href: buildRoute(Route.ADMIN_ABUSE_REPORTS),
     },
-    // Beside the abuse queue, because it is the same job on a different
-    // surface: someone outside the company saying something is wrong
-    // (AGL-2310).
-    {
-      id: 'nav-tab-admin-marketplace-reports',
-      label: 'Marketplace reports',
-      href: buildRoute(Route.ADMIN_MARKETPLACE_REPORTS),
-    },
+    /*
+     * Marketplace reports used to sit HERE, beside the abuse queue, because
+     * it is the same job on a different surface (AGL-2310). It is a plugin
+     * staff page since AGL-3080 — the collection it triages is one only the
+     * marketplace writes — so it arrives through `staffPages` below instead,
+     * at the same `/admin/marketplace-reports` URL. It lands with the other
+     * plugin tabs rather than next to the abuse queue, which is the one
+     * thing the move costs.
+     */
     {
       id: 'nav-tab-admin-lockdown',
       label: 'Lockdown',

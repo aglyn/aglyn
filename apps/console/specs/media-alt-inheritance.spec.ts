@@ -180,7 +180,7 @@ describe('a placement defaults its alt through the one shared rule', () => {
   })
 
   /**
-   * Two console surfaces that offer NO alt prompt at all, and insert into an
+   * Two marketplace surfaces that offer NO alt prompt at all, and insert into an
    * editor whose image rows cannot have their alt edited afterwards. A
    * hardcoded `''` here was permanent by construction, which is why they are
    * asserted together.
@@ -189,7 +189,17 @@ describe('a placement defaults its alt through the one shared rule', () => {
     ['listing-detail-editor.component.tsx'],
     ['publish-plugin-form.component.tsx'],
   ])('the marketplace %s inherits instead of inserting an empty alt', (file) => {
-    const text = source('apps', 'console', 'components', 'marketplace', file)
+    // The marketplace's own since AGL-3080; the rule they are held to is
+    // unchanged, and so is the reason they are asserted together.
+    const text = source(
+      'libs',
+      'plugins',
+      'marketplace',
+      'src',
+      'lib',
+      'components',
+      file,
+    )
     expect(text).toContain(`${HELPER}(`)
     expect(text).not.toContain(`insertImage('',`)
   })

@@ -32,7 +32,13 @@
  * another.
  */
 
+import {
+  listConsoleOrgNavItems,
+  resetPluginServicesForTests,
+} from '@aglyn/aglyn'
 import { RELEASE_FLAGS } from '@aglyn/aglyn/app-utils/release-flags'
+import { CONSOLE_PLUGIN_MANIFEST } from '../constants/plugins.client.generated'
+import { releaseFlagForNavTab } from '../utils/plugin-hub-sections'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { platformPaymentsConfigured } from '../utils/server/payments-platform'
@@ -73,59 +79,81 @@ describe('what the deployment can do is read on the SERVER (AGL-3080)', () => {
     expect(platformPaymentsConfigured(undefined)).toBe(false)
   })
 
-  it('draws the marketplace zone above the WHOLE subtree', () => {
-    // On the layout rather than the pages, for the reason the check was:
-    // it covers the sections, the listing, publish and publisher routes
-    // without five copies of it.
-    const layout = source(
-      'app',
-      '(app)',
-      '[orgSlug]',
-      'marketplace',
-      'layout.tsx',
+  it('hands the answer to every surface below the org layout', () => {
+    // The fact travels as a deployment CAPABILITY on a context, which is
+    // what lets any surface below say what it cannot do. It used to reach
+    // the marketplace through a `marketplaceCapability` zone drawn by the
+    // console's marketplace layout; AGL-3080 moved those routes into the
+    // plugin, so the notice is a plain import there and the zone is gone.
+    // What stays the app's job is putting the answer on the context.
+    const layout = source('app', '(app)', '[orgSlug]', 'layout.tsx')
+    expect(layout).toMatch(/payments=\{platformPaymentsConfigured\(\)\}/)
+  })
+
+  it('and the marketplace still says it, above its whole hub', () => {
+    // The sentence is the plugin's — it names what still works without a
+    // Stripe platform — and it is drawn once, by the hub, rather than per
+    // section. Read from source for the reason the gate below is: rendering
+    // the hub needs the shell's mount, its permission answers and a
+    // Firestore instance, and a mock deep enough to reach this line would be
+    // asserting on the mock.
+    const hub = readFileSync(
+      join(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        'libs',
+        'plugins',
+        'marketplace',
+        'src',
+        'lib',
+        'components',
+        'marketplace-hub.component.tsx',
+      ),
+      'utf8',
     )
-    expect(layout).toMatch(/<PluginWidgetSlot slot="marketplaceCapability" \/>/)
+    expect(hub).toMatch(/<MarketplacePaymentsNotice \/>/)
   })
 })
 
 describe('the hub behind the flag is release-gated (AGL-2019)', () => {
   /*
-   * The SECTIONS LAYOUT, which is where the gate has to be now that the
-   * sections are routes (AGL-2501). On the old single page the wrapper sat
-   * around the tab panels; a layout wraps every section route instead, so one
-   * gate still covers the whole hub — and a per-section copy would be eight
-   * chances to leave one out.
+   * The gate is the SHELL's now (AGL-3080). It was a `<FeatureGate>` in the
+   * marketplace's own sections layout, because the hub was eight
+   * hand-written console routes; it is an `orgNavItems` declaration served
+   * by the generic org plugin route, which applies the release flag around
+   * every plugin surface from the nav item's `navTabId`.
+   *
+   * So what has to hold moved with it, and got stronger: the id is RESOLVED
+   * against the flag registry rather than matched as text, which is the
+   * failure AGL-1654 found — `release_marketplace` named a nav tab that did
+   * not exist, so its gate had never once matched anything.
    */
-  const layoutSource = readFileSync(
-    join(
-      __dirname,
-      '..',
-      'app',
-      '(app)',
-      '[orgSlug]',
-      'marketplace',
-      '(sections)',
-      'layout.tsx',
-    ),
-    'utf8',
-  )
+  const hub = listConsoleOrgNavItems().find(
+    (entry) => entry.navItem.href === '/marketplace',
+  )?.navItem
 
-  // A STRUCTURAL assertion on the source, deliberately. Rendering this layout
-  // needs the org scope, the Firestore instance, the hosts hook and the plugin
-  // widget host; a mock deep enough to reach the gate would be asserting on
-  // the mock. What has to stay true is narrow and textual — the wrapper is
-  // present, and the flag it names is a real one.
-  it('wraps its body in <FeatureGate flag="release_marketplace">', () => {
-    expect(layoutSource).toMatch(/<FeatureGate flag="release_marketplace">/)
-    expect(layoutSource).toMatch(/<\/FeatureGate>/)
-    expect(layoutSource).toMatch(
-      /import FeatureGate from '.*components\/feature-gate\.component'/,
-    )
+  beforeAll(async () => {
+    resetPluginServicesForTests()
+    const entry = CONSOLE_PLUGIN_MANIFEST.find((row) => row.id === 'marketplace')
+    const loaded = (await entry?.load()) as Record<string, () => void>
+    loaded[String(entry?.register?.console)]()
+  })
+
+  it('declares a nav tab id that resolves to release_marketplace', () => {
+    const navItem = listConsoleOrgNavItems().find(
+      (entry) => entry.navItem.href === '/marketplace',
+    )?.navItem
+    expect(navItem).toBeDefined()
+    expect(releaseFlagForNavTab(navItem?.navTabId)).toBe('release_marketplace')
   })
 
   it('names a flag that actually exists — a typo would gate nothing', () => {
-    // `useReleaseFlag` on an unknown key would resolve to an undefined state,
-    // and the gate would silently pass everyone through.
+    // A `navTabId` resolving to nothing fails SILENTLY and in the safe
+    // direction: the surface simply stays visible. Which is the worst way to
+    // fail — staff flip the flag, watch nothing happen, and conclude the flag
+    // is broken.
     const keys = RELEASE_FLAGS.map((definition) => definition.key)
     expect(keys).toContain('release_marketplace')
   })

@@ -62,8 +62,10 @@ import {
   aiJobBriefLine,
   aiLimitReview,
   aiModelNodeIds,
+  aiPlacedComponentIds,
   aiPlanCreation,
   aiPlanReferenceLines,
+  aiPlanReuseViolations,
   aiUnspentOutcome,
 } from './ai-job-generation'
 import { aiPlanTemplateTokenViolations } from './ai-job-plan-conformance'
@@ -426,14 +428,19 @@ export function createAiJobTemplateStep(deps: AiJobTemplateStepDeps = {}): AiJob
       ...(AI_ROUTING_TABLE['job.template'].thinking ? { thinking: AI_ROUTING_TABLE['job.template'].thinking } : {}),
       ...(AI_ROUTING_TABLE['job.template'].effort ? { effort: AI_ROUTING_TABLE['job.template'].effort } : {}),
       context: { bindingTokens: aiTemplateAddressTokens(definition) },
-      // Rule 8's binding check, and the confirmed plan kept: a token the
-      // plan promised that the template does not bind (AGL-3143 §11).
+      // Rule 8's binding check, and the confirmed plan kept in both halves: a
+      // token the plan promised that the template does not bind (AGL-3143
+      // §11), and a component the plan reuses that it does not place. The
+      // layout and component doors hold their builds to that reuse; the
+      // template door did not, so it could drop a promised component and
+      // still answer `Done` (AGL-3024).
       extend: (tree) => [
         ...aiTemplateBindingCheck(definition)(tree),
         ...aiPlanTemplateTokenViolations(plan, definition, {
           rootId: tree.rootId,
           nodes: tree.nodes as unknown as Record<string, AiDoctrineNode>,
         }),
+        ...aiPlanReuseViolations(inventory, plan, aiPlacedComponentIds(tree), 'template'),
       ],
       ...(signal ? { signal } : {}),
     })

@@ -122,6 +122,7 @@ const orgMount = {
   orgId: 'org-1',
   hosts: [{ id: 'host-1', name: 'Example Shop', subdomain: 'shop' }],
   hostsReady: true,
+  orgSlug: 'acme',
   hostsPath: '/acme/hosts',
 }
 

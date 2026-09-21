@@ -126,6 +126,41 @@ describe('every ID-token verification goes through the checked handle', () => {
     expect(shared).toBeDefined()
     expect(shared.text).toContain('verifyIdToken(idToken, true)')
   })
+
+  /**
+   * Nobody hands the SDK its own `checkRevoked` (AGL-3229).
+   *
+   * The flag reads as the stricter call and is the broken one. firebase-admin
+   * answers it with `this.getUser(sub)` on the handle that verified the token
+   * — the project pool, for every route that verifies the ordinary way — and
+   * an SSO uid does not live there. The lookup throws `auth/user-not-found`,
+   * which `id-token-refusal.ts` classifies as a bad credential, so the door
+   * refuses the account rather than the token. On `POST /api/auth/session`
+   * that meant no tenant user could mint the shared cookie at all: the
+   * sign-out tombstone the mint replaces survived every sign-in, and the
+   * console asked for credentials again on every load.
+   *
+   * The wrapper now strips the argument, so a call that passes it is merely
+   * misleading rather than broken. This keeps it from being written, because
+   * the next reader would have to know that the flag does nothing to know
+   * that the code is right.
+   */
+  it('lets nobody pass checkRevoked to verifyIdToken', () => {
+    const offenders: string[] = []
+    for (const file of sourceFiles) {
+      if (file.path === WRAPPER || file.path === CHECK_REVOKED_ALWAYS) continue
+      file.text.split('\n').forEach((line, index) => {
+        // Code only. This guard's sibling went red on a doc comment that
+        // explained the very pattern it looks for; prose about `checkRevoked`
+        // is how these decisions get recorded and must stay writable.
+        const code = line.split('//')[0]
+        if (code.trimStart().startsWith('*')) return
+        if (!/verifyIdToken\s*\([^)]*,/.test(code)) return
+        offenders.push(`${file.path}:${index + 1}`)
+      })
+    }
+    expect(offenders).toEqual([])
+  })
 })
 
 describe('every revoke tells its own process immediately', () => {

@@ -50,7 +50,7 @@ import OrgActivityCard from '../../../../../components/org-activity-card.compone
 import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
-import { readOutcome } from '../../../../../utils/read-outcome'
+import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'

@@ -248,10 +248,14 @@ describe('the authorize leg', () => {
     expect(mockAuthorize).not.toHaveBeenCalled()
   })
 
-  it('passes checkRevoked when verifying the caller', async () => {
+  it('verifies the caller through the revocation-checked handle', async () => {
     await authorizePost(authorizeRequest())
 
-    expect(mockVerifyIdToken).toHaveBeenCalledWith('id-token', true)
+    // No `checkRevoked` argument (AGL-3229): `firebaseAdmin.app().auth()`
+    // checks revocation itself, against the pool the token names, and the SDK
+    // flag this used to pass asked the project pool — refusing every SSO
+    // account's handoff rather than checking it.
+    expect(mockVerifyIdToken).toHaveBeenCalledWith('id-token')
   })
 
   it('puts the secret in the FRAGMENT, never the query string', async () => {

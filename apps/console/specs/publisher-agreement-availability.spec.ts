@@ -40,8 +40,25 @@ import {
 import { LEGAL_DOCUMENTS } from '../constants/legal-documents'
 import { LEGAL_URLS } from '../constants/shared'
 
+/*
+ * The marketplace's own since AGL-3080. The clickwrap control this spec is
+ * about did not change; the file it lives in moved out of the console with
+ * the rest of the marketplace's surfaces.
+ */
 const sellerPanel = readFileSync(
-  join(__dirname, '..', 'components', 'org-seller-panel.component.tsx'),
+  join(
+    __dirname,
+    '..',
+    '..',
+    '..',
+    'libs',
+    'plugins',
+    'marketplace',
+    'src',
+    'lib',
+    'components',
+    'org-seller-panel.component.tsx',
+  ),
   'utf-8',
 )
 

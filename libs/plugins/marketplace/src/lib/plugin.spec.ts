@@ -20,23 +20,53 @@ import { BUNDLE_ID } from './constants/bundle-common'
 import { registerMarketplaceConsole } from './plugin'
 
 describe('marketplace plugin', () => {
-  it('exposes the marketplace through widget slots, not a per-site nav tab', () => {
-    // The marketplace moved to org scope (AGL-772/775): no `/marketplace` nav
-    // tab any more — the app renders browse/detail/installed through slots.
+  it('owns the org marketplace as a surface, and no per-site nav tab', () => {
+    /*
+     * The marketplace moved to org scope (AGL-772/775) — no per-SITE nav tab
+     * — and to a declaration (AGL-3080): the hub, the listing, the publisher
+     * storefront and the publish form were seventeen hand-written console
+     * routes, and are one `orgNavItems` entry the shell's generic org plugin
+     * route serves.
+     *
+     * `ownsSubtree` is what keeps every URL: a segment naming a section
+     * resolves as that section, and anything else beneath `/marketplace` is
+     * handed to the page as `segments`. Without it, every listing's page is
+     * a 404 — which is exactly the kind of thing that would ship quietly,
+     * since the hub itself would go on working.
+     */
     registerMarketplaceConsole()
     const extension = Aglyn.listConsoleExtensions().find(
       (entry) => entry.pluginId === BUNDLE_ID,
     )
     expect(extension).toBeDefined()
     expect(extension?.navItems ?? []).toHaveLength(0)
-    const slots = (extension?.widgets ?? []).map((widget) => widget.slot)
-    expect(slots).toEqual(
-      expect.arrayContaining([
-        'orgMarketplace',
-        'marketplaceListing',
-        'orgAddons',
-      ]),
+
+    const hub = (extension?.orgNavItems ?? []).find(
+      (item) => item.href === '/marketplace',
     )
+    expect(hub).toBeDefined()
+    expect(hub?.Component).toBeDefined()
+    expect(hub?.ownsSubtree).toBe(true)
+    expect((hub?.sections ?? []).map((section) => section.id)).toEqual([
+      'browse',
+      'installed',
+      'licences',
+      'upload',
+      'profile',
+      'listings',
+      'payouts',
+      'sales',
+    ])
+
+    /*
+     * What is left in the zones, and what is NOT. Four went with the routes
+     * that drew them — a zone exists so a console page can show marketplace
+     * UI without importing this plugin, and the hub is this plugin. These two
+     * are drawn by console pages that are not the marketplace: the
+     * installation detail page, and a site's layouts list.
+     */
+    const slots = (extension?.widgets ?? []).map((widget) => widget.slot)
+    expect(slots.sort()).toEqual(['hostArtifactPublish', 'pluginSiteSet'])
     expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBeUndefined()
   })
 })

@@ -259,12 +259,32 @@ function revocationCheckedAuth<T extends object>(target: T): T {
           const verify = Reflect.get(auth, prop, auth) as (
             ...a: unknown[]
           ) => Promise<DecodedIdToken>
-          // Spread, never `(token, checkRevoked)`: passing an explicit
-          // `undefined` where the caller passed nothing changes what the SDK
-          // sees, and a wrapper that alters the call it forwards is not a
-          // wrapper.
-          const decoded = await verify.apply(auth, args)
-          if (args[1] === true) return decoded
+          /*
+           * ONE ARGUMENT, ALWAYS (AGL-3229).
+           *
+           * `checkRevoked` used to be forwarded, and a caller passing `true`
+           * then returned here with the SDK's own answer and skipped the
+           * check below. That is not the stricter call it reads as — it is
+           * the BROKEN one, and for exactly the reason `revocationPool`
+           * exists: firebase-admin's `checkRevoked` runs
+           * `this.getUser(sub)` on the handle that verified the token, which
+           * for an SSO account is the project pool the uid is not in. The
+           * lookup throws `auth/user-not-found`, `id-token-refusal.ts` reads
+           * that as a bad credential, and `POST /api/auth/session` answered
+           * `401 Unauthenticated` to every tenant user — so no SSO account
+           * could mint the shared cookie, the sign-out tombstone it replaces
+           * survived every sign-in, and the console re-asked for credentials
+           * on every load.
+           *
+           * So the flag is now STRIPPED rather than honoured: the check
+           * below is the check, it is tenant-aware, it is cached, and it
+           * raises the same `auth/id-token-revoked` / `auth/user-disabled`
+           * codes the SDK's does. A wrapper that alters the call it forwards
+           * needs a reason, and "the forwarded call cannot answer the
+           * question for half our accounts" is one. Passing `true` is
+           * harmless and redundant; it is no longer a way around this.
+           */
+          const decoded = await verify.apply(auth, [args[0]])
           // The pool the TOKEN belongs to, which is not always the pool that
           // verified it — see `revocationPool`. Never `receiver`: the lookup
           // must not re-enter this proxy.
@@ -373,17 +393,18 @@ export function isImpersonationSession(decoded: DecodedIdToken): boolean {
 
 export async function verifyConsoleIdToken(
   idToken: string,
-  checkRevoked?: boolean,
 ): Promise<DecodedIdToken> {
   // `firebaseAdmin.app().auth()`, not a bare `getAuth` (AGL-1881): the raw
   // SDK handle skips the revocation check, and this helper's whole promise is
   // that it verifies "exactly like `auth().verifyIdToken`" plus the email
   // gate. A door that reads as the STRICTER one while being the looser one is
   // the worst shape available.
-  const decoded = await firebaseAdmin
-    .app()
-    .auth()
-    .verifyIdToken(idToken, checkRevoked)
+  //
+  // It used to forward a `checkRevoked` parameter, and there is nothing left
+  // for that to mean (AGL-3229): the handle's own check is the check, so the
+  // flag could only ever have selected the SDK's project-pool one, which is
+  // the one an SSO account cannot pass. Nothing passed it.
+  const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
   if (!isEmailVerified(decoded) && !isImpersonationSession(decoded)) {
     throw new EmailNotVerifiedError()
   }

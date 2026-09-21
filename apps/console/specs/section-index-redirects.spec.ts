@@ -43,12 +43,28 @@ import {
 
 const APP = join(__dirname, '../app')
 
-/** Every hub index that redirects to a first section. */
+/**
+ * Every hub index that redirects to a first section.
+ *
+ * ⚠️ `(app)/[orgSlug]/marketplace/page.tsx` WAS one of these and is not any
+ * more (AGL-3080). Its hub is a plugin surface now, served by the generic org
+ * plugin route, and that route's landing redirect is deliberately CLIENT-side:
+ * it lands on the first section this reader may actually open, which takes the
+ * permission map and the org's plan, and neither is resolved on the server.
+ * The trade is explicit — the bare `/{org}/marketplace` costs a hydrate it did
+ * not cost before, and in exchange a member without publish permission is no
+ * longer landed on a seller section and then refused.
+ *
+ * So the row is gone rather than the file being kept alive as a shim. What did
+ * NOT change is the half a third party holds: `?connect=` and `?purchase=`
+ * still reach the section they are about, which
+ * `marketplace-sections-are-routes.spec.ts` and `plugin-hub-sections.spec.ts`
+ * hold between them.
+ */
 const INDEX_PAGES = [
   '(app)/[orgSlug]/settings/page.tsx',
   '(app)/[orgSlug]/team/page.tsx',
   '(app)/[orgSlug]/hosts/[host]/admin/page.tsx',
-  '(app)/[orgSlug]/marketplace/page.tsx',
   '(app)/manage/user/page.tsx',
 ]
 

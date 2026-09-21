@@ -59,6 +59,7 @@ function Mount({ children }: { children: ReactNode }) {
       mount={{
         orgId: 'org-1',
         hostsReady: true,
+        orgSlug: 'acme',
         hostsPath: '/acme/hosts',
         hosts: [
           { id: 'host-a', name: 'Site A', subdomain: 'a' },

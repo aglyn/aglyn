@@ -120,7 +120,7 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const searchParams = useSearchParams()
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const { currentOrg } = useOrgScope()
+  const { currentOrg, orgs } = useOrgScope()
   const orgId = currentOrg?.$id
   const { org, ready: orgReady } = useCurrentOrg()
   const {
@@ -244,6 +244,22 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     firestore,
     user?.uid,
     reach === 'granted' && resolved && orgId ? orgId : undefined,
+  )
+  /*
+   * The workspaces the READER belongs to, as the org switcher names them
+   * (AGL-3080) — for a surface whose subject crosses workspaces, which at the
+   * org level is the only place such a surface can be. Built here because
+   * `useOrgScope` is already open above this page; a plugin resolving the
+   * same names would be paying for a read per row of documents the shell is
+   * holding.
+   */
+  const viewerOrgs = useMemo(
+    () =>
+      (orgs ?? []).map((membership) => ({
+        id: membership.$id,
+        name: membership.orgName || membership.slug || membership.$id,
+      })),
+    [orgs],
   )
   const orgMount = useMemo(
     () =>
@@ -394,6 +410,7 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
           entitled={entitled}
           org={org}
           permissions={permissions}
+          viewerOrgs={viewerOrgs}
           releaseFlag={releaseFlagVerdict}
           basePath={basePath}
           sections={resolvedSections}

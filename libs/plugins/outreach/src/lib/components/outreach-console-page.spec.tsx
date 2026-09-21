@@ -80,6 +80,7 @@ const page = (section: string, segments: string[]): ConsolePluginPageProps => ({
     orgId: 'org-1',
     hosts: [],
     hostsReady: true,
+    orgSlug: 'acme',
     hostsPath: '/acme/hosts',
   },
 })

@@ -60,18 +60,29 @@ const APP_ICON_CARD = join(
   'components',
   'app-icon-card.component.tsx',
 )
-const LISTING_EDITOR = join(
+/*
+ * The marketplace's own, since AGL-3080 moved its console surfaces into the
+ * plugin. The rule they are held to did not move: a README body stores a
+ * media REFERENCE, never an origin-absolute URL.
+ */
+const MARKETPLACE_COMPONENTS = join(
   __dirname,
   '..',
-  'components',
+  '..',
+  '..',
+  'libs',
+  'plugins',
   'marketplace',
+  'src',
+  'lib',
+  'components',
+)
+const LISTING_EDITOR = join(
+  MARKETPLACE_COMPONENTS,
   'listing-detail-editor.component.tsx',
 )
 const PUBLISH_FORM = join(
-  __dirname,
-  '..',
-  'components',
-  'marketplace',
+  MARKETPLACE_COMPONENTS,
   'publish-plugin-form.component.tsx',
 )
 /**
@@ -242,7 +253,7 @@ describe('content entry picker (AGL-1407, AGL-1705)', () => {
  * and it could not be verified whether a listing README renders on another
  * origin. It does not. `MarketplaceListingContent` is registered through
  * `registerConsoleExtension`, its `marketplaceListing` slot has exactly one
- * render site (the console's `/[orgSlug]/marketplace/[listingId]` route), and
+ * render site (the org marketplace's own listing page), and
  * `apps/tenant` never imports the marketplace plugin. The `og:image` path
  * reads `previewImageUrl`/`logoUrl`, never the README body.
  */
@@ -267,7 +278,13 @@ describe('marketplace README writers (AGL-1705)', () => {
    * question it was written to answer.
    */
   it('inserts a reference into the listing README body', () => {
-    expect(listingCode).toMatch(/mediaNodeSrc\(media\)/)
+    // `formatMediaRef` since AGL-3080, not `mediaNodeSrc`: the picker hands
+    // back the asset's id and scope directly now, where before this read a
+    // media DOCUMENT and had to derive the reference from its `cdnPath`.
+    // Same stored form, one fewer derivation.
+    expect(listingCode).toMatch(
+      /formatMediaRef\(media\.mediaScope,\s*media\.mediaId\)/,
+    )
     expect(listingCode).toMatch(/insertImage\([\s\S]{0,120}?,\s*src,?\s*\)/)
     expect(listingCode).not.toMatch(/insertImage\([^)]*,\s*url\s*\)/)
   })
@@ -282,25 +299,33 @@ describe('marketplace README writers (AGL-1705)', () => {
   it('leaves the listing IMAGE fields on the absolute URL', () => {
     expect(listingCode).toMatch(/previewImageUrl:\s*url\b/)
     expect(listingCode).toMatch(/logoUrl:\s*url\b/)
-    expect(listingCode).toMatch(/mediaSrc\(media\)/)
+    // The absolute form, which the picker resolves — CDN path over the raw
+    // download URL (AGL-1215) — instead of this surface calling `mediaSrc`
+    // on a document it no longer holds. What matters to AGL-1701 is that the
+    // field keeps a URL and not a reference, and `media.url` is that URL.
+    expect(listingCode).toMatch(/const url = media\.url/)
+    expect(listingCode).not.toMatch(/previewImageUrl:\s*src\b/)
+    expect(listingCode).not.toMatch(/logoUrl:\s*src\b/)
   })
 
   it('inserts a reference into the publish form README', () => {
-    expect(publishCode).toMatch(/mediaNodeSrc\(media/)
+    expect(publishCode).toMatch(
+      /formatMediaRef\(media\.mediaScope,\s*media\.mediaId\)/,
+    )
     // Second argument only — see the listing case above (AGL-1896).
     expect(publishCode).toMatch(/insertImage\([\s\S]{0,160}?,\s*src,?\s*\)/)
     expect(publishCode).not.toMatch(/insertImage\([^)]*,\s*url\s*\)/)
   })
 
   /**
-   * Both writers keep a `?? mediaSrc(...)`/`?? url` tail rather than dropping
-   * it. `mediaNodeSrc` derives the reference from `cdnPath`, which is only
-   * minted for orgs entitled to `mediaCdn` and is deleted for private assets —
-   * so a free-tier publisher has no reference to write, and the fallback is
-   * what keeps their README image from becoming an empty `src`.
+   * Both writers keep a `?? url` tail rather than dropping it. A reference
+   * needs the asset's CDN scope, which is only minted for orgs entitled to
+   * `mediaCdn` and is absent for a private asset — so a free-tier publisher
+   * has no reference to write, and the fallback is what keeps their README
+   * image from becoming an empty `src`.
    */
   it('keeps the free-tier fallback in both', () => {
-    expect(listingCode).toMatch(/mediaNodeSrc\(media\)\s*\?\?\s*url/)
-    expect(publishCode).toMatch(/mediaNodeSrc\(media[^)]*\)\s*\?\?\s*mediaSrc/)
+    expect(listingCode).toMatch(/formatMediaRef\([^)]*\)\s*\?\?\s*url/)
+    expect(publishCode).toMatch(/formatMediaRef\([^)]*\)\s*\?\?\s*media\.url/)
   })
 })

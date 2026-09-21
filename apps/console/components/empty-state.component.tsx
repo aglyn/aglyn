@@ -16,10 +16,11 @@
  */
 'use client'
 
-import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/material'
-import { useEffect, useState, type ReactNode } from 'react'
-import type { ReadOutcome } from '../utils/read-outcome'
+import ReadGatedEmptyState, {
+  type ReadGatedEmptyStateProps,
+} from '@aglyn/shared-ui-jsx/components/read-gated-empty-state.component'
+import { Button } from '@mui/material'
+import { useEffect, useState } from 'react'
 import {
   getSessionReauth,
   reopenSessionReauth,
@@ -27,82 +28,43 @@ import {
   type SessionReauthState,
 } from '../utils/session-reauth'
 
-export interface EmptyStateProps {
-  /** MDI path (e.g. `ICON_VARIANT_HOST_GROUP.path`) shown above the title. */
-  iconPath?: string
-  /** Headline — the one-line "what this is / what to do" message. */
-  title: ReactNode
-  /** Supporting copy under the title; keep it to a sentence or two. */
-  description?: ReactNode
-  /** Primary call to action (usually a `<Button>`), rendered below the copy. */
-  action?: ReactNode
-  /**
-   * Did the read behind this list actually succeed? REQUIRED, and
-   * deliberately not defaulted (AGL-1066).
-   *
-   * A list is empty for three different reasons and only one of them is
-   * "there is nothing here". Passing `loaded` is an assertion that the read
-   * reached the server and came back with zero rows; anything else renders
-   * the loading or degraded branch below and `title`/`description`/`action`
-   * are never shown. See `utils/read-outcome`.
-   */
-  read: ReadOutcome
-  /**
-   * What could not be loaded, for the degraded copy — a lower-case noun
-   * phrase in the customer's terms: `'your sites'`, `'your workspaces'`.
-   */
-  subject?: string
-  /** Re-runs the failed read. Omit only when nothing can retry it. */
-  onRetry?: () => void
-}
+export type EmptyStateProps = Omit<
+  ReadGatedEmptyStateProps,
+  'degradedAction'
+>
 
 /**
- * Reusable zero-state block: a centered icon, title, supporting copy and an
- * optional call to action inside the standard `CardDisplay` framing. Use it
- * wherever a list/grid can legitimately be empty (no sites yet, no org yet,
- * empty media library) instead of leaving a blank content area.
+ * The console's read-gated zero-state: `ReadGatedEmptyState` with the one
+ * thing only this app can supply.
  *
- * ## The zero-state is GATED, not merely offered (AGL-1066, AGL-1062)
+ * The block itself moved to `@aglyn/shared-ui-jsx` in AGL-3080 so a plugin's
+ * list surface could state the same rule — the gate is about EVIDENCE, and a
+ * plugin's list is as capable of asserting an emptiness it never read as the
+ * console's was (AGL-1066). What stayed is this: the session store.
  *
- * "No sites yet — Create a site to start building" is a statement of fact
- * about someone's account, and it was reachable from a read that never
- * reached the server: a stale session denies every server read while
- * `persistentLocalCache` keeps listeners painting, so the list rendered, then
- * emptied, then asserted the emptiness. On a page whose zero-state carries a
- * **Create site** button that is not just wrong, it invites a customer to
- * rebuild sites they still own.
+ * ## Why the re-auth affordance is here and not in the library
  *
- * So the copy and the call to action live behind `read === 'loaded'`. This is
- * a required prop rather than a caller-side `if` because the caller-side `if`
- * is exactly what every surface forgot; putting it here means a new list
- * cannot render a zero-state without answering the question first.
+ * The degraded branch normally offers `onRetry`, and for almost every failed
+ * read that is the right button. It is the WRONG button for exactly one
+ * cause: a stale session, where every server read is being refused and
+ * retrying is an invitation to fail. AGL-2486's fix was to offer the way back
+ * into the sign-in dialog instead — but only when the prompt is up and
+ * DISMISSED, because an undismissed prompt is already on screen and a live
+ * session has nothing to fix.
  *
- * ## The degraded branch says only what a list can know (AGL-2486)
+ * That verdict is read from the store that owns it, never inferred from this
+ * list's own denial (AGL-1179), and the store is the console's. A library
+ * that reached for it would be a library that only one app can use; a
+ * `degradedAction` prop is the same behaviour with the knowledge left where
+ * it lives.
  *
- * It used to end "if the banner above asks you to sign in again, that fixes
- * it". There is no banner above any more — a stale session opens the re-auth
- * dialog directly — and pointing at it was already the weaker half of a
- * message told twice. What survives is the part only this surface knows:
- * THIS list is incomplete, and nothing has been deleted. The diagnosis stays
- * where the evidence is; a list that guessed at it would be the AGL-1179
- * mistake at the surface instead of in a log.
- *
- * The one exception is not a guess either. When the session store says a
- * stale-session prompt is up and DISMISSED, the dialog has deliberately
- * taken itself off screen and left no way back — so the degraded lists
- * become the way back, offering the same dialog rather than a retry that
- * cannot succeed. Read from the store that owns the verdict, never inferred
- * from this list's own denial.
+ * A plugin surface therefore gets the retry button rather than this one. It
+ * is the honest answer for a caller that cannot see the session, and the
+ * console's own re-auth dialog is mounted above every authenticated page
+ * regardless (`authenticated.layout.tsx`), so the way back does not depend on
+ * this button existing.
  */
-export function EmptyState({
-  iconPath,
-  title,
-  description,
-  action,
-  read,
-  subject = 'this list',
-  onRetry,
-}: EmptyStateProps) {
+export function EmptyState(props: EmptyStateProps) {
   const [reauth, setReauth] = useState<SessionReauthState>(getSessionReauth)
   useEffect(() => subscribeSessionReauth(setReauth), [])
   // Both halves matter: `stale` is the only reason whose dialog leaves the
@@ -111,64 +73,19 @@ export function EmptyState({
   const dismissedStalePrompt =
     reauth.reason === 'stale' && reauth.dismissed === true
 
-  // A read still in flight is not an answer. Rendering the frame with a
-  // spinner keeps the page from jumping when the rows arrive, and — more to
-  // the point — keeps the zero-state's sentence out of the load window.
-  if (read === 'loading') {
-    return (
-      <CardDisplay contentGutterX contentGutterY>
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-          <CircularProgress aria-label={`Loading ${subject}`} />
-        </Box>
-      </CardDisplay>
-    )
-  }
-
-  if (read === 'unavailable') {
-    return (
-      <Alert
-        severity="warning"
-        action={
-          dismissedStalePrompt ? (
-            // Retrying is what cannot work here — every server read is being
-            // refused — so the button offers the thing that does.
-            <Button color="inherit" size="small" onClick={reopenSessionReauth}>
-              {'Sign in again'}
-            </Button>
-          ) : onRetry ? (
-            <Button color="inherit" size="small" onClick={onRetry}>
-              {'Try again'}
-            </Button>
-          ) : null
-        }
-      >
-        {`${subject.charAt(0).toUpperCase()}${subject.slice(1)} could not be ` +
-          'loaded, so this list is incomplete. Nothing has been deleted.'}
-      </Alert>
-    )
-  }
-
   return (
-    <CardDisplay contentGutterX contentGutterY>
-      <Stack
-        spacing={2}
-        sx={{ alignItems: 'center', textAlign: 'center', py: 6, px: 2 }}
-      >
-        {iconPath ? (
-          <MdiIcon color="primary" fontSize="large" path={iconPath} />
-        ) : null}
-        <Typography variant="h6">{title}</Typography>
-        {description ? (
-          <Typography
-            color="textSecondary"
-            sx={{ maxWidth: 440 }}
-          >
-            {description}
-          </Typography>
-        ) : null}
-        {action ? <div>{action}</div> : null}
-      </Stack>
-    </CardDisplay>
+    <ReadGatedEmptyState
+      {...props}
+      degradedAction={
+        dismissedStalePrompt ? (
+          // Retrying is what cannot work here — every server read is being
+          // refused — so the button offers the thing that does.
+          <Button color="inherit" size="small" onClick={reopenSessionReauth}>
+            {'Sign in again'}
+          </Button>
+        ) : undefined
+      }
+    />
   )
 }
 

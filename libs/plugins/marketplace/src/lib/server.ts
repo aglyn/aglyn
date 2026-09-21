@@ -20,6 +20,10 @@ import {
   registerPluginApiRoute,
   registerCustomFieldType,
 } from '@aglyn/aglyn/server'
+// Its own subpath, never the plugin-manager barrel: what a published page
+// does not need, it must not import.
+import { registerPluginRouteMetadata } from '@aglyn/aglyn/plugin-manager/plugin-route-metadata'
+import { BUNDLE_ID } from './constants/bundle-common'
 import { marketplaceBillingWebhookHandler } from './server/billing-webhook'
 import { publishPluginHandler } from './server/publish-plugin'
 import { verificationRequestHandler } from './server/verification-request'
@@ -37,6 +41,7 @@ import { installTemplateHandler } from './server/install-template'
 import { installThemeHandler } from './server/install-theme'
 import { previewImageHandler } from './server/preview-image'
 import { publishHandler } from './server/publish'
+import { marketplaceAdminReports } from './server/admin-reports'
 import { reportHandler } from './server/report'
 import { reviewsHandler } from './server/reviews'
 import { publisherProfileSaveHandler } from './server/publisher-profile-save'
@@ -65,6 +70,37 @@ export function registerMarketplaceConsoleApi(): void {
   // Server side of the rating custom field (AGL-434): validators run
   // on import/write paths even when no client loaded the plugin.
   registerCustomFieldType(RATING_FIELD)
+  /*
+   * What a listing link unfurls as (AGL-876, handed to the platform by
+   * AGL-3080).
+   *
+   * The card used to be built by a hand-written console route with a server
+   * layout of its own, which is what kept that route out of the generic
+   * plugin route — moving it would have dropped every listing's card with
+   * nothing red. The shell asks this instead, so the card survives the move
+   * and no console file reads `marketplaceListings` to build a head.
+   *
+   * One segment and one only: `/{org}/marketplace/{listingId}`. The hub, the
+   * publish page and every other address under this route answer `null`,
+   * which leaves the shell's own title exactly as it was.
+   */
+  registerPluginRouteMetadata(
+    {
+      route: 'marketplace',
+      resolve: async (segments) => {
+        if (segments.length !== 1) return null
+        const { readListingForSocialCard } = await import(
+          './server/listing-social-card.server'
+        )
+        const { listingSocialCard } = await import('./model/listing-social-card')
+        return listingSocialCard(await readListingForSocialCard(segments[0]))
+      },
+    },
+    // Named, because this registrar is called directly by the app's server
+    // loader rather than from inside a plugin `register` fn, where the
+    // loader's owner marker would be set.
+    { pluginId: BUNDLE_ID },
+  )
   registerPluginApiRoute('marketplace/checkout', checkoutHandler)
   registerPluginApiRoute('marketplace/connect', connectHandler)
   registerPluginApiRoute('marketplace/install', installHandler)
@@ -94,6 +130,16 @@ export function registerMarketplaceConsoleApi(): void {
   registerPluginApiRoute('marketplace/preview-image', previewImageHandler)
   registerPluginApiRoute('marketplace/publish', publishHandler)
   registerPluginApiRoute('marketplace/report', reportHandler)
+  /*
+   * The staff end of that button (AGL-2310), moved out of
+   * `apps/console/app/api/admin/` by AGL-3080. `web:` because it is a plain
+   * fetch from this plugin's own staff page, not a plugin-request handler —
+   * the same shape the AI plugin's `ai/admin/*` routes use, and for the same
+   * reason: a staff route names no host, so there is no subject to resolve.
+   */
+  registerPluginApiRoute('marketplace/admin/reports', {
+    web: marketplaceAdminReports,
+  })
   registerPluginApiRoute('marketplace/reviews', reviewsHandler)
   registerPluginApiRoute(
     'marketplace/publisher-profile',

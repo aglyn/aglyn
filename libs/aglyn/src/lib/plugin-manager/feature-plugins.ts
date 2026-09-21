@@ -176,6 +176,17 @@ export interface ConsolePluginOrgHost {
  */
 export interface ConsolePluginOrgMount {
   orgId: string
+  /**
+   * The organization's URL slug (AGL-3080) — the segment its console pages
+   * hang under, and what a surface needs to link to one of its siblings.
+   *
+   * Carried because plugins were reconstructing it: from `hostsPath` by
+   * splitting a string, or by resolving a site's org through an async lookup
+   * that can come back empty and leave a link unbuilt (AGL-867). The shell
+   * has it synchronously; every plugin paying for it again, differently, is
+   * the cost of not handing it over.
+   */
+  orgSlug: string
   hosts: readonly ConsolePluginOrgHost[]
   hostsReady: boolean
   /**
@@ -186,6 +197,27 @@ export interface ConsolePluginOrgMount {
    * cannot import the console's route table.
    */
   hostsPath: string
+  /**
+   * Where this organization manages its PLAN — the console's billing page
+   * for the org (AGL-3080).
+   *
+   * Here for the same reason `hostsPath` is: a plugin cannot import the
+   * console's route table, and a surface that has to say "on a paid plan the
+   * cut is lower" is useless without somewhere to send the person who just
+   * read it. The shell's own upgrade notice covers an ENTITLEMENT refusal,
+   * where the surface never renders; this covers the case the surface renders
+   * fine and the plan is still the answer — a marketplace publisher seeing
+   * the free-plan fee on a listing they are about to price.
+   *
+   * OPTIONAL, and a plugin must branch on it rather than assume it: a
+   * deployment that bills nobody has no such page, and a self-hoster who
+   * removed it should not get a plugin's link into a 404. The shell's own
+   * upgrade notice makes the same allowance. `resolveOrgMount` supplies it
+   * for every mount this console builds.
+   *
+   * A plugin renders a link to it or does not, and never parses it.
+   */
+  billingPath?: string
 }
 
 /**
@@ -206,6 +238,23 @@ export interface ConsolePluginPageProps {
   hostId: string | null
   /** Present only at an org-level mount — see {@link ConsolePluginOrgMount}. */
   orgMount?: ConsolePluginOrgMount
+  /**
+   * Every workspace the SIGNED-IN PERSON belongs to, as the org switcher
+   * already names them (AGL-3080) — not the mounted org's siblings, and
+   * nothing about what any of them contain.
+   *
+   * For a surface whose subject crosses workspaces. The marketplace's
+   * licences panel is the case: a purchase licenses one organization, so
+   * "I bought this once — which workspace did the licence land in?" is a
+   * question about the BUYER, and the answer is a name the reader already
+   * sees in the switcher. Resolving it from ids would be a read per row of
+   * documents the shell is already holding.
+   *
+   * Absent when the shell has not resolved them, and a surface must name the
+   * id rather than wait: this is a label, and a row with a raw id in it is
+   * worse than nothing only if the row does not appear at all.
+   */
+  viewerOrgs?: readonly { id: string; name: string }[]
   /** True when the org holds the extension's `featureFlag` entitlement. */
   entitled: boolean
   /**
@@ -591,8 +640,6 @@ export const CONSOLE_WIDGET_SLOTS = {
   orgData: 'orgData',
   /** Besigner functions (ƒx) panel. Props: hostId. */
   besignerFunctions: 'besignerFunctions',
-  /** Marketplace listing detail body. Props: hostId, listingId, permissions. */
-  marketplaceListing: 'marketplaceListing',
   /**
    * Wherever a console page offers to publish something it holds (AGL-3080).
    * Props: {@link ConsoleArtifactPublishZoneProps}.
@@ -621,27 +668,22 @@ export const CONSOLE_WIDGET_SLOTS = {
    * marketplace.
    */
   hostArtifactPublish: 'hostArtifactPublish',
-  /**
-   * Above the whole Marketplace subtree: what THIS DEPLOYMENT cannot do
-   * (AGL-2019, moved out of the console app by AGL-3080). No props — the
-   * widget reads {@link DeploymentCapabilities} from the context the org's
-   * server layout provides, and draws nothing when the deployment is
-   * configured.
+  /*
+   * `marketplaceListing`, `marketplaceCapability`, `orgMarketplace` and
+   * `orgAddons` were here until AGL-3080, and are gone rather than deprecated.
    *
-   * A zone rather than a component the app holds, because the sentence is
-   * the marketplace's: it names what still works without a Stripe platform
-   * (browsing, free installs) and that is the plugin's knowledge, not the
-   * shell's. The app supplies only the fact.
+   * Each existed for one reason: a CONSOLE ROUTE had to show marketplace UI
+   * and an app may not import a plugin. AGL-3080 moved those routes into the
+   * marketplace plugin, where the components are plain imports — so the four
+   * zones had no drawer left, and a zone nothing draws is a contract nothing
+   * can be held to. `plugin-widget-slot-zones.spec.ts` is what noticed, which
+   * is the whole reason that inventory exists.
+   *
+   * `pluginSiteSet` and `hostArtifactPublish` stayed, and the difference is
+   * the test: both are drawn by a console page that is NOT the marketplace —
+   * the installation detail page and a site's layouts list — offering a
+   * marketplace action in passing.
    */
-  marketplaceCapability: 'marketplaceCapability',
-  /**
-   * Org marketplace browse body (AGL-772). Props: hostId (acting site),
-   * permissions, orgScoped. The single org-scope place to browse + install,
-   * replacing the per-site marketplace tab.
-   */
-  orgMarketplace: 'orgMarketplace',
-  /** Plugins & add-ons hub installs section. Props: hostId. */
-  orgAddons: 'orgAddons',
   /** Bottom of the host dashboard. Props: hostId, org. (AGL-433) */
   dashboardFooter: 'dashboardFooter',
   /** Org settings page, below the tabbed cards. Props: orgId, org. */

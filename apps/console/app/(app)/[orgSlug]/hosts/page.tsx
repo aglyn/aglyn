@@ -67,7 +67,7 @@ import useBranding from '../../../../hooks/use-branding'
 import useCurrentOrg from '../../../../hooks/use-current-org'
 import { useOrgHosts } from '../../../../hooks/use-org-hosts'
 import { resolveOrgMount } from '../../../../utils/org-mount'
-import { readOutcome } from '../../../../utils/read-outcome'
+import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import {
   describeHostStatus,
   describeSiteAllowance,

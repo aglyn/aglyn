@@ -203,6 +203,7 @@ describe('EmailTemplatesCard', () => {
             { id: 'host-2', name: 'Two', subdomain: 'two' },
           ],
           hostsReady: true,
+          orgSlug: 'acme',
           hostsPath: '/acme/hosts',
         }}
       >

@@ -239,13 +239,17 @@ describe('it revokes only what the caller owns', () => {
 })
 
 describe('it will not let a stolen token drive a revocation', () => {
-  it('passes checkRevoked when verifying the caller', async () => {
+  it('verifies the caller through the revocation-checked handle', async () => {
     await post({ deviceId: 'dev-1' })
 
     // A caller whose own tokens were already revoked is not signed in, and
     // letting one sign the real owner out is a denial-of-service handed to
-    // whoever holds a stale token.
-    expect(mockVerifyArgs).toEqual(['tok', true])
+    // whoever holds a stale token. The check comes from
+    // `firebaseAdmin.app().auth()`, not from the SDK's `checkRevoked` flag
+    // this used to pass: that flag asks the pool that verified the token, so
+    // for an SSO account it refused rather than checked (AGL-3229). The test
+    // below is the property itself — a revoked caller revokes nothing.
+    expect(mockVerifyArgs).toEqual(['tok'])
   })
 
   it('401s a revoked caller token and revokes nothing', async () => {

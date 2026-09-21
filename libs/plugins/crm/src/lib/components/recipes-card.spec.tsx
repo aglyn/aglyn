@@ -148,7 +148,7 @@ function Mount(props: { children: ReactNode; hosts?: typeof HOSTS; hostsReady?: 
   const { children, hosts = HOSTS, hostsReady = true } = props
   return (
     <CrmOrgMountProvider
-      mount={{ orgId: 'org-1', hosts, hostsReady, hostsPath: '/acme/hosts' }}
+      mount={{ orgId: 'org-1', hosts, hostsReady, orgSlug: 'acme', hostsPath: '/acme/hosts' }}
     >
       {children}
     </CrmOrgMountProvider>

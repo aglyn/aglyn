@@ -427,6 +427,16 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: 'A marketplace listing page in the console — a publisher-supplied logo, screenshots and lightbox. AGL-1701 case #4 owns this actor pair; it never renders on a customer site.',
   },
+  'libs/plugins/marketplace/src/lib/model/listing-social-card.ts': {
+    markers: 2,
+    guard: 'off-tenant',
+    why: "The same console listing page's SOCIAL CARD (AGL-876, moved out of the console app by AGL-3080). Both markers are the publisher's own preview art and logo, resolved once for the `og:image` the console's `/[orgSlug]/marketplace/[listingId]` head emits. The reader is a crawler fetching a CONSOLE URL, so the actor pair is AGL-1701's: an org's own listing page, never a customer's site. Nothing here renders on a tenant page, and a listing that must not be described answers nothing at all.",
+  },
+  'libs/plugins/marketplace/src/lib/components/listing-detail-editor.component.tsx': {
+    markers: 2,
+    guard: 'off-tenant',
+    why: "The publisher's own EDITOR for their listing (AGL-869, moved out of the console app by AGL-3080). One marker previews the listing's `previewImageUrl` through `resolveMediaSrc`; the other previews a screenshot the same publisher just picked from their own library. The reader is a signed-in member of the org that owns the listing, on a console URL, looking at art they are in the middle of choosing — AGL-1701's actor pair, never a customer's site. `apps/tenant` does not import the marketplace plugin.",
+  },
   'libs/plugins/marketplace/src/lib/components/listing-image.component.tsx': {
     markers: 1,
     guard: 'off-tenant',

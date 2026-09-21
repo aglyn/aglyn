@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/plugins-marketplace",
-  "version": "1.0.0-beta.149",
+  "version": "1.0.0-beta.150",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,20 +25,24 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.149",
-    "@aglyn/shared-data-mdi": "1.0.0-beta.149",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.149",
-    "@aglyn/shared-ui-next": "1.0.0-beta.149",
-    "@aglyn/shared-ui-snackstack": "1.0.0-beta.149",
-    "@aglyn/shared-util-email": "1.0.0-beta.149",
-    "@aglyn/shared-util-http": "1.0.0-beta.149",
-    "@aglyn/tenant-data-admin": "1.0.0-beta.149",
-    "@aglyn/tenant-feature-instance": "1.0.0-beta.149",
-    "@aglyn/tenant-runtime": "1.0.0-beta.149",
+    "@aglyn/aglyn": "1.0.0-beta.150",
+    "@aglyn/aglyn-markdown-editor": "1.0.0-beta.150",
+    "@aglyn/shared-data-enums": "1.0.0-beta.150",
+    "@aglyn/shared-data-mdi": "1.0.0-beta.150",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.150",
+    "@aglyn/shared-ui-next": "1.0.0-beta.150",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.150",
+    "@aglyn/shared-util-email": "1.0.0-beta.150",
+    "@aglyn/shared-util-http": "1.0.0-beta.150",
+    "@aglyn/shared-util-timestamp": "1.0.0-beta.150",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.150",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.150",
+    "@aglyn/tenant-runtime": "1.0.0-beta.150",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
     "@mui/material": "^9.3.1",
+    "@mui/x-data-grid": "^9.12.0",
     "firebase": "^12.18.0",
     "firebase-admin": "^14.3.0",
     "next": "16.3.3",

@@ -157,6 +157,9 @@ const PLUGIN_TOPICS = {
   crmSettings: '/content-and-data/crm/settings',
   crmViews: '/content-and-data/crm/views',
   datasets: '/content-and-data/datasets/overview',
+  // The abuse/report triage topic: the marketplace's report queue moved into
+  // the plugin with its staff page in AGL-3080 and links here.
+  abuseReports: '/staff-console/abuse-reports',
   deals: '/content-and-data/crm/deals',
   designedEmails: '/marketing-and-automation/email-campaigns/designed-emails',
   emailCampaigns: '/marketing-and-automation/email-campaigns/overview',
@@ -170,6 +173,9 @@ const PLUGIN_TOPICS = {
   // (AGL-2978, AGL-2980).
   plugins: '/developers/plugins/overview',
   pos: '/commerce-and-bookings/commerce/pos-and-reservations',
+  // The marketplace's own console moved into libs/plugins in AGL-3080, and
+  // its seller panel and publisher profile link here.
+  publishAPlugin: '/developers/plugins/publish-a-plugin',
   publisherHandbook: '/developers/plugins/publishing/publisher-handbook',
   redirects: '/building-sites/redirects/overview',
   sequences: '/content-and-data/crm/sequences',

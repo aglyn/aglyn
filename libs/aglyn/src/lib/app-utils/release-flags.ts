@@ -160,10 +160,11 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     description: 'Marketplace browsing, publishing and plugin installs.',
     defaultEnabled: true,
     // AGL-1654: was 'nav-tab-marketplace', which matched no nav item, so
-    // `gateNavTabItems` never hid the tab. The org Marketplace tab is a
-    // console constant rather than a plugin nav item, so the id has to be
-    // kept in step with `org-nav-tabs.ts` by hand; the spec
-    // `release-flag-nav-tab-ids.spec.ts` is what holds it there.
+    // `gateNavTabItems` never hid the tab. The id is still held to a real
+    // declaration by `release-flag-nav-tab-ids.spec.ts` — but it is no longer
+    // held there BY HAND: AGL-3080 made the org Marketplace tab the
+    // marketplace plugin's own `orgNavItems` entry, so the tab and the
+    // surface behind it are one declaration that names this id once.
     //
     // The second half of that comment — "the page behind it carries no
     // `<FeatureGate>`" — was still true until AGL-2019 and is no longer.

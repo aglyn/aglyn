@@ -9,6 +9,35 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.150 — 2026-09-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.149...v1.0.0-beta.150)
+
+### Added
+
+- **marketplace:** the report queue triages from the plugin that writes it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2310](https://linear.app/aglyn/issue/AGL-2310), [AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **marketplace:** the hub is the marketplace's, and the console only mounts it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-1000](https://linear.app/aglyn/issue/AGL-1000), [AGL-2200](https://linear.app/aglyn/issue/AGL-2200), [AGL-2331](https://linear.app/aglyn/issue/AGL-2331))
+- **plugins:** a plugin can find a file, refuse a zero-state, and name the plan ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-1066](https://linear.app/aglyn/issue/AGL-1066), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **commerce:** the media library asks who is selling a file, instead of knowing ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
+- **marketplace:** a listing describes itself, and the shell writes the tags ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+### Fixed
+
+- **auth:** an SSO account can mint its session cookie again ([AGL-3229](https://linear.app/aglyn/issue/AGL-3229))
+- **ai:** a template places every component its confirmed plan reuses ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024), [AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+- **tenant:** the listing card's image sink is declared where it lives now ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-1725](https://linear.app/aglyn/issue/AGL-1725), [AGL-1701](https://linear.app/aglyn/issue/AGL-1701))
+
+### Changed
+
+- **core:** core stops restating the marketplace's own section list ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear id ceiling reads 3229 ([AGL-3229](https://linear.app/aglyn/issue/AGL-3229))
+
+</details>
+
 ## v1.0.0-beta.149 — 2026-09-21
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.147...v1.0.0-beta.149)

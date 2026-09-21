@@ -378,6 +378,7 @@
       "package": "@aglyn/plugins-marketplace",
       "register": {
         "console": "registerMarketplaceConsole",
+        "staff": "registerMarketplaceConsole",
         "consoleApi": "registerMarketplaceConsoleApi"
       },
       "apiPrefixes": [
@@ -400,11 +401,10 @@
           "shell": true,
           "slots": [
             "hostArtifactPublish",
-            "marketplaceCapability",
-            "marketplaceListing",
-            "orgAddons",
-            "orgMarketplace",
             "pluginSiteSet"
+          ],
+          "orgRoutes": [
+            "/marketplace"
           ]
         }
       }

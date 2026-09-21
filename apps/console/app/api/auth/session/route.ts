@@ -323,18 +323,21 @@ async function handler(request: Request): Promise<Response> {
       // impersonation must never mail the customer "new device sign-in".
       let signInIdentity: { uid: string; email: string | null } | null = null
       try {
-        // `checkRevoked` (AGL-1959). This was a bare `verifyIdToken`, and the
-        // gap it left is the whole of what makes a revocation real: after
-        // `revokeRefreshTokens(uid)` the browser cannot obtain a NEW ID token,
-        // but the one it already holds stays cryptographically valid for up to
-        // an hour — and this route would have exchanged it for a fresh
-        // FOURTEEN-DAY session cookie, handing back more than was revoked.
-        // Every admin path that revokes (lockdown, staff password reset,
-        // org member removal) was leaking through the same hole.
+        // The revocation check (AGL-1959) is what makes a revocation real
+        // here: after `revokeRefreshTokens(uid)` the browser cannot obtain a
+        // NEW ID token, but the one it already holds stays cryptographically
+        // valid for up to an hour — and this route would have exchanged it
+        // for a fresh FOURTEEN-DAY session cookie, handing back more than was
+        // revoked. Every admin path that revokes (lockdown, staff password
+        // reset, org member removal) was leaking through the same hole.
         //
-        // One `getUser` per mint. Mints happen on interactive sign-in, not per
-        // request, and the exchange half has paid the same cost since AGL-236.
-        const decoded = await auth.verifyIdToken(idToken, true)
+        // No `checkRevoked` argument (AGL-3229). `firebaseAdmin.app().auth()`
+        // runs the check itself, against the pool the TOKEN names — and the
+        // SDK flag this used to pass ran it against the project pool instead,
+        // where an SSO uid does not exist, so this route answered every
+        // tenant user `401 Unauthenticated` and no SSO account could mint a
+        // session cookie at all.
+        const decoded = await auth.verifyIdToken(idToken)
         if (!decoded.email_verified && !isImpersonationSession(decoded)) {
           const unverified = emailUnverifiedResponse()
           for (const value of clearTombstone ?? []) {
