@@ -101,6 +101,65 @@ describe('the rendered Stack applies the new props', () => {
     // the assertion above is reading a real difference and not a constant.
     expect(getComputedStyle(root(withMargins.container)).gap).toBe('')
   })
+
+  it('spaces with `gap` when `sx` takes the stack out of flex (AGL-3214)', () => {
+    // The aglyn.com footer nav: a two-up grid on a phone, a flex row from
+    // `md`. MUI's margin-based spacing assumes flex, and on a grid the
+    // margin lands inside the track — the first group sits flush and every
+    // later one a spacing-step right of its column.
+    const { container } = render(
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{ display: { xs: 'grid', md: 'flex' } }}
+      >
+        <div>{'a'}</div>
+        <div>{'b'}</div>
+      </Stack>,
+    )
+    expect(getComputedStyle(root(container)).gap).not.toBe('')
+    for (const child of Array.from(root(container).children))
+      expect(getComputedStyle(child).marginLeft).toBe('')
+  })
+
+  it('reads a non-flex display through every form `sx` takes', () => {
+    for (const sx of [
+      { display: 'grid' },
+      { display: ['grid', 'flex'] },
+      [{ color: 'red' }, { display: { xs: 'block' } }],
+    ]) {
+      const { container, unmount } = render(
+        <Stack direction="row" spacing={1} sx={sx as never}>
+          <div>{'a'}</div>
+          <div>{'b'}</div>
+        </Stack>,
+      )
+      expect(getComputedStyle(root(container)).gap).not.toBe('')
+      unmount()
+    }
+  })
+
+  it('leaves a flex stack on margins, and an explicit OFF alone', () => {
+    // The control: the detector has to be reading `display`, not turning
+    // `gap` on for every stack that carries an `sx` at all.
+    const flex = render(
+      <Stack direction="row" spacing={1} sx={{ display: 'flex', color: 'red' }}>
+        <div>{'a'}</div>
+        <div>{'b'}</div>
+      </Stack>,
+    )
+    expect(getComputedStyle(root(flex.container)).gap).toBe('')
+    flex.unmount()
+
+    // An author who turned the switch off keeps margins even on a grid.
+    const off = render(
+      <Stack direction="row" spacing={1} useFlexGap={false} sx={{ display: 'grid' }}>
+        <div>{'a'}</div>
+        <div>{'b'}</div>
+      </Stack>,
+    )
+    expect(getComputedStyle(root(off.container)).gap).toBe('')
+  })
 })
 
 describe('the divider attribute names a style, not a node', () => {

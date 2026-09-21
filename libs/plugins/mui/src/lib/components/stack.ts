@@ -94,11 +94,38 @@ function buildDivider(
   })
 }
 
+/**
+ * Displays that make a Stack the flex container MUI's `spacing` assumes.
+ */
+const FLEX_DISPLAYS = new Set(['flex', 'inline-flex'])
+
+/**
+ * Whether an author's `sx` takes the Stack out of flex at any breakpoint
+ * (AGL-3214).
+ *
+ * A function `sx` cannot be read without a theme, so it counts as flex and
+ * the stack keeps MUI's own behaviour.
+ */
+function hasNonFlexDisplay(sx: unknown): boolean {
+  if (Array.isArray(sx)) return sx.some(hasNonFlexDisplay)
+  if (!sx || typeof sx !== 'object') return false
+  const display = (sx as Record<string, unknown>).display
+  const notFlex = (value: unknown) =>
+    typeof value === 'string' && !FLEX_DISPLAYS.has(value)
+  if (typeof display === 'string') return notFlex(display)
+  // Responsive, in either of the forms the styles panel writes: an array of
+  // breakpoint values, or a `{ xs, md }` map.
+  if (Array.isArray(display)) return display.some(notFlex)
+  if (display && typeof display === 'object')
+    return Object.values(display).some(notFlex)
+  return false
+}
+
 const Stack = forwardRef<HTMLDivElement, StackWithFlexProps>(
   // repeatDataset/repeatLimit are compose-time attributes (AGL-103): the
   // tenant expands them before render; strip so they never hit the DOM.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  ({ justifyContent, alignItems, flexWrap, divider, repeatDataset, repeatLimit, repeatFilter, repeatSort, sx, ...props }, ref) =>
+  ({ justifyContent, alignItems, flexWrap, divider, useFlexGap, repeatDataset, repeatLimit, repeatFilter, repeatSort, sx, ...props }, ref) =>
     createElement(MuiStack, {
       ref,
       sx: [
@@ -114,6 +141,15 @@ const Stack = forwardRef<HTMLDivElement, StackWithFlexProps>(
       // (AGL-2525). A stack IS the nav row on most sites; before this it
       // could only be wrapped in one.
       ...applySemanticElement(dropClearedProps(props) as Record<string, unknown>),
+      // After the spread, so the element picker cannot carry a `useFlexGap`
+      // past it. `spacing` reaches children as `margin-left` unless this is
+      // on, and those margins assume flex: on a grid they land INSIDE the
+      // track, so every item but the first sits a spacing-step right of its
+      // column and the left gutter goes ragged (AGL-3214). `gap` is correct
+      // for grid, multi-column and flex alike, and an author's own `sx` gap
+      // still wins over it. A cleared switch persists as null, which is why
+      // this reads `??` and not `||` — an author's explicit OFF stands.
+      useFlexGap: useFlexGap ?? (hasNonFlexDisplay(sx) || undefined),
     }),
 )
 
