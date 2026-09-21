@@ -24,6 +24,8 @@ import {
   type ContactSource,
 } from '@aglyn/aglyn/app-utils/contacts'
 import { captureHostContact } from '@aglyn/tenant-runtime/capture-host-contact'
+import type { UpsertHostContactOptions } from '@aglyn/tenant-data-admin'
+import type { ResolvedCampaignTouch } from '@aglyn/tenant-data-admin/server/campaign-conversion-attribution'
 
 /**
  * The CRM answering the platform's contact-capture contract (AGL-3080).
@@ -64,7 +66,9 @@ export async function captureContactForCrm(
         ...(request.interaction.summary
           ? { summary: request.interaction.summary }
           : {}),
+        ...entryPointOf(request.detail),
       },
+      ...campaignTouchOf(request.detail),
       ...(request.marketingConsent === undefined
         ? {}
         : { marketingConsent: request.marketingConsent }),
@@ -99,6 +103,58 @@ export async function captureContactForCrm(
       error: 'The contact could not be recorded. Nothing else was affected.',
     }
   }
+}
+
+/**
+ * THE ENTRY POINT, off the silo's own `detail` bag (AGL-3080).
+ *
+ * The contract carries a capture's silo-side facts opaquely, so the two the
+ * CRM models are picked out here rather than typed into the platform. Both
+ * ride the INTERACTION, which is where `upsertHostContact` already keeps
+ * them: which form a person came in through routes the owner-assignment
+ * rules and rides the `contactCreated` payload, and the page is what a
+ * timeline row says about where they were.
+ *
+ * Absent, misspelled or the wrong type is the same answer as a door that
+ * never had one — a capture without an entry point, which is every capture
+ * that did not come through a form. It is never a reason to refuse: the
+ * person is the part that matters.
+ */
+function entryPointOf(
+  detail: Readonly<Record<string, unknown>> | undefined,
+): { formId?: string; path?: string } {
+  const text = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.trim() ? value : undefined
+  const formId = text(detail?.['formId'])
+  const path = text(detail?.['path'])
+  return {
+    ...(formId ? { formId } : {}),
+    ...(path ? { path } : {}),
+  }
+}
+
+/**
+ * WHERE THE VISITOR CAME FROM, off the same bag.
+ *
+ * ⚠️ A different fact from `campaignIds` and the two must never be folded
+ * together — `upsert-contact.ts` says so at the field itself. A touch is the
+ * ad or the link the visitor arrived by, already resolved through the
+ * allowlist by the silo; `campaignIds` is which campaigns the merchant filed
+ * the capture SURFACE under, which is true of everybody who fills that form
+ * in. Folding them would credit a campaign for a visitor who typed the
+ * address.
+ *
+ * Passed through as the silo resolved it, unread: the touch's shape belongs
+ * to whatever resolves it, and re-validating it here would be a second copy
+ * of a rule that has already run. Only its presence is decided here, because
+ * `null` and absent mean the same thing to the writer and a caller should
+ * not have to know which one it sends.
+ */
+function campaignTouchOf(
+  detail: Readonly<Record<string, unknown>> | undefined,
+): Pick<UpsertHostContactOptions, 'campaignTouch'> {
+  const touch = detail?.['campaignTouch']
+  return touch ? { campaignTouch: touch as ResolvedCampaignTouch } : {}
 }
 
 /**

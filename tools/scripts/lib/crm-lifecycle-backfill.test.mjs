@@ -1013,6 +1013,14 @@ describe('the guards', () => {
     assert.equal(doorSetsFloor("captureHostContact({ initialLifecycleStage: 'lead' })", 'lead'), true)
     assert.equal(doorSetsFloor("captureHostContact({ initialLifecycleStage: 'lead' })", 'customer'), false)
     assert.equal(doorSetsFloor("// initialLifecycleStage: 'lead' was here", 'lead'), false)
+    // The contract's word for the same floor, on a door that has crossed to
+    // `capturePluginContact` (AGL-3080). Same floor, same answer.
+    assert.equal(doorSetsFloor("recordCapturedContact({ lifecycleFloor: 'lead' })", 'lead'), true)
+    assert.equal(doorSetsFloor("recordCapturedContact({ lifecycleFloor: 'lead' })", 'customer'), false)
+    assert.equal(doorSetsFloor("// lifecycleFloor: 'lead' was here", 'lead'), false)
+    // And a door that names the floor under neither name is still a door
+    // this backfill may not be run against.
+    assert.equal(doorSetsFloor("recordCapturedContact({ interaction: { source: 'form' } })", 'lead'), false)
   })
 
   it('reads a field literal off its declaration', () => {

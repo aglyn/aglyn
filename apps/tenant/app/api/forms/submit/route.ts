@@ -29,7 +29,8 @@ import {
   resolveCampaignTouch,
   visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
-import { captureHostContact, emitHostEvent, resolveDatasetDoc } from '@aglyn/tenant-runtime'
+import { emitHostEvent, resolveDatasetDoc } from '@aglyn/tenant-runtime'
+import recordCapturedContact from '../../../../utils/record-captured-contact'
 import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'
 // The leaf, not the barrel: this route's specs substitute the barrel wholesale,
 // and the verification must be the real one under them.
@@ -649,46 +650,61 @@ export async function POST(request: Request): Promise<Response> {
       convertedAtMs: submittedAtMs,
     })
     if (contactEmail) {
-      void captureHostContact({
+      void recordCapturedContact({
+        /*
+         * Not gated on the org resolving. The record system keys a person on
+         * the SITE they were met on, so an org lookup that came back empty
+         * costs the capture nothing — and refusing to record the person over
+         * it would turn a lookup failure into a lost contact, silently, which
+         * is the failure this whole seam is arranged to avoid.
+         */
+        orgId: owningOrg?.orgId ?? '',
         hostId,
-        email: contactEmail,
-        name: sanitizedFields['name'] ?? sanitizedFields['fullName'],
-        source: 'form',
-        // A submission is the earliest sign of interest the CRM names
-        // (AGL-2612): a lead, whether or not the form also files one to the
-        // Leads list below. A floor, so a customer who writes in stays one.
-        initialLifecycleStage: 'lead',
+        identity: {
+          email: contactEmail,
+          name: sanitizedFields['name'] ?? sanitizedFields['fullName'],
+        },
         interaction: {
+          source: 'form',
           refId: submissionRef.id,
           summary: `Submitted "${resolvedFormName.slice(0, 60)}"`,
+        },
+        // A submission is the earliest sign of interest a record system names
+        // (AGL-2612): a lead, whether or not the form also files one to the
+        // Leads list below. A floor, so a customer who writes in stays one.
+        lifecycleFloor: 'lead',
+        ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
+        // Filed under the form's campaigns, inside this site's own facet on a
+        // row the whole org shares. Membership is not consent, and this passes
+        // none: `marketingConsent` above is the only input that records one.
+        ...(formCampaignIds.length ? { campaignIds: formCampaignIds } : {}),
+        // The mapped custom field values. Absent when nothing mapped, so the
+        // owner adds no `custom` key for nothing.
+        ...(Object.keys(mappedContactCustom).length
+          ? { profile: { custom: mappedContactCustom } }
+          : {}),
+        detail: {
           /*
-           * THE ENTRY POINT, on the contact's own timeline.
+           * THE ENTRY POINT, for the owner to put on the person's timeline.
            *
-           * Which form and which page a person came in through is a fact about
-           * this capture, so it rides the interaction the capture already
-           * writes rather than a second structure beside it. `sources` says
-           * only that SOME form produced this contact — every form sets the
-           * same flag — and answering "which one" by reading the submission
-           * back would be a document read per row of a timeline the console
-           * renders straight out of the contact.
+           * Which form and which page a person came in through is a fact
+           * about this capture rather than about the person, which is why it
+           * rides `detail` and not `profile`. `sources` says only that SOME
+           * form produced this contact — every form sets the same flag — and
+           * answering "which one" by reading the submission back would be a
+           * document read per row of a timeline the console renders straight
+           * out of the contact.
            *
            * The id only for a VERIFIED form, matching the submission: an
            * unverified id never reaches a stored row on this path.
            */
           ...(form ? { formId: form.id } : {}),
           ...(typeof path === 'string' && path ? { path } : {}),
+          // Where the visitor ARRIVED from, already resolved above — never
+          // the same fact as `campaignIds`, which is where the merchant filed
+          // the form.
+          ...(campaignTouch ? { campaignTouch } : {}),
         },
-        ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
-        ...(campaignTouch ? { campaignTouch } : {}),
-        // Filed under the form's campaigns, inside this site's own facet on a
-        // row the whole org shares. Membership is not consent, and this passes
-        // none: `marketingConsent` above is the only input that records one.
-        ...(formCampaignIds.length ? { campaignIds: formCampaignIds } : {}),
-        // The mapped custom field values, into this site's own facet. Absent
-        // when nothing mapped, so the writer adds no `custom` key for nothing.
-        ...(Object.keys(mappedContactCustom).length
-          ? { facet: { custom: mappedContactCustom } }
-          : {}),
       })
       /*
        * A lead, when the FORM says it is one (`docs/specs/reusable-forms.md`
