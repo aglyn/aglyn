@@ -86,13 +86,9 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   orgDashboard: 'bare',
   // Page and section bodies: the widget IS the surface.
   orgData: 'bare',
-  marketplaceListing: 'bare',
   // A dialog that portals out of the page it is opened from.
   hostArtifactPublish: 'bare',
   // A notice above a subtree, spaced by the layout that draws it.
-  marketplaceCapability: 'bare',
-  orgMarketplace: 'bare',
-  orgAddons: 'bare',
   // The body of the ƒx dialog, which spaces its own contents.
   besignerFunctions: 'bare',
   dashboardFooter: 'stack',

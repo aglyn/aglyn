@@ -212,6 +212,7 @@ function OrgHarness(props: { initial: string[] }) {
         orgId: 'org-1',
         hosts: [{ id: 'host-1', name: 'Site 1', subdomain: 'one' }],
         hostsReady: true,
+        orgSlug: 'acme',
         hostsPath: '/acme/hosts',
       }}
     >

@@ -96,11 +96,6 @@ export function orgNavTabItems(
       href: buildRoute(Route.ORG_PLUGINS, { orgSlug }),
     },
     {
-      id: 'nav-tab-org-marketplace',
-      label: 'Marketplace',
-      href: buildRoute(Route.ORG_MARKETPLACE, { orgSlug }),
-    },
-    {
       id: 'nav-tab-org-billing',
       label: 'Billing',
       href: buildRoute(Route.MANAGE_BILLING, { orgSlug }),

@@ -103,7 +103,7 @@ export function CrmOrgMountProvider(props: {
   children: ReactNode
 }) {
   const { mount, children } = props
-  const { orgId, hosts, hostsReady, hostsPath } = mount
+  const { orgId, orgSlug, hosts, hostsReady, hostsPath } = mount
   const [picked, setPicked] = useState<string | null>(null)
   // Read after mount rather than in the initializer, so the server and the
   // first client paint agree: the pick only ever affects a drawer somebody
@@ -157,6 +157,7 @@ export function CrmOrgMountProvider(props: {
   const value = useMemo<CrmOrgMount>(
     () => ({
       orgId,
+      orgSlug,
       hosts,
       hostsReady,
       hostsPath,
@@ -168,6 +169,7 @@ export function CrmOrgMountProvider(props: {
     }),
     [
       orgId,
+      orgSlug,
       hosts,
       hostsReady,
       hostsPath,

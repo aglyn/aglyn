@@ -376,7 +376,7 @@ describe('the email templates card (AGL-2658)', () => {
     expect((within(region).getByRole('button', { name: 'New template' }) as HTMLButtonElement).disabled).toBe(false)
     rerender(
       <CrmOrgMountProvider
-        mount={{ orgId: 'org-1', hosts: [], hostsReady: true, hostsPath: '/acme/hosts' }}
+        mount={{ orgId: 'org-1', hosts: [], hostsReady: true, orgSlug: 'acme', hostsPath: '/acme/hosts' }}
       >
         <CrmSettingsSection hostId={null} org={{}} />
       </CrmOrgMountProvider>,

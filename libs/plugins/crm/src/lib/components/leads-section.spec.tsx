@@ -276,6 +276,7 @@ describe('Convert… on the Leads row menu (AGL-2641)', () => {
         { id: 'site-3', name: 'Third' },
       ],
       hostsReady: true,
+      orgSlug: 'acme',
       hostsPath: '/acme/hosts',
       createHostId: 'site-2',
       setCreateHostId: jest.fn(),

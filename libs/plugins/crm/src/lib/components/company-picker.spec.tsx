@@ -302,6 +302,7 @@ describe('useCreateCompany consults the records band (AGL-2644)', () => {
         mount={{
           orgId: 'org-1',
           hostsReady: true,
+          orgSlug: 'acme',
           hostsPath: '/acme/hosts',
           hosts: [{ id: 'host-1', name: 'Site One', subdomain: 'one' }],
         }}

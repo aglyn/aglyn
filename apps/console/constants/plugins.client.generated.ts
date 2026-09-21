@@ -51,7 +51,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'marketplace',
     apiPrefixes: ["marketplace"],
     register: {"console":"registerMarketplaceConsole"},
-    contributes: {"console":{"shell":true,"slots":["hostArtifactPublish","marketplaceCapability","marketplaceListing","orgAddons","orgMarketplace","pluginSiteSet"]}},
+    contributes: {"console":{"shell":true,"slots":["hostArtifactPublish","pluginSiteSet"],"orgRoutes":["/marketplace"]}},
     load: () => import('@aglyn/plugins-marketplace'),
   },
   {

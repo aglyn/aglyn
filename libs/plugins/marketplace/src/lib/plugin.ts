@@ -16,7 +16,9 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
 import MarketplaceBrowse from './components/marketplace-browse.component'
+import MarketplaceHub from './components/marketplace-hub.component'
 import MarketplacePaymentsNotice from './components/marketplace-payments-notice.component'
 import HostPluginsCard from './components/host-plugins-card.component'
 import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
@@ -42,42 +44,16 @@ export function registerMarketplaceConsole(): void {
   // Custom field type (AGL-434): rating rides int32 with a starred input.
   Aglyn.registerCustomFieldType({ ...RATING_FIELD, Input: RatingInput })
   Aglyn.registerConsoleExtension({
-    // Listing detail content (AGL-419): the app route keeps the chrome
-    // and renders this through the 'marketplaceListing' slot.
+    /*
+     * Four widgets fewer since AGL-3080 — the listing body, the capability
+     * notice, browse, and installed add-ons. Their zones existed for one
+     * reason: a CONSOLE ROUTE had to show them and an app may not import a
+     * plugin. The hub is this plugin's own surface now, so those components
+     * are plain imports and the four zones are gone from the catalog.
+     *
+     * What is left is what a console page OTHER than the marketplace draws.
+     */
     widgets: [
-      {
-        slot: 'marketplaceListing',
-        widgetId: 'marketplace-listing-content',
-        Component: MarketplaceListingContent,
-      },
-      // What this deployment cannot do, said BEFORE the click (AGL-2019,
-      // moved here by AGL-3080). The sentence names what still works
-      // without a Stripe platform — browsing and free installs — which is
-      // this plugin's knowledge; the app supplies only the fact, through
-      // the deployment-capability context its org layout provides. The
-      // widget draws nothing at all on a configured deployment.
-      {
-        slot: 'marketplaceCapability',
-        widgetId: 'marketplace-payments-notice',
-        Component: MarketplacePaymentsNotice,
-      },
-      // Org marketplace browse (AGL-772): the org-scope `/marketplace`
-      // page renders this with an acting hostId + orgScoped, so listing
-      // links resolve to the org route. The single place to browse/install,
-      // replacing the per-site marketplace tab.
-      {
-        slot: 'orgMarketplace',
-        widgetId: 'marketplace-org-marketplace',
-        Component: MarketplaceBrowse,
-      },
-      // Installed add-ons management (AGL-423): the org "Plugins &
-      // add-ons" hub renders this with an acting hostId — the card lists
-      // host + org install pins with upgrade/uninstall/share-with-org.
-      {
-        slot: 'orgAddons',
-        widgetId: 'marketplace-installed-addons',
-        Component: HostPluginsCard,
-      },
       // The site set for one installation (AGL-1007): the same control the
       // listing page uses, exposed so the installation detail page can show
       // it without the app importing this plugin.
@@ -95,6 +71,101 @@ export function registerMarketplaceConsole(): void {
         slot: 'hostArtifactPublish',
         widgetId: 'marketplace-publish-artifact',
         Component: PublishArtifactDialog,
+      },
+    ],
+    /**
+     * THE MARKETPLACE HUB, as a declaration (AGL-3080).
+     *
+     * Seventeen hand-written console routes until now — the eight sections
+     * below plus a listing, a publisher storefront and a publish form —
+     * whose whole job was assembling chrome around bodies that already
+     * belonged to this plugin. The shell's generic org plugin route does
+     * that assembly for every other surface from exactly this.
+     *
+     * `ownsSubtree` is what keeps every URL the same. A segment naming a
+     * section below resolves as that section; anything else beneath
+     * `/marketplace` is handed to the page as `segments`, which is how
+     * `/{org}/marketplace/{listingId}` still opens a listing. The cost is
+     * stated where the flag is declared: this surface can no longer tell a
+     * typo from an id, so it owns saying "no such thing" — which a listing
+     * page has to do anyway for one deleted while a link to it was still in
+     * someone's inbox.
+     */
+    orgNavItems: [
+      {
+        label: 'Marketplace',
+        href: '/marketplace',
+        navTabId: 'nav-tab-org-marketplace',
+        icon: { path: mdiStorefrontOutline.path },
+        ownsSubtree: true,
+        Component: MarketplaceHub,
+        header: {
+          title: 'Marketplace',
+          icon: { path: mdiStorefrontOutline.path },
+          docsTopic: 'plugins',
+        },
+        sections: [
+          // "Browse All" (AGL-1024): the same grid also renders
+          // publisher-filtered views, so the unqualified verb was ambiguous
+          // about which you were getting.
+          { id: 'browse', label: 'Browse All' },
+          { id: 'installed', label: 'Installed' },
+          /*
+           * What this workspace OWNS (AGL-2331) — an org can hold a licence
+           * nobody has installed, and a member can install something they
+           * never bought. Buyer-side, so deliberately NOT gated like the
+           * seller sections below: the person who needs it is often not a
+           * publisher at all.
+           *
+           * `purchase` lands here: Stripe bakes it into the checkout session
+           * and holds the URL, and a buyer coming back wants what they now
+           * own.
+           */
+          {
+            id: 'licences',
+            label: 'Licenses',
+            landsOnQuery: ['purchase'],
+          },
+          /*
+           * The seller half. Each reads the organization's REVENUE or its
+           * payout account, so each names the permission rather than relying
+           * on a hidden tab — a URL can be typed whether or not a tab was
+           * ever offered, and the shell applies this to the rail and to the
+           * deep link as one verdict.
+           */
+          {
+            id: 'upload',
+            // Covers uploading a bundle as well as publishing an existing
+            // artifact (AGL-1024).
+            label: 'Upload / Publish',
+            permission: 'publishToMarketplace',
+          },
+          {
+            id: 'profile',
+            // Whose profile (AGL-1024) — the console also has org and user
+            // profiles.
+            label: 'Publisher Profile',
+            permission: 'publishToMarketplace',
+          },
+          {
+            id: 'listings',
+            label: 'Listings',
+            permission: 'publishToMarketplace',
+          },
+          {
+            id: 'payouts',
+            label: 'Payouts',
+            permission: 'publishToMarketplace',
+            // Stripe Connect onboarding returns with this, from
+            // `server/connect.ts`. A seller coming back wants Payouts.
+            landsOnQuery: ['connect'],
+          },
+          {
+            id: 'sales',
+            label: 'Sales',
+            permission: 'publishToMarketplace',
+          },
+        ],
       },
     ],
     pluginId: BUNDLE_ID,

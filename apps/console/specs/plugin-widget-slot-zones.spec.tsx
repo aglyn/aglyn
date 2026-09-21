@@ -341,7 +341,7 @@ const MOUNTS: Record<
     how: 'slot',
     props: {
       hostId: null,
-      orgMount: { orgId: 'org-1', hosts: [], hostsReady: true, hostsPath: '/acme/hosts' },
+      orgMount: { orgId: 'org-1', hosts: [], hostsReady: true, orgSlug: 'acme', hostsPath: '/acme/hosts' },
       basePath: '/acme/hosts',
     },
   },

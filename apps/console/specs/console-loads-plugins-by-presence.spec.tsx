@@ -176,7 +176,7 @@ describe('consolePluginsAt, against the real catalog (AGL-3142)', () => {
   })
 
   it('loads a zone`s plugins for the zone, and nothing for a zone it does not fill', () => {
-    expect(consolePluginsAt(ALL, { at: 'slots', slots: ['orgMarketplace'] })).toEqual([
+    expect(consolePluginsAt(ALL, { at: 'slots', slots: ['hostArtifactPublish'] })).toEqual([
       'marketplace',
     ])
     // The control: the same plugin, a zone it does not declare.
@@ -187,7 +187,7 @@ describe('consolePluginsAt, against the real catalog (AGL-3142)', () => {
     expect(
       consolePluginsAt(ALL, {
         at: 'slots',
-        slots: ['hostDashboard', 'orgMarketplace'],
+        slots: ['hostDashboard', 'hostArtifactPublish'],
       }),
     ).toEqual(expect.arrayContaining(['marketplace', 'commerce', 'crm']))
   })
@@ -212,27 +212,45 @@ describe('consolePluginsAt, against the real catalog (AGL-3142)', () => {
     ).toEqual([])
   })
 
+  it('serves the marketplace hub and its entity pages from one declaration', () => {
+    // The surface owns its subtree (AGL-3080), so the loader has to name it
+    // for a listing id it has never seen — which is the whole set of URLs
+    // that used to be hand-written console routes. A `/marketplace` that
+    // loaded the plugin and a `/marketplace/{id}` that did not would 404
+    // every listing while the hub itself went on working.
+    const org = (href: string) =>
+      consolePluginsAt(ALL, { at: 'route', href, level: 'org' as const })
+    expect(org('/marketplace')).toEqual(['marketplace'])
+    expect(org('/marketplace/browse')).toEqual(['marketplace'])
+    expect(org('/marketplace/lst_abc123')).toEqual(['marketplace'])
+    expect(org('/marketplace/publish/plugin')).toEqual(['marketplace'])
+    expect(org('/marketplace/publisher/acme-co')).toEqual(['marketplace'])
+    // The control the subtree rule needs: a sibling path that merely starts
+    // the same way is a different surface.
+    expect(org('/marketplace-archive')).toEqual([])
+  })
+
   it('never names a plugin the workspace has not enabled', () => {
     expect(
-      consolePluginsAt(['crm'], { at: 'slots', slots: ['orgMarketplace'] }),
+      consolePluginsAt(['crm'], { at: 'slots', slots: ['hostArtifactPublish'] }),
     ).toEqual([])
     // The control: enabled, and the zone loads it.
     expect(
-      consolePluginsAt(['marketplace'], { at: 'slots', slots: ['orgMarketplace'] }),
+      consolePluginsAt(['marketplace'], { at: 'slots', slots: ['hostArtifactPublish'] }),
     ).toEqual(['marketplace'])
   })
 })
 
 describe('a console zone loads the plugins that fill it (AGL-3142)', () => {
   it('loads the zone`s own plugin, and tells the realm loader which zone it is', async () => {
-    render(<PluginWidgetSlot slot="orgMarketplace" />)
+    render(<PluginWidgetSlot slot="hostArtifactPublish" />)
 
     await waitFor(() => expect(mockEnsured.length).toBeGreaterThan(0))
     expect(consoleEnsured()).toEqual(['marketplace'])
     // The realm half of the same rule: an install that declares this zone
     // loads here, so the host is composed here rather than on every screen.
     expect(mockRealmLoads).toEqual([
-      { orgId: MOCK_ORG_ID, where: { at: 'slots', slots: ['orgMarketplace'] } },
+      { orgId: MOCK_ORG_ID, where: { at: 'slots', slots: ['hostArtifactPublish'] } },
     ])
   })
 

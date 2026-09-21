@@ -35,42 +35,58 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+/*
+ * The marketplace's own since AGL-3080: the section list is an `orgNavItems`
+ * declaration and the panel is a plugin component, where they used to be a
+ * console constant and a console route. What could silently regress is
+ * unchanged — a section dropped, a prop lost, the panel gated behind the
+ * publisher permission it must not be gated behind.
+ */
+const MARKETPLACE = join(
+  __dirname,
+  '..',
+  '..',
+  '..',
+  'libs',
+  'plugins',
+  'marketplace',
+  'src',
+  'lib',
+)
 const read = (relative: string) =>
-  readFileSync(join(__dirname, '..', relative), 'utf8')
+  readFileSync(join(MARKETPLACE, relative), 'utf8')
 
-// Licences is a section ROUTE since AGL-2501, so its wiring lives in the
-// section list and its own page rather than in one page's tab array.
-const SECTIONS = 'constants/marketplace-sections.ts'
-const PAGE = 'app/(app)/[orgSlug]/marketplace/(sections)/licences/page.tsx'
 const PANEL = 'components/org-licences-panel.component.tsx'
 
 describe('the org marketplace carries a Licences section (AGL-2331)', () => {
-  it('mounts the panel from its own section page', () => {
-    const page = read(PAGE)
-    expect(page).toContain('<OrgLicencesPanel')
-    expect(page).toContain('org-licences-panel.component')
+  it('mounts the panel from the hub, for its own section', () => {
+    const hub = read('components/marketplace-hub.component.tsx')
+    expect(hub).toContain("section === 'licences'")
+    expect(hub).toContain('<OrgLicencesPanel')
   })
 
   it('is listed as a section, so the rail and the trail both name it', () => {
-    expect(read(SECTIONS)).toContain("id: 'licences'")
+    expect(read('plugin.ts')).toContain("id: 'licences'")
   })
 
   it('is NOT gated on the publisher permission', () => {
     /*
      * The section that answers "does this workspace own it" is for BUYERS.
-     * The seller sections beside it carry `seller: true`, which the layout
-     * turns into both a hidden rail entry and a refused route — and marking
-     * this one the same way, the obvious slip since it sits adjacent to them,
-     * would hide it from every customer who never publishes, which is nearly
-     * all of them.
+     * The seller sections beside it name `publishToMarketplace`, which the
+     * shell turns into both a hidden rail entry and a refused route — and
+     * marking this one the same way, the obvious slip since it sits adjacent
+     * to them, would hide it from every customer who never publishes, which
+     * is nearly all of them.
      *
      * Read off the section's own entry rather than from its position in the
-     * file: ordering says nothing once the gate is a field.
+     * file: ordering says nothing once the gate is a field. The live resolver
+     * says the same thing in `marketplace-sections-are-routes.spec.ts`; this
+     * is the declaration end of it, where the slip would be typed.
      */
-    const sections = read(SECTIONS)
-    const entry = sections.slice(sections.indexOf("id: 'licences'"))
+    const declaration = read('plugin.ts')
+    const entry = declaration.slice(declaration.indexOf("id: 'licences'"))
     const nextEntry = entry.indexOf("id: '", 1)
-    expect(entry.slice(0, nextEntry)).toContain('seller: false')
+    expect(entry.slice(0, nextEntry)).not.toContain('permission:')
   })
 
   it('reads the licence by ORG, not only by buyer', () => {

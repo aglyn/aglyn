@@ -310,7 +310,7 @@ describe('at the organization level', () => {
   const openWithoutSite = (count: 1 | 2, props: Partial<React.ComponentProps<typeof CrmSendEmailDialog>> = {}) =>
     render(
       <CrmOrgMountProvider
-        mount={{ orgId: 'org-1', hosts: hosts(count), hostsReady: true, hostsPath: '/acme/hosts' }}
+        mount={{ orgId: 'org-1', hosts: hosts(count), hostsReady: true, orgSlug: 'acme', hostsPath: '/acme/hosts' }}
       >
         <CrmSendEmailDialog
           open
@@ -564,7 +564,7 @@ describe('the email zone', () => {
   })
 
   it('reads a contact at the organization level, and a lead on its own site', () => {
-    const mount = { orgId: 'org-1', hosts: [{ id: 'site-2', name: 'Site Two', subdomain: 'two' }], hostsReady: true, hostsPath: '/acme/hosts' }
+    const mount = { orgId: 'org-1', hosts: [{ id: 'site-2', name: 'Site Two', subdomain: 'two' }], hostsReady: true, orgSlug: 'acme', hostsPath: '/acme/hosts' }
     const { unmount } = inShell(
       <CrmOrgMountProvider mount={mount}>
         <CrmSendEmailDialog open onClose={onClose} hostId="site-2" contactId="contact-1" email="ada@example.com" name="Ada" />

@@ -40,141 +40,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/browse/page.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/installed/page.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/layout.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/licences/page.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/listings/page.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/payouts/page.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/profile/page.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/sales/page.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/upload/page.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/layout.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace",
-        "plugin-id"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/page.tsx",
-      "rules": [
-        "domain-name",
-        "plugin-collection:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/layout.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/page.tsx",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/publish/plugin/layout.tsx",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/publish/plugin/page.tsx",
-      "rules": [
-        "domain-name",
-        "plugin-collection:marketplace"
-      ],
-      "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/publisher/[handle]/layout.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/publisher/[handle]/page.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/app/(app)/[orgSlug]/plugins/[pluginRef]/page.tsx",
       "rules": [
         "plugin-collection:marketplace"
@@ -638,45 +503,6 @@
       "lane": "marketing"
     },
     {
-      "path": "apps/console/components/marketplace/edit-listing-dialog.component.tsx",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/components/marketplace/listing-detail-editor.component.tsx",
-      "rules": [
-        "domain-name",
-        "plugin-id"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/components/marketplace/listing-review-status.component.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/components/marketplace/listing-verification-request.component.tsx",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/components/marketplace/publish-plugin-form.component.tsx",
-      "rules": [
-        "domain-name",
-        "plugin-id",
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/components/notifications-menu.component.tsx",
       "rules": [
         "plugin-id"
@@ -685,34 +511,11 @@
       "why": "`'inbox'` here is the notification tray's own tab, beside `'archive'` — a user's unread notifications. It is not the Inbox plugin and reads nothing of it."
     },
     {
-      "path": "apps/console/components/org-licences-panel.component.tsx",
-      "rules": [
-        "plugin-collection:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/components/org-publish-panel.component.tsx",
-      "rules": [
-        "plugin-collection:data",
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "apps/console/components/org-seller-panel.component.tsx",
-      "rules": [
-        "plugin-collection:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/components/plugin-widget-slot.component.tsx",
       "rules": [
         "domain-declares:ai",
         "domain-declares:commerce",
         "domain-declares:forms",
-        "domain-declares:marketplace",
         "domain-declares:workflows"
       ],
       "lane": "ai"
@@ -824,15 +627,6 @@
       ],
       "lane": "stays",
       "why": "Legal text names the vendors it discloses."
-    },
-    {
-      "path": "apps/console/constants/marketplace-sections.ts",
-      "rules": [
-        "domain-name",
-        "domain-exports:marketplace",
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
     },
     {
       "path": "apps/console/constants/subprocessor-inventory.ts",
@@ -1720,7 +1514,6 @@
         "domain-declares:ai",
         "domain-declares:commerce",
         "domain-declares:forms",
-        "domain-declares:marketplace",
         "domain-declares:workflows"
       ],
       "lane": "ai"

@@ -57,6 +57,7 @@ export function resolveOrgMount(input: {
   if (!orgId) return undefined
   return {
     orgId,
+    orgSlug,
     hosts: hosts.map((host) => {
       const displayName =
         typeof host.displayName === 'string' ? host.displayName : ''

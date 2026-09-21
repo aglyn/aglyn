@@ -18,7 +18,9 @@
 
 import {
   PageHeaderActionsContext,
+  PageHeaderHelpContext,
   PageHeaderRecordContext,
+  type PageHeaderHelpValue,
   type PageHeaderRecordValue,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_HOME } from '@aglyn/shared-data-enums'
@@ -27,6 +29,7 @@ import { useMemo, useState } from 'react'
 import DashboardHeaderComponent, {
   type DashboardHeaderProps,
 } from '../dashboard-header.component'
+import { DOCS_HELP_TOPICS } from '../../constants/docs-links'
 import FooterComponent from '../footer.component'
 import QuotaWarningsBanner from '../quota-warnings-banner.component'
 import SearchDiscouragedBanner from '../search-discouraged-banner.component'
@@ -113,6 +116,31 @@ export function DashboardLayout(props: DashboardLayoutProps) {
   const [record, setHeaderRecord] = useState<PageHeaderRecordValue | null>(null)
   const headerRecord = useMemo(() => ({ setHeaderRecord }), [])
 
+  /*
+   * And the header's help `?`, for the same surfaces and the same reason
+   * (AGL-3080). A route that owns this layout passes `help` directly; a
+   * surface the generic plugin route mounts has only its nav item's topic,
+   * which is the whole surface's — so every entity page beneath it opened
+   * the one tooltip, which is the AGL-2200 shape arrived at from the other
+   * end.
+   *
+   * Resolved against the console's registry here, never trusted: a plugin
+   * names any string it likes, and an unknown topic falls back to the
+   * route's own rather than throwing on hover (AGL-1074).
+   */
+  const [publishedHelp, setHeaderHelp] = useState<PageHeaderHelpValue | null>(
+    null,
+  )
+  const headerHelp = useMemo(() => ({ setHeaderHelp }), [])
+  const resolvedHelp = useMemo(() => {
+    if (!publishedHelp?.topic) return help
+    if (!(publishedHelp.topic in DOCS_HELP_TOPICS)) return help
+    return {
+      topic: publishedHelp.topic,
+      ...(publishedHelp.anchor ? { anchor: publishedHelp.anchor } : {}),
+    } as DashboardHeaderProps['help']
+  }, [publishedHelp, help])
+
   const breadcrumbs = useMemo(() => {
     return [
       ...(disableDefaultBreadcrumb ? [] : defaultBreadcrumbs),
@@ -139,6 +167,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
 
   return (
     <PageHeaderActionsContext.Provider value={headerActions}>
+      <PageHeaderHelpContext.Provider value={headerHelp}>
       <PageHeaderRecordContext.Provider value={headerRecord}>
         <Stack component="main" direction="column" sx={{ flexGrow: 1 }}>
           {/* Site-wide usage-cap banner (AGL-136). */}
@@ -151,7 +180,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
             breadcrumbItems={breadcrumbs}
             headerRight={headerRight ?? publishedHeaderActions}
             header={resolvedHeader}
-            help={help}
+            help={resolvedHelp}
           />
 
           <Box component="section" sx={{ flexGrow: 1 }}>
@@ -163,6 +192,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
 
         {aside}
       </PageHeaderRecordContext.Provider>
+      </PageHeaderHelpContext.Provider>
     </PageHeaderActionsContext.Provider>
   )
 }

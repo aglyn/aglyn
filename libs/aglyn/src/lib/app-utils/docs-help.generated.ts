@@ -237,6 +237,11 @@ export const PLUGIN_DOCS = {
     title: 'POS & reservations',
     excerpt: 'Sell in person from the console register and take date-range reservations with deposits.',
   },
+  publishAPlugin: {
+    path: '/developers/plugins/publish-a-plugin',
+    title: 'Publish a plugin',
+    excerpt: 'Ship your own plugin to the marketplace with version pinning.',
+  },
   publisherHandbook: {
     path: '/developers/plugins/publishing/publisher-handbook',
     title: 'Publisher handbook',
@@ -303,6 +308,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
   plugins: ['#install--upgrade', '#browse-card', '#whats-included', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#when-one-plugin-depends-on-another', '#a-dependency-that-is-off-for-one-site', '#configure', '#configure-site', '#publish-your-own', '#related'],
   pos: ['#registers', '#the-register', '#platform-fees-at-the-register', '#selling-past-the-count', '#when-something-disconnects', '#reservations', '#related'],
+  publishAPlugin: ['#the-publish-pipeline', '#private-plugins', '#paid-listings', '#your-publisher-profile', '#tips', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#rules-an-email-starter-has-to-meet', '#publishing-a-version', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#asking-to-be-verified', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#disabled-versions', '#private-plugins', '#authoring-your-listing', '#what-your-listing-can-say-about-aglyn', '#versioning--updates', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#getting-paid', '#low-prices-and-processing'],
   redirects: ['#manage-redirects', '#sending-visitors-to-another-site', '#metrics', '#match-modes-v2', '#related'],
   sequences: ['#what-it-is-for', '#sent-from-your-own-mailbox', '#where-it-lives', '#connect-a-mailbox', '#send-as', '#daily-cap', '#mailbox-status', '#auto-pause', '#mailbox-actions', '#compliance-settings', '#allowed-countries', '#sequences', '#build-a-sequence', '#sequence-status', '#enroll', '#cold-contacts', '#enrollments', '#sending', '#what-stops-a-sequence', '#unsubscribe', '#related'],

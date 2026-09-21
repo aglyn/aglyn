@@ -127,7 +127,7 @@ function orgMount(hosts: Array<{ id: string; name: string; subdomain: string }>)
   return function Mount({ children }: { children: ReactNode }) {
     return (
       <CrmOrgMountProvider
-        mount={{ orgId: 'org-1', hosts, hostsReady: true, hostsPath: '/acme/hosts' }}
+        mount={{ orgId: 'org-1', hosts, hostsReady: true, orgSlug: 'acme', hostsPath: '/acme/hosts' }}
       >
         {children}
       </CrmOrgMountProvider>

@@ -77,6 +77,7 @@ const props: ConsoleOrgSitesZoneProps = {
     orgId: 'org-1',
     hosts: HOSTS,
     hostsReady: true,
+    orgSlug: 'acme',
     hostsPath: '/acme/hosts',
   },
   basePath: '/acme/hosts',

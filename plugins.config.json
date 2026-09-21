@@ -400,11 +400,10 @@
           "shell": true,
           "slots": [
             "hostArtifactPublish",
-            "marketplaceCapability",
-            "marketplaceListing",
-            "orgAddons",
-            "orgMarketplace",
             "pluginSiteSet"
+          ],
+          "orgRoutes": [
+            "/marketplace"
           ]
         }
       }

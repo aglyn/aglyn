@@ -45,6 +45,7 @@ describe('resolveOrgMount', () => {
     })
     expect(mount).toEqual({
       orgId: 'org-1',
+      orgSlug: 'acme',
       hosts: [
         { id: 'h-1', name: 'Demo Bakery', subdomain: 'demo' },
         { id: 'h-2', name: 'second', subdomain: 'second' },

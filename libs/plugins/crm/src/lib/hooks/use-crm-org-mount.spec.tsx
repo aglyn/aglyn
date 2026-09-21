@@ -33,6 +33,7 @@ const MOUNT: ConsolePluginOrgMount = {
     { id: 'site-2', name: 'Two', subdomain: 'two' },
   ],
   hostsReady: true,
+  orgSlug: 'acme',
   hostsPath: '/acme/hosts',
 }
 

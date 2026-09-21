@@ -107,7 +107,7 @@ function mountWith(hosts: typeof HOSTS) {
   return function Mount({ children }: { children: ReactNode }) {
     return (
       <CrmOrgMountProvider
-        mount={{ orgId: 'org-1', hostsReady: true, hostsPath: '/acme/hosts', hosts }}
+        mount={{ orgId: 'org-1', hostsReady: true, orgSlug: 'acme', hostsPath: '/acme/hosts', hosts }}
       >
         {children}
       </CrmOrgMountProvider>

@@ -163,6 +163,7 @@ describe('CrmTasksDueCard', () => {
             { id: 'site-2', name: 'Two', subdomain: 'two' },
           ],
           hostsReady: true,
+          orgSlug: 'acme',
           hostsPath: '/acme/hosts',
         }}
       >
@@ -194,7 +195,7 @@ describe('CrmTasksDueCard', () => {
     anyOpenTask = false
     const { container } = render(
       <CrmOrgMountProvider
-        mount={{ orgId: 'org-1', hosts: [], hostsReady: true, hostsPath: '/acme/hosts' }}
+        mount={{ orgId: 'org-1', hosts: [], hostsReady: true, orgSlug: 'acme', hostsPath: '/acme/hosts' }}
       >
         <CrmTasksDueCard hostId={null} basePath="/acme/crm" />
       </CrmOrgMountProvider>,

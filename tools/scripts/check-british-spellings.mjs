@@ -86,7 +86,21 @@ const MARKDOWN_ROOTS = [
   'apps/docs/help',
 ]
 
-/** Ships as UI: the console, and the docs site's own React components. */
+/**
+ * Ships as UI: the console, and the docs site's own React components.
+ *
+ * ⚠️ `libs/plugins` is NOT swept, and that is a hole rather than a decision
+ * (noticed by AGL-3080). Plugin consoles ship as UI exactly as the console
+ * does, and surfaces keep MOVING there — this sweep lost four occurrences
+ * the day the marketplace's console routes became plugin components, and the
+ * ratchet recorded their departure as a cleanup.
+ *
+ * Widening it is its own change, not a line here: `libs/plugins` holds 14
+ * occurrences across five plugins today, and each needs a per-plugin verdict
+ * on whether it is a persisted value (a besigner emphasis id, an import
+ * column header) or real debt. Recording fourteen of those blind is how a
+ * ratchet baseline becomes a place things hide.
+ */
 const SOURCE_ROOTS = ['apps/console', 'apps/docs/src']
 
 const MARKDOWN = /\.mdx?$/

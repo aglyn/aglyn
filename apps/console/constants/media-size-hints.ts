@@ -120,15 +120,6 @@ export const EMAIL_LOGO_HINT =
   'and most refuse SVG.'
 
 /**
- * A marketplace listing's mark, rendered in a grid of square tiles beside
- * other publishers' — so square is not a preference here, it is the shape of
- * the slot.
- */
-export const LISTING_LOGO_HINT =
-  'Recommended: a square PNG or SVG, at least 256×256 — listings are shown ' +
-  'as square tiles.'
-
-/**
  * A PERSON's picture, which is not a logo and does not take a logo's advice.
  *
  * `schema.org` gives `logo` to an Organization and `image` to a Person, and

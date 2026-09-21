@@ -45,6 +45,7 @@ function orgMount({ children }: { children: ReactNode }) {
         orgId: 'org-1',
         hosts: [{ id: 'host-a', name: 'Site A', subdomain: 'a' }],
         hostsReady: true,
+        orgSlug: 'acme',
         hostsPath: '/acme/hosts',
       }}
     >
