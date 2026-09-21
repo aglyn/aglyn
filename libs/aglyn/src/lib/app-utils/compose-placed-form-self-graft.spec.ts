@@ -129,4 +129,43 @@ describe('a placed form does not graft into its own subtree', () => {
     )
     expect(deep).toHaveLength(1)
   })
+
+  it('a design wrapped in a container still composes to one form', () => {
+    // The shape a besigner-authored form actually has: the document root is a
+    // container and the form node sits inside it. `checkFormContract` asks
+    // only that the tree CONTAIN a form naming this form, so this passes
+    // publish exactly as a form-rooted design does — and the fixture above,
+    // which is form-rooted, never exercised it.
+    const wrappedDesign = {
+      rootId: 'root',
+      nodes: {
+        root: { $id: 'root', componentId: 'div', props: {}, nodes: ['form'] },
+        form: {
+          ...placedForm('form', 'f1', ['field']),
+          props: { formId: 'f1', submitLabel: 'Request a Consultation' },
+        },
+        field: {
+          $id: 'field',
+          componentId: 'muiTextField',
+          props: { name: 'email' },
+          nodes: [] as string[],
+        },
+      },
+    }
+
+    const composed = composeReusableComponentNodes(
+      { page: placedForm('page', 'f1') } as any,
+      undefined,
+      [placedFormPlacement({ f1: wrappedDesign } as any)],
+    ) as Record<string, any>
+
+    // One form, and it is the DESIGN'S: the placement took the root's place
+    // (AGL-2521), so the send button is the entity's own `submitLabel` and a
+    // visitor sees one button rather than the placement's beside it.
+    expect(formNodes(composed)).toHaveLength(1)
+    expect(composed['page'].componentId).toBe('div')
+    expect(formNodes(composed)[0][1].props.submitLabel).toBe(
+      'Request a Consultation',
+    )
+  })
 })

@@ -23,6 +23,7 @@ import {
 import * as Besigner from '@aglyn/besigner'
 import { createTheme, ThemeProvider } from '@aglyn/shared-ui-theme'
 import { act, render } from '@testing-library/react'
+import type { ReactNode } from 'react'
 
 import {
   createDevicePinnedTheme,
@@ -962,6 +963,21 @@ describe('canvas reveal through the rendered tree (AGL-592)', () => {
  * before the entity existed.
  */
 describe('placed form preview', () => {
+  /*
+   * A real `<form>` factory, so the two cases below are asked of the DOM the
+   * canvas actually builds. Without it `form` is unregistered, every leaf
+   * renders as a `div`, and a nested `<form>` inside `<form>` — the thing
+   * these tests exist to refuse — is invisible to any query.
+   */
+  beforeAll(() => {
+    Aglyn.components.registerComponent(
+      (({ children }: { children?: ReactNode }) => (
+        <form>{children}</form>
+      )) as never,
+      { $id: 'form' } as never,
+    )
+  })
+
   const design = {
     rootId: 'f-root',
     nodes: {
@@ -1047,6 +1063,71 @@ describe('placed form preview', () => {
     expect(emotionCssFor(preview as HTMLElement)).toContain(
       'pointer-events:none',
     )
+  })
+
+  /**
+   * The shape a besigner-authored form actually has: a container root with the
+   * `form` node inside it. `checkFormContract` asks only that the design
+   * CONTAIN a form naming this form, so this is what publish accepts and what
+   * every real entity looks like — the fixture above has no `form` node at all,
+   * which is why the canvas drew two and no test saw it.
+   */
+  const designWithFormRoot = {
+    rootId: 'f-root',
+    nodes: {
+      'f-root': { $id: 'f-root', componentId: 'div', nodes: ['f-form'] },
+      'f-form': {
+        $id: 'f-form',
+        componentId: 'form',
+        parentId: 'f-root',
+        props: { formId: 'contact', submitLabel: 'Request a consultation' },
+        nodes: ['f-email'],
+      },
+      'f-email': {
+        $id: 'f-email',
+        componentId: 'div',
+        parentId: 'f-form',
+        props: { children: 'Work email' },
+      },
+    },
+  } as any
+
+  it('draws ONE form element, not the placement around the entity\'s', () => {
+    const { baseElement } = renderForm(formNode({ formId: 'contact' }), {
+      contact: designWithFormRoot,
+    })
+
+    // The published compose puts the design's root IN the placement's place
+    // (AGL-2521), so a visitor sees one form and one send button. A canvas
+    // that draws the placement's `form` around the entity's shows two send
+    // buttons and nests `<form>` inside `<form>`, which is invalid HTML.
+    expect(baseElement.querySelectorAll('form')).toHaveLength(1)
+  })
+
+  it('draws every child of the design root, not just the first', () => {
+    const { baseElement } = renderForm(formNode({ formId: 'contact' }), {
+      contact: {
+        ...designWithFormRoot,
+        nodes: {
+          ...designWithFormRoot.nodes,
+          'f-root': {
+            $id: 'f-root',
+            componentId: 'div',
+            nodes: ['f-form', 'f-note'],
+          },
+          'f-note': {
+            $id: 'f-note',
+            componentId: 'div',
+            parentId: 'f-root',
+            props: { children: 'We reply within a day' },
+          },
+        },
+      },
+    })
+
+    // The canvas took the root's first child alone, so anything a design put
+    // beside its form was missing from every page placing it.
+    expect(leafText(baseElement)).toContain('We reply within a day')
   })
 
   it("never puts the entity's nodes into the canvas store", () => {
