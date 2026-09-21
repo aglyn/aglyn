@@ -128,7 +128,7 @@ describe('console img-src, report-only (AGL-1685)', () => {
     expect(policy).toContain('data:')
     expect(policy).toContain('blob:')
     // Raw DAM download URLs, the free-tier and pre-AGL-1215 fallback in
-    // `utils/media-src.ts`.
+    // `@aglyn/aglyn/app-utils/media-src`.
     expect(policy).toContain('https://firebasestorage.googleapis.com')
     // Google identity `photoURL`, mirrored onto the roster by `upsertOrgMember`.
     expect(policy).toContain('https://lh3.googleusercontent.com')

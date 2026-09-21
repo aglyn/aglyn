@@ -40,7 +40,7 @@ import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgScope } from '../hooks/use-org-scope'
 import EmptyState from './empty-state.component'
-import type { ReadOutcome } from '../utils/read-outcome'
+import type { ReadOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 
 /**
  * WHICH WORKSPACE HOLDS A LICENCE (AGL-2331).

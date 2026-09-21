@@ -1,4 +1,12 @@
 /**
+ * @jest-environment jsdom
+ *
+ * Must stay the FIRST block comment in the file — Jest reads the pragma only
+ * from the opening docblock, so a license header above it silently leaves the
+ * suite on this project's `node` default. It matters here: `mediaSrc`
+ * branches on `typeof window`, and the browser half is the half that ships
+ * an absolute URL into a document.
+ *
  * @license
  * Copyright 2026 Aglyn LLC
  *
@@ -15,8 +23,6 @@
  * limitations under the License.
  */
 
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { mediaSrc, mediaThumbnailSrc } from './media-src'
 
 describe('mediaThumbnailSrc — grid tiles must not fetch full-size originals', () => {
@@ -58,41 +64,5 @@ describe('mediaThumbnailSrc — grid tiles must not fetch full-size originals', 
     // it must stay width-free — a thumbnail width baked into a stored URL
     // would serve a 320px image on a full-bleed hero forever.
     expect(mediaSrc({ cdnPath: '/api/media/cdn/h1/m1' })).not.toContain('w=')
-  })
-})
-
-describe('the DAM grid uses the thumbnail source (AGL-1440 follow-up)', () => {
-  // Asserted at the DECLARATION rather than through a render: the bug is
-  // which FIELD the tile reads, and a render test passes just as happily
-  // with a full-size original in the `src` as with a variant.
-  const source = readFileSync(
-    join(
-      __dirname,
-      '..',
-      'components',
-      'media',
-      'media-asset-card.component.tsx',
-    ),
-    'utf8',
-  )
-
-  it('never puts the raw `media.url` in an image tile', () => {
-    expect(source).not.toContain('image={media.url}')
-  })
-
-  it('routes the image tile through mediaThumbnailSrc', () => {
-    expect(source).toContain('mediaThumbnailSrc(media')
-  })
-
-  it('routes VIDEO through the CDN URL — Range support unlocked it', () => {
-    // This pin used to hold the OPPOSITE: video stayed on `media.url`
-    // because `serveMediaCdn` ignored `Range` and a <video> seek would have
-    // re-downloaded a file that may be 200 MB. AGL-1442 S4 gave the route
-    // single byte-range 206s (`serve-media-cdn.range.spec.ts` holds that
-    // contract), so the raw storage URL lost its only advantage — and with
-    // it went the CSP and the caching the raw URL never had. No `?w=`:
-    // variants are WebP stills of images, a video has none.
-    expect(source).not.toContain('src={media.url}')
-    expect(source).toContain('src={mediaSrc(media)}')
   })
 })

@@ -129,7 +129,7 @@ import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import useOrgHosts from '../../hooks/use-org-hosts'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
-import { mediaSrc, mediaThumbnailSrc } from '../../utils/media-src'
+import { mediaSrc, mediaThumbnailSrc } from '@aglyn/aglyn/app-utils/media-src'
 import { probeVideoFile } from '../../utils/video-probe'
 import {
   readAnalyticsDays,

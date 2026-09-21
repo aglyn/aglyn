@@ -67,7 +67,7 @@ import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 import EditListingDialog from './marketplace/edit-listing-dialog.component'
 import MediaPickerDialog from './media/media-picker-dialog.component'
-import mediaSrc from '../utils/media-src'
+import mediaSrc from '@aglyn/aglyn/app-utils/media-src'
 import { payoutReadiness } from '../utils/payout-readiness'
 import {
   summarizeSellerLedger,

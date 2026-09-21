@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { buildRoute, Route } from '../constants/route-links'
 import { resolveOrgMount } from './org-mount'
 
 /**
@@ -52,7 +53,23 @@ describe('resolveOrgMount', () => {
       ],
       hostsReady: true,
       hostsPath: '/acme/hosts',
+      billingPath: '/acme/billing',
     })
+  })
+
+  it('hands over the org\'s billing path, not its slug (AGL-3080)', () => {
+    // A plugin surface that names a plan has to link somewhere, and the slug
+    // alone would make every plugin author rebuild the console's URL shape
+    // from a string. `toEqual` above would catch a missing field; this says
+    // what the field is FOR, so moving the billing page fails here rather
+    // than in whichever plugin guessed.
+    const mount = resolveOrgMount({
+      orgId: 'org-1',
+      orgSlug: 'acme',
+      hosts: [],
+      hostsReady: true,
+    })
+    expect(mount?.billingPath).toBe(buildRoute(Route.MANAGE_BILLING, { orgSlug: 'acme' }))
   })
 
   it('carries the list\'s readiness through, so a consumer can hold on it', () => {

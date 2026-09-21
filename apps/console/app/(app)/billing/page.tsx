@@ -34,7 +34,7 @@ import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import { useOrgScope } from '../../../hooks/use-org-scope'
 import { useWorkspacePage } from '../../../hooks/use-workspace-page'
 import { billingHrefFor, resolveBillingEntry } from '../../../utils/billing-entry'
-import { readOutcome } from '../../../utils/read-outcome'
+import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 
 /**
  * The org-agnostic billing entry point (AGL-2430) — `/billing`.

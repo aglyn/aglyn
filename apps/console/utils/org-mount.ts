@@ -41,6 +41,11 @@ export interface OrgMountHostDoc {
  * `undefined` until the workspace has resolved: a mount naming no org is a
  * surface mounted nowhere, and every consumer holds on it rather than
  * guessing.
+ *
+ * The paths are built here rather than handed over as an org slug (AGL-3080):
+ * the slug alone would make every plugin author reinvent the console's URL
+ * shape, and the day one of them moves, the plugin that guessed it right is
+ * as broken as the plugin that guessed it wrong.
  */
 export function resolveOrgMount(input: {
   orgId: string | undefined
@@ -64,6 +69,7 @@ export function resolveOrgMount(input: {
     }),
     hostsReady,
     hostsPath: buildRoute(Route.HOST_LIST, { orgSlug }),
+    billingPath: buildRoute(Route.MANAGE_BILLING, { orgSlug }),
   }
 }
 

@@ -42,7 +42,7 @@ import {
   mediaPosterThumbnailSrc,
   mediaSrc,
   mediaThumbnailSrc,
-} from '../../utils/media-src'
+} from '@aglyn/aglyn/app-utils/media-src'
 
 export interface MediaAssetCardProps {
   media: Aglyn.AglynHostMedia

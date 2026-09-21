@@ -26,6 +26,11 @@
  * made shared, because the console had it in exactly one place and every
  * other list surface reached the opposite conclusion from the same evidence.
  *
+ * It lives in `shared-ui-jsx` rather than the console (AGL-3080) because a
+ * PLUGIN's list surface answers the same question and cannot import an app.
+ * There is no UI here and there never was — the rule is about evidence, not
+ * about pixels — so the only thing the move changes is who may state it.
+ *
  * ## Why a three-valued type and not a boolean
  *
  * Because two of the three states produce an empty array, and only one of

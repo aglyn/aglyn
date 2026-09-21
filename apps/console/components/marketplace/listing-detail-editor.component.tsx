@@ -40,7 +40,7 @@ import {
   type MarkdownFieldHandle,
 } from '@aglyn/aglyn-markdown-editor'
 import MediaPickerDialog from '../media/media-picker-dialog.component'
-import mediaSrc from '../../utils/media-src'
+import mediaSrc from '@aglyn/aglyn/app-utils/media-src'
 
 // Mirrors the server's fixed taxonomy (marketplace plugin model), which the
 // console can't import across the aglyn:addons boundary. The server

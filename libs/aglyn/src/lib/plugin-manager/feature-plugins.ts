@@ -186,6 +186,27 @@ export interface ConsolePluginOrgMount {
    * cannot import the console's route table.
    */
   hostsPath: string
+  /**
+   * Where this organization manages its PLAN — the console's billing page
+   * for the org (AGL-3080).
+   *
+   * Here for the same reason `hostsPath` is: a plugin cannot import the
+   * console's route table, and a surface that has to say "on a paid plan the
+   * cut is lower" is useless without somewhere to send the person who just
+   * read it. The shell's own upgrade notice covers an ENTITLEMENT refusal,
+   * where the surface never renders; this covers the case the surface renders
+   * fine and the plan is still the answer — a marketplace publisher seeing
+   * the free-plan fee on a listing they are about to price.
+   *
+   * OPTIONAL, and a plugin must branch on it rather than assume it: a
+   * deployment that bills nobody has no such page, and a self-hoster who
+   * removed it should not get a plugin's link into a 404. The shell's own
+   * upgrade notice makes the same allowance. `resolveOrgMount` supplies it
+   * for every mount this console builds.
+   *
+   * A plugin renders a link to it or does not, and never parses it.
+   */
+  billingPath?: string
 }
 
 /**

@@ -53,7 +53,7 @@ import { docsHelp } from '../../constants/docs-links'
 import { mediaNodeSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { inheritedMediaAlt } from '@aglyn/aglyn/app-utils/media-metadata'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import mediaSrc from '../../utils/media-src'
+import mediaSrc from '@aglyn/aglyn/app-utils/media-src'
 import { buildRoute, Route } from '../../constants/route-links'
 
 // Mirrors the server taxonomy; the server re-validates (the console cannot

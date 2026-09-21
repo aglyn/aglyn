@@ -55,7 +55,7 @@ import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import { useOrgScope } from '../../../hooks/use-org-scope'
 import { useWorkspacePage } from '../../../hooks/use-workspace-page'
-import { readOutcome } from '../../../utils/read-outcome'
+import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import { usePendingInvites } from '../../../hooks/use-pending-invites'
 import { consumeOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
 import {
