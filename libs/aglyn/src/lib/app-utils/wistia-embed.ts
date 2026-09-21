@@ -135,6 +135,24 @@ export interface WistiaPlayerOptions {
  * `autoPlay=false` rather than leaving the option out: an option in the embed
  * overrides the media's own settings in the Wistia account, and those may be
  * set to autoplay.
+ *
+ * ## The corners belong to the page (AGL-3209)
+ *
+ * `roundedPlayer=false` is stated on every address, and is not an option a
+ * caller may turn back on. Wistia's rounded chrome rounds and clips INSIDE the
+ * frame, where the document's own canvas is white: on a dark page the corner
+ * arcs and the clip's antialiased edge composite as a white ring around the
+ * film rather than as the page behind them.
+ *
+ * Measured on 2026-09-21 against the live videos page, whose background is
+ * `rgb(42 52 64)` and whose film is `rgb(22 30 52)`: the frame's first column
+ * read `rgb(137 141 152)` and its top-left corner `rgb(195 198 201)` —
+ * lighter than either, so painted rather than blended. With the option off
+ * the same pixels are the film.
+ *
+ * The shape is the placement's to decide in any case: `VideoPlayerFrame` takes
+ * a `radius` from the element's own control and puts it on the frame, which a
+ * second rounding inside the frame can only fight.
  */
 export function wistiaPlayerSrc(
   value: unknown,
@@ -144,6 +162,7 @@ export function wistiaPlayerSrc(
   if (!embedUrl) return undefined
   const params = new URLSearchParams({
     autoPlay: options.autoPlay === false ? 'false' : 'true',
+    roundedPlayer: 'false',
   })
   if (options.doNotTrack) params.set('doNotTrack', 'true')
   if (options.muted) params.set('muted', 'true')
