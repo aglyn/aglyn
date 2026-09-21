@@ -42,6 +42,15 @@ const composeScreenNodesMock = composeScreenNodes as jest.Mock
 const composeNodesWithChromeMock = composeNodesWithChrome as jest.Mock
 const getScreenMock = getScreen as jest.Mock
 
+/**
+ * A listing whose whole set fits one read: the total is exact, so the pager is
+ * numbered and there are no cursors to carry (AGL-3219).
+ */
+type NumberedPages = Omit<
+  NonNullable<CollectionContent['pagination']>,
+  'nextCursor' | 'prevCursor'
+>
+
 const content = (
   overrides: Partial<CollectionContent> = {},
 ): CollectionContent => ({
@@ -255,7 +264,14 @@ describe('composeCollectionTemplatePage (AGL-551)', () => {
   it('hands the routed category and page to the list template (AGL-1321)', async () => {
     const data = content({
       category: { slug: 'open-source', id: 'opensrc', name: 'Open source', known: true },
-      pagination: { page: 2, perPage: 10, totalPages: 3, totalEntries: 21 },
+      pagination: {
+        page: 2,
+        perPage: 10,
+        totalPages: 3,
+        totalEntries: 21,
+        nextCursor: '',
+        prevCursor: '',
+      },
     })
     data.collection!.listScreenId = 'list-screen'
     data.collection!.categories = [{ id: 'opensrc', name: 'Open source' }]
@@ -318,11 +334,14 @@ describe('composeCollectionTemplatePage (AGL-551)', () => {
     // difference — including the category, or "next" walks the reader off
     // the filter and onto the unfiltered page 2.
     const listTokens = async (
-      pagination: CollectionContent['pagination'],
+      pagination: NumberedPages,
       category?: CollectionContent['category'],
     ) => {
       composeScreenNodesMock.mockClear()
-      const data = content({ pagination, ...(category ? { category } : {}) })
+      const data = content({
+        pagination: { nextCursor: '', prevCursor: '', ...pagination },
+        ...(category ? { category } : {}),
+      })
       data.collection!.listScreenId = 'list-screen'
       await composeCollectionTemplatePage({ hostId: 'host-1', content: data })
       return composeScreenNodesMock.mock.calls[0][0].tokens
@@ -531,7 +550,14 @@ describe('composeCollectionFallbackPage (AGL-551)', () => {
   it('keeps the pager inside the category it is paging (AGL-1321)', async () => {
     const data = content({
       category: { slug: 'guides', name: 'Guides', known: true },
-      pagination: { page: 2, perPage: 10, totalPages: 3, totalEntries: 21 },
+      pagination: {
+        page: 2,
+        perPage: 10,
+        totalPages: 3,
+        totalEntries: 21,
+        nextCursor: '',
+        prevCursor: '',
+      },
     })
     await composeCollectionFallbackPage({ hostId: 'host-1', host, content: data })
     const nodes = Object.values(
@@ -551,11 +577,14 @@ describe('composeCollectionFallbackPage (AGL-551)', () => {
     // collection with NO authored list screen must still get exactly the
     // pager it got before: prev only past page 1, next only before the last.
     const pagerHrefs = async (
-      pagination: CollectionContent['pagination'],
+      pagination: NumberedPages,
       category?: CollectionContent['category'],
     ) => {
       composeNodesWithChromeMock.mockClear()
-      const data = content({ pagination, ...(category ? { category } : {}) })
+      const data = content({
+        pagination: { nextCursor: '', prevCursor: '', ...pagination },
+        ...(category ? { category } : {}),
+      })
       await composeCollectionFallbackPage({
         hostId: 'host-1',
         host,
