@@ -31,5 +31,10 @@
   "peerDependencies": {
     "next": "16.3.3"
   },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    }
+  },
   "sideEffects": false
 }

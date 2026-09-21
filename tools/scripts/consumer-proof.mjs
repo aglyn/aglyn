@@ -148,9 +148,12 @@ function main() {
     step('install into an empty project')
     writeFileSync(join(dir, 'package.json'), `${JSON.stringify({ name: `consumer-${storyName}`, private: true, type: 'module' }, null, 2)}\n`)
     const tarballs = readdirSync(join(dir, 'tarballs')).map((name) => join(dir, 'tarballs', name))
-    // Peers are named by the story rather than auto-installed, so the proof is
-    // also about which of them a consumer can do WITHOUT.
-    run('npm', ['install', '--legacy-peer-deps', '--no-audit', '--no-fund', '--loglevel=error', ...tarballs, ...story.peers], dir)
+    // A PLAIN install, the one a consumer types. npm installs every peer that
+    // is not marked optional, so this is also the proof of which frameworks a
+    // story drags in: the first release installed \`next\`, \`firebase\` and MUI
+    // beside the logic packages, because the core named them as hard peers
+    // and the proof was hiding that behind \`--legacy-peer-deps\`.
+    run('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', ...tarballs, ...story.peers], dir)
     const present = story.forbidden.filter((name) => existsSync(join(dir, 'node_modules', name)))
     if (present.length) throw new Error(`the install pulled in what this story must not need: ${present.join(', ')}`)
 

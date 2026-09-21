@@ -117,8 +117,13 @@ function main(argv) {
     const args = ['publish', '--access', 'public', '--tag', distTagFor(entry.version)]
     if (!publish) args.push('--dry-run')
     // Provenance is signed by the CI run's identity; outside one there is none.
-    else if (process.env.GITHUB_ACTIONS) args.push('--provenance')
-    execFileSync('npm', args, { cwd: join(ROOT, 'dist', entry.root), stdio: ['ignore', publish ? 'inherit' : 'ignore', 'inherit'] })
+    // Said either way, because every package.json asks for it in
+    // \`publishConfig\` and npm refuses to publish rather than go without.
+    else args.push(process.env.GITHUB_ACTIONS ? '--provenance' : '--provenance=false')
+    // A real publish keeps the terminal: an account with two-factor auth is
+    // asked to approve in the browser, and npm with no stdin cannot wait for
+    // that — it fails with EOTP instead of asking.
+    execFileSync('npm', args, { cwd: join(ROOT, 'dist', entry.root), stdio: publish ? 'inherit' : ['ignore', 'ignore', 'inherit'] })
     console.log(`    ${publish ? 'published' : 'would publish'} ${entry.name}@${entry.version}`)
   }
   return 0
