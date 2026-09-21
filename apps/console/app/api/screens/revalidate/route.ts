@@ -384,15 +384,28 @@ async function collectionRevalidation(
   add(collectionListUrl({ collectionSlug }))
 
   /**
-   * Every page of the unfiltered listing.
+   * Every page of the unfiltered listing that the CACHED read covers.
    *
-   * The whole range rather than a count-derived one. `listLiveEntries` bounds
-   * the live set at `COLLECTION_SOURCE_MAX`, and the routed listing pages it
-   * at `COLLECTION_LIST_PAGE_SIZE`, so the range is a constant the runtime
-   * already enforces — and dropping a page that does not exist is a cache-key
-   * delete against a key nothing holds, which costs nothing. Asking Firestore
-   * for the exact page count would trade that for a read on every save and
-   * still be wrong the moment publishing an entry adds a page.
+   * A constant range rather than a count-derived one: dropping a page that
+   * does not exist is a cache-key delete against a key nothing holds, which
+   * costs nothing, while asking Firestore for the exact page count would trade
+   * that for a read on every save and still be wrong the moment publishing an
+   * entry adds a page.
+   *
+   * It used to be the whole range, because `COLLECTION_SOURCE_MAX` bounded the
+   * LIVE SET and not merely one read of it — a listing had no eleventh page to
+   * miss. AGL-3213 ended that: the constant still bounds the cached head every
+   * listing address shares, but the collection now runs past it, and a page
+   * that starts beyond the head is served by its own window read at its own
+   * address.
+   *
+   * The range deliberately did not follow it there. `MAX_PATHS` takes the
+   * FIRST paths it is handed, so extending this to a collection's real page
+   * count would spend the budget on pages almost nobody opens and drop the
+   * dependent screens below instead — and those deep pages are exactly the
+   * ones whose entries did not change. They catch up on their own ISR window,
+   * which is the argument the category listings below already make for
+   * themselves.
    */
   const listPages = Math.ceil(COLLECTION_SOURCE_MAX / COLLECTION_LIST_PAGE_SIZE)
   for (let page = 2; page <= listPages; page += 1) {
