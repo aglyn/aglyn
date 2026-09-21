@@ -596,6 +596,8 @@ describe('the component step', () => {
       name: 'Testimonial card',
       uid: 'uid-1',
       org: STARTER_ORG,
+      // The claim that makes a second pass replay this copy (AGL-3024).
+      attemptKey: COMPONENT_ID,
     })
     expect(mockRunAiRequest).not.toHaveBeenCalled()
     expect(outcome.outputs).toEqual([
