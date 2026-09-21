@@ -9,12 +9,19 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
-## v1.0.0-beta.148 — 2026-09-21
+## v1.0.0-beta.149 — 2026-09-21
 
-[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.147...v1.0.0-beta.148)
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.147...v1.0.0-beta.149)
 
 ### Added
 
+- **notifications:** the settings leave the feed they were sitting on top of ([AGL-3226](https://linear.app/aglyn/issue/AGL-3226), [AGL-3223](https://linear.app/aglyn/issue/AGL-3223))
+- **notifications:** staff hears about a new account and a new workspace ([AGL-3225](https://linear.app/aglyn/issue/AGL-3225))
+- **notifications:** a notification can reach an inbox, and by default does not ([AGL-3224](https://linear.app/aglyn/issue/AGL-3224))
+- **notifications:** a preference can name a site, a workspace or neither, and a channel ([AGL-3223](https://linear.app/aglyn/issue/AGL-3223))
+- **marketplace:** a page says what it holds, the marketplace says where it goes ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **plugins:** the three non-money doors report the people they meet ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **tenant:** the form no longer knows who keeps the people it meets ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 - **ai:** a template's plan promises binding tokens, and the build is held to them ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143), [AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
 - **plugins:** a plugin backs the capacity it sells, and core counts it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
 - **plugins:** the plugin that writes a collection is the one that declares it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-3124](https://linear.app/aglyn/issue/AGL-3124), [AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
@@ -24,6 +31,8 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **ai:** a fact the product photo shows is not a gap to bracket ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+- **besigner:** a placed form is drawn once, as the site draws it ([AGL-3222](https://linear.app/aglyn/issue/AGL-3222))
 - **ai:** the per-member AI usage read asks months by id, not by a missing index ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
 - **ai:** the template dialog says its subject is required ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143), [AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
 - **ai:** a paid section is told how to repeat an item, not just how many elements ([AGL-3143](https://linear.app/aglyn/issue/AGL-3143), [AGL-3070](https://linear.app/aglyn/issue/AGL-3070), [AGL-3053](https://linear.app/aglyn/issue/AGL-3053), [AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
@@ -40,6 +49,13 @@ content on the marketing site and is written separately.
 - the backup's retirement test is git cherry, not a range ([AGL-3221](https://linear.app/aglyn/issue/AGL-3221))
 - the realignment backup branch is retired, not kept ([AGL-3221](https://linear.app/aglyn/issue/AGL-3221))
 - a second upload is the bug replace-in-place exists to prevent ([AGL-3216](https://linear.app/aglyn/issue/AGL-3216))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **release:** v1.0.0-beta.148 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089), [AGL-3143](https://linear.app/aglyn/issue/AGL-3143), [AGL-3024](https://linear.app/aglyn/issue/AGL-3024), [AGL-3219](https://linear.app/aglyn/issue/AGL-3219), [AGL-3220](https://linear.app/aglyn/issue/AGL-3220), [AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+</details>
 
 ## v1.0.0-beta.147 — 2026-09-21
 
