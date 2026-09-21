@@ -16,8 +16,7 @@
  */
 'use client'
 
-import { mdiBellOutline, mdiCogOutline } from '@aglyn/shared-data-mdi'
-import { CardDisplay, Container, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Button, Stack } from '@mui/material'
 import {
@@ -36,26 +35,24 @@ import {
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import NotificationsTable from '../../../../components/notifications-table.component'
-import DashboardLayout from '../../../../components/layouts/dashboard.layout'
-import { docsHelp } from '../../../../constants/docs-links'
-import { buildRoute, Route } from '../../../../constants/route-links'
-import {
-  CONTENT_MAX_WIDTH,
-  TABLE_PAGE_SIZE_DEFAULT,
-} from '../../../../constants/shared'
-import useHostIndexEntries from '../../../../hooks/use-host-index-entries'
-import useOrgHosts from '../../../../hooks/use-org-hosts'
-import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
+import NotificationsTable from '../../../../../components/notifications-table.component'
+import { docsHelp } from '../../../../../constants/docs-links'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../../../../../constants/shared'
+import useHostIndexEntries from '../../../../../hooks/use-host-index-entries'
+import useOrgHosts from '../../../../../hooks/use-org-hosts'
+import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
 import {
   normalizeNotificationLink,
   resolveNotificationOrgSlug,
-} from '../../../../utils/notification-links'
-
+} from '../../../../../utils/notification-links'
 
 /**
- * Notifications page (AGL-260): the full, cursor-paginated feed behind
+ * The notifications feed (AGL-260): the full, cursor-paginated list behind
  * the app-bar dropdown's "View all".
+ *
+ * The page chrome — the header, the breadcrumb and the section rail — belongs
+ * to the sections layout beside it (AGL-3230), so this renders its card and
+ * nothing around it.
  */
 const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
@@ -180,79 +177,50 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   }
 
   return (
-    <DashboardLayout
-      breadcrumbItems={[
-        {
-          children: 'Notifications',
-          href: buildRoute(Route.MANAGE_NOTIFICATIONS),
-        },
-      ]}
-      header={{ children: 'Notifications', icon: { path: mdiBellOutline.path } }}
-      help={{ topic: 'consoleTour', anchor: '#the-notifications-feed' }}
+    <CardDisplay
+      header={'All notifications'}
+      help={docsHelp('consoleTour', {
+        anchor: '#workspace-settings--notifications',
+        excerpt:
+          'Every console notification, newest first. What arrives here, ' +
+          'and what also reaches your inbox, is set in Notification ' +
+          'settings.',
+      })}
+      contentGutterX
+      contentGutterY
+      contentBordered="all"
     >
-      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <CardDisplay
-          header={'All notifications'}
-          help={docsHelp('consoleTour', {
-            anchor: '#workspace-settings--notifications',
-            excerpt:
-              'Every console notification, newest first. What arrives here, ' +
-              'and what also reaches your inbox, is set in Notification ' +
-              'settings.',
-          })}
-          contentGutterX
-          contentGutterY
-          contentBordered="all"
+      <Stack spacing={1.5}>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
         >
-          <Stack spacing={1.5}>
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
-            >
-              <Button
-                size="small"
-                color="primary"
-                disabled={markingAll}
-                onClick={() => void handleMarkAllRead()}
-              >
-                {markingAll ? 'Marking…' : 'Mark all read'}
-              </Button>
-              {/*
-                * The preferences moved out (AGL-3226) and this is what is
-                * left in their place: one button, on the right, where the
-                * row of switches used to start.
-                */}
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<MdiIcon path={mdiCogOutline.path} size={0.8} />}
-                sx={{ ml: 'auto' }}
-                onClick={() =>
-                  router.push(buildRoute(Route.MANAGE_NOTIFICATION_SETTINGS))
-                }
-              >
-                {'Notification settings'}
-              </Button>
-            </Stack>
-            <NotificationsTable
-              rows={rows}
-              onOpen={handleOpen}
-              page={page}
-              pageSize={pageSize}
-              hasMore={hasMore}
-              loading={loading}
-              // `cursors[i]` is the LAST row of page i, so page i+1 resumes
-              // after `cursors[i]` and page i resumes after `cursors[i - 1]`.
-              onPageChange={(next) =>
-                void loadPage(next, next > page ? cursors[page] : cursors[next - 1])
-              }
-              onPageSizeChange={setPageSize}
-            />
-          </Stack>
-        </CardDisplay>
-      </Container>
-    </DashboardLayout>
+          <Button
+            size="small"
+            color="primary"
+            disabled={markingAll}
+            onClick={() => void handleMarkAllRead()}
+          >
+            {markingAll ? 'Marking…' : 'Mark all read'}
+          </Button>
+        </Stack>
+        <NotificationsTable
+          rows={rows}
+          onOpen={handleOpen}
+          page={page}
+          pageSize={pageSize}
+          hasMore={hasMore}
+          loading={loading}
+          // `cursors[i]` is the LAST row of page i, so page i+1 resumes
+          // after `cursors[i]` and page i resumes after `cursors[i - 1]`.
+          onPageChange={(next) =>
+            void loadPage(next, next > page ? cursors[page] : cursors[next - 1])
+          }
+          onPageSizeChange={setPageSize}
+        />
+      </Stack>
+    </CardDisplay>
   )
 }
 ManageNotifications.displayName = 'Page:ManageNotifications'

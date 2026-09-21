@@ -132,7 +132,7 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))
 
-import Page from '../app/(app)/manage/notifications/settings/page'
+import Page from '../app/(app)/manage/notifications/(sections)/settings/page'
 
 /** What the last `setDoc` wrote to `notificationSettings`. */
 const lastWrite = () =>
@@ -261,11 +261,15 @@ describe('the notification settings page (AGL-3226)', () => {
 })
 
 /**
- * The feed keeps the feed (AGL-3226).
+ * The feed keeps the feed (AGL-3226, AGL-3230).
  *
  * Mocked separately from the page above because the claim is about a
  * DIFFERENT page: that the preferences left it. Asserting that on the source
  * text would pass for a page that still rendered them from a helper.
+ *
+ * What replaced them is the section rail, which belongs to the layout beside
+ * this page and is covered by `notification-sections.spec.ts` — so what is
+ * asserted here is the absence, plus the one control the feed still owns.
  */
 jest.mock('../components/notifications-table.component', () => ({
   __esModule: true,
@@ -277,7 +281,7 @@ jest.mock('../hooks/use-host-index-entries', () => ({
   default: () => new Map(),
 }))
 
-import Feed from '../app/(app)/manage/notifications/page'
+import Feed from '../app/(app)/manage/notifications/(sections)/page'
 
 describe('the notifications feed after the settings moved out (AGL-3226)', () => {
   beforeEach(() => {
@@ -286,15 +290,25 @@ describe('the notifications feed after the settings moved out (AGL-3226)', () =>
     mockIsStaff = false
   })
 
-  it('offers the settings rather than holding them', async () => {
+  it('holds no preference control at all', async () => {
     render(<Feed />)
     expect(
-      await screen.findByRole('button', { name: 'Notification settings' }),
+      await screen.findByRole('button', { name: 'Mark all read' }),
     ).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Mark all read' })).toBeTruthy()
     // Not one preference control left on the page the feed lives on.
     expect(screen.queryAllByRole('switch')).toHaveLength(0)
+    expect(screen.queryAllByRole('group')).toHaveLength(0)
     expect(screen.queryByText('Daily CRM digest')).toBeNull()
     expect(screen.queryByText('Send test alert')).toBeNull()
+  })
+
+  it('draws no chrome of its own — that is the sections layout above it', async () => {
+    // The header, the breadcrumb and the rail moved up a level (AGL-3230).
+    // A page that kept rendering its own `DashboardLayout` would nest one
+    // inside the layout's, which is two headers and two breadcrumb trails.
+    render(<Feed />)
+    await screen.findByRole('button', { name: 'Mark all read' })
+    expect(screen.queryByRole('navigation')).toBeNull()
+    expect(screen.queryAllByRole('heading', { name: 'Notifications' })).toHaveLength(0)
   })
 })

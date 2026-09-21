@@ -192,10 +192,10 @@ const shots = [
   {
     out: 'getting-started/notifications-page.png',
     path: '/manage/notifications',
-    // The button the preferences moved behind (AGL-3226) — waiting on it
-    // rather than on the heading is what stops this capturing the page
-    // before the feed's own controls have rendered.
-    waitFor: 'Notification settings',
+    // The rail entry for the section being captured (AGL-3230) — waiting on
+    // it rather than on the heading is what stops this shooting the page
+    // before the sections layout beside the feed has rendered.
+    waitFor: 'All notifications',
   },
   {
     out: 'analytics/analytics-page.png',

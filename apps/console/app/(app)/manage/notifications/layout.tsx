@@ -25,7 +25,7 @@ import { segmentTitle } from '../../../page-title'
 //
 // `segmentTitle`, not a bare string, since AGL-3226 put a titled route below
 // this one: a plain title REPLACES the template for everything nested under
-// it, so the settings page would have lost the brand off its tab.
+// it, so the settings section would have lost the brand off its tab.
 export const metadata: Metadata = { title: segmentTitle('Notifications') }
 
 export default function ManageNotificationsTitleLayout({
