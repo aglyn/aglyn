@@ -74,9 +74,24 @@ So whenever you push from a worktree, finish the job here:
 git fetch origin
 git cherry -v origin/main main   # every line must start with '-' (already upstream)
 git status --porcelain           # must be empty — a peer's edit is not yours to move
-git branch main-stale-$(date +%F) main
+git branch main-stale-$(date +%F)-$(git rev-parse --short main) main
 git reset --keep origin/main
 ```
+
+Then retire the backup, in the same breath (AGL-3221):
+
+```bash
+git log origin/main..main-stale-<name>   # must be EMPTY
+git branch -D main-stale-<name>
+```
+
+It is a backup for the seconds the reset takes, not a record. Empty means every
+commit it was holding is upstream, which is the only thing it was protecting
+against; after that it is clutter, and it accumulates fast — four of them were
+minted on 2026-09-21 alone, one within half an hour of the last sweep. The sha
+suffix is what lets two sessions realign on the same day: `$(date +%F)` on its
+own collides, `git branch` refuses the second, and you get `-b` and `-agl3216`
+names nobody can later tell apart.
 
 ⚑ `--keep`, never `--hard`. It ABORTS when a file it would overwrite has local
 changes, instead of destroying a peer's uncommitted work — which is the half of
