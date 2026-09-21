@@ -682,13 +682,18 @@ function orgCapacityRows() {
       throw new Error(`${where} is present and declares nothing — drop it, or name the capacity the plugin backs`)
     }
     for (const declaration of declared) {
-      const { kind, order, collection, addonKind, includedEntitlement, nouns } = declaration
+      const { kind, order, collection, addonKind, includedEntitlement, purchaseCeilingEntitlement, nouns } = declaration
       const what = `${where} "${kind ?? ''}"`
       for (const [field, value] of [
         ['kind', kind],
         ['collection', collection],
         ['addonKind', addonKind],
         ['includedEntitlement', includedEntitlement],
+        // Required, not optional. A capacity with no ceiling field would be
+        // measured by the console meter as "included plus everything bought",
+        // above the limit a create is actually refused at — a meter that says
+        // there is room where the next create is refused.
+        ['purchaseCeilingEntitlement', purchaseCeilingEntitlement],
       ]) {
         if (typeof value !== 'string' || !value.trim()) throw new Error(`${what} needs a "${field}"`)
       }

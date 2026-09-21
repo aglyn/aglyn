@@ -162,17 +162,22 @@ const INDIRECT_SURFACES: Record<string, { via: string; renderedIn: string; label
   },
   /*
    * The quota warnings banner meters datasets against the limit a create is
-   * refused at: `checkDatasetQuota(org, count).limit`, the included
-   * `datasetsPerOrg` plus purchased datasets, clamped to the plan maximum.
-   * The helper resolves the key internally, so the string legitimately
-   * appears in no component. Pinned at both ends, as for `managersPerOrg`:
-   * the helper's file must still name the key and the banner must still
-   * render its datasets line.
+   * refused at: what the plan includes (`datasetsPerOrg`) plus purchased
+   * datasets, clamped to the plan maximum. The helper resolves the key
+   * internally, so the string legitimately appears in no component.
+   *
+   * BOTH ENDS MOVED WITH AGL-3080 and both are still pinned. Datasets are
+   * the data plugin's capacity now, so the file that names the entitlement
+   * is the compiled declaration rather than a core helper, and the banner
+   * renders the plugin's own plural instead of a literal it spelled itself.
+   * The word the customer reads is asserted where a literal can no longer
+   * prove it — `quota-warnings-banner.component.spec.tsx` finds "datasets"
+   * in the rendered banner, which is a stronger end than a grep for it was.
    */
   datasetsPerOrg: {
-    via: 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts',
+    via: 'libs/aglyn/src/lib/plugin-manager/first-party-plugins.generated.ts',
     renderedIn: 'apps/console/components/quota-warnings-banner.component.tsx',
-    label: "label: 'datasets'",
+    label: 'capacity.nouns.many',
   },
 }
 

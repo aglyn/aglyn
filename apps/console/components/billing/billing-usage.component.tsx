@@ -20,7 +20,7 @@ import {
   type AglynOrgBilling,
   checkApiRequestQuota,
   checkCrmRecordsQuota,
-  checkDatasetQuota,
+  checkPluginOrgCapacityQuota,
   checkSeatQuota,
   CRM_EMAIL_USAGE_COLLECTION,
   crmEmailUsageDayKey,
@@ -33,6 +33,7 @@ import {
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
+import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
 import { type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import { UsageMeter as SharedUsageMeter } from '@aglyn/shared-ui-jsx/components/usage-meter.component'
 import { Link, LinearProgress, Stack, Typography } from '@mui/material'
@@ -106,6 +107,17 @@ export function UsageMeter(props: {
   help?: HelpTipContent
 }) {
   return <SharedUsageMeter {...props} unlimited={props.limit === UNLIMITED} />
+}
+
+/**
+ * A declared org capacity's label: the plugin's plural, capitalized, with the
+ * console's own suffix for an org-scoped meter — the one "Data storage
+ * (organization)" beside it already wears. The noun is the plugin's because
+ * it is the only side that knows what it sells; the scope word is this
+ * page's, because it is about where the meter sits on it.
+ */
+function capacityMeterLabel(many: string): string {
+  return `${many.charAt(0).toUpperCase()}${many.slice(1)} (organization)`
 }
 
 function HostUsageMeters(props: {
@@ -304,9 +316,25 @@ export function BillingUsageComponent(props: BillingUsageProps) {
    * question an admin asks at that moment is "why does it say 5 when I see 3".
    */
   const [pendingSeats, setPendingSeats] = useState(0)
-  // Org-level data meters (AGL-239/240): datasets and their storage are
-  // org-scoped, so they meter once here instead of per host.
-  const [orgDatasets, setOrgDatasets] = useState<number | null>(null)
+  /*
+   * Org capacities a PLUGIN backs, keyed by kind — the datasets meter
+   * (AGL-239/240) generalized, because the collection it counts is the data
+   * plugin's and not core's to name (AGL-3080).
+   *
+   * COMPILED declarations, never a registry: this page loads no plugin code,
+   * so a registry nothing had filled would simply drop the meters, and a
+   * missing meter on the page a customer reads before deciding to stay is
+   * indistinguishable from a workspace that uses none of it.
+   *
+   * A kind stays absent until its count answers, and the meter renders `null`
+   * — "not yet metered" — rather than 0, which would read as unused.
+   */
+  const orgCapacities = pluginOrgCapacities()
+  const [capacityCounts, setCapacityCounts] = useState<
+    Readonly<Record<string, number>>
+  >({})
+  // Dataset storage is metered against a core entitlement in megabytes, not
+  // by counting a collection, so it is not one of the declarations above.
   const [dataStorageMb, setDataStorageMb] = useState<number | null>(null)
   // API requests this month (AGL-635): the live per-request counter, so the
   // current month is authoritative (not the monthly rollup).
@@ -428,13 +456,22 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
       })
-    void getCountFromServer(collection(firestore, 'orgs', orgId, 'datasets'))
-      .then((snapshot) => {
-        if (active) setOrgDatasets(snapshot.data().count)
-      })
-      .catch(() => {
-        // Meter keeps its "not yet metered" state on failure.
-      })
+    for (const capacity of orgCapacities) {
+      void getCountFromServer(
+        collection(firestore, 'orgs', orgId, capacity.collection),
+      )
+        .then((snapshot) => {
+          if (active) {
+            setCapacityCounts((previous) => ({
+              ...previous,
+              [capacity.kind]: snapshot.data().count,
+            }))
+          }
+        })
+        .catch(() => {
+          // Meter keeps its "not yet metered" state on failure.
+        })
+    }
     void getDoc(
       doc(
         firestore,
@@ -543,7 +580,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     return () => {
       active = false
     }
-  }, [crmEmailCap, firestore, orgId, user])
+  }, [crmEmailCap, firestore, orgCapacities, orgId, user])
 
   /*
    * The hourly ceiling, from the server.
@@ -726,11 +763,21 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         used={teamSeats}
         limit={teamSeatLimit}
       />
-      <UsageMeter
-        label="Datasets (organization)"
-        used={orgDatasets}
-        limit={checkDatasetQuota(org, 0).limit}
-      />
+      {/*
+        One meter per declared capacity, in the order core sorts them — the
+        same sequence the downgrade warning and the add-on refusal list, so a
+        customer reading this page and then changing plan meets the capacities
+        in one order. The plugin supplies the noun; core supplies the limit a
+        create is refused at.
+      */}
+      {orgCapacities.map((capacity) => (
+        <UsageMeter
+          key={capacity.kind}
+          label={capacityMeterLabel(capacity.nouns.many)}
+          used={capacityCounts[capacity.kind] ?? null}
+          limit={checkPluginOrgCapacityQuota(org, capacity.kind, 0).limit}
+        />
+      ))}
       <UsageMeter
         label="Data storage (organization)"
         used={dataStorageMb}

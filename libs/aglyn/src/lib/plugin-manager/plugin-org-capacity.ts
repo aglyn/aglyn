@@ -88,6 +88,18 @@ export interface PluginOrgCapacityDeclaration {
    * word "includes" makes false while clearing an org a plan change strands.
    */
   includedEntitlement: string
+  /**
+   * The `PLAN_ENTITLEMENTS` field holding how far BUYING can raise it — the
+   * ceiling the two gates above deliberately do not measure against, and the
+   * one a console meter has to, because what it draws is the limit a create
+   * is refused at: included, plus what the org bought, clamped to this.
+   *
+   * A FIELD NAME, never a number. Every declaration here names an entitlement
+   * and lets core resolve it, so what a plan sells stays one table on core's
+   * side of the line — a declaration carrying `10` would be a second copy of
+   * a price list, in a plugin, going stale the first time a plan changed.
+   */
+  purchaseCeilingEntitlement: string
   nouns: PluginOrgCapacityNouns
 }
 

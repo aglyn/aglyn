@@ -371,7 +371,6 @@
       "rules": [
         "plugin-id",
         "plugin-collection:crm",
-        "plugin-collection:data",
         "domain-declares:crm",
         "domain-declares:workflows"
       ],
@@ -472,7 +471,6 @@
     {
       "path": "apps/console/components/quota-warnings-banner.component.tsx",
       "rules": [
-        "plugin-collection:data",
         "domain-declares:ai"
       ],
       "lane": "data"

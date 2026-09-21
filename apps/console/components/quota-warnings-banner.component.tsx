@@ -17,12 +17,13 @@
 'use client'
 
 import {
-  checkDatasetQuota,
+  checkPluginOrgCapacityQuota,
   checkSeatQuota,
   resolveOrgEntitlements,
   resolvePlanComp,
   UNLIMITED,
 } from '@aglyn/aglyn'
+import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
 import { assistBandRefuses } from '@aglyn/aglyn/app-utils/assist-credits'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { Alert, Button } from '@mui/material'
@@ -182,11 +183,28 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   const planComp = resolvePlanComp(org)
   const plan = org?.plan || planComp?.plan
 
-  // Host-level quotas: screens, media storage, datasets.
+  // Host-level quotas — screens and media storage — plus every org capacity
+  // a plugin backs, which today is the data plugin's datasets.
   useEffect(() => {
     if (!orgInScope || !plan || !hostId) return
     let active = true
     const entitlements = resolveOrgEntitlements(org)
+    /*
+     * The capacities are COMPILED (AGL-3080), which is what lets this banner
+     * read them at all. It renders on every console page, in a bundle that
+     * loads no plugin code, and a registry no plugin here had filled would
+     * answer "no capacities" — every quota row silently absent and the banner
+     * reporting a clean account to a workspace that is over. That is AGL-3025
+     * on a claim about the customer's account, so there is no registrar to
+     * miss: the declarations are in the manifest before anything runs.
+     *
+     * Org-scoped, and skipped entirely for a site collaborator (AGL-1068) —
+     * see `orgWideViewer`. They cannot be told an org-wide total, so the row
+     * is omitted rather than shown as a wrong number. The
+     * `hosts/{hostId}/datasets` fallback that used to sit here is gone
+     * (AGL-1050): production held nothing under it and the rules deny it.
+     */
+    const capacities = pluginOrgCapacities()
     void Promise.all([
       getCountFromServer(
         collection(firestore, 'hosts', hostId, 'screens'),
@@ -194,20 +212,16 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       getDoc(doc(firestore, 'hosts', hostId, 'counters', 'media')).catch(
         () => null,
       ),
-      // Datasets are org-scoped (AGL-239/240). The `hosts/{hostId}/datasets`
-      // fallback that used to sit here is gone (AGL-1050): production held
-      // nothing under it and the rules now deny it outright, so asking would
-      // be a guaranteed-denied read for a guaranteed-empty answer.
-      //
-      // Skipped entirely for a site collaborator (AGL-1068) — see
-      // `orgWideViewer`. They cannot be told the org's dataset total, so
-      // the row is omitted rather than shown as a wrong number.
-      orgWideViewer && orgId
-        ? getCountFromServer(
-            collection(firestore, 'orgs', orgId, 'datasets'),
-          ).catch(() => null)
-        : Promise.resolve(null),
-    ]).then(([screens, media, datasets]) => {
+      Promise.all(
+        capacities.map((capacity) =>
+          orgWideViewer && orgId
+            ? getCountFromServer(
+                collection(firestore, 'orgs', orgId, capacity.collection),
+              ).catch(() => null)
+            : Promise.resolve(null),
+        ),
+      ),
+    ]).then(([screens, media, counted]) => {
       if (!active) return
       const mediaBytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
       setQuotas((previous) => [
@@ -232,18 +246,24 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         // number, and the one that would say you are comfortably under a
         // limit you may already have hit.
         //
-        // Measured against the limit a create is refused at — the datasets
-        // the plan includes plus the ones the org bought, clamped to the
-        // plan's maximum — so the warning and the refusal name one number.
-        ...(datasets
-          ? [
-              {
-                label: 'datasets',
-                used: datasets.data().count,
-                limit: checkDatasetQuota(org, datasets.data().count).limit,
-              },
-            ]
-          : []),
+        // Measured against the limit a create is refused at — what the plan
+        // includes plus what the org bought, clamped to the plan's ceiling —
+        // so the warning and the refusal name one number. Core resolves it
+        // from the declaration's entitlement fields; the plugin names the
+        // fields and never the figure.
+        ...capacities.flatMap((capacity, index) => {
+          const snapshot = counted[index]
+          if (!snapshot) return []
+          const used = snapshot.data().count
+          return [
+            {
+              label: capacity.nouns.many,
+              used,
+              limit: checkPluginOrgCapacityQuota(org, capacity.kind, used)
+                .limit,
+            },
+          ]
+        }),
       ])
     })
     return () => {

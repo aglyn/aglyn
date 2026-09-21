@@ -504,6 +504,7 @@
           "collection": "datasets",
           "addonKind": "datasets",
           "includedEntitlement": "datasetsPerOrg",
+          "purchaseCeilingEntitlement": "maxDatasetsPerOrg",
           "nouns": {
             "one": "dataset",
             "many": "datasets",

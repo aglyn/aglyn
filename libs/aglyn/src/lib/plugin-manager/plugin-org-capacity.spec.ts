@@ -29,7 +29,11 @@
  * assert what the real config compiles, in the state a bare process is in.
  */
 
-import { PLAN_ENTITLEMENTS } from '../app-utils/plan-entitlements'
+import {
+  checkDatasetQuota,
+  checkPluginOrgCapacityQuota,
+  PLAN_ENTITLEMENTS,
+} from '../app-utils/plan-entitlements'
 import {
   pluginOrgCapacities,
   pluginOrgCapacity,
@@ -47,6 +51,7 @@ describe('plugin org capacities', () => {
       collection: 'datasets',
       addonKind: 'datasets',
       includedEntitlement: 'datasetsPerOrg',
+      purchaseCeilingEntitlement: 'maxDatasetsPerOrg',
       nouns: { one: 'dataset', many: 'datasets', addon: 'extra datasets' },
     })
     expect(pluginOrgCapacityForAddon('datasets')).toEqual(datasets)
@@ -71,13 +76,57 @@ describe('plugin org capacities', () => {
      */
     for (const capacity of pluginOrgCapacities()) {
       for (const [plan, entitlements] of Object.entries(PLAN_ENTITLEMENTS)) {
-        const where = `${capacity.kind}/${plan}`
-        const value = (entitlements as unknown as Record<string, unknown>)[
-          capacity.includedEntitlement
-        ]
-        expect([where, typeof value]).toEqual([where, 'number'])
+        // BOTH fields. The ceiling reads as zero the same way, and a zero
+        // ceiling clamps the console meter's limit to zero — a meter drawn
+        // full against a capacity the customer has plenty of.
+        for (const field of [
+          capacity.includedEntitlement,
+          capacity.purchaseCeilingEntitlement,
+        ]) {
+          const where = `${capacity.kind}/${plan}/${field}`
+          const value = (entitlements as unknown as Record<string, unknown>)[
+            field
+          ]
+          expect([where, typeof value]).toEqual([where, 'number'])
+        }
       }
     }
+  })
+
+  it('resolves the dataset limit core already resolves by hand', () => {
+    /*
+     * The declaration-driven quota and `checkDatasetQuota` are two
+     * implementations of one number, kept apart on purpose: the hand-written
+     * one has a dozen callers on money paths and is not worth rewriting for
+     * this, and the generic one exists because a console meter draws a row
+     * per declared capacity and cannot switch on `datasets`.
+     *
+     * Two implementations are only safe while something refuses to let them
+     * drift, and this is it — every plan, with and without a purchase, and
+     * over the ceiling where the clamp is the whole answer.
+     */
+    for (const plan of Object.keys(PLAN_ENTITLEMENTS)) {
+      for (const bought of [0, 2, 9999]) {
+        const org = { plan, seatAddons: { datasets: bought } } as never
+        const where = `${plan}/+${bought}`
+        expect([where, checkPluginOrgCapacityQuota(org, 'datasets', 0).limit])
+          .toEqual([where, checkDatasetQuota(org, 0).limit])
+      }
+    }
+  })
+
+  it('reads a capacity nobody declared as zero, never as unlimited', () => {
+    // The same direction `overLimitRows` and `includedCapacity` fail in. A
+    // meter promising room is the reassuring answer, and the create is
+    // refused at the limit either way — so the honest failure is the full bar.
+    const quota = checkPluginOrgCapacityQuota(
+      { plan: 'enterprise' } as never,
+      'nonesuch',
+      3,
+    )
+    expect([quota.limit, quota.included, quota.ceiling, quota.allowed]).toEqual([
+      0, 0, 0, false,
+    ])
   })
 
   it('keeps one owner per capacity, per add-on and per position', () => {
