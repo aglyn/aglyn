@@ -54,7 +54,8 @@ export interface OutreachMailboxApi {
     input: Omit<OutreachMailboxSettingsRequest, 'orgId'>,
   ): Promise<OutreachMailboxResponse>
   setPaused(mailboxId: string, paused: boolean): Promise<OutreachMailboxResponse>
-  sendTest(mailboxId: string): Promise<OutreachMailboxTestResponse>
+  /** A test from the mailbox — to `to`, or to the account's own address. */
+  sendTest(mailboxId: string, to?: string): Promise<OutreachMailboxTestResponse>
   disconnect(mailboxId: string): Promise<OutreachMailboxDisconnectResponse>
 }
 
@@ -122,10 +123,10 @@ export function useOutreachMailboxApi(orgId: string | null): OutreachMailboxApi 
           method: 'POST',
           body: { mailboxId, paused },
         }),
-      sendTest: (mailboxId) =>
+      sendTest: (mailboxId, to) =>
         call<OutreachMailboxTestResponse>(OUTREACH_API_ROUTES.mailboxesTest, {
           method: 'POST',
-          body: { mailboxId },
+          body: { mailboxId, ...(to ? { to } : {}) },
         }),
       disconnect: (mailboxId) =>
         call<OutreachMailboxDisconnectResponse>(OUTREACH_API_ROUTES.mailboxesDisconnect, {

@@ -132,10 +132,13 @@ export interface OutreachMailboxResponse {
   mailbox: OutreachMailbox
 }
 
-/** `POST outreach/mailboxes/test` */
+/**
+ * `POST outreach/mailboxes/test` — `{ mailboxId, to? }`. `to` is the address
+ * the test goes to; left off, the account's own (AGL-3228).
+ */
 export interface OutreachMailboxTestResponse {
   ok: true
-  /** The account's own address the test went to. */
+  /** The address the test went to. */
   sentTo: string
   gmailMessageId: string
   sentAtMs: number

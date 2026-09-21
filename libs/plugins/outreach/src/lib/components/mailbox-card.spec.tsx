@@ -327,9 +327,23 @@ describe('MailboxCard — test and disconnect (AGL-2978)', () => {
   it('sends a test and says where it went', async () => {
     const { props } = renderCard()
     fireEvent.click(button(MAILBOX_ACTION_LABELS.test) as HTMLElement)
-    await waitFor(() => expect(props.api.sendTest).toHaveBeenCalledWith('gm_1'))
+    await waitFor(() => expect(props.api.sendTest).toHaveBeenCalledWith('gm_1', undefined))
     expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
       'Test sent to avery@rep.example.com. Check your inbox.',
+      expect.objectContaining({ variant: 'success' }),
+    )
+  })
+
+  it('sends a test to an address the member types, and says what to read there (AGL-3228)', async () => {
+    const { props } = renderCard()
+    ;(props.api.sendTest as jest.Mock).mockResolvedValue({ ok: true, sentTo: 'outside@example.org', gmailMessageId: 'm2', sentAtMs: NOW })
+    fireEvent.change(screen.getByLabelText(MAILBOX_ACTION_LABELS.testAddress), { target: { value: ' outside@example.org ' } })
+    // The button says so once an address is in.
+    expect(button(MAILBOX_ACTION_LABELS.test)).toBeNull()
+    fireEvent.click(button(MAILBOX_ACTION_LABELS.testElsewhere) as HTMLElement)
+    await waitFor(() => expect(props.api.sendTest).toHaveBeenCalledWith('gm_1', 'outside@example.org'))
+    expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+      'Test sent to outside@example.org. Its original source shows whether the sender authenticated.',
       expect.objectContaining({ variant: 'success' }),
     )
   })

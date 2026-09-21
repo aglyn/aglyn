@@ -765,6 +765,26 @@ describe('send a test to myself (AGL-2978)', () => {
     expect(refresh.get('refresh_token')).toBe(REFRESH_TOKEN)
   })
 
+  it('goes to an address the member names, and refuses one that is not an address (AGL-3228)', async () => {
+    const mailbox = await connectMailbox()
+    googleCalls = []
+    const sent = await run('test', post('outreach/mailboxes/test', { orgId: ORG, mailboxId: mailbox.id, to: ' Outside@Example.org ' }))
+    expect(sent.status).toBe(200)
+    expect(sent.body).toMatchObject({ ok: true, sentTo: 'outside@example.org' })
+    const request = googleCalls.find((call) => call.url === `${GMAIL_API_BASE}/messages/send`)
+    const raw = Buffer.from(JSON.parse(request?.body ?? '{}').raw, 'base64url').toString('utf8')
+    expect(raw).toContain('To: outside@example.org\r\n')
+    // An outside receiver is told where to read the authentication results
+    // (the body is quoted-printable, so unfold its soft line breaks first).
+    expect(raw.replace(/=\r\n/g, '')).toContain('Authentication-Results')
+    const refused = await run('test', post('outreach/mailboxes/test', { orgId: ORG, mailboxId: mailbox.id, to: 'not an address' }))
+    expect(refused.status).toBe(400)
+    expect(refused.body.reason).toBe('invalid-request')
+    // Blank means oneself, as before.
+    const own = await run('test', post('outreach/mailboxes/test', { orgId: ORG, mailboxId: mailbox.id, to: '  ' }))
+    expect(own.body.sentTo).toBe('avery@rep.example.com')
+  })
+
   it('is its member’s alone, even for an org admin, and rate-limited', async () => {
     const mailbox = await connectMailbox()
     expect((await run('test', post('outreach/mailboxes/test', { orgId: ORG, mailboxId: mailbox.id }, 'token-admin'))).body.reason).toBe('not-your-mailbox')
