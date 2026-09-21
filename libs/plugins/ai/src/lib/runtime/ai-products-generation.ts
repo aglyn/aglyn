@@ -99,7 +99,7 @@ export const AI_PRODUCT_COPY_INSTRUCTIONS: AiSystemBlock[] = [
         'Tags are words or short phrases a shopper filters by.',
         'Choose categories only from the list you are given, by id, and none when none fits.',
         'Give one name per option the product has, in order, keeping a name that is already clear.',
-        'When a photo is attached, use only what it plainly shows, and prefer the product’s own text where the two differ.',
+        'When a photo is attached, use only what it plainly shows, and prefer the product’s own text where the two differ. What it shows — a color, a finish, a shape, a part — is a fact you have: write it, rather than marking it in brackets.',
         'Write in the language of the product’s name and text.',
       ]
         .map((rule) => `- ${rule}`)
