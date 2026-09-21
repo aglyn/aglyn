@@ -205,7 +205,12 @@
         "label": "Commerce",
         "description": "Products, carts, checkout, orders, POS.",
         "releaseFlag": "release_commerce_v2",
-        "publishedSiteImpact": "elements"
+        "publishedSiteImpact": "elements",
+        "editBarLink": {
+          "order": 30,
+          "label": "Orders",
+          "path": "/products/orders"
+        }
       },
       "contributes": {
         "site": {
@@ -463,7 +468,12 @@
         "label": "Inbox",
         "description": "Form submissions and lead inbox.",
         "releaseFlag": "release_inbox",
-        "publishedSiteImpact": "console-only"
+        "publishedSiteImpact": "console-only",
+        "editBarLink": {
+          "order": 20,
+          "label": "Inbox",
+          "path": "/inbox"
+        }
       },
       "contributes": {
         "console": {

@@ -7,7 +7,7 @@
  * the types and the resolvers in `enabled-plugins.ts`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PublishedSiteImpact } from './enabled-plugins'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
@@ -150,3 +150,22 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "redirects": "routes",
   "workflows": "routes",
 }
+
+/**
+ * The admin edit bar's quick links, in the order they are drawn — each
+ * declared by the plugin whose console page it opens (AGL-3080).
+ */
+export const PLUGIN_EDIT_BAR_LINKS: readonly PluginEditBarLink[] = [
+  {
+    "pluginId": "inbox",
+    "order": 20,
+    "label": "Inbox",
+    "path": "/inbox"
+  },
+  {
+    "pluginId": "commerce",
+    "order": 30,
+    "label": "Orders",
+    "path": "/products/orders"
+  },
+]
