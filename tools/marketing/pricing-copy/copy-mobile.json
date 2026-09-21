@@ -5,7 +5,7 @@
   "frameName": "Pricing — Mobile",
   "frameSize": {
     "width": 375,
-    "height": 10345
+    "height": 11030
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -395,7 +395,7 @@
       "name": "Compare features",
       "order": 2,
       "widthPx": 375,
-      "heightPx": 2763,
+      "heightPx": 2859,
       "groups": [
         {
           "figmaNodeId": "268:1992",
@@ -873,7 +873,7 @@
               ]
             },
             {
-              "figmaNodeId": null,
+              "figmaNodeId": "2142:620",
               "name": "row",
               "cells": [
                 "Aglyn AI: generate pages, emails, campaigns, products and more",
@@ -881,7 +881,7 @@
               ]
             },
             {
-              "figmaNodeId": null,
+              "figmaNodeId": "2142:623",
               "name": "row",
               "cells": [
                 "AI credits / mo",
@@ -946,7 +946,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 375,
-      "heightPx": 1177,
+      "heightPx": 1277,
       "groups": [
         {
           "figmaNodeId": "268:2170",
@@ -1124,7 +1124,7 @@
               ]
             },
             {
-              "figmaNodeId": null,
+              "figmaNodeId": "2142:626",
               "name": "row",
               "cells": [
                 "AI credits, per 1,000 over the included band",
@@ -1162,7 +1162,7 @@
               ]
             },
             {
-              "figmaNodeId": null,
+              "figmaNodeId": "2146:655",
               "name": "fa",
               "cells": [
                 "Aglyn AI",
@@ -1180,7 +1180,7 @@
       "name": "FAQ",
       "order": 4,
       "widthPx": 375,
-      "heightPx": 1596,
+      "heightPx": 2085,
       "groups": [
         {
           "figmaNodeId": "247:4567",
@@ -1226,7 +1226,7 @@
               ]
             },
             {
-              "figmaNodeId": null,
+              "figmaNodeId": "2146:652",
               "name": "qa",
               "cells": [
                 "What does Aglyn AI cost?",

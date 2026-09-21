@@ -1186,16 +1186,7 @@ for (const [label, [why]] of injected('--declare-extra-row', 2)) {
  * matching and is reported as resolved, so it cannot outlive its reason. An
  * exemption that outlives its reason is just an untested cell.
  */
-const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
-  'AI assist · Starter': {
-    frame: '—',
-    why: "AGL-3207 opened `features.aiAssist` on Starter, because AGL-3203 sold the tier a 750-credit band while both AI doors were shut — the only row on the ladder with a band it could not spend. The frame prints the dash from when the guided rung started at Pro. ⛔ Unlike the two cells below, this row DOES exist in the Figma frames (8 occurrences across the four breakpoints), so this one is closable by editing four cells rather than by adding rows — but re-extracting `copy-*.json` to pick that up would DROP the two AI rows the frames are missing entirely, converting one declared gap into three. Close it in the same pass that adds those rows",
-  },
-  'AI credits / mo · Starter': {
-    frame: '—',
-    why: "AGL-3203 gave Starter a band of its own — 750 credits a month — because a paying workspace was including FEWER AI credits than the Free taste's 300, which is what the published comparison column showed. The frame still prints the dash it printed while the band was 0. Resolves when `/pricing` is republished with `750 / mo` in the Starter column of this row; the besigner screen is the only place that cell can be changed, and this declaration fails the moment it is",
-  },
-}
+const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
 
 /*
  * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.
@@ -1721,12 +1712,7 @@ tierStrip.finish()
  * bound achieves nothing. The pair is only ever right together, and this is
  * what reads the half of it that lives on the page.
  *=========================================*/
-const USAGE_STALE: Record<string, Divergence> = {
-  'AI credits, per 1,000 over the included band · Starter': {
-    frame: '—',
-    why: "The other half of AGL-3203. A band and its rate are only ever right together — a finite band with no rate beside it is silently free past the band — so `PLAN_PRICING.starter.extraAssistCreditsUsdPer1k` moved from null to $3.00, Pro's rate, in the same commit as the 750-credit band. The frame still prints the dash from when Starter sold nothing past a band it did not have. Resolves when `/pricing` is republished with `$3` in the Starter column of this row",
-  },
-}
+const USAGE_STALE: Record<string, Divergence> = {}
 
 /**
  * The rate the product BILLS and the page has never stated.
