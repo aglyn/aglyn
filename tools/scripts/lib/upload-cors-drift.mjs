@@ -276,19 +276,42 @@ export async function fetchProjectDomains({
   teamId = TEAM_SCOPE,
   fetchImpl = fetch,
 }) {
-  const url =
+  /*
+   * PAGE UNTIL THE END. A truncated read is indistinguishable from a complete
+   * one — a well-formed list of exactly `limit` names, with the cursor to the
+   * rest sitting unread in `pagination.next` — and the derivation treats every
+   * name it did not see as an origin nothing serves. The console crossed 100
+   * domains and the check began reporting 54 live names as stale, `app.aglyn.com`
+   * among them, which is the shape of the bug: the platform origin cannot stop
+   * being served. Following the report's own `--prune` advice from there
+   * withdraws upload permission from sites that are still using it.
+   */
+  const base =
     `https://api.vercel.com/v9/projects/${encodeURIComponent(project)}/domains` +
     `?teamId=${encodeURIComponent(teamId)}&limit=100`
-  const response = await fetchImpl(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!response.ok) {
-    throw new Error(
-      `Vercel refused the project-domains read: ${response.status} ${response.statusText}`,
-    )
+  const domains = []
+  let until = null
+  /*
+   * A page that comes back empty ends the walk even if it still hands us a
+   * cursor, so a server that always returns one cannot spin this forever.
+   */
+  for (;;) {
+    const url = until === null ? base : `${base}&until=${encodeURIComponent(until)}`
+    const response = await fetchImpl(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!response.ok) {
+      throw new Error(
+        `Vercel refused the project-domains read: ${response.status} ${response.statusText}`,
+      )
+    }
+    const body = await response.json()
+    const page = body?.domains ?? []
+    domains.push(...page)
+    const next = body?.pagination?.next
+    if (page.length === 0 || next === undefined || next === null) return domains
+    until = next
   }
-  const body = await response.json()
-  return body?.domains ?? []
 }
 
 /** The live bucket's CORS document, with the metageneration a write needs. */
