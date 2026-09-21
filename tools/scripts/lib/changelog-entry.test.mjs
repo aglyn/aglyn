@@ -212,6 +212,13 @@ describe('what a commit subject becomes', () => {
     // No row yet: its own spelling rather than a catch-all, so the next
     // release shows the name that needs choosing.
     assert.equal(areaFor(commit('c5', 'fix(widget-forge): a thing')), 'Widget forge')
+    // That fallback is how `shared-ui` was found: its `-jsx` and `-next`
+    // siblings had rows and the parent did not, so v1.0.0-beta.147 published
+    // "Shared ui" on the site. The answer is the row, not a catch-all.
+    assert.equal(
+      areaFor(commit('c5b', 'refactor(shared-ui): a thing')),
+      'UI components',
+    )
     assert.equal(areaFor(commit('c6', 'fix: a thing with no scope at all')), 'Platform')
   })
 })
