@@ -741,7 +741,7 @@
             "duplicateOf": null,
             "values": {
               "free": "—",
-              "starter": "—",
+              "starter": "✓",
               "pro": "✓",
               "business": "✓",
               "scale": "✓",

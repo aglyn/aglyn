@@ -118,6 +118,27 @@ export function resolveExtensionPermission(
 }
 
 /**
+ * Several permission gates as one verdict (AGL-3080): what the extension and
+ * the nav item require AND what a section inside them requires, the way
+ * `composeExtensionEntitlements` composes the plan gates.
+ *
+ * `refused` outranks `pending` outranks `granted`, and the order is the
+ * whole function. A settled refusal is a refusal whatever else is still
+ * loading; an unsettled read holds the surface shut beside a gate that has
+ * already answered yes, because rendering on the answered half would paint a
+ * seller's page for the one paint the other half took to say no. Declaring
+ * nothing resolves `granted`, so a section that names no key of its own
+ * inherits its surface's verdict unchanged.
+ */
+export function composeExtensionPermissions(
+  ...verdicts: readonly ExtensionPermission[]
+): ExtensionPermission {
+  if (verdicts.includes('refused')) return 'refused'
+  if (verdicts.includes('pending')) return 'pending'
+  return 'granted'
+}
+
+/**
  * What a refused reader is told.
  *
  * Names the surface and where the grant comes from, and says nothing about

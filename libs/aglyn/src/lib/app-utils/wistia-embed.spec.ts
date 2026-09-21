@@ -88,7 +88,7 @@ describe('the Wistia builders rebuild the address from the id alone', () => {
 
   it('plays at once, because the frame only exists after a press', () => {
     expect(wistiaPlayerSrc(`https://wi.st/medias/${ID}`)).toBe(
-      `${WISTIA_PLAYER_ORIGIN}/embed/iframe/${ID}?autoPlay=true`,
+      `${WISTIA_PLAYER_ORIGIN}/embed/iframe/${ID}?autoPlay=true&roundedPlayer=false`,
     )
   })
 
@@ -97,7 +97,25 @@ describe('the Wistia builders rebuild the address from the id alone', () => {
     // whose own Wistia settings autoplay.
     expect(
       wistiaPlayerSrc(`https://wi.st/medias/${ID}`, { autoPlay: false }),
-    ).toBe(`${WISTIA_PLAYER_ORIGIN}/embed/iframe/${ID}?autoPlay=false`)
+    ).toBe(
+      `${WISTIA_PLAYER_ORIGIN}/embed/iframe/${ID}?autoPlay=false&roundedPlayer=false`,
+    )
+  })
+
+  it('turns Wistia\'s rounded chrome off on every address (AGL-3209)', () => {
+    // The rounding is clipped inside the frame, over a white canvas, so on a
+    // dark page it paints a white ring around the film. No option turns it
+    // back on: the corner shape is the frame's, from the element's `radius`.
+    for (const options of [
+      {},
+      { autoPlay: false },
+      { doNotTrack: true, muted: true, loop: true },
+    ]) {
+      const params = new URL(
+        wistiaPlayerSrc(`https://wi.st/medias/${ID}`, options) as string,
+      ).searchParams
+      expect(params.get('roundedPlayer')).toBe('false')
+    }
   })
 
   it('keeps autoplay on for anything but an explicit false', () => {

@@ -556,9 +556,28 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // rule — a positive band with no rate beside it is usage past a bound
     // that is silently free, which `plan-entitlements.spec.ts` forbids.
     //
-    // `features.aiAssist` stays false: the band is credits, not the guided
-    // rung of the console assistant, exactly as on Free. The AI add-on adds
-    // `AI_ADDON_CREDITS_PER_MONTH.starter` on top and switches both flags on.
+    // `features.aiAssist` is TRUE, and AGL-3203 shipping it false was the
+    // defect AGL-3207 closes. The reasoning then was "the band is credits,
+    // not the guided rung, exactly as on Free" — but on Free the band IS
+    // spendable, through `aiGenerative`, which is the door the taste exists
+    // for. Starter carried neither flag, so it was the only row on the
+    // ladder sold a band with nothing to spend it through: 750 credits
+    // reachable only by buying the $9 add-on that was also the only thing
+    // that made them usable. "No plan bands at zero any more" was true of
+    // the number and false of the capability.
+    //
+    // It opens `aiAssist` rather than `aiGenerative` because that is the
+    // shape of every paid rung above it — the included band funds the guided
+    // assistant and generation is the add-on. Opening the generative door
+    // here instead would hand the FIRST paid rung a door Pro through Agency
+    // have to buy.
+    //
+    // No cost moves: `tier-margin-floor.spec.ts` already prices this tier's
+    // assist term at 100% burn of the 750 credits, 75¢/mo. A door does not
+    // widen a band; it only makes spend that was already modeled reachable.
+    //
+    // The AI add-on adds `AI_ADDON_CREDITS_PER_MONTH.starter` on top and
+    // switches `aiGenerative` on as well.
     assistCreditsPerMonth: 750,
     apiRequestsPerMonth: 0,
     datasetsPerOrg: 3,
@@ -593,7 +612,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       removeBranding: true,
       scheduledPublishing: false,
       marketplaceSelling: false,
-      aiAssist: false,
+      aiAssist: true,
       aiGenerative: false,
       workflows: true,
       dataStore: true,

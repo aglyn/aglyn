@@ -30,6 +30,7 @@
 import type { ConsoleNavSection, ReleaseFlagKey } from '@aglyn/aglyn'
 import {
   hubLandingHref,
+  hubRedirectTarget,
   releaseFlagForNavTab,
   resolveHubSections,
 } from '../utils/plugin-hub-sections'
@@ -230,5 +231,207 @@ describe('a hub whose extension the plan lacks (AGL-2851)', () => {
 
   it('draws no lock while the org has not settled', () => {
     expect(lockedIds(rail(undefined, false, false))).toEqual([])
+  })
+})
+
+/**
+ * A SECTION ONLY SOME MEMBERS MAY OPEN (AGL-3080).
+ *
+ * The third gate, and the only one that SUBTRACTS the tab. A plan is
+ * something a workspace can buy, so a section the plan lacks is drawn locked
+ * and links to the notice that sells it; a permission is something only an
+ * owner can grant, so a section the reader may not open is not drawn at all —
+ * a locked-looking tab would send a member to Billing to fix the wrong thing.
+ *
+ * The case it exists for is the Marketplace, whose browse, installed and
+ * licences sections are every member's and whose listings, upload, sales and
+ * payouts read the organization's revenue.
+ *
+ * `pending` hides too, and that is the load-bearing half: `useOrgPermissions`
+ * answers as an ADMIN's map until the member read lands, so a rail drawn on
+ * it would offer every member the seller tabs for the paint before they
+ * vanished.
+ */
+describe('a section gated by its own permission (AGL-3080)', () => {
+  const MARKET_RAIL: readonly ConsoleNavSection[] = [
+    { id: 'browse', label: 'Browse' },
+    { id: 'sales', label: 'Sales', permission: 'publishToMarketplace' },
+    { id: 'payouts', label: 'Payouts', permission: 'publishToMarketplace' },
+  ]
+  /** Answers in the camelCase space plugin registration contributes to. */
+  const answers = (publishToMarketplace: boolean, loaded = true) => ({
+    can: () => false,
+    permissions: { publishToMarketplace },
+    loaded,
+  })
+  const rail = (permission: ReturnType<typeof answers> | undefined) =>
+    resolveHubSections(MARKET_RAIL, '/acme/marketplace', {
+      flags: flags(),
+      isStaff: false,
+      org: CRM_ORG,
+      orgReady: true,
+      permission,
+    })
+  const shown = (sections: ReturnType<typeof rail>) =>
+    (sections ?? []).filter((section) => section.visible).map((s) => s.id)
+
+  it('draws the seller sections for a publisher', () => {
+    expect(shown(rail(answers(true)))).toEqual(['browse', 'sales', 'payouts'])
+    expect(rail(answers(true))?.every((section) => !section.refused)).toBe(true)
+  })
+
+  it('HIDES them from a member without the key, and says why', () => {
+    const member = rail(answers(false))
+    expect(shown(member)).toEqual(['browse'])
+    // Hidden, not locked: there is nothing here for the reader to buy.
+    expect(member?.every((section) => !section.locked)).toBe(true)
+    // `refused` is the reason, so a deep link is answered with the refusal
+    // that applies rather than with the release flag's "coming soon".
+    expect(member?.filter((s) => s.refused).map((s) => s.id)).toEqual([
+      'sales',
+      'payouts',
+    ])
+  })
+
+  it('hides them while the member read is PENDING, and refuses nothing yet', () => {
+    const loading = rail(answers(true, false))
+    expect(shown(loading)).toEqual(['browse'])
+    expect(loading?.every((section) => !section.refused)).toBe(true)
+  })
+
+  it('cannot be opened by forgetting to pass the answers', () => {
+    // A caller that omits `permission` gets `pending`, which hides the
+    // section. The failure mode of this gate has to be shut, not open.
+    const forgot = rail(undefined)
+    expect(shown(forgot)).toEqual(['browse'])
+    expect(forgot?.every((section) => !section.refused)).toBe(true)
+  })
+
+  it('lands a bare hub past a refused first section', () => {
+    const rail = resolveHubSections(
+      [
+        { id: 'sales', label: 'Sales', permission: 'publishToMarketplace' },
+        { id: 'browse', label: 'Browse' },
+      ],
+      '/acme/marketplace',
+      {
+        flags: flags(),
+        isStaff: false,
+        org: CRM_ORG,
+        orgReady: true,
+        permission: answers(false),
+      },
+    )
+    expect(hubLandingHref(rail)).toBe('/acme/marketplace/browse')
+  })
+
+  it('leaves a hub that declares no section permission exactly as it was', () => {
+    // The red check for the default: if the answers object leaked into
+    // sections that declare nothing, every existing hub would go dark for a
+    // member whose read has not landed.
+    const untouched = resolveHubSections(SECTIONS, '/acme/crm', {
+      flags: flags(),
+      isStaff: false,
+      org: CRM_ORG,
+      orgReady: true,
+      permission: answers(false, false),
+    })
+    expect(shown(untouched)).toEqual(['contacts', 'leads', 'deals'])
+  })
+})
+
+/**
+ * A RETURN URL SOMEBODY ELSE IS HOLDING (AGL-3080).
+ *
+ * Stripe bakes `?connect=` into account-onboarding links and `?purchase=`
+ * into checkout sessions. Those live in a third party's records, not ours,
+ * and once one lands on a section that means nothing to the person carrying
+ * it there is no fixing it from this side — a seller coming back from Connect
+ * onboarding wants Payouts, and a buyer coming back from checkout wants what
+ * they now own.
+ *
+ * Two halves, and both are needed: the marker has to survive the redirect at
+ * all, and it has to decide where the redirect goes.
+ */
+describe('a hub URL carrying a return marker (AGL-3080)', () => {
+  const MARKET_RAIL: readonly ConsoleNavSection[] = [
+    { id: 'browse', label: 'Browse' },
+    { id: 'licences', label: 'Licences', landsOnQuery: ['purchase'] },
+    {
+      id: 'payouts',
+      label: 'Payouts',
+      permission: 'publishToMarketplace',
+      landsOnQuery: ['connect'],
+    },
+  ]
+  const publisher = {
+    can: () => false,
+    permissions: { publishToMarketplace: true },
+    loaded: true,
+  }
+  const rail = (permission = publisher) =>
+    resolveHubSections(MARKET_RAIL, '/acme/marketplace', {
+      flags: flags(),
+      isStaff: false,
+      org: CRM_ORG,
+      orgReady: true,
+      permission,
+    })
+
+  it('lands on the section the marker names, not on the first one', () => {
+    expect(
+      hubLandingHref(rail(), new URLSearchParams('connect=return')),
+    ).toBe('/acme/marketplace/payouts')
+    expect(
+      hubLandingHref(rail(), new URLSearchParams('purchase=abc123')),
+    ).toBe('/acme/marketplace/licences')
+  })
+
+  it('reads the marker by PRESENCE, whatever the third party put in it', () => {
+    // The value is Stripe's business. Routing on it would make a marker we
+    // cannot see ahead of time into a decision we cannot answer.
+    expect(hubLandingHref(rail(), new URLSearchParams('connect='))).toBe(
+      '/acme/marketplace/payouts',
+    )
+  })
+
+  it('falls back to the bare rule with no marker, and for an unknown one', () => {
+    expect(hubLandingHref(rail(), new URLSearchParams(''))).toBe(
+      '/acme/marketplace/browse',
+    )
+    expect(hubLandingHref(rail(), new URLSearchParams('utm_source=x'))).toBe(
+      '/acme/marketplace/browse',
+    )
+    expect(hubLandingHref(rail())).toBe('/acme/marketplace/browse')
+  })
+
+  it('does NOT let a marker lift a gate', () => {
+    // A member without the seller key gets the answer they would get typing
+    // the hub's address by hand — a claim is not a grant.
+    const member = rail({
+      can: () => false,
+      permissions: { publishToMarketplace: false },
+      loaded: true,
+    })
+    expect(hubLandingHref(member, new URLSearchParams('connect=return'))).toBe(
+      '/acme/marketplace/browse',
+    )
+  })
+
+  it('carries the WHOLE query across the redirect', () => {
+    // Whole rather than by allow-list: a marker nothing routes on today
+    // still survives the hop, which is what makes it safe to add one.
+    expect(
+      hubRedirectTarget(
+        '/acme/marketplace/payouts',
+        new URLSearchParams('connect=return&utm_source=stripe'),
+      ),
+    ).toBe('/acme/marketplace/payouts?connect=return&utm_source=stripe')
+    expect(hubRedirectTarget('/acme/marketplace/browse')).toBe(
+      '/acme/marketplace/browse',
+    )
+    expect(
+      hubRedirectTarget('/acme/marketplace/browse', new URLSearchParams('')),
+    ).toBe('/acme/marketplace/browse')
   })
 })

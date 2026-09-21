@@ -9,6 +9,30 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.145 — 2026-09-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.144...v1.0.0-beta.145)
+
+### Added
+
+- **aglyn:** a hub section claims the return marker that lands on it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **aglyn:** a plugin hub section declares the permission it needs ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+### Fixed
+
+- **video:** a Wistia player no longer rings the film in white ([AGL-3209](https://linear.app/aglyn/issue/AGL-3209))
+- **pricing:** open Starter's AI assist — its 750 credits had no door ([AGL-3207](https://linear.app/aglyn/issue/AGL-3207), [AGL-3203](https://linear.app/aglyn/issue/AGL-3203), [AGL-2925](https://linear.app/aglyn/issue/AGL-2925))
+- **pricing:** /pricing states Starter's 750 credits and its $3 rate ([AGL-3203](https://linear.app/aglyn/issue/AGL-3203), [AGL-2968](https://linear.app/aglyn/issue/AGL-2968))
+
+<details>
+<summary>Also in this release: 3 chore</summary>
+
+- **tools:** the Linear ceiling is 3209, read from the workspace ([AGL-3209](https://linear.app/aglyn/issue/AGL-3209))
+- **docs:** the feature matrix says Starter has aiAssist ([AGL-3207](https://linear.app/aglyn/issue/AGL-3207))
+- **tools:** the Linear ceiling is 3206, read from the workspace ([AGL-3206](https://linear.app/aglyn/issue/AGL-3206), [AGL-3203](https://linear.app/aglyn/issue/AGL-3203))
+
+</details>
+
 ## v1.0.0-beta.144 — 2026-09-21
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.143...v1.0.0-beta.144)

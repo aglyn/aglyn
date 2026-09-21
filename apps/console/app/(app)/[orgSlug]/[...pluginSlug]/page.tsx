@@ -26,7 +26,12 @@ import { AppLink, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { Alert, Box, CircularProgress } from '@mui/material'
-import { notFound, useParams, useRouter } from 'next/navigation'
+import {
+  notFound,
+  useParams,
+  useRouter,
+  useSearchParams,
+} from 'next/navigation'
 import { Suspense, useEffect, useMemo } from 'react'
 import ConsoleMediaPickerProvider from '../../../../components/console-media-picker-provider.component'
 import { useEnabledPluginIds } from '../../../../components/console-plugins-gate.component'
@@ -51,6 +56,7 @@ import {
   upgradeNoticeMessage,
 } from '../../../../utils/extension-entitlement'
 import {
+  composeExtensionPermissions,
   refusedExtensionNotice,
   requiredExtensionPermissions,
   resolveExtensionPermission,
@@ -62,6 +68,7 @@ import {
 } from '../../../../utils/org-plugin-surfaces'
 import {
   hubLandingHref,
+  hubRedirectTarget,
   releaseFlagForNavTab,
   resolveHubSections,
 } from '../../../../utils/plugin-hub-sections'
@@ -103,6 +110,14 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const params = useParams<{ pluginSlug?: string | string[] }>()
   const orgSlug = useOrgSlug()
   const router = useRouter()
+  /*
+   * The query on the way in, so a hub redirect carries it across (AGL-3080).
+   * A redirect that drops it silently deletes what somebody else put in the
+   * URL — Stripe's `?connect=` and `?purchase=` markers are held in a third
+   * party's records and are unfixable from this side once they land on a
+   * bare section.
+   */
+  const searchParams = useSearchParams()
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { currentOrg } = useOrgScope()
@@ -113,6 +128,16 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     can: canOrgPermission,
     loaded: permissionsLoaded,
   } = useOrgPermissions()
+
+  /*
+   * The ONE place this route looks a permission key up (AGL-3080). The page
+   * body's gate and the rail's per-section gate read the same object, so the
+   * rail cannot draw a tab the body is about to refuse.
+   */
+  const permissionAnswers = useMemo(
+    () => ({ can: canOrgPermission, permissions, loaded: permissionsLoaded }),
+    [canOrgPermission, permissions, permissionsLoaded],
+  )
   const { orgWide, ready: reachReady } = useOrgReach()
   const reach = resolveOrgPluginReach({ orgWide, reachReady })
 
@@ -178,8 +203,12 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
         org,
         orgReady,
         featureFlag: resolved?.extension.featureFlag,
+        // The rail resolves a section's permission from the same answers the
+        // body below refuses it with (AGL-3080), so a hidden tab and a
+        // refused deep link are one verdict.
+        permission: permissionAnswers,
       }),
-    [resolved, basePath, flags, isStaff, org, orgReady],
+    [resolved, basePath, flags, isStaff, org, orgReady, permissionAnswers],
   )
 
   /*
@@ -194,17 +223,18 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
       ? resolved.segments.length
         ? `${basePath}/${resolved.segments.join('/')}`
         : orgReady
-          ? (hubLandingHref(resolvedSections) ?? basePath)
+          ? (hubLandingHref(resolvedSections, searchParams) ?? basePath)
           : undefined
       : undefined
   const sectionRedirect =
     legacyRedirect ??
     (resolved && !resolved.section && resolvedSections?.length && orgReady
-      ? hubLandingHref(resolvedSections)
+      ? hubLandingHref(resolvedSections, searchParams)
       : undefined)
   useEffect(() => {
-    if (sectionRedirect) router.replace(sectionRedirect)
-  }, [sectionRedirect, router])
+    if (sectionRedirect)
+      router.replace(hubRedirectTarget(sectionRedirect, searchParams))
+  }, [sectionRedirect, router, searchParams])
 
   /*
    * The organization's sites, for the mount. Withheld until reach admits the
@@ -244,7 +274,23 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   )
   const extensionPermission = resolveExtensionPermission(
     requiredExtensionPermissions(resolved?.extension, resolved?.navItem),
-    { can: canOrgPermission, permissions, loaded: permissionsLoaded },
+    permissionAnswers,
+  )
+
+  /*
+   * The SECTION's own key inside the surface's (AGL-3080), composed the way
+   * the entitlement above is composed: a section can only ever be narrower
+   * than the surface holding it, so declaring one refuses more readers and
+   * never admits one the surface already refused. The rail resolved this from
+   * the same answers, which is what keeps a hidden tab and a refused deep
+   * link one verdict rather than two.
+   */
+  const surfacePermission = composeExtensionPermissions(
+    extensionPermission,
+    resolveExtensionPermission(
+      resolved?.section?.permission ? [resolved.section.permission] : [],
+      permissionAnswers,
+    ),
   )
 
   const header = resolved?.navItem.header
@@ -275,7 +321,7 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   ) : reach === 'pending' ||
     !orgReady ||
     !permissionsLoaded ||
-    extensionPermission === 'pending' ? (
+    surfacePermission === 'pending' ? (
     // Nothing renders off a guess: reach fails open and the permission map
     // loads permissive (AGL-2474), and an unsettled org is not a plan
     // (AGL-1380).
@@ -284,10 +330,19 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     </Box>
   ) : reach === 'refused' ? (
     <Alert severity="info">{orgPluginScopedNotice(title)}</Alert>
-  ) : extensionPermission === 'refused' ? (
+  ) : surfacePermission === 'refused' ? (
     // Before the entitlement branch: a reader who may not open the surface
     // is not shown its upgrade path.
-    <Alert severity="warning">{refusedExtensionNotice(title)}</Alert>
+    <Alert severity="warning">
+      {refusedExtensionNotice(
+        // The SECTION's label when the surface admitted the reader and the
+        // section did not (AGL-3080). Naming the surface there would deny a
+        // page they can plainly see in the rail beside this one.
+        extensionPermission === 'refused'
+          ? title
+          : (resolved?.section?.label ?? title),
+      )}
+    </Alert>
   ) : surfaceEntitlement === 'blocked' ? (
     <PluginHubRail sections={resolvedSections}>
       <Alert

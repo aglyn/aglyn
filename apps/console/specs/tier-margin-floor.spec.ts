@@ -1302,8 +1302,11 @@ describe('what full utilization costs against each price, and where it stops cle
     expect(Object.keys(tierCostTerms('starter'))).toContain('assistCredits')
     expect(tierCostTerms('starter').assistCredits).toBeCloseTo(0.75, 2)
     expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBe(750)
-    // The band is credits, not the guided rung — that still starts at Pro.
-    expect(PLAN_ENTITLEMENTS.starter.features.aiAssist).toBe(false)
+    // The guided rung starts HERE since AGL-3207, and the cost above is
+    // why opening it moved nothing: the assist term is already the full 750
+    // credits at 75¢, so the door makes modeled spend reachable rather than
+    // adding any.
+    expect(PLAN_ENTITLEMENTS.starter.features.aiAssist).toBe(true)
     // The email axis, read the same way and for the same reason. Campaign
     // email begins at Pro, so the term is present and ZERO rather than
     // absent — a missing term would drop cost by arithmetic instead of by

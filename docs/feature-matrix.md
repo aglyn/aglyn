@@ -23,7 +23,7 @@ this file is the last step, not the decision.
 | `abTesting` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `abandonedCart` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `actions` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `aiAssist` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `aiAssist` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `aiGenerative` | ✓ | — | — | — | — | — | — | ✓ |
 | `apiAccess` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `bookings` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
