@@ -145,12 +145,12 @@ mailbox, as with a disconnect.
 ## Compliance settings {#compliance-settings}
 
 Every email a sequence sends ends with a footer saying who sent it, where they
-can be reached by post, that the email is a business solicitation, and how to
-stop more of them:
+can be reached by post, that the email is a sales email, and how to stop more
+of them:
 
 ```text
 Example Co LLC · 100 Example St, Springfield, IL 62701
-This is a business solicitation from Example Co. Not relevant? Reply "no" and I won't email again.
+This is a sales email from Example Co. Not interested? Reply "no" and I won't email again.
 ```
 
 The United States' CAN-SPAM Act requires those things of a commercial email,

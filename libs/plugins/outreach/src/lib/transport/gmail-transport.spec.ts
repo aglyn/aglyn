@@ -610,7 +610,7 @@ describe('sending the engine’s composed email (AGL-2978)', () => {
     )
     expect(raw).toContain(`List-Unsubscribe-Post: ${LIST_UNSUBSCRIBE_ONE_CLICK}\r\n`)
     expect(raw).not.toMatch(/^In-Reply-To:/m)
-    expect(raw).toContain('This is a business solicitation from Example Co LLC.')
+    expect(raw).toContain('This is a sales email from Example Co LLC.')
   })
 
   it('sends a reply step into the engine’s thread, answering the last message and naming them all', async () => {

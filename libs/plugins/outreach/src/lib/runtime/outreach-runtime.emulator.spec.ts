@@ -330,7 +330,7 @@ describeEmulated('the send job (AGL-2981)', () => {
     )
     expect(headers['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click')
     // The footer, however the body was encoded for the wire.
-    expect(gmail.sent[0].body.replace(/=\r\n/g, '')).toContain('This is a business solicitation from Example Co.')
+    expect(gmail.sent[0].body.replace(/=\r\n/g, '')).toContain('This is a sales email from Example Co.')
 
     const after = await enrollment(one.id)
     expect(after).toMatchObject({ status: 'active', stepIndex: 1, sendClaim: null })
